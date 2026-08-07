@@ -60,6 +60,7 @@
     
     <!-- خاص -->
     <color name="yns_launcher_background">#070B1D</color>
+    <color name="younes_launcher_background">#070B1D</color>
     <color name="younes_obsidian">#030712</color>
     <color name="younes_emerald">#00C896</color>
     <color name="younes_yemeni_gold">#E8B84A</color>

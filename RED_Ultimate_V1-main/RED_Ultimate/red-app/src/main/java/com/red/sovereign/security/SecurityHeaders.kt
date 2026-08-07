@@ -1,5 +1,6 @@
 package com.red.sovereign.security
 
+import com.red.sovereign.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.Response
 

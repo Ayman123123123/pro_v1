@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val api = AuthApi()
+    private val api = AuthApi(application)
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
     private val pstn = PstnApi(tokens)

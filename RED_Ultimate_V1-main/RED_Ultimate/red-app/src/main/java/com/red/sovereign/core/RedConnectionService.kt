@@ -57,7 +57,7 @@ class RedConnectionService : Service() {
         signal = SignalSessionManager(this)
         groupCrypto = GroupCryptoManager(this)
         keyManager = DeviceKeyManager(this)
-        socket = RedWebSocketClient(tokenStore, ::onEnvelope, ::onState)
+        socket = RedWebSocketClient(this, tokenStore, ::onEnvelope, ::onState)
         scope.launch {
             if (signal.replenishPreKeys() is ApiResult.Error) {
                 notifyConnection("تعذر تحديث مفاتيح الجلسات الآمنة — ستتم المحاولة عند إعادة الاتصال")
@@ -173,7 +173,7 @@ class RedConnectionService : Service() {
     private fun refreshAndReconnect() {
         val refresh = tokenStore.refreshToken ?: run { stopSelf(); return }
         scope.launch {
-            when (val result = AuthApi().refresh(refresh)) {
+            when (val result = AuthApi(applicationContext).refresh(refresh)) {
                 is ApiResult.Success -> { tokenStore.updateTokens(result.value); attempts = 0; socket.connect() }
                 is ApiResult.Error -> { notifyConnection("انتهت الجلسة — افتح يونس لتسجيل الدخول"); stopSelf() }
             }

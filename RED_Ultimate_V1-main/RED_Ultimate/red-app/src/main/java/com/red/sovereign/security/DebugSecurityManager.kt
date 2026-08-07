@@ -2,134 +2,86 @@ package com.red.sovereign.security
 
 import android.content.Context
 import android.os.Build
+import com.red.sovereign.BuildConfig
+import java.security.MessageDigest
 
-/**
- * Manages security settings based on build configuration.
- * Enables strict security in release builds and relaxed security in debug builds.
- */
+/** Applies strict security defaults in release and developer-friendly defaults in debug. */
 object DebugSecurityManager {
+    fun isDebugBuild(): Boolean = BuildConfig.DEBUG
 
-    /**
-     * Returns true if the app is running in debug mode.
-     */
-    fun isDebugBuild(): Boolean {
-        return BuildConfig.DEBUG
-    }
+    fun shouldEnableCertificatePinning(): Boolean = !BuildConfig.DEBUG
 
-    /**
-     * Returns true if certificate pinning should be enabled.
-     * Disabled in debug builds to allow local development.
-     */
-    fun shouldEnableCertificatePinning(): Boolean {
-        return !BuildConfig.DEBUG
-    }
+    fun shouldEnableLogging(): Boolean = BuildConfig.DEBUG
 
-    /**
-     * Returns true if logging should be enabled.
-     * Enabled only in debug builds.
-     */
-    fun shouldEnableLogging(): Boolean {
-        return BuildConfig.DEBUG
-    }
+    fun shouldEnableStrictSsl(): Boolean = true
 
-    /**
-     * Returns true if strict SSL validation should be applied.
-     * Always enabled, but can be overridden for testing.
-     */
-    fun shouldEnableStrictSsl(): Boolean {
-        return true
-    }
-
-    /**
-     * Initialize security settings based on build type.
-     */
     fun initialize(context: Context) {
-        // Enable/disable certificate pinning based on build type
-        CertificatePinner.isEnabled = shouldEnableCertificatePinning()
-
-        // Configure logging
+        CertificatePinner.loadPins(context)
+        CertificatePinner.setEnabled(shouldEnableCertificatePinning())
         if (shouldEnableLogging()) {
-            // Enable verbose logging
-            println("[Security] Debug build detected - relaxed security")
-            println("[Security] Certificate pinning: ${CertificatePinner.isEnabled}")
+            println("[Security] Debug build - certificate pinning disabled unless manually configured")
         } else {
-            // Enable strict security
-            println("[Security] Release build detected - strict security enabled")
-            println("[Security] Certificate pinning: ${CertificatePinner.isEnabled}")
+            println("[Security] Release build - strict TLS and configured pins enabled")
         }
     }
 
-    /**
-     * Validate that the build is properly configured for security.
-     */
-    fun validateConfiguration(): List<String> {
-        val warnings = mutableListOf<String>()
-
-        if (BuildConfig.DEBUG) {
-            warnings.add("DEBUG_BUILD: Certificate pinning is disabled for local development")
-            warnings.add("DEBUG_BUILD: Logging is enabled - disable in production")
-        }
-
-        if (BuildConfig.VERSION_NAME.isBlank()) {
-            warnings.add("VERSION_NAME is not set")
-        }
-
-        if (BuildConfig.APPLICATION_ID.isBlank()) {
-            warnings.add("APPLICATION_ID is not set")
-        }
-
-        return warnings
+    fun validateConfiguration(): List<String> = buildList {
+        if (BuildConfig.DEBUG) add("DEBUG_BUILD: certificate pinning is disabled for local development")
+        if (BuildConfig.VERSION_NAME.isBlank()) add("VERSION_NAME is not set")
+        if (BuildConfig.APPLICATION_ID.isBlank()) add("APPLICATION_ID is not set")
     }
 
-    /**
-     * Get security recommendations based on current configuration.
-     */
-    fun getSecurityRecommendations(): List<SecurityRecommendation> {
-        val recommendations = mutableListOf<SecurityRecommendation>()
-
-        if (BuildConfig.DEBUG) {
-            recommendations.add(
-                SecurityRecommendation(
-                    severity = "INFO",
-                    title = "Debug Build",
-                    description = "This is a debug build. Certificate pinning is disabled for local testing."
-                )
-            )
-        }
-
-        recommendations.add(
+    fun getSecurityRecommendations(): List<SecurityRecommendation> = buildList {
+        add(
             SecurityRecommendation(
-                severity = "INFO",
+                severity = if (BuildConfig.DEBUG) "INFO" else "OK",
                 title = "Certificate Pinning",
-                description = if (CertificatePinner.isEnabled) "Enabled - connections are verified against pinned certificates" 
-                    else "Disabled - all certificates are accepted (debug only)"
+                description = if (CertificatePinner.isEnabled) {
+                    "Enabled for configured production hosts"
+                } else {
+                    "Disabled in debug/local development"
+                }
             )
         )
-
-        recommendations.add(
+        add(
             SecurityRecommendation(
-                severity = "INFO",
+                severity = "OK",
                 title = "Security Headers",
-                description = "Security headers are added to all HTTP requests"
+                description = "Security headers are added to API requests"
             )
         )
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            recommendations.add(
+            add(
                 SecurityRecommendation(
-                    severity = "INFO",
+                    severity = "OK",
                     title = "StrongBox",
-                    description = "Device supports StrongBox keystore for hardware-backed keys"
+                    description = "Device may support StrongBox hardware-backed keys"
                 )
             )
         }
-
-        return recommendations
     }
 
-    /**
-     * Security recommendation.
-     */
+    fun isValidEmail(email: String): Boolean =
+        Regex("^[A-Za-z0-9+_.-]+@([A-Za-z0-9.-]+\\.[A-Za-z]{2,})$").matches(email)
+
+    fun isValidPhone(phone: String): Boolean =
+        Regex("^\\+?[0-9]{10,15}$").matches(phone.replace(Regex("[^0-9+]"), ""))
+
+    fun isStrongPassword(password: String): Boolean =
+        password.length >= 12 &&
+            password.any { it.isUpperCase() } &&
+            password.any { it.isLowerCase() } &&
+            password.any { it.isDigit() } &&
+            password.any { !it.isLetterOrDigit() }
+
+    fun sanitizeInput(input: String?): String? = input?.trim()?.takeIf { it.isNotEmpty() }
+
+    fun isValidUuid(uuid: String): Boolean = runCatching { java.util.UUID.fromString(uuid) }.isSuccess
+
+    fun hashData(data: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(data.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+
     data class SecurityRecommendation(
         val severity: String,
         val title: String,
