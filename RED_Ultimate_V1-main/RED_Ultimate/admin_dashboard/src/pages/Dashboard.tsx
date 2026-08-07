@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as echarts from 'echarts';
-import './styles.css';
+
 
 // ===== SERVER METRICS PANEL =====
 interface ServerMetric {
