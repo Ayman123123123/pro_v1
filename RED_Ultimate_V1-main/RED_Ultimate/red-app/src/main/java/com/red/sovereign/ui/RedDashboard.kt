@@ -90,6 +90,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetDefaults
@@ -118,6 +119,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -256,6 +258,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
         onPost = { text -> feed.create(text) { showCreate = false } },
+        onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) }
     )
@@ -409,28 +412,69 @@ private fun PostCard(
     onVote: (Post, String) -> Unit,
     onThread: () -> Unit,
     onQuote: () -> Unit
-) = Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-    Column(Modifier.padding(16.dp)) {
+) = Card(
+    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+    colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
+    shape = RoundedCornerShape(24.dp)
+) {
+    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.authorDisplayName.take(1)); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                Text(post.authorDisplayName, fontWeight = FontWeight.Bold)
-                Text("@${post.authorUsername} · ${post.authorRedId}", color = Color.Gray, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(
+                    Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))
+                ),
+                contentAlignment = Alignment.Center
+            ) { Text(post.authorDisplayName.take(1).ifBlank { "ي" }, color = Color(0xFF03120E), fontWeight = FontWeight.Black) }
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                Text(post.authorDisplayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("@${post.authorUsername} · ${post.authorRedId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "اليمن" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
         }
-        Text(post.text, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
-        post.quotePostId?.let { quotedId -> AssistChip({}, { Text("اقتباس يونس · ${quotedId.take(8)}") }, enabled = false, leadingIcon = { Icon(Icons.Default.Repeat, null, Modifier.size(15.dp)) }) }
-        post.poll?.let { poll ->
-            val totalVotes = poll.options.sumOf { it.votes }.coerceAtLeast(1)
-            poll.options.forEach { option ->
-                val percent = (option.votes * 100 / totalVotes).toInt()
-                OutlinedButton({ onVote(post, option.id) }, Modifier.fillMaxWidth()) {
-                    Text("${option.text} · ${option.votes} ($percent%)")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
+            if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
+        }
+        Text(post.text, fontSize = 17.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface)
+        post.quotePostId?.let { quotedId ->
+            Card(colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised.copy(alpha = .72f))) {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Repeat, null, tint = AqyalGold, modifier = Modifier.size(18.dp))
+                    Text(" اقتباس يونس · ${quotedId.take(8)}", color = AqyalGold, fontSize = 12.sp)
                 }
             }
         }
-        HorizontalDivider()
+        post.poll?.let { poll ->
+            val totalVotes = poll.options.sumOf { it.votes }.coerceAtLeast(1)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                poll.options.forEach { option ->
+                    val ratio = (option.votes.toFloat() / totalVotes.toFloat()).coerceIn(0f, 1f)
+                    Card(
+                        Modifier.fillMaxWidth().clickable { onVote(post, option.id) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(option.text, fontWeight = FontWeight.SemiBold)
+                                Text("${(ratio * 100).toInt()}%", color = AqyalCyanGlow, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = { ratio },
+                                modifier = Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)),
+                                color = YounesEmerald,
+                                trackColor = MaterialTheme.colorScheme.surface
+                            )
+                            Text("${option.votes} صوت", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             PostAction(Icons.Default.FavoriteBorder, "${post.reactionCounts["LIKE"] ?: 0}", true) { onLike(post) }
             PostAction(Icons.AutoMirrored.Filled.Chat, post.replyCount.toString(), true, onThread)
@@ -1278,21 +1322,57 @@ private fun CreateSheet(
     publishing: Boolean,
     onDismiss: () -> Unit,
     onPost: (String) -> Unit,
+    onPoll: (String, List<String>, Int) -> Unit,
     onStory: () -> Unit,
     onLive: () -> Unit
 ) {
-    var composer by remember { mutableStateOf(false) }; var text by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    var mode by remember { mutableStateOf("menu") }
+    var text by remember { mutableStateOf("") }
+    var pollQuestion by remember { mutableStateOf("") }
+    var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
+    var pollHours by remember { mutableIntStateOf(24) }
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("إنشاء في يونس", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            if (composer) {
-                OutlinedTextField(text, { text = it }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، أو فكرة طويلة…") })
-                Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
-            } else {
-                CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، استطلاع، صور وفيديو", true) { composer = true }
-                CreateOption(Icons.Default.AddCircle, "حالة 24 ساعة", "صورة أو فيديو يُحذف تلقائياً", true, onStory)
-                CreateOption(Icons.Default.LiveTv, "بث مباشر", "فيديو عبر SFU المحلي", true, onLive)
-                CreateOption(Icons.Default.RecordVoiceOver, "مساحة صوتية", "مؤتمر عام مثل Spaces — قيد الربط", false) {}
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("إنشاء في يونس", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (mode != "menu") TextButton({ mode = "menu" }) { Text("الخيارات") }
+            }
+            when (mode) {
+                "post" -> {
+                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، فكرة طويلة، أو إعلاناً محلياً…") }, maxLines = 7)
+                    Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
+                }
+                "poll" -> {
+                    OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
+                    pollOptions.forEachIndexed { index, value ->
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { next -> pollOptions = pollOptions.toMutableList().also { it[index] = next.take(80) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("الخيار ${index + 1}") },
+                            singleLine = true
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(1 to "ساعة", 24 to "يوم", 72 to "3 أيام", 168 to "أسبوع").forEach { option ->
+                            FilterChip(selected = pollHours == option.first, onClick = { pollHours = option.first }, label = { Text(option.second) })
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
+                        OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
+                    }
+                    val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
+                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر الاستطلاع") }
+                }
+                else -> {
+                    CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
+                    CreateOption(Icons.Default.Forum, "استطلاع تفاعلي", "سؤال وخيارات وتصويت فعلي عبر الخادم", true) { mode = "poll" }
+                    CreateOption(Icons.Default.AddCircle, "حالة 24 ساعة", "صورة أو فيديو يُحذف تلقائياً", true, onStory)
+                    CreateOption(Icons.Default.LiveTv, "بث مباشر", "فيديو عبر SFU المحلي", true, onLive)
+                    CreateOption(Icons.Default.RecordVoiceOver, "مساحة صوتية", "قريباً: غرفة صوتية عامة مرتبطة بالمؤتمرات", false) {}
+                }
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -1445,16 +1525,20 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         is AttachmentState.Exported -> current.path to current.name
         else -> null
     }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Videocam, null, tint = YounesEmerald, modifier = Modifier.size(40.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
-            }
-            if (downloaded?.second == manifest.name) {
-                IconButton({ /* click handled by fullscreen */ }) { Icon(Icons.Default.PlayArrow, "تشغيل", tint = YounesEmerald) }
-            } else {
+    if (downloaded?.second == manifest.name) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
+            StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth().height(220.dp))
+        }
+    } else {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(YounesEmerald.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Videocam, null, tint = YounesEmerald, modifier = Modifier.size(34.dp))
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                }
                 IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.Download, "تنزيل الفيديو")
                 }
@@ -1474,16 +1558,26 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         is AttachmentState.Exported -> current.path to current.name
         else -> null
     }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(40.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+    if (downloaded?.second == manifest.name) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(30.dp))
+                    Text(manifest.name, Modifier.padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                }
+                VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
             }
-            if (downloaded?.second == manifest.name) {
-                IconButton({ /* fullscreen */ }) { Icon(Icons.Default.PlayArrow, "تشغيل", tint = AqyalCyanGlow) }
-            } else {
+        }
+    } else {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(52.dp).clip(CircleShape).background(AqyalCyanGlow.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(30.dp))
+                }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text("صوت مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                }
                 IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.Download, "تنزيل الصوت")
                 }
