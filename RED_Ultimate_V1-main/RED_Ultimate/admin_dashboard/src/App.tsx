@@ -47,8 +47,8 @@ const MasterLayout: React.FC<{ children: React.ReactNode; userName: string }> = 
       <aside className={`admin-sider ${sidebarOpen ? 'open' : ''}`}>
         <div className="admin-sider-header">
           <div className="admin-brand-logo">
-            <div className="admin-brand-icon">
-              <span>ي</span>
+            <div className="admin-brand-icon admin-brand-icon--image">
+              <img src="/admin-master-icon.svg" alt="يونس ماستر" />
             </div>
             <div className="admin-brand-text">
               <span className="admin-brand-name">يونس ماستر</span>
@@ -226,6 +226,20 @@ const MasterLayout: React.FC<{ children: React.ReactNode; userName: string }> = 
           font-size: 1.5rem;
           font-weight: 900;
           box-shadow: 0 4px 15px rgba(0, 201, 140, 0.3);
+          overflow: hidden;
+        }
+
+        .admin-brand-icon--image {
+          background: #f7fafc;
+          border: 1px solid rgba(232, 184, 74, 0.6);
+          box-shadow: 0 8px 24px rgba(232, 184, 74, 0.18);
+        }
+
+        .admin-brand-icon--image img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
         }
 
         .admin-brand-text {

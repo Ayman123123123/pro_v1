@@ -20,15 +20,11 @@ const Login = ({ onLogin, isLoading }) => {
     <div className="login-shell">
       <div className="login-bg-orb login-bg-orb--1"></div>
       <div className="login-bg-orb login-bg-orb--2"></div>
-      
+
       <div className="login-card">
         <div className="login-brand">
-          <div className="login-emblem">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="currentColor" opacity="0.3"/>
-              <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+          <div className="login-emblem login-emblem--image">
+            <img src="/admin-master-icon.svg" alt="يونس ماستر" />
           </div>
           <h1 className="login-title">يونس ماستر</h1>
           <p className="login-subtitle">لوحة تحكم المسؤول المحلي الآمنة</p>
@@ -189,7 +185,7 @@ const Login = ({ onLogin, isLoading }) => {
           padding: 40px;
           position: relative;
           backdrop-filter: blur(20px);
-          box-shadow: 
+          box-shadow:
             0 25px 50px -12px rgba(0, 0, 0, 0.5),
             inset 0 1px 0 rgba(255, 255, 255, 0.05),
             0 0 60px rgba(0, 201, 140, 0.1);
@@ -213,18 +209,26 @@ const Login = ({ onLogin, isLoading }) => {
         }
 
         .login-emblem {
-          width: 64px;
-          height: 64px;
+          width: 76px;
+          height: 76px;
           margin: 0 auto 16px;
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, rgba(0, 201, 140, 0.2) 0%, rgba(53, 203, 224, 0.2) 100%);
-          border: 2px solid rgba(0, 201, 140, 0.4);
-          border-radius: 16px;
+          background: #f7fafc;
+          border: 2px solid rgba(232, 184, 74, 0.55);
+          border-radius: 22px;
           color: var(--yns-green);
-          box-shadow: 0 10px 40px rgba(0, 201, 140, 0.2);
+          box-shadow: 0 10px 40px rgba(232, 184, 74, 0.22);
           animation: emblem-pulse 3s ease-in-out infinite;
+          overflow: hidden;
+        }
+
+        .login-emblem img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          display: block;
         }
 
         @keyframes emblem-pulse {

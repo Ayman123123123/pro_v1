@@ -206,6 +206,20 @@ a:hover {
   font-size: 1.25rem;
   font-weight: 900;
   box-shadow: var(--shadow-glow-green);
+  overflow: hidden;
+}
+
+.admin-brand-icon--image {
+  background: #f7fafc;
+  border: 1px solid rgba(232, 184, 74, 0.55);
+  box-shadow: 0 8px 28px rgba(232, 184, 74, 0.18);
+}
+
+.admin-brand-icon--image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .admin-sider-nav {
