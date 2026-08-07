@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { LockOutlined, UserOutlined, LoadingOutlined } from '@ant-design/icons';
-import '../styles.css';
 
 const Login = ({ onLogin, isLoading }) => {
   const [username, setUsername] = useState('');
