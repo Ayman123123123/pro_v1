@@ -1,6 +1,8 @@
 package com.red.sovereign.auth
 
+import android.content.Context
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -13,9 +15,10 @@ import java.io.File
 import java.io.FileOutputStream
 
 class AuthorizedApiClient(
+    private val context: Context,
     private val tokens: TokenStore,
-    private val auth: AuthApi = AuthApi(),
-    private val client: OkHttpClient = OkHttpClient()
+    private val auth: AuthApi = AuthApi(context),
+    private val client: OkHttpClient = SecureOkHttpClient.getDefault(context)
 ) {
     suspend fun request(method: String, path: String, jsonBody: String? = null): ApiResult<String> =
         requestBody(method, path, jsonBody?.toRequestBody(JSON))

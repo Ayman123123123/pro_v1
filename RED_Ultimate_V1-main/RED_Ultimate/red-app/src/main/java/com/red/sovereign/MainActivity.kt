@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +20,8 @@ import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.security.DebugSecurityManager
+import com.red.sovereign.security.CertificatePinner
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.ui.AuthFlow
 import com.red.sovereign.ui.RedDashboard
@@ -31,6 +34,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize security manager
+        DebugSecurityManager.initialize(application)
+        
+        // Log security recommendations
+        DebugSecurityManager.getSecurityRecommendations().forEach { rec ->
+            Log.i("Security", "[${rec.severity}] ${rec.title}: ${rec.description}")
+        }
+
         // Private messages, recovery codes and device identity must not leak through screenshots
         // or the Android recent-apps thumbnail. A user-controlled exception can be added for public feed export later.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
