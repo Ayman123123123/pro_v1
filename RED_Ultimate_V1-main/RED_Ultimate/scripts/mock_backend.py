@@ -164,6 +164,34 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length > 0 else b"{}"
         data = json.loads(body.decode("utf-8")) if body else {}
 
+        if path == "/api/auth/login":
+            username = data.get("username", "admin")
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "accessToken": "younes_mock_jwt_access_token_2026",
+                "refreshToken": "younes_mock_jwt_refresh_token_2026",
+                "user": {
+                    "id": "admin_uuid_001",
+                    "username": username,
+                    "displayName": "مسؤول يونس السيادي",
+                    "role": "ADMIN"
+                }
+            }).encode())
+            return
+
+        if path == "/api/auth/refresh":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "accessToken": "younes_mock_jwt_access_token_2026_refreshed",
+                "refreshToken": "younes_mock_jwt_refresh_token_2026"
+            }).encode())
+            return
+
+        if path == "/api/auth/logout":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "LOGGED_OUT"}).encode())
+            return
+
         if path.startswith("/api/admin/dinstar/ports/"):
             # Reset port
             reset_match = re.match(r"^/api/admin/dinstar/ports/(\d+)/reset$", path)
