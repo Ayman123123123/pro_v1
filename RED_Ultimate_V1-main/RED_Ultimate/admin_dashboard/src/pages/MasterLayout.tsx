@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Menu, theme, Tag, Space, Badge, Button, Avatar, Dropdown } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Layout, Menu, theme, Tag, Space, Badge, Button, Avatar, Dropdown, Spin, Alert } from 'antd';
 import {
   DashboardOutlined,
   SafetyCertificateOutlined,
@@ -11,7 +11,8 @@ import {
   AlertOutlined,
   LogoutOutlined,
   UserOutlined,
-  BellOutlined
+  BellOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import OverviewTab from './tabs/OverviewTab';
 import AuthorityTab from './tabs/AuthorityTab';
@@ -22,7 +23,7 @@ import MediaTab from './tabs/MediaTab';
 import InfrastructureTab from './tabs/InfrastructureTab';
 import ModerationTab from './tabs/ModerationTab';
 import NotificationsTab from './tabs/NotificationsTab';
-import { authStore, getUnreadCount } from '../api';
+import { authStore, getUnreadCount, apiFetch } from '../api';
 
 const { Header, Content, Sider } = Layout;
 
@@ -30,17 +31,28 @@ const MasterLayout: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('1');
   const [collapsed, setCollapsed] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [healthStatus, setHealthStatus] = useState<'UP'|'DOWN'|'LOADING'>('LOADING');
+  const [backendVersion, setBackendVersion] = useState('');
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
 
+  // ─── تحميل حالة الخدمة + إشعارات ───
   useEffect(() => {
-    const loadCount = async () => {
+    const loadStatus = async () => {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        setHealthStatus(data.status === 'UP' ? 'UP' : 'DOWN');
+        setBackendVersion(data.version || '');
+      } catch {
+        setHealthStatus('DOWN');
+      }
       try {
         const data = await getUnreadCount();
         setUnreadNotifCount(data.count || 0);
       } catch {}
     };
-    loadCount();
-    const timer = setInterval(loadCount, 15000);
+    loadStatus();
+    const timer = setInterval(loadStatus, 15000);
     return () => clearInterval(timer);
   }, []);
 
@@ -77,6 +89,9 @@ const MasterLayout: React.FC = () => {
     '9': <NotificationsTab />,
   };
 
+  const statusColor = healthStatus === 'UP' ? '#52c41a' : healthStatus === 'DOWN' ? '#f5222d' : '#faad14';
+  const statusText = healthStatus === 'UP' ? 'متصل' : healthStatus === 'DOWN' ? 'غير متصل' : 'جاري التحميل';
+
   return (
     <Layout style={{ minHeight: '100vh', background: '#000' }}>
       <Sider breakpoint="lg" collapsedWidth="0" collapsed={collapsed} onCollapse={setCollapsed} theme="dark"
@@ -86,12 +101,18 @@ const MasterLayout: React.FC = () => {
             {collapsed ? '◆' : '◆ YOUNES MASTER'}
           </b>
         </div>
+        {backendVersion && (
+          <div style={{ textAlign: 'center', color: '#666', fontSize: 10, padding: '0 8px 8px' }}>
+            {backendVersion}
+          </div>
+        )}
         <Menu theme="dark" mode="inline" selectedKeys={[currentTab]} items={menuItems}
           onClick={({key}) => setCurrentTab(key)} />
       </Sider>
       <Layout>
         <Header style={{ background: '#0a0a0a', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1a1a1a' }}>
           <Space>
+            <Badge status={healthStatus === 'UP' ? 'success' : healthStatus === 'DOWN' ? 'error' : 'warning'} text={<span style={{ color: '#ccc', fontSize: 12 }}>{statusText}</span>} />
             <Tag color="blue">LOCAL MODE</Tag>
             <Tag color="gold">YOUNES ID AUTHORITY</Tag>
           </Space>
