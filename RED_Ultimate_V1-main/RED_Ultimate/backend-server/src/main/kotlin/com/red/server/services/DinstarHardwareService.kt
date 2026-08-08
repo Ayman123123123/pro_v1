@@ -386,7 +386,7 @@ class DinstarHardwareService(
 
         return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                val challenge = response.challenges().joinToString(", ") { "${it.scheme()} realm=${it.realm()}" }
+                val challenge = response.challenges().joinToString(", ") { "${it.scheme} realm=${it.realm}" }
                 log.error("DINSTAR HTTP {} on {} — auth challenge: {}", response.code, unsigned.url, challenge)
                 throw IllegalStateException("DINSTAR HTTP ${response.code} on ${unsigned.url.encodedPath} — auth challenge: $challenge")
             }

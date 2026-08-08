@@ -51,7 +51,9 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
     fun getPortInfo(@PathVariable port: Int, authentication: Authentication): Map<String, Any> {
         val actor = UUID.fromString(authentication.name)
         audit.record(actor, "DINSTAR_PORT_INFO", port.toString())
-        return mapOf("port" to port, "status" to hardware.getHardwareStatus().find { it["index"] == port })
+        val portInfo = hardware.getHardwareStatus().find { it["index"] == port }
+        val status = portInfo ?: mapOf("error" to "Port not found")
+        return mapOf("port" to port, "status" to status)
     }
 
     /** Explicitly disabled until the exact firmware exposes a documented operation. */
