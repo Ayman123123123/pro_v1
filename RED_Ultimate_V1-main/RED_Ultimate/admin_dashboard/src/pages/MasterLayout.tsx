@@ -10,7 +10,8 @@ import {
   CloudServerOutlined,
   AlertOutlined,
   LogoutOutlined,
-  UserOutlined
+  UserOutlined,
+  BellOutlined
 } from '@ant-design/icons';
 import OverviewTab from './tabs/OverviewTab';
 import AuthorityTab from './tabs/AuthorityTab';
@@ -20,14 +21,28 @@ import SecurityTab from './tabs/SecurityTab';
 import MediaTab from './tabs/MediaTab';
 import InfrastructureTab from './tabs/InfrastructureTab';
 import ModerationTab from './tabs/ModerationTab';
-import { authStore } from '../api';
+import NotificationsTab from './tabs/NotificationsTab';
+import { authStore, getUnreadCount } from '../api';
 
 const { Header, Content, Sider } = Layout;
 
 const MasterLayout: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('1');
   const [collapsed, setCollapsed] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+
+  useEffect(() => {
+    const loadCount = async () => {
+      try {
+        const data = await getUnreadCount();
+        setUnreadNotifCount(data.count || 0);
+      } catch {}
+    };
+    loadCount();
+    const timer = setInterval(loadCount, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogout = () => {
     authStore.clear();
@@ -47,6 +62,7 @@ const MasterLayout: React.FC = () => {
     { key: '6', icon: <SecurityScanOutlined />, label: 'الأمان السيادي' },
     { key: '7', icon: <CloudServerOutlined />, label: 'البنية التحتية' },
     { key: '8', icon: <AlertOutlined />, label: 'الثقة والسلامة' },
+    { key: '9', icon: <BellOutlined />, label: unreadNotifCount > 0 ? `الإشعارات (${unreadNotifCount})` : 'الإشعارات' },
   ];
 
   const tabContent: Record<string, React.ReactNode> = {
@@ -58,6 +74,7 @@ const MasterLayout: React.FC = () => {
     '6': <SecurityTab />,
     '7': <InfrastructureTab />,
     '8': <ModerationTab />,
+    '9': <NotificationsTab />,
   };
 
   return (

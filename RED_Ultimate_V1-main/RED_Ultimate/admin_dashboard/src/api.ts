@@ -66,3 +66,56 @@ export async function adminLogout() {
   }
   authStore.clear();
 }
+
+// ━━━━━━━━━━━━ 🔔 Notifications API ━━━━━━━━━━━━
+export async function getNotifications(page = 0, size = 50, type?: string) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (type) params.set('type', type);
+  const res = await apiFetch(`/api/notifications?${params}`);
+  return res.json();
+}
+
+export async function markNotificationRead(id: string) {
+  await apiFetch(`/api/notifications/${id}/read`, { method: 'PUT' });
+}
+
+export async function markAllNotificationsRead() {
+  await apiFetch('/api/notifications/read-all', { method: 'PUT' });
+}
+
+export async function getUnreadCount() {
+  const res = await apiFetch('/api/notifications/unread-count');
+  return res.json();
+}
+
+// ━━━━━━━━━━━━ 🟢 Status & Privacy API ━━━━━━━━━━━━
+export async function getUserStatus(userId: string) {
+  const res = await apiFetch(`/api/social/status/${userId}`);
+  return res.json();
+}
+
+export async function updateMyStatus(type: string, customText?: string, visibleTo = 'EVERYONE') {
+  const res = await apiFetch('/api/social/status', {
+    method: 'PUT',
+    body: JSON.stringify({ type, customText, visibleTo })
+  });
+  return res.json();
+}
+
+export async function getPrivacySettings() {
+  const res = await apiFetch('/api/social/privacy');
+  return res.json();
+}
+
+export async function updatePrivacySettings(settings: Record<string, string>) {
+  const res = await apiFetch('/api/social/privacy', {
+    method: 'PUT',
+    body: JSON.stringify(settings)
+  });
+  return res.json();
+}
+
+export async function getOnlineContacts() {
+  const res = await apiFetch('/api/social/online-contacts');
+  return res.json();
+}
