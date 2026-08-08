@@ -5,6 +5,7 @@ import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
+import org.slf4j.LoggerFactory
 
 @RestController
 class HealthController(
@@ -12,22 +13,27 @@ class HealthController(
     private val redisTemplate: RedisTemplate<String, String>,
     private val jdbcTemplate: JdbcTemplate
 ) {
+    companion object { private val log = LoggerFactory.getLogger(HealthController::class.java) }
+
     @GetMapping("/health")
     fun health(): Map<String, Any> {
-        val mongoOk = try {
-            mongoTemplate.db.name; true
-        } catch (e: Exception) { false }
-        
-        val redisOk = try {
-            redisTemplate.connectionFactory?.connection?.ping(); true
-        } catch (e: Exception) { false }
-        
-        val postgresOk = try {
-            jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1
-        } catch (e: Exception) { false }
+        val mongoResult = runCatching { mongoTemplate.db.name; true }
+        val redisResult = runCatching { redisTemplate.connectionFactory?.connection?.ping(); true }
+        val postgresResult = runCatching { jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1 }
 
+        val mongoOk = mongoResult.getOrDefault(false)
+        val redisOk = redisResult.getOrDefault(false)
+        val postgresOk = postgresResult.getOrDefault(false)
         val allOk = mongoOk && redisOk && postgresOk
-        
+
+        if (!allOk) {
+            val down = mutableListOf<String>()
+            if (!mongoOk) down += "mongodb"
+            if (!redisOk) down += "redis"
+            if (!postgresOk) down += "postgresql"
+            log.warn("Health check DOWN — services unavailable: {}", down.joinToString())
+        }
+
         return mapOf(
             "brand" to "YOUNES",
             "displayName" to "يونس",
