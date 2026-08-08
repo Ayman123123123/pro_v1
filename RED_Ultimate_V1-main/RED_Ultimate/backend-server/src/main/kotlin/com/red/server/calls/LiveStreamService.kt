@@ -1,5 +1,6 @@
 package com.red.server.calls
 
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.util.concurrent.ConcurrentHashMap
 
@@ -9,28 +10,32 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @Service
 class LiveStreamService {
-    // StreamId -> List of ViewerSessionIds
+    companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
+
+    // StreamId -> Set of ViewerSessionIds
     private val liveViewers = ConcurrentHashMap<String, MutableSet<String>>()
 
     fun startStream(streamId: String, broadcasterId: String) {
-        liveViewers[streamId] = mutableSetOf()
-        println("🔴 RED LIVE: Stream $streamId started by $broadcasterId")
+        liveViewers[streamId] = ConcurrentHashMap.newKeySet()
+        log.info("Stream {} started by broadcaster {}", streamId, broadcasterId)
     }
 
-    fun addViewer(streamId: String, viewerId: String) {
-        liveViewers[streamId]?.add(viewerId)
+    fun addViewer(streamId: String, viewerId: String): Int {
+        val viewers = liveViewers[streamId] ?: return -1
+        viewers.add(viewerId)
+        return viewers.size
     }
 
     fun removeViewer(streamId: String, viewerId: String) {
         liveViewers[streamId]?.remove(viewerId)
     }
 
-    fun getViewerCount(streamId: String): Int {
-        return liveViewers[streamId]?.size ?: 0
-    }
+    fun getViewerCount(streamId: String): Int = liveViewers[streamId]?.size ?: 0
+
+    fun getActiveStreams(): Set<String> = liveViewers.keys.toSet()
 
     fun stopStream(streamId: String) {
         liveViewers.remove(streamId)
-        println("🚫 RED LIVE: Stream $streamId has ended.")
+        log.info("Stream {} ended", streamId)
     }
 }

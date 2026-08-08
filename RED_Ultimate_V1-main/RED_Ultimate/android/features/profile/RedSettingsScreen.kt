@@ -62,7 +62,7 @@ fun RedSettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("خطي اليمني (DINSTAR Gateway)", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFFF4B400))
-                            Text("موديل: UC2000-VE-8T • سبأفون", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                            Text("موديل: UC2000-VE-8G • GSM", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                         }
                     }
                     Badge(containerColor = Color(0xFF4CAF50)) { Text("متصل", color = Color.White) }
@@ -114,7 +114,7 @@ fun RedSettingsScreen(
                             // Simulate network discovery scan
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 isScanning = false
-                                scanResult = "تم اكتشاف بوابة DINSTAR بنجاح على IP: 192.168.1.100"
+                                scanResult = "تم اكتشاف بوابة DINSTAR بنجاح"
                             }, 2000)
                         },
                         shape = RoundedCornerShape(12.dp),

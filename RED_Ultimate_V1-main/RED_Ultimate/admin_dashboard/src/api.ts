@@ -12,7 +12,8 @@ export const authStore = {
     sessionStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     window.dispatchEvent(new Event('younes:auth-expired'));
-  }
+  },
+  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY)
 };
 
 async function rotate(): Promise<boolean> {
@@ -53,4 +54,15 @@ export async function adminLogin(username: string, password: string) {
   if (!response.ok || data.user?.role !== 'ADMIN') throw new Error(data.error || 'بيانات المسؤول غير صحيحة');
   authStore.set(data.accessToken, data.refreshToken);
   return data;
+}
+
+export async function adminLogout() {
+  const refreshToken = authStore.refresh();
+  if (refreshToken) {
+    await apiFetch('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken })
+    }).catch(() => {}); // Best-effort; clear tokens regardless
+  }
+  authStore.clear();
 }

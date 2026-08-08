@@ -1,5 +1,6 @@
 package com.red.sovereign
 
+import android.util.Log
 import com.red.sovereign.core.delivery.RedDeliveryEngine
 import com.red.sovereign.features.calls.RedVoipMaster
 import com.red.sovereign.features.pstn.PstnViewModel
@@ -20,20 +21,44 @@ class MasterSystemOrchestrator @Inject constructor(
     private val approvalManager: ApprovalManager,
     private val identityManager: IdentityManager
 ) {
+    companion object { private const val TAG = "RED.Orchestrator" }
+
+    @Volatile private var isRunning = false
+
     fun startSovereignSystem() {
+        if (isRunning) {
+            Log.w(TAG, "System already running, ignoring duplicate start")
+            return
+        }
+
         if (approvalManager.isUserApproved()) {
-            println("🔴 RED: Initializing all systems for user ${identityManager.getUserName()}")
-            
-            // System C: Messaging
-            deliveryEngine.initialize()
-            
-            // System A: VoIP SFU
-            voipMaster.prepare()
-            
-            // System B: PSTN Isolated
-            pstnViewModel.syncGatewayStatus()
+            Log.i(TAG, "Initializing sovereign systems for user ${identityManager.getUserName()}")
+
+            // System C: Guaranteed Messaging
+            runCatching { deliveryEngine.initialize() }
+                .onFailure { Log.e(TAG, "Delivery engine init failed", it) }
+
+            // System A: VoIP SFU (1080p AV1/Opus)
+            runCatching { voipMaster.prepare() }
+                .onFailure { Log.e(TAG, "VoIP master prepare failed", it) }
+
+            // System B: PSTN Isolated (DINSTAR UC2000-VE-8G)
+            runCatching { pstnViewModel.syncGatewayStatus() }
+                .onFailure { Log.e(TAG, "PSTN gateway sync failed", it) }
+
+            isRunning = true
+            Log.i(TAG, "All sovereign systems initialized successfully")
         } else {
+            Log.w(TAG, "User not approved — showing pending UI")
             approvalManager.showPendingUI()
         }
     }
+
+    fun stopSovereignSystem() {
+        if (!isRunning) return
+        Log.i(TAG, "Shutting down sovereign systems")
+        isRunning = false
+    }
+
+    fun isSystemRunning(): Boolean = isRunning
 }
