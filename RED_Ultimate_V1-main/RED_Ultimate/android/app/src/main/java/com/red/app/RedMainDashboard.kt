@@ -67,18 +67,18 @@ fun RedMainDashboard() {
                 Box(modifier = Modifier.padding(padding)) {
                     when (selectedTab) {
                         0 -> RedChatListScreen(
-                            onChatClick = { chat -> /* Open Chat */ },
-                            onDinstarDial = { number -> selectedTab = 2 } // Switch to dialer
+                            onChatClick = { chat -> /* TODO: navigate to chat detail */ },
+                            onDinstarDial = { number -> selectedTab = 2 }
                         )
                         1 -> RedCallLogScreen()
                         2 -> PstnDialerScreen() // Dual Engine: VoIP vs Dinstar Yemeni Line
                         3 -> RedExploreScreen(
-                            onStartLive = { /* Start Live Stream */ },
-                            onStartSpace = { /* Start Space Room */ }
+                            onStartLive = { /* TODO: launch live broadcast */ },
+                            onStartSpace = { /* TODO: create audio space */ }
                         )
                         4 -> RedSettingsScreen(
-                            onManageDinstar = { /* Open Dinstar Admin */ },
-                            onLogout = { /* Logout */ }
+                            onManageDinstar = { /* TODO: open Dinstar admin panel */ },
+                            onLogout = { /* TODO: clear tokens and restart */ }
                         )
                     }
                 }

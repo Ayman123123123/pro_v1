@@ -114,7 +114,7 @@ fun RedSettingsScreen(
                             // Simulate network discovery scan
                             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 isScanning = false
-                                scanResult = "تم اكتشاف بوابة DINSTAR بنجاح على IP: 192.168.1.100"
+                                scanResult = "تم اكتشاف بوابة DINSTAR بنجاح"
                             }, 2000)
                         },
                         shape = RoundedCornerShape(12.dp),

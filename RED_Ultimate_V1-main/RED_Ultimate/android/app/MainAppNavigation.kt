@@ -15,10 +15,15 @@ import com.red.sovereign.features.stories.*
 fun MainAppNavigation() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "auth") {
+    NavHost(navController = navController, startDestination = "splash") {
+        // Splash → Auth → Main
+        composable("splash") {
+            RedSplashScreen(onFinished = { navController.navigate("auth") { popUpTo("splash") { inclusive = true } } })
+        }
+
         // Authentication Flow
-        composable("auth") { WelcomeScreen(onLogin = { navController.navigate("main") }) }
-        
+        composable("auth") { WelcomeScreen(onLogin = { navController.navigate("main") { popUpTo("auth") { inclusive = true } } }) }
+
         // Main Application Dashboard (Tabs)
         composable("main") {
             RedDashboard(
@@ -47,13 +52,22 @@ fun MainAppNavigation() {
         }
 
         composable("settings") { SettingsScreen(navController) }
-        
-        composable("dumin_settings") { 
-            // Dumin hardware config screen
-        }
+
+        composable("profile") { ProfileScreen() }
+
+        composable("backup") { BackupScreen() }
+
+        composable("update") { UpdateScreen() }
 
         composable("create_story") {
             CreateStoryScreen(onFinished = { navController.popBackStack() })
+        }
+
+        composable("story_viewer/{userId}") { backStack ->
+            StoryViewerScreen(
+                userId = backStack.arguments?.getString("userId") ?: "",
+                onClose = { navController.popBackStack() }
+            )
         }
     }
 }
