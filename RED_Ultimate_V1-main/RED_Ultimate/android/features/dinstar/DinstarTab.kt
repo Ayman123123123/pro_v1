@@ -45,7 +45,8 @@ import com.red.core.theme.SovereignColors
 fun DinstarTab(
     viewModel: DinstarViewModel,
     onDialViaPort: ((port: Int, number: String) -> Unit)? = null,
-    onNavigateToCdr: (() -> Unit)? = null
+    onNavigateToCdr: (() -> Unit)? = null,
+    onNavigateToSms: (() -> Unit)? = null
 ) {
     val gatewayStatus by viewModel.gatewayStatus.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
@@ -144,6 +145,7 @@ fun DinstarTab(
                     onDiscover = { viewModel.discoverGateway() },
                     onQueryCdr = { viewModel.queryCdr() },
                     onGetCapabilities = { viewModel.getCapabilities() },
+                    onNavigateToSms = onNavigateToSms,
                     isLoading = isLoading
                 )
             }
@@ -720,6 +722,7 @@ private fun QuickActionsRow(
     onDiscover: () -> Unit,
     onQueryCdr: () -> Unit,
     onGetCapabilities: () -> Unit,
+    onNavigateToSms: (() -> Unit)? = null,
     isLoading: Boolean
 ) {
     Row(
@@ -729,7 +732,11 @@ private fun QuickActionsRow(
         QuickActionChip("🔄 تحديث", SovereignColors.Cyan, onRefresh, isLoading, Modifier.weight(1f))
         QuickActionChip("🔍 اكتشاف", SovereignColors.DinstarGold, onDiscover, isLoading, Modifier.weight(1f))
         QuickActionChip("📋 سجل", SovereignColors.VoipBlue, onQueryCdr, isLoading, Modifier.weight(1f))
-        QuickActionChip("⚙️ قدرات", SovereignColors.Success, onGetCapabilities, isLoading, Modifier.weight(1f))
+        if (onNavigateToSms != null) {
+            QuickActionChip("📱 SMS", SovereignColors.Success, onNavigateToSms, isLoading, Modifier.weight(1f))
+        } else {
+            QuickActionChip("⚙️ قدرات", SovereignColors.Warning, onGetCapabilities, isLoading, Modifier.weight(1f))
+        }
     }
 }
 

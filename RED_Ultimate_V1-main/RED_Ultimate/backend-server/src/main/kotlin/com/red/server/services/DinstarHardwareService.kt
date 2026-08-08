@@ -155,6 +155,98 @@ class DinstarHardwareService(
 
     fun capabilities() = documentedCapabilities()
 
+    // ═══════════════════════════════════════════════════════
+    // 📱 SMS Operations — حسب وثائق Dinstar API الرسمية
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * إرسال SMS — POST /api/send_sms
+     * 
+     * @param text محتوى الرسالة (حتى 60 بايت لـ GSM7BIT)
+     * @param params قائمة المستلمين: [{number: "777123456", user_id: 1}]
+     * @param ports منافذ محددة (اختياري، null = جميع المنافذ)
+     * @param encoding GSM7BIT أو UCS2
+     */
+    fun sendSms(
+        text: String,
+        params: List<Map<String, Any?>>,
+        ports: List<Int>? = null,
+        encoding: String = "GSM7BIT"
+    ): Map<String, Any?> {
+        require(text.isNotBlank()) { "SMS text is required" }
+        require(params.isNotEmpty()) { "At least one recipient is required" }
+        require(params.size <= 32) { "Maximum 32 recipients per request" }
+        require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
+        
+        val body = mutableMapOf<String, Any>(
+            "text" to text,
+            "param" to params,
+            "encoding" to encoding,
+            "request_status_report" to true
+        )
+        ports?.let { if (it.isNotEmpty()) body["port"] = it }
+        
+        return postJson("/api/send_sms", body)
+    }
+
+    /** جلب نتائج إرسال SMS — POST /api/query_sms_result */
+    fun querySmsResult(userIds: List<Int> = emptyList(), numbers: List<String> = emptyList()): Map<String, Any?> {
+        val body = mutableMapOf<String, Any>()
+        if (userIds.isNotEmpty()) body["user_id"] = userIds
+        if (numbers.isNotEmpty()) body["number"] = numbers
+        return postJson("/api/query_sms_result", body)
+    }
+
+    /** جلب حالة تسليم SMS — POST /api/query_sms_deliver_status */
+    fun querySmsDeliveryStatus(
+        numbers: List<String> = emptyList(),
+        timeAfter: String? = null,
+        timeBefore: String? = null
+    ): Map<String, Any?> {
+        val body = mutableMapOf<String, Any>()
+        if (numbers.isNotEmpty()) body["number"] = numbers
+        timeAfter?.let { body["time_after"] = it }
+        timeBefore?.let { body["time_before"] = it }
+        return postJson("/api/query_sms_deliver_status", body)
+    }
+
+    /** جلب SMS الواردة — GET /api/query_incoming_sms */
+    fun queryIncomingSms(): Map<String, Any?> = getJson("/api/query_incoming_sms", emptyMap())
+
+    /** عدد SMS في الطابور — GET /api/query_sms_count */
+    fun querySmsQueueCount(): Map<String, Any> = getJson("/api/query_sms_count", emptyMap())
+
+    /** إيقاف مهمة إرسال SMS — GET /api/stop_sms?task_id=N */
+    fun stopSmsTask(taskId: Int): Map<String, Any> {
+        require(taskId >= 0) { "Invalid task_id" }
+        return getJson("/api/stop_sms", mapOf("task_id" to taskId.toString()))
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 📞 Advanced Port Operations — حسب وثائق Dinstar
+    // ═══════════════════════════════════════════════════════
+
+    /** Call Forward — GET /api/set_port_info?action=CallForward */
+    fun setCallForward(port: Int, param: String, number: String): Map<String, Any> {
+        require(port in 0..7) { "Port must be 0-7" }
+        require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) { "Invalid CallForward param" }
+        return getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "CallForward",
+            "param" to param, "number" to number
+        ))
+    }
+
+    /** Power on/off port — GET /api/set_port_info?action=power&param=on/off */
+    fun setPortPower(port: Int, on: Boolean): Map<String, Any> {
+        require(port in 0..7) { "Port must be 0-7" }
+        return getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
+        ))
+    }
+
+    /** Get Device Status — POST /api/get_status */
+    fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
+
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
         registerGateway(0)

@@ -71,6 +71,7 @@ class SecurityConfig(
                     .requestMatchers("/api/groups/**").authenticated()
                     .requestMatchers("/api/messages/**", "/api/contacts/**", "/api/devices/**").authenticated()
                     .requestMatchers("/api/pstn/**", "/api/dinstar/**").authenticated()
+                    .requestMatchers("/api/admin/dinstar/sms/**").hasRole("ADMIN")
                     .requestMatchers("/api/media/**").authenticated()
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()

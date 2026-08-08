@@ -191,6 +191,12 @@ fun MainAppNavigation() {
                 onDialWithPort = { port, number -> navController.navigate("pstn_call/$number") }
             )
         }
+        composable("dinstar_sms") {
+            DinstarSmsScreen(
+                viewModel = remember { DinstarViewModel() },
+                onBack = { navController.popBackStack() }
+            )
+        }
 
         // ━━━━━━━━━━━━ 🔔 الإشعارات ━━━━━━━━━━━━
         composable("notifications") {

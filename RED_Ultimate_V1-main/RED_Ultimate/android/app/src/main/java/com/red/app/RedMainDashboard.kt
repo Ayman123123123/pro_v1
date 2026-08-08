@@ -106,7 +106,8 @@ fun RedMainDashboard(
                         2 -> DinstarTab(
                             viewModel = dinstarViewModel,
                             onDialViaPort = { port, number -> onNavigateToPstn(number) },
-                            onNavigateToCdr = { onNavigateToDinstar() }
+                            onNavigateToCdr = { onNavigateToDinstar() },
+                            onNavigateToSms = { onNavigateToDinstar() }
                         )
                         3 -> RedExploreScreen(
                             onStartLive = onNavigateToLive,

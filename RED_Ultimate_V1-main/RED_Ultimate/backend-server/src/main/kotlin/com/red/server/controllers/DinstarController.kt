@@ -62,6 +62,29 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
     fun updateSip(@RequestBody data: Map<String, String>): Nothing =
         hardware.updateSipSettings(data["sip_ip"].orEmpty())
 
+    /** Call Forward — set or check */
+    @PostMapping("/ports/{port}/callforward")
+    fun setCallForward(
+        @PathVariable port: Int,
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): Map<String, Any> {
+        val param = body["param"] ?: throw IllegalArgumentException("param is required (Unconditional/NoReply/Busy/Not_Reachable/CancelAll)")
+        val number = body["number"] ?: ""
+        return hardware.setCallForward(port, param, number)
+    }
+
+    /** Power on/off port */
+    @PostMapping("/ports/{port}/power")
+    fun setPortPower(@PathVariable port: Int, @RequestBody body: Map<String, String>): Map<String, Any> {
+        val on = body["on"]?.toBoolean() ?: true
+        return hardware.setPortPower(port, on)
+    }
+
+    /** Device status — POST /api/get_status */
+    @GetMapping("/device-status")
+    fun deviceStatus(): Map<String, Any?> = hardware.getDeviceStatus()
+
     /** Voice always follows the authorized Asterisk route. */
     @PostMapping("/dial")
     fun directDial() = ResponseEntity.status(410).body(
