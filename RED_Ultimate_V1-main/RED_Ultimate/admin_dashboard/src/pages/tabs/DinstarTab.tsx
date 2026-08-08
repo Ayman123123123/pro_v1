@@ -16,7 +16,7 @@ const DinstarTab: React.FC = () => {
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24 }}>
-                <h2 style={{ color: '#fff' }}>🔴 DINSTAR UC2000-VE-8T (GSM Gateway)</h2>
+                <h2 style={{ color: '#fff' }}>🔴 DINSTAR UC2000-VE-8G (GSM Gateway)</h2>
                 <Button icon={<ReloadOutlined />} onClick={refresh}>Manual Sync</Button>
             </div>
             <Row gutter={[16, 16]}>
