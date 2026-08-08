@@ -6,5 +6,5 @@
 - Functional errors: 1 (reduced from 8)
 - Backend: 58+ Kotlin files
 - Admin: 22+ React files
-- Docker: 13 services with healthchecks
+- Docker: 10 services (compose), 7 with healthchecks (backend, PostgreSQL, MongoDB, Redis, MinIO, media-sfu, admin-panel)
 - All reports, docs, .env, nginx complete.

@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "start": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "check": "node --check src/api.ts && node scripts/check-api-contract.mjs",
+    "check:api": "node scripts/check-api-contract.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

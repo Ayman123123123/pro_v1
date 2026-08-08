@@ -1,29 +1,40 @@
 import React, { useEffect, useState } from 'react';
+import { Card, Col, Row, Statistic } from 'antd';
+import { ApiOutlined, DatabaseOutlined, MessageOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { apiFetch } from '../api';
 
 /**
- * RED Admin Live Monitor
- * Tracks System A (VoIP), System B (PSTN), and System C (Messages) in Real-time.
+ * RED Admin Live Monitor — يقرأ المقاييس الحقيقية من:
+ *   GET /api/admin/monitor/stats  -> { active_users, total_messages, jvm_memory_percent, uptime_ms, cpu_cores, ... }
  */
 const LiveMonitor = () => {
-    const [stats, setStats] = useState({ voip: 0, pstn: 0, msgs: 0 });
+    const [stats, setStats] = useState(null);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            // Fetch live stats from backend
-            fetch('/api/admin/monitor/stats')
-                .then(res => res.json())
-                .then(data => setStats(data));
-        }, 2000);
+        const load = async () => {
+            try {
+                const response = await apiFetch('/api/admin/monitor/stats');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                setStats(await response.json());
+                setError('');
+            } catch (e) {
+                setError(e?.message || 'network');
+            }
+        };
+        load();
+        const interval = setInterval(load, 5000);
         return () => clearInterval(interval);
     }, []);
 
     return (
-        <div className="monitor-container">
-            <h2>Live System Monitoring</h2>
-            <div className="stat-card">4K VoIP Calls: {stats.voip}</div>
-            <div className="stat-card">PSTN Calls (Dumin): {stats.pstn}</div>
-            <div className="stat-card">Messages Delivered: {stats.msgs}</div>
-        </div>
+        <Row gutter={[16, 16]}>
+            <Col span={6}><Card><Statistic title="المستخدمون المتصلون (5 دقائق)" value={stats?.active_users ?? '—'} prefix={<ThunderboltOutlined />} /></Card></Col>
+            <Col span={6}><Card><Statistic title="إجمالي الرسائل" value={stats?.total_messages ?? '—'} prefix={<MessageOutlined />} /></Card></Col>
+            <Col span={6}><Card><Statistic title="ذاكرة JVM" value={stats?.jvm_memory_percent ?? '—'} suffix="%" prefix={<ApiOutlined />} /></Card></Col>
+            <Col span={6}><Card><Statistic title="مدة التشغيل" value={Math.round((stats?.uptime_ms ?? 0) / 1000)} suffix="ث" prefix={<DatabaseOutlined />} /></Card></Col>
+            {error && <Col span={24}><Card size="small" style={{ color: '#ff7875' }}>تعذر قراءة المقاييس: {error}</Card></Col>}
+        </Row>
     );
 };
 

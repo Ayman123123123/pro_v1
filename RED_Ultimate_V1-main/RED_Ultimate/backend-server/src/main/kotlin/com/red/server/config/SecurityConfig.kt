@@ -50,7 +50,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/identity/authority").permitAll()
                     .requestMatchers("/health", "/actuator/health").permitAll()
                     .requestMatchers("/ws/**").permitAll()
-                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**")
+                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**")
                     .hasRole("ADMIN")
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()
