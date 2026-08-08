@@ -267,9 +267,62 @@ class DinstarHardwareService(
         return response["info"] as? List<Map<String, Any?>> ?: emptyList()
     }
 
+    /**
+     * Yemen mobile operator prefixes — CORRECTED per Wikipedia + ITU E.164
+     * | Prefix | Operator                        |
+     * |--------|---------------------------------|
+     * | 71     | سبأفون (Sabafon)               |
+     * | 73     | يو / YOU (formerly MTN Yemen)   |
+     * | 77, 78 | يمن موبايل (Yemen Mobile)      |
+     * | 70     | واي (Y Telecom)                |
+     * | 10     | يمن 4G (Yemen 4G)              |
+     */
+    private val YEMEN_OPERATOR_PREFIXES: Map<String, String> = mapOf(
+        "71" to "Sabafon",
+        "73" to "YOU",
+        "77" to "YemenMobile",
+        "78" to "YemenMobile",
+        "70" to "YTelecom",
+        "10" to "Yemen4G"
+    )
+
+    /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
+    private fun resolveOperatorName(apiName: String?, simNumber: String?): String {
+        // First try: use SIM number prefix (most reliable)
+        if (!simNumber.isNullOrBlank()) {
+            val digits = simNumber.filter { it.isDigit() }
+            val local = when {
+                digits.startsWith("967") -> digits.removePrefix("967")
+                digits.startsWith("0") -> digits.removePrefix("0")
+                else -> digits
+            }
+            if (local.length >= 2) {
+                val prefix = local.substring(0, 2)
+                YEMEN_OPERATOR_PREFIXES[prefix]?.let { return it }
+            }
+        }
+        // Second try: match API operator name with corrections
+        if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
+            return when {
+                apiName.contains("Sabafon", ignoreCase = true) -> "Sabafon"
+                apiName.contains("YOU", ignoreCase = true) || apiName.contains("Yemeni Omani", ignoreCase = true) -> "YOU"
+                apiName.contains("MTN", ignoreCase = true) -> "YOU"  // MTN → YOU since 2021
+                apiName.contains("Yemen", ignoreCase = true) && apiName.contains("Mobile", ignoreCase = true) -> "YemenMobile"
+                apiName.contains("Y Telecom", ignoreCase = true) || apiName == "Y" -> "YTelecom"
+                apiName.contains("HiTel", ignoreCase = true) || apiName.contains("Hi Tel", ignoreCase = true) -> "YTelecom"  // HiTel→YTelecom
+                apiName.contains("Yemen 4G", ignoreCase = true) -> "Yemen4G"
+                else -> apiName  // Return as-is if unrecognized
+            }
+        }
+        return "UNKNOWN"
+    }
+
     private fun normalizePort(raw: Map<String, Any?>): Map<String, Any?>? {
         val index = (raw["port"] as? Number)?.toInt() ?: return null
         val signalRaw = (raw["signal"] as? Number)?.toInt()?.coerceIn(0, 31) ?: 0
+        val simNumber = raw["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+        val apiOperator = raw["operator"]?.toString()
+        val resolvedOperator = resolveOperatorName(apiOperator, simNumber)
         return mapOf(
             "index" to index,
             "radioType" to raw["type"].toString(),
@@ -278,10 +331,10 @@ class DinstarHardwareService(
             "signalRaw" to signalRaw,
             "signal" to (signalRaw / 31.0 * 100).roundToInt(),
             "gprs" to raw["gprs"].toString(),
-            "numberMasked" to mask(raw["number"]?.toString()),
+            "numberMasked" to mask(simNumber),
             "imsiMasked" to mask(raw["imsi"]?.toString()),
             "iccidMasked" to mask(raw["iccid"]?.toString()),
-            "operator" to "UNKNOWN"
+            "operator" to resolvedOperator
         )
     }
 
