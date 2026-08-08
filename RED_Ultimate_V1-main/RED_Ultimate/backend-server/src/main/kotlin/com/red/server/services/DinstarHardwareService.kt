@@ -155,6 +155,98 @@ class DinstarHardwareService(
 
     fun capabilities() = documentedCapabilities()
 
+    // ═══════════════════════════════════════════════════════
+    // 📱 SMS Operations — حسب وثائق Dinstar API الرسمية
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * إرسال SMS — POST /api/send_sms
+     * 
+     * @param text محتوى الرسالة (حتى 60 بايت لـ GSM7BIT)
+     * @param params قائمة المستلمين: [{number: "777123456", user_id: 1}]
+     * @param ports منافذ محددة (اختياري، null = جميع المنافذ)
+     * @param encoding GSM7BIT أو UCS2
+     */
+    fun sendSms(
+        text: String,
+        params: List<Map<String, Any?>>,
+        ports: List<Int>? = null,
+        encoding: String = "GSM7BIT"
+    ): Map<String, Any?> {
+        require(text.isNotBlank()) { "SMS text is required" }
+        require(params.isNotEmpty()) { "At least one recipient is required" }
+        require(params.size <= 32) { "Maximum 32 recipients per request" }
+        require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
+        
+        val body = mutableMapOf<String, Any>(
+            "text" to text,
+            "param" to params,
+            "encoding" to encoding,
+            "request_status_report" to true
+        )
+        ports?.let { if (it.isNotEmpty()) body["port"] = it }
+        
+        return postJson("/api/send_sms", body)
+    }
+
+    /** جلب نتائج إرسال SMS — POST /api/query_sms_result */
+    fun querySmsResult(userIds: List<Int> = emptyList(), numbers: List<String> = emptyList()): Map<String, Any?> {
+        val body = mutableMapOf<String, Any>()
+        if (userIds.isNotEmpty()) body["user_id"] = userIds
+        if (numbers.isNotEmpty()) body["number"] = numbers
+        return postJson("/api/query_sms_result", body)
+    }
+
+    /** جلب حالة تسليم SMS — POST /api/query_sms_deliver_status */
+    fun querySmsDeliveryStatus(
+        numbers: List<String> = emptyList(),
+        timeAfter: String? = null,
+        timeBefore: String? = null
+    ): Map<String, Any?> {
+        val body = mutableMapOf<String, Any>()
+        if (numbers.isNotEmpty()) body["number"] = numbers
+        timeAfter?.let { body["time_after"] = it }
+        timeBefore?.let { body["time_before"] = it }
+        return postJson("/api/query_sms_deliver_status", body)
+    }
+
+    /** جلب SMS الواردة — GET /api/query_incoming_sms */
+    fun queryIncomingSms(): Map<String, Any?> = getJson("/api/query_incoming_sms", emptyMap())
+
+    /** عدد SMS في الطابور — GET /api/query_sms_count */
+    fun querySmsQueueCount(): Map<String, Any> = getJson("/api/query_sms_count", emptyMap())
+
+    /** إيقاف مهمة إرسال SMS — GET /api/stop_sms?task_id=N */
+    fun stopSmsTask(taskId: Int): Map<String, Any> {
+        require(taskId >= 0) { "Invalid task_id" }
+        return getJson("/api/stop_sms", mapOf("task_id" to taskId.toString()))
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 📞 Advanced Port Operations — حسب وثائق Dinstar
+    // ═══════════════════════════════════════════════════════
+
+    /** Call Forward — GET /api/set_port_info?action=CallForward */
+    fun setCallForward(port: Int, param: String, number: String): Map<String, Any> {
+        require(port in 0..7) { "Port must be 0-7" }
+        require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) { "Invalid CallForward param" }
+        return getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "CallForward",
+            "param" to param, "number" to number
+        ))
+    }
+
+    /** Power on/off port — GET /api/set_port_info?action=power&param=on/off */
+    fun setPortPower(port: Int, on: Boolean): Map<String, Any> {
+        require(port in 0..7) { "Port must be 0-7" }
+        return getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
+        ))
+    }
+
+    /** Get Device Status — POST /api/get_status */
+    fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
+
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
         registerGateway(0)
@@ -175,9 +267,62 @@ class DinstarHardwareService(
         return response["info"] as? List<Map<String, Any?>> ?: emptyList()
     }
 
+    /**
+     * Yemen mobile operator prefixes — CORRECTED per Wikipedia + ITU E.164
+     * | Prefix | Operator                        |
+     * |--------|---------------------------------|
+     * | 71     | سبأفون (Sabafon)               |
+     * | 73     | يو / YOU (formerly MTN Yemen)   |
+     * | 77, 78 | يمن موبايل (Yemen Mobile)      |
+     * | 70     | واي (Y Telecom)                |
+     * | 10     | يمن 4G (Yemen 4G)              |
+     */
+    private val YEMEN_OPERATOR_PREFIXES: Map<String, String> = mapOf(
+        "71" to "Sabafon",
+        "73" to "YOU",
+        "77" to "YemenMobile",
+        "78" to "YemenMobile",
+        "70" to "YTelecom",
+        "10" to "Yemen4G"
+    )
+
+    /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
+    private fun resolveOperatorName(apiName: String?, simNumber: String?): String {
+        // First try: use SIM number prefix (most reliable)
+        if (!simNumber.isNullOrBlank()) {
+            val digits = simNumber.filter { it.isDigit() }
+            val local = when {
+                digits.startsWith("967") -> digits.removePrefix("967")
+                digits.startsWith("0") -> digits.removePrefix("0")
+                else -> digits
+            }
+            if (local.length >= 2) {
+                val prefix = local.substring(0, 2)
+                YEMEN_OPERATOR_PREFIXES[prefix]?.let { return it }
+            }
+        }
+        // Second try: match API operator name with corrections
+        if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
+            return when {
+                apiName.contains("Sabafon", ignoreCase = true) -> "Sabafon"
+                apiName.contains("YOU", ignoreCase = true) || apiName.contains("Yemeni Omani", ignoreCase = true) -> "YOU"
+                apiName.contains("MTN", ignoreCase = true) -> "YOU"  // MTN → YOU since 2021
+                apiName.contains("Yemen", ignoreCase = true) && apiName.contains("Mobile", ignoreCase = true) -> "YemenMobile"
+                apiName.contains("Y Telecom", ignoreCase = true) || apiName == "Y" -> "YTelecom"
+                apiName.contains("HiTel", ignoreCase = true) || apiName.contains("Hi Tel", ignoreCase = true) -> "YTelecom"  // HiTel→YTelecom
+                apiName.contains("Yemen 4G", ignoreCase = true) -> "Yemen4G"
+                else -> apiName  // Return as-is if unrecognized
+            }
+        }
+        return "UNKNOWN"
+    }
+
     private fun normalizePort(raw: Map<String, Any?>): Map<String, Any?>? {
         val index = (raw["port"] as? Number)?.toInt() ?: return null
         val signalRaw = (raw["signal"] as? Number)?.toInt()?.coerceIn(0, 31) ?: 0
+        val simNumber = raw["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+        val apiOperator = raw["operator"]?.toString()
+        val resolvedOperator = resolveOperatorName(apiOperator, simNumber)
         return mapOf(
             "index" to index,
             "radioType" to raw["type"].toString(),
@@ -186,10 +331,10 @@ class DinstarHardwareService(
             "signalRaw" to signalRaw,
             "signal" to (signalRaw / 31.0 * 100).roundToInt(),
             "gprs" to raw["gprs"].toString(),
-            "numberMasked" to mask(raw["number"]?.toString()),
+            "numberMasked" to mask(simNumber),
             "imsiMasked" to mask(raw["imsi"]?.toString()),
             "iccidMasked" to mask(raw["iccid"]?.toString()),
-            "operator" to "UNKNOWN"
+            "operator" to resolvedOperator
         )
     }
 

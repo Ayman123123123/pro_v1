@@ -4,6 +4,7 @@ import android.util.Log
 import com.red.sovereign.core.delivery.RedDeliveryEngine
 import com.red.sovereign.features.calls.RedVoipMaster
 import com.red.sovereign.features.pstn.PstnViewModel
+import com.red.features.dinstar.DinstarViewModel
 import com.red.sovereign.core.auth.ApprovalManager
 import com.red.sovereign.core.auth.IdentityManager
 import javax.inject.Inject
@@ -19,7 +20,8 @@ class MasterSystemOrchestrator @Inject constructor(
     private val voipMaster: RedVoipMaster,
     private val pstnViewModel: PstnViewModel,
     private val approvalManager: ApprovalManager,
-    private val identityManager: IdentityManager
+    private val identityManager: IdentityManager,
+    private val dinstarViewModel: DinstarViewModel
 ) {
     companion object { private const val TAG = "RED.Orchestrator" }
 
@@ -46,6 +48,10 @@ class MasterSystemOrchestrator @Inject constructor(
             runCatching { pstnViewModel.syncGatewayStatus() }
                 .onFailure { Log.e(TAG, "PSTN gateway sync failed", it) }
 
+            // Dinstar Gateway Discovery & Live Monitoring
+            runCatching { dinstarViewModel.discoverGateway() }
+                .onFailure { Log.e(TAG, "Dinstar gateway discovery failed", it) }
+
             isRunning = true
             Log.i(TAG, "All sovereign systems initialized successfully")
         } else {
@@ -57,6 +63,7 @@ class MasterSystemOrchestrator @Inject constructor(
     fun stopSovereignSystem() {
         if (!isRunning) return
         Log.i(TAG, "Shutting down sovereign systems")
+        dinstarViewModel.stopLiveMonitoring()
         isRunning = false
     }
 

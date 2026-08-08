@@ -26,6 +26,39 @@ interface Discovery {
   message?: string;
 }
 
+/**
+ * Yemen mobile operators — CORRECTED mapping (Wikipedia + ITU E.164)
+ * | Prefix | Operator                        |
+ * |--------|---------------------------------|
+ * | 71     | سبأفون (Sabafon)               |
+ * | 73     | يو / YOU (formerly MTN Yemen)   |
+ * | 77, 78 | يمن موبايل (Yemen Mobile)      |
+ * | 70     | واي (Y Telecom)                |
+ * | 10     | يمن 4G (Yemen 4G)              |
+ */
+const YEMEN_OPERATORS: Record<string, { arabic: string; english: string; color: string }> = {
+  'Sabafon':   { arabic: 'سبأفون',     english: 'Sabafon',             color: '#E53935' },
+  'MTN':       { arabic: 'يو',          english: 'YOU (Yemeni Omani)', color: '#FFB300' },
+  'YOU':       { arabic: 'يو',          english: 'YOU (Yemeni Omani)', color: '#FFB300' },
+  'YemenMobile':{arabic: 'يمن موبايل',  english: 'Yemen Mobile',       color: '#43A047' },
+  'Yemen Mobile':{arabic:'يمن موبايل',  english: 'Yemen Mobile',       color: '#43A047' },
+  'YTelecom':  { arabic: 'واي',         english: 'Y Telecom',          color: '#1E88E5' },
+  'Y Telecom': { arabic: 'واي',         english: 'Y Telecom',          color: '#1E88E5' },
+  'HiTel':     { arabic: 'واي',         english: 'Y Telecom',          color: '#1E88E5' },
+  'Yemen4G':   { arabic: 'يمن 4G',      english: 'Yemen 4G',           color: '#7C4DFF' },
+  'Yemen 4G':  { arabic: 'يمن 4G',      english: 'Yemen 4G',           color: '#7C4DFF' },
+};
+
+/** Resolve operator name: maps old/wrong names to correct Yemen operator */
+function resolveOperator(raw?: string): { arabic: string; english: string; color: string } {
+  if (!raw || raw === 'UNKNOWN' || raw === 'غير معروف') return { arabic: 'غير معروف', english: 'Unknown', color: '#757575' };
+  if (YEMEN_OPERATORS[raw]) return YEMEN_OPERATORS[raw];
+  for (const key of Object.keys(YEMEN_OPERATORS)) {
+    if (raw.includes(key)) return YEMEN_OPERATORS[key];
+  }
+  return { arabic: raw, english: raw, color: '#757575' };
+}
+
 const DinstarTab: React.FC = () => {
     const [slots, setSlots] = useState<PortSlot[]>([]);
     const [discovery, setDiscovery] = useState<Discovery | null>(null);
@@ -99,7 +132,9 @@ const DinstarTab: React.FC = () => {
 
             {/* Port Grid */}
             <Row gutter={[16, 16]}>
-                {slots.map(slot => (
+                {slots.map(slot => {
+                    const op = resolveOperator(slot.operator);
+                    return (
                     <Col span={6} key={slot.index}>
                         <Card style={{ background: '#1f1f1f', border: '1px solid #333' }}
                             extra={<Tag color={statusColor(slot.status)}>{slot.status || 'UNKNOWN'}</Tag>}>
@@ -109,7 +144,7 @@ const DinstarTab: React.FC = () => {
                                 </Badge>
                                 <div>
                                     <b style={{ color: '#fff' }}>SIM {slot.index + 1}</b>
-                                    <div style={{ fontSize: 11, color: '#888' }}>{slot.radioType || 'GSM'}</div>
+                                    <div style={{ fontSize: 11, color: op.color, fontWeight: 600 }}>{op.arabic}</div>
                                     <div style={{ fontSize: 11, color: slot.callState === 'ACTIVE' ? '#722ed1' : '#888' }}>
                                         {slot.callState || 'IDLE'}
                                     </div>
@@ -124,11 +159,13 @@ const DinstarTab: React.FC = () => {
                             </div>
                             <div style={{ marginTop: 8, fontSize: 11, color: '#666' }}>
                                 <div>{slot.numberMasked || '—'}</div>
+                                <div style={{ color: op.color, fontWeight: 600 }}>{op.arabic}</div>
                                 <div>GPRS: {slot.gprs || 'UNKNOWN'}</div>
                             </div>
                         </Card>
                     </Col>
-                ))}
+                    );
+                })}
             </Row>
 
             {!slots.length && (

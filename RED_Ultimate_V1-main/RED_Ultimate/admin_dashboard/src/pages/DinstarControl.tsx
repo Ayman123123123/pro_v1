@@ -6,6 +6,15 @@ import { apiFetch } from '../api';
 type Port = { index:number; radioType?:string; status?:string; callState?:string; signal?:number; signalRaw?:number; gprs?:string; numberMasked?:string; imsiMasked?:string; iccidMasked?:string; operator?:string };
 type Discovery = { success:boolean; gatewayIp:string; model:string; status:string; portsDetected?:number; message?:string };
 
+/** Yemen operators — CORRECTED (Wikipedia + ITU E.164): 71=Sabafon, 73=YOU, 77/78=YemenMobile, 70=Y Telecom, 10=Yemen4G */
+const YEMEN_OP: Record<string,{ar:string;en:string;clr:string}> = {
+  Sabafon:{ar:'سبأفون',en:'Sabafon',clr:'#E53935'}, MTN:{ar:'يو',en:'YOU',clr:'#FFB300'}, YOU:{ar:'يو',en:'YOU',clr:'#FFB300'},
+  YemenMobile:{ar:'يمن موبايل',en:'Yemen Mobile',clr:'#43A047'}, 'Yemen Mobile':{ar:'يمن موبايل',en:'Yemen Mobile',clr:'#43A047'},
+  YTelecom:{ar:'واي',en:'Y Telecom',clr:'#1E88E5'}, 'Y Telecom':{ar:'واي',en:'Y Telecom',clr:'#1E88E5'}, HiTel:{ar:'واي',en:'Y Telecom',clr:'#1E88E5'},
+  Yemen4G:{ar:'يمن 4G',en:'Yemen 4G',clr:'#7C4DFF'}, 'Yemen 4G':{ar:'يمن 4G',en:'Yemen 4G',clr:'#7C4DFF'},
+};
+const resolveOp=(o?:string)=>{if(!o||o==='UNKNOWN')return{ar:'غير معروف',en:'Unknown',clr:'#757575'};if(YEMEN_OP[o])return YEMEN_OP[o];for(const k of Object.keys(YEMEN_OP))if(o.includes(k))return YEMEN_OP[k];return{ar:o,en:o,clr:'#757575'};};
+
 export default function DinstarControl() {
   const [ports,setPorts]=useState<Port[]>([]); const [discovery,setDiscovery]=useState<Discovery|null>(null); const [capabilities,setCapabilities]=useState<Record<string,unknown>>({});
   const [cdr,setCdr]=useState<any[]>([]); const [loading,setLoading]=useState(false); const [ussdPort,setUssdPort]=useState<number|null>(null); const [ussd,setUssd]=useState('');
@@ -27,7 +36,7 @@ export default function DinstarControl() {
     </Descriptions></Card>
     <Row gutter={[12,12]}>{ports.map(port=><Col xs={24} sm={12} lg={6} key={port.index}><Card title={`SIM ${port.index+1}`} extra={<Tag color={port.status==='REGISTERED'?'green':'orange'}>{port.status||'UNKNOWN'}</Tag>}>
       <div style={{textAlign:'center'}}><SignalFilled style={{fontSize:34,color:(port.signal||0)>55?'#00C896':'#E8B84A'}}/><Progress percent={port.signal||0} strokeColor="#00C896"/><Space wrap><Tag>{port.radioType||'UNKNOWN'}</Tag><Tag color="blue">{port.callState||'UNKNOWN'}</Tag><Tag>{port.gprs||'UNKNOWN'}</Tag></Space></div>
-      <Descriptions column={1} size="small" style={{marginTop:10}}><Descriptions.Item label="Number">{port.numberMasked||'غير معروف'}</Descriptions.Item><Descriptions.Item label="IMSI">{port.imsiMasked||'—'}</Descriptions.Item><Descriptions.Item label="ICCID">{port.iccidMasked||'—'}</Descriptions.Item></Descriptions>
+      <Descriptions column={1} size="small" style={{marginTop:10}}><Descriptions.Item label="Operator"><Tag color={resolveOp(port.operator).clr}>{resolveOp(port.operator).ar}</Tag></Descriptions.Item><Descriptions.Item label="Number">{port.numberMasked||'غير معروف'}</Descriptions.Item><Descriptions.Item label="IMSI">{port.imsiMasked||'—'}</Descriptions.Item><Descriptions.Item label="ICCID">{port.iccidMasked||'—'}</Descriptions.Item></Descriptions>
       <Space style={{marginTop:8}}><Button size="small" icon={<ApiOutlined/>} onClick={()=>{setUssdPort(port.index);setUssd('');}}>USSD</Button><Button size="small" danger icon={<ToolOutlined/>} onClick={()=>reset(port.index)}>Reset module</Button></Space>
     </Card></Col>)}</Row>
     {!ports.length&&<Card><Typography.Text type="secondary">لا توجد بيانات منافذ. تحقق من عنوان الجهاز وكلمة API ومن أن الحاسوب/الخادم يصل إلى شبكة 192.168.11.0/24.</Typography.Text></Card>}
