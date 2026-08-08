@@ -48,7 +48,7 @@ class PstnCallService(
         }
 
         return runCatching {
-            val slot = loadBalancer.getOptimalSlotBySignal()
+            val slot = loadBalancer.getOptimalSlotWfq(number)
             log.info("PSTN dial: user={} number={} slot={}/8", user.redId, number, slot + 1)
             val actionId = pstn.dialGsm(number)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)

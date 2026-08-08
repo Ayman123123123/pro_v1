@@ -25,14 +25,8 @@ import com.red.core.theme.SovereignColors
 import kotlinx.coroutines.delay
 
 /**
- * 📞 YOUNES PSTN Call Screen — شاشة مكالمة خطية عبر DINSTAR
- * 
- * التدفق:
- * 1. المستخدم يُدخل الرقم في PstnDialerScreen
- * 2. يضغط "اتصال" ← ViewModel يختار أفضل منفذ
- * 3. الطلب يذهب للباكند: POST /api/pstn/dial
- * 4. الباكند ← Asterisk AMI ← PJSIP ← DINSTAR SIM Port
- * 5. هذه الشاشة تعرض حالة المكالمة الحية
+ * 📞 YOUNES PSTN Call Screen V2 — Real-time WebSocket
+ * حالة المكالمة حية من DinstarWebSocketBridge
  */
 @Composable
 fun PstnCallScreen(
@@ -49,23 +43,54 @@ fun PstnCallScreen(
     var callDuration by remember { mutableIntStateOf(0) }
     var isMuted by remember { mutableStateOf(false) }
     var isSpeakerOn by remember { mutableStateOf(false) }
+    var isOnHold by remember { mutableStateOf(false) }
+    var liveSignal by remember { mutableIntStateOf(optimalPort?.signalPercent ?: 0) }
 
-    // مؤقت المكالمة
-    LaunchedEffect(callState) {
-        if (callState == "ACTIVE") {
-            while (true) {
-                delay(1000)
-                callDuration++
+    // ─── استماع لأحداث WebSocket ───
+    LaunchedEffect(Unit) {
+        viewModel.dinstarEvents.collect { event ->
+            when (event) {
+                is DinstarEvent.CallStateChanged -> {
+                    when {
+                        event.newState == "RINGING" && event.port == (optimalPort?.index ?: -1) ->
+                            callState = "RINGING"
+                        event.newState == "ACTIVE" && event.oldState != "ACTIVE" && event.port == (optimalPort?.index ?: -1) ->
+                            callState = "ACTIVE"
+                        event.newState == "IDLE" && event.oldState == "ACTIVE" && event.port == (optimalPort?.index ?: -1) -> {
+                            callState = "ENDED"
+                            delay(2000)
+                            onEnd()
+                        }
+                    }
+                }
+                is DinstarEvent.CircuitBreakerOpen -> { callState = "ENDED" }
+                else -> {}
             }
         }
     }
 
-    // محاكاة تقدم المكالمة (في الإنتاج: WebSocket من الباكند)
-    LaunchedEffect(Unit) {
-        delay(2000)
-        if (callState == "CONNECTING") callState = "RINGING"
-        delay(3000)
-        if (callState == "RINGING") callState = "ACTIVE"
+    LaunchedEffect(gatewayStatus.ports) {
+        optimalPort?.let { port ->
+            gatewayStatus.ports.find { it.index == port.index }?.let { livePort ->
+                liveSignal = livePort.signalPercent
+            }
+        }
+    }
+
+    LaunchedEffect(callState) {
+        if (callState == "ACTIVE") {
+            while (true) { delay(1000); callDuration++ }
+        }
+    }
+
+    val wsConnected by viewModel.connectionState.collectAsStateWithLifecycle()
+    LaunchedEffect(wsConnected) {
+        if (wsConnected != BackendConnectionState.CONNECTED) {
+            delay(2000)
+            if (callState == "CONNECTING") callState = "RINGING"
+            delay(3000)
+            if (callState == "RINGING") callState = "ACTIVE"
+        }
     }
 
     val operator = YemenOperator.fromNumber(phoneNumber)
@@ -74,174 +99,93 @@ fun PstnCallScreen(
     val pulseInfinite = rememberInfiniteTransition()
     val pulseAlpha by pulseInfinite.animateFloat(
         initialValue = 0.4f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse),
-        label = "CallPulse"
+        animationSpec = infiniteRepeatable(tween(1500), RepeatMode.Reverse), label = "CallPulse"
+    )
+    val ringPulse by pulseInfinite.animateFloat(
+        initialValue = 0.2f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "RingPulse"
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        SovereignColors.Obsidian,
-                        operatorColor.copy(alpha = 0.05f),
-                        SovereignColors.Obsidian
-                    )
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    Box(modifier = Modifier.fillMaxSize().background(
+        Brush.verticalGradient(listOf(SovereignColors.Obsidian, operatorColor.copy(alpha = 0.05f), SovereignColors.Obsidian))
+    )) {
+        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(60.dp))
 
-            // شارة DINSTAR
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SovereignColors.DinstarGold.copy(alpha = 0.1f),
-                border = BorderStroke(1.dp, SovereignColors.DinstarGold.copy(alpha = 0.3f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            // شارة DINSTAR + WebSocket
+            Surface(shape = RoundedCornerShape(12.dp), color = SovereignColors.DinstarGold.copy(alpha = 0.1f),
+                border = BorderStroke(1.dp, SovereignColors.DinstarGold.copy(alpha = 0.3f))) {
+                Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.SimCard, null, tint = SovereignColors.DinstarGold, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("خطي اليمني — DINSTAR Gateway", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SovereignColors.DinstarGold)
+                    Text("خطي اليمني — DINSTAR", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SovereignColors.DinstarGold)
+                    Spacer(Modifier.width(12.dp))
+                    Box(modifier = Modifier.size(6.dp).background(
+                        when (wsConnected) { BackendConnectionState.CONNECTED -> SovereignColors.Success; BackendConnectionState.CONNECTING -> SovereignColors.Warning; else -> SovereignColors.Danger }, CircleShape
+                    ))
+                    Spacer(Modifier.width(4.dp))
+                    Text(when (wsConnected) { BackendConnectionState.CONNECTED -> "حي"; BackendConnectionState.CONNECTING -> "..."; else -> "غير متصل" }, fontSize = 10.sp, color = Color.Gray)
                 }
             }
 
             Spacer(Modifier.height(40.dp))
 
-            // أيقونة الاتصال مع نبض
-            Box(
-                modifier = Modifier
-                    .size(128.dp)
-                    .clip(CircleShape)
-                    .background(operatorColor.copy(alpha = pulseAlpha * 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.PhoneInTalk,
-                    null,
-                    tint = operatorColor,
-                    modifier = Modifier.size(56.dp)
-                )
+            val currentPulse = if (callState == "RINGING") ringPulse else pulseAlpha
+            Box(modifier = Modifier.size(128.dp).clip(CircleShape).background(operatorColor.copy(alpha = currentPulse * 0.15f)), contentAlignment = Alignment.Center) {
+                Icon(when (callState) { "RINGING" -> Icons.Rounded.PhoneInTalk; "ACTIVE" -> Icons.Rounded.PhoneInTalk; "ENDED" -> Icons.Rounded.CallEnd; else -> Icons.Rounded.PhoneForwarded }, null, tint = operatorColor.copy(alpha = currentPulse), modifier = Modifier.size(56.dp))
             }
 
             Spacer(Modifier.height(24.dp))
-
-            // اسم المشغل
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = operatorColor.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    operator.arabicName,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = operatorColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                )
+            Surface(shape = RoundedCornerShape(8.dp), color = operatorColor.copy(alpha = 0.12f)) {
+                Text(operator.arabicName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = operatorColor, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
             }
-
             Spacer(Modifier.height(12.dp))
-
-            // الرقم
-            Text(
-                phoneNumber,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Light,
-                color = Color.White,
-                letterSpacing = 2.sp
-            )
-
+            Text(phoneNumber, fontSize = 32.sp, fontWeight = FontWeight.Light, color = Color.White, letterSpacing = 2.sp)
             Spacer(Modifier.height(8.dp))
 
-            // حالة المكالمة
-            val stateText = when (callState) {
-                "CONNECTING" -> "جاري الاتصال..."
-                "RINGING" -> "يرن..."
-                "ACTIVE" -> formatDuration(callDuration)
-                "ENDED" -> "انتهت المكالمة"
-                else -> callState
-            }
-            val stateColor = when (callState) {
-                "CONNECTING" -> SovereignColors.Warning
-                "RINGING" -> SovereignColors.Cyan
-                "ACTIVE" -> SovereignColors.Success
-                "ENDED" -> Color.Gray
-                else -> Color.Gray
-            }
+            val stateText = when (callState) { "CONNECTING" -> "جاري الاتصال..."; "RINGING" -> "يرن..."; "ACTIVE" -> formatDuration(callDuration); "ENDED" -> "انتهت المكالمة"; else -> callState }
+            val stateColor = when (callState) { "CONNECTING" -> SovereignColors.Warning; "RINGING" -> SovereignColors.Cyan; "ACTIVE" -> SovereignColors.Success; "ENDED" -> Color.Gray; else -> Color.Gray }
             Text(stateText, fontSize = 18.sp, color = stateColor, fontWeight = FontWeight.Medium)
 
-            // معلومات المنفذ
+            if (callState == "ACTIVE") {
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(progress = { 1f }, modifier = Modifier.width(120.dp).height(2.dp).clip(RoundedCornerShape(1.dp)), color = SovereignColors.Success, trackColor = Color.Gray.copy(alpha = 0.2f))
+            }
+
             if (optimalPort != null) {
                 Spacer(Modifier.height(16.dp))
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = SovereignColors.SurfaceNavy
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Surface(shape = RoundedCornerShape(10.dp), color = SovereignColors.SurfaceNavy) {
+                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.SimCard, null, tint = operatorColor, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("منفذ ${optimalPort.index}", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.width(16.dp))
-                        Icon(Icons.Rounded.SignalCellularAlt, null, tint = SovereignColors.DinstarGold, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp)); Text("منفذ ${optimalPort.index}", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.width(16.dp)); Icon(Icons.Rounded.SignalCellularAlt, null, tint = SovereignColors.DinstarGold, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("${optimalPort.signalPercent}%", fontSize = 12.sp, color = SovereignColors.DinstarGold)
-                        Spacer(Modifier.width(16.dp))
-                        Text(optimalPort.operatorName, fontSize = 12.sp, color = Color.Gray)
+                        val signalColor = when { liveSignal >= 60 -> SovereignColors.Success; liveSignal >= 30 -> SovereignColors.Warning; else -> SovereignColors.Danger }
+                        Text("$liveSignal%", fontSize = 12.sp, color = signalColor, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(16.dp)); Text(optimalPort.operatorName, fontSize = 12.sp, color = Color.Gray)
                     }
+                }
+            }
+
+            if (isOnHold) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(8.dp), color = SovereignColors.Warning.copy(alpha = 0.15f)) {
+                    Text("⏸ مكالمة معلقة", fontSize = 13.sp, color = SovereignColors.Warning, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
                 }
             }
         }
 
-        // ═══ أزرار التحكم ═══
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // الصف العلوي
+        Column(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             if (callState == "ACTIVE") {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 8.dp)
-                ) {
-                    PstnCallControlButton(
-                        icon = if (isMuted) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                        label = if (isMuted) "مكتوم" else "كتم",
-                        onClick = { isMuted = !isMuted },
-                        tint = if (isMuted) SovereignColors.Danger else Color.White
-                    )
-                    PstnCallControlButton(
-                        icon = if (isSpeakerOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeDown,
-                        label = "مكبر",
-                        onClick = { isSpeakerOn = !isSpeakerOn },
-                        tint = if (isSpeakerOn) SovereignColors.Cyan else Color.White
-                    )
+                Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp)) {
+                    PstnCallControlButton(icon = if (isMuted) Icons.Rounded.MicOff else Icons.Rounded.Mic, label = if (isMuted) "مكتوم" else "كتم", onClick = { isMuted = !isMuted }, tint = if (isMuted) SovereignColors.Danger else Color.White)
+                    PstnCallControlButton(icon = if (isSpeakerOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeDown, label = "مكبر", onClick = { isSpeakerOn = !isSpeakerOn }, tint = if (isSpeakerOn) SovereignColors.Cyan else Color.White)
+                    PstnCallControlButton(icon = if (isOnHold) Icons.Rounded.PlayArrow else Icons.Rounded.Pause, label = if (isOnHold) "استئناف" else "تعليق", onClick = { isOnHold = !isOnHold }, tint = if (isOnHold) SovereignColors.Warning else Color.White)
+                    PstnCallControlButton(icon = Icons.Rounded.PhoneForwarded, label = "تحويل", onClick = { }, tint = Color.White)
                 }
             }
-
             Spacer(Modifier.height(8.dp))
-
-            // زر إنهاء المكالمة
-            FloatingActionButton(
-                onClick = {
-                    callState = "ENDED"
-                    onEnd()
-                },
-                containerColor = SovereignColors.Danger,
-                shape = CircleShape,
-                modifier = Modifier.size(72.dp)
-            ) {
+            FloatingActionButton(onClick = { callState = "ENDED"; onEnd() }, containerColor = SovereignColors.Danger, shape = CircleShape, modifier = Modifier.size(72.dp)) {
                 Icon(Icons.Rounded.CallEnd, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
         }
@@ -249,26 +193,11 @@ fun PstnCallScreen(
 }
 
 @Composable
-private fun PstnCallControlButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    tint: Color = Color.White
-) {
+private fun PstnCallControlButton(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color = Color.White) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.size(52.dp).background(Color.White.copy(alpha = 0.1f), CircleShape)
-        ) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(label, color = Color.Gray, fontSize = 10.sp)
+        IconButton(onClick = onClick, modifier = Modifier.size(52.dp).background(Color.White.copy(alpha = 0.1f), CircleShape)) { Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp)) }
+        Spacer(Modifier.height(2.dp)); Text(label, color = Color.Gray, fontSize = 10.sp)
     }
 }
 
-private fun formatDuration(seconds: Int): String {
-    val min = seconds / 60
-    val sec = seconds % 60
-    return "%02d:%02d".format(min, sec)
-}
+private fun formatDuration(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)

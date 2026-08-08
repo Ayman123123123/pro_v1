@@ -16,6 +16,7 @@ import com.red.sovereign.features.media.*
 import com.red.sovereign.features.privacy.*
 import com.red.core.theme.*
 import com.red.features.dinstar.*
+import com.red.features.devices.*
 
 /**
  * 🧭 YOUNES Sovereign Navigation — 24 مسار متكامل
@@ -120,6 +121,19 @@ fun MainAppNavigation() {
             )
         }
 
+        composable(
+            "incoming_pstn_call/{number}/{port}",
+            arguments = listOf(navArgument("port") { type = NavType.IntType })
+        ) { backStack ->
+            IncomingPstnCallScreen(
+                callerNumber = backStack.arguments?.getString("number") ?: "",
+                portIndex = backStack.arguments?.getInt("port") ?: 0,
+                viewModel = remember { DinstarViewModel() },
+                onAnswer = { _, number -> navController.navigate("pstn_call/$number") },
+                onReject = { navController.popBackStack() }
+            )
+        }
+
         composable("conference/{groupId}") { backStack ->
             ConferenceScreen(
                 participants = listOf("أنت", backStack.arguments?.getString("groupId") ?: ""),
@@ -183,7 +197,13 @@ fun MainAppNavigation() {
         composable("settings") { SettingsScreen(navController) }
         composable("backup") { BackupScreen() }
         composable("update") { UpdateScreen() }
-        composable("devices") { /* TODO: DevicesScreen */ }
+        composable("devices") {
+            DevicesScreen(
+                onBack = { navController.popBackStack() },
+                onLogoutDevice = { deviceId -> /* TODO: API call to revoke session */ },
+                onNavigateToDinstar = { navController.navigate("dinstar_admin") }
+            )
+        }
         composable("dinstar_admin") {
             DinstarAdminScreen(
                 viewModel = remember { DinstarViewModel() },

@@ -40,10 +40,14 @@ class DinstarViewModel(
         private const val REFRESH_INTERVAL_MS = 10_000L
         private const val MAX_REFRESH_RETRIES = 3
         private const val SIGNAL_THRESHOLD = 20
-        private const val CIRCUIT_BREAKER_THRESHOLD = 5      // 5 أعطال متتالية → دائرة مفتوحة
-        private const val CIRCUIT_BREAKER_RESET_MS = 30_000L  // بعد 30ث → نصف مفتوحة
-        private const val SUCCESS_WINDOW_SIZE = 20            // نافذة آخر 20 مكالمة
+        private const val CIRCUIT_BREAKER_THRESHOLD = 5
+        private const val CIRCUIT_BREAKER_RESET_MS = 30_000L
+        private const val SUCCESS_WINDOW_SIZE = 20
     }
+
+    // ─── WebSocket Bridge ───
+    private val wsBridge = DinstarWebSocketBridge(backendUrl)
+    private var wsListenerJob: Job? = null
 
     // ─── OkHttp مع ConnectionPool فعال ───
     private val client = OkHttpClient.Builder()
@@ -178,6 +182,7 @@ class DinstarViewModel(
                         recordCircuitSuccess()
                         refreshStatus()
                         startLiveMonitoring()
+                        connectWebSocket()
                         _dinstarEvents.tryEmit(DinstarEvent.GatewayDiscovered(response["gatewayIp"]?.toString() ?: ""))
                     } else {
                         _connectionState.value = BackendConnectionState.ERROR
@@ -429,7 +434,77 @@ class DinstarViewModel(
         }
     }
 
-    /** جلب قدرات الجهاز */
+    // ═══ CallForward + PortPower ═══
+    fun setCallForward(port: Int, param: String, number: String) {
+        require(port in 0..7)
+        viewModelScope.launch(supervisorJob) {
+            _commandResult.value = DinstarCommandResult.Loading
+            try {
+                val body = mapper.writeValueAsString(mapOf("param" to param, "number" to number))
+                val response = apiPostWithBody("/api/admin/dinstar/ports/$port/callforward", body)
+                if (response != null) {
+                    _commandResult.value = DinstarCommandResult.Success("تم تحويل المكالمات من المنفذ $port", response)
+                    _dinstarEvents.tryEmit(DinstarEvent.CallForwardSet(port, param, number))
+                }
+            } catch (e: Exception) { _commandResult.value = DinstarCommandResult.Error("خطأ: ${e.message}") }
+        }
+    }
+    fun cancelCallForward(port: Int) { setCallForward(port, "CancelAll", "") }
+    fun setPortPower(port: Int, on: Boolean) {
+        require(port in 0..7)
+        viewModelScope.launch(supervisorJob) {
+            _commandResult.value = DinstarCommandResult.Loading
+            try {
+                val body = mapper.writeValueAsString(mapOf("power" to if (on) "on" else "off"))
+                val response = apiPostWithBody("/api/admin/dinstar/ports/$port/power", body)
+                if (response != null) {
+                    _commandResult.value = DinstarCommandResult.Success("تم ${if (on) "تشغيل" else "إيقاف"} المنفذ $port", response)
+                    _dinstarEvents.tryEmit(DinstarEvent.PortPowerChanged(port, on))
+                    delay(2000); refreshStatus()
+                }
+            } catch (e: Exception) { _commandResult.value = DinstarCommandResult.Error("خطأ: ${e.message}") }
+        }
+    }
+    fun getDeviceStatus() {
+        viewModelScope.launch(supervisorJob) {
+            try {
+                val response = apiPost("/api/admin/dinstar/device-status")
+                if (response != null) _commandResult.value = DinstarCommandResult.Success("حالة الجهاز", response)
+            } catch (e: Exception) { Log.e(TAG, "Device status failed", e) }
+        }
+    }
+
+    // ═══ WebSocket ═══
+    fun connectWebSocket(token: String? = null) {
+        wsBridge.connect(token)
+        if (wsListenerJob?.isActive != true) {
+            wsListenerJob = viewModelScope.launch(supervisorJob) {
+                wsBridge.wsEvents.collect { event ->
+                    when (event) {
+                        is DinstarWsEvent.Connected -> Log.i(TAG, "WS CONNECTED")
+                        is DinstarWsEvent.PortStatusChanged -> {
+                            val currentPorts = _gatewayStatus.value.ports.toMutableList()
+                            val idx = currentPorts.indexOfFirst { it.index == event.port }
+                            if (idx >= 0) {
+                                val old = currentPorts[idx]
+                                currentPorts[idx] = old.copy(callState = event.callState.ifBlank { old.callState }, signalPercent = if (event.signal > 0) event.signal else old.signalPercent)
+                                _gatewayStatus.value = _gatewayStatus.value.copy(ports = currentPorts)
+                                _dinstarEvents.tryEmit(DinstarEvent.CallStateChanged(event.port, old.callState, event.callState.ifBlank { old.callState }, old.operatorName))
+                            }
+                        }
+                        is DinstarWsEvent.CdrReceived -> queryCdr()
+                        is DinstarWsEvent.IncomingSms -> { queryIncomingSms(); _dinstarEvents.tryEmit(DinstarEvent.IncomingSmsReceived(1)) }
+                        is DinstarWsEvent.ExceptionEvent -> { if (event.type == "call_fail") { recordCallSuccess(false); recordCircuitFailure() } }
+                        is DinstarWsEvent.Error -> Log.e(TAG, "WS error: ${event.message}")
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+    fun disconnectWebSocket() { wsBridge.disconnect(); wsListenerJob?.cancel(); wsListenerJob = null }
+
+        /** جلب قدرات الجهاز */
     fun getCapabilities() {
         viewModelScope.launch(supervisorJob) {
             try {
@@ -744,6 +819,8 @@ class DinstarViewModel(
     override fun onCleared() {
         super.onCleared()
         stopLiveMonitoring()
+        disconnectWebSocket()
+        wsBridge.destroy()
         supervisorJob.cancel()
         client.dispatcher.executorService.shutdown()
         client.connectionPool.evictAll()
@@ -778,6 +855,8 @@ sealed class DinstarEvent {
     data class IncomingSmsReceived(val count: Int) : DinstarEvent()
     data class CallStateChanged(val port: Int, val oldState: String, val newState: String, val operator: String) : DinstarEvent()
     data class CircuitBreakerOpen(val failures: Int) : DinstarEvent()
+    data class CallForwardSet(val port: Int, val param: String, val number: String) : DinstarEvent()
+    data class PortPowerChanged(val port: Int, val on: Boolean) : DinstarEvent()
 }
 
 data class PortScore(
