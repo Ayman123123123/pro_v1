@@ -37,10 +37,10 @@ spring:
 red:
   dinstar:
     ip: ${DINSTAR_IP:192.168.11.1}
-    port: ${DINSTAR_PORT:80}
-    scheme: ${DINSTAR_SCHEME:http}
-    username: ${DINSTAR_USERNAME:}
-    password: ${DINSTAR_PASSWORD:}
+    port: ${DINSTAR_PORT:443}
+    scheme: ${DINSTAR_SCHEME:https}
+    username: ${DINSTAR_USERNAME:admin}
+    password: ${DINSTAR_PASSWORD:admin}
 
   minio:
     endpoint: http://minio:9000

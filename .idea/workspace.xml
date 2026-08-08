@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="1810805e-9b6b-456f-8c66-e30d804a0c21" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/pro.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/res/drawable/younes_background.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/res/drawable/younes_background.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-1.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-1.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-2.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-2.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-3.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-3.jpg" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 5,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3HbXQMajPLn4ALihigTbxQYnqCt" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "C:/Users/hpc01/Pictures/pro"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="1810805e-9b6b-456f-8c66-e30d804a0c21" name="Changes" comment="" />
+      <created>1786137725070</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1786137725070</updated>
+    </task>
+    <servers />
+  </component>
+</project>

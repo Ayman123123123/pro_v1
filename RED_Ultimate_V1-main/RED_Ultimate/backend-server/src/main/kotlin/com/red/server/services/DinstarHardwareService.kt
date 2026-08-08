@@ -1,7 +1,8 @@
 package com.red.server.services
 
+import com.burgstaller.okhttp.digest.CachingAuthenticator
+import com.burgstaller.okhttp.digest.Credentials
 import com.fasterxml.jackson.databind.ObjectMapper
-import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -18,22 +19,30 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
-/** Verified UC2000-VE adapter. Only documented HTTP API operations are exposed. */
+/** Verified UC2000-VE-8G adapter. Only documented HTTP API operations are exposed. */
 @Service
 class DinstarHardwareService(
     @Value("\${red.dinstar.ip}") private val configuredIp: String,
-    @Value("\${red.dinstar.port:80}") private val configuredPort: Int,
-    @Value("\${red.dinstar.scheme:http}") private val configuredScheme: String,
-    @Value("\${red.dinstar.username:}") private val gatewayUsername: String,
-    @Value("\${red.dinstar.password:}") private val gatewayPassword: String,
+    @Value("\${red.dinstar.port:443}") private val configuredPort: Int,
+    @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
+    @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
+    @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
     private val mapper: ObjectMapper,
     private val jdbc: JdbcTemplate
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .callTimeout(12, TimeUnit.SECONDS)
-        .build()
+    private val digestCredentials = Credentials(gatewayUsername, gatewayPassword)
+    private val digestAuthenticator = CachingAuthenticator(Credentials(gatewayUsername, gatewayPassword))
+    
+    private val client: OkHttpClient = run {
+        val builder = OkHttpClient.Builder()
+            .authenticator(digestAuthenticator)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .callTimeout(12, TimeUnit.SECONDS)
+        // Configure SSL for self-signed certs
+        import com.red.server.dinstar.service.GatewaySsl
+        GatewaySsl.configure(builder).build()
+    }
     @Volatile private var activeHost = configuredIp
     private val gatewayId: UUID get() = UUID.nameUUIDFromBytes("DINSTAR:$activeHost:$configuredPort".toByteArray())
 
@@ -45,26 +54,30 @@ class DinstarHardwareService(
             activeHost = host
             registerGateway(result.size)
             return mapOf(
-                "success" to true, "gatewayIp" to host, "model" to "UC2000-VE-8T",
+                "success" to true, "gatewayIp" to host, "model" to "UC2000-VE-8G",
                 "status" to "ONLINE", "portsDetected" to result.size,
                 "capabilities" to documentedCapabilities()
             )
         }
         return mapOf(
-            "success" to false, "gatewayIp" to configuredIp, "model" to "UC2000-VE-8T",
+            "success" to false, "gatewayIp" to configuredIp, "model" to "UC2000-VE-8G",
             "status" to "OFFLINE", "message" to "No authenticated UC2000 get_port_info response"
         )
     }
 
     fun getHardwareStatus(): List<Map<String, Any?>> {
-        val info = queryPortInfo(activeHost)
+        val info = runCatching { queryPortInfo(activeHost) }.getOrElse {
+            registerGateway(0)
+            return emptyList()
+        }
         registerGateway(info.size)
         return info.mapNotNull(::normalizePort).also(::persistPorts)
     }
 
     fun resetPort(port: Int): Map<String, Any> {
-        require(port in 0..7) { "UC2000-VE-8T port must be 0-7" }
-        val response = postJson("/api/set_port_info", mapOf("action" to "reset", "port" to listOf(port)))
+        require(port in 0..7) { "UC2000-VE-8G port must be 0-7" }
+        val response = runCatching { getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString())) }
+            .getOrElse { return mapOf("status" to "FAILED", "port" to port, "error" to networkError(it)) }
         require(apiSuccess(response)) { "DINSTAR rejected module reset" }
         return mapOf("status" to "SUCCEEDED", "port" to port)
     }
@@ -72,17 +85,21 @@ class DinstarHardwareService(
     fun sendUssd(port: Int, text: String): Map<String, Any?> {
         require(port in 0..7)
         require(text.matches(Regex("^[*#0-9]{2,30}$"))) { "Invalid USSD code" }
-        val response = postJson("/api/send_ussd", mapOf("port" to listOf(port), "command" to "send", "text" to text))
+        val response = runCatching { postJson("/api/send_ussd", mapOf("port" to listOf(port), "command" to "send", "text" to text)) }
+            .getOrElse { return mapOf("status" to "FAILED", "port" to port, "error" to networkError(it)) }
         require(apiSuccess(response)) { "DINSTAR rejected USSD request" }
         return response
     }
 
     fun queryUssd(port: Int): Map<String, Any?> {
         require(port in 0..7)
-        return getJson("/api/query_ussd_reply", mapOf("port" to port.toString()))
+        return runCatching { getJson("/api/query_ussd_reply", mapOf("port" to port.toString())) }
+            .getOrElse { mapOf("error" to networkError(it)) }
     }
 
-    fun queryCdr(): Map<String, Any?> = getJson("/api/query_cdr", emptyMap())
+    fun queryCdr(): Map<String, Any?> =
+        runCatching { postJson("/api/get_cdr", mapOf("port" to (0..7).toList())) }
+            .getOrElse { mapOf("error" to networkError(it)) }
 
     fun updateSipSettings(newSipIp: String): Nothing = unsupported(
         "Firmware-independent SIP configuration API is not documented for UC2000-VE; configure the SIP trunk in the gateway UI and Asterisk"
@@ -143,7 +160,7 @@ class DinstarHardwareService(
                VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT (host,api_port) DO UPDATE SET model=EXCLUDED.model,scheme=EXCLUDED.scheme,
                capabilities_json=EXCLUDED.capabilities_json,last_seen_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP""",
-            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", "UC2000-VE-8T", activeHost, configuredScheme, configuredPort, capabilities
+            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", "UC2000-VE-8G", activeHost, configuredScheme, configuredPort, capabilities
         )
     }
 
@@ -163,23 +180,33 @@ class DinstarHardwareService(
     private fun getJson(path: String, query: Map<String, String>, host: String = activeHost): Map<String, Any?> {
         val builder = baseUrl(host).newBuilder().addPathSegments(path.removePrefix("/"))
         query.forEach(builder::addQueryParameter)
-        return execute(Request.Builder().url(builder.build()).get().build())
+        val request = Request.Builder().url(builder.build()).get().build()
+        return execute(request)
     }
 
     private fun postJson(path: String, value: Any): Map<String, Any?> {
         val body = mapper.writeValueAsBytes(value).toRequestBody(JSON)
-        return execute(Request.Builder().url(baseUrl(activeHost).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build())
+        val request = Request.Builder().url(baseUrl(activeHost).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build()
+        return execute(request)
     }
 
     private fun execute(unsigned: Request): Map<String, Any?> {
         require(gatewayUsername.isNotBlank() && gatewayPassword.isNotBlank()) { "DINSTAR credentials must be configured" }
-        val request = unsigned.newBuilder().header("Authorization", Credentials.basic(gatewayUsername, gatewayPassword)).header("Accept", "application/json").build()
-        return client.newCall(request).execute().use { response ->
-            require(response.isSuccessful) { "DINSTAR HTTP ${response.code}" }
-            @Suppress("UNCHECKED_CAST")
-            val responseBody = requireNotNull(response.body) { "DINSTAR returned an empty HTTP body" }
-            mapper.readValue(responseBody.bytes(), Map::class.java) as Map<String, Any?>
-        }
+        val response = client.newCall(unsigned).execute()
+        return readJson(response)
+    }
+
+    private fun readJson(response: okhttp3.Response): Map<String, Any?> = response.use {
+        require(it.isSuccessful) { gatewayHttpError(it.code) }
+        val body = requireNotNull(it.body) { "DINSTAR returned an empty HTTP body" }
+        mapper.readValue(body.bytes(), Map::class.java) as Map<String, Any?>
+    }
+
+    private fun gatewayHttpError(code: Int): String = when (code) {
+        401 -> "DINSTAR HTTP 401 - gateway rejected the credentials (check DINSTAR_USERNAME/DINSTAR_PASSWORD)"
+        404 -> "DINSTAR HTTP 404 - API endpoint not found (enable the new-version API on the gateway, or check the model)"
+        408 -> "DINSTAR HTTP 408 - gateway request timeout"
+        else -> "DINSTAR HTTP $code"
     }
 
     private fun baseUrl(host: String) = "$configuredScheme://$host:$configuredPort".also {
@@ -203,6 +230,12 @@ class DinstarHardwareService(
         "remoteNetworkConfig" to false,
         "factoryResetFromYounes" to false
     )
+
+    private fun networkError(error: Throwable): String = when (error) {
+        is java.net.ConnectException -> "DINSTAR_UNREACHABLE"
+        is java.net.SocketTimeoutException -> "DINSTAR_TIMEOUT"
+        else -> error.message ?: error.javaClass.simpleName
+    }
 
     companion object { private val JSON = "application/json; charset=utf-8".toMediaType() }
 }
