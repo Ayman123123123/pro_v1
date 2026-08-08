@@ -368,3 +368,40 @@ interface PrivacyDao {
     @Query("UPDATE privacy_settings SET liveLocation = :value WHERE id = 1")
     suspend fun updateLiveLocation(value: String)
 }
+
+// ════════════════════════════════════════════════════
+// 📡 Dinstar Gateway DAO — لقطات المنافذ
+// ════════════════════════════════════════════════════
+
+@Dao
+interface DinstarDao {
+    @Query("SELECT * FROM dinstar_port_snapshots ORDER BY portIndex ASC")
+    fun getAllPorts(): Flow<List<DinstarPortSnapshotEntity>>
+
+    @Query("SELECT * FROM dinstar_port_snapshots WHERE registrationState = 'REGISTERED' AND callState = 'IDLE' ORDER BY signalPercent DESC")
+    fun getAvailablePorts(): Flow<List<DinstarPortSnapshotEntity>>
+
+    @Query("SELECT * FROM dinstar_port_snapshots WHERE isHealthy = 1 ORDER BY signalPercent DESC")
+    fun getHealthyPorts(): Flow<List<DinstarPortSnapshotEntity>>
+
+    @Query("SELECT * FROM dinstar_port_snapshots WHERE portIndex = :port")
+    suspend fun getPort(port: Int): DinstarPortSnapshotEntity?
+
+    @Query("SELECT AVG(signalPercent) FROM dinstar_port_snapshots WHERE registrationState = 'REGISTERED'")
+    suspend fun getAverageSignal(): Float?
+
+    @Query("SELECT COUNT(*) FROM dinstar_port_snapshots WHERE registrationState = 'REGISTERED'")
+    suspend fun getRegisteredCount(): Int
+
+    @Query("SELECT COUNT(*) FROM dinstar_port_snapshots WHERE callState = 'ACTIVE'")
+    suspend fun getActiveCallCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPort(port: DinstarPortSnapshotEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPorts(ports: List<DinstarPortSnapshotEntity>)
+
+    @Query("DELETE FROM dinstar_port_snapshots")
+    suspend fun clearAll()
+}

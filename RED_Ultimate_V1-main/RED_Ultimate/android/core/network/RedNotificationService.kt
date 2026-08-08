@@ -73,10 +73,29 @@ class RedNotificationService : Service() {
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 Log.d(TAG, "WebSocket message received: ${text.take(100)}")
-                // TODO: Parse protobuf/JSON and route to appropriate handler
-                // - New message → show chat notification
-                // - Incoming call → launch call screen
-                // - Gateway alert → update Dinstar status
+                // Route messages by type
+                runCatching {
+                    val json = org.json.JSONObject(text)
+                    val type = json.optString("type", "")
+                    when (type) {
+                        "DINSTAR_PORT_STATUS" -> {
+                            val port = json.optInt("port", -1)
+                            val state = json.optString("callState", "")
+                            Log.i(TAG, "Dinstar port $port state: $state")
+                            // TODO: Update DinstarViewModel port state
+                        }
+                        "DINSTAR_CDR" -> {
+                            Log.i(TAG, "Dinstar CDR update received")
+                        }
+                        "NEW_MESSAGE" -> {
+                            // Show chat notification
+                        }
+                        "INCOMING_CALL" -> {
+                            // Launch call screen
+                        }
+                        else -> Log.d(TAG, "Unhandled WS message type: $type")
+                    }
+                }.onFailure { Log.w(TAG, "Failed to parse WS message: ${it.message}") }
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {

@@ -15,6 +15,7 @@ import com.red.sovereign.features.stories.*
 import com.red.sovereign.features.media.*
 import com.red.sovereign.features.privacy.*
 import com.red.core.theme.*
+import com.red.features.dinstar.*
 
 /**
  * 🧭 YOUNES Sovereign Navigation — 24 مسار متكامل
@@ -183,7 +184,13 @@ fun MainAppNavigation() {
         composable("backup") { BackupScreen() }
         composable("update") { UpdateScreen() }
         composable("devices") { /* TODO: DevicesScreen */ }
-        composable("dinstar_admin") { /* TODO: Dinstar admin panel */ }
+        composable("dinstar_admin") {
+            DinstarAdminScreen(
+                viewModel = remember { DinstarViewModel() },
+                onBack = { navController.popBackStack() },
+                onDialWithPort = { port, number -> navController.navigate("pstn_call/$number") }
+            )
+        }
 
         // ━━━━━━━━━━━━ 🔔 الإشعارات ━━━━━━━━━━━━
         composable("notifications") {

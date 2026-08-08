@@ -15,6 +15,8 @@ import com.red.features.calls.RedCallLogScreen
 import com.red.features.explore.RedExploreScreen
 import com.red.features.pstn.PstnDialerScreen
 import com.red.features.profile.RedSettingsScreen
+import com.red.features.dinstar.DinstarTab
+import com.red.features.dinstar.DinstarViewModel
 
 /**
  * 🏛️ YOUNES Main Dashboard — 5 تبويبات متكاملة
@@ -45,6 +47,7 @@ fun RedMainDashboard(
             var selectedTab by remember { mutableStateOf(0) }
             var unreadChats by remember { mutableStateOf(3) }
             var missedCalls by remember { mutableStateOf(1) }
+            val dinstarViewModel = remember { DinstarViewModel() }
 
             val tabs = listOf(
                 NavTab("المحادثات", Icons.Default.ChatBubbleOutline, Icons.Default.ChatBubble, unreadChats),
@@ -100,7 +103,11 @@ fun RedMainDashboard(
                             onDinstarDial = { number -> onNavigateToPstn(number) }
                         )
                         1 -> RedCallLogScreen()
-                        2 -> PstnDialerScreen()
+                        2 -> DinstarTab(
+                            viewModel = dinstarViewModel,
+                            onDialViaPort = { port, number -> onNavigateToPstn(number) },
+                            onNavigateToCdr = { onNavigateToDinstar() }
+                        )
                         3 -> RedExploreScreen(
                             onStartLive = onNavigateToLive,
                             onStartSpace = onNavigateToSpace

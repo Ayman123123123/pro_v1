@@ -44,9 +44,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PrivacySettingsEntity::class,
         UserProfileEntity::class,
         DraftMessageEntity::class,
-        MessageReactionEntity::class
+        MessageReactionEntity::class,
+        DinstarPortSnapshotEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class MasterDatabase : RoomDatabase() {
@@ -57,6 +58,7 @@ abstract class MasterDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
     abstract fun notificationDao(): NotificationDao
     abstract fun privacyDao(): PrivacyDao
+    abstract fun dinstarDao(): DinstarDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -247,7 +249,31 @@ abstract class MasterDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // لقطات منافذ Dinstar المحلية
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `dinstar_port_snapshots` (
+                        `portIndex` INTEGER NOT NULL,
+                        `radioType` TEXT NOT NULL DEFAULT 'GSM',
+                        `registrationState` TEXT NOT NULL DEFAULT 'UNREGISTERED',
+                        `callState` TEXT NOT NULL DEFAULT 'IDLE',
+                        `signalPercent` INTEGER NOT NULL DEFAULT 0,
+                        `signalRaw` INTEGER NOT NULL DEFAULT 0,
+                        `gprsState` TEXT NOT NULL DEFAULT 'DETACH',
+                        `operatorName` TEXT NOT NULL DEFAULT '',
+                        `numberMasked` TEXT,
+                        `simType` TEXT NOT NULL DEFAULT 'UNKNOWN',
+                        `isHealthy` INTEGER NOT NULL DEFAULT 0,
+                        `observedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`portIndex`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_dinstar_signal` ON `dinstar_port_snapshots` (`signalPercent`, `registrationState`)")
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }
 
@@ -540,4 +566,26 @@ data class MessageReactionEntity(
     val userId: String,
     val emoji: String,
     val addedAt: Long = System.currentTimeMillis()
+)
+
+// ════════════════════════════════════════════════════
+// 📡 لقطات منافذ Dinstar
+// ════════════════════════════════════════════════════
+
+@Entity(tableName = "dinstar_port_snapshots", indices = [
+    Index(value = ["signalPercent", "registrationState"], name = "idx_dinstar_signal")
+])
+data class DinstarPortSnapshotEntity(
+    @PrimaryKey val portIndex: Int,
+    val radioType: String = "GSM",
+    val registrationState: String = "UNREGISTERED",
+    val callState: String = "IDLE",
+    val signalPercent: Int = 0,
+    val signalRaw: Int = 0,
+    val gprsState: String = "DETACH",
+    val operatorName: String = "",
+    val numberMasked: String? = null,
+    val simType: String = "UNKNOWN",
+    val isHealthy: Boolean = false,
+    val observedAt: Long = System.currentTimeMillis()
 )

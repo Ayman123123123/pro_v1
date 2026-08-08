@@ -173,6 +173,43 @@ object ThemeIcons {
     val rtl = Icons.Rounded.FormatTextdirectionRToL
 }
 
+// ━━━━━━━━━━━━ 📡 Dinstar Gateway ━━━━━━━━━━━━
+object DinstarIcons {
+    val gateway = Icons.Rounded.Router
+    val simCard = Icons.Rounded.SimCard
+    val portInfo = Icons.Rounded.Info
+    val signal = Icons.Rounded.SignalCellularAlt
+    val signalWeak = Icons.Rounded.SignalCellular1Bar
+    val signalMedium = Icons.Rounded.SignalCellular2Bar
+    val signalStrong = Icons.Rounded.SignalCellular4Bar
+    val registered = Icons.Rounded.CheckCircle
+    val unregistered = Icons.Rounded.Cancel
+    val callActive = Icons.Rounded.PhoneInTalk
+    val callIdle = Icons.Rounded.Phone
+    val reset = Icons.Rounded.Refresh
+    val ussd = Icons.Rounded.Dialpad
+    val discover = Icons.Rounded.TravelExplore
+    val capabilities = Icons.Rounded.Extension
+    val cdr = Icons.Rounded.ReceiptLong
+    val billing = Icons.Rounded.AttachMoney
+    val port0 = Icons.Rounded.Look0
+    val port1 = Icons.Rounded.Look1
+    val port2 = Icons.Rounded.Look2
+    val port3 = Icons.Rounded.Look3
+    val port4 = Icons.Rounded.Look4
+    val port5 = Icons.Rounded.Look5
+    val port6 = Icons.Rounded.Look6
+    val settings = Icons.Rounded.SettingsInputAntenna
+    val gsm = Icons.Rounded.CellTower
+    val sms = Icons.Rounded.Sms
+    val moduleReset = Icons.Rounded.RestartAlt
+    val healthCheck = Icons.Rounded.HealthAndSafety
+    val operatorSabafon = Icons.Rounded.NetworkCell
+    val operatorMtn = Icons.Rounded.NetworkCell
+    val operatorYemenMobile = Icons.Rounded.NetworkCell
+    val operatorHiTel = Icons.Rounded.NetworkCell
+}
+
 // ━━━━━━━━━━━━ 📡 البث المباشر ━━━━━━━━━━━━
 object LiveIcons {
     val goLive = Icons.Rounded.LiveTv
