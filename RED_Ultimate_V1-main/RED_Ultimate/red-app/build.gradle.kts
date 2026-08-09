@@ -108,7 +108,7 @@ dependencies {
     implementation(libs.androidx.paging.compose)
 
     // ─── WorkManager — مزامنة في الخلفية ─────────────────────────────────────
-    implementation(libs.androidx.work.runtime-ktx)
+    implementation(libs.androidx.work.runtime.ktx)
 
     // ─── Room — قاعدة بيانات محلية سيادية ────────────────────────────────────
     implementation(libs.androidx.room.runtime)
