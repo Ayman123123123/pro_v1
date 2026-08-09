@@ -14,11 +14,15 @@ import kotlinx.coroutines.launch
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val api = FeedApi(AuthorizedApiClient(TokenStore(application)))
+    private val drafts = DraftsStore(application)
     val posts = mutableStateListOf<Post>()
     val threadPosts = mutableStateListOf<Post>()
     var state: FeedState by mutableStateOf(FeedState.Loading); private set
     var threadState: ThreadState by mutableStateOf(ThreadState.Idle); private set
     var scope: String? = null; private set
+
+    // === Drafts API (encrypted, per-scope) ===
+    val hasDraft = drafts.hasDraft
 
     init { load(null) }
 
@@ -116,6 +120,13 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun delete(post: Post) = viewModelScope.launch {
+        when (val result = api.delete(post.id)) {
+            is ApiResult.Success -> posts.remove(post)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
     fun hide(post: Post) = viewModelScope.launch {
         when (val result = api.hide(post.id)) {
             is ApiResult.Success -> posts.remove(post)
@@ -139,6 +150,21 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeThread() { threadPosts.clear(); threadState = ThreadState.Idle }
 
+    fun refresh() = load(scope)
+
+    // === Drafts (encrypted, async, per-scope) ===
+    /** حفظ مسودة فوراً (async, encrypted) */
+    fun saveDraft(text: String) = drafts.save(text, scope)
+
+    /** تحميل مسودة محفوظة (suspend) */
+    suspend fun loadDraft(): String? = drafts.load(scope)
+
+    /** حذف المسودة الحالية (بعد النشر أو الإلغاء) */
+    fun discardDraft() = drafts.delete(scope)
+
+    /** حذف كل المسودات (sign-out flow) */
+    fun clearAllDrafts() = drafts.clearAll()
+
     private fun replace(post: Post) {
         posts.indexOfFirst { it.id == post.id }.takeIf { it >= 0 }?.let { posts[it] = post }
         state = FeedState.Ready
@@ -153,15 +179,10 @@ sealed interface ThreadState {
     data class Error(val message: String) : ThreadState
 }
 
-sealed interface FeedState { data object Loading: FeedState; data object Ready: FeedState; data object Publishing: FeedState; data class Message(val text:String): FeedState; data class Error(val message:String): FeedState }
-
-    // Professional: Draft handling
-    fun saveDraft(text: String) { /* TODO: Save to EncryptedMediaCache as draft */ }
-    fun loadDraft(): String? = null // TODO: Load from cache
-    fun delete(post: Post) = viewModelScope.launch {
-        when (val result = api.delete(post.id)) {
-            is ApiResult.Success -> posts.remove(post)
-            is ApiResult.Error -> state = FeedState.Error(result.message)
-        }
-    }
-    fun refresh() = load(scope)
+sealed interface FeedState {
+    data object Loading : FeedState
+    data object Ready : FeedState
+    data object Publishing : FeedState
+    data class Message(val text: String) : FeedState
+    data class Error(val message: String) : FeedState
+}
