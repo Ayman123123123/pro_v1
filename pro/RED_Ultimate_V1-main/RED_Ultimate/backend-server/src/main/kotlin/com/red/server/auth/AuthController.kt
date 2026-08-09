@@ -2,6 +2,7 @@ package com.red.server.auth
 
 import com.red.server.auth.model.AccountStatus
 import jakarta.servlet.http.HttpServletRequest
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -15,7 +16,8 @@ import java.time.Duration
 class AuthController(
     private val registration: RegistrationService,
     private val recovery: RecoveryService,
-    private val limits: RateLimitService
+    private val limits: RateLimitService,
+    @Value("\${red.trust-x-forwarded-for:false}") private val trustXForwardedFor: Boolean = false
 ) {
 
     @PostMapping("/register")
@@ -56,6 +58,18 @@ class AuthController(
         return ResponseEntity.noContent().build()
     }
 
-    private fun clientIp(request: HttpServletRequest): String =
-        request.getHeader("X-Forwarded-For")?.substringBefore(',')?.trim()?.takeIf { it.isNotEmpty() } ?: request.remoteAddr
+    /**
+     * Extracts client IP, only trusting X-Forwarded-For when configured.
+     * ⚠️  X-Forwarded-For can be spoofed by clients unless behind a trusted reverse proxy.
+     * Set red.trust-x-forwarded-for=true only when behind a verified proxy that strips client XFF.
+     */
+    private fun clientIp(request: HttpServletRequest): String {
+        if (trustXForwardedFor) {
+            val xff = request.getHeader("X-Forwarded-For")
+            if (!xff.isNullOrBlank()) {
+                return xff.substringBefore(',').trim().takeIf { it.isNotEmpty() } ?: request.remoteAddr
+            }
+        }
+        return request.remoteAddr ?: "unknown"
+    }
 }

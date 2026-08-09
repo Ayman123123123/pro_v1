@@ -29,11 +29,12 @@ class JwtAuthenticationFilter(
             ?.takeIf { it.startsWith("Bearer ", ignoreCase = true) }
             ?.substringAfter(' ')
 
-        log.warn("JWT Filter: URI={}, Method={}, AuthHeaderPresent={}, TokenPresent={}, AuthAlreadySet={}", 
+        // ⚠️ SECURITY: Don't log full tokens or token prefixes — only metadata
+        log.debug("JWT Filter: URI={}, Method={}, AuthHeaderPresent={}, TokenPresent={}, AuthAlreadySet={}",
             request.requestURI, request.method, authHeader != null, !token.isNullOrBlank(), SecurityContextHolder.getContext().authentication != null)
 
         if (!token.isNullOrBlank() && SecurityContextHolder.getContext().authentication == null) {
-            log.warn("JWT Filter: Processing token for URI={}, TokenPrefix={}", request.requestURI, token?.take(20))
+            log.debug("JWT Filter: Processing token for URI={}", request.requestURI)
             runCatching {
                 val user = users.findById(jwtService.userId(token)).orElse(null)
                 val deviceId = jwtService.deviceId(token)
@@ -46,15 +47,15 @@ class JwtAuthenticationFilter(
                     val authorities = listOf(SimpleGrantedAuthority("ROLE_${user.role.name}"))
                     SecurityContextHolder.getContext().authentication =
                         UsernamePasswordAuthenticationToken(user.id.toString(), token, authorities)
-                    log.warn("JWT auth successful for user: {}", user.id)
+                    log.debug("JWT auth successful for user: {}", user.id)
                 } else {
-                    log.warn("JWT auth failed: user={}, deviceAllowed={}, tokenValid={}", user?.id, deviceAllowed, !token.isNullOrBlank())
+                    log.debug("JWT auth failed: user={}, deviceAllowed={}", user?.id, deviceAllowed)
                 }
             }.onFailure { e ->
-                log.warn("JWT parsing failed: {}", e.message)
+                log.debug("JWT parsing failed: {}", e.message)
             }
         } else {
-            log.warn("JWT Filter: Skipped - tokenNullOrBlank={}, authAlreadySet={}", token.isNullOrBlank(), SecurityContextHolder.getContext().authentication != null)
+            log.debug("JWT Filter: Skipped - tokenNullOrBlank={}, authAlreadySet={}", token.isNullOrBlank(), SecurityContextHolder.getContext().authentication != null)
         }
         chain.doFilter(request, response)
     }
