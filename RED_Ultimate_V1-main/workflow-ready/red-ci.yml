@@ -80,7 +80,12 @@ jobs:
           python3 -c "import ast; ast.parse(open('scripts/mock_backend.py').read())"
           python3 scripts/mock_backend.py &
           sleep 2
-          curl -fs http://127.0.0.1:8080/health | grep -q '"status": "UP"' && echo "mock OK"
+          curl -fs http://127.0.0.1:8080/health | grep -q '"status": "UP"' && echo "health OK"
+          curl -fs http://127.0.0.1:8080/api/admin/dinstar/inventory | grep -q 'portIndex' && echo "inventory OK"
+          curl -fs http://127.0.0.1:8080/api/admin/users/user_uuid_001/overview | grep -q 'messages24h' && echo "overview OK"
+          curl -fs -X PUT http://127.0.0.1:8080/api/admin/dinstar/inventory/gateway_uuid_001/ports/0 -H 'Content-Type: application/json' -d '{}' | grep -q 'portIndex' && echo "inventory PUT OK"
+          curl -fs -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/api/admin/users/user_uuid_001/temporary-password | grep -q '204' && echo "temporary-password OK"
+          curl -fs -X POST http://127.0.0.1:8080/api/admin/users/user_uuid_001/remote-app-wipe | grep -q 'commandId' && echo "remote-wipe OK"
           kill %1 2>/dev/null || true
       - name: Bash scripts syntax check
         working-directory: RED_Ultimate_V1-main
