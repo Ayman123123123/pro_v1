@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlinx.serialization)
+    id("com.google.devtools.ksp")
 }
 
 val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.1.50")
@@ -107,7 +108,16 @@ dependencies {
     implementation(libs.androidx.paging.compose)
 
     // ─── WorkManager — مزامنة في الخلفية ─────────────────────────────────────
-    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.work.runtime-ktx)
+
+    // ─── Room — قاعدة بيانات محلية سيادية ────────────────────────────────────
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.signal.android.database.sqlcipher)
+
+    // ─── Accompanist — أذونات وتسهيلات Compose ─────────────────────────────────
+    implementation(libs.accompanist.permissions)
 
     testImplementation("junit:junit:4.13.2")
 }

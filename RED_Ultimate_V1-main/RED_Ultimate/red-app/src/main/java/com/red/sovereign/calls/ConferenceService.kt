@@ -54,7 +54,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
-        signaling = ConferenceSignalingClient(TokenStore(this), this)
+        signaling = ConferenceSignalingClient(this, TokenStore(this), this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

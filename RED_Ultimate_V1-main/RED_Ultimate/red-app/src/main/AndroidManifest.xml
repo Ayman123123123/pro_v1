@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:name=".YounesApplication"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:usesCleartextTraffic="${usesCleartext}"
@@ -29,6 +30,10 @@
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service
             android:name=".core.RedConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+        <service
+            android:name=".core.network.SovereignNotificationRouter"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
 

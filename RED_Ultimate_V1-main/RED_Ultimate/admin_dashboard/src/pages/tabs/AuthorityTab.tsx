@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Descriptions, Input, message, Modal, Space, Table, Tag, Typography } from 'antd';
-import { CheckOutlined, CloseOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, DownloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { apiFetch } from '../../api';
 
 interface Device { id: string; deviceName: string; platform: string; identityFingerprint: string; status: string; }
@@ -54,7 +54,12 @@ export default function AuthorityTab() {
     </Space> }
   ];
 
-  return <Card title="سلطة اعتماد حسابات يونس" extra={<Button onClick={fetchPending}>تحديث</Button>}>
+  const exportCsv = () => {
+    const rows = [['معرف يونس','المستخدم','الاسم الظاهر','الحالة','التسجيل','الأجهزة'], ...users.map(u=>[u.redId, u.username, u.displayName, u.status, new Date(u.createdAt).toLocaleString('ar'), u.devices.map(d=>`${d.deviceName}(${d.platform})`).join('; ')])];
+    const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`younes-pending-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+  return <Card title="سلطة اعتماد حسابات يونس" extra={<Space><Button icon={<DownloadOutlined/>} onClick={exportCsv} disabled={!users.length}>تصدير CSV</Button><Button onClick={fetchPending}>تحديث</Button></Space>}>
     <Table dataSource={users} columns={columns} rowKey="id" loading={loading} scroll={{x: 1050}}
       expandable={{ expandedRowRender: u => <Descriptions bordered size="small" column={1}>
         {u.devices.map(d => <Descriptions.Item key={d.id} label={`${d.deviceName} — بصمة مفتاح الهوية`}><Typography.Text copyable code>{d.identityFingerprint}</Typography.Text></Descriptions.Item>)}

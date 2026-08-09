@@ -21,6 +21,7 @@ data class DeviceEnrollmentRequest(
 @Serializable data class LoginRequest(val username: String, val password: String, val deviceId: String? = null)
 @Serializable data class RefreshRequest(val refreshToken: String)
 @Serializable data class PasswordRecoveryRequest(val redId: String, val recoveryCode: String, val newPassword: String)
+@Serializable data class TemporaryPasswordChangeRequest(val username: String, val temporaryPassword: String, val newPassword: String)
 
 @Serializable
 data class DeviceResponse(

@@ -1,6 +1,7 @@
 package com.red.server.messaging
 
 import com.red.server.database.MessageDocument
+import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Criteria
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service
 
 @Service
 class AdvancedMessageService(private val mongoTemplate: MongoTemplate) {
+    companion object { private val log = LoggerFactory.getLogger(AdvancedMessageService::class.java) }
 
     /**
      * الحذف للجميع: يحذف الرسالة من الأرشيف ويرسل إشارة حذف لكافة الأجهزة
@@ -19,8 +21,7 @@ class AdvancedMessageService(private val mongoTemplate: MongoTemplate) {
         
         return if (message != null) {
             mongoTemplate.remove(query, "messages")
-            println("🔴 RED: Message $messageId deleted for everyone.")
-            // إرجاع قائمة المشاركين في المحادثة لإبلاغهم
+            log.info("Message {} deleted for everyone by sender {}", messageId, senderId)
             listOf(message.receiverId) 
         } else emptyList()
     }
@@ -30,7 +31,7 @@ class AdvancedMessageService(private val mongoTemplate: MongoTemplate) {
      */
     fun editMessage(messageId: String, senderId: String, newContent: ByteArray) {
         val query = Query(Criteria.where("uuid").`is`(messageId).and("senderId").`is`(senderId))
-        val update = Update().set("payload", newContent).set("isEdited", true)
-        mongoTemplate.updateFirst(query, update, "messages")
+        val result = mongoTemplate.updateFirst(query, Update().set("payload", newContent).set("isEdited", true), "messages")
+        if (result.modifiedCount > 0) log.info("Message {} edited by sender {}", messageId, senderId)
     }
 }

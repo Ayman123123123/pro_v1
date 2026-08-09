@@ -1,6 +1,7 @@
 package com.red.server.groups
 
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.audit.AuditService
 import com.red.server.media.MediaService
 import com.red.server.social.UuidV7
 import org.springframework.data.domain.Sort
@@ -16,7 +17,7 @@ import java.util.Base64
 import java.util.UUID
 
 @Service
-class GroupService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val media: MediaService) {
+class GroupService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val media: MediaService, private val audit: AuditService) {
     private val random = SecureRandom()
     fun create(ownerId: UUID, request: CreateGroupRequest): GroupResponse {
         val owner = users.findById(ownerId).orElseThrow { NoSuchElementException("User not found") }
@@ -24,6 +25,7 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         val description = request.description?.trim()?.takeIf(String::isNotEmpty); require(description == null || description.length <= 500)
         val group = mongo.save(GroupDocument(UuidV7.next(), name, description, owner.redId))
         mongo.save(GroupMember("${group.id}:${owner.id}", group.id, owner.id.toString(), owner.redId, owner.username, GroupRole.OWNER))
+        audit.record(ownerId, "GROUP_CREATED", group.id, mapOf("name" to name))
         return response(group)
     }
 
@@ -37,6 +39,9 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         membership(groupId, userId)
         return response(group(groupId))
     }
+
+    /** Returns the authoritative group role used when issuing a room-scoped SFU capability. */
+    fun roleFor(userId: UUID, groupId: String): GroupRole = membership(groupId, userId).role
 
     fun add(actorId: UUID, groupId: String, request: AddGroupMemberRequest): GroupResponse {
         requireManager(groupId, actorId)

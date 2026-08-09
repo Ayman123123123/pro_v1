@@ -1,18 +1,127 @@
-name: Docker Image CI
+name: RED CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "arena/**" ]
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+
 jobs:
-
-  build:
-
+  # ── 1) الخادم الخلفي: بناء + اختبارات JUnit ────────────────────────────────
+  backend:
+    name: Backend (build + tests)
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate/backend-server
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Build and run tests
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean test bootJar
+
+  # ── 2) لوحة الإدارة: عقد API + فحص TypeScript + بناء الإنتاج ──────────────
+  admin-dashboard:
+    name: Admin dashboard (build + API contract)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: API contract check (dashboard ↔ backend)
+        run: npm run check:api
+      - name: Production build
+        run: npm run build
+
+  # ── 3) فحوصات ثابتة: تطابق الكيانات مع قاعدة البيانات + صيغة SFU ──────────
+  static-checks:
+    name: Schema + SFU syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: JPA entities ↔ Flyway migrations
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: python3 scripts/check-schema-consistency.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: SFU syntax check
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate/media-sfu
+        run: node --check server.js
+      - name: Mock backend syntax + smoke test
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: |
+          python3 -c "import ast; ast.parse(open('scripts/mock_backend.py').read())"
+          python3 scripts/mock_backend.py &
+          sleep 2
+          curl -fs http://127.0.0.1:8080/health | grep -q '"status": "UP"' && echo "mock OK"
+          kill %1 2>/dev/null || true
+      - name: Bash scripts syntax check
+        working-directory: RED_Ultimate_V1-main
+        run: |
+          bash -n run.sh && bash -n scripts/ci-build-all.sh
+          bash -n RED_Ultimate/scripts/run-all-local.sh
+      - name: STOPSHIP gate
+        working-directory: RED_Ultimate_V1-main
+        run: |
+          if grep -rn "STOPSHIP" --include="*.kt" --include="*.kts" --include="*.java" --include="*.tsx" --include="*.ts" RED_Ultimate/backend-server RED_Ultimate/red-app RED_Ultimate/admin_dashboard 2>/dev/null; then
+            echo "STOPSHIP found!"; exit 1
+          fi
+          echo "No STOPSHIP markers ✅"
+
+  # ── 4) صحة Docker Compose ──────────────────────────────────────────────────
+  compose:
+    name: Docker Compose config validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: docker compose --env-file .env.example config --quiet
+
+  # ── 5) Android: بناء APK تجريبي (بوابة إطلاق منفصلة) ──────────────────────
+  android:
+    name: Android APK (assembleDebug)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Build debug APK
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug \
+            -PRED_SERVER_URL="http://192.168.1.50" \
+            -PRED_SKIP_BUILD_LOGIC=true \
+            --dependency-verification strict \
+            --no-configuration-cache --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: red-app-debug
+          path: RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk

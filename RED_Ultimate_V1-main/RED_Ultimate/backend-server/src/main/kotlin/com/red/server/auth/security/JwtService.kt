@@ -52,5 +52,23 @@ class JwtService(
 
     fun deviceId(token: String): UUID? = parse(token)["deviceId"]?.toString()?.let(UUID::fromString)
 
+    fun issueSfuTicket(user: UserAccount, deviceId: UUID, roomId: String, role: String, canProduce: Boolean): String {
+        require(roomId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) { "Invalid SFU room ID" }
+        val now = Instant.now()
+        return Jwts.builder()
+            .subject(user.id.toString())
+            .claim("redId", user.redId)
+            .claim("deviceId", deviceId.toString())
+            .claim("scope", "sfu")
+            .claim("roomId", roomId)
+            .claim("role", role)
+            .claim("canProduce", canProduce)
+            .id(UUID.randomUUID().toString())
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plusSeconds(120)))
+            .signWith(key)
+            .compact()
+    }
+
     fun expirationSeconds(): Long = expirationMs / 1000
 }

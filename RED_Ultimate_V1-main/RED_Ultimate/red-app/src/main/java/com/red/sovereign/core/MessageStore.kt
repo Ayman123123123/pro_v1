@@ -24,9 +24,10 @@ data class StoredMessage(
 
 data class LocalMessage(val id: String, val conversationId: String, val senderId: String, val plaintext: ByteArray, val type: String, val timestamp: Long, val outgoing: Boolean, val status: String = "SENT")
 data class ConversationSummary(val conversationId: String, val peerId: String, val preview: String, val timestamp: Long, val pinned: Boolean, val archived: Boolean, val mutedUntil: Long)
+data class QueuedOutbound(val id: String, val target: String, val conversation: String, val type: String, val payload: ByteArray, val createdAt: Long, val attempts: Int, val nextAttemptAt: Long)
 
 /** Ciphertext is retained for protocol delivery; decrypted UI history is separately encrypted with Android Keystore. */
-class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.db", null, 4) {
+class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.db", null, 6) {
     private val recordCipher = ProtocolRecordCipher()
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE messages (
@@ -38,6 +39,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         db.execSQL("CREATE INDEX idx_messages_conversation ON messages(conversation_id, sequence_number DESC)")
         db.execSQL("CREATE INDEX idx_messages_status ON messages(status)")
         createLocalHistoryTables(db)
+        createOutboxTable(db)
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
@@ -49,6 +51,8 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE local_history ADD COLUMN status TEXT NOT NULL DEFAULT 'SENT'")
         }
+        if (oldVersion < 5) createOutboxTable(db)
+        if (oldVersion < 6) db.execSQL("ALTER TABLE outbound_queue ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0")
     }
 
     private fun createLocalHistoryTables(db: SQLiteDatabase) {
@@ -60,6 +64,14 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         db.execSQL("""CREATE TABLE IF NOT EXISTS conversation_preferences (
             conversation_id TEXT PRIMARY KEY, pinned INTEGER NOT NULL DEFAULT 0,
             archived INTEGER NOT NULL DEFAULT 0, muted_until INTEGER NOT NULL DEFAULT 0)""")
+    }
+
+    private fun createOutboxTable(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS outbound_queue (
+            id TEXT PRIMARY KEY, target_red_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
+            message_type TEXT NOT NULL, encrypted_payload BLOB NOT NULL, created_at INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at INTEGER NOT NULL)""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_outbound_queue_created ON outbound_queue(created_at)")
     }
 
     fun save(message: RedProtos.ChatMessage, status: String = "DELIVERED") {
@@ -80,6 +92,36 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
     }
 
     fun delete(messageId: String) { writableDatabase.delete("messages", "id = ?", arrayOf(messageId)) }
+
+    /** Stores pending plaintext encrypted by the Android Keystore until WebSocket delivery begins. */
+    fun enqueueOutbound(id: String, target: String, conversation: String, type: String, payload: ByteArray) {
+        require(payload.isNotEmpty() && payload.size <= 256 * 1024)
+        writableDatabase.insertWithOnConflict("outbound_queue", null, ContentValues().apply {
+            val now = System.currentTimeMillis()
+            put("id", id); put("target_red_id", target); put("conversation_id", conversation); put("message_type", type)
+            put("encrypted_payload", recordCipher.encrypt(payload)); put("created_at", now); put("next_attempt_at", now)
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun queuedOutbound(limit: Int = 100): List<QueuedOutbound> {
+        val result = mutableListOf<QueuedOutbound>()
+        readableDatabase.query("outbound_queue", null, "next_attempt_at <= ?", arrayOf(System.currentTimeMillis().toString()), null, null, "created_at ASC", limit.coerceIn(1, 500).toString()).use { cursor ->
+            while (cursor.moveToNext()) result += QueuedOutbound(
+                cursor.getString(cursor.getColumnIndexOrThrow("id")), cursor.getString(cursor.getColumnIndexOrThrow("target_red_id")),
+                cursor.getString(cursor.getColumnIndexOrThrow("conversation_id")), cursor.getString(cursor.getColumnIndexOrThrow("message_type")),
+                recordCipher.decrypt(cursor.getBlob(cursor.getColumnIndexOrThrow("encrypted_payload"))), cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
+                cursor.getInt(cursor.getColumnIndexOrThrow("attempts")), cursor.getLong(cursor.getColumnIndexOrThrow("next_attempt_at"))
+            )
+        }
+        return result
+    }
+
+    fun markOutboundAttempt(id: String) {
+        val attempts = readableDatabase.query("outbound_queue", arrayOf("attempts"), "id=?", arrayOf(id), null, null, null).use { if (it.moveToFirst()) it.getInt(0) + 1 else return }
+        val delayMs = (1_000L shl attempts.coerceAtMost(8)).coerceAtMost(5 * 60_000L)
+        writableDatabase.update("outbound_queue", ContentValues().apply { put("attempts", attempts); put("next_attempt_at", System.currentTimeMillis() + delayMs) }, "id=?", arrayOf(id))
+    }
+    fun removeOutbound(id: String) { writableDatabase.delete("outbound_queue", "id=?", arrayOf(id)) }
 
     fun messages(conversationId: String, limit: Int = 100): List<StoredMessage> {
         val result = mutableListOf<StoredMessage>()
