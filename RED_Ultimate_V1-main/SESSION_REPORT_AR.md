@@ -771,3 +771,46 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 ## الحالة النهائية
 كل ما طلبه المستخدم أُنجز: كل الملفات من كل الفروع جُمعت، الأفضل والأحدث
 اختير، المكررات 100% فقط حُذفت، وكل الفحوصات خضراء.
+
+---
+
+# ملحق إصلاح CI (2026-08-09) — بعد دمج PR #5
+
+## ما حدث
+1. **تم دمج PR #5** بنجاح في `main` (commit `8153c80`) — 673 ملفًا، +29,503/−3,903
+2. اكتشفنا أن **GitHub Actions تعمل فعليًا** وكان الـ workflow المكسور
+   `.github/workflows/android.yml` (أضافه المستخدم يدويًا من واجهة GitHub)
+   يفشل في كل run: يشغّل `./gradlew build` من **جذر المستودع** حيث لا يوجد
+   مشروع Gradle.
+
+## السبب الجذري
+GitHub Actions **لا يكتشف إلا** `.github/workflows/` في **جذر** المستودع.
+الـ CI الاحترافي الكامل (RED CI: 5 وظائف) كان داخل
+`RED_Ultimate_V1-main/.github/workflows/docker-image.yml` — أي **غير مرئي**
+لـ GitHub، فلا يعمل أبدًا.
+
+## الإصلاحات
+| الإجراء | الحالة |
+|---|---|
+| حذف `.github/workflows/android.yml` المكسور (من فرع الجلسة) | ✅ دُفع `9104c53` |
+| نقل RED CI إلى `workflow-ready/red-ci.yml` (جذر المستودع عند التفعيل) | ✅ |
+| تصحيح مسار APK: `app/build/outputs/...` بدل `red-app/build/outputs/...` | ✅ |
+| إضافة `workflow_dispatch` (تشغيل يدوي مع إدخال server_url) | ✅ |
+| نقل `repair-lfs.yml` إلى `workflow-ready/` | ✅ |
+| حذف النسختين المتداخلتين الميتتين (`RED_Ultimate_V1-main/.github/workflows/*`) | ✅ |
+| دليل تفعيل بخطوة واحدة: `workflow-ready/README.md` | ✅ |
+
+## لماذا التفعيل يدوي؟
+توكن GitHub App (`arena-ai-coding-agent[bot]`) **لا يملك صلاحية `workflows`**:
+- إنشاء/تعديل `.github/workflows/*` → مرفوض (403)
+- **حذف** `.github/workflows/*` → مسموح (تم بنجاح)
+- الملفات خارج `.github/workflows/` → مسموحة
+
+لهذا وضعنا الملفات الجاهزة في `workflow-ready/` — التفعيل = نسخها إلى
+`.github/workflows/` (الطريقتان موثقتان في `workflow-ready/README.md`).
+
+## بعد التفعيل
+- **RED CI** يعمل على كل push/PR نحو main: Backend (build+tests) +
+  Admin dashboard (build+contract) + Static checks (schema+SFU+mock) +
+  Compose validation + **Android APK artifact**.
+- يمكن التشغيل اليدوي من تبويب Actions مع تحديد عنوان خادم RED للبناء.
