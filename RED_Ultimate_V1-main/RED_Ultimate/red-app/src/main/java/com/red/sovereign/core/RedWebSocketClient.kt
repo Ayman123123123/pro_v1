@@ -52,10 +52,11 @@ class RedWebSocketClient(
         conversationId: String,
         messageType: String,
         senderDeviceId: Int,
-        encrypted: EncryptedEnvelope
+        encrypted: EncryptedEnvelope,
+        messageId: String = UuidV7.next()
     ): String {
         val sender = requireNotNull(tokens.redId) { "RED ID is unavailable" }
-        val id = UuidV7.next()
+        val id = messageId
         val chat = RedProtos.ChatMessage.newBuilder()
             .setId(id).setConversationId(conversationId).setSenderId(sender).setReceiverId(receiverRedId)
             .setPayload(ByteString.copyFrom(encrypted.bytes)).setTimestamp(System.currentTimeMillis()).setType(messageType)
@@ -72,6 +73,13 @@ class RedWebSocketClient(
             RedProtos.MessageAck.newBuilder().setMessageId(messageId).setSequenceNumber(sequence).setStatus(status)
         ).build()
         check(socket?.send(envelope.toByteArray().toByteString()) == true) { "RED WebSocket is not connected" }
+    }
+
+    fun acknowledgeRemoteWipe(commandId: String) {
+        val envelope = RedProtos.RedRED.newBuilder().setRemoteWipeAck(
+            RedProtos.RemoteWipeAck.newBuilder().setCommandId(commandId)
+        ).build()
+        socket?.send(envelope.toByteArray().toByteString())
     }
 
     fun typing(conversationId: String, targetRedId: String, active: Boolean) {

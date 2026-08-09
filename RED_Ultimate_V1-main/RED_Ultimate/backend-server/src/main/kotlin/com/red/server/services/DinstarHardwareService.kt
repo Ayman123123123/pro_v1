@@ -38,6 +38,7 @@ class DinstarHardwareService(
     @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
+    @Value("\${red.dinstar.model:UC2000-VE-8G}") private val configuredModel: String,
     private val mapper: ObjectMapper,
     private val jdbc: JdbcTemplate
 ) {
@@ -89,6 +90,7 @@ class DinstarHardwareService(
             .build()
     }
 
+    private val modelProfile = DinstarModelProfile.parse(configuredModel)
     @Volatile private var activeHost = configuredIp
     private val gatewayId: UUID get() = UUID.nameUUIDFromBytes("DINSTAR:$activeHost:$configuredPort".toByteArray())
 
@@ -100,13 +102,13 @@ class DinstarHardwareService(
             activeHost = host
             registerGateway(result.size)
             return mapOf(
-                "success" to true, "gatewayIp" to host, "model" to "UC2000-VE-8G",
+                "success" to true, "gatewayIp" to host, "model" to modelProfile.modelId,
                 "status" to "ONLINE", "portsDetected" to result.size,
                 "capabilities" to documentedCapabilities()
             )
         }
         return mapOf(
-            "success" to false, "gatewayIp" to configuredIp, "model" to "UC2000-VE-8G",
+            "success" to false, "gatewayIp" to configuredIp, "model" to modelProfile.modelId,
             "status" to "OFFLINE", "message" to "No authenticated UC2000 get_port_info response"
         )
     }
@@ -118,7 +120,7 @@ class DinstarHardwareService(
     }
 
     fun resetPort(port: Int): Map<String, Any> {
-        require(port in 0..7) { "UC2000-VE-8G port must be 0-7" }
+        require(port in 0..7) { modelProfile.modelId + " port must be 0-7" }
         // set_port_info uses GET with query parameters per the official Dinstar API documentation
         val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
         require(apiSuccess(response)) { "DINSTAR rejected module reset" }
@@ -345,7 +347,7 @@ class DinstarHardwareService(
                VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT (host,api_port) DO UPDATE SET model=EXCLUDED.model,scheme=EXCLUDED.scheme,
                capabilities_json=EXCLUDED.capabilities_json,last_seen_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP""",
-            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", "UC2000-VE-8G", activeHost, configuredScheme, configuredPort, capabilities
+            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", modelProfile.modelId, activeHost, configuredScheme, configuredPort, capabilities
         )
     }
 

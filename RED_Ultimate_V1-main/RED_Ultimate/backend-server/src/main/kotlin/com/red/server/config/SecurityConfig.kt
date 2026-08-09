@@ -56,7 +56,7 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     // Public endpoints
-                    .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover", "/api/auth/temporary-password-change").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/identity/authority", "/api/identity/directory").permitAll()
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()

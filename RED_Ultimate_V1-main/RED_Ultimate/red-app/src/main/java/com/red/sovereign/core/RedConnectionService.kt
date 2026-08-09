@@ -13,8 +13,6 @@ import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthApi
 import com.red.sovereign.auth.DeviceKeyManager
 import com.red.sovereign.auth.TokenStore
-import com.red.sovereign.core.database.LocalHistoryEntity
-import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.crypto.DecryptedMessageBus
 import com.red.sovereign.crypto.SignalSessionManager
@@ -22,6 +20,7 @@ import com.red.sovereign.groups.Group
 import com.red.sovereign.groups.GroupCryptoManager
 import com.red.sovereign.proto.RedProtos
 import com.red.sovereign.settings.SettingsRuntime
+import com.red.sovereign.security.RemoteAppWipe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,12 +39,11 @@ class RedConnectionService : Service() {
     private var reconnectTask: ScheduledFuture<*>? = null
     private var attempts = 0
     @Volatile private var connected = false
-    private val pendingSends = ConcurrentLinkedQueue<PendingSend>()
     private val pendingGroupSends = ConcurrentLinkedQueue<PendingGroupSend>()
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var tokenStore: TokenStore
-    private lateinit var repository: LocalRepository
+    private lateinit var messageStore: MessageStore
     private lateinit var signal: SignalSessionManager
     private lateinit var groupCrypto: GroupCryptoManager
     private lateinit var keyManager: DeviceKeyManager
@@ -55,7 +53,7 @@ class RedConnectionService : Service() {
         super.onCreate()
         createChannels()
         tokenStore = TokenStore(this)
-        repository = LocalRepository(this)
+        messageStore = MessageStore(this)
         signal = SignalSessionManager(this)
         groupCrypto = GroupCryptoManager(this)
         keyManager = DeviceKeyManager(this)
@@ -77,7 +75,7 @@ class RedConnectionService : Service() {
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
             val type = intent.getStringExtra(EXTRA_TYPE)?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: return START_STICKY
             val payload = intent.getByteArrayExtra(EXTRA_PAYLOAD)?.takeIf { it.isNotEmpty() && it.size <= 256 * 1024 } ?: return START_STICKY
-            pendingSends.add(PendingSend(target, conversation, type, payload))
+            messageStore.enqueueOutbound(UuidV7.next(), target, conversation, type, payload)
             if (connected) drainSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_GROUP_TEXT) {
             val encodedGroup = intent.getStringExtra(EXTRA_GROUP) ?: return START_STICKY
@@ -94,10 +92,8 @@ class RedConnectionService : Service() {
     }
 
     private fun drainSends() {
-        while (connected) {
-            val pending = pendingSends.poll() ?: break
-            sendEncryptedPayload(pending)
-        }
+        if (!connected) return
+        messageStore.queuedOutbound().forEach(::sendEncryptedPayload)
     }
 
     private fun drainGroupSends() {
@@ -119,7 +115,7 @@ class RedConnectionService : Service() {
                         }
                         firstId?.let {
                             val bytes = pending.text.toByteArray(Charsets.UTF_8); val timestamp = System.currentTimeMillis()
-                            repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), bytes, "GROUP_MESSAGE", timestamp, true))
+                            messageStore.saveDecrypted(LocalMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, "GROUP_MESSAGE", timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, timestamp, 0, type = "GROUP_MESSAGE", outgoing = true))
                         }
                     }
@@ -128,22 +124,30 @@ class RedConnectionService : Service() {
         }
     }
 
-    private fun sendEncryptedPayload(pending: PendingSend) {
+    private fun sendEncryptedPayload(pending: QueuedOutbound) {
         scope.launch {
-            when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
-                is ApiResult.Error -> notifyConnection("فشل التشفير: ${encrypted.message}")
-                is ApiResult.Success -> {
-                    var firstId: String? = null
-                    encrypted.value.forEach { envelope ->
-                        val id = socket.sendEncrypted(pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope)
-                        if (firstId == null) firstId = id
+            try {
+                when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
+                    is ApiResult.Error -> {
+                        messageStore.markOutboundAttempt(pending.id)
+                        notifyConnection("فشل تشفير رسالة مؤجلة: ${encrypted.message}")
                     }
-                    firstId?.let {
+                    is ApiResult.Success -> {
+                        encrypted.value.forEachIndexed { index, envelope ->
+                            socket.sendEncrypted(
+                                pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope,
+                                messageId = if (index == 0) pending.id else UuidV7.next()
+                            )
+                        }
                         val timestamp = System.currentTimeMillis()
-                        repository.saveLocalHistory(LocalHistoryEntity(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
-                        DecryptedMessageBus.publish(DecryptedMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
+                        messageStore.saveDecrypted(LocalMessage(pending.id, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
+                        DecryptedMessageBus.publish(DecryptedMessage(pending.id, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
+                        messageStore.removeOutbound(pending.id)
                     }
                 }
+            } catch (failure: Throwable) {
+                messageStore.markOutboundAttempt(pending.id)
+                notifyConnection("تعذر إرسال رسالة مؤجلة — ستتم إعادة المحاولة")
             }
         }
     }
@@ -195,7 +199,7 @@ class RedConnectionService : Service() {
                 val message = envelope.message
                 if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
                     runCatching {
-                        repository.saveIncomingMessage(message)
+                        messageStore.save(message)
                         when (message.type) {
                             "GROUP_MESSAGE" -> groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
                             else -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
@@ -204,29 +208,29 @@ class RedConnectionService : Service() {
                         if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
                         } else {
-                            repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
+                            messageStore.saveDecrypted(LocalMessage(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
-                            // إشعار للرسائل الجديدة غير الصادرة، حسب تفضيلات المستخدم
-                            if (SettingsRuntime.current.messageNotifications) {
-                                notifyEncryptedMessage(message.senderId, plaintext)
-                            }
+                            if (SettingsRuntime.current.messageNotifications && messageStore.conversationPreference(message.conversationId).third <= System.currentTimeMillis()) notifyEncryptedMessage(
+                                message.senderId,
+                                if (message.type == "TEXT" || message.type == "GROUP_MESSAGE") plaintext.toString(Charsets.UTF_8) else null
+                            )
                         }
                         socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                     }
                 } else if (message.senderId == tokenStore.redId) {
-                    repository.saveIncomingMessage(message, outgoing = true)
+                    messageStore.save(message, "SENT")
                 }
             }
             RedProtos.RedRED.SignalCase.ACK -> {
-                repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
+                messageStore.updateStatus(envelope.ack.messageId, envelope.ack.status)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
             }
-            RedProtos.RedRED.SignalCase.DELETE -> {
-                // حذف "للجميع" — إزالة الرسالة من المخزن المحلي فور استقبال الإشارة
-                repository.deleteMessage(envelope.delete.messageId)
-                com.red.sovereign.crypto.MessageAckBus.publish(
-                    com.red.sovereign.crypto.MessageAck(envelope.delete.messageId, "DELETED")
-                )
+            RedProtos.RedRED.SignalCase.DELETE -> messageStore.delete(envelope.delete.messageId)
+            RedProtos.RedRED.SignalCase.REMOTE_WIPE -> {
+                notifyConnection("تم استلام أمر أمان لمسح بيانات يونس المحلية")
+                socket.acknowledgeRemoteWipe(envelope.remoteWipe.commandId)
+                RemoteAppWipe.execute(this)
+                stopSelf()
             }
             RedProtos.RedRED.SignalCase.TYPING -> {
                 val typing = envelope.typing
@@ -320,5 +324,4 @@ class RedConnectionService : Service() {
     }
 }
 
-private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray)
 private data class PendingGroupSend(val groupJson: String, val text: String)

@@ -76,6 +76,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         else login(credentials.first, credentials.second)
     }
 
+    fun changeTemporaryPassword(username: String, temporaryPassword: String, newPassword: String) = viewModelScope.launch {
+        state = AuthState.Submitting
+        when (val result = withServerDiscoveryRetry { api.changeTemporaryPassword(TemporaryPasswordChangeRequest(username, temporaryPassword, newPassword)) }) {
+            is ApiResult.Success -> login(username, newPassword)
+            is ApiResult.Error -> state = AuthState.Error(localize(result.message))
+        }
+    }
+
     fun recover(redId: String, code: String, newPassword: String) = viewModelScope.launch {
         state = AuthState.Submitting
         state = when (val result = withServerDiscoveryRetry { api.recover(PasswordRecoveryRequest(redId.trim(), code.trim(), newPassword)) }) {
@@ -113,6 +121,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyAuth(response: AuthResponse, username: String, password: String) {
+        if (response.message == "TEMPORARY_PASSWORD_CHANGE_REQUIRED") {
+            state = AuthState.TemporaryPasswordChange(username, password)
+            return
+        }
         when (response.status) {
             "APPROVED" -> {
                 tokens.save(response)
@@ -171,6 +183,7 @@ sealed interface AuthState {
     data object RecoveryComplete : AuthState
     data object Submitting : AuthState
     data class Pending(val redId: String, val username: String, val recoveryCodes: List<String>) : AuthState
+    data class TemporaryPasswordChange(val username: String, val temporaryPassword: String) : AuthState
     data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean) : AuthState
     data class Rejected(val reason: String?) : AuthState
     data object Suspended : AuthState

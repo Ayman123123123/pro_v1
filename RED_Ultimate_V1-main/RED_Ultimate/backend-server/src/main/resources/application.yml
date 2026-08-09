@@ -69,6 +69,8 @@ red:
     scheme: ${DINSTAR_SCHEME:https}
     username: ${DINSTAR_USERNAME:admin}
     password: ${DINSTAR_PASSWORD:admin}
+    model: ${DINSTAR_MODEL:UC2000-VE-8G}
+    collect-sim-identifiers: ${DINSTAR_COLLECT_SIM_IDENTIFIERS:false}
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3

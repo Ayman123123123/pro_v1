@@ -77,6 +77,9 @@ class RegistrationService(
         if (user.status != AccountStatus.APPROVED) {
             return blockedResponse(user, accountDevices)
         }
+        if (user.passwordResetRequired) {
+            return AuthResponse(user.status, user.toResponse(accountDevices), message = "TEMPORARY_PASSWORD_CHANGE_REQUIRED")
+        }
 
         val device = resolveApprovedDevice(user, request.deviceId)
         val refresh = refreshTokens.issue(user, device)
@@ -103,6 +106,22 @@ class RegistrationService(
             refreshToken = rotated.token,
             expiresInSeconds = jwtService.expirationSeconds()
         )
+    }
+
+    @Transactional
+    fun changeTemporaryPassword(request: TemporaryPasswordChangeRequest) {
+        val user = users.findByUsernameIgnoreCase(request.username.trim()) ?: throw InvalidCredentialsException()
+        require(user.status == AccountStatus.APPROVED && user.passwordResetRequired) { "Temporary password change is not required" }
+        require(passwordEncoder.matches(request.temporaryPassword, user.passwordHash)) { "Temporary password is invalid" }
+        require(request.newPassword.length in 12..128) { "Password must contain 12-128 characters" }
+        require(!request.newPassword.contains(user.username, ignoreCase = true)) { "Password must not contain the username" }
+        require(!COMMON_PASSWORDS.contains(request.newPassword.lowercase())) { "Password is too common" }
+        user.passwordHash = passwordEncoder.encode(request.newPassword)
+        user.passwordResetRequired = false
+        user.passwordResetIssuedAt = null
+        user.updatedAt = java.time.Instant.now()
+        users.save(user)
+        refreshTokens.revokeAll(user.id)
     }
 
     fun logout(request: LogoutRequest) = refreshTokens.revoke(request.refreshToken)

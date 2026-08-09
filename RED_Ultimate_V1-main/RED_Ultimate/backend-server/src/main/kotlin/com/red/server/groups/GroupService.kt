@@ -38,6 +38,9 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         return response(group(groupId))
     }
 
+    /** Returns the authoritative group role used when issuing a room-scoped SFU capability. */
+    fun roleFor(userId: UUID, groupId: String): GroupRole = membership(groupId, userId).role
+
     fun add(actorId: UUID, groupId: String, request: AddGroupMemberRequest): GroupResponse {
         requireManager(groupId, actorId)
         require(request.role != GroupRole.OWNER) { "Ownership transfer requires a dedicated operation" }

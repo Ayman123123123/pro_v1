@@ -20,5 +20,6 @@ class TokenStore(val context: Context) {
         store.put("pstn_enabled", response.user.pstnEnabled.toString())
     }
     fun updateTokens(response: RefreshResponse) { store.put("access", response.accessToken); store.put("refresh", response.refreshToken) }
-    fun clearSession() = store.remove("access", "refresh", "red_id", "username")
+    /** Remove every value derived from an authenticated account, not only bearer credentials. */
+    fun clearSession() = store.remove("access", "refresh", "device_id", "red_id", "username", "pstn_enabled")
 }
