@@ -6,9 +6,12 @@ services:
     build:
       context: .
       dockerfile: backend-server/Dockerfile
+      # DNS صريح لتفادي فشل تنزيل Maven داخل WSL2/Docker Desktop
+      network: host
     container_name: red-backend
     restart: unless-stopped
     environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -126,6 +129,7 @@ services:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
