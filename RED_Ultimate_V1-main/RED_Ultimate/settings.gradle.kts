@@ -1,6 +1,10 @@
 pluginManagement {
     repositories {
         google()
+        // Google Maven mirror — reliable DNS, often works when repo.maven.apache.org is blocked
+        maven {
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
@@ -25,6 +29,10 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
+        // Google Maven mirror FIRST (fast + reliable DNS)
+        maven {
+            url = uri("https://maven-central.storage-download.googleapis.com/maven2")
+        }
         maven {
             url = uri("$rootDir/local-maven")
             content { includeGroup("org.signal") }
@@ -39,6 +47,10 @@ dependencyResolutionManagement {
         maven {
             url = uri("https://repo1.maven.org/maven2")
             content { includeGroup("org.signal") }
+        }
+        // Alibaba Maven mirror — fast for users behind GFW (China, Yemen sometimes)
+        maven {
+            url = uri("https://maven.aliyun.com/repository/public")
         }
         mavenCentral()
     }
