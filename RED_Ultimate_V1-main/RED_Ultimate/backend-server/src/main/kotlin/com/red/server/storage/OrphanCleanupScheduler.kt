@@ -23,8 +23,12 @@ class OrphanCleanupScheduler(
         try {
             val stats = storage.getLocalUsageStats()
             log.info("Orphan scan — media_files: {} bytes, db_records: {}", stats["media_files"], stats["database_records"])
-            // Real impl: list bucket objects vs MongoDB referenced keys via findOrphanKeys()
-            media.scheduleOrphanCleanup()
+            // Real: collect referenced keys from MongoDB (posts, stories, groups) + media_grants
+            // For now, dryRun=true to log only — set to false after verification
+            val referenced = emptySet<String>() // TODO: query MongoDB PostDocument.media + StoryDocument.mediaKey
+            val orphans = media.deleteOrphans(referenced, dryRun = true)
+            if (orphans.isNotEmpty()) log.warn("Found {} orphan media keys (dryRun): {}", orphans.size, orphans.take(10))
+            else log.info("No orphan media keys found")
         } catch (e: Exception) {
             log.warn("Orphan scan failed: {}", e.message)
         }
