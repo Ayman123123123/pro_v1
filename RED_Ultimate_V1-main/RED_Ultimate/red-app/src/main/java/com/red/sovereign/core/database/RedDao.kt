@@ -78,4 +78,11 @@ interface RedDao {
     // --- Search ---
     @Query("SELECT * FROM local_history WHERE conversationId = :convId AND encryptedPlaintext LIKE :query")
     suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
+
+    // --- Delete ---
+    @Query("DELETE FROM local_history WHERE id = :messageId")
+    suspend fun deleteLocalHistory(messageId: String)
+
+    @Query("DELETE FROM messages WHERE id = :messageId")
+    suspend fun deleteMessage(messageId: String)
 }

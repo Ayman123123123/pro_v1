@@ -1,5 +1,6 @@
 package com.red.sovereign.security
 
+import android.util.Log
 import com.red.sovereign.BuildConfig
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -67,21 +68,25 @@ class LoggingInterceptor(private val isDebug: Boolean = false) : Interceptor {
         val duration = System.currentTimeMillis() - startTime
 
         // Log request
-        println("→ ${request.method} ${request.url}")
-        println("  Headers: ${request.headers}")
+        Log.d(TAG, "→ ${request.method} ${request.url}")
+        Log.d(TAG, "  Headers: ${request.headers}")
 
         // Log response
-        println("← ${response.code} ${response.request?.url} (${duration}ms)")
-        println("  Headers: ${response.headers}")
+        Log.d(TAG, "← ${response.code} ${response.request?.url} (${duration}ms)")
+        Log.d(TAG, "  Headers: ${response.headers}")
 
         response.body?.string()?.let { body ->
             if (body.length < 5000) {
-                println("  Body: $body")
+                Log.d(TAG, "  Body: $body")
             } else {
-                println("  Body: [${body.length} bytes - truncated]")
+                Log.d(TAG, "  Body: [${body.length} bytes - truncated]")
             }
         }
 
         return response
+    }
+
+    private companion object {
+        const val TAG = "LoggingInterceptor"
     }
 }
