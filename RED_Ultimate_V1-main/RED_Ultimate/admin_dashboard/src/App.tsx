@@ -8,7 +8,7 @@ import {
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { adminLogin, authStore } from './api';
+import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
 import './styles.css';
 
@@ -57,8 +57,9 @@ export default function App() {
     }
   };
 
-  const logout = () => {
-    authStore.clear();
+  const logout = async () => {
+    // إخطار الخادم بإبطال جلسة refresh (أفضل ممارسة أمنية)
+    await adminLogout();
     setAuthenticated(false);
     setCurrentPage('dashboard');
   };

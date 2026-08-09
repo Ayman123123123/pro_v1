@@ -1,0 +1,37 @@
+# ═══════════════════════════════════════════════════════════════
+# EditorConfig — اتساق ترميز الكود في كل المحررات (IDEs)
+# ═══════════════════════════════════════════════════════════════
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts,java}]
+indent_style = space
+indent_size = 4
+ij_kotlin_allow_trailing_comma = true
+
+[*.{ts,tsx,js,jsx,json}]
+indent_style = space
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.{sql,proto}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{sh,bash}]
+indent_style = space
+indent_size = 2
+
+[Makefile]
+indent_style = tab

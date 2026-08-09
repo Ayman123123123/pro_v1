@@ -68,6 +68,26 @@ jobs:
       - name: SFU syntax check
         working-directory: RED_Ultimate_V1-main/RED_Ultimate/media-sfu
         run: node --check server.js
+      - name: Mock backend syntax + smoke test
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: |
+          python3 -c "import ast; ast.parse(open('scripts/mock_backend.py').read())"
+          python3 scripts/mock_backend.py &
+          sleep 2
+          curl -fs http://127.0.0.1:8080/health | grep -q '"status": "UP"' && echo "mock OK"
+          kill %1 2>/dev/null || true
+      - name: Bash scripts syntax check
+        working-directory: RED_Ultimate_V1-main
+        run: |
+          bash -n run.sh && bash -n scripts/ci-build-all.sh
+          bash -n RED_Ultimate/scripts/run-all-local.sh
+      - name: STOPSHIP gate
+        working-directory: RED_Ultimate_V1-main
+        run: |
+          if grep -rn "STOPSHIP" --include="*.kt" --include="*.kts" --include="*.java" --include="*.tsx" --include="*.ts" RED_Ultimate/backend-server RED_Ultimate/red-app RED_Ultimate/admin_dashboard 2>/dev/null; then
+            echo "STOPSHIP found!"; exit 1
+          fi
+          echo "No STOPSHIP markers ✅"
 
   # ── 4) صحة Docker Compose ──────────────────────────────────────────────────
   compose:
