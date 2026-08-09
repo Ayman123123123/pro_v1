@@ -15,10 +15,7 @@ import androidx.lifecycle.viewModelScope
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
-import com.red.sovereign.core.database.GroupEntity
-import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.media.MediaApi
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -26,36 +23,19 @@ import kotlinx.serialization.json.Json
 class GroupViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
     private val media = MediaApi(application, client)
-    private val repository = LocalRepository(application)
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     val groups = mutableStateListOf<Group>()
     val avatars = mutableStateMapOf<String, ImageBitmap>()
     val joinRequests = mutableStateListOf<GroupJoinRequestResponse>()
     var latestInvite: GroupInviteResponse? by mutableStateOf(null); private set
     var state: GroupState by mutableStateOf(GroupState.Loading); private set
-
-    init {
-        load()
-        viewModelScope.launch {
-            repository.getGroups().collectLatest { entities ->
-                groups.clear()
-                groups.addAll(entities.map { entity ->
-                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString())
-                })
-            }
-        }
-    }
+    init { load() }
 
     fun load() = viewModelScope.launch {
         state = GroupState.Loading
         when (val result = client.request("GET", "/api/groups")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<List<Group>>(result.value) }
-                .onSuccess { list ->
-                    state = GroupState.Ready
-                    repository.saveGroups(list.map { 
-                        GroupEntity(it.id, it.name, it.description, it.avatarUrl, it.ownerRedId, it.members.size)
-                    })
-                }
+                .onSuccess { groups.clear(); groups.addAll(it); state = GroupState.Ready }
                 .onFailure { state = GroupState.Error("INVALID_GROUP_RESPONSE") }
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }

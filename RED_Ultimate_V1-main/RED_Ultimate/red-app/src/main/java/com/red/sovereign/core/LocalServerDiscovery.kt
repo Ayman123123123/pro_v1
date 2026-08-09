@@ -3,7 +3,6 @@ package com.red.sovereign.core
 import android.content.Context
 import com.red.sovereign.BuildConfig
 import com.red.sovereign.auth.ApiResult
-import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,12 +19,11 @@ import java.util.concurrent.TimeUnit
  * expected local identity-authority algorithm before the endpoint is persisted.
  */
 class LocalServerDiscovery(private val context: Context) {
-    private val client: OkHttpClient = SecureOkHttpClient.build(
-        context = context,
-        connectTimeout = 500,
-        readTimeout = 700,
-        writeTimeout = 800
-    )
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(450, TimeUnit.MILLISECONDS)
+        .readTimeout(650, TimeUnit.MILLISECONDS)
+        .callTimeout(1200, TimeUnit.MILLISECONDS)
+        .build()
 
     suspend fun discover(port: Int = preferredPort()): ApiResult<String> {
         if (!BuildConfig.DEBUG) return ApiResult.Error(null, "LAN_DISCOVERY_DISABLED_IN_RELEASE")

@@ -180,7 +180,7 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     fun pushNotification(userId: String, notificationJson: String) {
-        redis.opsForList().leftPush("red:notify:queue:$userId", notificationJson)
+        redis.opsForList().0.leftPush("red:notify:queue:$userId", notificationJson)
         // Trim to last 100
         redis.opsForList().trim("red:notify:queue:$userId", 0, 99)
     }

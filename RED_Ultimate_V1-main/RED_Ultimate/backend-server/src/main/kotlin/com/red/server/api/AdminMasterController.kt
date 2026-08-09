@@ -1,7 +1,6 @@
 package com.red.server.api
 
 import com.red.server.infrastructure.dinstar.DinstarMasterClient
-import com.red.server.audit.AuditService
 import com.red.server.auth.RedApprovalService
 import com.red.server.services.CoreService
 import com.red.server.services.DinstarHardwareService
@@ -16,8 +15,7 @@ class AdminMasterController(
     private val dinstar: DinstarMasterClient,
     private val approval: RedApprovalService,
     private val core: CoreService,
-    private val hardware: DinstarHardwareService,
-    private val audit: AuditService
+    private val hardware: DinstarHardwareService
 ) {
     // [System A & C] إحصائيات المرور الحية
     @GetMapping("/system/stats")
@@ -28,24 +26,24 @@ class AdminMasterController(
     fun getDinstarSlots() = ResponseEntity.ok(dinstar.getPortsRealtimeStatus())
 
     @PostMapping("/hardware/dinstar/action")
-    fun executeDinstarAction(@RequestBody request: DinstarActionRequest, authentication: Authentication): ResponseEntity<Any> {
-        val actor = UUID.fromString(authentication.name)
-        val action = request.action.trim().uppercase()
-        // Do not write phone numbers, SIP addresses, or other sensitive command data to audit logs.
-        val details = mapOf("slot" to request.slot, "hasPhoneNumber" to !request.phoneNumber.isNullOrBlank(), "hasSipServer" to !request.sipServer.isNullOrBlank())
-        val result: Any = try {
-            when (action) {
-                "DISCOVER" -> hardware.discoverGateway()
-                "REBOOT" -> hardware.rebootDevice()
-                "UPDATE_SIP" -> hardware.updateSipSettings(requireNotNull(request.sipServer) { "sipServer is required" })
-                "DIAL" -> hardware.initiateCall(requireNotNull(request.phoneNumber) { "phoneNumber is required" }, request.slot ?: 0)
-                else -> throw IllegalArgumentException("Unsupported DINSTAR action")
+    fun executeDinstarAction(@RequestBody request: DinstarActionRequest): ResponseEntity<Any> {
+        val result: Any = when (request.action.uppercase()) {
+            "DISCOVER" -> hardware.discoverGateway()
+            "REBOOT" -> {
+                hardware.rebootDevice()
+                mapOf("status" to "REBOOT_REQUESTED")
             }
-        } catch (error: Exception) {
-            audit.record(actor, "DINSTAR_ACTION_REJECTED", action, details + mapOf("errorType" to error.javaClass.simpleName))
-            throw error
+            "UPDATE_SIP" -> {
+                val sipServer = requireNotNull(request.sipServer) { "sipServer is required" }
+                hardware.updateSipSettings(sipServer)
+                mapOf("status" to "SIP_UPDATED", "sipServer" to sipServer)
+            }
+            "DIAL" -> hardware.initiateCall(
+                requireNotNull(request.phoneNumber) { "phoneNumber is required" },
+                request.slot ?: 0
+            )
+            else -> throw IllegalArgumentException("Unsupported DINSTAR action")
         }
-        audit.record(actor, "DINSTAR_ACTION_EXECUTED", action, details)
         return ResponseEntity.ok(result)
     }
 

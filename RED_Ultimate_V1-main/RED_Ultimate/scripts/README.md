@@ -1,22 +1,21 @@
-# أدوات الفحص والتحقق — RED Ultimate
+# scripts/ — أتمتة التشغيل والأمان
 
-سكريبتات جاهزة تعمل من جذر `RED_Ultimate/` (أو من أي مكان مع المسار الكامل).
+> **الحالة:** نشط للمطور/المشغل
 
-| الأداة | ماذا تفعل | التشغيل |
-|---|---|---|
-| `check-schema-consistency.py` | يقارن كيانات JPA/Hibernate مع ترحيلات Flyway (V1–V13) ليمنع انهيار `ddl-auto: validate` وقت الإقلاع. | `python3 scripts/check-schema-consistency.py` |
-| `check-lfs-pointers.sh` | يكشف ملفات Git LFS pointer المكسورة (130 بايت) التي لا يملك المستودع محتواها الفعلي. | `bash scripts/check-lfs-pointers.sh` |
-| `generate-local-identity-authority.sh` | يولّد سلطة هوية ECDSA P-256 محلية للمستخدمين والأجهزة. | `bash scripts/generate-local-identity-authority.sh` |
-| `local-first-run.sh` | يشغّل المنظومة كاملة محليًا (Docker Compose + إعداد `.env` و`secrets/`). | `./scripts/local-first-run.sh <IP>` |
-| `prefetch-android-crypto.ps1` | ينزّل ملفات libsignal الكبيرة إلى cache محلي resumable مع تحقق SHA-256. | PowerShell |
-| `build-android-local.ps1` | يبني APK مضبوطًا على عنوان الخادم المحلي. | PowerShell |
+## الوظيفة
 
-## أدوات لوحة الإدارة (من داخل `admin_dashboard/`)
+أدوات تشغيل Alpha محليًا على Windows وPOSIX وتوليد سلطة هوية P-256. تنشئ أسرارًا محلية ولا ترفعها.
 
-| الأمر | ماذا يفعل |
-|---|---|
-| `npm run check:api` | فاحص عقد API: يطابق كل استدعاءات الواجهة مع مسارات الخادم. |
-| `npm run check` | فحص العقد + فحص صيغة `src/api.ts`. |
-| `npm run build` | فحص TypeScript كامل + بناء إنتاج Vite. |
+## المحتوى
 
-كل الأدوات أعلاه موصولة بوظائف CI في `.github/workflows/docker-image.yml`.
+`local-first-run.ps1`، `local-first-run.sh`، `generate-local-identity-authority.sh`.
+
+## العلاقة بباقي المشروع
+
+- راجع [`../settings.gradle.kts`](../settings.gradle.kts) لمعرفة ما يدخل البناء فعلًا؛ وجود المصدر لا يعني أنه مفعّل.
+- الحدود القانونية موثقة في [`../W0_MODULE_BOUNDARIES.md`](../W0_MODULE_BOUNDARIES.md).
+- خريطة النظام الكاملة في [`../docs/01-PROJECT-OVERVIEW.md`](../docs/01-PROJECT-OVERVIEW.md).
+
+## التحقق
+
+لا تُعلن ميزة هذا المجلد مكتملة إلا إذا دخلت بوابة البناء المناسبة واختبار runtime/جهازها. أسرار `.env` و`secrets/` ومفاتيح Android الخاصة لا تُحفظ في Git.

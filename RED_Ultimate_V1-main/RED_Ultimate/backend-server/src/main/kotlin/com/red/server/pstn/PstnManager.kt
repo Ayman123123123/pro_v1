@@ -24,16 +24,11 @@ class PstnManager(
 
     private fun ensureConnected(): DefaultManagerConnection {
         connection?.let { connected ->
-            try {
-                // Just check if connection object exists and is usable
-                return connected
-            } catch (e: Exception) {
-                // Ignore, will reconnect
-            }
+            if (runCatching { connected.isConnected }.getOrDefault(false)) return connected
         }
         return connectionLock.withLock {
             connection?.let { connected ->
-                return connected
+                if (runCatching { connected.isConnected }.getOrDefault(false)) return connected
             }
             require(amiPassword.isNotBlank()) { "ASTERISK_AMI_PASSWORD must be configured" }
             log.info("Connecting to Asterisk AMI at {}...", amiHost)

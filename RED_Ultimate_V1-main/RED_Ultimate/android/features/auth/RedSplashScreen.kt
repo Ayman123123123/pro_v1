@@ -17,15 +17,22 @@ import kotlinx.coroutines.delay
 @Composable
 fun RedSplashScreen(onFinished: () -> Unit) {
     val scale = remember { Animatable(0.5f) }
-    
+    val alpha = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
-        scale.animateTo(
-            targetValue = 1.2f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
+        launch {
+            scale.animateTo(
+                targetValue = 1.0f,
+                animationSpec = tween(800, easing = FastOutSlowInEasing)
             )
-        )
+        }
+        launch {
+            delay(600)
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(800, easing = FastOutSlowInEasing)
+            )
+        }
         delay(3000)
         onFinished()
     }
@@ -33,32 +40,46 @@ fun RedSplashScreen(onFinished: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A)),
+            .background(Color(0xFF030712)),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Logo diamond
             Surface(
-                modifier = Modifier.size(150.dp).scale(scale.value),
-                color = Color(0xFFD32F2F),
+                modifier = Modifier.size(120.dp).scale(scale.value),
+                color = Color(0xFF00C896),
                 shape = androidx.compose.foundation.shape.CircleShape
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("R", color = Color.White, fontSize = 80.sp, fontWeight = FontWeight.Black)
+                    Text("◆", color = Color(0xFF030712), fontSize = 60.sp, fontWeight = FontWeight.Black)
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            // Brand name
             Text(
-                text = "RED",
-                color = Color.White,
-                fontSize = 32.sp,
+                text = "YOUNES",
+                color = Color(0xFF00C896),
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 8.sp
+                letterSpacing = 6.sp,
+                modifier = Modifier.graphicsLayer(alpha = alpha.value)
             )
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "SOVEREIGN COMMUNICATIONS",
-                color = Color.Gray,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 8.dp)
+                text = "اتصالات سيادية",
+                color = Color(0xFF94A3B8),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.graphicsLayer(alpha = alpha.value)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            // Loading indicator
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .width(120.dp)
+                    .graphicsLayer(alpha = alpha.value),
+                color = Color(0xFF00C896),
+                trackColor = Color(0xFF1E293B)
             )
         }
     }

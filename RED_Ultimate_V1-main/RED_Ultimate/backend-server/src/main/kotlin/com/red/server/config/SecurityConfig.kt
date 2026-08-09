@@ -8,22 +8,20 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
-import org.springframework.security.config.Elements
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
-import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 /**
- * YOUNES Sovereign Security Configuration
- * - Argon2id password hashing
- * - JWT authentication filter
- * - CORS configuration
- * - Stateless session management
+ * 🔒 YOUNES Sovereign Security Configuration
+ * - Argon2id لكلمات المرور
+ * - JWT عديم الحالة
+ * - CORS قابل للتهيئة
+ * - مسارات عامة/محمية/إدارية محددة بدقة
  */
 @Configuration
 class SecurityConfig(
@@ -55,14 +53,14 @@ class SecurityConfig(
             }
             .authorizeHttpRequests { auth ->
                 auth
-                    // Public endpoints
-                    .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover", "/api/auth/temporary-password-change").permitAll()
+                    // ─── مسارات عامة (لا تحتاج مصادقة) ───
+                    .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/identity/authority", "/api/identity/directory").permitAll()
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()
-                    // Admin endpoints
-                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
-                    // Social features
+                    // ─── مسارات إدارية ───
+                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
+                    // ─── مسارات المستخدم المصادق ───
                     .requestMatchers(HttpMethod.GET, "/api/social/status/**").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
@@ -80,11 +78,10 @@ class SecurityConfig(
             }
             .headers { headers ->
                 headers
-                    .xssProtection { it.disable() }
+                    .xssProtection { it.headerValue(org.springframework.security.config.Elements.XSS_PROTECTION_HEADER_VALUE_BLOCK) }
                     .contentSecurityPolicy { it.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; media-src 'self' blob:; frame-ancestors 'none'") }
-                    .referrerPolicy { it.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) }
+                    .referrerPolicy { it.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) }
             }
-            // JWT filter must come before UsernamePasswordAuthenticationFilter (always present in filter chain)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()

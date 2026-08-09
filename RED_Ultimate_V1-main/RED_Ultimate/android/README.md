@@ -1,24 +1,21 @@
-# أرشيف تطبيق Android القديم (مرجع تاريخي)
+# android/ — مصدر AQYAL التاريخي
 
-هذا المجلد يحفظ **نسخة أقدم من تطبيق Android** (حزم `com.red.core` و `com.red.features`)
-خارج البناء الحالي. التطبيق الرسمي الحديث هو `red-app/` (حزمة `com.red.sovereign`).
+> **الحالة:** مرجع استخراج — خارج Gradle graph
 
-## ما تم دمجه في red-app الحديث ✅
-| الملف القديم | المكان الجديد في red-app |
-|---|---|
-| `core/network/MinioUploader.kt` | `red-app/.../core/network/MinioUploader.kt` |
-| `core/utils/MediaCompressor.kt` | موجود في `red-app/.../core/utils/` |
-| `core/utils/VideoTrimmer.kt` | موجود في `red-app/.../core/utils/` |
-| `core/utils/VoiceRecorder.kt` | `red-app/.../core/utils/VoiceRecorder.kt` |
-| `core/delivery/BurnManager.kt` | `red-app/.../core/delivery/BurnManager.kt` (معاد ربطه بـ MessageStore) |
+## الوظيفة
 
-## ما يغطيه red-app الحديث (بدائل أحدث)
-- `features/calls/VoipEngine.kt` ← `red-app/.../calls/WebRtcEngine.kt`
-- `features/calls/WebRtcSignaler.kt` ← `red-app/.../calls/CallSignalingClient.kt`
-- `features/calls/RedVoipMaster.kt` ← `red-app/.../calls/WebRtcEngine.kt`
-- `features/calls/LiveBroadcastManager.kt` ← `red-app/.../calls/LiveStreamService.kt`
-- `features/pstn/PstnEngine.kt` ← `red-app/.../calls/TelecomBridge.kt`
+تجربة Android سابقة تحتوي أفكار واجهة AQYAL والقصص والمكالمات. لا تمثل APK الحالي ولا يجوز إضافة اعتماد مباشر عليها؛ تُنقل الأفكار المنتقاة إلى `red-app/` بعد الاختبار.
 
-## الملفات الفريدة المتبقية (أرشيف فقط — لا تُدمج لأن حزمها قديمة)
-الملفات المتبقية هنا تمثل ميزات كاملة من نسخة سابقة؛ إعادة دمجها تتطلب
-إعادة تسمية حزم شاملة. تُحفظ كمرجع تاريخي ولا تُبنى.
+## المحتوى
+
+`app/` و`core/` و`features/` مصادر تاريخية غير مبنية.
+
+## العلاقة بباقي المشروع
+
+- راجع [`../settings.gradle.kts`](../settings.gradle.kts) لمعرفة ما يدخل البناء فعلًا؛ وجود المصدر لا يعني أنه مفعّل.
+- الحدود القانونية موثقة في [`../W0_MODULE_BOUNDARIES.md`](../W0_MODULE_BOUNDARIES.md).
+- خريطة النظام الكاملة في [`../docs/01-PROJECT-OVERVIEW.md`](../docs/01-PROJECT-OVERVIEW.md).
+
+## التحقق
+
+لا تُعلن ميزة هذا المجلد مكتملة إلا إذا دخلت بوابة البناء المناسبة واختبار runtime/جهازها. أسرار `.env` و`secrets/` ومفاتيح Android الخاصة لا تُحفظ في Git.

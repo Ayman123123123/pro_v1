@@ -12,8 +12,7 @@ import {
   LogoutOutlined,
   UserOutlined,
   BellOutlined,
-  ReloadOutlined,
-  DatabaseOutlined
+  ReloadOutlined
 } from '@ant-design/icons';
 import OverviewTab from './tabs/OverviewTab';
 import AuthorityTab from './tabs/AuthorityTab';
@@ -24,7 +23,6 @@ import MediaTab from './tabs/MediaTab';
 import InfrastructureTab from './tabs/InfrastructureTab';
 import ModerationTab from './tabs/ModerationTab';
 import NotificationsTab from './tabs/NotificationsTab';
-import BackupTab from './tabs/BackupTab';
 import { authStore, getUnreadCount, apiFetch } from '../api';
 
 const { Header, Content, Sider } = Layout;
@@ -77,7 +75,6 @@ const MasterLayout: React.FC = () => {
     { key: '7', icon: <CloudServerOutlined />, label: 'البنية التحتية' },
     { key: '8', icon: <AlertOutlined />, label: 'الثقة والسلامة' },
     { key: '9', icon: <BellOutlined />, label: unreadNotifCount > 0 ? `الإشعارات (${unreadNotifCount})` : 'الإشعارات' },
-    { key: '10', icon: <DatabaseOutlined />, label: 'النسخ الاحتياطي' },
   ];
 
   const tabContent: Record<string, React.ReactNode> = {
@@ -90,7 +87,6 @@ const MasterLayout: React.FC = () => {
     '7': <InfrastructureTab />,
     '8': <ModerationTab />,
     '9': <NotificationsTab />,
-    '10': <BackupTab />,
   };
 
   const statusColor = healthStatus === 'UP' ? '#52c41a' : healthStatus === 'DOWN' ? '#f5222d' : '#faad14';

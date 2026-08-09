@@ -1,6 +1,5 @@
 package com.red.server.api.admin
 
-import com.red.server.audit.AuditService
 import com.red.server.auth.ApprovalActionRequest
 import com.red.server.auth.RedApprovalService
 import com.red.server.infrastructure.dinstar.DinstarMasterClient
@@ -22,8 +21,7 @@ class RedMasterController(
     private val statsService: MasterStatsService,
     private val approvalService: RedApprovalService,
     private val dinstarClient: DinstarMasterClient,
-    private val securityService: RedSecurityService,
-    private val audit: AuditService
+    private val securityService: RedSecurityService
 ) {
     @GetMapping("/stats/realtime")
     fun getGlobalStats() = ResponseEntity.ok(statsService.getLiveMetrics())
@@ -48,11 +46,8 @@ class RedMasterController(
     fun getSlots() = ResponseEntity.ok(dinstarClient.getPortsRealtimeStatus())
 
     @PostMapping("/security/wipe")
-    fun initiateWipe(@RequestParam userId: String, authentication: Authentication): ResponseEntity<Any> {
-        val actor = UUID.fromString(authentication.name)
-        audit.record(actor, "REMOTE_WIPE_SENT", userId)
-        return ResponseEntity.ok(securityService.sendWipeSignal(userId))
-    }
+    fun initiateWipe(@RequestParam userId: String) =
+        ResponseEntity.ok(securityService.sendWipeSignal(userId))
 
     @GetMapping("/media/active-calls")
     fun getActiveCalls() = ResponseEntity.ok(statsService.getVoipMetrics())

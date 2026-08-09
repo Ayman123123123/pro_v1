@@ -101,9 +101,6 @@ class ContactService(
         require(target.id != ownerId) { "Cannot block yourself" }
         jdbc.update("INSERT INTO user_blocks(blocker_id,blocked_id) VALUES (?,?) ON CONFLICT DO NOTHING", ownerId, target.id)
         jdbc.update("DELETE FROM red_contacts WHERE (owner_id=? AND contact_id=?) OR (owner_id=? AND contact_id=?)", ownerId, target.id, target.id, ownerId)
-        // A block terminates future access. Existing account-level media grants between the pair must
-        // not survive and allow an attachment download after messaging has been prohibited.
-        jdbc.update("DELETE FROM media_grants WHERE (owner_id=? AND grantee_id=?) OR (owner_id=? AND grantee_id=?)", ownerId, target.id, target.id, ownerId)
         jdbc.update("UPDATE contact_requests SET status='REJECTED',resolved_at=CURRENT_TIMESTAMP WHERE status='PENDING' AND ((requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?))", ownerId, target.id, target.id, ownerId)
     }
 

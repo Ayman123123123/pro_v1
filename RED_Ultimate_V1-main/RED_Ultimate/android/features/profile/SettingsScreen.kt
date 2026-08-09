@@ -19,7 +19,7 @@ import androidx.navigation.NavController
 @Composable
 fun SettingsScreen(navController: NavController) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("RED Settings") }) }
+        topBar = { TopAppBar(title = { Text("إعدادات يونس") }) }
     ) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
             // Profile Header
@@ -36,7 +36,7 @@ fun SettingsScreen(navController: NavController) {
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text("RED Admin", style = MaterialTheme.typography.titleLarge)
+                        Text("مسؤول يونس", style = MaterialTheme.typography.titleLarge)
                         Text("Sovereign ID: @red_01", color = Color.Gray)
                     }
                     Spacer(Modifier.weight(1f))

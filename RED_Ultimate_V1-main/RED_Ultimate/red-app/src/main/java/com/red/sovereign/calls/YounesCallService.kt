@@ -59,7 +59,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         super.onCreate(); createChannel()
         audio = getSystemService(AudioManager::class.java)
         telecom = TelecomBridge(this).also { runCatching(it::register) }
-        signaling = CallSignalingClient(this, TokenStore(this), this)
+        signaling = CallSignalingClient(TokenStore(this), this)
         val sensors = getSystemService(SensorManager::class.java)
         sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }

@@ -82,7 +82,6 @@ fun AuthFlow(viewModel: AuthViewModel) {
         AuthState.Recovery -> RecoveryScreen(viewModel::recover, viewModel::showLogin)
         AuthState.RecoveryComplete -> StatusScreen("تم تغيير كلمة المرور", "أُلغيت كل الجلسات القديمة. يمكنك تسجيل الدخول الآن.", viewModel::showLogin)
         is AuthState.Pending -> PendingScreen(state, viewModel::checkApproval, viewModel::showLogin)
-        is AuthState.TemporaryPasswordChange -> TemporaryPasswordScreen(state, viewModel::changeTemporaryPassword)
         is AuthState.Rejected -> StatusScreen("تم رفض الطلب", state.reason ?: "راجع مسؤول منظومة يونس المحلية", viewModel::showLogin)
         AuthState.Suspended -> StatusScreen("الحساب موقوف", "تواصل مع المسؤول المحلي", viewModel::showLogin)
         AuthState.Banned -> StatusScreen("الحساب محظور", "تم إلغاء صلاحية الحساب والأجهزة", viewModel::showLogin)
@@ -162,20 +161,6 @@ private fun RecoveryScreen(submit: (String, String, String) -> Unit, back: () ->
         PasswordField(confirm, { confirm = it.take(128) }, "تأكيد كلمة المرور")
         Button({ submit(redId, code, password) }, Modifier.fillMaxWidth(), enabled = redId.isNotBlank() && code.isNotBlank() && password.length in 12..128 && password == confirm) { Text("تغيير وإلغاء الجلسات") }
         OutlinedButton(back, Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-private fun TemporaryPasswordScreen(state: AuthState.TemporaryPasswordChange, submit: (String, String, String) -> Unit) {
-    var password by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    FormColumn("تغيير كلمة المرور المؤقتة") {
-        Text("قام مسؤول يونس بتعيين كلمة مرور مؤقتة. اختر كلمة مرور جديدة قبل دخول الحساب.", textAlign = TextAlign.Center)
-        PasswordField(password, { password = it.take(128) }, "كلمة المرور الجديدة — 12 محرفًا على الأقل")
-        if (password.isNotEmpty()) PasswordStrength(password, state.username)
-        PasswordField(confirm, { confirm = it.take(128) }, "تأكيد كلمة المرور")
-        if (confirm.isNotEmpty() && password != confirm) Text("كلمتا المرور غير متطابقتين", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        Button({ submit(state.username, state.temporaryPassword, password) }, Modifier.fillMaxWidth(), enabled = password.length in 12..128 && password == confirm) { Text("تغيير كلمة المرور والدخول") }
     }
 }
 
