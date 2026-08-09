@@ -347,7 +347,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
         item {
             LazyRow(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
-                items(stories.stories, key = Story::id) { story -> StoryCircle(story.ownerDisplayName, false) { stories.open(story) } }
+                items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
         item {
@@ -740,25 +740,42 @@ private fun ChatHubScreen(
     Column(Modifier.fillMaxSize()) {
         if (tab == 0) Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (directory.requests.isNotEmpty()) {
-                Text("طلبات الصداقة", color = AqyalGold, fontWeight = FontWeight.Bold)
-                directory.requests.forEach { request ->
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised)) {
-                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Avatar(request.requester.displayName.take(1)); Column(Modifier.weight(1f).padding(horizontal = 9.dp)) { Text(request.requester.displayName); Text("@${request.requester.username}", color = AqyalCyanGlow, fontSize = 11.sp) }
-                            TextButton({ directory.resolve(request, false) }) { Text("رفض") }
-                            Button({ directory.resolve(request, true) }) { Text("قبول") }
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Person, null, tint = AqyalGold)
+                            Text(" طلبات الصداقة الواردة", color = AqyalGold, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.weight(1f))
+                            Text("${directory.requests.size}", color = Color.White, modifier = Modifier.background(AqyalGold, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 12.sp)
+                        }
+                        directory.requests.forEach { request ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(request.requester.displayName.take(1)); Column(Modifier.weight(1f).padding(horizontal = 9.dp)) { Text(request.requester.displayName, color = Color.White); Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp) }
+                                    TextButton({ directory.resolve(request, false) }) { Text("رفض", color = Color.Gray) }
+                                    Button({ directory.resolve(request, true) }, colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول") }
+                                }
+                            }
                         }
                     }
                 }
             }
+            if (directory.state is DirectoryState.Message) {
+                Card(colors = CardDefaults.cardColors(containerColor = YounesEmerald.copy(alpha = 0.2f)), modifier = Modifier.fillMaxWidth()) {
+                    Text((directory.state as DirectoryState.Message).text, color = YounesEmerald, modifier = Modifier.padding(12.dp), fontSize = 13.sp)
+                }
+            }
             if (directory.contacts.isNotEmpty()) {
-                Text("الأصدقاء", color = AqyalGold, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("الأصدقاء", color = AqyalGold, fontWeight = FontWeight.Bold)
+                    Text("${directory.contacts.size}", color = Color.White, fontSize = 12.sp, modifier = Modifier.background(AqyalCyanGlow, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp))
+                    Spacer(Modifier.weight(1f))
+                    TextButton({ showDirectory = true }) { Text("إضافة +", color = AqyalGold, fontSize = 12.sp) }
+                }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(directory.contacts.filter { person ->
                         conversations.none { it.peerId == person.redId && it.archived }
-                    }.sortedByDescending { person ->
-                        conversations.find { it.peerId == person.redId }?.pinned ?: false
-                    }, key = { it.redId }) { person ->
+                    }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }.thenBy { it.displayName }), key = { it.redId }) { person ->
                         Column(Modifier.widthIn(max = 86.dp).clickable { target = person.redId }, horizontalAlignment = Alignment.CenterHorizontally) {
                             Avatar(person.displayName.take(1)); Text(person.displayName, maxLines = 1, fontSize = 11.sp); Text("@${person.username}", color = AqyalCyanGlow, maxLines = 1, fontSize = 9.sp)
                             IconButton({ selectedContact = person }, Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(16.dp)) }
