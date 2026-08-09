@@ -214,10 +214,10 @@ class DinstarHardwareService(
     fun queryIncomingSms(): Map<String, Any?> = getJson("/api/query_incoming_sms", emptyMap())
 
     /** عدد SMS في الطابور — GET /api/query_sms_count */
-    fun querySmsQueueCount(): Map<String, Any> = getJson("/api/query_sms_count", emptyMap())
+    fun querySmsQueueCount(): Map<String, Any?> = getJson("/api/query_sms_count", emptyMap())
 
     /** إيقاف مهمة إرسال SMS — GET /api/stop_sms?task_id=N */
-    fun stopSmsTask(taskId: Int): Map<String, Any> {
+    fun stopSmsTask(taskId: Int): Map<String, Any?> {
         require(taskId >= 0) { "Invalid task_id" }
         return getJson("/api/stop_sms", mapOf("task_id" to taskId.toString()))
     }
@@ -227,7 +227,7 @@ class DinstarHardwareService(
     // ═══════════════════════════════════════════════════════
 
     /** Call Forward — GET /api/set_port_info?action=CallForward */
-    fun setCallForward(port: Int, param: String, number: String): Map<String, Any> {
+    fun setCallForward(port: Int, param: String, number: String): Map<String, Any?> {
         require(port in 0..7) { "Port must be 0-7" }
         require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) { "Invalid CallForward param" }
         return getJson("/api/set_port_info", mapOf(
@@ -237,7 +237,7 @@ class DinstarHardwareService(
     }
 
     /** Power on/off port — GET /api/set_port_info?action=power&param=on/off */
-    fun setPortPower(port: Int, on: Boolean): Map<String, Any> {
+    fun setPortPower(port: Int, on: Boolean): Map<String, Any?> {
         require(port in 0..7) { "Port must be 0-7" }
         return getJson("/api/set_port_info", mapOf(
             "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
@@ -386,7 +386,7 @@ class DinstarHardwareService(
 
         return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                val challenge = response.challenges().joinToString(", ") { "${it.scheme()} realm=${it.realm()}" }
+                val challenge = response.challenges().joinToString(", ") { "${it.scheme} realm=${it.realm}" }
                 log.error("DINSTAR HTTP {} on {} — auth challenge: {}", response.code, unsigned.url, challenge)
                 throw IllegalStateException("DINSTAR HTTP ${response.code} on ${unsigned.url.encodedPath} — auth challenge: $challenge")
             }

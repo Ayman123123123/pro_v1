@@ -38,6 +38,25 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, done: () -> Unit) = viewModelScope.launch {
+        val cleanOptions = options.map(String::trim).filter { it.length >= 2 }.distinct().take(6)
+        if (question.isBlank() || cleanOptions.size < 2) {
+            state = FeedState.Error("اكتب سؤالاً واضحاً وخيارين على الأقل")
+            return@launch
+        }
+        state = FeedState.Publishing
+        val request = CreatePostRequest(
+            text = question.trim(),
+            visibility = scope ?: "LOCAL_YEMEN",
+            pollOptions = cleanOptions,
+            pollDurationHours = durationHours.coerceIn(1, 168)
+        )
+        when (val result = api.create(request)) {
+            is ApiResult.Success -> { posts.add(0, result.value); state = FeedState.Ready; done() }
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
     fun follow(post: Post) = viewModelScope.launch {
         when (val result = api.follow(post.authorRedId)) {
             is ApiResult.Success -> state = FeedState.Message("تمت متابعة @${post.authorUsername}")

@@ -1,6 +1,6 @@
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Backend — Multi-stage Docker Build
-# Stage 1: Build JAR using Gradle (with Maven mirrors & timeouts)
+# Stage 1: Gradle build with JDK 21
 # Stage 2: Minimal Eclipse Temurin JRE 21 Runtime
 # ══════════════════════════════════════════════════════════════════
 
@@ -19,8 +19,13 @@ WORKDIR /build/backend-server
 RUN gradle bootJar --no-daemon -x test --stacktrace || \
     gradle :backend-server:bootJar --no-daemon -x test
 
-# ─── Stage 2: Runtime ───
-FROM eclipse-temurin:21-jre-jammy AS runtime
+# ══════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════
+# Stage 2: Runtime
+# ═════════════════════════════════════════════════════════════════
+
+FROM eclipse-temurin:21-jre-jammy
+
 WORKDIR /app
 
 # Install curl for healthcheck & tzdata

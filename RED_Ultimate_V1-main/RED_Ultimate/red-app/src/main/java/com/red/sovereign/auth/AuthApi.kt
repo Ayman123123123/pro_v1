@@ -1,6 +1,8 @@
 package com.red.sovereign.auth
 
+import android.content.Context
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -12,10 +14,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class AuthApi(
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build(),
+    private val context: Context,
+    private val client: OkHttpClient = SecureOkHttpClient.build(context),
     private val json: Json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 ) {
     suspend fun register(request: RegisterRequest): ApiResult<AuthResponse> =

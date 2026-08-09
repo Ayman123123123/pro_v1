@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
+import java.util.UUID
 
 /**
  * 🔔 YOUNES Sovereign Notification Controller
@@ -28,8 +29,9 @@ class NotificationController(
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(required = false) type: String?
     ): ResponseEntity<NotificationPage> {
-        val notifications = notificationService.getNotifications(user.id, page, size, type)
-        val unreadCount = notificationService.getUnreadCount(user.id)
+        val userId = user.id.toString()
+        val notifications = notificationService.getNotifications(userId, page, size, type)
+        val unreadCount = notificationService.getUnreadCount(userId)
         return ResponseEntity.ok(NotificationPage(notifications, unreadCount, page))
     }
 
@@ -41,7 +43,7 @@ class NotificationController(
         @PathVariable id: String,
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<Void> {
-        notificationService.markAsRead(user.id, id)
+        notificationService.markAsRead(user.id.toString(), id)
         return ResponseEntity.ok().build()
     }
 
@@ -52,7 +54,7 @@ class NotificationController(
     fun markAllAsRead(
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<Void> {
-        notificationService.markAllAsRead(user.id)
+        notificationService.markAllAsRead(user.id.toString())
         return ResponseEntity.ok().build()
     }
 
@@ -64,7 +66,7 @@ class NotificationController(
         @PathVariable id: String,
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<Void> {
-        notificationService.delete(user.id, id)
+        notificationService.delete(user.id.toString(), id)
         return ResponseEntity.ok().build()
     }
 
@@ -75,7 +77,7 @@ class NotificationController(
     fun getUnreadCount(
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<UnreadCountResponse> {
-        val count = notificationService.getUnreadCount(user.id)
+        val count = notificationService.getUnreadCount(user.id.toString())
         return ResponseEntity.ok(UnreadCountResponse(count))
     }
 
@@ -86,7 +88,7 @@ class NotificationController(
     fun getPreferences(
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<NotificationPreferences> {
-        return ResponseEntity.ok(notificationService.getPreferences(user.id))
+        return ResponseEntity.ok(notificationService.getPreferences(user.id.toString()))
     }
 
     /**
@@ -97,7 +99,7 @@ class NotificationController(
         @RequestBody request: NotificationPreferences,
         @AuthenticationPrincipal user: UserAccount
     ): ResponseEntity<NotificationPreferences> {
-        return ResponseEntity.ok(notificationService.updatePreferences(user.id, request))
+        return ResponseEntity.ok(notificationService.updatePreferences(user.id.toString(), request))
     }
 }
 
