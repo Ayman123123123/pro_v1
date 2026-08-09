@@ -70,10 +70,12 @@ fun YounesCallOverlay() {
             Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(peer, style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                    Text(when (state) { is CallUiState.Incoming -> "مكالمة واردة"; is CallUiState.Connecting -> "جارٍ الاتصال الآمن…"; is CallUiState.Active -> "مكالمة يونس مشفرة"; is CallUiState.Error -> state.message; else -> "" }, color = Color.White.copy(alpha = .75f))
+                    Text(when (state) { is CallUiState.Incoming -> "مكالمة واردة"; is CallUiState.Connecting -> "جارٍ الاتصال الآمن…"; is CallUiState.Active -> "مكالمة يونس مشفرة"; is CallUiState.Error -> state.message + " (سيُغلق تلقائياً)"; else -> "" }, color = Color.White.copy(alpha = .75f))
                 }
                 if (mode == "VIDEO") Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) { LocalVideoRenderer(Modifier.size(120.dp, 170.dp)) }
-                if (state is CallUiState.Incoming) Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
+                if (state is CallUiState.Error) {
+                    Button({ YounesCallService.action(context, YounesCallService.ACTION_END) }) { Text("إغلاق") }
+                } else if (state is CallUiState.Incoming) Row(horizontalArrangement = Arrangement.spacedBy(36.dp)) {
                     FilledIconButton({ YounesCallService.action(context, YounesCallService.ACTION_REJECT) }, Modifier.size(68.dp)) { Icon(Icons.Default.CallEnd, "رفض", tint = Color.Red) }
                     FilledIconButton({ callPermissions.launch(if (mode == "VIDEO") arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)) }, Modifier.size(68.dp)) { Icon(Icons.Default.Call, "قبول", tint = Color(0xFF2DDBA4)) }
                 } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

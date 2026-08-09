@@ -98,7 +98,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onSignal(signal: CallSignal) {
         when (signal.type) {
             "OFFER" -> {
-                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode
+                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode ?: "VOICE"
+                // Ensure overlay shows immediately even if app was in background
                 CallRuntime.state = CallUiState.Incoming(callId.orEmpty(), target, mode)
                 scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(incomingNotification(target, mode), media = false)
@@ -110,6 +111,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             "HOLD" -> { engine?.setMicrophoneEnabled(false); engine?.setCameraEnabled(false) }
             "RESUME" -> { engine?.setMicrophoneEnabled(true); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
+            "CANCELLED" -> {
+                // Another device answered — stop ringing on this device
+                incomingOffer = null
+                CallRuntime.state = CallUiState.Idle
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             "END", "REJECT" -> endCall(sendSignal = false)
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
         }
@@ -129,6 +137,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private fun rejectIncoming() {
         incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
+        incomingOffer = null
         endCall(sendSignal = false)
     }
 
@@ -159,7 +168,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
-    private fun fail(message: String) { CallRuntime.state = CallUiState.Error(message); updateNotification(message) }
+    private fun fail(message: String) {
+        CallRuntime.state = CallUiState.Error(message)
+        updateNotification(message)
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (CallRuntime.state is CallUiState.Error) {
+                CallRuntime.state = CallUiState.Idle
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
 
     private fun prepareAudio() {
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
