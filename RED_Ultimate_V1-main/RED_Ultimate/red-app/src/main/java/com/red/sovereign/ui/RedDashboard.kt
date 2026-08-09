@@ -877,7 +877,10 @@ private fun ChatHubScreen(
                     val rich = RichMessage(
                         action = if (editingMessageId != null) "EDIT" else "MESSAGE",
                         text = messageText.trim(), replyTo = replyToMessage?.id, editOf = editingMessageId,
-                        expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it }
+                        expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it },
+                        mentions = Regex("""@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}""").findAll(messageText).map { it.value }.toList(),
+                        hashtags = Regex("""#[\w\u0600-\u06FF]{2,30}""").findAll(messageText).map { it.value }.toList(),
+                        disappearingMs = disappearingDurationMs
                     )
                     RedConnectionService.sendRichText(context, target, conversation, rich)
                     messageText = ""; showEmoji = false; replyToMessage = null; editingMessageId = null
@@ -1488,8 +1491,28 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
     if (rich == null) { Text("رسالة غير صالحة", color = MaterialTheme.colorScheme.error); return }
     rich.replyTo?.let { replyId -> conversation.firstOrNull { it.id == replyId }?.let { quoted -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .45f))) { Text(messageDisplayText(quoted), Modifier.padding(7.dp), maxLines = 2, style = MaterialTheme.typography.bodySmall) } } }
     if (rich.forwardOf != null) Text("معاد توجيهها", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(rich.text, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
-    rich.expiresAt?.let { Text("رسالة مؤقتة", style = MaterialTheme.typography.labelSmall) }
+    val annotated = remember(rich.text, rich.mentions, rich.hashtags) {
+        val t = rich.text
+        val mentions = rich.mentions + Regex("""@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}""").findAll(t).map { it.value }.toList()
+        val hashtags = rich.hashtags + Regex("""#[\w\u0600-\u06FF]{2,30}""").findAll(t).map { it.value }.toList()
+        androidx.compose.ui.text.buildAnnotatedString {
+            append(t)
+            mentions.forEach { m -> val idx = t.indexOf(m); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = YounesEmerald, fontWeight = FontWeight.Bold), idx, idx + m.length) }
+            hashtags.forEach { h -> val idx = t.indexOf(h); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = AqyalCyanGlow), idx, idx + h.length) }
+        }
+    }
+    Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
+    rich.expiresAt?.let {
+        val remaining = (it - System.currentTimeMillis()).coerceAtLeast(0)
+        val label = when {
+            remaining <= 0 -> "انتهت"
+            remaining < 3600000 -> "${remaining/60000}د"
+            remaining < 86400000 -> "${remaining/3600000}س"
+            else -> "${remaining/86400000}ي"
+        }
+        Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
+    }
+    if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
 }
 
 @Composable
