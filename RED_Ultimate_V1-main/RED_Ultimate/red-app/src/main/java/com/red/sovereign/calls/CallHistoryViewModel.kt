@@ -25,29 +25,51 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
     var error: String? by mutableStateOf(null); private set
 
     init {
-        load()
         viewModelScope.launch {
             repository.getCallLogs().collectLatest { entities ->
                 calls.clear()
-                calls.addAll(entities.map { entity ->
-                    CallHistoryItem(entity.id, entity.peerId, "User", entity.type, entity.direction, entity.status, entity.timestamp, entity.durationMs)
-                })
+                calls.addAll(entities.map { it.toCallHistoryItem() })
             }
         }
+        load()
     }
 
     fun load() = viewModelScope.launch {
         loading = true; error = null
         when (val result = client.request("GET", "/api/calls/history?limit=100")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<List<CallHistoryItem>>(result.value) }
-                .onSuccess { list ->
-                    loading = false
-                    repository.saveCallLog(list.map { 
-                        CallLogEntity(it.id, it.peerId, it.type, it.direction, it.status, it.timestamp, it.durationMs)
-                    }.firstOrNull() ?: return@onSuccess) // Batch save would be better, adding it to repository
-                }.onFailure { error = "INVALID_CALL_HISTORY" }
+            is ApiResult.Success -> runCatching {
+                json.decodeFromString<List<CallHistoryItem>>(result.value)
+            }.onSuccess { list ->
+                if (list.isNotEmpty()) repository.saveCallLogs(list.map { it.toCallLogEntity() })
+            }.onFailure { error = "INVALID_CALL_HISTORY: ${it.message}" }
             is ApiResult.Error -> error = result.message
         }
         loading = false
     }
+
+    private fun CallLogEntity.toCallHistoryItem(): CallHistoryItem = CallHistoryItem(
+        id = id,
+        peerId = peerId,
+        peerLabel = peerLabel,
+        direction = direction,
+        type = type,
+        route = route,
+        status = status,
+        startedAt = timestamp.toString(),
+        answeredAt = answeredAt?.toString(),
+        endedAt = endedAt?.toString()
+    )
+
+    private fun CallHistoryItem.toCallLogEntity(): CallLogEntity = CallLogEntity(
+        id = id,
+        peerId = peerId,
+        peerLabel = peerLabel,
+        type = type.toString(),
+        direction = direction,
+        route = route.toString(),
+        status = status.toString(),
+        timestamp = startedAt.toLongOrNull() ?: 0L,
+        answeredAt = answeredAt?.toLongOrNull(),
+        endedAt = endedAt?.toLongOrNull()
+    )
 }

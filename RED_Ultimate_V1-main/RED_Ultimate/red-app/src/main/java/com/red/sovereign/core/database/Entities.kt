@@ -71,11 +71,15 @@ data class GroupEntity(
 data class CallLogEntity(
     @PrimaryKey val id: String,
     val peerId: String,
-    val type: String, // VOICE, VIDEO, DINSTAR
+    val peerLabel: String = "",
+    val type: String, // VOICE, VIDEO, DINSTAR, GROUP, LIVE, SPACE
     val direction: String, // INCOMING, OUTGOING
-    val status: String, // COMPLETED, MISSED, REJECTED
+    val route: String = "RED", // RED, DINSTAR
+    val status: String, // COMPLETED, MISSED, REJECTED, ACTIVE, ENDED, FAILED
     val timestamp: Long,
-    val durationMs: Long = 0
+    val durationMs: Long = 0,
+    val answeredAt: Long? = null,
+    val endedAt: Long? = null
 )
 
 @Entity(tableName = "stories")
