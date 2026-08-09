@@ -51,6 +51,57 @@ class AuthorizedApiClient(
         }
     }
 
+    /** تنزيل بايتات (مثل الوسائط المشفرة) مع حد أقصى للحجم. */
+    suspend fun requestBytes(path: String, maximumBytes: Int = 25 * 1024 * 1024): ApiResult<ByteArray> = withContext(Dispatchers.IO) {
+        require(maximumBytes in 1..100 * 1024 * 1024)
+        val token = tokens.accessToken ?: return@withContext ApiResult.Error(401, "UNAUTHENTICATED")
+        fun build(access: String) = Request.Builder()
+            .url(ServerEndpoint.url().trimEnd('/') + path)
+            .header("Authorization", "Bearer $access")
+            .get()
+            .build()
+        val result = executeResponseWithRefresh(build(token)) { build(it) }
+        when (result) {
+            is ApiResult.Error -> result
+            is ApiResult.Success -> result.value.use { response ->
+                if (!response.isSuccessful) ApiResult.Error(response.code, response.body?.string())
+                else {
+                    val bytes = response.body?.bytes()
+                    if (bytes == null) ApiResult.Error(null, "EMPTY_RESPONSE")
+                    else if (bytes.size > maximumBytes) ApiResult.Error(null, "MEDIA_TOO_LARGE")
+                    else ApiResult.Success(bytes)
+                }
+            }
+        }
+    }
+
+    /** تنزيل ملف كامل إلى وجهة محلية (مثل كاش الوسائط). */
+    suspend fun requestFile(path: String, destination: File, maximumBytes: Long = 100L * 1024 * 1024): ApiResult<File> = withContext(Dispatchers.IO) {
+        require(maximumBytes in 1..100L * 1024 * 1024)
+        val token = tokens.accessToken ?: return@withContext ApiResult.Error(401, "UNAUTHENTICATED")
+        fun build(access: String) = Request.Builder()
+            .url(ServerEndpoint.url().trimEnd('/') + path)
+            .header("Authorization", "Bearer $access")
+            .get()
+            .build()
+        val result = executeResponseWithRefresh(build(token)) { build(it) }
+        when (result) {
+            is ApiResult.Error -> result
+            is ApiResult.Success -> result.value.use { response ->
+                if (!response.isSuccessful) ApiResult.Error(response.code, response.body?.string())
+                else {
+                    val body = response.body ?: return@use ApiResult.Error(null, "EMPTY_RESPONSE")
+                    if (body.contentLength() > maximumBytes) ApiResult.Error(null, "MEDIA_TOO_LARGE")
+                    else {
+                        destination.parentFile?.mkdirs()
+                        body.byteStream().use { input -> FileOutputStream(destination).use { input.copyTo(it) } }
+                        ApiResult.Success(destination)
+                    }
+                }
+            }
+        }
+    }
+
     private fun executeWithRefresh(initial: Request, rebuild: (String) -> Request): ApiResult<String> {
         executeResponseWithRefresh(initial, rebuild).let { result ->
             return when (result) {
