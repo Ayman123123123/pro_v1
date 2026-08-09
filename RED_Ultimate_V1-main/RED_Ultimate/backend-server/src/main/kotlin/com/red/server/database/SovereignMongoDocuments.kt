@@ -49,6 +49,9 @@ data class MessageDocument(
     // الحذف
     var deletedForSenderAt: Instant? = null,
     var deletedForEveryoneAt: Instant? = null,
+    // حذف ناعم متوافق مع مسار الرسائل القديم + التعديل
+    var deletedAt: Instant? = null,
+    var isEdited: Boolean = false,
     // التوقيتات
     val createdAt: Instant = Instant.now(),
     var deliveredAt: Instant? = null,
