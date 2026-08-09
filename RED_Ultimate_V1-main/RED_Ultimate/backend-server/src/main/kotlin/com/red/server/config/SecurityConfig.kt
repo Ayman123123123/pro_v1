@@ -78,6 +78,7 @@ class SecurityConfig(
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()
             }
+            // TODO: HttpOnly refresh cookie + CSRF for admin — see PRODUCT_NORTH_STAR A
             .headers { headers ->
                 headers
                     .xssProtection { it.disable() }

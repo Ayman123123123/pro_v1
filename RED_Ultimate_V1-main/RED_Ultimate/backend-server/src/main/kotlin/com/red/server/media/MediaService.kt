@@ -40,6 +40,18 @@ class MediaService(
         return MediaObject(key, mime, file.size, "/api/media/$key")
     }
 
+    fun generateThumbnailPlaceholder(key: String): String {
+        // TODO: Generate 256x256 thumbnail via media-sfu or local ffmpeg
+        // Currently returns original key; future: return thumbnail key "thumbs/{key}"
+        validateKey(key)
+        return "thumbs/$key"
+    }
+
+    fun scheduleOrphanCleanup() {
+        // TODO: Scan MongoDB posts/stories for orphaned MinIO keys and delete
+        // Called daily via Spring @Scheduled — placeholder for now
+    }
+
     fun exists(key: String): Boolean = runCatching {
         validateKey(key); ensureBucket(); minio.statObject(StatObjectArgs.builder().bucket(bucket).`object`(key).build()); true
     }.getOrDefault(false)
