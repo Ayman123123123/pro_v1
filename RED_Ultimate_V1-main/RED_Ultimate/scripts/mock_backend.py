@@ -153,6 +153,71 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+        if path == "/api/master/v1/stats/realtime":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "active_users": 42, "messages_24h": 1284, "delivered_messages_24h": 1201,
+                "read_messages_24h": 980, "pending_messages_24h": 83, "active_conversations": 210,
+                "delivery_rate_percent": 93.5, "jvm_memory_percent": 41.0, "db_health": "UP",
+                "pending_approvals": 3, "timestamp": int(time.time() * 1000)
+            }).encode())
+            return
+
+        if path == "/api/master/v1/media/active-calls":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"active_calls": 2, "source": "realtime", "timestamp": int(time.time() * 1000)}).encode())
+            return
+
+        if path == "/api/master/v1/hardware/dinstar/slots":
+            self._set_headers(200)
+            self.wfile.write(json.dumps(YEMEN_OPERATORS).encode())
+            return
+
+        if path == "/api/admin/monitor/stats":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "active_users": 42, "total_messages": 51230, "jvm_memory_percent": 41.0,
+                "uptime_ms": 86400000, "cpu_cores": 8, "timestamp": int(time.time() * 1000)
+            }).encode())
+            return
+
+        if path == "/api/admin/users/pending" or path == "/api/admin/pending-users":
+            self._set_headers(200)
+            self.wfile.write(json.dumps([
+                {"id": "user_uuid_001", "redId": "YNS-1234-5678", "username": "new_user",
+                 "displayName": "مستخدم جديد", "status": "PENDING", "createdAt": "2026-08-09T00:00:00Z",
+                 "devices": [{"id": "dev_001", "deviceName": "Android", "platform": "ANDROID", "status": "PENDING"}]}
+            ]).encode())
+            return
+
+        if path == "/api/admin/users":
+            self._set_headers(200)
+            self.wfile.write(json.dumps([
+                {"id": "user_uuid_001", "redId": "YNS-1234-5678", "username": "new_user",
+                 "displayName": "مستخدم جديد", "status": "APPROVED", "pstnEnabled": False, "pstnDailyLimit": 10}
+            ]).encode())
+            return
+
+        if path == "/api/admin/audit":
+            self._set_headers(200)
+            self.wfile.write(json.dumps([]).encode())
+            return
+
+        if path.startswith("/api/notifications"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"items": [], "unread": 0, "total": 0}).encode())
+            return
+
+        if path.startswith("/api/social/status") or path.startswith("/api/social/privacy") or path.startswith("/api/social/online-contacts"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"type": "OFFLINE", "customText": None, "visibleTo": "EVERYONE"}).encode())
+            return
+
+        if path.startswith("/api/admin/moderation/reports"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps([]).encode())
+            return
+
         # Fallback 404
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "NOT_FOUND", "path": path}).encode())
@@ -263,6 +328,49 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+        if path == "/api/admin/users/action" or path == "/api/admin/users/update-status" or path == "/api/admin/users/approve":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"id": data.get("userId"), "status": data.get("action") or data.get("status") or "APPROVED"}).encode())
+            return
+
+        if path == "/api/admin/ws-ticket":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"ticket": "mock_ws_ticket_2026", "expiresIn": 30}).encode())
+            return
+
+        if path.startswith("/api/admin/security/kill-switch") or path.startswith("/api/admin/security/wipe"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "OK"}).encode())
+            return
+
+        self._set_headers(200)
+        self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length > 0 else b"{}"
+        data = json.loads(body.decode("utf-8")) if body else {}
+
+        if path == "/api/admin/users/pstn":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"id": data.get("userId"), "pstnEnabled": data.get("enabled"), "pstnDailyLimit": data.get("dailyLimit")}).encode())
+            return
+        if path.startswith("/api/notifications") or path.startswith("/api/social/status") or path.startswith("/api/social/privacy"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "UPDATED"}).encode())
+            return
+        self._set_headers(200)
+        self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith("/api/admin/moderation/reports/"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "UPDATED"}).encode())
+            return
         self._set_headers(200)
         self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
 
