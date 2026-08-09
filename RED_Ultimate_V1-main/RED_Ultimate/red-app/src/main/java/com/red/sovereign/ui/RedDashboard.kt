@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
@@ -47,12 +48,14 @@ import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsOff
@@ -205,11 +208,11 @@ import com.red.sovereign.features.chat.SovereignGroupInfoScreen
 import com.red.sovereign.features.profile.BackupScreen
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
-    HOME("الرئيسية", Icons.Default.Home),
-    CHATS("الدردشات", Icons.Default.Forum),
+    CHATS("الدردشات", Icons.Default.ChatBubble),
     GROUPS("المجموعات", Icons.Default.Groups),
     CALLS("المكالمات", Icons.Default.Call),
-    MORE("المزيد", Icons.Default.Menu)
+    HOME("الرئيسية", Icons.Default.Home),
+    MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
 private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS }
@@ -220,7 +223,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupName by remember { mutableStateOf("") }
-    var section by remember { mutableStateOf(MainSection.HOME) }
+    var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
         if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
@@ -264,11 +267,13 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     Scaffold(
         containerColor = Color.Transparent,
         floatingActionButton = {
-            if (section == MainSection.HOME && !showDinstar) FloatingActionButton(
-                onClick = { showCreate = true },
-                containerColor = YounesEmerald,
-                contentColor = Color(0xFF002117)
-            ) { Icon(Icons.Default.Add, "إنشاء محتوى") }
+            if (!showDinstar) when (section) {
+                MainSection.CHATS -> FloatingActionButton(onClick = { showDirectory = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
+                MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
+                MainSection.CALLS -> FloatingActionButton(onClick = { /* TODO: show dialer */ showDinstar = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Call, "مكالمة جديدة") }
+                MainSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
+                else -> {}
+            }
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
@@ -284,7 +289,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            RedTopBar(account.redId, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
+            RedTopBar(account.redId, account.username, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
@@ -319,7 +324,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
 }
 
 @Composable
-private fun RedTopBar(redId: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
+private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically
 ) {
@@ -329,8 +334,10 @@ private fun RedTopBar(redId: String, compact: Boolean, onSettings: () -> Unit, o
         modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
         contentScale = ContentScale.Crop
     )
-    Text(" يونس", fontSize = 24.sp, color = AqyalGold, fontWeight = FontWeight.Black)
-    Text("  $redId", color = AqyalCyanGlow, fontSize = 11.sp, modifier = Modifier.weight(1f), overflow = TextOverflow.Ellipsis, maxLines = 1)
+    Column(Modifier.weight(1f).padding(start = 8.dp)) {
+        Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
     IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
     IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
