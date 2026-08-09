@@ -80,7 +80,7 @@ class SecurityConfig(
             }
             .headers { headers ->
                 headers
-                    .xssProtection { it.headerValue(Elements.XSS_PROTECTION_HEADER_VALUE_BLOCK) }
+                    .xssProtection { it.disable() }
                     .contentSecurityPolicy { it.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; media-src 'self' blob:; frame-ancestors 'none'") }
                     .referrerPolicy { it.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) }
             }

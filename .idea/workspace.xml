@@ -5,14 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1810805e-9b6b-456f-8c66-e30d804a0c21" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/pro.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/res/drawable/younes_background.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/res/drawable/younes_background.jpg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-1.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-1.jpg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-2.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-2.jpg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-3.jpg" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/image-search/luxury-royal-gold-blue-app-icon-abstract-3.jpg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/config/SecurityConfig.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/config/SecurityConfig.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/database/MessageDocument.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/database/MessageDocument.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/database/RedisManager.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/database/RedisManager.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/notification/NotificationController.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/notification/NotificationController.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/social/StatusController.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/social/StatusController.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/websocket/TypingHandler.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/websocket/TypingHandler.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/docker-compose.yml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -25,31 +26,31 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3HbXQMajPLn4ALihigTbxQYnqCt" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.cidr.known.project.marker": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.readMode.enableVisualFormatting": "true",
-    "cf.first.check.clang-format": "false",
-    "cidr.known.project.marker": "true",
-    "git-widget-placeholder": "main",
-    "ignore.virus.scanning.warn.message": "true",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "C:/Users/hpc01/Pictures/pro"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/hpc01/Pictures/pro&quot;
   }
-}]]></component>
+}</component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="1810805e-9b6b-456f-8c66-e30d804a0c21" name="Changes" comment="" />

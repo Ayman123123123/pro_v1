@@ -9,6 +9,10 @@ WORKDIR /build
 COPY backend-server/ backend-server/
 COPY shared-proto/ shared-proto/
 WORKDIR /build/backend-server
+
+# Fix DNS resolution for Gradle dependencies - use multiple approaches
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && echo "nameserver 1.1.1.1" >> /etc/resolv.conf || true
+
 RUN gradle clean bootJar --no-daemon -x test
 
 FROM eclipse-temurin:21-jre-jammy
