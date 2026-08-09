@@ -814,3 +814,35 @@ GitHub Actions **لا يكتشف إلا** `.github/workflows/` في **جذر** �
   Admin dashboard (build+contract) + Static checks (schema+SFU+mock) +
   Compose validation + **Android APK artifact**.
 - يمكن التشغيل اليدوي من تبويب Actions مع تحديد عنوان خادم RED للبناء.
+
+---
+
+# 🏁 الجولة السادسة عشرة — إتمام الرفع بعد الدمج (2026-08-09)
+
+## الوضع
+- دُمج PR #5 (كل الجلسات الثماني) و PR #6 (CI) في `main` (e048028).
+- هذه الجلسة الجديدة (arena/019fe499-pro-v1) انبثقت من `main` المدمج.
+
+## ما أُنجز في هذه الجولة
+1. **تحقق شامل** من كل ملفات الدمج المعروضة (+29827/−2760): كلها موجودة في main.
+2. **إعادة بناء المحتوى المفقود** (كان في 3 التزامات محلية من جلسة سابقة أُغلقت قبل الرفع):
+   - `mock_backend.py` (495 سطرًا): أُضيفت 7 نقاط جديدة —
+     `GET/PUT /api/admin/dinstar/inventory` (جرد SIM بـ8 منافذ)،
+     `GET /api/admin/users/{id}/overview`،
+     `POST .../temporary-password` (204)،
+     `POST .../remote-app-wipe` (202 + commandId)،
+     `POST /api/admin/security/wipe` و`kill-switch` بأشكال حقيقية (SENT/ACTIVATED).
+   - `scripts/regenerate-lfs-pending.py` (جديد): يعيد توليد الـ 381 مؤشر LFS
+     من الالتزام `7dca9d8` — تحقق: 381/381 ✅.
+   - `lfs-pending/README.md`: أُضيف قسم إعادة التوليد.
+   - `check-all.sh`: أُضيف الفحص الحي الحادي عشر (smoke test للـ mock) — 11/11 ✅.
+   - `workflow-ready/red-ci.yml`: خطوة smoke test موسّعة بنقاط الجرد الجديدة.
+3. **الفحص الشامل: 11/11 أخضر** ✅ (كيانات + عقد API + بناء + SFU + smoke حي + YAML + bash).
+
+## الملفات المرفوعة في هذه الجولة
+- `scripts/mock_backend.py` (محسّن)
+- `scripts/regenerate-lfs-pending.py` (جديد)
+- `scripts/check-all.sh` (11 فحصًا)
+- `lfs-pending/README.md` (محدّث)
+- `workflow-ready/red-ci.yml` (smoke موسّع)
+- `SESSION_REPORT_AR.md` (هذا القسم)

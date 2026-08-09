@@ -36,6 +36,22 @@ echo "[4/6] صياغة SFU + mock_backend"
 check "node --check server.js" bash -c "cd media-sfu && node --check server.js"
 check "python3 mock_backend.py" python3 -c "import ast; ast.parse(open('scripts/mock_backend.py').read())"
 
+echo "[4b] اختبار حي لخادم mock (smoke test)"
+check "mock smoke: health + inventory + overview + PUT + POST" bash -c "
+  python3 scripts/mock_backend.py >/tmp/mock_smoke.log 2>&1 &
+  MOCK_PID=\$!
+  sleep 1.2
+  ok=1
+  curl -sf http://127.0.0.1:8080/health >/dev/null || ok=0
+  curl -sf http://127.0.0.1:8080/api/admin/dinstar/inventory | grep -q 'portIndex' || ok=0
+  curl -sf http://127.0.0.1:8080/api/admin/users/user_uuid_001/overview | grep -q 'messages24h' || ok=0
+  curl -sf -X PUT http://127.0.0.1:8080/api/admin/dinstar/inventory/gateway_uuid_001/ports/0 -H 'Content-Type: application/json' -d '{}' | grep -q 'portIndex' || ok=0
+  curl -sf -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/admin/users/user_uuid_001/temporary-password | grep -q '204' || ok=0
+  curl -sf -X POST http://127.0.0.1:8080/api/admin/users/user_uuid_001/remote-app-wipe | grep -q 'commandId' || ok=0
+  kill \$MOCK_PID 2>/dev/null
+  [ \"\$ok\" = 1 ]
+"
+
 echo "[5/6] صحة Docker Compose + nginx"
 check "docker-compose YAML" python3 -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"
 check "nginx.conf متوازن" bash -c "grep -c '{' nginx.conf >/dev/null && grep -c '}' nginx.conf >/dev/null"
