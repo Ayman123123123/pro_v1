@@ -1,7 +1,7 @@
 package com.red.server.websocket
 
 import com.google.protobuf.ByteString
-import com.red.server.database.SovereignMongoDocuments
+import com.red.server.database.MessageDocument
 import com.red.server.database.RedisManager
 import com.red.server.messaging.DeleteService
 import com.red.server.messaging.MessageService
@@ -106,7 +106,7 @@ class RedMasterHandler(
         }
     }
 
-    private fun messageEnvelope(message: SovereignMongoDocuments.MessageDocument): RedProtos.RedRED {
+    private fun messageEnvelope(message: MessageDocument): RedProtos.RedRED {
         val value = RedProtos.ChatMessage.newBuilder()
             .setId(message.uuid).setConversationId(message.conversationId)
             .setSenderId(message.senderId).setReceiverId(message.receiverId)
@@ -117,7 +117,7 @@ class RedMasterHandler(
         return RedProtos.RedRED.newBuilder().setMessage(value).build()
     }
 
-    private fun ack(message: SovereignMongoDocuments.MessageDocument, status: String): RedProtos.RedRED = RedProtos.RedRED.newBuilder().setAck(
+    private fun ack(message: MessageDocument, status: String): RedProtos.RedRED = RedProtos.RedRED.newBuilder().setAck(
         RedProtos.MessageAck.newBuilder().setMessageId(message.uuid).setSequenceNumber(message.sequenceNumber).setStatus(status)
     ).build()
 

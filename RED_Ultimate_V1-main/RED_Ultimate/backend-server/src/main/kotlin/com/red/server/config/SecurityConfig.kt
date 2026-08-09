@@ -61,7 +61,7 @@ class SecurityConfig(
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     // Admin endpoints
-                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
+                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
                     // Social features
                     .requestMatchers(HttpMethod.GET, "/api/social/status/**").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()

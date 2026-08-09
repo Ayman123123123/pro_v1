@@ -1,6 +1,6 @@
 package com.red.server.messaging
 
-import com.red.server.database.SovereignMongoDocuments.MessageDocument
+import com.red.server.database.MessageDocument
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Query

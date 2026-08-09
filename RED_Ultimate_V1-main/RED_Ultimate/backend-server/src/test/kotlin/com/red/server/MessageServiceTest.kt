@@ -2,8 +2,8 @@ package com.red.server
 
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
-import com.red.server.database.SovereignMongoDocuments.ConversationSequence
-import com.red.server.database.SovereignMongoDocuments.MessageDocument
+import com.red.server.database.ConversationSequence
+import com.red.server.database.MessageDocument
 import com.red.server.messaging.MessageService
 import com.red.sovereign.proto.RedProtos
 import com.google.protobuf.ByteString
