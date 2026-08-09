@@ -7,6 +7,12 @@ import {
   SafetyOutlined,
   SettingOutlined,
   TeamOutlined,
+  AlertOutlined,
+  AuditOutlined,
+  CloudUploadOutlined,
+  ExperimentOutlined,
+  FlagOutlined,
+  NotificationOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
@@ -18,19 +24,49 @@ const UserManagement = lazy(() => import('./pages/UserManagement'));
 const MasterLayout = lazy(() => import('./pages/MasterLayout'));
 const DinstarControl = lazy(() => import('./pages/DinstarControl'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics'));
+const Reports = lazy(() => import('./pages/Reports'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
+const Backups = lazy(() => import('./pages/Backups'));
+const Announcements = lazy(() => import('./pages/Announcements'));
+const FeatureFlags = lazy(() => import('./pages/FeatureFlags'));
 
 const { Header, Sider, Content } = Layout;
 
-type PageKey = 'dashboard' | 'master' | 'users' | 'dinstar' | 'monitor' | 'diagnostics';
+type PageKey =
+  | 'dashboard'
+  | 'users'
+  | 'reports'
+  | 'audit'
+  | 'announcements'
+  | 'featureflags'
+  | 'backups'
+  | 'master'
+  | 'dinstar'
+  | 'monitor'
+  | 'diagnostics';
 
-const menuItems = [
-  { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية' },
-  { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي' },
-  { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون والصلاحيات' },
-  { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR' },
-  { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية' },
-  { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص' },
+const menuItems: { key: PageKey; icon: JSX.Element; label: string; group: string }[] = [
+  // Operations
+  { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية', group: 'main' },
+  { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
+  { key: 'reports', icon: <AlertOutlined />, label: 'مراقبة المحتوى', group: 'main' },
+  { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
+  // System
+  { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
+  { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
+  { key: 'backups', icon: <CloudUploadOutlined />, label: 'النسخ الاحتياطية', group: 'system' },
+  // Sovereign
+  { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي', group: 'sovereign' },
+  { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR', group: 'sovereign' },
+  { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
+  { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
 ];
+
+const groupLabels: Record<string, string> = {
+  main: 'العمليات',
+  system: 'النظام',
+  sovereign: 'السيادي',
+};
 
 /**
  * Real administrative shell. Authentication is delegated to /api/auth/login via adminLogin(),
@@ -58,7 +94,6 @@ export default function App() {
   };
 
   const logout = async () => {
-    // إخطار الخادم بإبطال جلسة refresh (أفضل ممارسة أمنية)
     await adminLogout();
     setAuthenticated(false);
     setCurrentPage('dashboard');
@@ -71,13 +106,30 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard': return <Dashboard />;
-      case 'master': return <MasterLayout />;
       case 'users': return <UserManagement />;
+      case 'reports': return <Reports />;
+      case 'audit': return <AuditLog />;
+      case 'announcements': return <Announcements />;
+      case 'featureflags': return <FeatureFlags />;
+      case 'backups': return <Backups />;
+      case 'master': return <MasterLayout />;
       case 'dinstar': return <DinstarControl />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;
     }
   };
+
+  // Group menu items
+  const groupedMenu = ['main', 'system', 'sovereign'].map(group => ({
+    key: group,
+    type: 'group' as const,
+    label: groupLabels[group],
+    children: menuItems.filter(m => m.group === group).map(m => ({
+      key: m.key,
+      icon: m.icon,
+      label: m.label,
+    })),
+  }));
 
   return (
     <ConfigProvider
@@ -94,26 +146,45 @@ export default function App() {
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#050A16' }}>
-        <Sider theme="dark" collapsible>
-          <div style={{ height: 42, margin: 16, color: '#fff', fontSize: 16, textAlign: 'center', lineHeight: '20px', paddingTop: 2 }}>
-            <strong>يونس ماستر</strong><br />
-            <span style={{ color: '#8A9FB2', fontSize: 11 }}>الإدارة السيادية المحلية</span>
+        <Sider theme="dark" collapsible width={240}>
+          <div style={{
+            height: 64, padding: 16, color: '#fff', textAlign: 'center',
+            borderBottom: '1px solid #1A2F4A', marginBottom: 8
+          }}>
+            <strong style={{ fontSize: 16 }}>يونس ماستر</strong>
+            <div style={{ color: '#8A9FB2', fontSize: 11, marginTop: 2 }}>
+              الإدارة السيادية
+            </div>
           </div>
           <Menu
             theme="dark"
             mode="inline"
             selectedKeys={[currentPage]}
-            items={menuItems}
+            items={groupedMenu}
             onClick={({ key }) => setCurrentPage(key as PageKey)}
+            style={{ borderRight: 0 }}
           />
         </Sider>
         <Layout>
-          <Header style={{ background: '#081525', color: '#F1F7FA', borderBottom: '1px solid #17344A', padding: '0 20px', fontSize: 16, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#E8B84A' }}>يونس السيادي — لوحة الإدارة</span>
+          <Header style={{
+            background: '#081525', color: '#F1F7FA',
+            borderBottom: '1px solid #17344A', padding: '0 20px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+            <span style={{ color: '#E8B84A', fontSize: 16, fontWeight: 'bold' }}>
+              {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
+            </span>
             <Button danger onClick={logout}>تسجيل الخروج</Button>
           </Header>
-          <Content style={{ margin: 16, padding: 24, background: '#07111F', border: '1px solid #132B40', borderRadius: 18 }}>
-            <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', minHeight: 320 }}><Spin size="large" /></div>}>
+          <Content style={{
+            margin: 16, padding: 24, background: '#07111F',
+            border: '1px solid #132B40', borderRadius: 18, overflow: 'auto'
+          }}>
+            <Suspense fallback={
+              <div style={{ display: 'grid', placeItems: 'center', minHeight: 320 }}>
+                <Spin size="large" tip="جاري التحميل..." />
+              </div>
+            }>
               {renderPage()}
             </Suspense>
           </Content>
