@@ -115,10 +115,10 @@ val RedMutedText        = YounesMuted
 // تدرجات لونية احترافية
 // ═══════════════════════════════════════════════════════════════════════════════
 val GradientBackground  = Brush.verticalGradient(
-    listOf(YounesVoid, YounesMidnight, Color(0xFF06101E), YounesVoid)
+    listOf(YounesVoid, YounesMidnight) // Official: solid deep, no rainbow — professional, not clownish
 )
 val GradientPrimary     = Brush.linearGradient(
-    listOf(YounesPrimary, Color(0xFF00B07C))
+    listOf(YounesPrimary, YounesPrimary) // Official: solid emerald, no clownish glow
 )
 val GradientAccent      = Brush.linearGradient(
     listOf(YounesAccent, YounesAccentSoft)
