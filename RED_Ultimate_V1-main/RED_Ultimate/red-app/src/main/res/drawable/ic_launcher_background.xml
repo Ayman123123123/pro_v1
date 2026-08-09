@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    🎨 YOUNES Sovereign — App Icon Background
+    Deep navy with radial gradient + subtle network mesh
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Base dark navy -->
+    <path
+        android:fillColor="#071A2E"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+
+    <!-- Radial gradient overlay (center brighter) -->
+    <path android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="50"
+                android:gradientRadius="62"
+                android:startColor="#1E3A5F"
+                android:centerColor="#0A1628"
+                android:endColor="#050A16" />
+        </aapt:attr>
+    </path>
+
+    <!-- Subtle network mesh pattern -->
+    <group>
+        <path
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#35CBE0"
+            android:strokeAlpha="0.10"
+            android:strokeWidth="0.4"
+            android:pathData="M0,18 L108,18 M0,36 L108,36 M0,54 L108,54 M0,72 L108,72 M0,90 L108,90 M18,0 L18,108 M36,0 L36,108 M54,0 L54,108 M72,0 L72,108 M90,0 L90,108" />
+    </group>
+
+    <!-- Diagonal mesh accent -->
+    <group>
+        <path
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#E8B84A"
+            android:strokeAlpha="0.08"
+            android:strokeWidth="0.3"
+            android:pathData="M-10,30 L30,-10 M-10,60 L60,-10 M-10,90 L90,-10 M18,118 L118,18 M48,118 L118,48 M78,118 L118,78" />
+    </group>
+
+    <!-- Soft glow at center -->
+    <path android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="35"
+                android:startColor="#E8B84A"
+                android:centerColor="#E8B84A00"
+                android:endColor="#00000000" />
+        </aapt:attr>
+    </path>
+
+</vector>
