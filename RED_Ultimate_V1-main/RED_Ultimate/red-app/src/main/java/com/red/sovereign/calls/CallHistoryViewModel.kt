@@ -19,6 +19,7 @@ import kotlinx.serialization.json.Json
 class CallHistoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
     private val repository = LocalRepository(application)
+    private val cipher = CallLogCipher()
     private val json = Json { ignoreUnknownKeys = true }
     val calls = mutableStateListOf<CallHistoryItem>()
     var loading by mutableStateOf(false); private set
@@ -28,6 +29,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             repository.getCallLogs().collectLatest { entities ->
                 calls.clear()
+                // نُفك تشفير peerId/label للعرض في الواجهة فقط — DB تبقى مشفرة
                 calls.addAll(entities.map { it.toCallHistoryItem() })
             }
         }
@@ -49,8 +51,8 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun CallLogEntity.toCallHistoryItem(): CallHistoryItem = CallHistoryItem(
         id = id,
-        peerId = peerId,
-        peerLabel = peerLabel,
+        peerId = cipher.decryptPeerId(peerId),
+        peerLabel = cipher.decryptLabel(peerLabel),
         direction = direction,
         type = type,
         route = route,
@@ -62,8 +64,8 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun CallHistoryItem.toCallLogEntity(): CallLogEntity = CallLogEntity(
         id = id,
-        peerId = peerId,
-        peerLabel = peerLabel,
+        peerId = cipher.encryptPeerId(peerId),
+        peerLabel = cipher.encryptLabel(peerLabel),
         type = type.toString(),
         direction = direction,
         route = route.toString(),

@@ -1493,7 +1493,21 @@ private fun CallHistoryRow(call: CallHistoryItem) {
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(call.peerLabel.ifBlank { call.peerId }, fontWeight = FontWeight.Bold)
-            Text("${if (call.direction == "OUTGOING") "صادرة" else "واردة"} · ${call.status}", color = if (call.status == "MISSED") Color.Red else Color.Gray, fontSize = 12.sp)
+            Text(
+                buildString {
+                    append(if (call.direction == "OUTGOING") "صادرة" else "واردة")
+                    append(" · ")
+                    append(call.status)
+                    val durationSec = (call.endedAt?.toLongOrNull() ?: 0L) - (call.answeredAt?.toLongOrNull() ?: 0L)
+                    if (durationSec > 0) {
+                        append(" · ")
+                        val mm = durationSec / 60; val ss = durationSec % 60
+                        append("%d:%02d".format(mm, ss))
+                    }
+                },
+                color = if (call.status == "MISSED") Color.Red else Color.Gray,
+                fontSize = 12.sp
+            )
         }
         AssistChip({}, { Text(if (call.route == "DINSTAR") "DINSTAR صوت" else "يونس ${call.type}") }, enabled = false)
         }
