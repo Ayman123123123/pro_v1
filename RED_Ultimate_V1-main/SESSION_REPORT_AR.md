@@ -705,3 +705,69 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 ## الحالة النهائية
 المشروع الآن: مدمج من كل الجلسات + محصّن أمنيًا + موثق بالكامل + أدوات
 جودة آلية + بناء محسّن. كل شيء مرفوع على GitHub.
+
+---
+
+# ملحق الجولة الخامسة عشرة (2026-08-09) — الإكمال النهائي الشامل
+
+## ما أُنجز في هذه الجولة (إكمال كل المتبقي)
+
+### 1) استعادة الأصول البصرية الكاملة (12 صورة)
+استُخرجت كل صور الأيقونات والخلفيات من فرع `019fdf57`/`019fde37` (محتوى حقيقي،
+ليست مؤشرات LFS) إلى `red-app/src/main/res/drawable/`:
+
+| الصورة | الحجم | الوصف |
+|---|---|---|
+| younes_icon_ultimate_v2.png | 1.79 MB | أيقونة Ultimate V2 (الأفضل) |
+| younes_ultimate_pro_max.png | 2.20 MB | أيقونة Pro Max |
+| younes_admin_icon.png | 2.20 MB | أيقونة الإدارة (= Pro Max، اسمان لسياقين) |
+| younes_icon_hybrid_pro.png | 1.43 MB | أيقونة Hybrid Pro (صقر+ي) |
+| younes_icon_8k_new.png | 1.80 MB | أيقونة 8K |
+| younes_icon_ultimate.png | 1.91 MB | أيقونة Ultimate |
+| younes_final_8k.png | 1.92 MB | الأيقونة النهائية 8K |
+| younes_icon_clean_pro.png | 1.52 MB | أيقونة Clean Pro (= Master، اسمان) |
+| younes_icon_master.png | 1.52 MB | **المستخدمة فعليًا** في AuthScreens + RedDashboard |
+| younes_background_8k_new.jpg | 140 KB | خلفية زمردية 8K |
+| younes_background_pro.jpg | 87 KB | خلفية Pro |
+| younes_background.jpg | 39 KB | خلفية أصلية |
+
+- تحققت: كلها PNG/JPEG صالحة (فحص التوقيعات)
+- `younes_icon_master` مرجع حي في `AuthScreens.kt:221` و`RedDashboard.kt:315`
+
+### 2) استبدال الملفات الناقصة في أرشيف android/ (نسخ الفرع الكاملة)
+| الملف | قبل | بعد | ملاحظات |
+|---|---|---|---|
+| android/app/MainAppNavigation.kt | 59 سطرًا (stub) | **242 سطرًا** | 24 مسارًا كاملًا + call type picker + مؤتمرات + بث + فضاء صوتي |
+| android/core/database/MasterDatabase.kt | 61 (v2، 5 كيانات) | **591 (v6، 16 كيانًا)** | كل الكيانات + 5 ترحيلات + فهارس |
+| android/features/profile/ProfileScreen.kt | 40 (demo) | **245** | أفاتار حقيقي + حالات + خصوصية + أجهزة |
+| android/features/chat/MediaBubble.kt | 39 | **198** | فقاعات وسائط كاملة |
+| android/features/chat/ChatDetailScreen.kt | — | **جديد** | يكمل مرجع التنقل (كان مرجعًا معلقًا) |
+| android/features/chat/LuxuryChatBubble.kt | — | **جديد** | يعتمد عليه ChatDetailScreen |
+| android/core/network/MinioUploader.kt | — | **جديد** (65) | كان محذوفًا لكن `StoryRepositoryImpl` يطلبه (`uploadFileSync`) |
+
+- تحققت من توافق كل الكيانات مع استعلامات `SovereignDaos.kt` (أعمدة camelCase مطابقة)
+- تحققت من وجود كل الرموز المستوردة (SovereignColors, StatusPickerDialog,
+  UserStatus, DevicesScreen, DinstarAdminScreen ...) — كلها موجودة
+
+### 3) التحقق من الملفات المتبقية من قائمة المستخدم (كلها سليمة)
+- `ConferenceOverlay.kt` (265) — مطابق لأفضل نسخة ✓
+- `MessageStore.kt` (211) — نسختنا v6 + outbox queue (أفضل من الفرع 169) ✓
+- `red_protocol.proto` (69) — فيه RemoteWipe + RemoteWipeAck ✓
+- `LiveStreamService.kt` — واجهاته كلها مطابقة لـ WebRtcEngine.Events +
+  ConferenceSignalingClient.Listener (تحقق كامل من التواقيع) ✓
+- `LiveStreamController` ↔ `LiveStreamService` الخلفي: كل الدوال مطابقة ✓
+- Migrations: V17/V18 = محتوى V14/V15 من 019fdeb0 لكن **IF NOT EXISTS** (أفضل) ✓
+- لا تعارض مسارات: `/api/admin` (AdminController + AdminMonitorController
+  بمسارات فرعية مختلفة) + `/ports/{port}/ussd` (GET+POST = مكملان) ✓
+- لا مراجع مكسورة: `MessageDocument` معرف في `SovereignMongoDocuments.kt` ✓
+- `check-sovereign-boundaries.sh` يعمل (Sovereign identity boundary passed) ✓
+
+### 4) المقاييس النهائية
+- **10/10 فاحصات** خضراء (check-all.sh)
+- **PR #5**: 657 ملفًا، +28,101 / −3,816، MERGEABLE
+- أرشيف android/ الآن مكتمل 81 ملفًا مقابل 73 سابقًا
+- red-app drawable: 25 أصلًا بصريًا (بدل 13)
+
+## الحالة النهائية
+كل ما طلبه المستخدم أُنجز: كل الملفات من كل الفروع جُمعت، الأفضل والأحدث
+اختير، المكررات 100% فقط حُذفت، وكل الفحوصات خضراء.
