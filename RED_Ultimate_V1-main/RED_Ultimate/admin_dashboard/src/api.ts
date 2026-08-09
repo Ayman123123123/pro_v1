@@ -122,6 +122,27 @@ export async function getOnlineContacts() {
 }
 
 // ━━━━━━━━━━━━━━━━ 👥 Users Management ━━━━━━━━━━━━━━━━
+export interface UserRecord {
+  id: string;
+  redId: string;
+  username: string;
+  displayName: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
+  role: 'USER' | 'ADMIN';
+  pstnEnabled: boolean;
+  createdAt: string;
+  approvedAt?: string;
+  lastSeen?: number;
+}
+
+export interface PageResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 export async function getUsers(params: {
   page?: number;
   size?: number;
@@ -130,7 +151,7 @@ export async function getUsers(params: {
   role?: string;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
-} = {}) {
+} = {}): Promise<PageResponse<UserRecord>> {
   const searchParams = new URLSearchParams();
   if (params.page !== undefined) searchParams.set('page', String(params.page));
   if (params.size !== undefined) searchParams.set('size', String(params.size));
@@ -193,6 +214,43 @@ export async function deleteUser(userId: string, hard = false) {
 export async function getDashboardSummary() {
   const res = await apiFetch('/api/admin/dashboard/summary');
   return res.json();
+}
+
+export interface DashboardSummary {
+  analytics: {
+    totalUsers: number;
+    approvedUsers: number;
+    pendingUsers: number;
+    bannedUsers: number;
+    newUsers24h: number;
+    approvalRate: number;
+  };
+  pendingReports: number;
+  recentCriticalAlerts: number;
+  degradedComponents: number;
+  activeBackups: number;
+  generatedAt: string;
+}
+
+export interface SystemHealth {
+  id: string;
+  component: string;
+  status: 'HEALTHY' | 'DEGRADED' | 'DOWN';
+  cpuUsage?: number;
+  memoryUsage?: number;
+  diskUsage?: number;
+  activeConnections?: number;
+  requestsPerSecond?: number;
+  averageResponseMs?: number;
+  errorRate?: number;
+  details?: string;
+  lastCheckAt: string;
+}
+
+export interface RealtimeMetrics {
+  users: any;
+  health: Record<string, SystemHealth>;
+  timestamp: string;
 }
 
 export async function getSystemAnalytics(startDate: string, endDate: string) {
