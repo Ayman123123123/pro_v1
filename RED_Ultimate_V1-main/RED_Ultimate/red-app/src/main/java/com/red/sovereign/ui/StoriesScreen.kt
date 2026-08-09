@@ -77,6 +77,28 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                 is StoryViewerState.Loading -> CircularProgressIndicator(color = Color.White)
                 is StoryViewerState.Image -> Image(viewer.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                 is StoryViewerState.Video -> StoryVideoPlayer(viewer.uri, Modifier.fillMaxSize())
+                is StoryViewerState.Text -> {
+                    val bg = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(story.backgroundColor ?: "#1565C0")) } catch (_: Exception) { Color(0xFF1565C0) }
+                    Box(Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) {
+                        Text(story.caption ?: "", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(24.dp))
+                    }
+                }
+                is StoryViewerState.Voice -> {
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(64.dp))
+                        Text("رسالة صوتية • ${story.durationMs?.let { "${it/1000}ث" } ?: ""}", color = Color.White, fontSize = 16.sp)
+                        story.waveform.takeIf { it.isNotEmpty() }?.let { wave ->
+                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 24.dp)) {
+                                val step = size.width / wave.size.coerceAtLeast(1)
+                                wave.forEachIndexed { i, v ->
+                                    val h = size.height * (v.coerceIn(4,100)/100f)
+                                    drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(i*step+step/2, (size.height-h)/2), end = androidx.compose.ui.geometry.Offset(i*step+step/2, (size.height+h)/2), strokeWidth = 3f)
+                                }
+                            }
+                        }
+                        Button(onClick = { /* TODO: play voice story */ }) { Text("تشغيل") }
+                    }
+                }
                 is StoryViewerState.Unsupported -> Text(viewer.message, color = Color.White)
                 is StoryViewerState.Error -> Text("تعذر تحميل الحالة: ${viewer.message}", color = MaterialTheme.colorScheme.error)
                 else -> Unit
