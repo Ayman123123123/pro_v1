@@ -63,8 +63,15 @@ class LocalRepository(context: Context) {
 
     // --- Search ---
     suspend fun search(convId: String, query: String): List<LocalHistoryEntity> {
-        // Since we store encrypted data, we pull and decrypt for search
-        // In a production app, we would use a separate FTS index for decrypted text
-        return emptyList() // TODO: Implement properly with FTS
+        if (query.isBlank()) return emptyList()
+        // searchMessages يبحث في local_history (النص المفكوك المخزن محليًا بعد فك التشفير).
+        // في بيئة إنتاج، يُضاف فهرس FTS منفصل للنص المفكوك.
+        return dao.searchMessages(convId, "%${query.trim()}%")
+    }
+
+    // --- Delete ---
+    suspend fun deleteMessage(messageId: String) {
+        dao.deleteLocalHistory(messageId)
+        dao.deleteMessage(messageId)
     }
 }

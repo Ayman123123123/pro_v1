@@ -206,7 +206,10 @@ class RedConnectionService : Service() {
                         } else {
                             repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
-                            // TODO: Add notification logic back if needed, using repository preferences
+                            // إشعار للرسائل الجديدة غير الصادرة، حسب تفضيلات المستخدم
+                            if (SettingsRuntime.current.messageNotifications) {
+                                notifyEncryptedMessage(message.senderId, plaintext)
+                            }
                         }
                         socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                     }
@@ -218,7 +221,13 @@ class RedConnectionService : Service() {
                 repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
             }
-            RedProtos.RedRED.SignalCase.DELETE -> Unit // TODO: Handle delete in repository
+            RedProtos.RedRED.SignalCase.DELETE -> {
+                // حذف "للجميع" — إزالة الرسالة من المخزن المحلي فور استقبال الإشارة
+                repository.deleteMessage(envelope.delete.messageId)
+                com.red.sovereign.crypto.MessageAckBus.publish(
+                    com.red.sovereign.crypto.MessageAck(envelope.delete.messageId, "DELETED")
+                )
+            }
             RedProtos.RedRED.SignalCase.TYPING -> {
                 val typing = envelope.typing
                 TypingEventBus.publish(TypingEvent(typing.conversationId, typing.userId, typing.isTyping))
