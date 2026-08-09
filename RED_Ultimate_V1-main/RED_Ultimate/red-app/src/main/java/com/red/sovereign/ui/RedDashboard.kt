@@ -282,7 +282,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            RedTopBar(account.redId, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true })
+            RedTopBar(account.redId, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
@@ -317,7 +317,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
 }
 
 @Composable
-private fun RedTopBar(redId: String, compact: Boolean, onSettings: () -> Unit) = Row(
+private fun RedTopBar(redId: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
     verticalAlignment = Alignment.CenterVertically
 ) {
@@ -329,7 +329,7 @@ private fun RedTopBar(redId: String, compact: Boolean, onSettings: () -> Unit) =
     )
     Text(" يونس", fontSize = 24.sp, color = AqyalGold, fontWeight = FontWeight.Black)
     Text("  $redId", color = AqyalCyanGlow, fontSize = 11.sp, modifier = Modifier.weight(1f), overflow = TextOverflow.Ellipsis, maxLines = 1)
-    IconButton({}, enabled = false) { Icon(Icons.Default.Search, "بحث — قيد الربط") }
+    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
     IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
