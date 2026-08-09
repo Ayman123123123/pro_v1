@@ -8,7 +8,6 @@ import { apiFetch } from '../api';
  * قائمة موافقات الحسابات — متوافقة مع عقد لوحة RED:
  *   GET  /api/admin/users/pending        (قائمة الانتظار)
  *   POST /api/admin/users/action         { userId, action, reason }
- * ملاحظة: الصفحة الحية المستخدمة فعليًا هي AuthorityTab؛ هذا المكوّن احتياطي/مستقل.
  */
 const Approvals = () => {
     const [pendingUsers, setPendingUsers] = useState([]);

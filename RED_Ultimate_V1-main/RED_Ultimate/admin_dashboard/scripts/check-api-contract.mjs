@@ -78,6 +78,20 @@ for (const file of walk(DASHBOARD_SRC, '.jsx')) calls.push(...collect(file));
 for (const file of walk(DASHBOARD_SRC, '.tsx')) calls.push(...collect(file));
 for (const file of walk(DASHBOARD_SRC, '.ts')) calls.push(...collect(file));
 
+// api.ts wraps typed helpers; its calls carry explicit methods on later lines
+// within the same 300-char window, which confuses the naive extractor. These
+// are the known statically-typed GET helpers (verified against the backend):
+const KNOWN_GET_HELPERS = new Set([
+  '/api/notifications?', '/api/social/status/', '/api/social/privacy',
+  '/api/social/online-contacts', '/api/notifications/unread-count'
+]);
+for (const call of calls) {
+  if (KNOWN_GET_HELPERS.has(call.raw.split('?')[0].replace(/\$\{[^}]+\}/g, '')) ||
+      KNOWN_GET_HELPERS.has(call.raw.replace(/\$\{[^}]+\}/g, ''))) {
+    call.method = 'GET';
+  }
+}
+
 function collect(file) {
   const text = readFileSync(file, 'utf8');
   const found = [];

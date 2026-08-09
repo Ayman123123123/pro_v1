@@ -445,3 +445,50 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 - لا توجد ملفات محادثة في أي مكان يمكنني الوصول إليه (لا git، لا GitHub، لا هذا الجهاز).
 - "التأريخ" الذي تراه على GitHub = أسماء فروع الجلسات الثماني (فارغة عدا هذه).
 - نصوص محادثاتك السابقة محفوظة في حسابك على **منصة Arena** (arena.ai)، ويمكنك قراءتها هناك بالكامل.
+
+---
+
+# ملحق الجولة التاسعة (2026-08-09) — الدمج الأسطوري: كل ملفات جهازك في مشروع واحد
+
+## 🎉 النجاح الكبير: استلمت فرع `local-full-merge` من جهازك
+
+شغّلت سكربت الدمج على جهازك (`merge-local-copies.ps1`) → **وصلني 30,175 ملفًا** من كل نسخك المحلية. بعد التحليل، دمجت **كل ما هو فريد وجديد** في مشروع واحد متكامل.
+
+## ما تم دمجه (كنوز جلساتك السابقة)
+
+### 1) خادم Dinstar المطوّر بالكامل (421 سطرًا)
+- **أصلح الأخطاء الخمسة** من `CODE_BUG_ANALYSIS.md` (التي كانت موجودة فعلًا):
+  - ✅ **Digest Auth** (بدل Basic) — عبر `okhttp-digest:3.1.1` + `CachingAuthenticatorDecorator`
+  - ✅ `get_cdr` = POST + JSON body (كان GET)
+  - ✅ `set_port_info` = GET + query params (كان POST)
+  - ✅ النموذج = **UC2000-VE-8G** (كان 8T)
+  - ✅ `red.dinstar.model` قابل للضبط في application.yml + .env
+- **ميزات إضافية**: SMS كامل، Call Forward، Power on/off، get_status، SSL trust config
+- + اختبار `DinstarHardwareServiceTest.kt` (137 سطرًا)
+
+### 2) ترقيات قاعدة البيانات (V14 + V15)
+- `V14__Profiles_Privacy_Calls_Notifications_Groups.sql` (246 سطرًا): user_privacy_settings، call_history، call_participants، user_notifications، notification_preferences، groups+، group_features، group_invites، story_viewers، usage_stats
+- `V15__Billing_CDR_RateLimit_Encryption.sql` (159 سطرًا): dinstar_cdr، pstn_tariffs (4 تعارف يمنية)، user_bills، rate_limit_rules، encryption_sessions، sent_prekey_records، message_delivery_receipts
+- `application.yml` محسّن (92 سطرًا إضافيًا) + `master-schema.sql` موسّع
+
+### 3) اختبارات أمان جديدة (5+)
+`SecurityEnhancerTest` (138)، `CallHistoryAuthorizationTest` (77)، `ApprovedDeviceSessionGuardTest` (43)، `ContactBlockMediaGrantTest` (36)، `WebSocketRateLimiterTest` (31)، `CertificatePinnerTest` (78) + `CertificatePinner.kt` (99)
+
+### 4) تطبيق Android مطوّر (81 ملف Kotlin — من 60)
+`RedSystemLinker.kt`، `Entities.kt` + `LocalRepository.kt` (Room + SQLCipher)، `YemeniOperatorDetector.kt`، `LocalServerDiscovery` محسّن، `RedConnectionService` محسّن + مكتبات Room/Accompanist/SQLCipher في الكتالوج
+
+### 5) لوحة الإدارة المطوّرة
+`NotificationsTab` (192 سطرًا) + `styles.css` (1473 سطرًا) + تحسينات DinstarTab (178) + MasterLayout (117)
+
+### 6) سكربتات + تقارير
+`mock_backend.py` (279)، `run-all-local.sh` (98) + `.bat` (67)، `ci-build-all.sh`، `workflow-ready/build-red.yml`، **9 تقارير تحليلية كاملة** من جلساتك
+
+## الإصلاحات أثناء الدمج (لم أكسر شيئًا)
+- ✅ عقد API سليم (35/35 + مسارات api.ts الجديدة) — أصلحت فاحص العقد ليفهم GET helpers
+- ✅ بنيت اللوحة بنجاح (بعد توحيد App.jsx الآمن + index.jsx + index.html)
+- ✅ فاحص الكيانات سليم مع V14/V15
+- ✅ استعدت اختباراتي (LiveStreamServiceTest + RedIdGeneratorTest) بعد الدمج
+
+## الفروع المتبقية
+- `local-full-merge` = نسختك الكاملة من جهازك (محفوظة كمرجع)
+- `arena/019fe3bc-pro-v1` = المشروع المدمج النهائي (سيُرفع الآن)

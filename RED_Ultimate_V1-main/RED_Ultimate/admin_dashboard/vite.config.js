@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const apiTarget = process.env.RED_API_TARGET || 'http://backend:8080';
+
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -16,13 +18,14 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     allowedHosts: true,
-    // Inside the Docker network the backend is reachable as "backend:8080".
-    // For local development outside Compose, point RED_API_TARGET at it, e.g.:
-    //   RED_API_TARGET=http://localhost:8080 npm run dev
     proxy: {
-      '/api': { target: process.env.RED_API_TARGET || 'http://backend:8080', changeOrigin: true },
-      '/health': { target: process.env.RED_API_TARGET || 'http://backend:8080', changeOrigin: true },
-      '/ws': { target: (process.env.RED_API_TARGET || 'http://backend:8080').replace(/^http/, 'ws'), ws: true }
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/health': { target: apiTarget, changeOrigin: true },
+      '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true }
     }
+  },
+  preview: {
+    host: '0.0.0.0',
+    allowedHosts: true
   }
 });

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arabic Typography & Custom Font Declarations for YOUNES / RED Sovereign -->
+    <string name="font_family_cairo">sans-serif</string>
+    <string name="font_family_tajawal">sans-serif-medium</string>
+    <string name="font_family_primary">sans-serif</string>
+    <string name="font_family_title">sans-serif-medium</string>
+
+    <!-- Font Size Tokens -->
+    <dimen name="font_size_caption">12sp</dimen>
+    <dimen name="font_size_body_small">13sp</dimen>
+    <dimen name="font_size_body">15sp</dimen>
+    <dimen name="font_size_title">18sp</dimen>
+    <dimen name="font_size_header">22sp</dimen>
+    <dimen name="font_size_hero">28sp</dimen>
+
+    <!-- Layout Spacing & Radius Tokens -->
+    <dimen name="spacing_xxs">2dp</dimen>
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_small">8dp</dimen>
+    <dimen name="spacing_medium">16dp</dimen>
+    <dimen name="spacing_large">24dp</dimen>
+    <dimen name="spacing_xlarge">32dp</dimen>
+    <dimen name="card_radius">20dp</dimen>
+    <dimen name="button_radius">14dp</dimen>
+    <dimen name="input_radius">16dp</dimen>
+    <dimen name="avatar_radius">999dp</dimen>
+</resources>

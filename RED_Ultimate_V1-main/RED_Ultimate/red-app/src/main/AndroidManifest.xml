@@ -31,6 +31,10 @@
             android:name=".core.RedConnectionService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
+        <service
+            android:name=".core.network.SovereignNotificationRouter"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

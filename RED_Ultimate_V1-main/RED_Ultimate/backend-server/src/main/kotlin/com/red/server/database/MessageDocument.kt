@@ -22,9 +22,7 @@ data class MessageDocument(
     val createdAt: Instant = Instant.now(),
     var deliveredAt: Instant? = null,
     var readAt: Instant? = null,
-    var deletedAt: Instant? = null,
-    var isEdited: Boolean = false,
-    var editedAt: Instant? = null
+    var deletedAt: Instant? = null
 )
 
 @Document("conversation_sequences")
