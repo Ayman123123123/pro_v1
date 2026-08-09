@@ -231,6 +231,22 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
+    // 🔧 إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
+    var showCallDialer by remember { mutableStateOf(false) }
+    var dialerRedId by remember { mutableStateOf("") }
+    var dialerVideo by remember { mutableStateOf(false) }
+    var pendingDialerTarget by remember { mutableStateOf<String?>(null) }
+    var pendingDialerVideo by remember { mutableStateOf(false) }
+    val dialerCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted = !pendingDialerVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val redId = pendingDialerTarget
+        if (audioGranted && cameraGranted && redId != null && redId.matches(RED_ID_PATTERN)) {
+            YounesCallService.start(context, redId, pendingDialerVideo)
+            section = MainSection.CALLS
+        }
+        pendingDialerTarget = null
+    }
     
     val feed: FeedViewModel = viewModel()
     // ... (rest of ViewModels)
@@ -270,7 +286,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             if (!showDinstar) when (section) {
                 MainSection.CHATS -> FloatingActionButton(onClick = { showDirectory = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
                 MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
-                MainSection.CALLS -> FloatingActionButton(onClick = { /* TODO: show dialer */ showDinstar = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Call, "مكالمة جديدة") }
+                MainSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
                 MainSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
                 else -> {}
             }
@@ -321,6 +337,54 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     )
     if (showSettings) YounesSettingsSheet(account, settings, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
+
+    // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
+    if (showCallDialer) {
+        AlertDialog(
+            onDismissRequest = { showCallDialer = false; dialerRedId = ""; dialerVideo = false },
+            title = { Text("مكالمة جديدة عبر يونس") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: YNS-ABCD-EFGH أو RED-2345-6789", color = Color.Gray, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = dialerRedId,
+                        onValueChange = { dialerRedId = it.uppercase().take(14) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("YNS-XXXX-XXXX") },
+                        singleLine = true
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(checked = dialerVideo, onCheckedChange = { dialerVideo = it })
+                        Text("مكالمة فيديو", fontSize = 14.sp)
+                    }
+                    val valid = dialerRedId.matches(RED_ID_PATTERN)
+                    if (dialerRedId.isNotBlank() && !valid) {
+                        Text("معرّف يونس غير صالح — يجب أن يكون بصيغة YNS-XXXX-XXXX", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                val perms = buildList {
+                    add(Manifest.permission.RECORD_AUDIO)
+                    if (dialerVideo) add(Manifest.permission.CAMERA)
+                }.toTypedArray()
+                Button(
+                    enabled = dialerRedId.matches(RED_ID_PATTERN),
+                    onClick = {
+                        val redId = dialerRedId
+                        val video = dialerVideo
+                        showCallDialer = false
+                        dialerRedId = ""
+                        dialerVideo = false
+                        pendingDialerTarget = redId
+                        pendingDialerVideo = video
+                        dialerCallPermissions.launch(perms)
+                    }
+                ) { Text(if (dialerVideo) "اتصال فيديو" else "اتصال صوتي") }
+            },
+            dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("إلغاء") } }
+        )
+    }
 }
 
 @Composable
@@ -1414,7 +1478,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     return Card(Modifier.fillMaxWidth().clickable {
         // Redial on tap — fixes history not calling
-        if (call.peerId.matches(Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$"))) {
+        if (call.peerId.matches(RED_ID_PATTERN)) {
             YounesCallService.start(context, call.peerId, call.type == "VIDEO")
         }
     }) {
