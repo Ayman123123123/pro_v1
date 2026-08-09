@@ -140,8 +140,9 @@ import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
-import com.red.sovereign.calls.YounesCallOverlay
+import com.red.sovereign.calls.UnifiedCallOverlays
 import com.red.sovereign.calls.YounesConferenceOverlay
+import com.red.sovereign.calls.YounesLiveStreamOverlay
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.ConferenceRuntime
 import com.red.sovereign.calls.YounesLiveStreamOverlay
@@ -251,10 +252,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
-        // Still show call overlays even when not on dashboard
-        YounesCallOverlay()
-        YounesConferenceOverlay()
-        YounesLiveStreamOverlay()
+        // Still show call overlays even when not on dashboard — unified
+        UnifiedCallOverlays()
         return
     }
 
@@ -311,9 +310,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE }
     )
     if (showSettings) YounesSettingsSheet(account, settings, viewModel::logout) { showSettings = false }
-    YounesCallOverlay()
-    YounesConferenceOverlay()
-    YounesLiveStreamOverlay()
+    UnifiedCallOverlays()
 }
 
 @Composable
