@@ -1,10 +1,10 @@
-# merge-local-copies.ps1 — دمج كل نسخ المشروع المحلية في نسخة واحدة ورفعها إلى GitHub
+# merge-local-copies.ps1 - Merge ALL local project copies into ONE and push to GitHub
 # -----------------------------------------------------------------------------
-# يفحص كل مجلدات المشروع على جهازك (Windows)، يجمع كل الملفات الفريدة/الأحدث
-# في المجلد الرئيسي Pictures\pro، يلتزم كل شيء، ويرفع إلى فرع جديد على GitHub
-# باسم local-full-merge — ثم يستلمه الذكاء الاصطناعي ويدمجه في المشروع المتكامل.
+# ASCII-only version (works on Windows PowerShell 5.1).
+# Scans every project folder on this machine, copies every unique/newer file
+# into Pictures\pro, commits everything, and pushes to branch "local-full-merge".
 #
-# التشغيل:  powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1
+# Run:  powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1
 $ErrorActionPreference = "Continue"
 
 $dest = "C:\Users\hpc01\Pictures\pro"
@@ -14,30 +14,32 @@ $sources = @(
 )
 $skipDirs = @('.git','node_modules','build','dist','.gradle','.idea','.vs','.cache','__pycache__','out','target','.venv','.terraform')
 
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
-Write-Host "   دمج كل نسخ المشروع المحلية -> مشروع واحد متكامل"
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "============================================================"
+Write-Host "  MERGE ALL LOCAL PROJECT COPIES INTO ONE + PUSH TO GITHUB"
+Write-Host "============================================================"
 
 if (-not (Test-Path $dest)) {
-  Write-Host "❌ المجلد الرئيسي غير موجود: $dest" -ForegroundColor Red
+  Write-Host "[ERROR] Destination folder missing: $dest"
   exit 1
 }
 Set-Location $dest
 
-# ── 1) تأمين الحالة الحالية ─────────────────────────────────────────────────
-Write-Host "`n[1/4] حفظ الحالة الحالية (كل الملفات + التقارير)..." -ForegroundColor Yellow
+# --- 1) Commit current state (all files + reports) --------------------------
+Write-Host ""
+Write-Host "[1/4] Committing current state (all files + reports)..."
 git config user.name "Ayman" 2>$null
 git config user.email "Ayman123123123@users.noreply.github.com" 2>$null
 git add -A
-git commit -m "نسخة كاملة من جهازي: كل الملفات والتقارير المحلية" --allow-empty | Out-Null
-Write-Host "   ✅ تم الالتزام" -ForegroundColor Green
+git commit -m "Full local state: all files and reports" --allow-empty | Out-Null
+Write-Host "   OK - committed"
 
-# ── 2) دمج كل المصادر الأخرى (كل الملفات، بلا حذف أي شيء) ───────────────────
-Write-Host "`n[2/4] دمج النسخ المحلية الأخرى..." -ForegroundColor Yellow
+# --- 2) Merge every other copy (all files, never delete) --------------------
+Write-Host ""
+Write-Host "[2/4] Merging other local copies..."
 $ops = 0
 foreach ($s in $sources) {
-  if (-not (Test-Path $s)) { Write-Host "   (غير موجود: $s)" -ForegroundColor DarkGray; continue }
-  Write-Host "   ← $s" -ForegroundColor Cyan
+  if (-not (Test-Path $s)) { Write-Host "   (missing: $s)"; continue }
+  Write-Host "   <- $s"
   Get-ChildItem $s -Recurse -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
     $f = $_
     foreach ($d in $skipDirs) { if ($f.FullName -match [regex]::Escape("\$d\")) { return } }
@@ -53,28 +55,32 @@ foreach ($s in $sources) {
     } elseif ((Get-Item $target).LastWriteTime -lt $f.LastWriteTime) {
       Copy-Item $f.FullName $target -Force -ErrorAction SilentlyContinue
       $script:ops++
-      Write-Host "     ↑ $rel" -ForegroundColor Yellow
+      Write-Host "     ^ $rel" -ForegroundColor Yellow
     }
   }
 }
-Write-Host "   (تم دمج $ops ملف/تحديث)" -ForegroundColor Green
+Write-Host "   (merged $ops files/updates)"
 
-# ── 3) الالتزام بالملفات المدمجة ─────────────────────────────────────────────
-Write-Host "`n[3/4] الالتزام بالملفات المدمجة..." -ForegroundColor Yellow
+# --- 3) Commit merged files ------------------------------------------------
+Write-Host ""
+Write-Host "[3/4] Committing merged files..."
 git add -A
-git commit -m "دمج كل النسخ المحلية في مشروع واحد متكامل" --allow-empty | Out-Null
-Write-Host "   ✅ تم الالتزام" -ForegroundColor Green
+git commit -m "Merged all local copies into one unified project" --allow-empty | Out-Null
+Write-Host "   OK - committed"
 
-# ── 4) الرفع إلى GitHub ──────────────────────────────────────────────────────
-Write-Host "`n[4/4] الرفع إلى GitHub (فرع جديد: local-full-merge)..." -ForegroundColor Yellow
+# --- 4) Push to GitHub on new branch local-full-merge ----------------------
+Write-Host ""
+Write-Host "[4/4] Pushing to GitHub (new branch: local-full-merge)..."
 git push origin HEAD:local-full-merge 2>&1 | ForEach-Object { Write-Host "   $_" }
 if ($LASTEXITCODE -eq 0) {
-  Write-Host "`n════════════════════════════════════════════════════════" -ForegroundColor Green
-  Write-Host "  ✅ تم الرفع بنجاح إلى الفرع: local-full-merge" -ForegroundColor Green
-  Write-Host "  سيتسلمه الذكاء الاصطناعي الآن ويدمجه في المشروع المتكامل." -ForegroundColor Green
-  Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "============================================================"
+  Write-Host "  SUCCESS - pushed to branch: local-full-merge"
+  Write-Host "  The AI will now pull it and merge into the main project."
+  Write-Host "============================================================"
 } else {
-  Write-Host "`n⚠️ فشل الرفع. جرّب تسجيل الدخول ثم أعد تشغيل السكربت:" -ForegroundColor Red
-  Write-Host "   gh auth login" -ForegroundColor Yellow
-  Write-Host "   powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1" -ForegroundColor Yellow
+  Write-Host ""
+  Write-Host "[WARNING] Push failed. Login and retry:"
+  Write-Host "   gh auth login"
+  Write-Host "   powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1"
 }
