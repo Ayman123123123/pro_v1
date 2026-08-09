@@ -28,9 +28,9 @@ FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
-# Install curl for healthcheck & tzdata
+# Install curl for healthcheck, tzdata and ffmpeg for video thumbnails
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl tzdata \
+    && apt-get install -y --no-install-recommends curl tzdata ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Security: create non-root user
