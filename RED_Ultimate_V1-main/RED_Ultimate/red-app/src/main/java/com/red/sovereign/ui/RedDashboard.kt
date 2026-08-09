@@ -190,6 +190,7 @@ import com.red.sovereign.ui.theme.AqyalSurfaceNavy
 import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
+import com.red.sovereign.features.contacts.ContactsScreen
 import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -211,7 +212,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.Menu)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -252,6 +253,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         // Still show call overlays even when not on dashboard — unified
@@ -293,7 +295,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
                     account,
                     onDinstar = { showDinstar = true },
                     onSettings = { showSettings = true },
-                    onContacts = { section = MainSection.CHATS },
+                    onContacts = { currentScreen = SovereignScreen.CONTACTS },
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
                     onBackup = { currentScreen = SovereignScreen.BACKUP },
