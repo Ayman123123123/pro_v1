@@ -85,18 +85,16 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                 }
                 is StoryViewerState.Voice -> {
                     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Icon(androidx.compose.material.icons.Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(64.dp))
-                        Text("رسالة صوتية • ${story.durationMs?.let { "${it/1000}ث" } ?: ""}", color = Color.White, fontSize = 16.sp)
-                        story.waveform.takeIf { it.isNotEmpty() }?.let { wave ->
-                            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 24.dp)) {
-                                val step = size.width / wave.size.coerceAtLeast(1)
-                                wave.forEachIndexed { i, v ->
-                                    val h = size.height * (v.coerceIn(4,100)/100f)
-                                    drawLine(Color.White, start = androidx.compose.ui.geometry.Offset(i*step+step/2, (size.height-h)/2), end = androidx.compose.ui.geometry.Offset(i*step+step/2, (size.height+h)/2), strokeWidth = 3f)
-                                }
-                            }
-                        }
-                        Button(onClick = { /* TODO: play voice story */ }) { Text("تشغيل") }
+                        Icon(androidx.compose.material.icons.Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("رسالة صوتية", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(16.dp))
+                        com.red.sovereign.stories.VoiceStoryPlayer(
+                            mediaUrl = story.mediaUrl,
+                            durationMs = story.durationMs ?: 0L,
+                            waveform = story.waveform,
+                            onFinished = onNext
+                        )
                     }
                 }
                 is StoryViewerState.Unsupported -> Text(viewer.message, color = Color.White)

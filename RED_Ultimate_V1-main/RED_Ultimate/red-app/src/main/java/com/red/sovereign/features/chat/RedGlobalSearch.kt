@@ -18,7 +18,10 @@ import com.red.sovereign.ui.theme.SovereignColors
  * 🔍 YOUNES Global Search — البحث السيادي الشامل
  */
 @Composable
-fun RedGlobalSearch(onBack: () -> Unit = {}) {
+fun RedGlobalSearch(
+    onBack: () -> Unit = {},
+    onOpenConversation: (senderRedId: String) -> Unit = {}
+) {
     var searchQuery by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val messageStore = remember { com.red.sovereign.core.MessageStore(context) }
@@ -78,10 +81,25 @@ fun RedGlobalSearch(onBack: () -> Unit = {}) {
                 }
             } else {
                 items(results, key = { it.id }) { msg ->
-                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth().clickable { /* TODO: open conversation */ }) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenConversation(msg.senderId) }
+                    ) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(com.red.sovereign.core.RichMessage.decode(msg.plaintext)?.text?.take(80) ?: msg.plaintext.toString(Charsets.UTF_8).take(80), maxLines = 2, color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                            Text("${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.timestamp))}", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                com.red.sovereign.core.RichMessage.decode(msg.plaintext)?.text?.take(80)
+                                    ?: msg.plaintext.toString(Charsets.UTF_8).take(80),
+                                maxLines = 2,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.timestamp))}",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.labelSmall
+                            )
                         }
                     }
                 }
