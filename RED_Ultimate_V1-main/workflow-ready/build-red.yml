@@ -6,7 +6,7 @@ on:
       - 'fix/**'
       - 'extracted/**'
     paths:
-      - 'project/**'
+      - 'RED_Ultimate_V1-main/**'
       - 'workflow-ready/**'
   workflow_dispatch:
     inputs:
@@ -65,7 +65,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-red-${{ runner.os }}-${{ hashFiles('project/**/libs.versions.toml','project/**/gradle-wrapper.properties') }}
+          key: gradle-red-${{ runner.os }}-${{ hashFiles('RED_Ultimate_V1-main/RED_Ultimate/gradle/libs.versions.toml','RED_Ultimate_V1-main/RED_Ultimate/gradle/wrapper/gradle-wrapper.properties') }}
 
       - name: Resolve inputs
         id: inputs
@@ -83,7 +83,7 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          ROOT="project/pro/RED_Ultimate_V1-main/RED_Ultimate"
+          ROOT="RED_Ultimate_V1-main/RED_Ultimate"
           cd "$ROOT"
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           chmod +x gradlew
@@ -96,7 +96,7 @@ jobs:
       - name: Extract build errors
         if: always()
         run: |
-          LOG="project/pro/RED_Ultimate_V1-main/RED_Ultimate/build-output.log"
+          LOG="RED_Ultimate_V1-main/RED_Ultimate/build-output.log"
           if [ -f "$LOG" ]; then
             {
               echo "## Build result: ${{ steps.build.outcome }}"
@@ -120,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-output-log
-          path: project/pro/RED_Ultimate_V1-main/RED_Ultimate/build-output.log
+          path: RED_Ultimate_V1-main/RED_Ultimate/build-output.log
           if-no-files-found: ignore
 
       - name: Upload APK
@@ -128,7 +128,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: red-app-debug
-          path: project/pro/RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk
+          path: RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Attach APK to release
@@ -137,7 +137,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          APK=$(find project/pro/RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APK=$(find RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug -name '*.apk' | head -1)
           cp "$APK" red-app-debug.apk
           gh release upload v1.0.0 red-app-debug.apk --repo "$GITHUB_REPOSITORY" --clobber
           echo "APK attached to release v1.0.0"
