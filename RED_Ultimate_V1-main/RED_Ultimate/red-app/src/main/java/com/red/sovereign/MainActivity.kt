@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 com.red.sovereign.core.RedConnectionService.start(this@MainActivity)
                                 com.red.sovereign.calls.YounesCallService.listen(this@MainActivity)
+                                com.red.sovereign.calls.YounesConnectionService.register(this@MainActivity)
                                 val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
                                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
                             } else {

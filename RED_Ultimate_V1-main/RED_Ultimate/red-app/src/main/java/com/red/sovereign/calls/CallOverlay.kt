@@ -20,9 +20,11 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.SpeakerPhone
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Button
@@ -127,6 +129,12 @@ fun YounesCallOverlay() {
                     FilledIconButton({ callPermissions.launch(if (mode == "VIDEO") arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)) }, Modifier.size(68.dp)) { Icon(Icons.Default.Call, "قبول", tint = Color(0xFF2DDBA4)) }
                 } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     val active = state as? CallUiState.Active
+                    var isRecording by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                    CallControl(if (isRecording) androidx.compose.material.icons.Icons.Default.Stop else androidx.compose.material.icons.Icons.Default.FiberManualRecord, if (isRecording) "إيقاف التسجيل" else "تسجيل") {
+                        isRecording = !isRecording
+                        if (isRecording) YounesCallService.action(context, YounesCallService.ACTION_START_RECORDING)
+                        else YounesCallService.action(context, YounesCallService.ACTION_STOP_RECORDING)
+                    }
                     CallControl(if (mic) Icons.Default.Mic else Icons.Default.MicOff, "الميكروفون") { mic = !mic; YounesCallService.action(context, YounesCallService.ACTION_MIC, mic) }
                     CallControl(Icons.Default.SpeakerPhone, "مكبر الصوت") { YounesCallService.action(context, YounesCallService.ACTION_SPEAKER, !CallRuntime.speaker) }
                     CallControl(if (active?.isHeld == true) Icons.Default.PlayArrow else Icons.Default.Pause, if (active?.isHeld == true) "استئناف" else "تعليق") {

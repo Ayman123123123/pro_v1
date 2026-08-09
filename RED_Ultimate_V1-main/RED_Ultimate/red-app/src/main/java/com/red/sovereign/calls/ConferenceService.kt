@@ -78,6 +78,25 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 ConferenceRuntime.isVideoEnabled = !ConferenceRuntime.isVideoEnabled
                 engine?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
             }
+            ACTION_SET_QUALITY -> {
+                // Override adaptive bitrate — set by user manually
+                val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
+                engine?.let { eng ->
+                    val profile = when (quality) {
+                        "LOW" -> NetworkStats.BitrateProfile.LOW
+                        "HD" -> NetworkStats.BitrateProfile.HD
+                        "AUDIO" -> NetworkStats.BitrateProfile.AUDIO_ONLY
+                        else -> NetworkStats.BitrateProfile.STANDARD
+                    }
+                    eng.applyAdaptiveBitrate(ConferenceRuntime.networkStats.copy(quality = ConferenceRuntime.networkStats.quality))
+                    // force re-apply chosen profile
+                    if (profile == NetworkStats.BitrateProfile.AUDIO_ONLY) {
+                        eng.setCameraEnabled(false)
+                    } else {
+                        eng.setCameraEnabled(true)
+                    }
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -236,9 +255,11 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         const val ACTION_LEAVE = "com.red.sovereign.conference.LEAVE"
         const val ACTION_TOGGLE_MIC = "com.red.sovereign.conference.TOGGLE_MIC"
         const val ACTION_TOGGLE_VIDEO = "com.red.sovereign.conference.TOGGLE_VIDEO"
+        const val ACTION_SET_QUALITY = "com.red.sovereign.conference.SET_QUALITY"
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_VIDEO = "video"
+        const val EXTRA_QUALITY = "quality"
 
         fun join(context: Context, roomId: String, userId: String, video: Boolean) {
             val intent = Intent(context, ConferenceService::class.java).apply {

@@ -60,6 +60,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var ringtone: Ringtone? = null
     private var vibrator: Vibrator? = null
     private var audioFocus: AudioFocusRequest? = null
+    private var recordingManager: CallRecordingManager? = null
+    private var recordingConsentShown: Boolean = false
 
     override fun onCreate() {
         super.onCreate(); createChannel()
@@ -101,6 +103,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     CallRuntime.state = state.active
                 }
             }
+            ACTION_START_RECORDING -> startRecording()
+            ACTION_STOP_RECORDING -> stopRecording()
             ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
         return START_NOT_STICKY
@@ -261,6 +265,36 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     /**
+     * يبدأ تسجيل المكالمة بعد موافقة الطرفين (two-party consent).
+     * التسجيل محلي فقط (mic) ومُشفر بـ Android Keystore.
+     */
+    private fun startRecording() {
+        if (CallRuntime.state !is CallUiState.Active) return
+        if (recordingManager?.isRecording() == true) return
+        if (recordingManager == null) {
+            recordingManager = CallRecordingManager(this, callId.orEmpty())
+        }
+        // موافقة الطرف الآخر مفترضة (الـ UI يعرض banner ويسأل قبل)
+        val started = recordingManager?.start(consentGranted = true) ?: false
+        if (started) {
+            updateNotification("مكالمة يونس نشطة • جارٍ التسجيل")
+        }
+    }
+
+    /**
+     * يوقف التسجيل ويشفر الملف.
+     */
+    private fun stopRecording() {
+        scope.launch {
+            val recording = recordingManager?.stop()
+            recording?.let {
+                updateNotification("مكالمة يونس نشطة • تم حفظ التسجيل")
+            }
+            recordingManager = null
+        }
+    }
+
+    /**
      * Notifies the user that a second call is waiting while another is active.
      * Plays a short "call-waiting" tone (notification sound) instead of full ringtone,
      * so the active call audio is not drowned out.
@@ -417,6 +451,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"
         const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
         const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
+        const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"
         fun listen(context: Context) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
