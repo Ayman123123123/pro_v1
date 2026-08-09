@@ -592,3 +592,33 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - **صفر TODO/FIXME** في الكود
 - **صفر println** في red-app والخادم
 - كل الفاحصات خضراء + اللوحة حية على 8088
+
+---
+
+# ملحق الجولة الثانية عشرة (2026-08-09) — إكمال كل المتبقي دون الاعتماد على التقارير
+
+## الفحص الذاتي العميق (اقرأ وتحقق من الكود الفعلي، لا من الوثائق)
+
+### اكتشافات وإصلاحات حرجة (أخطاء ترجمة حتمية)
+
+| # | الاكتشاف | الإصلاح |
+|---|---|---|
+| 1 | **LiveStreamService المدمجة** ترجع `Unit`/`Set<String>` بينما LiveStreamController والاختبار يتوقعان `LiveStream` | أعدت بناء الخدمة الغنية (data class LiveStream + startStream ترجع LiveStream + stopStream Boolean + getActiveStreams List) |
+| 2 | **ثغرة أمنية**: `/api/live/admin/**` غير محمية في SecurityConfig (أي منفذ إداري للبث مفتوح بدون مصادقة) | أضفت `.hasRole("ADMIN")` |
+| 3 | **5 ملفات تشير إلى `SovereignMongoDocuments.MessageDocument`** بينما الفئات في المستوى الأعلى (خطأ ترجمة) | صححت الاستيرادات في AdvancedMessageService + MessageService + MessageServiceTest + DeleteService + RedMasterHandler |
+| 4 | **mock_backend ناقص** مسارات لوحة الإدارة + لا do_PUT/do_PATCH | أضفت كل المسارات (stats/users/notifications/social/moderation) واختبرته فعليًا — كل المسارات تستجيب |
+| 5 | **run.sh + ci-build-all.sh** بمسار مزدوج خاطئ | صححت إلى RED_Ultimate |
+
+## فحوصات أعمق تمت (كلها سليمة)
+- استيرادات com.red في الخادم: **0 مكسورة** (بعد استثناء المولّد RedProtos والمكتبات)
+- استيرادات com.red في red-app: **0 مكسورة** (تحقق يدوي من كل رمز مشكوك فيه)
+- 52 مسار API في red-app كلها موجودة في المتحكمات ✅
+- معالجات WebSocket الأربعة موجودة ✅ | لا تكرار مسارات حقيقي ✅
+- red-app لا يشير لأي رمز من الأرشيف القديم (com.red.core/features) ✅
+- كل الفاحصات خضراء + البناء سليم + اللوحة حية ✅
+
+## الحالة النهائية
+- صفر أخطاء ترجمة مكتشفة (ضمن ما يمكن التحقق منه ساكنًا)
+- صفر TODO/FIXME | صفر println | صفر مسارات قديمة
+- mock_backend كامل يعمل فعليًا | run.sh/ci-build-all.sh صحيحان
+- آخر التزام مرفوع على GitHub
