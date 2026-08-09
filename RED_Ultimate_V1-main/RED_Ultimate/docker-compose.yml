@@ -44,6 +44,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
+      start_period: 60s
     networks: ["red-net"]
 
   # 2. VoIP/Conference SFU (System A)
@@ -93,11 +94,21 @@ services:
       - "5038"
     networks: ["red-net"]
 
-  # 5. Database: PostgreSQL 16
+  # 5. Database: PostgreSQL 16 (محصّن: buffers + work_mem + slow-query log)
   db-postgres:
     image: postgres:16
     container_name: red-db-sql
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "log_min_duration_statement=500"
+      - "-c"
+      - "max_connections=100"
     environment:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
@@ -109,11 +120,12 @@ services:
       interval: 10s
     networks: ["red-net"]
 
-  # 6. Database: MongoDB 8
+  # 6. Database: MongoDB 8 (حدّ ذاكرة WiredTiger للبيئات الصغيرة)
   db-mongo:
     image: mongo:8
     container_name: red-db-nosql
     restart: unless-stopped
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     environment:
       - MONGO_INITDB_ROOT_USERNAME=red_user
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
@@ -123,10 +135,10 @@ services:
       interval: 10s
     networks: ["red-net"]
 
-  # 7. Cache: Redis 7
+  # 7. Cache: Redis 7 (ذاكرة محدودة LRU + persist)
   cache-redis:
     image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     container_name: red-cache
     restart: unless-stopped
     environment:
@@ -163,6 +175,10 @@ services:
     ports: ["${RED_HTTP_PORT:-8088}:80"]
     volumes: ["./nginx.conf:/etc/nginx/nginx.conf"]
     depends_on: [backend, admin-panel]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      interval: 30s
+      start_period: 30s
     networks: ["red-net"]
 
   admin-panel:
