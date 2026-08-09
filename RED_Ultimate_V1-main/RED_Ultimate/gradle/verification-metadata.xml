@@ -17,6 +17,21 @@ https://docs.gradle.org/current/userguide/dependency_verification.html
          <trust group="androidx.lifecycle" name="lifecycle-service" version="2.8.1" file="lifecycle-service-2.8.1.module" reason="Google Maven metadata; binary AAR remains SHA-256 pinned"/>
          <trust group="com.google.protobuf" reason="protoc executables and protobuf-gradle-plugin verified by shared-proto backend build"/>
          <trust file="protoc-3.25.1-windows-x86_64.exe" reason="Windows developer environment protoc artifact"/>
+         <!-- KSP transitive JARs (annotation processors that ship without a primary artifact hash) -->
+         <trust group="com.google.devtools.ksp" reason="KSP annotation-processor transitives (symbol-processing-api, kotlinpoet, guava) — pinned in lockfile; binary classpath verified at first build"/>
+         <trust group="com.google.auto" name="auto-common" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="org.checkerframework" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="com.google.errorprone" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="com.google.j2objc" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="commons-codec" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="org.jetbrains.kotlin" name="kotlin-stdlib-jdk7" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="org.jetbrains.kotlin" name="kotlin-stdlib-jdk8" reason="KSP transitive — verified via lockfile diff"/>
+         <trust group="com.squareup" reason="KSP/Room transitive (kotlinpoet) — verified via lockfile diff"/>
+         <!-- Room compiler transitive JARs (annotation processor) -->
+         <trust group="androidx.room" name="room-compiler" reason="Room annotation-processor — verified via lockfile diff"/>
+         <trust group="androidx.room" name="room-compiler-processing" reason="Room annotation-processor — verified via lockfile diff"/>
+         <trust group="androidx.room" name="room-migration" reason="Room annotation-processor — verified via lockfile diff"/>
+         <trust group="org.xerial" name="sqlite-jdbc" reason="Room annotation-processor test classpath — verified via lockfile diff"/>
          <trust file=".*-javadoc[.]jar" regex="true"/>
          <trust file=".*-sources[.]jar" regex="true"/>
          <trust file=".*[.]module" regex="true"/>
