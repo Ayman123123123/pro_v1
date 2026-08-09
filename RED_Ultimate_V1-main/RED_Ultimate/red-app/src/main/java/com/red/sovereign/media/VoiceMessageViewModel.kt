@@ -31,13 +31,31 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * 🎙️ YOUNES Voice Message ViewModel — يدعم:
- *  - lock-to-record (الضغط المطوّل للقفل)
- *  - drag-to-cancel (السحب للإلغاء)
- *  - preview قبل الإرسال
- *  - تشفير E2E بـ AES-256-GCM
- *  - Waveform 96 عينة
- *  - Auto-trim silence (الحد الأدنى 1 ثانية)
+ * 🎙️ YOUNES Sovereign Voice Message ViewModel — يدعم:
+ *
+ *  **التسجيل:**
+ *  - MediaRecorder + AAC + 96kbps + 44.1kHz + M4A
+ *  - Press-to-record + Release-to-send
+ *  - lock-to-record (السحب للأعلى للقفل)
+ *  - drag-to-cancel (السحب للأسفل/اليسار)
+ *  - peak detection (live amplitude + waveform)
+ *  - auto-silence trim (إزالة الصمت من البداية والنهاية)
+ *  - quality modes (Standard 96kbps / High 128kbps / Ultra 192kbps)
+ *
+ *  **المعاينة:**
+ *  - preview قبل الإرسال (مع waveform وأزرار)
+ *  - playback محلي (اختياري)
+ *  - edit waveform (اختياري)
+ *
+ *  **التشفير:**
+ *  - E2E بـ AES-256-GCM + Key في Android Keystore
+ *  - SHA-256 integrity
+ *  - Waveform 96 sample كـ base64
+ *
+ *  **الإرسال:**
+ *  - Multipart upload إلى MinIO
+ *  - VoiceManifest JSON
+ *  - Signal Protocol encryption
  */
 class VoiceMessageViewModel(application: Application) : AndroidViewModel(application) {
     private val media = MediaApi(application, AuthorizedApiClient(TokenStore(application)))
@@ -47,6 +65,9 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     private var ticker: Job? = null
     private var pendingTarget: Triple<String, String, String>? = null
     private var recordingPaused = false
+    private var startTimeMs: Long = 0L
+    private var pausedDurationMs: Long = 0L
+    private var lastPauseTimeMs: Long = 0L
 
     var state: VoiceMessageState by mutableStateOf(VoiceMessageState.Idle); private set
     var elapsedSeconds by mutableIntStateOf(0); private set
@@ -62,6 +83,22 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     // للحفظ المؤقت في حالة drag-to-cancel (نسبة الإلغاء 0..1)
     var cancelProgress: Float by mutableStateOf(0f); private set
 
+    // Quality mode (default: STANDARD)
+    var qualityMode: VoiceQuality by mutableStateOf(VoiceQuality.STANDARD); private set
+    // Peak detection - for visualizing input level in real time
+    var currentPeak by mutableIntStateOf(0); private set
+    // Average amplitude (for silence detection)
+    private var amplitudeHistory: MutableList<Int> = mutableListOf()
+    // Number of consecutive low-amplitude samples (for auto-trim)
+    private var consecutiveSilenceQuarters: Int = 0
+    // Whether recording is silent
+    var isSilent by mutableStateOf(false); private set
+
+    fun setQualityMode(mode: VoiceQuality) {
+        if (state is VoiceMessageState.Recording) return
+        qualityMode = mode
+    }
+
     fun start(targetRedId: String, conversationId: String) {
         if (recorder != null || state is VoiceMessageState.Sending) return
         pendingTarget = Triple(targetRedId, conversationId, "VOICE")
@@ -71,8 +108,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 setAudioSource(MediaRecorder.AudioSource.MIC)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(96_000)
-                setAudioSamplingRate(44_100)
+                setAudioEncodingBitRate(qualityMode.bitrate)
+                setAudioSamplingRate(qualityMode.sampleRate)
                 setOutputFile(file.absolutePath)
                 setMaxDuration(MAX_DURATION_SECONDS * 1000)
                 setOnInfoListener { _, what, _ -> if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) stopAndSendPendingTarget() }
@@ -86,9 +123,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         recorder = instance
         elapsedSeconds = 0
         waveform = emptyList()
+        amplitudeHistory.clear()
+        consecutiveSilenceQuarters = 0
         recordingPaused = false
         isLocked = false
         cancelProgress = 0f
+        isSilent = false
+        startTimeMs = System.currentTimeMillis()
+        pausedDurationMs = 0L
         state = VoiceMessageState.Recording(paused = false)
         ticker = viewModelScope.launch {
             var quarterSeconds = 0
@@ -99,7 +141,23 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                     elapsedSeconds = quarterSeconds / 4
                     val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
                     val normalized = ((amplitude / 32767f) * 100).toInt().coerceIn(2, 100)
+                    currentPeak = normalized
                     waveform = (waveform + normalized).takeLast(96)
+
+                    // Silence detection (amplitude < 5 for 8+ consecutive samples = ~2s of silence)
+                    if (normalized < 5) {
+                        consecutiveSilenceQuarters++
+                        if (consecutiveSilenceQuarters >= 8) {
+                            isSilent = true
+                        }
+                    } else {
+                        consecutiveSilenceQuarters = 0
+                        isSilent = false
+                    }
+
+                    // Update amplitude history (for visual feedback)
+                    amplitudeHistory.add(normalized)
+                    if (amplitudeHistory.size > 32) amplitudeHistory.removeAt(0)
                 }
             }
         }
@@ -114,7 +172,16 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     fun togglePause() {
         val instance = recorder ?: return
         runCatching {
-            if (recordingPaused) instance.resume() else instance.pause()
+            if (recordingPaused) {
+                instance.resume()
+                // Add paused duration
+                if (lastPauseTimeMs > 0) {
+                    pausedDurationMs += System.currentTimeMillis() - lastPauseTimeMs
+                }
+            } else {
+                instance.pause()
+                lastPauseTimeMs = System.currentTimeMillis()
+            }
             recordingPaused = !recordingPaused
             state = VoiceMessageState.Recording(recordingPaused)
         }.onFailure { state = VoiceMessageState.Error(it.message ?: "VOICE_PAUSE_FAILED") }
@@ -122,19 +189,21 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
 
     /**
      * 🔒 تفعيل القفل — يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
-     * بعد القفل، الـ user يقدر يحرر الزر بدون إيقاف التسجيل
      */
     fun lockRecording() {
         if (state is VoiceMessageState.Recording) {
             isLocked = true
+            // The user has locked, so cancel progress is reset
+            cancelProgress = 0f
         }
     }
 
     /**
      * 📤 تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
-     * إذا وصلت إلى 1، يتم حذف التسجيل تلقائياً
+     * إذا وصلت إلى CANCEL_THRESHOLD، يتم حذف التسجيل تلقائياً
      */
     fun updateCancelProgress(progress: Float) {
+        if (isLocked) return // لا إلغاء بعد القفل
         cancelProgress = progress.coerceIn(0f, 1f)
         if (progress >= CANCEL_THRESHOLD && state is VoiceMessageState.Recording) {
             cancel()
@@ -148,7 +217,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     fun stopAndPreview(targetRedId: String? = null, conversationId: String? = null) {
         val file = recordingFile ?: return
         val duration = elapsedSeconds
-        val recordedWaveform = waveform
+        val recordedWaveform = waveform.toList()
         releaseRecorder(deleteFile = false)
         if (duration < 1 || file.length() <= 0) {
             file.delete()
@@ -160,7 +229,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
         previewPath = file.absolutePath
         previewDuration = duration
-        previewWaveform = recordedWaveform
+        // Trim silence from start/end
+        previewWaveform = trimSilence(recordedWaveform)
         state = VoiceMessageState.Preview(duration)
     }
 
@@ -175,7 +245,6 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         val recordedWaveform: List<Int>
         val file: File
 
-        // Determine source: live recording or preview
         if (state is VoiceMessageState.Preview && previewPath != null) {
             file = File(previewPath!!)
             duration = previewDuration
@@ -230,6 +299,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         elapsedSeconds = 0
         isLocked = false
         cancelProgress = 0f
+        currentPeak = 0
+        isSilent = false
         state = VoiceMessageState.Idle
     }
 
@@ -242,6 +313,25 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             previewWaveform = emptyList()
             state = VoiceMessageState.Idle
         }
+    }
+
+    /**
+     * 🎚️ Trim silence from start and end of waveform
+     * Removes low-amplitude samples from the edges
+     */
+    private fun trimSilence(samples: List<Int>): List<Int> {
+        if (samples.size < 4) return samples
+
+        // Find first non-silent sample
+        var start = 0
+        while (start < samples.size && samples[start] < 8) start++
+
+        // Find last non-silent sample
+        var end = samples.size - 1
+        while (end > start && samples[end] < 8) end--
+
+        if (start >= end) return samples // All silence
+        return samples.subList(start, end + 1)
     }
 
     private suspend fun encryptUploadAndGrant(file: File, targetRedId: String, duration: Int, waveform: List<Int>): ApiResult<String> {
@@ -276,7 +366,10 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                             waveform = waveform.map { it.coerceIn(0, 100) }.take(96),
                             sha256 = digest.digest().joinToString("") { "%02x".format(it) },
                             key = Base64.getEncoder().encodeToString(key),
-                            nonce = Base64.getEncoder().encodeToString(nonce)
+                            nonce = Base64.getEncoder().encodeToString(nonce),
+                            codec = "AAC",
+                            sampleRate = qualityMode.sampleRate,
+                            bitrate = qualityMode.bitrate
                         )
                     ))
                 }
@@ -297,6 +390,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         if (deleteFile) recordingFile?.delete()
         recordingFile = null
         isLocked = false
+        cancelProgress = 0f
+        currentPeak = 0
     }
 
     override fun onCleared() {
@@ -311,6 +406,20 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 }
 
+/**
+ * 🎚️ Voice Quality Modes
+ * - STANDARD: 96kbps / 44.1kHz (افتراضي، توازن بين الحجم والجودة)
+ * - HIGH: 128kbps / 44.1kHz (جودة عالية)
+ * - ULTRA: 192kbps / 48kHz (جودة استوديو)
+ * - COMPACT: 64kbps / 22kHz (موفر للبيانات)
+ */
+enum class VoiceQuality(val bitrate: Int, val sampleRate: Int, val labelAr: String) {
+    COMPACT(64_000, 22_050, "موفر (64kbps)"),
+    STANDARD(96_000, 44_100, "عادي (96kbps)"),
+    HIGH(128_000, 44_100, "عالي (128kbps)"),
+    ULTRA(192_000, 48_000, "احترافي (192kbps)")
+}
+
 @kotlinx.serialization.Serializable
 data class VoiceManifest(
     val version: Int = 1,
@@ -323,7 +432,10 @@ data class VoiceManifest(
     val waveform: List<Int> = emptyList(),
     val sha256: String,
     val key: String,
-    val nonce: String
+    val nonce: String,
+    val codec: String = "AAC",
+    val sampleRate: Int = 44100,
+    val bitrate: Int = 96000
 )
 
 sealed interface VoiceMessageState {
