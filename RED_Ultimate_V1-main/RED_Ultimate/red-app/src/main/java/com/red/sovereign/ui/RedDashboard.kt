@@ -370,7 +370,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
             feed.state is FeedState.Error -> item { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message) }
             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }) }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = feed::edit, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -452,6 +452,7 @@ private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column
 }
 
 @Composable
+@Composable
 private fun PostCard(
     post: Post,
     currentRedId: String,
@@ -459,13 +460,19 @@ private fun PostCard(
     onFollow: (Post) -> Unit,
     onVote: (Post, String) -> Unit,
     onThread: () -> Unit,
-    onQuote: () -> Unit
+    onQuote: () -> Unit,
+    onEdit: (Post, String) -> Unit = { _, _ -> },
+    onDelete: (Post) -> Unit = {},
+    onHide: (Post) -> Unit = {},
+    onMute: (Post) -> Unit = {},
+    onReport: (Post) -> Unit = {}
 ) = Card(
     Modifier.fillMaxWidth().padding(horizontal = 14.dp),
     colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
     shape = RoundedCornerShape(24.dp)
 ) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        var showMenu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(48.dp).clip(CircleShape).background(
@@ -477,6 +484,17 @@ private fun PostCard(
                 Text(post.authorDisplayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("@${post.authorUsername} · ${post.authorRedId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            IconButton({ showMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات") }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                if (post.authorRedId == currentRedId) {
+                    DropdownMenuItem(text = { Text("تعديل") }, onClick = { showMenu = false; onEdit(post, post.text) })
+                    DropdownMenuItem(text = { Text("حذف") }, onClick = { showMenu = false; onDelete(post) })
+                } else {
+                    DropdownMenuItem(text = { Text("إخفاء") }, onClick = { showMenu = false; onHide(post) })
+                    DropdownMenuItem(text = { Text("كتم @${post.authorUsername}") }, onClick = { showMenu = false; onMute(post) })
+                    DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
+                }
+            }
             if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -485,6 +503,21 @@ private fun PostCard(
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }
         Text(post.text, fontSize = 17.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface)
+        if (post.hashtags.isNotEmpty() || post.mentions.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                post.hashtags.forEach { tag -> Text(tag, color = AqyalCyanGlow, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                post.mentions.forEach { m -> Text(m, color = YounesEmerald, fontSize = 13.sp) }
+            }
+        }
+        post.linkCard?.let { card ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(10.dp)) {
+                    Text(card.title ?: card.url, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(card.description ?: "", color = Color.Gray, fontSize = 12.sp, maxLines = 2)
+                }
+            }
+        }
+        if (post.editedAt != null) Text("تم التعديل", color = Color.Gray, fontSize = 11.sp)
         post.quotePostId?.let { quotedId ->
             Card(colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised.copy(alpha = .72f))) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
