@@ -622,3 +622,49 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - صفر TODO/FIXME | صفر println | صفر مسارات قديمة
 - mock_backend كامل يعمل فعليًا | run.sh/ci-build-all.sh صحيحان
 - آخر التزام مرفوع على GitHub
+
+---
+
+# ملحق الجولة الثالثة عشرة (2026-08-09) — جلب كل فروع arena ودمج الأفضل من كل فرع
+
+## الاكتشاف الكبير: الفروع السبعة ليست فارغة!
+كان الفحص السابق خاطئًا — بعد جلبها فعليًا (`git fetch` لكل فرع) اتضح أن كل فرع
+يحتوي 10,000+ ملفات والتزامات حقيقية:
+| الفرع | التزامات | المميز |
+|---|---|---|
+| 019fda7a | 2 | SecurityEnhancer كامل (245) + NotificationService (458) |
+| 019fde37 | 4 | نفس النمط |
+| 019fde64 | 4 | نفس النمط |
+| 019fde80 | 9 | App.tsx (615) + Dashboard (474) — لكن mock! |
+| 019fdeb0 | 42 | **لوحة آمنة كاملة** (App.tsx adminLogin حقيقي) |
+| 019fdf57 | 35 | نفس النمط |
+| 019fdfec | 22 | **nginx محصّن (198) + DinstarEventListener كامل** |
+
+## ما دُمج (اختيار الأفضل من كل فرع)
+
+### من 019fdeb0 (لوحة آمنة مطوّرة) ✅
+- App.tsx (123) — يستخدم **adminLogin الحقيقي** + authStore (آمن، ليس mock)
+- Login.tsx (440) — واجهة دخول احترافية كاملة
+- Dashboard.tsx (238) — 6 مسارات حقيقية
+- DinstarControl.tsx (250) — جرد SIM كامل + عمليات
+
+### من 019fdfec (تحصينات) ✅
+- nginx.conf (198): rate limiting (auth 5r/s, api 30r/s, ws 10r/s) + upstreams + حماية actuator + HTTPS 443
+- DinstarEventListener: يربط الأحداث بـ CallHistoryService (answer/end/failed عبر actionId)
+- DeleteService: متوافق مع MessageDocument (deletedAt)
+- docker-compose: HTTPS 8443 + DINSTAR 443/https + healthchecks + DNS
+
+### رفضت بذكاء (mock غير آمن) ❌
+- App.tsx (615) و Dashboard (470) من الفروع القديمة — كانت **mock** (`mockToken` في localStorage) — نسخة 019fdeb0 الأمنية أفضل
+- NotificationService (458) — تعتمد javax.mail غير الموجودة + AuthDtos القديم — نسختي (148) متوافقة وتحتوي كل الدوال
+- SecurityEnhancer (245) — نسختي (133) تحتوي كل الحماية بلا اعتماديات خارجية
+
+## إضافات جديدة
+- GET /api/admin/dinstar/inventory + PUT /inventory/{gatewayId}/ports/{portIndex} (مع audit)
+- V16 migration: عمود note في gateway_port_snapshots
+- AuthorizedApiClient: requestBytes + requestFile (كانتا ناقصتين → كسرتا MediaApi)
+
+## الحالة النهائية
+- كل ما هو أفضل من **كل الفروع السبعة** دُمج في فرع واحد
+- اللوحة الحية تعمل بالنسخة المطوّرة الآمنة (YOUNES Sovereign Admin)
+- كل الفاحصات خضراء + البناء سليم
