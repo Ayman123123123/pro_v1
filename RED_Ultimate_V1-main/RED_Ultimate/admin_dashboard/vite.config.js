@@ -24,11 +24,18 @@ export default defineConfig({
     proxy: {
       '/api': { target: apiTarget, changeOrigin: true },
       '/health': { target: apiTarget, changeOrigin: true },
+      '/sfu-health': { target: apiTarget, changeOrigin: true },
       '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true }
     }
   },
   preview: {
     host: '0.0.0.0',
-    allowedHosts: true
+    allowedHosts: true,
+    proxy: {
+      '/api': { target: apiTarget, changeOrigin: true },
+      '/health': { target: apiTarget, changeOrigin: true },
+      '/sfu-health': { target: apiTarget, changeOrigin: true },
+      '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true }
+    }
   }
 });

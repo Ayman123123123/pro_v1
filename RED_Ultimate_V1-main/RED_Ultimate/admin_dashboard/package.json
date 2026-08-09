@@ -8,6 +8,8 @@
     "start": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "mock": "node mock-backend.cjs",
+    "serve": "node server.cjs",
     "check": "node --check src/api.ts && node scripts/check-api-contract.mjs",
     "check:api": "node scripts/check-api-contract.mjs"
   },
