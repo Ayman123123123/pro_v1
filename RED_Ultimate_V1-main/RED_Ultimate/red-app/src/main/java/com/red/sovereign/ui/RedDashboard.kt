@@ -172,6 +172,15 @@ import com.red.sovereign.media.VoiceManifest
 import com.red.sovereign.media.VoiceMessageState
 import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.media.VoiceNotePlayer
+import com.red.sovereign.media.voice.VoiceBubble
+import com.red.sovereign.media.voice.VoiceColors
+import com.red.sovereign.media.voice.VoicePreviewActions
+import com.red.sovereign.media.voice.VoiceRecorderPanel
+import com.red.sovereign.media.voice.VoiceRecordButton
+import com.red.sovereign.media.voice.VoiceTimerDisplay
+import com.red.sovereign.media.voice.VoiceWaveformCanvas
+import com.red.sovereign.media.voice.VoiceCancelProgressBar
+import com.red.sovereign.media.voice.VoiceLockIndicator
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
@@ -999,48 +1008,60 @@ private fun ChatHubScreen(
                 is AttachmentState.Exported -> Text("تم حفظ ${attachmentState.name} في الموقع الذي اخترته", color = YounesEmerald, style = MaterialTheme.typography.bodySmall)
                 AttachmentState.Idle -> Unit
             }
-            when (val voiceState = voiceMessages.state) {
-                is VoiceMessageState.Recording -> VoiceRecordingControls(
-                    voiceState = voiceState,
-                    voiceMessages = voiceMessages,
-                    isLocked = voiceMessages.isLocked,
-                    cancelProgress = voiceMessages.cancelProgress
-                )
-                is VoiceMessageState.Preview -> VoicePreviewControls(
-                    duration = voiceState.durationSeconds,
-                    waveform = voiceMessages.previewWaveform,
-                    onSend = { voiceMessages.stopAndSend(target, conversation) },
-                    onDiscard = { voiceMessages.discardPreview() },
-                    isSending = false
-                )
-                VoiceMessageState.Sending -> Text("جارٍ تشفير الرسالة الصوتية ورفعها…", color = AqyalGold, style = MaterialTheme.typography.bodySmall)
-                is VoiceMessageState.Sent -> Text("تم إرسال رسالة صوتية ${formatDuration(voiceState.durationSeconds)}", color = YounesEmerald, style = MaterialTheme.typography.bodySmall)
-                is VoiceMessageState.Error -> Text("تعذر التسجيل: ${voiceState.message}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                VoiceMessageState.Idle -> Unit
-            }
+            // 🎙️ Voice Recorder Panel — احترافي بالكامل
+            VoiceRecorderPanel(
+                state = voiceMessages.state,
+                elapsedSeconds = voiceMessages.elapsedSeconds,
+                waveform = voiceMessages.waveform,
+                isLocked = voiceMessages.isLocked,
+                cancelProgress = voiceMessages.cancelProgress,
+                hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+                onPress = { voiceMessages.lockRecording() },
+                onRelease = { voiceMessages.stopAndPreview(target, conversation) },
+                onLockRequest = { voiceMessages.lockRecording() },
+                onCancel = { voiceMessages.cancel() },
+                onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                onStopAndPreview = { voiceMessages.stopAndPreview(target, conversation) },
+                onSend = { voiceMessages.stopAndSend(target, conversation) },
+                onDiscard = { voiceMessages.discardPreview() },
+                onClick = {
+                    if (voiceMessages.state is VoiceMessageState.Recording) {
+                        voiceMessages.stopAndPreview(target, conversation)
+                    } else if (voiceMessages.state is VoiceMessageState.Preview) {
+                        voiceMessages.stopAndSend(target, conversation)
+                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        voiceMessages.start(target, conversation)
+                    } else {
+                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+            )
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton({ showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
                 IconButton({ showAttachmentSheet = true }, enabled = target.matches(RED_ID_PATTERN) && attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
-                IconButton({
-                    if (voiceMessages.state is VoiceMessageState.Recording) voiceMessages.stopAndPreview(target, conversation)
-                    else if (voiceMessages.state is VoiceMessageState.Preview) voiceMessages.stopAndSend(target, conversation)
-                    else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) voiceMessages.start(target, conversation)
-                    else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                }, enabled = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending) {
-                    val icon = when (val state = voiceMessages.state) {
-                        is VoiceMessageState.Recording -> if (voiceMessages.isLocked) Icons.Default.Send else Icons.Default.Stop
-                        is VoiceMessageState.Preview -> Icons.Default.Send
-                        else -> Icons.Default.Mic
+                VoiceRecordButton(
+                    state = voiceMessages.state,
+                    isLocked = voiceMessages.isLocked,
+                    hasPermission = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending,
+                    onPress = { voiceMessages.lockRecording() },
+                    onRelease = { voiceMessages.stopAndPreview(target, conversation) },
+                    onLockRequest = { voiceMessages.lockRecording() },
+                    onCancel = { voiceMessages.cancel() },
+                    onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                    onClick = {
+                        if (voiceMessages.state is VoiceMessageState.Recording) {
+                            voiceMessages.stopAndPreview(target, conversation)
+                        } else if (voiceMessages.state is VoiceMessageState.Preview) {
+                            voiceMessages.stopAndSend(target, conversation)
+                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            voiceMessages.start(target, conversation)
+                        } else {
+                            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
                     }
-                    val desc = when (val state = voiceMessages.state) {
-                        is VoiceMessageState.Recording -> if (voiceMessages.isLocked) "إرسال بعد القفل" else "إيقاف ومعاينة"
-                        is VoiceMessageState.Preview -> "إرسال المعاينة"
-                        else -> "تسجيل رسالة صوتية"
-                    }
-                    Icon(icon, desc)
-                }
+                )
                 Column(Modifier.weight(1f)) {
                     // Mentions @ + Hashtags # autocomplete
                     val mentionQuery = USERNAME_PARTIAL.find(messageText)?.groupValues?.get(1)
@@ -1892,23 +1913,43 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
         if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(manifestJson)
     }
-    val downloaded = when (val current = attachments.state) {
-        is AttachmentState.Downloaded -> current.path to current.name
-        is AttachmentState.Exported -> current.path to current.name
+    val isDownloaded = when (val current = attachments.state) {
+        is AttachmentState.Downloaded -> current.name == manifest.name
+        is AttachmentState.Exported -> current.name == manifest.name
+        else -> false
+    }
+    val isDownloading = attachments.state is AttachmentState.Working
+    val downloadedUri = when (val current = attachments.state) {
+        is AttachmentState.Downloaded -> if (current.name == manifest.name) {
+            android.net.Uri.fromFile(java.io.File(current.path))
+        } else null
+        is AttachmentState.Exported -> if (current.name == manifest.name) {
+            android.net.Uri.fromFile(java.io.File(current.path))
+        } else null
         else -> null
     }
-    if (downloaded?.second == manifest.name) {
-        VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
-    } else Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.Mic, null, tint = if (item.outgoing) Color(0xFF00382A) else YounesEmerald)
-        Column(Modifier.weight(1f).padding(horizontal = 9.dp)) {
-            Text("رسالة صوتية", fontWeight = FontWeight.SemiBold)
-            VoiceWaveform(manifest.waveform, if (item.outgoing) Color(0xFF00513E) else YounesEmerald, Modifier.fillMaxWidth().height(30.dp))
-            Text("${formatDuration(manifest.durationSeconds)} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
-        }
-        IconButton({ attachments.download(manifestJson) }, enabled = attachments.state !is AttachmentState.Working) {
-            Icon(Icons.Default.Download, "تنزيل وتشغيل الرسالة الصوتية")
-        }
+
+    if (downloadedUri != null) {
+        // 🎙️ مشغّل احترافي مع waveform
+        VoiceNotePlayer(
+            uri = downloadedUri,
+            waveform = manifest.waveform,
+            durationSeconds = manifest.durationSeconds,
+            modifier = Modifier.fillMaxWidth()
+        )
+    } else {
+        // 💬 فقاعة احترافية قبل التنزيل
+        VoiceBubble(
+            manifest = manifest,
+            isOutgoing = item.outgoing,
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            onPlayPause = { attachments.download(manifestJson) },
+            onSeek = { /* no-op before download */ },
+            onSpeedChange = { /* no-op before download */ },
+            onDownload = { attachments.download(manifestJson) },
+            onWaveformTap = { attachments.download(manifestJson) }
+        )
     }
 }
 
