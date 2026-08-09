@@ -159,7 +159,8 @@ class CommunitiesViewModel(private val api: CommunitiesApi) : ViewModel() {
 @Composable
 fun CommunitiesScreen(
     tokens: TokenStore,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenCommunity: (communityId: String, communityName: String) -> Unit = { _, _ -> }
 ) {
     val api = remember(tokens) { CommunitiesApi(AuthorizedApiClient(tokens)) }
     val vm: CommunitiesViewModel = viewModel(
@@ -243,6 +244,7 @@ fun CommunitiesScreen(
                     items(state.communities, key = { it.id }) { community ->
                         CommunityCard(
                             community = community,
+                            onOpen = { onOpenCommunity(community.id, community.name) },
                             onJoin = { vm.join(community) },
                             onLeave = { vm.leave(community) },
                             onDelete = { vm.delete(community) }
@@ -264,6 +266,7 @@ fun CommunitiesScreen(
 @Composable
 private fun CommunityCard(
     community: Community,
+    onOpen: () -> Unit,
     onJoin: () -> Unit,
     onLeave: () -> Unit,
     onDelete: () -> Unit
@@ -273,7 +276,7 @@ private fun CommunityCard(
     val isAdmin = community.myRole == "ADMIN"
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { /* TODO: open community feed */ },
+        modifier = Modifier.fillMaxWidth().clickable { onOpen() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(14.dp)
     ) {
