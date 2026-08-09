@@ -30,16 +30,37 @@ import javax.crypto.CipherOutputStream
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
+/**
+ * 🎙️ YOUNES Voice Message ViewModel — يدعم:
+ *  - lock-to-record (الضغط المطوّل للقفل)
+ *  - drag-to-cancel (السحب للإلغاء)
+ *  - preview قبل الإرسال
+ *  - تشفير E2E بـ AES-256-GCM
+ *  - Waveform 96 عينة
+ *  - Auto-trim silence (الحد الأدنى 1 ثانية)
+ */
 class VoiceMessageViewModel(application: Application) : AndroidViewModel(application) {
     private val media = MediaApi(application, AuthorizedApiClient(TokenStore(application)))
     private val random = SecureRandom()
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
     private var ticker: Job? = null
+    private var pendingTarget: Triple<String, String, String>? = null
+    private var recordingPaused = false
+
     var state: VoiceMessageState by mutableStateOf(VoiceMessageState.Idle); private set
     var elapsedSeconds by mutableIntStateOf(0); private set
     var waveform: List<Int> by mutableStateOf(emptyList()); private set
-    private var recordingPaused = false
+
+    // للحفظ المؤقت قبل الإرسال (preview)
+    var previewPath: String? by mutableStateOf(null); private set
+    var previewDuration: Int by mutableIntStateOf(0); private set
+    var previewWaveform: List<Int> by mutableStateOf(emptyList()); private set
+
+    // للحفظ المؤقت في حالة lock-to-record
+    var isLocked: Boolean by mutableStateOf(false); private set
+    // للحفظ المؤقت في حالة drag-to-cancel (نسبة الإلغاء 0..1)
+    var cancelProgress: Float by mutableStateOf(0f); private set
 
     fun start(targetRedId: String, conversationId: String) {
         if (recorder != null || state is VoiceMessageState.Sending) return
@@ -66,6 +87,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         elapsedSeconds = 0
         waveform = emptyList()
         recordingPaused = false
+        isLocked = false
+        cancelProgress = 0f
         state = VoiceMessageState.Recording(paused = false)
         ticker = viewModelScope.launch {
             var quarterSeconds = 0
@@ -82,8 +105,6 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private var pendingTarget: Triple<String, String, String>? = null
-
     private fun createRecorder(): MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         MediaRecorder(getApplication<Application>())
     } else {
@@ -99,45 +120,129 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }.onFailure { state = VoiceMessageState.Error(it.message ?: "VOICE_PAUSE_FAILED") }
     }
 
+    /**
+     * 🔒 تفعيل القفل — يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
+     * بعد القفل، الـ user يقدر يحرر الزر بدون إيقاف التسجيل
+     */
+    fun lockRecording() {
+        if (state is VoiceMessageState.Recording) {
+            isLocked = true
+        }
+    }
+
+    /**
+     * 📤 تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
+     * إذا وصلت إلى 1، يتم حذف التسجيل تلقائياً
+     */
+    fun updateCancelProgress(progress: Float) {
+        cancelProgress = progress.coerceIn(0f, 1f)
+        if (progress >= CANCEL_THRESHOLD && state is VoiceMessageState.Recording) {
+            cancel()
+        }
+    }
+
+    /**
+     * 📤 إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
+     * يحفظ الـ target و conversationId للإرسال اللاحق
+     */
+    fun stopAndPreview(targetRedId: String? = null, conversationId: String? = null) {
+        val file = recordingFile ?: return
+        val duration = elapsedSeconds
+        val recordedWaveform = waveform
+        releaseRecorder(deleteFile = false)
+        if (duration < 1 || file.length() <= 0) {
+            file.delete()
+            state = VoiceMessageState.Error("VOICE_TOO_SHORT")
+            return
+        }
+        if (targetRedId != null && conversationId != null) {
+            pendingTarget = Triple(targetRedId, conversationId, "VOICE")
+        }
+        previewPath = file.absolutePath
+        previewDuration = duration
+        previewWaveform = recordedWaveform
+        state = VoiceMessageState.Preview(duration)
+    }
+
     fun stopAndSend(targetRedId: String, conversationId: String) {
         pendingTarget = Triple(targetRedId, conversationId, "VOICE")
         stopAndSendPendingTarget()
     }
 
     private fun stopAndSendPendingTarget() {
-        val target = pendingTarget ?: return
-        val file = recordingFile ?: return
-        val duration = elapsedSeconds
-        val recordedWaveform = waveform
-        releaseRecorder(deleteFile = false)
+        val target = pendingTarget
+        val duration: Int
+        val recordedWaveform: List<Int>
+        val file: File
+
+        // Determine source: live recording or preview
+        if (state is VoiceMessageState.Preview && previewPath != null) {
+            file = File(previewPath!!)
+            duration = previewDuration
+            recordedWaveform = previewWaveform
+        } else {
+            file = recordingFile ?: return
+            duration = elapsedSeconds
+            recordedWaveform = waveform
+            releaseRecorder(deleteFile = false)
+        }
+
         if (duration < 1 || file.length() <= 0) { file.delete(); state = VoiceMessageState.Error("VOICE_TOO_SHORT"); return }
         viewModelScope.launch {
             state = VoiceMessageState.Sending
-            when (val result = encryptUploadAndGrant(file, target.first, duration, recordedWaveform)) {
+            when (val result = encryptUploadAndGrant(file, target?.first ?: return@launch, duration, recordedWaveform)) {
                 is ApiResult.Error -> state = VoiceMessageState.Error(result.message)
                 is ApiResult.Success -> {
-                    RedConnectionService.sendPayload(
-                        getApplication(), target.first, target.second, target.third,
-                        result.value.toByteArray(Charsets.UTF_8)
-                    )
+                    target?.let {
+                        RedConnectionService.sendPayload(
+                            getApplication(), it.first, it.second, it.third,
+                            result.value.toByteArray(Charsets.UTF_8)
+                        )
+                    }
                     state = VoiceMessageState.Sent(duration)
                 }
             }
             file.delete()
+            previewPath = null
             pendingTarget = null
         }
     }
 
+    /**
+     * 🗑️ حذف الـ preview والعودة إلى Idle
+     */
+    fun discardPreview() {
+        previewPath?.let { File(it).delete() }
+        previewPath = null
+        previewDuration = 0
+        previewWaveform = emptyList()
+        state = VoiceMessageState.Idle
+    }
+
     fun cancel() {
         releaseRecorder(deleteFile = true)
+        previewPath?.let { File(it).delete() }
+        previewPath = null
+        previewDuration = 0
+        previewWaveform = emptyList()
         pendingTarget = null
         waveform = emptyList()
         elapsedSeconds = 0
+        isLocked = false
+        cancelProgress = 0f
         state = VoiceMessageState.Idle
     }
 
     fun permissionDenied() { if (recorder == null) state = VoiceMessageState.Error("MICROPHONE_PERMISSION_REQUIRED") }
-    fun clear() { if (recorder == null) state = VoiceMessageState.Idle }
+    fun clear() {
+        if (recorder == null) {
+            previewPath?.let { File(it).delete() }
+            previewPath = null
+            previewDuration = 0
+            previewWaveform = emptyList()
+            state = VoiceMessageState.Idle
+        }
+    }
 
     private suspend fun encryptUploadAndGrant(file: File, targetRedId: String, duration: Int, waveform: List<Int>): ApiResult<String> {
         val key = ByteArray(32).also(random::nextBytes)
@@ -191,11 +296,19 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         recorder = null
         if (deleteFile) recordingFile?.delete()
         recordingFile = null
+        isLocked = false
     }
 
-    override fun onCleared() { releaseRecorder(deleteFile = true); super.onCleared() }
+    override fun onCleared() {
+        releaseRecorder(deleteFile = true)
+        previewPath?.let { File(it).delete() }
+        super.onCleared()
+    }
 
-    companion object { private const val MAX_DURATION_SECONDS = 600 }
+    companion object {
+        private const val MAX_DURATION_SECONDS = 600
+        const val CANCEL_THRESHOLD = 0.6f  // 60% سحب = إلغاء
+    }
 }
 
 @kotlinx.serialization.Serializable
@@ -216,6 +329,7 @@ data class VoiceManifest(
 sealed interface VoiceMessageState {
     data object Idle : VoiceMessageState
     data class Recording(val paused: Boolean) : VoiceMessageState
+    data class Preview(val durationSeconds: Int) : VoiceMessageState
     data object Sending : VoiceMessageState
     data class Sent(val durationSeconds: Int) : VoiceMessageState
     data class Error(val message: String) : VoiceMessageState

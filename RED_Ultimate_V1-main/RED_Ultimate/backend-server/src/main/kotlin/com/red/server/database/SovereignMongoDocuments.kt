@@ -41,6 +41,8 @@ data class MessageDocument(
     @Indexed var status: String = "SENT", // SENT, DELIVERED, READ, FAILED
     // الوسائط المشفرة
     val attachments: List<MessageAttachment> = emptyList(),
+    // 🎙️ البيانات الوصفية للرسائل الصوتية (اختيارية — تُملأ عند messageType=VOICE)
+    val voiceMetadata: VoiceMessageMetadata? = null,
     // الرد والتحويل
     val replyToMessageUuid: String? = null,
     val forwardedFromConversationId: String? = null,
@@ -68,6 +70,26 @@ data class MessageAttachment(
     val caption: String? = null,
     val fileName: String? = null
 )
+
+/**
+ * 🎙️ بيانات وصفية للرسائل الصوتية (Voice Messages)
+ * مخزّنة في MongoDB كحقل منفصل للبحث والفهرسة الفعّالة
+ * الـ waveform يُخزّن كـ base64 لتوفير المساحة
+ */
+data class VoiceMessageMetadata(
+    val durationMs: Long,
+    val waveform: String,        // base64-encoded List<Int> (96 samples max)
+    val sampleRate: Int = 44100, // Hz
+    val bitrate: Int = 96000,    // bps
+    val codec: String = "AAC",   // AAC, Opus
+    val mimeType: String = "audio/mp4" // audio/mp4, audio/ogg
+) {
+    init {
+        require(durationMs in 0..600_000) { "Voice message max 10 minutes" }
+        require(sampleRate in 8000..48000) { "Sample rate must be 8-48 kHz" }
+        require(bitrate in 8000..320_000) { "Bitrate must be 8-320 kbps" }
+    }
+}
 
 data class MessageReaction(
     val userId: String,

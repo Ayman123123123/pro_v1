@@ -12,6 +12,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -127,6 +129,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -997,14 +1000,19 @@ private fun ChatHubScreen(
                 AttachmentState.Idle -> Unit
             }
             when (val voiceState = voiceMessages.state) {
-                is VoiceMessageState.Recording -> Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}" else "● تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        IconButton(voiceMessages::togglePause) { Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "استئناف" else "إيقاف مؤقت") }
-                        TextButton(voiceMessages::cancel) { Text("إلغاء") }
-                    }
-                    VoiceWaveform(voiceMessages.waveform, MaterialTheme.colorScheme.error, Modifier.fillMaxWidth().height(34.dp))
-                }
+                is VoiceMessageState.Recording -> VoiceRecordingControls(
+                    voiceState = voiceState,
+                    voiceMessages = voiceMessages,
+                    isLocked = voiceMessages.isLocked,
+                    cancelProgress = voiceMessages.cancelProgress
+                )
+                is VoiceMessageState.Preview -> VoicePreviewControls(
+                    duration = voiceState.durationSeconds,
+                    waveform = voiceMessages.previewWaveform,
+                    onSend = { voiceMessages.stopAndSend(target, conversation) },
+                    onDiscard = { voiceMessages.discardPreview() },
+                    isSending = false
+                )
                 VoiceMessageState.Sending -> Text("جارٍ تشفير الرسالة الصوتية ورفعها…", color = AqyalGold, style = MaterialTheme.typography.bodySmall)
                 is VoiceMessageState.Sent -> Text("تم إرسال رسالة صوتية ${formatDuration(voiceState.durationSeconds)}", color = YounesEmerald, style = MaterialTheme.typography.bodySmall)
                 is VoiceMessageState.Error -> Text("تعذر التسجيل: ${voiceState.message}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -1016,11 +1024,22 @@ private fun ChatHubScreen(
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
                 IconButton({
-                    if (voiceMessages.state is VoiceMessageState.Recording) voiceMessages.stopAndSend(target, conversation)
+                    if (voiceMessages.state is VoiceMessageState.Recording) voiceMessages.stopAndPreview(target, conversation)
+                    else if (voiceMessages.state is VoiceMessageState.Preview) voiceMessages.stopAndSend(target, conversation)
                     else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) voiceMessages.start(target, conversation)
                     else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                 }, enabled = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending) {
-                    Icon(if (voiceMessages.state is VoiceMessageState.Recording) Icons.Default.Stop else Icons.Default.Mic, if (voiceMessages.state is VoiceMessageState.Recording) "إيقاف وإرسال" else "تسجيل رسالة صوتية")
+                    val icon = when (val state = voiceMessages.state) {
+                        is VoiceMessageState.Recording -> if (voiceMessages.isLocked) Icons.Default.Send else Icons.Default.Stop
+                        is VoiceMessageState.Preview -> Icons.Default.Send
+                        else -> Icons.Default.Mic
+                    }
+                    val desc = when (val state = voiceMessages.state) {
+                        is VoiceMessageState.Recording -> if (voiceMessages.isLocked) "إرسال بعد القفل" else "إيقاف ومعاينة"
+                        is VoiceMessageState.Preview -> "إرسال المعاينة"
+                        else -> "تسجيل رسالة صوتية"
+                    }
+                    Icon(icon, desc)
                 }
                 Column(Modifier.weight(1f)) {
                     // Mentions @ + Hashtags # autocomplete
@@ -1733,6 +1752,119 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
     }
     if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
+}
+
+@Composable
+private fun VoiceRecordingControls(
+    voiceState: VoiceMessageState.Recording,
+    voiceMessages: VoiceMessageViewModel,
+    isLocked: Boolean,
+    cancelProgress: Float
+) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var dragOffsetX by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+    var dragOffsetY by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+
+    Column {
+        // ⏺️ شريط التسجيل العلوي
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(if (voiceState.paused) AqyalGold else MaterialTheme.colorScheme.error))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}"
+                else "● تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(voiceMessages::togglePause) {
+                Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "استئناف" else "إيقاف مؤقت")
+            }
+            TextButton(voiceMessages::cancel) { Text("إلغاء") }
+        }
+        VoiceWaveform(voiceMessages.waveform, MaterialTheme.colorScheme.error, Modifier.fillMaxWidth().height(34.dp))
+
+        // 🎚️ منطقة السحب — إذا السحب لليسار/الأسفل = إلغاء تدريجي
+        if (cancelProgress > 0f) {
+            Text(
+                "↩️ اسحب لمعاودة التسجيل • ${(cancelProgress * 100).toInt()}%",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+
+        // 🔒 إذا قُفل التسجيل، اعرض أزرار الإرسال والإلغاء
+        if (isLocked) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = voiceMessages::cancel,
+                    modifier = Modifier.weight(1f)
+                ) { Text("حذف") }
+                // الإرسال يتم عبر زر الإرسال الرئيسي في شريط الكتابة
+                OutlinedButton(
+                    onClick = { /* triggered via main send button */ },
+                    modifier = Modifier.weight(1f),
+                    enabled = false
+                ) { Text("🔒 مُقفل — استخدم زر الإرسال") }
+            }
+        } else {
+            // 🔓 نصيحة للمستخدم: اسحب للقفل أو ارفع الإصبع للإرسال
+            Text(
+                "💡 اسحب للأعلى للقفل • ارفع الإصبع للإرسال • اسحب للأسفل للإلغاء",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoicePreviewControls(
+    duration: Int,
+    waveform: List<Int>,
+    onSend: () -> Unit,
+    onDiscard: () -> Unit,
+    isSending: Boolean
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.PlayArrow, null, tint = YounesEmerald)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "معاينة الرسالة الصوتية • ${formatDuration(duration)}",
+                color = YounesEmerald,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        VoiceWaveform(waveform, YounesEmerald, Modifier.fillMaxWidth().height(34.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDiscard,
+                modifier = Modifier.weight(1f),
+                enabled = !isSending
+            ) {
+                Icon(Icons.Default.Close, null); Text(" حذف")
+            }
+            Button(
+                onClick = onSend,
+                modifier = Modifier.weight(1f),
+                enabled = !isSending && duration >= 1
+            ) {
+                if (isSending) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White)
+                else { Icon(Icons.Default.Send, null); Text(" إرسال") }
+            }
+        }
+    }
 }
 
 @Composable
