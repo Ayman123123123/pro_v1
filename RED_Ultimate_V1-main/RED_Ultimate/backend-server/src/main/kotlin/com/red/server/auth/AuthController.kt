@@ -2,7 +2,6 @@ package com.red.server.auth
 
 import com.red.server.auth.model.AccountStatus
 import jakarta.servlet.http.HttpServletRequest
-import org.springframework.http.CacheControl
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -22,8 +21,7 @@ class AuthController(
     @PostMapping("/register")
     fun register(@RequestBody request: RegisterRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
         limits.check("register", clientIp(servlet), 5, Duration.ofHours(1))
-        // Registration returns one-time recovery codes; never allow a browser or proxy to cache them.
-        return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore()).body(registration.register(request))
+        return ResponseEntity.status(HttpStatus.CREATED).body(registration.register(request))
     }
 
     @PostMapping("/login")
@@ -37,19 +35,11 @@ class AuthController(
             AccountStatus.PENDING -> HttpStatus.LOCKED
             AccountStatus.REJECTED, AccountStatus.SUSPENDED, AccountStatus.BANNED -> HttpStatus.FORBIDDEN
         }
-        return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).body(response)
-    }
-
-    @PostMapping("/temporary-password-change")
-    fun changeTemporaryPassword(@RequestBody request: TemporaryPasswordChangeRequest, servlet: HttpServletRequest): ResponseEntity<Void> {
-        limits.check("temporary-password-change", "${clientIp(servlet)}:${request.username}", 5, Duration.ofMinutes(15))
-        registration.changeTemporaryPassword(request)
-        return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build()
+        return ResponseEntity.status(status).body(response)
     }
 
     @PostMapping("/refresh")
-    fun refresh(@RequestBody request: RefreshRequest): ResponseEntity<RefreshResponse> =
-        ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(registration.refresh(request))
+    fun refresh(@RequestBody request: RefreshRequest): RefreshResponse = registration.refresh(request)
 
     @PostMapping("/logout")
     fun logout(@RequestBody request: LogoutRequest): ResponseEntity<Void> {

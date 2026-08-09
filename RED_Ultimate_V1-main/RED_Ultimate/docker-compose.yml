@@ -1,17 +1,22 @@
 name: red-sovereign
 
+# ══════════════════════════════════════════════════════════════════
+# 🏛️ YOUNES Sovereign Platform — Docker Compose
+# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Asterisk + Coturn
+# ══════════════════════════════════════════════════════════════════
+
 services:
-  # 1. The Brain: RED Unified Server
+  # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
   backend:
     build:
       context: .
       dockerfile: backend-server/Dockerfile
-      # DNS صريح لتفادي فشل تنزيل Maven داخل WSL2/Docker Desktop
-      network: host
     container_name: red-backend
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -24,12 +29,11 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
-      - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
-      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
+      - DINSTAR_USERNAME=${DINSTAR_USERNAME:-admin}
+      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:-admin}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
       - DINSTAR_PORT=${DINSTAR_PORT:-443}
       - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
-      - DINSTAR_MODEL=${DINSTAR_MODEL:-UC2000-VE-8G}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -38,6 +42,7 @@ services:
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_PORT=3478
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
     volumes:
       - ./secrets:/run/secrets:ro
     depends_on:
@@ -48,27 +53,29 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 60s
     networks: ["red-net"]
 
-  # 2. VoIP/Conference SFU (System A)
+  # ━━━━━━━━━━━━ 2. VoIP/Conference SFU ━━━━━━━━━━━━
   media-sfu:
     build: ./media-sfu
     container_name: red-media-sfu
+    restart: unless-stopped
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
     networks: ["red-net"]
 
-  # 3. Relay: COTURN
+  # ━━━━━━━━━━━━ 3. TURN/STUN Relay ━━━━━━━━━━━━
   coturn:
     image: coturn/coturn
     container_name: red-turn
@@ -80,7 +87,6 @@ services:
       - --use-auth-secret
       - --static-auth-secret=${TURN_SECRET:?TURN_SECRET is required}
       - --realm=red.sovereign
-      # Stay below Windows' default dynamic/ephemeral range (49152+) to avoid random bind conflicts.
       - --min-port=45000
       - --max-port=45050
     ports:
@@ -89,7 +95,7 @@ services:
       - "45000-45050:45000-45050/udp"
     networks: ["red-net"]
 
-  # 4. PSTN Gateway: Asterisk PBX
+  # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
   pstn-gateway:
     build: ./pstn-asterisk
     container_name: red-pstn-gateway
@@ -100,74 +106,68 @@ services:
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"
-    expose:
-      - "5038"
+    expose: ["5038"]
     healthcheck:
-      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      timeout: 5s
+      retries: 5
     networks: ["red-net"]
 
-  # 5. Database: PostgreSQL 16 (محصّن: buffers + work_mem + slow-query log)
+  # ━━━━━━━━━━━━ 5. PostgreSQL 16 ━━━━━━━━━━━━
   db-postgres:
     image: postgres:16
     container_name: red-db-sql
     restart: unless-stopped
-    command:
-      - "postgres"
-      - "-c"
-      - "shared_buffers=128MB"
-      - "-c"
-      - "work_mem=4MB"
-      - "-c"
-      - "log_min_duration_statement=500"
-      - "-c"
-      - "max_connections=100"
     environment:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "work_mem=4MB", "-c", "maintenance_work_mem=64MB", "-c", "max_connections=100", "-c", "log_min_duration_statement=500"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "admin"]
+      test: ["CMD", "pg_isready", "-U", "admin", "-d", "red_sovereign"]
       interval: 10s
+      timeout: 5s
+      retries: 5
     networks: ["red-net"]
 
-  # 6. Database: MongoDB 8 (حدّ ذاكرة WiredTiger للبيئات الصغيرة)
+  # ━━━━━━━━━━━━ 6. MongoDB 8 ━━━━━━━━━━━━
   db-mongo:
     image: mongo:8
     container_name: red-db-nosql
     restart: unless-stopped
-    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     environment:
       - MONGO_INITDB_ROOT_USERNAME=red_user
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.5"]
     volumes: ["mongo-data:/data/db"]
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet --username red_user --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 10s
+      timeout: 5s
+      retries: 5
     networks: ["red-net"]
 
-  # 7. Cache: Redis 7 (ذاكرة محدودة LRU + persist)
+  # ━━━━━━━━━━━━ 7. Redis 7 ━━━━━━━━━━━━
   cache-redis:
     image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     container_name: red-cache
     restart: unless-stopped
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-    volumes:
-      - redis-data:/data
+    volumes: ["redis-data:/data"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 10s
+      timeout: 5s
+      retries: 5
     networks: ["red-net"]
 
-  # 8. Storage: MinIO
+  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) ━━━━━━━━━━━━
   minio:
     image: minio/minio
     container_name: red-storage
@@ -185,22 +185,35 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # 9. Proxy & Admin UI
+  # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI ━━━━━━━━━━━━
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: red-proxy
+    restart: unless-stopped
     ports: ["${RED_HTTP_PORT:-8088}:80", "${RED_HTTPS_PORT:-8443}:443"]
-    volumes: ["./nginx.conf:/etc/nginx/nginx.conf"]
-    depends_on: [backend, admin-panel]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./secrets/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - ./secrets/privkey.pem:/etc/ssl/private/privkey.pem:ro
+    depends_on:
+      backend: { condition: service_healthy }
+      admin-panel: { condition: service_healthy }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
-      start_period: 30s
+      timeout: 5s
+      retries: 3
     networks: ["red-net"]
 
   admin-panel:
     build: ./admin_dashboard
     container_name: red-admin-ui
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks: ["red-net"]
 
 volumes:

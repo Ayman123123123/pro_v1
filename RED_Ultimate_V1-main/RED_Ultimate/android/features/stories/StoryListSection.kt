@@ -54,7 +54,7 @@ fun StoryListSection(
                         .clickable { onStoryClick(story.userId) },
                     contentScale = ContentScale.Crop
                 )
-                Text("RED User", style = MaterialTheme.typography.labelSmall)
+                Text("يونس", style = MaterialTheme.typography.labelSmall)
             }
         }
     }

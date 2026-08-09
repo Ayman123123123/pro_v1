@@ -1,9 +1,7 @@
 package com.red.sovereign.calls
 
-import android.content.Context
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
-import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -23,10 +21,10 @@ data class CallSignal(
     val payload: Map<String, String> = emptyMap()
 )
 
-class CallSignalingClient(private val context: Context, private val tokens: TokenStore, private val listener: Listener) {
+class CallSignalingClient(private val tokens: TokenStore, private val listener: Listener) {
     interface Listener { fun onSignal(signal: CallSignal); fun onConnected(); fun onDisconnected(); fun onError(message: String) }
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http: OkHttpClient = SecureOkHttpClient.build(context)
+    private val http = OkHttpClient()
     private var socket: WebSocket? = null
 
     fun connect() {

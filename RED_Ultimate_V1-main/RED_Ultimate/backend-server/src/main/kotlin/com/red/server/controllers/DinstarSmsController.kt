@@ -81,11 +81,11 @@ class DinstarSmsController(
 
     /** عدد SMS في الطابور */
     @GetMapping("/queue")
-    fun querySmsQueueCount(): Map<String, Any?> = hardware.querySmsQueueCount()
+    fun querySmsQueueCount(): Map<String, Any> = hardware.querySmsQueueCount()
 
     /** إيقاف مهمة إرسال SMS */
     @PostMapping("/stop")
-    fun stopSmsTask(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
+    fun stopSmsTask(@RequestBody body: Map<String, Any?>): Map<String, Any> {
         val taskId = (body["task_id"] as? Number)?.toInt()
             ?: throw IllegalArgumentException("task_id is required")
         return hardware.stopSmsTask(taskId)

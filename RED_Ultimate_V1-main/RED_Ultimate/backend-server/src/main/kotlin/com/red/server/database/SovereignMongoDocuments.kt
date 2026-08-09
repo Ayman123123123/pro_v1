@@ -49,9 +49,6 @@ data class MessageDocument(
     // الحذف
     var deletedForSenderAt: Instant? = null,
     var deletedForEveryoneAt: Instant? = null,
-    // حذف ناعم متوافق مع مسار الرسائل القديم + التعديل
-    var deletedAt: Instant? = null,
-    var isEdited: Boolean = false,
     // التوقيتات
     val createdAt: Instant = Instant.now(),
     var deliveredAt: Instant? = null,
@@ -129,7 +126,7 @@ enum class CallStatus { RINGING, CONNECTING, ACTIVE, ON_HOLD, ENDED, MISSED, FAI
 // ════════════════════════════════════════════════════
 
 @Document("stories")
-@CompoundIndex(name = "owner_expires", def = "{'ownerId': 1, 'expiresAt': 1}", )
+@CompoundIndex(name = "owner_expires", def = "{'ownerId': 1, 'expiresAt': 1}", expireAfterSeconds = 0)
 data class StoryDocument(
     @Id val id: String,
     @Indexed val ownerId: String,
@@ -146,7 +143,7 @@ data class StoryDocument(
     val includedUsers: List<String> = emptyList(),
     // التوقيتات
     val createdAt: Instant = Instant.now(),
-    @Indexed(expireAfterSeconds = 86400) val expiresAt: Instant, // TTL index
+    @Indexed val expiresAt: Instant, // TTL index
     var deletedAt: Instant? = null
 )
 

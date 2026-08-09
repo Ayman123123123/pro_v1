@@ -12,7 +12,6 @@ import org.springframework.web.socket.BinaryMessage
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.BinaryWebSocketHandler
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 @Component
@@ -20,35 +19,18 @@ class RedMasterHandler(
     private val messages: MessageService,
     private val deletes: DeleteService,
     private val redisManager: RedisManager,
-    private val redis: StringRedisTemplate,
-    private val userIntelligence: com.red.server.services.AdminUserIntelligenceService,
-    private val accessGuard: ApprovedDeviceSessionGuard
+    private val redis: StringRedisTemplate
 ) : BinaryWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
-    private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
 
     override fun handleBinaryMessage(session: WebSocketSession, frame: BinaryMessage) {
-        if (!frameLimiter.tryAcquire(session.id) || !accessGuard.isStillAuthorized(
-                session.attributes["accountId"] as? String,
-                session.attributes["deviceId"] as? String
-            )
-        ) {
-            session.close(CloseStatus.POLICY_VIOLATION)
-            return
-        }
-        val envelope = runCatching { RedProtos.RedRED.parseFrom(frame.payload) }.getOrElse {
-            session.close(CloseStatus.BAD_DATA)
-            return
-        }
+        val envelope = RedProtos.RedRED.parseFrom(frame.payload)
         when (envelope.signalCase) {
             RedProtos.RedRED.SignalCase.MESSAGE -> receiveMessage(session, envelope.message)
             RedProtos.RedRED.SignalCase.ACK -> receiveAck(session, envelope.ack)
             RedProtos.RedRED.SignalCase.TYPING -> receiveTyping(session, envelope.typing)
             RedProtos.RedRED.SignalCase.SYNC_REQ -> sync(session, envelope.syncReq)
             RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
-            RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> userIntelligence.markRemoteWipeAcknowledged(
-                UUID.fromString(session.attributes["accountId"] as String), envelope.remoteWipeAck.commandId
-            )
             else -> Unit
         }
     }
@@ -75,7 +57,7 @@ class RedMasterHandler(
     private fun receiveTyping(session: WebSocketSession, typing: RedProtos.TypingRED) {
         val sender = userId(session)
         require(typing.userId == sender) { "userId does not match authenticated RED ID" }
-        messages.requireTypingAllowed(sender, typing.targetUserId, typing.conversationId)
+        require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
         redisManager.setTyping(sender, typing.conversationId)
         sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
     }
@@ -88,21 +70,9 @@ class RedMasterHandler(
     private fun delete(session: WebSocketSession, request: RedProtos.DeleteRED) {
         if (!request.forEveryone) return
         val original = deletes.deleteForEveryone(request.messageId, userId(session)) ?: return
-        require(request.conversationId == original.conversationId) { "Delete conversation does not match message" }
-        val canonicalDelete = RedProtos.DeleteRED.newBuilder()
-            .setMessageId(original.uuid)
-            .setConversationId(original.conversationId)
-            .setForEveryone(true)
-            .build()
-        val envelope = RedProtos.RedRED.newBuilder().setDelete(canonicalDelete).build()
+        val envelope = RedProtos.RedRED.newBuilder().setDelete(request).build()
         sendToUser(original.senderId, envelope)
         sendToUser(original.receiverId, envelope)
-    }
-
-    /** Delivers an app-data wipe command only to the target user's currently authenticated devices. */
-    fun sendRemoteWipe(redId: String, commandId: String, reason: String) {
-        val command = RedProtos.RemoteWipe.newBuilder().setCommandId(commandId).setReason(reason.take(200)).build()
-        sendToUser(redId, RedProtos.RedRED.newBuilder().setRemoteWipe(command).build())
     }
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
@@ -115,7 +85,6 @@ class RedMasterHandler(
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
-        frameLimiter.remove(session.id)
         val redId = session.attributes["userId"] as? String ?: return
         sessions[redId]?.let { userSessions ->
             userSessions.remove(session.id)

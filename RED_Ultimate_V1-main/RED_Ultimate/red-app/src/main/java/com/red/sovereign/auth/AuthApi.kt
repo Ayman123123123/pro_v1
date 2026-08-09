@@ -1,8 +1,6 @@
 package com.red.sovereign.auth
 
-import android.content.Context
 import com.red.sovereign.core.ServerEndpoint
-import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -14,8 +12,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 class AuthApi(
-    private val context: Context,
-    private val client: OkHttpClient = SecureOkHttpClient.build(context),
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build(),
     private val json: Json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 ) {
     suspend fun register(request: RegisterRequest): ApiResult<AuthResponse> =
@@ -26,17 +26,6 @@ class AuthApi(
 
     suspend fun refresh(token: String): ApiResult<RefreshResponse> =
         post("/api/auth/refresh", json.encodeToString(RefreshRequest(token))) { json.decodeFromString<RefreshResponse>(it) }
-
-    suspend fun changeTemporaryPassword(request: TemporaryPasswordChangeRequest): ApiResult<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val http = Request.Builder().url(ServerEndpoint.url() + "/api/auth/temporary-password-change")
-                .post(json.encodeToString(request).toRequestBody(JSON)).header("Accept", "application/json").build()
-            client.newCall(http).execute().use { response ->
-                if (response.isSuccessful) ApiResult.Success(response.code, Unit)
-                else ApiResult.Error(response.code, "TEMPORARY_PASSWORD_CHANGE_FAILED")
-            }
-        }.getOrElse { ApiResult.Error(null, it.message ?: "NETWORK_ERROR") }
-    }
 
     suspend fun recover(request: PasswordRecoveryRequest): ApiResult<Unit> = withContext(Dispatchers.IO) {
         runCatching {

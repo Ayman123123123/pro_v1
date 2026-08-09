@@ -38,7 +38,6 @@ class DinstarHardwareService(
     @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
-    @Value("\${red.dinstar.model:UC2000-VE-8G}") private val configuredModel: String,
     private val mapper: ObjectMapper,
     private val jdbc: JdbcTemplate
 ) {
@@ -90,7 +89,6 @@ class DinstarHardwareService(
             .build()
     }
 
-    private val modelProfile = DinstarModelProfile.parse(configuredModel)
     @Volatile private var activeHost = configuredIp
     private val gatewayId: UUID get() = UUID.nameUUIDFromBytes("DINSTAR:$activeHost:$configuredPort".toByteArray())
 
@@ -102,13 +100,13 @@ class DinstarHardwareService(
             activeHost = host
             registerGateway(result.size)
             return mapOf(
-                "success" to true, "gatewayIp" to host, "model" to modelProfile.modelId,
+                "success" to true, "gatewayIp" to host, "model" to "UC2000-VE-8G",
                 "status" to "ONLINE", "portsDetected" to result.size,
                 "capabilities" to documentedCapabilities()
             )
         }
         return mapOf(
-            "success" to false, "gatewayIp" to configuredIp, "model" to modelProfile.modelId,
+            "success" to false, "gatewayIp" to configuredIp, "model" to "UC2000-VE-8G",
             "status" to "OFFLINE", "message" to "No authenticated UC2000 get_port_info response"
         )
     }
@@ -120,7 +118,7 @@ class DinstarHardwareService(
     }
 
     fun resetPort(port: Int): Map<String, Any> {
-        require(port in 0..7) { modelProfile.modelId + " port must be 0-7" }
+        require(port in 0..7) { "UC2000-VE-8G port must be 0-7" }
         // set_port_info uses GET with query parameters per the official Dinstar API documentation
         val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
         require(apiSuccess(response)) { "DINSTAR rejected module reset" }
@@ -216,10 +214,10 @@ class DinstarHardwareService(
     fun queryIncomingSms(): Map<String, Any?> = getJson("/api/query_incoming_sms", emptyMap())
 
     /** عدد SMS في الطابور — GET /api/query_sms_count */
-    fun querySmsQueueCount(): Map<String, Any?> = getJson("/api/query_sms_count", emptyMap())
+    fun querySmsQueueCount(): Map<String, Any> = getJson("/api/query_sms_count", emptyMap())
 
     /** إيقاف مهمة إرسال SMS — GET /api/stop_sms?task_id=N */
-    fun stopSmsTask(taskId: Int): Map<String, Any?> {
+    fun stopSmsTask(taskId: Int): Map<String, Any> {
         require(taskId >= 0) { "Invalid task_id" }
         return getJson("/api/stop_sms", mapOf("task_id" to taskId.toString()))
     }
@@ -229,7 +227,7 @@ class DinstarHardwareService(
     // ═══════════════════════════════════════════════════════
 
     /** Call Forward — GET /api/set_port_info?action=CallForward */
-    fun setCallForward(port: Int, param: String, number: String): Map<String, Any?> {
+    fun setCallForward(port: Int, param: String, number: String): Map<String, Any> {
         require(port in 0..7) { "Port must be 0-7" }
         require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) { "Invalid CallForward param" }
         return getJson("/api/set_port_info", mapOf(
@@ -239,7 +237,7 @@ class DinstarHardwareService(
     }
 
     /** Power on/off port — GET /api/set_port_info?action=power&param=on/off */
-    fun setPortPower(port: Int, on: Boolean): Map<String, Any?> {
+    fun setPortPower(port: Int, on: Boolean): Map<String, Any> {
         require(port in 0..7) { "Port must be 0-7" }
         return getJson("/api/set_port_info", mapOf(
             "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
@@ -347,7 +345,7 @@ class DinstarHardwareService(
                VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT (host,api_port) DO UPDATE SET model=EXCLUDED.model,scheme=EXCLUDED.scheme,
                capabilities_json=EXCLUDED.capabilities_json,last_seen_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP""",
-            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", modelProfile.modelId, activeHost, configuredScheme, configuredPort, capabilities
+            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", "UC2000-VE-8G", activeHost, configuredScheme, configuredPort, capabilities
         )
     }
 
@@ -388,7 +386,7 @@ class DinstarHardwareService(
 
         return client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                val challenge = response.challenges().joinToString(", ") { "${it.scheme} realm=${it.realm}" }
+                val challenge = response.challenges().joinToString(", ") { "${it.scheme()} realm=${it.realm()}" }
                 log.error("DINSTAR HTTP {} on {} — auth challenge: {}", response.code, unsigned.url, challenge)
                 throw IllegalStateException("DINSTAR HTTP ${response.code} on ${unsigned.url.encodedPath} — auth challenge: $challenge")
             }

@@ -32,11 +32,6 @@ class MediaGrantService(
     fun revokeAll(ownerId: UUID, objectKey: String) {
         jdbc.update("DELETE FROM media_grants WHERE object_key=? AND owner_id=?", objectKey, ownerId)
     }
-
-    /** Removes every future object grant involving an account after ban, rejection, or account closure. */
-    fun revokeAllForAccount(accountId: UUID) {
-        jdbc.update("DELETE FROM media_grants WHERE owner_id=? OR grantee_id=?", accountId, accountId)
-    }
 }
 
 data class MediaGrantRequest(val objectKey: String = "", val targetRedId: String = "")

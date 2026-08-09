@@ -38,8 +38,6 @@ data class LoginRequest(
 data class RefreshRequest(val refreshToken: String)
 data class LogoutRequest(val refreshToken: String)
 
-data class TemporaryPasswordChangeRequest(val username: String, val temporaryPassword: String, val newPassword: String)
-
 data class ApprovalActionRequest(
     val userId: UUID,
     val action: AccountStatus,

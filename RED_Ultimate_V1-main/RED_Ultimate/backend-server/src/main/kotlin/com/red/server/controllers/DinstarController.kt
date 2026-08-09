@@ -9,10 +9,7 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/api/admin/dinstar")
-class DinstarController(
-    private val hardware: DinstarHardwareService,
-    private val audit: AuditService
-) {
+class DinstarController(private val hardware: DinstarHardwareService, private val audit: AuditService) {
 
     @GetMapping("/status")
     fun status() = hardware.getHardwareStatus()
@@ -28,7 +25,7 @@ class DinstarController(
     fun cdr() = hardware.queryCdr()
 
     @PostMapping("/ports/{port}/reset")
-    fun resetPort(@PathVariable port: Int, authentication: Authentication): Map<String, Any?> {
+    fun resetPort(@PathVariable port: Int, authentication: Authentication): Map<String, Any> {
         val actor = UUID.fromString(authentication.name)
         val result = hardware.resetPort(port)
         hardware.recordOperation(actor, "PORT_MODULE_RESET", port, "SUCCEEDED")
@@ -54,9 +51,7 @@ class DinstarController(
     fun getPortInfo(@PathVariable port: Int, authentication: Authentication): Map<String, Any> {
         val actor = UUID.fromString(authentication.name)
         audit.record(actor, "DINSTAR_PORT_INFO", port.toString())
-        val portInfo = hardware.getHardwareStatus().find { it["index"] == port }
-        val status = portInfo ?: mapOf("error" to "Port not found")
-        return mapOf("port" to port, "status" to status)
+        return mapOf("port" to port, "status" to hardware.getHardwareStatus().find { it["index"] == port })
     }
 
     /** Explicitly disabled until the exact firmware exposes a documented operation. */
@@ -73,7 +68,7 @@ class DinstarController(
         @PathVariable port: Int,
         @RequestBody body: Map<String, String>,
         authentication: Authentication
-    ): Map<String, Any?> {
+    ): Map<String, Any> {
         val param = body["param"] ?: throw IllegalArgumentException("param is required (Unconditional/NoReply/Busy/Not_Reachable/CancelAll)")
         val number = body["number"] ?: ""
         return hardware.setCallForward(port, param, number)
@@ -81,7 +76,7 @@ class DinstarController(
 
     /** Power on/off port */
     @PostMapping("/ports/{port}/power")
-    fun setPortPower(@PathVariable port: Int, @RequestBody body: Map<String, String>): Map<String, Any?> {
+    fun setPortPower(@PathVariable port: Int, @RequestBody body: Map<String, String>): Map<String, Any> {
         val on = body["on"]?.toBoolean() ?: true
         return hardware.setPortPower(port, on)
     }
