@@ -75,4 +75,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // Enter PiP if video call is active
+        try {
+            val callActive = com.red.sovereign.calls.CallRuntime.state is com.red.sovereign.calls.CallUiState.Active
+            val confActive = com.red.sovereign.calls.ConferenceRuntime.state is com.red.sovereign.calls.ConferenceUiState.Active
+            val isVideo = com.red.sovereign.calls.CallRuntime.localVideo != null || com.red.sovereign.calls.ConferenceRuntime.localVideo != null
+            if ((callActive || confActive) && isVideo && android.os.Build.VERSION.SDK_INT >= 26) {
+                val params = android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(9, 16)).build()
+                enterPictureInPictureMode(params)
+            }
+        } catch (_: Exception) {}
+    }
 }
