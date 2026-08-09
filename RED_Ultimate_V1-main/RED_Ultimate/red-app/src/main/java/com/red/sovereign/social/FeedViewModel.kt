@@ -126,3 +126,14 @@ sealed interface ThreadState {
 }
 
 sealed interface FeedState { data object Loading: FeedState; data object Ready: FeedState; data object Publishing: FeedState; data class Message(val text:String): FeedState; data class Error(val message:String): FeedState }
+
+    // Professional: Draft handling
+    fun saveDraft(text: String) { /* TODO: Save to EncryptedMediaCache as draft */ }
+    fun loadDraft(): String? = null // TODO: Load from cache
+    fun delete(post: Post) = viewModelScope.launch {
+        when (val result = api.delete(post.id)) {
+            is ApiResult.Success -> posts.remove(post)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+    fun refresh() = load(scope)

@@ -39,19 +39,23 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
     }
     
     var progress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(story.id, viewer) {
+    var isPaused by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(false) }
+    LaunchedEffect(story.id, viewer, isPaused) {
+        if (isPaused) return@LaunchedEffect
         if (viewer is StoryViewerState.Image || viewer is StoryViewerState.Unsupported || viewer is StoryViewerState.Error) {
             progress = 0f
             val duration = 5000L
             val interval = 50L
             val steps = duration / interval
             for (i in 1..steps) {
+                if (isPaused) break
                 delay(interval)
                 progress = i.toFloat() / steps
             }
-            onNext()
+            if (!isPaused) onNext()
         } else if (viewer is StoryViewerState.Video) {
-            progress = 0f // Let the video player control advancement if possible, but for now we pause progress bar.
+            progress = 0f
         }
     }
     
@@ -59,6 +63,11 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures(
+                onPress = {
+                    isPaused = true
+                    tryAwaitRelease()
+                    isPaused = false
+                },
                 onTap = { offset ->
                     if (offset.x < size.width * 0.3f) onPrev() else onNext()
                 }
