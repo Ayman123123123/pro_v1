@@ -883,7 +883,7 @@ private fun ChatHubScreen(
                     Icon(if (voiceMessages.state is VoiceMessageState.Recording) Icons.Default.Stop else Icons.Default.Mic, if (voiceMessages.state is VoiceMessageState.Recording) "إيقاف وإرسال" else "تسجيل رسالة صوتية")
                 }
                 Column(Modifier.weight(1f)) {
-                    // Mentions autocomplete
+                    // Mentions @ + Hashtags # autocomplete
                     val mentionQuery = Regex("@([A-Za-z0-9_.]{1,20})\$").find(messageText)?.groupValues?.get(1)
                     if (mentionQuery != null && directory.contacts.isNotEmpty()) {
                         val suggestions = directory.contacts.filter { it.username.contains(mentionQuery, ignoreCase = true) || it.displayName.contains(mentionQuery, ignoreCase = true) }.take(3)
@@ -902,7 +902,33 @@ private fun ChatHubScreen(
                             }
                         }
                     }
-                    OutlinedTextField(messageText, { messageText = it }, Modifier.fillMaxWidth(), placeholder = { Text("رسالة مشفرة… @ للذكر # للوسم") }, maxLines = 4)
+                    val hashtagQuery = Regex("#([\w\u0600-\u06FF]{1,20})\$").find(messageText)?.groupValues?.get(1)
+                    if (hashtagQuery != null) {
+                        val popular = listOf("مهم", "يمن", "تقنية", "عام", "خاص").filter { it.contains(hashtagQuery, ignoreCase = true) }.take(3)
+                        if (popular.isNotEmpty()) {
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                                Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    popular.forEach { tag ->
+                                        AssistChip(onClick = { messageText = messageText.replace(Regex("#[\w\u0600-\u06FF]{1,20}\$"), "#$tag ") }, label = { Text("#$tag", color = AqyalCyanGlow) })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة مشفرة… @ # ⏳") }, maxLines = 4)
+                        if (disappearingDurationMs != null) {
+                            val label = when (disappearingDurationMs) {
+                                3600000L -> "1س"
+                                86400000L -> "24س"
+                                604800000L -> "7ي"
+                                else -> "⏳"
+                            }
+                            AssistChip(onClick = { disappearingDurationMs = null }, label = { Text("⏳ $label", color = AqyalGold) }, colors = AssistChipDefaults.assistChipColors(containerColor = AqyalGold.copy(alpha = 0.2f)))
+                        } else {
+                            IconButton({ disappearingDurationMs = 86400000L }) { Icon(Icons.Default.History, "رسالة مؤقتة", tint = Color.Gray) }
+                        }
+                    }
                 }
                 FilledIconButton({
                     val rich = RichMessage(
