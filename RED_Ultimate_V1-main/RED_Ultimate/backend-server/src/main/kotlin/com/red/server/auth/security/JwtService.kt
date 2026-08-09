@@ -42,6 +42,31 @@ class JwtService(
             .compact()
     }
 
+    /** Issues a short-lived SFU ticket for a specific group/room */
+    fun issueSfuTicket(
+        user: UserAccount,
+        deviceId: UUID,
+        groupId: String,
+        groupRole: String,
+        canProduce: Boolean
+    ): String {
+        val now = Instant.now()
+        val builder = Jwts.builder()
+            .subject(user.id.toString())
+            .claim("redId", user.redId)
+            .claim("username", user.username)
+            .claim("role", user.role.name)
+            .claim("deviceId", deviceId.toString())
+            .claim("sfuGroupId", groupId)
+            .claim("sfuGroupRole", groupRole)
+            .claim("sfuCanProduce", canProduce)
+        return builder
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plusMinutes(10))) // Short-lived ticket: 10 minutes
+            .signWith(key)
+            .compact()
+    }
+
     fun parse(token: String): Claims = Jwts.parser()
         .verifyWith(key)
         .build()
