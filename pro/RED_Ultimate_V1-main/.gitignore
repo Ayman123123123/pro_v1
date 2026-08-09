@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Environment secrets (use .env.example as template)
+.env
+
+# Gradle / Android build outputs
+.gradle/
+build/
+*/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Logs & OS
+*.log
+Thumbs.db
+.DS_Store
+
+# Keystores / signing
+*.jks
+*.keystore
+
+# Docker volumes / local data and extracted local builds
+minio-data/
+postgres-data/
+mongo-data/
+local-artifacts/

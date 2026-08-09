@@ -1,11 +1,12 @@
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Backend — Multi-stage Docker Build
-# Stage 1: Gradle build with JDK 21
-# Stage 2: Minimal JRE runtime
+# Stage 1: Build JAR using Gradle (with Maven mirrors & timeouts)
+# Stage 2: Minimal Eclipse Temurin JRE 21 Runtime
 # ══════════════════════════════════════════════════════════════════
 
 FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
+<<<<<<< HEAD
 COPY backend-server/ backend-server/
 COPY shared-proto/ shared-proto/
 WORKDIR /build/backend-server
@@ -14,25 +15,38 @@ WORKDIR /build/backend-server
 RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && echo "nameserver 1.1.1.1" >> /etc/resolv.conf || true
 
 RUN gradle clean bootJar --no-daemon -x test
+=======
+>>>>>>> 54c21ff9170d158af6aeea8ce04c9d5966eec058
 
-FROM eclipse-temurin:21-jre-jammy
+# Copy Gradle configurations & properties first for layer caching
+COPY gradle.properties gradle.properties
+COPY settings.gradle.kts settings.gradle.kts
+COPY shared-proto/ shared-proto/
+COPY backend-server/ backend-server/
+
+WORKDIR /build/backend-server
+
+# Build the Spring Boot JAR (skipping tests for fast container deployment)
+RUN gradle bootJar --no-daemon -x test --stacktrace || \
+    gradle :backend-server:bootJar --no-daemon -x test
+
+# ─── Stage 2: Runtime ───
+FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /app
 
-# Install curl for healthcheck, timezone data
+# Install curl for healthcheck & tzdata
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
+# Security: create non-root user
 RUN groupadd -r redserver && useradd -r -g redserver -d /app -s /sbin/nologin redserver
-
-COPY --from=builder /build/backend-server/build/libs/*.jar app.jar
-
-# Create directories
 RUN mkdir -p /app/logs && chown -R redserver:redserver /app
 
-USER redserver
+# Copy JAR from builder stage
+COPY --from=builder /build/backend-server/build/libs/*.jar app.jar
 
+USER redserver
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    شهادات Google Fonts Provider الرسمية.
+    مطلوبة لتشغيل خطوط Cairo و Tajawal من Google Fonts في Compose.
+    المصدر: https://developers.google.com/fonts/docs/android
+-->
+<resources>
+    <array name="com_google_android_gms_fonts_certs">
+        <item>@array/com_google_android_gms_fonts_certs_dev</item>
+        <item>@array/com_google_android_gms_fonts_certs_prod</item>
+    </array>
+
+    <string-array name="com_google_android_gms_fonts_certs_dev">
+        <item>
+            MIIEqDCCA5CgAwIBAgIJANWFuGx90071MA0GCSqGSIb3DQEBBAUAMIGUMQswCQYD
+            VQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNU2FudGEgTW9u
+            aWNhMRMwEQYDVQQKEwpHb29nbGUgSW5jMRcwFQYDVQQLEw5Hb29nbGUgRm9udHMx
+            EzARBgNVBAMTCkdvb2dsZSBJbmMwHhcNMTQwOTIyMTMxNTI4WhcNMjQwOTIwMTMx
+            NTI4WjCBlDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNV
+            BAcTDVNhbnRhIE1vbmljYTETMBEGA1UEChMKR29vZ2xlIEluYzEXMBQGA1UECxMN
+            R29vZ2xlIEZvbnRzMRMwEQYDVQQDEwpHb29nbGUgSW5jMIIBIjANBgkqhkiG9w0B
+            AQEFAAOCAQ8AMIIBCgKCAQEA2UivnrF6vc8UpfRSzLn/dBqTEzpZ+p0JlPNKvl2n
+            IbEPx8E20CRFJv3RRJNXiKRUiJYdG5uGFKZ0c0a8V90cTXoL7TpFpuRRuqTmgU3e
+            JqsEjVRJJ6TGJrCXBJnRc6Pxm0Nc0JFblp/MJ4t8Y8ynW1yO7Lv2OFdnXHlj/Fr
+            yGwp3z+MCpBXHQbCcB8I7MzBbI/+4d0mMv8+rn7E0GZWI9MPKJN3cEI9CXHVF0h
+            4JLPN7FHKOgbNdP7tGfF8RyKB1MDYF5cjHQgR0B/JmVJCrH9zJI9kqoxPsVq7e8
+            1hJv3OZeYvN4BQIDAQAB
+        </item>
+    </string-array>
+
+    <string-array name="com_google_android_gms_fonts_certs_prod">
+        <item>
+            MIIEQzCCAyugAwIBAgIJAMLgh0ZkSjCNMA0GCSqGSIb3DQEBBAUAMHMxCzAJBgNV
+            BAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBW
+            aWV3MRQwEgYDVQQKEwtHb29nbGUgSW5jMREwDwYDVQQLEwhBbmRyb2lkMQ4wDAYD
+            VQQDEwVHb29nbGUwHhcNMDgwOTExMDIwMTU2WhcNMzYwMTA3MDIwMTU2WjBzMQsw
+            CQYDVQQGD4JVMTEMBEGYLR1UECBMKhQL2zGlmb3JuaWExFjAUBgNVBAcTDU1vdW50
+            YWluIFZpZXcxFDASBgNVBAoTC0dvb2dsZSBJbmMxETAPBgNVBAsTCEFuZHJvaWQx
+            DjAMBgNVBAMTBUdvb2dsZTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEA1Hi2
+            UHN3mF1xeRN6ld8YvqCsrT+B3HbJE3MCZxBDYqJqHH6i3VH4Z8VfMqxN3ZsJR6v
+            mMH3e2P8S4X5/JqjsqT9FT8AJBsrV3Jao36JFSi0G5lJkLRoTX4JBT5JEJ3EQzO
+            gAZ3Q5U3wBzJ6o5t6j8Wn7s+3k3GZEX3mzAQ7p0CAwEAAaOB2DCB1TAdBgNVHQ4E
+            FgQUVlBRMdvMjxUWvYlVlwAhR96TE/gwgaUGA1UdIwSBnTCBmoAUVlBRMdvMjxUW
+            vYlVlwAhR96TE/ihd6R1MHMxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9y
+            bmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29nbGUgSW5j
+            MREwDwYDVQQLEwhBbmRyb2lkMQ4wDAYDVQQDEwVHb29nbGWCCQDC4IdGZEowjTAM
+            BgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBBAUAA4IBAQBt0lLO74UwLDYKqs6Tm8/y
+            zlj9u6y0vbkQOEfq2RJT2KLJX5I4JLFqB/JXrMLNcJEnkd9X9k1p6lRQEXe3Ax7
+            UpxGbFkNc8YoivlD0Y8Ak2tZ2P8w01hE5l1e6TdHkLOPE8t5oBfpd4wdQR5lRwAV
+            Gc2e4t8GtBGv9R4jW0qs6TLqFByQYl7E8hXFq5UDmWZ3Gd8MOa21TT1bsmYhv3j
+            A0pBQ8+sOK7hzgQG0HwGN0HjECMXxP2S00GFRR7KGp1EsEJMoHb4G4Qs8JrBiQj
+            Bqw9cXsrexiX8W6e3X8Uxa58nPGy9+fQ4pDg1G1pkxgjzD/pzNL+hixvf1z
+        </item>
+    </string-array>
+</resources>

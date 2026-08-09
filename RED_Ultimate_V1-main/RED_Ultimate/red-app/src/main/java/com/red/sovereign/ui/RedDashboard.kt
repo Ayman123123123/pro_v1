@@ -197,6 +197,7 @@ import com.red.sovereign.features.devices.DevicesScreen
 import com.red.sovereign.features.explore.RedExploreScreen
 import com.red.sovereign.features.privacy.PrivacySettingsScreen
 import com.red.sovereign.features.chat.CreateGroupScreen
+import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
 import com.red.sovereign.features.profile.BackupScreen
 
@@ -208,7 +209,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.Menu)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -241,6 +242,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.CREATE_GROUP -> CreateGroupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         return
