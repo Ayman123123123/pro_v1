@@ -136,6 +136,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onDisconnected() { leave() }
     override fun onError(message: String) {
         ConferenceRuntime.state = ConferenceUiState.Error(message)
+        // Auto-dismiss after 3s like YounesCallService
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (ConferenceRuntime.state is ConferenceUiState.Error) {
+                ConferenceRuntime.state = ConferenceUiState.Idle
+            }
+        }
         leave()
     }
 

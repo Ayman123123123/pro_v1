@@ -124,6 +124,11 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onDisconnected() { stopStream() }
     override fun onError(message: String) {
         LiveStreamRuntime.state = LiveStreamUiState.Error(message)
+        // Auto-dismiss after 3s
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (LiveStreamRuntime.state is LiveStreamUiState.Error) LiveStreamRuntime.state = LiveStreamUiState.Idle
+        }
         stopStream()
     }
 
