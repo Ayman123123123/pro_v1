@@ -12,11 +12,17 @@ data class RichMessage(
     val editOf: String? = null,
     val deleteOf: String? = null,
     val forwardOf: String? = null,
-    val expiresAt: Long? = null
+    val expiresAt: Long? = null,
+    val mentions: List<String> = emptyList(), // RED IDs mentioned via @
+    val hashtags: List<String> = emptyList(), // # tags
+    val disappearingMs: Long? = null // 0=off, 3600000=1h, 86400000=24h, 604800000=7d
 ) {
     init {
         require(action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY"))
         require(text.length <= 65_536)
+        require(mentions.size <= 20) { "Too many mentions" }
+        require(hashtags.size <= 10) { "Too many hashtags" }
+        require(disappearingMs == null || disappearingMs in setOf(0L, 3600000L, 86400000L, 604800000L))
     }
 
     companion object {
