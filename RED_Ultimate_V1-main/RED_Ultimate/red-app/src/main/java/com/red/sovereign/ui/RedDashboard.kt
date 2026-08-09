@@ -882,7 +882,28 @@ private fun ChatHubScreen(
                 }, enabled = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending) {
                     Icon(if (voiceMessages.state is VoiceMessageState.Recording) Icons.Default.Stop else Icons.Default.Mic, if (voiceMessages.state is VoiceMessageState.Recording) "إيقاف وإرسال" else "تسجيل رسالة صوتية")
                 }
-                OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة مشفرة…") }, maxLines = 4)
+                Column(Modifier.weight(1f)) {
+                    // Mentions autocomplete
+                    val mentionQuery = Regex("@([A-Za-z0-9_.]{1,20})\$").find(messageText)?.groupValues?.get(1)
+                    if (mentionQuery != null && directory.contacts.isNotEmpty()) {
+                        val suggestions = directory.contacts.filter { it.username.contains(mentionQuery, ignoreCase = true) || it.displayName.contains(mentionQuery, ignoreCase = true) }.take(3)
+                        if (suggestions.isNotEmpty()) {
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                                Column {
+                                    suggestions.forEach { person ->
+                                        Row(Modifier.fillMaxWidth().clickable {
+                                            messageText = messageText.replace(Regex("@[A-Za-z0-9_.]{1,20}\$"), "@${person.redId} ")
+                                        }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("@${person.username}", color = YounesEmerald, fontWeight = FontWeight.Bold)
+                                            Text(" • ${person.displayName}", color = Color.Gray, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(messageText, { messageText = it }, Modifier.fillMaxWidth(), placeholder = { Text("رسالة مشفرة… @ للذكر # للوسم") }, maxLines = 4)
+                }
                 FilledIconButton({
                     val rich = RichMessage(
                         action = if (editingMessageId != null) "EDIT" else "MESSAGE",
