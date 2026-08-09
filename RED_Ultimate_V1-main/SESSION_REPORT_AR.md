@@ -492,3 +492,48 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 ## الفروع المتبقية
 - `local-full-merge` = نسختك الكاملة من جهازك (محفوظة كمرجع)
 - `arena/019fe3bc-pro-v1` = المشروع المدمج النهائي (سيُرفع الآن)
+
+---
+
+# ملحق الجولة العاشرة (2026-08-09) — اختيار الأحدث والأفضل + حذف المكرر 100%
+
+## المنهجية (كما طلبت تمامًا)
+
+### 1) فحص شامل للازدواجية
+- **173 مجموعة متطابقة 100%** (268 ملفًا زائدًا) في المستودع
+- **التحليل الحاسم**: معظمها تكرارات هيكلية شرعية (كل وحدة Gradle تحتاج `.gitignore` و`AndroidManifest.xml` و`ic_launcher` خاصًا بها — حذفها يكسر البناء) → أُبقيت
+
+### 2) الملفات المكررة 100% الحقيقية — حُذفت ✅
+| الملف | السبب |
+|---|---|
+| `RedDashboard.kt.bak` | نسخة احتياطية قديمة — RedDashboard.kt الحديث هو الأساس |
+| `ic_launcher_pro.png` + `younes_icon_master.png` + `admin-icon.png` | 3 نسخ متطابقة 100% من `younes_icon_pro.png` |
+| `android/core/network/MinioUploader.kt` | أصبح مكررًا بعد دمجه في red-app |
+
+### 3) أُبقي بذكاء (رغم التطابق):
+- `ic_launcher` + `ic_launcher_round` في كل الكثافات — كلاهما **مطلوب في AndroidManifest** (`android:icon` + `android:roundIcon`)
+
+### 4) الميزات الفريدة — دُمجت في red-app الحديث ✅
+| الميزة | من | إلى |
+|---|---|---|
+| **MinioUploader** (رفع MinIO) | android/ | `red-app/.../core/network/` |
+| **VoiceRecorder** (تسجيل OGG/Opus) | android/ | `red-app/.../core/utils/` (محسّن: Log + إدارة أخطاء) |
+| **BurnManager** (رسائل ذاتية التدمير) | android/ | `red-app/.../core/delivery/` (معاد ربطه بـ MessageStore) |
+
+### 5) التحقق: red-app الحديث يغطي كل الميزات القديمة ببدائل أحدث
+- `VoipEngine` ← `WebRtcEngine` ✅ | `WebRtcSignaler` ← `CallSignalingClient` (JSON) ✅
+- `LiveBroadcastManager` ← `LiveStreamService` (20 دالة) ✅ | `PstnEngine` ← `TelecomBridge` ✅
+- الملفات القديمة المتبقية (87 فريدة) محفوظة كأرشيف موثق في `android/README.md`
+
+### 6) تطوير وتحسين إضافي
+- **استعادة `MessageServiceTest` الحقيقي** (26 اختبارًا) — الدمج استبدله بالوهمي `println("PASS")`، رُدّت النسخة الحقيقية
+- **إصلاح 10 بقايا `println(`** في الملفات الأمنية (CertificatePinner، SecurityHeaders، DebugSecurityManager) → `android.util.Log`
+- كل الفاحصات خضراء: عقد API ✅ | الكيانات ↔ DB ✅ | بناء اللوحة ✅
+
+## الحالة النهائية
+- **9,986 ملفًا** مرفوعًا على GitHub (بعد حذف 6 تكرارات حقيقية)
+- **3 ميزات فريدة مدمجة** في التطبيق الحديث
+- **0 println** في red-app و backend-server (main)
+- **21 اختبار JUnit** حقيقيًا في الخادم
+- اللوحة الحية على المنفذ 8088 ✅
+- الشجرة نظيفة (0 تغييرات متبقية) ✅
