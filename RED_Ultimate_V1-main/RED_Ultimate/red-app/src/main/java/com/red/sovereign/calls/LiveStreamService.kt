@@ -40,6 +40,8 @@ object LiveStreamRuntime {
     var eglContext: org.webrtc.EglBase.Context? = null
     var isMuted by mutableStateOf(false)
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
+    /** عدد المشاهدين النشطين — محدّث عبر signaling (PARTICIPANT_JOINED/LEFT) */
+    var viewerCount: Int by mutableStateOf(0)
 }
 
 class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingClient.Listener {
@@ -85,7 +87,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         scope.launch {
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
-            engine?.create(isBroadcaster)
+            // Live streaming needs HD + simulcast for adaptive quality to viewers
+            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
             }
@@ -115,6 +118,12 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                         signal.payload["candidate"].orEmpty()
                     )
                 )
+            }
+            "VIEWER_JOINED" -> {
+                if (isBroadcaster) LiveStreamRuntime.viewerCount += 1
+            }
+            "VIEWER_LEFT" -> {
+                if (isBroadcaster) LiveStreamRuntime.viewerCount = (LiveStreamRuntime.viewerCount - 1).coerceAtLeast(0)
             }
         }
     }

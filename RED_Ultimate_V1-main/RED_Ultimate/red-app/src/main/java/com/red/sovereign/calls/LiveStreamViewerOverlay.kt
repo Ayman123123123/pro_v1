@@ -113,6 +113,9 @@ fun YounesLiveStreamOverlay() {
                     )
                     val stats = LiveStreamRuntime.networkStats
                     Text("جودة الشبكة: ${stats.quality.name} · ${stats.rttMs}ms", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                    if (isBroadcaster) {
+                        Text("المشاهدون: ${LiveStreamRuntime.viewerCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 

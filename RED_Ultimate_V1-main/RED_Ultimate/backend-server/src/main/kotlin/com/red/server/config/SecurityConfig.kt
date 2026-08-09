@@ -68,6 +68,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
                     .requestMatchers("/api/notifications/**").authenticated()
                     .requestMatchers("/api/calls/**", "/api/calls/ice-servers").authenticated()
+                    .requestMatchers("/api/recordings/**").authenticated()
                     .requestMatchers("/api/stories/**").authenticated()
                     .requestMatchers("/api/feed/**", "/api/posts/**", "/api/social/**").authenticated()
                     .requestMatchers("/api/groups/**").authenticated()
