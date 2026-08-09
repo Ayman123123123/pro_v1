@@ -13,6 +13,7 @@ import {
   ExperimentOutlined,
   FlagOutlined,
   NotificationOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
@@ -29,12 +30,14 @@ const AuditLog = lazy(() => import('./pages/AuditLog'));
 const Backups = lazy(() => import('./pages/Backups'));
 const Announcements = lazy(() => import('./pages/Announcements'));
 const FeatureFlags = lazy(() => import('./pages/FeatureFlags'));
+const ContentManagement = lazy(() => import('./pages/ContentManagement'));
 
 const { Header, Sider, Content } = Layout;
 
 type PageKey =
   | 'dashboard'
   | 'users'
+  | 'content'
   | 'reports'
   | 'audit'
   | 'announcements'
@@ -49,6 +52,7 @@ const menuItems: { key: PageKey; icon: JSX.Element; label: string; group: string
   // Operations
   { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية', group: 'main' },
   { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
+  { key: 'content', icon: <BarChartOutlined />, label: 'المحتوى', group: 'main' },
   { key: 'reports', icon: <AlertOutlined />, label: 'مراقبة المحتوى', group: 'main' },
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
   // System
@@ -107,6 +111,7 @@ export default function App() {
     switch (currentPage) {
       case 'dashboard': return <Dashboard />;
       case 'users': return <UserManagement />;
+      case 'content': return <ContentManagement />;
       case 'reports': return <Reports />;
       case 'audit': return <AuditLog />;
       case 'announcements': return <Announcements />;

@@ -545,3 +545,220 @@ export function subscribeToEvents(onEvent: (event: any) => void): EventSource {
   };
   return es;
 }
+
+// ━━━━━━━━━━━━━━━━ 📊 Content Management ━━━━━━━━━━━━━━━━
+export interface Poll {
+  id: string;
+  creatorId: string;
+  question: string;
+  description?: string;
+  pollType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'RANKED';
+  isAnonymous: boolean;
+  allowAddOptions: boolean;
+  status: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
+  startsAt: string;
+  endsAt?: string;
+  targetType: 'GLOBAL' | 'GROUP' | 'USER';
+  totalVotes: number;
+  uniqueVoters: number;
+  createdAt: string;
+}
+
+export interface Event {
+  id: string;
+  creatorId: string;
+  title: string;
+  description?: string;
+  locationName?: string;
+  locationAddress?: string;
+  startsAt: string;
+  endsAt?: string;
+  eventType: 'MEETING' | 'CONFERENCE' | 'WEBINAR' | 'SOCIAL' | 'CELEBRATION' | 'OTHER';
+  visibility: 'PUBLIC' | 'PRIVATE' | 'INVITATION_ONLY';
+  maxAttendees?: number;
+  currentAttendees: number;
+  status: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
+  rsvpEnabled: boolean;
+  createdAt: string;
+}
+
+export interface Hashtag {
+  id: string;
+  tagName: string;
+  description?: string;
+  category?: string;
+  usageCount: number;
+  postsCount: number;
+  storiesCount: number;
+  uniqueUsers: number;
+  trendingScore: number;
+  isTrending: boolean;
+  isBlocked: boolean;
+  blockedReason?: string;
+}
+
+export interface StickerPack {
+  id: string;
+  name: string;
+  description?: string;
+  isOfficial: boolean;
+  isFree: boolean;
+  priceCents: number;
+  currency: string;
+  isPublished: boolean;
+  stickerCount: number;
+  totalDownloads: number;
+  createdAt: string;
+}
+
+export async function getPolls(params: { page?: number; size?: number; status?: string } = {}) {
+  const searchParams = new URLSearchParams();
+  if (params.page !== undefined) searchParams.set('page', String(params.page));
+  if (params.size !== undefined) searchParams.set('size', String(params.size));
+  if (params.status) searchParams.set('status', params.status);
+  const res = await apiFetch(`/api/admin/content/polls?${searchParams}`);
+  return res.json();
+}
+
+export async function getActivePolls() {
+  const res = await apiFetch('/api/admin/content/polls/active');
+  return res.json();
+}
+
+export async function getPollDetail(pollId: string) {
+  const res = await apiFetch(`/api/admin/content/polls/${pollId}`);
+  return res.json();
+}
+
+export async function createPoll(data: {
+  question: string;
+  options: string[];
+  pollType?: string;
+  isAnonymous?: boolean;
+  allowAddOptions?: boolean;
+  endsAt?: string;
+}) {
+  const res = await apiFetch('/api/admin/content/polls', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function closePoll(pollId: string) {
+  const res = await apiFetch(`/api/admin/content/polls/${pollId}/close`, { method: 'POST' });
+  return res.json();
+}
+
+export async function deletePoll(pollId: string) {
+  const res = await apiFetch(`/api/admin/content/polls/${pollId}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function getEvents(params: { page?: number; size?: number; status?: string } = {}) {
+  const searchParams = new URLSearchParams();
+  if (params.page !== undefined) searchParams.set('page', String(params.page));
+  if (params.size !== undefined) searchParams.set('size', String(params.size));
+  if (params.status) searchParams.set('status', params.status);
+  const res = await apiFetch(`/api/admin/content/events?${searchParams}`);
+  return res.json();
+}
+
+export async function getUpcomingEvents() {
+  const res = await apiFetch('/api/admin/content/events/upcoming');
+  return res.json();
+}
+
+export async function getLiveEvents() {
+  const res = await apiFetch('/api/admin/content/events/live');
+  return res.json();
+}
+
+export async function createEvent(data: {
+  title: string;
+  description?: string;
+  locationName?: string;
+  startsAt: string;
+  endsAt?: string;
+  eventType?: string;
+  visibility?: string;
+  maxAttendees?: number;
+  rsvpEnabled?: boolean;
+}) {
+  const res = await apiFetch('/api/admin/content/events', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function cancelEvent(eventId: string, reason: string) {
+  const res = await apiFetch(`/api/admin/content/events/${eventId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+  return res.json();
+}
+
+export async function deleteEvent(eventId: string) {
+  const res = await apiFetch(`/api/admin/content/events/${eventId}`, { method: 'DELETE' });
+  return res.json();
+}
+
+export async function getTrendingHashtags(limit = 50) {
+  const res = await apiFetch(`/api/admin/content/hashtags/trending?limit=${limit}`);
+  return res.json();
+}
+
+export async function getPopularHashtags(limit = 50) {
+  const res = await apiFetch(`/api/admin/content/hashtags/popular?limit=${limit}`);
+  return res.json();
+}
+
+export async function searchHashtags(query: string, page = 0, size = 20) {
+  const res = await apiFetch(`/api/admin/content/hashtags/search?query=${encodeURIComponent(query)}&page=${page}&size=${size}`);
+  return res.json();
+}
+
+export async function blockHashtag(hashtagId: string, reason: string) {
+  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/block`, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+  return res.json();
+}
+
+export async function unblockHashtag(hashtagId: string) {
+  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/unblock`, { method: 'POST' });
+  return res.json();
+}
+
+export async function getStickerPacks(official = false) {
+  const res = await apiFetch(`/api/admin/content/sticker-packs?official=${official}`);
+  return res.json();
+}
+
+export async function createStickerPack(data: {
+  name: string;
+  description?: string;
+  coverMediaKey: string;
+  isOfficial?: boolean;
+  isFree?: boolean;
+  priceCents?: number;
+}) {
+  const res = await apiFetch('/api/admin/content/sticker-packs', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function publishStickerPack(packId: string) {
+  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}/publish`, { method: 'POST' });
+  return res.json();
+}
+
+export async function deleteStickerPack(packId: string) {
+  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' });
+  return res.json();
+}
