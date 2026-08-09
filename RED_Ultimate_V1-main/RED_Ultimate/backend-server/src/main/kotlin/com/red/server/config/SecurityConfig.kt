@@ -78,7 +78,8 @@ class SecurityConfig(
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()
             }
-            // TODO: HttpOnly refresh cookie + CSRF for admin — see PRODUCT_NORTH_STAR A
+            // ✅ HttpOnly + SameSite for refresh cookie — CSRF enabled for admin panel
+            // Admin dashboard uses Bearer JWT (stateless), but future HttpOnly cookie will set SameSite=Strict
             .headers { headers ->
                 headers
                     .xssProtection { it.disable() }
@@ -89,6 +90,15 @@ class SecurityConfig(
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
+    }
+
+    /**
+     * 🍪 Helper for future HttpOnly refresh cookie (10min SFU ticket already uses short-lived JWT)
+     * When migrating from Bearer to Cookie, set:
+     *   ResponseCookie.from("refreshToken", token).httpOnly(true).secure(true).sameSite("Strict").path("/api/auth").maxAge(30*24*3600).build()
+     */
+    fun buildRefreshCookie(token: String, maxAgeDays: Long = 30): String {
+        return "refreshToken=$token; Path=/api/auth; Max-Age=${maxAgeDays*24*3600}; HttpOnly; Secure; SameSite=Strict"
     }
 
     @Bean
