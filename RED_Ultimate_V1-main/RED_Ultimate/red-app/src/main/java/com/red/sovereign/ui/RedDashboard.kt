@@ -189,6 +189,7 @@ import com.red.sovereign.ui.theme.AqyalRoyalBlue
 import com.red.sovereign.ui.theme.AqyalSurfaceNavy
 import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.features.communities.CommunitiesScreen
 import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -210,7 +211,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.Menu)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,6 +251,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         // Still show call overlays even when not on dashboard — unified
@@ -294,7 +296,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
                     onContacts = { section = MainSection.CHATS },
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
-                    onBackup = { currentScreen = SovereignScreen.BACKUP }
+                    onBackup = { currentScreen = SovereignScreen.BACKUP },
+                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES }
                 )
             }
         }
@@ -1325,7 +1328,8 @@ private fun MoreScreen(
     onContacts: () -> Unit,
     onDevices: () -> Unit,
     onPrivacy: () -> Unit,
-    onBackup: () -> Unit
+    onBackup: () -> Unit,
+    onCommunities: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -1348,7 +1352,7 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Devices, "الأجهزة المتصلة", "إدارة جلسات يونس على كافة أجهزتك", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onDevices)
         MoreOption(Icons.Default.Settings, "الإعدادات العامة", "الهوية والأجهزة والخادم والجلسة", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
         MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
-        MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "قيد التطوير — لن يُعرض كمكتمل قبل اختباره", Color(0xFFA78BFA), enabled = false) { }
+        MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
     }
 }
 
