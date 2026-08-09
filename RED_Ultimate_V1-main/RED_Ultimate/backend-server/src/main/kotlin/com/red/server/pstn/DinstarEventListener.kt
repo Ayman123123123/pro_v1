@@ -32,14 +32,14 @@ class DinstarEventListener(
         val state = event.channelStateDesc ?: return
         val channel = event.channel ?: return
         val lineNumber = channel.substringAfter('/').substringBefore('@')
-        val actionId = event.actionId
 
-        log.info("DINSTAR line {} state → {} (channel={}, actionId={})", lineNumber, state, channel, actionId)
+        log.info("DINSTAR line {} state → {} (channel={})", lineNumber, state, channel)
 
         when (state) {
             "Up" -> {
                 // Call answered — update history
-                actionId?.let { runCatching { history.answer(it) } }
+                // Note: NewStateEvent doesn't have actionId for correlation
+                log.info("Line {} answered", lineNumber)
             }
             "Ringing" -> {
                 log.debug("Line {} ringing", lineNumber)
@@ -51,14 +51,11 @@ class DinstarEventListener(
         val channel = event.channel ?: return
         val lineNumber = channel.substringAfter('/').substringBefore('@')
         val cause = event.causeTxt ?: "UNKNOWN"
-        val actionId = event.actionId
 
-        log.info("DINSTAR line {} hung up — cause: {} (actionId={})", lineNumber, cause, actionId)
+        log.info("DINSTAR line {} hung up — cause: {}", lineNumber, cause)
 
-        actionId?.let {
-            val failed = cause in setOf("BUSY", "NO ANSWER", "CONGESTION", "CHANUNAVAIL", "NETWORK_OUT_OF_ORDER")
-            runCatching { history.end(it, failed) }
-        }
+        // Note: HangupEvent doesn't have actionId for correlation with originate action
+        log.debug("Hangup for line {} with cause {}", lineNumber, cause)
     }
 
     private fun handleBridge(event: BridgeEvent) {

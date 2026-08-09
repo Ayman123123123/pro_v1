@@ -1,0 +1,17 @@
+﻿# Build outputs
+**/build/
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/caches/
+.idea/libraries/
+.DS_Store
+
+# Large generated/debug artifacts if present
+*.apk
+*.aab
+
+pro/RED_Ultimate_V1-main/app/src/screenshotTest*/
