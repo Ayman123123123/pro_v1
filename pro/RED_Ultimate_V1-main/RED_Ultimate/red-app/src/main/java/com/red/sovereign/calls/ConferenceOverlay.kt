@@ -81,6 +81,10 @@ fun YounesConferenceOverlay() {
                         color = Color.LightGray,
                         fontSize = 14.sp
                     )
+                    if (state is ConferenceUiState.Active) {
+                        val stats = ConferenceRuntime.networkStats
+                        Text("جودة الشبكة: ${stats.quality.name} (${stats.rttMs}ms)", color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                    }
                 }
 
                 // Grid of Videos
@@ -232,6 +236,24 @@ fun YounesConferenceOverlay() {
                 }
             }
         }
+    }
+}
+
+/**
+ * يعرض مؤشر جودة الشبكة بألوان: أخضر (ممتاز) → أحمر (ضعيف)
+ */
+@Composable
+private fun QualityIndicator(stats: NetworkStats) {
+    val color = when (stats.quality) {
+        NetworkStats.Quality.EXCELLENT -> Color(0xFF2DDBA4)
+        NetworkStats.Quality.GOOD -> Color(0xFF8BC34A)
+        NetworkStats.Quality.FAIR -> Color(0xFFFFC107)
+        NetworkStats.Quality.POOR -> Color(0xFFE53935)
+        NetworkStats.Quality.UNKNOWN -> Color.Gray
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Text(stats.quality.name, color = Color.White, fontSize = 11.sp)
     }
 }
 

@@ -1,7 +1,9 @@
 package com.red.sovereign.calls
 
+import android.content.Context
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -42,6 +44,7 @@ data class ConferenceParticipant(
 )
 
 class ConferenceSignalingClient(
+    private val context: Context,
     private val tokens: TokenStore,
     private val listener: Listener
 ) {
@@ -56,10 +59,7 @@ class ConferenceSignalingClient(
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http = OkHttpClient.Builder()
-        .pingInterval(20, TimeUnit.SECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val http: OkHttpClient = SecureOkHttpClient.build(context)
     private var socket: WebSocket? = null
 
     fun connect(roomId: String) {

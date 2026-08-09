@@ -55,10 +55,10 @@ function App() {
     };
 
     return (
-      <ConfigProvider direction="rtl" theme={{ algorithm: theme.darkAlgorithm, token: { fontFamily: 'Cairo, Tajawal, Segoe UI, Tahoma, Arial, sans-serif', colorPrimary: '#00C896', colorInfo: '#35CBE0', colorSuccess: '#00C896', colorWarning: '#E8B84A', colorError: '#F43F5E', colorBgBase: '#050A16', colorBgContainer: '#0D1829', colorBorder: '#1D3850', borderRadius: 14 }, components: { Card: { colorBgContainer: '#101E2E' }, Menu: { darkItemBg: '#08111F', darkItemSelectedBg: '#0B3F38', darkItemHoverBg: '#10283A' }, Layout: { siderBg: '#08111F', headerBg: '#081525' } } }}>
-        <Layout className="admin-shell">
-            <Sider className="admin-sider" theme="dark" collapsible breakpoint="lg" collapsedWidth="0">
-                <div className="admin-brand">
+      <ConfigProvider direction="rtl" theme={{ algorithm: theme.darkAlgorithm, token: { colorPrimary: '#00C896', colorInfo: '#35CBE0', colorWarning: '#E8B84A', colorBgBase: '#050A16', borderRadius: 14 } }}>
+        <Layout style={{ minHeight: '100vh', background: '#050A16' }}>
+            <Sider theme="dark" collapsible>
+                <div style={{ height: 32, margin: 16, color: '#fff', fontSize: 18, textAlign: 'center', lineHeight: '32px' }}>
                     ◆ يونس — الإدارة
                 </div>
                 <Menu
@@ -70,11 +70,11 @@ function App() {
                 />
             </Sider>
             <Layout>
-                <Header className="admin-header" style={{ color: '#F1F7FA', borderBottom: '1px solid #17344A', padding: '0 24px', fontSize: 16, fontWeight: 'bold' }}>
+                <Header style={{ background: '#081525', color: '#F1F7FA', borderBottom: '1px solid #17344A', padding: '0 20px', fontSize: 16, fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{color:'#E8B84A'}}>يونس السيادي — لوحة الإدارة</span>
                     <Button danger onClick={logout}>تسجيل الخروج</Button>
                 </Header>
-                <Content className="admin-content admin-page-surface" style={{ margin: 16, padding: 24, background: '#07111F', border: '1px solid #132B40', borderRadius: 18 }}>
+                <Content style={{ margin: 16, padding: 24, background: '#07111F', border: '1px solid #132B40', borderRadius: 18 }}>
                     <Suspense fallback={<div style={{display:'grid',placeItems:'center',minHeight:320}}><Spin size="large" /></div>}>
                         {renderPage()}
                     </Suspense>

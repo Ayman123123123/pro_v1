@@ -16,13 +16,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.features.dinstar.DinstarViewModel
+import com.red.features.dinstar.YemenOperator
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * RED Sovereign PSTN & VoIP Dialer Screen
  * Features Dual Engine: VoIP App (Blue) vs Dinstar Yemeni Line (Gold).
+ * متكامل مع DinstarViewModel لعرض حالة البوابة الحقيقية
  */
 @Composable
-fun PstnDialerScreen() {
+fun PstnDialerScreen(
+    dinstarViewModel: DinstarViewModel? = null,
+    onCallViaDinstar: ((port: Int, number: String) -> Unit)? = null
+) {
     var phoneNumber by remember { mutableStateOf("") }
     var isVoipMode by remember { mutableStateOf(true) } // true = VoIP App (Blue), false = Dinstar Yemeni Line (Gold)
 
@@ -30,6 +37,13 @@ fun PstnDialerScreen() {
         targetValue = if (isVoipMode) Color(0xFF1E88E5) else Color(0xFFF4B400),
         label = "ModeColor"
     )
+
+    // حالة Dinstar الحية
+    val gatewayStatus = dinstarViewModel?.gatewayStatus?.collectAsStateWithLifecycle()?.value
+    val isDinstarOnline = gatewayStatus?.isOnline == true
+    val bestPort = dinstarViewModel?.selectOptimalPort(phoneNumber.ifBlank { null })
+    val operator = YemenOperator.fromNumber(phoneNumber)
+    val operatorColor = Color(operator.colorHex)
 
     Column(
         modifier = Modifier
@@ -57,9 +71,19 @@ fun PstnDialerScreen() {
                     Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("خطي اليمني (DINSTAR Gateway)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFF4B400))
-                        Text("شبكة سبأفون • متصل • الإشارة: 85%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+                        if (isDinstarOnline && bestPort != null) {
+                            Text("${bestPort.operatorName} • منفذ ${bestPort.index} • الإشارة: ${bestPort.signalPercent}%", fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+                        } else if (isDinstarOnline) {
+                            Text("متصل • ${gatewayStatus?.registeredCount ?: 0} شرائح مسجلة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+                        } else {
+                            Text("غير متصل — اكتشاف البوابة أولاً", fontSize = 11.sp, color = Color.Red.copy(alpha = 0.7f))
+                        }
                     }
-                    Badge(containerColor = Color(0xFF4CAF50)) { Text("جاهز", color = Color.White, fontSize = 10.sp) }
+                    if (isDinstarOnline) {
+                        Badge(containerColor = Color(0xFF4CAF50)) { Text("جاهز", color = Color.White, fontSize = 10.sp) }
+                    } else {
+                        Badge(containerColor = Color.Red) { Text("غير متصل", color = Color.White, fontSize = 10.sp) }
+                    }
                 }
             }
         }
@@ -143,7 +167,13 @@ fun PstnDialerScreen() {
             FloatingActionButton(
                 onClick = {
                     if (phoneNumber.isNotEmpty()) {
-                        // Trigger call via VoIP or Dinstar
+                        if (isVoipMode) {
+                            // VoIP call via WebRTC
+                        } else {
+                            // Dinstar PSTN call via optimal port
+                            val port = bestPort?.index ?: 0
+                            onCallViaDinstar?.invoke(port, phoneNumber)
+                        }
                     }
                 },
                 containerColor = activeColor,

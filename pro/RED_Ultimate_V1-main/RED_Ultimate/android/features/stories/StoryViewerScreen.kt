@@ -103,7 +103,7 @@ fun StoryViewerScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 32.dp, start = 16.dp, end = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("RED Contact", color = Color.White, modifier = Modifier.weight(1f))
+            Text("يونس", color = Color.White, modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, null, tint = Color.White) }
         }
 

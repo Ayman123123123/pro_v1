@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS dinstar_config (
     last_sync TIMESTAMP
 );
 
--- تفاصيل الـ 8 منافذ (8T)
+-- تفاصيل الـ 8 منافذ (8G GSM)
 CREATE TABLE IF NOT EXISTS dinstar_ports (
     port_index INT PRIMARY KEY, -- 0 to 7
     sim_number VARCHAR(20),
