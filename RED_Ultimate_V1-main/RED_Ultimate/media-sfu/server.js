@@ -39,7 +39,9 @@ function authenticate(header) {
   const supplied = base64UrlDecode(parts[2]);
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw new Error('Unauthorized');
   const claims = JSON.parse(base64UrlDecode(parts[1]).toString('utf8'));
-  if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Expired or invalid token');
+  if (!claims.sub || !claims.redId || !claims.deviceId || claims.scope !== 'sfu' || !claims.roomId || !claims.exp || claims.exp * 1000 <= Date.now()) {
+    throw new Error('Expired or invalid SFU capability');
+  }
   return claims;
 }
 
@@ -133,6 +135,7 @@ wss.on('connection', (ws, _req, claims) => {
         if (context.room) throw new Error('Already joined');
         const roomId = String(message.roomId || '');
         if (!/^[A-Za-z0-9_-]{8,128}$/.test(roomId)) throw new Error('Invalid roomId');
+        if (roomId !== claims.roomId) throw new Error('SFU capability is not valid for this room');
         const room = await roomFor(roomId);
         const peerId = claims.redId;
         const existing = room.peers.get(peerId);
@@ -158,6 +161,7 @@ wss.on('connection', (ws, _req, claims) => {
         return send(ws, requestId, { status: 'transportConnected', transportId: transport.id });
       }
       if (type === 'produce') {
+        if (claims.canProduce !== true) throw new Error('This SFU capability is receive-only');
         const transport = peer.transports.get(message.transportId);
         if (!transport) throw new Error('Transport not found');
         const producer = await transport.produce({ kind: message.kind, rtpParameters: message.rtpParameters, appData: { peerId: context.peerId } });

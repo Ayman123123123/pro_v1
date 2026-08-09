@@ -15,7 +15,10 @@ import androidx.lifecycle.viewModelScope
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.core.database.LocalRepository
+import com.red.sovereign.core.database.StoryEntity
 import com.red.sovereign.media.MediaApi
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -23,17 +26,44 @@ import kotlinx.serialization.json.Json
 class StoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
     private val media = MediaApi(application, client)
+    private val repository = LocalRepository(application)
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     val stories = mutableStateListOf<Story>()
     var state: StoryState by mutableStateOf(StoryState.Idle); private set
     var viewer: StoryViewerState by mutableStateOf(StoryViewerState.Closed); private set
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch {
+            repository.getActiveStories().collectLatest { entities ->
+                stories.clear()
+                stories.addAll(entities.map { entity ->
+                    Story(
+                        id = entity.id,
+                        ownerRedId = entity.userId,
+                        ownerUsername = "user",
+                        ownerDisplayName = "Owner",
+                        mediaUrl = entity.mediaUrl,
+                        mediaType = entity.mediaType,
+                        caption = entity.caption,
+                        createdAt = entity.timestamp.toString(),
+                        expiresAt = entity.expiresAt.toString()
+                    )
+                })
+            }
+        }
+    }
+
     fun load() = viewModelScope.launch {
         state = StoryState.Loading
         when (val result = client.request("GET", "/api/stories")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<List<Story>>(result.value) }
-                .onSuccess { stories.clear(); stories.addAll(it); state = StoryState.Idle }
+                .onSuccess { list ->
+                    state = StoryState.Idle
+                    repository.saveStories(list.map { 
+                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, it.timestamp, it.timestamp + 86400000)
+                    })
+                }
                 .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
             is ApiResult.Error -> state = StoryState.Error(result.message)
         }

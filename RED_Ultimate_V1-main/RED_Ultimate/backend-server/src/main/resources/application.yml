@@ -9,6 +9,12 @@ spring:
       host: cache-redis
       port: 6379
       password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
 
   servlet:
     multipart:
@@ -20,11 +26,18 @@ spring:
     username: ${DB_USER:red_user}
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
 
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    validate-on-migrate: true
 
   jpa:
     hibernate:
@@ -32,44 +45,67 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
 
-# RED Sovereign Configuration
+  actuator:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,metrics
+    endpoint:
+      health:
+        show-details: when-authorized
+
+# ══════════════════════════════════════════
+# 🏛️ YOUNES Sovereign Configuration
+# ══════════════════════════════════════════
 red:
   dinstar:
     ip: ${DINSTAR_IP:192.168.11.1}
-    port: ${DINSTAR_PORT:80}
-    scheme: ${DINSTAR_SCHEME:http}
-    username: ${DINSTAR_USERNAME:}
-    password: ${DINSTAR_PASSWORD:}
-
-  minio:
-    endpoint: http://minio:9000
-    access-key: ${MINIO_USER:redadmin}
-    secret-key: ${MINIO_PASSWORD:}
-    bucket: red-media
-
+    port: ${DINSTAR_PORT:443}
+    scheme: ${DINSTAR_SCHEME:https}
+    username: ${DINSTAR_USERNAME:admin}
+    password: ${DINSTAR_PASSWORD:admin}
+    model: ${DINSTAR_MODEL:UC2000-VE-8G}
+    collect-sim-identifiers: ${DINSTAR_COLLECT_SIM_IDENTIFIERS:false}
+    connect-timeout: 10s
+    read-timeout: 30s
+    max-retries: 3
   security:
-    jwt-secret: ${JWT_SECRET:}
-    jwt-expiration-ms: ${JWT_EXPIRATION_MS:3600000}
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-expiration-minutes: 15
     refresh-expiration-days: ${REFRESH_EXPIRATION_DAYS:30}
-
-  turn:
-    host: ${TURN_PUBLIC_HOST:127.0.0.1}
-    port: ${TURN_PORT:3478}
-    secret: ${TURN_SECRET:}
-
-  identity-authority:
-    private-key-path: ${RED_IDENTITY_PRIVATE_KEY_PATH:}
-    public-key-path: ${RED_IDENTITY_PUBLIC_KEY_PATH:}
-    certificate-valid-days: ${RED_DEVICE_CERTIFICATE_VALID_DAYS:90}
-
-  bootstrap-admin:
-    username: ${RED_ADMIN_USERNAME:}
+  admin:
+    username: ${RED_ADMIN_USERNAME:red_admin}
     password: ${RED_ADMIN_PASSWORD:}
+  storage:
+    endpoint: http://minio:9000
+    access-key: redadmin
+    secret-key: ${MINIO_PASSWORD:}
+    bucket-media: red-media
+    bucket-avatars: red-avatars
+    bucket-stories: red-stories
+  turn:
+    secret: ${TURN_SECRET:}
+    public-host: ${TURN_PUBLIC_HOST:127.0.0.1}
+    port: 3478
+  pstn:
+    daily-limit-default: 100
+    signal-threshold: 20
+  rate-limit:
+    enabled: true
+    default-requests-per-minute: 60
 
-# Logging
 logging:
   level:
-    com.red: DEBUG
-    org.springframework.web: INFO
+    root: INFO
+    com.red.server: INFO
+    org.springframework.security: WARN
+    org.flyway: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -104,6 +104,15 @@ class MessageService(
         MessageDocument::class.java
     )
 
+    /** Applies the same identity and block policy to transient typing events as to real messages. */
+    fun requireTypingAllowed(senderRedId: String, receiverRedId: String, conversationId: String) {
+        require(senderRedId.matches(RED_ID) && receiverRedId.matches(RED_ID) && senderRedId != receiverRedId) {
+            "Invalid typing identities"
+        }
+        require(conversationId.length in 8..128) { "Invalid typing conversation ID" }
+        enforceNotBlocked(senderRedId, receiverRedId)
+    }
+
     private fun enforceNotBlocked(senderRedId: String, receiverRedId: String) {
         val sender = users.findByRedId(senderRedId) ?: throw NoSuchElementException("Sender identity not found")
         val receiver = users.findByRedId(receiverRedId) ?: throw NoSuchElementException("Receiver identity not found")

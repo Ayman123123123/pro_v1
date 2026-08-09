@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Layout, Menu, theme, Tag, Space, Badge } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Layout, Menu, theme, Tag, Space, Badge, Button, Avatar, Dropdown, Spin, Alert } from 'antd';
 import {
   DashboardOutlined,
   SafetyCertificateOutlined,
@@ -8,7 +8,12 @@ import {
   VideoCameraOutlined,
   SecurityScanOutlined,
   CloudServerOutlined,
-  AlertOutlined
+  AlertOutlined,
+  LogoutOutlined,
+  UserOutlined,
+  BellOutlined,
+  ReloadOutlined,
+  DatabaseOutlined
 } from '@ant-design/icons';
 import OverviewTab from './tabs/OverviewTab';
 import AuthorityTab from './tabs/AuthorityTab';
@@ -18,49 +23,113 @@ import SecurityTab from './tabs/SecurityTab';
 import MediaTab from './tabs/MediaTab';
 import InfrastructureTab from './tabs/InfrastructureTab';
 import ModerationTab from './tabs/ModerationTab';
+import NotificationsTab from './tabs/NotificationsTab';
+import BackupTab from './tabs/BackupTab';
+import { authStore, getUnreadCount, apiFetch } from '../api';
 
 const { Header, Content, Sider } = Layout;
 
 const MasterLayout: React.FC = () => {
   const [currentTab, setCurrentTab] = useState('1');
+  const [collapsed, setCollapsed] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [healthStatus, setHealthStatus] = useState<'UP'|'DOWN'|'LOADING'>('LOADING');
+  const [backendVersion, setBackendVersion] = useState('');
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
 
-  const menuItems = [
-    { key: '1', icon: <DashboardOutlined />, label: 'System Overview' },
-    { key: '2', icon: <SafetyCertificateOutlined />, label: 'User Authority' },
-    { key: '3', icon: <MessageOutlined />, label: 'Messaging Center' },
-    { key: '4', icon: <PhoneOutlined />, label: 'Dinstar PSTN' },
-    { key: '5', icon: <VideoCameraOutlined />, label: 'Media SFU' },
-    { key: '6', icon: <SecurityScanOutlined />, label: 'Sovereign Security' },
-    { key: '7', icon: <CloudServerOutlined />, label: 'Infrastructure' },
-    { key: '8', icon: <AlertOutlined />, label: 'Trust & Safety' },
+  // ─── تحميل حالة الخدمة + إشعارات ───
+  useEffect(() => {
+    const loadStatus = async () => {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        setHealthStatus(data.status === 'UP' ? 'UP' : 'DOWN');
+        setBackendVersion(data.version || '');
+      } catch {
+        setHealthStatus('DOWN');
+      }
+      try {
+        const data = await getUnreadCount();
+        setUnreadNotifCount(data.count || 0);
+      } catch {}
+    };
+    loadStatus();
+    const timer = setInterval(loadStatus, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleLogout = () => {
+    authStore.clear();
+    window.location.reload();
+  };
+
+  const userMenuItems = [
+    { key: 'logout', icon: <LogoutOutlined />, label: 'تسجيل الخروج', danger: true as const }
   ];
+
+  const menuItems = [
+    { key: '1', icon: <DashboardOutlined />, label: 'نظرة عامة' },
+    { key: '2', icon: <SafetyCertificateOutlined />, label: 'سلطة المستخدمين' },
+    { key: '3', icon: <MessageOutlined />, label: 'مركز الرسائل' },
+    { key: '4', icon: <PhoneOutlined />, label: 'DINSTAR PSTN' },
+    { key: '5', icon: <VideoCameraOutlined />, label: 'وسائط SFU' },
+    { key: '6', icon: <SecurityScanOutlined />, label: 'الأمان السيادي' },
+    { key: '7', icon: <CloudServerOutlined />, label: 'البنية التحتية' },
+    { key: '8', icon: <AlertOutlined />, label: 'الثقة والسلامة' },
+    { key: '9', icon: <BellOutlined />, label: unreadNotifCount > 0 ? `الإشعارات (${unreadNotifCount})` : 'الإشعارات' },
+    { key: '10', icon: <DatabaseOutlined />, label: 'النسخ الاحتياطي' },
+  ];
+
+  const tabContent: Record<string, React.ReactNode> = {
+    '1': <OverviewTab />,
+    '2': <AuthorityTab />,
+    '3': <MessagingTab />,
+    '4': <DinstarTab />,
+    '5': <MediaTab />,
+    '6': <SecurityTab />,
+    '7': <InfrastructureTab />,
+    '8': <ModerationTab />,
+    '9': <NotificationsTab />,
+    '10': <BackupTab />,
+  };
+
+  const statusColor = healthStatus === 'UP' ? '#52c41a' : healthStatus === 'DOWN' ? '#f5222d' : '#faad14';
+  const statusText = healthStatus === 'UP' ? 'متصل' : healthStatus === 'DOWN' ? 'غير متصل' : 'جاري التحميل';
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#000' }}>
-      <Sider breakpoint="lg" collapsedWidth="0" theme="dark">
+      <Sider breakpoint="lg" collapsedWidth="0" collapsed={collapsed} onCollapse={setCollapsed} theme="dark"
+        style={{ borderRight: '1px solid #1a1a1a' }}>
         <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
-          <b style={{ color: '#00C896', fontSize: 18 }}>◆ YOUNES MASTER</b>
+          <b style={{ color: '#00C896', fontSize: collapsed ? 14 : 18, whiteSpace: 'nowrap' }}>
+            {collapsed ? '◆' : '◆ YOUNES MASTER'}
+          </b>
         </div>
-        <Menu theme="dark" mode="inline" defaultSelectedKeys={['1']} items={menuItems} onClick={({key}) => setCurrentTab(key)} />
+        {backendVersion && (
+          <div style={{ textAlign: 'center', color: '#666', fontSize: 10, padding: '0 8px 8px' }}>
+            {backendVersion}
+          </div>
+        )}
+        <Menu theme="dark" mode="inline" selectedKeys={[currentTab]} items={menuItems}
+          onClick={({key}) => setCurrentTab(key)} />
       </Sider>
       <Layout>
-        <Header style={{ background: '#0a0a0a', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Header style={{ background: '#0a0a0a', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1a1a1a' }}>
           <Space>
-             <Tag color="blue">LOCAL MODE</Tag>
-             <Tag color="gold">YOUNES ID AUTHORITY</Tag>
+            <Badge status={healthStatus === 'UP' ? 'success' : healthStatus === 'DOWN' ? 'error' : 'warning'} text={<span style={{ color: '#ccc', fontSize: 12 }}>{statusText}</span>} />
+            <Tag color="blue">LOCAL MODE</Tag>
+            <Tag color="gold">YOUNES ID AUTHORITY</Tag>
           </Space>
-          <Badge dot={false}><AlertOutlined style={{ color: '#fff', fontSize: 20 }} /></Badge>
+          <Dropdown menu={{ items: userMenuItems, onClick: ({key}) => { if (key === 'logout') handleLogout(); } }}
+            placement="bottomRight" trigger={['click']}>
+            <Space style={{ cursor: 'pointer' }}>
+              <Avatar icon={<UserOutlined />} style={{ background: '#00C896' }} />
+              <span style={{ color: '#ccc' }}>المسؤول</span>
+            </Space>
+          </Dropdown>
         </Header>
         <Content style={{ margin: '24px 16px', padding: 24, background: '#141414', borderRadius: borderRadiusLG, overflow: 'initial' }}>
-          {currentTab === '1' && <OverviewTab />}
-          {currentTab === '2' && <AuthorityTab />}
-          {currentTab === '3' && <MessagingTab />}
-          {currentTab === '4' && <DinstarTab />}
-          {currentTab === '5' && <MediaTab />}
-          {currentTab === '6' && <SecurityTab />}
-          {currentTab === '7' && <InfrastructureTab />}
-          {currentTab === '8' && <ModerationTab />}
+          {tabContent[currentTab] || <OverviewTab />}
         </Content>
       </Layout>
     </Layout>

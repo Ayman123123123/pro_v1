@@ -6,9 +6,12 @@ services:
     build:
       context: .
       dockerfile: backend-server/Dockerfile
+      # DNS صريح لتفادي فشل تنزيل Maven داخل WSL2/Docker Desktop
+      network: host
     container_name: red-backend
     restart: unless-stopped
     environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -24,8 +27,9 @@ services:
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
-      - DINSTAR_PORT=${DINSTAR_PORT:-80}
-      - DINSTAR_SCHEME=${DINSTAR_SCHEME:-http}
+      - DINSTAR_PORT=${DINSTAR_PORT:-443}
+      - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
+      - DINSTAR_MODEL=${DINSTAR_MODEL:-UC2000-VE-8G}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -44,6 +48,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
+      start_period: 60s
     networks: ["red-net"]
 
   # 2. VoIP/Conference SFU (System A)
@@ -55,6 +60,12 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks: ["red-net"]
 
   # 3. Relay: COTURN
@@ -91,17 +102,34 @@ services:
       - "10000-10100:10000-10100/udp"
     expose:
       - "5038"
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks: ["red-net"]
 
-  # 5. Database: PostgreSQL 16
+  # 5. Database: PostgreSQL 16 (محصّن: buffers + work_mem + slow-query log)
   db-postgres:
     image: postgres:16
     container_name: red-db-sql
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "log_min_duration_statement=500"
+      - "-c"
+      - "max_connections=100"
     environment:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -109,11 +137,12 @@ services:
       interval: 10s
     networks: ["red-net"]
 
-  # 6. Database: MongoDB 8
+  # 6. Database: MongoDB 8 (حدّ ذاكرة WiredTiger للبيئات الصغيرة)
   db-mongo:
     image: mongo:8
     container_name: red-db-nosql
     restart: unless-stopped
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
     environment:
       - MONGO_INITDB_ROOT_USERNAME=red_user
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
@@ -123,10 +152,10 @@ services:
       interval: 10s
     networks: ["red-net"]
 
-  # 7. Cache: Redis 7
+  # 7. Cache: Redis 7 (ذاكرة محدودة LRU + persist)
   cache-redis:
     image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     container_name: red-cache
     restart: unless-stopped
     environment:
@@ -160,9 +189,13 @@ services:
   nginx:
     image: nginx:alpine
     container_name: red-proxy
-    ports: ["${RED_HTTP_PORT:-8088}:80"]
+    ports: ["${RED_HTTP_PORT:-8088}:80", "${RED_HTTPS_PORT:-8443}:443"]
     volumes: ["./nginx.conf:/etc/nginx/nginx.conf"]
     depends_on: [backend, admin-panel]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      interval: 30s
+      start_period: 30s
     networks: ["red-net"]
 
   admin-panel:

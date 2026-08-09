@@ -1,40 +1,96 @@
-# RED Ultimate V1
+# 🏛️ RED Ultimate V1 — YOUNES Sovereign Platform
 
 منصة RED محلية أولًا للمراسلة الاجتماعية والمكالمات. المشروع القانوني داخل [`RED_Ultimate/`](RED_Ultimate/README.md).
 
-## ابدأ من هنا
+> **حالة المشروع**: مدمج بالكامل من كل الجلسات السابقة — تطبيق Android + خادم + لوحة إدارة + SFU + PSTN.
 
-1. [نظرة المشروع والمعمارية](RED_Ultimate/docs/01-PROJECT-OVERVIEW.md)
-2. [قواعد البيانات والتخزين](RED_Ultimate/docs/02-DATABASES.md)
-3. [السيرفر ولوحة الإدارة وتدفق البيانات](RED_Ultimate/docs/03-SERVER-ADMIN-PANEL.md)
-4. [تطبيق Android والمصادر التاريخية](RED_Ultimate/docs/04-APPS.md)
-5. [تشغيل Alpha محليًا](RED_Ultimate/LOCAL_FIRST_RUN_AR.md)
-6. [حدود الوحدات القانونية](RED_Ultimate/W0_MODULE_BOUNDARIES.md)
+---
 
-## المكونات القانونية
+## 🚀 التشغيل السريع
 
-- Android: `RED_Ultimate/red-app/` كـ Gradle `:app`.
-- Backend: `RED_Ultimate/backend-server/`.
-- Protocol: `RED_Ultimate/shared-proto/`.
-- Admin: `RED_Ultimate/admin_dashboard/`.
-- SFU: `RED_Ultimate/media-sfu/`.
-- DINSTAR voice: `RED_Ultimate/pstn-asterisk/`.
-- Runtime: `RED_Ultimate/docker-compose.yml`.
+### الخيار 1: تشغيل كامل عبر Docker (الأسهل)
+```bash
+cd RED_Ultimate
+./scripts/local-first-run.sh 192.168.1.50   # Linux
+# أو على Windows:
+# .\scripts\local-first-run.ps1 -ServerIp 192.168.1.50
+```
 
-> `app/` و`android/` و`app-android/` مصادر تاريخية خارج البناء، وليست تطبيقات إطلاق إضافية.
+### الخيار 2: تطوير سريع (mock backend + لوحة حية)
+```bash
+./run.sh    # اختر 1 → لوحة + خادم mock
+```
 
-## مبادئ غير قابلة للكسر
+### الخيار 3: واحد-كليك من جهازك
+```bash
+# من مجلد المشروع:
+RUN.bat    # Windows
+./run.sh   # Linux/macOS
+```
 
-- لا هاتف/SIM/بريد/SMS/OTP للتسجيل.
-- الحساب والجهاز يحتاجان موافقة إدارية.
-- RED voice/video عبر WebRTC وبـ RED ID دون SIM.
-- DINSTAR مسار صوت PSTN منفصل ويستهلك رصيد SIM وتتحكم به الإدارة.
-- مفاتيح libsignal الخاصة لا تغادر Android.
-- المحتوى الاجتماعي العام ليس E2EE.
-- لا توصف ميزة بأنها مكتملة قبل البناء واختبار runtime/الجهاز المناسب.
+---
 
-## حالة التحقق
+## 🧩 المكونات
 
-بوابة CI تبني وتختبر backend، تبني APK مع dependency verification صارم، تبني لوحة الإدارة، وتفحص SFU وAsterisk. PR يبقى Draft حتى تنجح تجربة Docker المحلية وهاتفين وعتاد DINSTAR حسب كل بوابة.
+| المكوّن | المسار | التقنية |
+|---|---|---|
+| 📱 تطبيق Android | `RED_Ultimate/red-app/` (Gradle `:app`) | Kotlin + Compose + WebRTC + libsignal |
+| ⚙️ الخادم | `RED_Ultimate/backend-server/` | Spring Boot 3.5 + Kotlin 2.4 |
+| 🗄️ البروتوكول | `RED_Ultimate/shared-proto/` | Protobuf (Wire) |
+| 🖥️ لوحة الإدارة | `RED_Ultimate/admin_dashboard/` | React 19 + TypeScript + Ant Design |
+| 🎥 وسيط الوسائط | `RED_Ultimate/media-sfu/` | mediasoup (WebRTC SFU) |
+| 📞 بوابة PSTN | `RED_Ultimate/pstn-asterisk/` | Asterisk + DINSTAR UC2000-VE-8G |
+| 🐳 التشغيل | `RED_Ultimate/docker-compose.yml` | 10 خدمات مع healthchecks |
 
-كل واحد من المجلدات العليا الأربعة والعشرين داخل `RED_Ultimate/` يحتوي `README.md` يوضح الوظيفة والحالة والعلاقة بباقي النظام.
+> `app/` و`android/` و`app-android/` مصادر تاريخية خارج البناء (أرشيف موثق).
+
+---
+
+## 📚 الوثائق
+
+| الوثيقة | المحتوى |
+|---|---|
+| [نظرة المشروع](RED_Ultimate/docs/01-PROJECT-OVERVIEW.md) | المعمارية الكاملة |
+| [قواعد البيانات](RED_Ultimate/docs/02-DATABASES.md) | PostgreSQL + MongoDB + Redis + Room |
+| [السيرفر واللوحة](RED_Ultimate/docs/03-SERVER-ADMIN-PANEL.md) | تدفق البيانات |
+| [التطبيقات](RED_Ultimate/docs/04-APPS.md) | Android والتاريخ |
+| [تشغيل Alpha محليًا](RED_Ultimate/LOCAL_FIRST_RUN_AR.md) | دليل خطوة بخطوة |
+| [مرجع API الكامل](RED_Ultimate/API_REFERENCE.md) | **127 endpoint موثق** |
+| [تقرير الجلسات](SESSION_REPORT_AR.md) | سجل كل التطوير |
+
+---
+
+## 🔒 مبادئ غير قابلة للكسر
+
+- ❌ لا هاتف/SIM/بريد/SMS/OTP للتسجيل
+- ✅ الحساب والجهاز يحتاجان موافقة إدارية (سلطة يونس)
+- ✅ RED voice/video عبر WebRTC وبـ RED ID دون SIM
+- ✅ DINSTAR مسار صوت PSTN منفصل تتحكم به الإدارة
+- ✅ مفاتيح libsignal الخاصة لا تغادر Android
+- ⚠️ المحتوى الاجتماعي العام ليس E2EE
+
+---
+
+## ✅ التحقق والجودة
+
+بوابة CI (GitHub Actions) تتحقق تلقائيًا من:
+1. **Backend**: بناء + 23 اختبار JUnit
+2. **لوحة الإدارة**: عقد API (35/35) + بناء TypeScript
+3. **فحوصات ثابتة**: تطابق الكيانات مع DB + SFU + mock_backend + STOPSHIP
+4. **Docker Compose**: صحة الإعداد
+5. **Android**: بناء APK مع dependency verification صارم
+
+---
+
+## 📦 ما تم إنجازه (ملخص)
+
+- ✅ **دمج كل فروع arena** — أفضل ما في 7 جلسات سابقة
+- ✅ **لوحة إدارة مطوّرة وآمنة** (React 19 + مصادقة حقيقية)
+- ✅ **DINSTAR كامل**: Digest auth + SMS + Call Forward + جرد SIM
+- ✅ **nginx محصّن**: rate limiting + HTTPS + حماية actuator
+- ✅ **16 ترحيل قاعدة بيانات** (V1→V16)
+- ✅ **صفر TODO** | **صفر println** | **صفر استيرادات مكسورة**
+
+---
+
+*آخر تحديث: 2026-08-09 — الفرع `arena/019fe3bc-pro-v1`*

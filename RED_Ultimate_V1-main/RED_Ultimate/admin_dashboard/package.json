@@ -7,7 +7,11 @@
     "dev": "vite --host 0.0.0.0",
     "start": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "mock": "node mock-backend.cjs",
+    "serve": "node server.cjs",
+    "check": "node --check src/api.ts && node scripts/check-api-contract.mjs",
+    "check:api": "node scripts/check-api-contract.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
@@ -15,7 +19,8 @@
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.5",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
