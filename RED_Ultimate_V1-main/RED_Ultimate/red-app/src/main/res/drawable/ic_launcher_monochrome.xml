@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    🎨 YOUNES Sovereign — Monochrome (Material You / Android 13+)
+    Single color, alpha-based (will be tinted by system based on theme)
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Shield/chat bubble background -->
     <path
         android:fillColor="#000000"
-        android:pathData="M18,22 L36,22 L54,45 L72,22 L90,22 L64,56 L64,87 L44,87 L44,56 Z" />
+        android:pathData="M32,34 C36,28 42,25 50,25 C62,25 72,33 72,44 C72,52 68,58 60,62 L62,70 L52,65 C50,65 48,65 46,65 C36,65 28,58 28,48 C28,42 30,38 32,34 Z" />
+
+    <!-- Y letter (main symbol) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,33 L46,33 L50,40 L54,33 L60,33 L52,46 L52,56 L48,56 L48,46 Z" />
+
+    <!-- Center dot -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M50,48 m-1.2,0 a1.2,1.2 0,1 0 2.4,0 a1.2,1.2 0,1 0 -2.4,0" />
+
 </vector>
