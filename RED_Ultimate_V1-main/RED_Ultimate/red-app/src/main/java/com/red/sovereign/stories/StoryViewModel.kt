@@ -113,6 +113,17 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 
+    fun react(story: Story, emoji: String) = viewModelScope.launch {
+        client.request("POST", "/api/stories/${story.id}/react", json.encodeToString(StoryReactionRequest(emoji)))
+    }
+
+    fun delete(story: Story) = viewModelScope.launch {
+        when (val result = client.request("DELETE", "/api/stories/${story.id}")) {
+            is ApiResult.Success -> stories.remove(story)
+            is ApiResult.Error -> state = StoryState.Error(result.message)
+        }
+    }
+
     fun viewed(story: Story) = viewModelScope.launch {
         client.request("POST", "/api/stories/${story.id}/view")
     }

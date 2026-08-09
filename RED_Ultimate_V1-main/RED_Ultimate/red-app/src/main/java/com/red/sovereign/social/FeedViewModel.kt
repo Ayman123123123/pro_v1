@@ -109,6 +109,34 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun edit(post: Post, newText: String) = viewModelScope.launch {
+        when (val result = api.edit(post.id, newText)) {
+            is ApiResult.Success -> replace(result.value)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun hide(post: Post) = viewModelScope.launch {
+        when (val result = api.hide(post.id)) {
+            is ApiResult.Success -> posts.remove(post)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun mute(post: Post) = viewModelScope.launch {
+        when (val result = api.mute(post.authorRedId)) {
+            is ApiResult.Success -> { posts.removeAll { it.authorRedId == post.authorRedId }; state = FeedState.Message("تم كتم @${post.authorUsername}") }
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun report(post: Post, reason: String = "OTHER") = viewModelScope.launch {
+        when (val result = api.report(post.id, reason)) {
+            is ApiResult.Success -> state = FeedState.Message("تم الإبلاغ")
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
     fun closeThread() { threadPosts.clear(); threadState = ThreadState.Idle }
 
     private fun replace(post: Post) {
