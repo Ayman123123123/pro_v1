@@ -165,9 +165,33 @@ class MediaService(
         return allKeys.filter { it !in referencedKeys }
     }
 
+    fun listAllKeys(limit: Int = 10000): List<String> {
+        ensureBucket()
+        val keys = mutableListOf<String>()
+        var result = minio.listObjects(
+            io.minio.ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
+        )
+        for (item in result) {
+            val obj = item.getOrNull() ?: continue
+            keys += obj.objectName()
+            if (keys.size >= limit) break
+        }
+        return keys
+    }
+
+    fun deleteOrphans(referencedKeys: Set<String>, dryRun: Boolean = true): List<String> {
+        val all = listAllKeys()
+        val orphans = findOrphanKeys(all, referencedKeys)
+        if (!dryRun) {
+            orphans.forEach { key ->
+                try { minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build()) } catch (_: Exception) {}
+            }
+        }
+        return orphans
+    }
+
     fun scheduleOrphanCleanup() {
-        // Placeholder — real impl would list bucket objects and compare with MongoDB
-        // See findOrphanKeys() for testable logic
+        // Placeholder for @Scheduled — real logic is in OrphanCleanupScheduler which queries MongoDB
     }
 
     fun exists(key: String): Boolean = runCatching {
