@@ -537,3 +537,58 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 - **21 اختبار JUnit** حقيقيًا في الخادم
 - اللوحة الحية على المنفذ 8088 ✅
 - الشجرة نظيفة (0 تغييرات متبقية) ✅
+
+---
+
+# ملحق الجولة الحادية عشرة (2026-08-09) — الفحص الذاتي الكامل وإكمال كل المتبقي
+
+## المنهجية: فحص وقراءة وتحقق ذاتي (لا افتراضات)
+
+قرأت **كل التقارير العشرة من جهازك** (PROFESSIONAL_UPGRADE، FINAL_INTEGRATION،
+VERIFICATION، UC2000-VE-8G، DINSTAR_API، DATABASE_UPGRADE، FULL_TEST، UI_UX،
+CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
+
+## اكتشافات حرجة أُصلحت
+
+### 1) ازدواج فئات = فشل ترجمة حتمي ⚠️
+- `MessageDocument` و`ConversationSequence` كانتا **معلنتين في ملفين بنفس الحزمة**
+  (MessageDocument.kt البسيط + SovereignMongoDocuments.kt الغني) = خطأ ترجمة
+- **الإصلاح**: النسخة الغنية أصبحت الأساس (أضفت deletedAt + isEdited)، حذفت
+  البسيطة، حدّثت 3 ملفات (MessageService + AdvancedMessageService + Test)
+
+### 2) إكمال كل TODOs المتبقية (5)
+| الملف | TODO | الإكمال |
+|---|---|---|
+| UserStatusService | فحص جهات الاتصال | تنفيذ عبر red_contacts (JdbcTemplate) |
+| UserStatusService | اسم المستخدم | جلب من UserAccountRepository |
+| LocalRepository | بحث FTS | تنفيذ searchMessages الفعلي (LIKE) |
+| RedConnectionService | معالجة DELETE | حذف محلي + نشر DELETED |
+| RedConnectionService | إشعارات الرسائل | استدعاء notifyEncryptedMessage حسب التفضيلات |
+
+### 3) تحصينات Docker الناقصة (من FINAL_INTEGRATION) — أُكملت
+- db-postgres: shared_buffers=128MB, work_mem=4MB, log_min_duration=500ms, max_connections=100
+- db-mongo: wiredTigerCacheSizeGB=0.25
+- cache-redis: maxmemory=256mb + allkeys-lru
+- backend: start_period=60s + nginx: healthcheck
+- nginx: قالب HTTPS 8443 اختياري موثق
+
+### 4) إصلاح build-red.yml (مسارات قديمة)
+- كل `project/pro/RED_Ultimate_V1-main` → `RED_Ultimate_V1-main` (كانت ستكسر البناء)
+
+### 5) إصلاح CI: Java 17 → 21 لوظيفة Android
+
+## التحقق من ادعاءات التقارير (كلها موجودة فعليًا)
+- ✅ Dinstar: Digest auth + SSL trust + get_cdr POST + set_port_info GET + 8G (421 سطر)
+- ✅ RedisManager: 42 دالة (أكثر من 30 الموعودة)
+- ✅ Room: 8 كيانات + DAO شامل (red-app)
+- ✅ V14/V15 migrations + master-schema موسّع
+- ✅ Notification/Social controllers + NotificationService (Redis)
+- ✅ WebSocket: 4 endpoints (/ws/master, /ws/calls, /ws/typing, /ws/admin/logs)
+- ✅ SecurityConfig: 18 مسار مصادقة + CSP + XSS protection
+- ✅ HealthController: Flyway + Dinstar + System + responseTime
+
+## الحالة النهائية
+- **صفر ازدواج فئات** في نفس الحزمة (backend + red-app + اختبارات)
+- **صفر TODO/FIXME** في الكود
+- **صفر println** في red-app والخادم
+- كل الفاحصات خضراء + اللوحة حية على 8088
