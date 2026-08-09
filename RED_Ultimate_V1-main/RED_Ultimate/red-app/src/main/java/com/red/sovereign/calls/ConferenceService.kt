@@ -41,6 +41,7 @@ object ConferenceRuntime {
     val remoteVideos = androidx.compose.runtime.mutableStateMapOf<String, VideoTrack>()
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
+    var networkStats: NetworkStats by mutableStateOf(NetworkStats())
 }
 
 class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingClient.Listener {
@@ -169,13 +170,28 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
+    override fun onNetworkStats(stats: NetworkStats) { ConferenceRuntime.networkStats = stats }
+
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             ConferenceRuntime.state = ConferenceUiState.Active(roomId, System.currentTimeMillis())
+            startStatsPolling()
+        }
+    }
+
+    private var statsJob: kotlinx.coroutines.Job? = null
+    private fun startStatsPolling() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                engine?.pollStats()
+                kotlinx.coroutines.delay(2000)
+            }
         }
     }
 
     private fun leave() {
+        statsJob?.cancel(); statsJob = null
         if (roomId.isNotBlank()) signaling.leave(roomId, userId)
         signaling.close()
         engine?.release()
@@ -185,6 +201,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         ConferenceRuntime.remoteVideos.clear()
         ConferenceRuntime.localVideo = null
         ConferenceRuntime.eglContext = null
+        ConferenceRuntime.networkStats = NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
