@@ -67,7 +67,7 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
                     .requestMatchers("/api/notifications/**").authenticated()
-                    .requestMatchers("/api/calls/**", "/api/calls/ice-servers").authenticated()
+                    .requestMatchers("/api/calls/**", "/api/calls/ice-servers", "/api/calls/telemetry").authenticated()
                     .requestMatchers("/api/recordings/**").authenticated()
                     .requestMatchers("/api/stories/**").authenticated()
                     .requestMatchers("/api/feed/**", "/api/posts/**", "/api/social/**").authenticated()

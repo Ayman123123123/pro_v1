@@ -199,7 +199,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     override fun onIceCandidate(candidate: IceCandidate) = signaling.send(CallSignal(callId, target, type = "ICE", mode = mode, payload = mapOf("sdpMid" to candidate.sdpMid.orEmpty(), "sdpMLineIndex" to candidate.sdpMLineIndex.toString(), "candidate" to candidate.sdp)))
     override fun onRemoteVideo(track: VideoTrack) { CallRuntime.remoteVideo = track }
-    override fun onNetworkStats(stats: NetworkStats) { CallRuntime.networkStats = stats }
+    override fun onNetworkStats(stats: NetworkStats) { CallRuntime.networkStats = stats; onStatsReceived(stats) }
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         when (state) {
             PeerConnection.PeerConnectionState.CONNECTED -> {
@@ -221,6 +221,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 kotlinx.coroutines.delay(2000)
             }
         }
+    }
+
+    /**
+     * يُستدعى من `onNetworkStats` لتسجيل الـ Telemetry.
+     */
+    private fun onStatsReceived(stats: NetworkStats) {
+        CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) = fail(message)
     override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
@@ -382,6 +389,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private fun endCall(sendSignal: Boolean) {
         statsJob?.cancel(); statsJob = null
+        val durationMs = CallRuntime.state.let { (it as? CallUiState.Active)?.let { active -> System.currentTimeMillis() - active.startedAt } ?: 0L }
+        CallTelemetry.onCallEnded(callId.orEmpty(), mode, "RED", durationMs)
+        CallTelemetry.flush(this)
+        CallTelemetry.reset()
         stopRingtone()
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
