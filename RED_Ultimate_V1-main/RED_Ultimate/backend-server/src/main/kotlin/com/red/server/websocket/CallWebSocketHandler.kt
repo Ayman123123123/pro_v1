@@ -16,7 +16,7 @@ class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val history: CallHistoryService
 ) : TextWebSocketHandler() {
-    private val sessions = ConcurrentHashMap<String, WebSocketSession>()
+    private val sessions = ConcurrentHashMap<String, MutableList<WebSocketSession>>()
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
@@ -35,10 +35,18 @@ class CallWebSocketHandler(
         }
 
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)
-        val target = sessions[signal.targetUserId]?.takeIf(WebSocketSession::isOpen)
-        if (target != null) {
-            target.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound)))
+        val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen) ?: emptyList()
+        if (targets.isNotEmpty()) {
+            val json = objectMapper.writeValueAsString(outbound)
+            targets.forEach { it.sendMessage(TextMessage(json)) }
+            // Notify caller that at least one device is ringing
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
+            // If ANSWER/REJECT from one device, cancel ringing on other devices of same user
+            if (type in setOf("ANSWER", "REJECT", "END")) {
+                val cancelType = if (type == "ANSWER") "CANCELLED" else type
+                val cancelMsg = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
+                targets.filter { it.id != session.id }.forEach { runCatching { it.sendMessage(TextMessage(cancelMsg)) } }
+            }
         } else {
             if (type == "OFFER") history.missed(callId)
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "UNAVAILABLE", "callId" to callId))))
@@ -47,11 +55,24 @@ class CallWebSocketHandler(
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
         val redId = session.attributes["userId"] as? String ?: return
-        sessions.put(redId, session)?.takeIf { it.isOpen }?.close()
+        sessions.compute(redId) { _, list ->
+            val l = list ?: mutableListOf()
+            l.removeIf { !it.isOpen }
+            l.add(session)
+            l
+        }
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
-        sessions.entries.removeIf { it.value.id == session.id }
+        val redId = session.attributes["userId"] as? String
+        if (redId != null) {
+            sessions.computeIfPresent(redId) { _, list ->
+                list.removeIf { it.id == session.id }
+                if (list.isEmpty()) null else list
+            }
+        } else {
+            sessions.entries.removeIf { entry -> entry.value.any { it.id == session.id } }
+        }
     }
 
     private fun requireCallId(signal: IncomingCallSignal) = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }

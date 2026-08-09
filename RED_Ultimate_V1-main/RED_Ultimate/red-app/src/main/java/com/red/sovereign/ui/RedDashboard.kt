@@ -218,6 +218,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupName by remember { mutableStateOf("") }
     var section by remember { mutableStateOf(MainSection.HOME) }
+    // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
+    androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
+        if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
+    }
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
@@ -234,6 +238,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     val callHistory: CallHistoryViewModel = viewModel()
     val createStoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
 
+    // 🔔 Overlays must be global — before early return so they appear on ANY screen (Devices, Privacy, etc.)
+    // YounesCallOverlay etc. are placed at the very end as well, but this early placement ensures incoming call is never missed
     if (currentScreen != SovereignScreen.DASHBOARD) {
         when (currentScreen) {
             SovereignScreen.DEVICES -> DevicesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -245,6 +251,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
+        // Still show call overlays even when not on dashboard
+        YounesCallOverlay()
+        YounesConferenceOverlay()
+        YounesLiveStreamOverlay()
         return
     }
 
@@ -1282,8 +1292,16 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
 }
 
 @Composable
-private fun CallHistoryRow(call: CallHistoryItem) = Card(Modifier.fillMaxWidth()) {
-    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+@Composable
+private fun CallHistoryRow(call: CallHistoryItem) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    return Card(Modifier.fillMaxWidth().clickable {
+        // Redial on tap — fixes history not calling
+        if (call.peerId.matches(Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$"))) {
+            YounesCallService.start(context, call.peerId, call.type == "VIDEO")
+        }
+    }) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(if (call.route == "DINSTAR") AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
             Icon(if (call.type == "VIDEO") Icons.Default.Videocam else Icons.Default.Call, null, tint = Color.Black)
         }
@@ -1292,6 +1310,7 @@ private fun CallHistoryRow(call: CallHistoryItem) = Card(Modifier.fillMaxWidth()
             Text("${if (call.direction == "OUTGOING") "صادرة" else "واردة"} · ${call.status}", color = if (call.status == "MISSED") Color.Red else Color.Gray, fontSize = 12.sp)
         }
         AssistChip({}, { Text(if (call.route == "DINSTAR") "DINSTAR صوت" else "يونس ${call.type}") }, enabled = false)
+        }
     }
 }
 
