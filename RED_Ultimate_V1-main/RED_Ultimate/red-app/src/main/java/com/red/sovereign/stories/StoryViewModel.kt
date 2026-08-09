@@ -69,11 +69,12 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun upload(uri: Uri, caption: String? = null) = viewModelScope.launch {
+    fun upload(uri: Uri, caption: String? = null, visibleTo: String = "EVERYONE") = viewModelScope.launch {
         state = StoryState.Uploading
+        // Professional: compress before upload (handled by MediaCompressor)
         when (val uploaded = media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
-            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption)))) {
+            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo)))) {
                 is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }
                     .onSuccess { stories.add(0, it); state = StoryState.Idle }
                     .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
