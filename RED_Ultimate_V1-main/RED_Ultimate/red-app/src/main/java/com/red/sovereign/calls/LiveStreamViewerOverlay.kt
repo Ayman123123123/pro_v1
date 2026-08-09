@@ -139,6 +139,21 @@ fun YounesLiveStreamOverlay() {
                             tint = Color.White
                         )
                     }
+                    IconButton(
+                        onClick = { LiveStreamService.action(context, LiveStreamService.ACTION_TOGGLE_VIDEO) },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (LiveStreamRuntime.localVideo?.enabled() == true) Color.White.copy(alpha = 0.2f) else Color.Red,
+                                RoundedCornerShape(28.dp)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = "كتم/تفعيل الكاميرا",
+                            tint = Color.White
+                        )
+                    }
                 }
 
                 IconButton(

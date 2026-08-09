@@ -143,7 +143,11 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 ConferenceRuntime.state = ConferenceUiState.Idle
             }
         }
-        leave()
+        // تأخير مغلق طفيف حتى يرى المستخدم رسالة الخطأ
+        scope.launch {
+            kotlinx.coroutines.delay(500)
+            leave()
+        }
     }
 
     override fun onLocalDescription(description: SessionDescription) {
@@ -180,6 +184,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         ConferenceRuntime.participants = emptyList()
         ConferenceRuntime.remoteVideos.clear()
         ConferenceRuntime.localVideo = null
+        ConferenceRuntime.eglContext = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

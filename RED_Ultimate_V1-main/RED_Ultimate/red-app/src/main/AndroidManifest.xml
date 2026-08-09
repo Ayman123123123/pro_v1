@@ -29,6 +29,14 @@
             android:exported="false"
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service
+            android:name=".calls.ConferenceService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall" />
+        <service
+            android:name=".calls.LiveStreamService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall" />
+        <service
             android:name=".core.RedConnectionService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
