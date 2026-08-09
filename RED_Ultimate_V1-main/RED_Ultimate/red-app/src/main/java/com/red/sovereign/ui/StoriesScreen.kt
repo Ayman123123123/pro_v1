@@ -137,7 +137,12 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                 )
             }
             
-            // Reply box
+            // Reactions + Reply box
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("❤️", "🔥", "😢", "👏").forEach { emoji ->
+                    AssistChip(onClick = { stories.react(story, emoji) }, label = { Text(emoji) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.2f)))
+                }
+            }
             var replyText by remember { mutableStateOf("") }
             val context = androidx.compose.ui.platform.LocalContext.current
             Row(Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
