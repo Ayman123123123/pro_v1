@@ -17,7 +17,8 @@ import java.util.UUID
 @Service
 class MediaService(
     private val minio: MinioClient,
-    @Value("\${red.minio.bucket}") private val bucket: String
+    @Value("\${red.minio.bucket}") private val bucket: String,
+    private val scanner: MediaSecurityScanner? = null
 ) {
     @Synchronized
     fun ensureBucket() {
@@ -27,6 +28,10 @@ class MediaService(
     }
 
     fun upload(userId: UUID, file: MultipartFile): MediaObject {
+        // 🛡️ فحص أمني قبل أي معالجة
+        scanner?.scan(file)?.let { result ->
+            require(result.allowed) { result.reason }
+        }
         require(!file.isEmpty && file.size in 1..MAX_SIZE) { "Media file must contain 1 byte to 100 MiB" }
         val mime = file.contentType?.lowercase()?.substringBefore(';') ?: ""
         require(mime in ALLOWED) { "Unsupported media type" }
