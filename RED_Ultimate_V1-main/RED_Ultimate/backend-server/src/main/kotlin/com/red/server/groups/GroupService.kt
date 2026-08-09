@@ -46,6 +46,8 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         require(!mongo.exists(Query(Criteria.where("id").`is`(id)), GroupMember::class.java)) { "User is already a member" }
         mongo.save(GroupMember(id, groupId, target.id.toString(), target.redId, target.username, request.role))
         touch(groupId)
+        // 🔐 E2EE: Membership changed — clients must rotate Sender Key distribution
+        // The next message from any member will generate a fresh distributionId (see GroupCryptoManager.membershipHash)
         return response(group(groupId))
     }
 
@@ -62,6 +64,7 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         require(target.role != GroupRole.OWNER) { "Owner cannot be removed" }
         require(actor.role == GroupRole.OWNER || (actor.role == GroupRole.ADMIN && target.role == GroupRole.MEMBER)) { "Insufficient group permission" }
         mongo.remove(Query(Criteria.where("id").`is`(target.id)), GroupMember::class.java); touch(groupId)
+        // 🔐 E2EE: Member removed — remaining members must rotate Sender Key on next send
         return response(group(groupId))
     }
 
@@ -90,6 +93,7 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
     fun leave(userId: UUID, groupId: String) {
         val member = membership(groupId, userId); require(member.role != GroupRole.OWNER) { "Owner must transfer or delete the group" }
         mongo.remove(Query(Criteria.where("id").`is`(member.id)), GroupMember::class.java); touch(groupId)
+        // 🔐 E2EE: Leave triggers rotation
     }
 
     fun updateAvatar(actorId: UUID, groupId: String, request: UpdateGroupAvatarRequest): GroupResponse {
