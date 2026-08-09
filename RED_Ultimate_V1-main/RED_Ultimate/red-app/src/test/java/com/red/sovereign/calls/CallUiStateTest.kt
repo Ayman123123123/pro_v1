@@ -42,6 +42,26 @@ class CallUiStateTest {
         assertNotEquals(incoming, active)
         assertNotEquals(active, error)
     }
+
+    @Test fun `Active carries isHeld flag and can transition to held`() {
+        val active = CallUiState.Active("c1", "YNS-AAAA-BBBB", "VOICE", 1000L, isHeld = false)
+        assertEquals(false, active.isHeld)
+        val held = active.copy(isHeld = true)
+        assertEquals(true, held.isHeld)
+        // يمكن العودة للحالة النشطة
+        val resumed = held.copy(isHeld = false)
+        assertEquals(false, resumed.isHeld)
+    }
+
+    @Test fun `ActiveWithIncoming pairs active call with waiting call`() {
+        val active = CallUiState.Active("c1", "YNS-ALICE", "VOICE", 1000L)
+        val waiting = CallUiState.Incoming("c2", "YNS-BOB", "VOICE")
+        val state = CallUiState.ActiveWithIncoming(active, waiting)
+        assertEquals(active, state.active)
+        assertEquals(waiting, state.waiting)
+        assertEquals("YNS-ALICE", state.active.peer)
+        assertEquals("YNS-BOB", state.waiting.peer)
+    }
 }
 
 class ConferenceUiStateTest {

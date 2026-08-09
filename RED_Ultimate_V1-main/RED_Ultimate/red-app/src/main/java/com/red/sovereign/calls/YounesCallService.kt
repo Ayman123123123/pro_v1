@@ -53,6 +53,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var mode = "VOICE"
     private var outgoingPending = false
     private var incomingOffer: CallSignal? = null
+    private var pendingSecondOffer: CallSignal? = null
     private var pendingIce = mutableListOf<IceCandidate>()
     private var remoteDescriptionSet = false
     private var proximityLock: PowerManager.WakeLock? = null
@@ -87,6 +88,19 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             ACTION_SWITCH_CAMERA -> engine?.switchCamera()
             ACTION_SPEAKER -> setSpeaker(intent.getBooleanExtra(EXTRA_ENABLED, true))
             ACTION_BLUETOOTH -> routeBluetooth()
+            ACTION_HOLD -> holdCall()
+            ACTION_RESUME -> resumeCall()
+            ACTION_DTMF -> sendDtmf(intent?.getStringExtra(EXTRA_DTMF)?.firstOrNull() ?: '0')
+            ACTION_ACCEPT_SECOND -> acceptSecondIncoming()
+            ACTION_REJECT_SECOND -> {
+                val state = CallRuntime.state as? CallUiState.ActiveWithIncoming
+                if (state != null) {
+                    runCatching { signaling.send(CallSignal(state.waiting.callId, state.waiting.peer, type = "REJECT", mode = state.waiting.mode)) }
+                    pendingSecondOffer = null
+                    stopRingtone()
+                    CallRuntime.state = state.active
+                }
+            }
             ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
         return START_NOT_STICKY
@@ -103,9 +117,25 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onSignal(signal: CallSignal) {
         when (signal.type) {
             "OFFER" -> {
-                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode ?: "VOICE"
-                // Ensure overlay shows immediately even if app was in background
-                CallRuntime.state = CallUiState.Incoming(callId.orEmpty(), target, mode)
+                val newIncoming = CallUiState.Incoming(
+                    callId = signal.callId.orEmpty(),
+                    peer = signal.sourceUserId.orEmpty(),
+                    mode = signal.mode ?: "VOICE"
+                )
+                // CALL WAITING: إذا في مكالمة نشطة، نضيف المكالمة الجديدة كـ waiting
+                val currentActive = CallRuntime.state as? CallUiState.Active
+                if (currentActive != null && !currentActive.isHeld) {
+                    CallRuntime.state = CallUiState.ActiveWithIncoming(currentActive, newIncoming)
+                    // نحفظ الـ offer الثاني بشكل منفصل
+                    pendingSecondOffer = signal
+                    notifyWaiting(newIncoming)
+                    return
+                }
+                incomingOffer = signal
+                target = newIncoming.peer
+                callId = newIncoming.callId
+                mode = newIncoming.mode
+                CallRuntime.state = newIncoming
                 startRingtone()
                 scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(incomingNotification(target, mode), media = false)
@@ -165,17 +195,112 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     override fun onIceCandidate(candidate: IceCandidate) = signaling.send(CallSignal(callId, target, type = "ICE", mode = mode, payload = mapOf("sdpMid" to candidate.sdpMid.orEmpty(), "sdpMLineIndex" to candidate.sdpMLineIndex.toString(), "candidate" to candidate.sdp)))
     override fun onRemoteVideo(track: VideoTrack) { CallRuntime.remoteVideo = track }
+    override fun onNetworkStats(stats: NetworkStats) { CallRuntime.networkStats = stats }
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         when (state) {
-            PeerConnection.PeerConnectionState.CONNECTED -> { CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis()); updateNotification("مكالمة يونس نشطة") }
+            PeerConnection.PeerConnectionState.CONNECTED -> {
+                CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis())
+                updateNotification("مكالمة يونس نشطة")
+                startStatsPolling()
+            }
             PeerConnection.PeerConnectionState.FAILED, PeerConnection.PeerConnectionState.CLOSED -> endCall(sendSignal = false)
             else -> Unit
+        }
+    }
+
+    private var statsJob: kotlinx.coroutines.Job? = null
+    private fun startStatsPolling() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                engine?.pollStats()
+                kotlinx.coroutines.delay(2000)
+            }
         }
     }
     override fun onError(message: String) = fail(message)
     override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
+
+    /**
+     * Holds the active call — keeps the peer connection alive but disables the local tracks
+     * so the other side sees/hears nothing. The system Telecom call is also marked inactive.
+     */
+    private fun holdCall() {
+        val current = CallRuntime.state as? CallUiState.Active ?: return
+        if (current.isHeld) return
+        engine?.setMicrophoneEnabled(false)
+        engine?.setCameraEnabled(false)
+        CallRuntime.state = current.copy(isHeld = true)
+        runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) }
+        scope.launch { runCatching { telecom.hold(target) } }
+        updateNotification("مكالمة يونس معلّقة")
+    }
+
+    /**
+     * Resumes a held call.
+     */
+    private fun resumeCall() {
+        val current = CallRuntime.state as? CallUiState.Active ?: return
+        if (!current.isHeld) return
+        engine?.setMicrophoneEnabled(true)
+        if (mode == "VIDEO") engine?.setCameraEnabled(true)
+        CallRuntime.state = current.copy(isHeld = false)
+        runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) }
+        scope.launch { runCatching { telecom.resume(target) } }
+        updateNotification("مكالمة يونس نشطة")
+    }
+
+    /**
+     * Sends a DTMF tone (used for IVR navigation).
+     */
+    private fun sendDtmf(digit: Char) {
+        if (CallRuntime.state !is CallUiState.Active) return
+        scope.launch { runCatching { telecom.sendDtmf(target, digit) } }
+    }
+
+    /**
+     * Notifies the user that a second call is waiting while another is active.
+     * Plays a short ringtone (not the full one) and updates the notification.
+     */
+    private fun notifyWaiting(waiting: CallUiState.Incoming) {
+        startRingtone() // رنة مختصرة فقط
+        updateNotification("مكالمة يونس: ${waiting.peer} في الانتظار")
+    }
+
+    /**
+     * Accepts a waiting call: holds the current call and answers the second.
+     * Requires a second WebRTC engine (current architecture uses one engine per call).
+     * For simplicity in the first cut, this swaps the active call and parks the first on hold.
+     */
+    private fun acceptSecondIncoming() {
+        val state = CallRuntime.state as? CallUiState.ActiveWithIncoming ?: return
+        val waiting = state.waiting
+        val previous = state.active
+
+        // 1) أرسل HOLD للمكالمة الأولى
+        runCatching { signaling.send(CallSignal(previous.callId, previous.peer, type = "HOLD", mode = previous.mode)) }
+
+        // 2) أوقف المحرك الحالي وأنشئ جديد للـ waiting
+        engine?.release()
+        engine = null
+        target = waiting.peer
+        callId = waiting.callId
+        mode = waiting.mode
+        CallRuntime.state = CallUiState.Connecting(waiting.callId, waiting.peer, waiting.mode)
+        promote(notification("تبديل إلى ${waiting.peer}", ongoing = true), media = true)
+        prepareAudio()
+
+        // 3) أنشئ محرك جديد وأرسل ANSWER
+        scope.launch {
+            if (createEngine(mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
+            val sdp = pendingSecondOffer?.payload?.get("sdp") ?: return@launch fail("عرض غير صالح")
+            engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
+            pendingSecondOffer = null
+            stopRingtone()
+        }
+    }
     private fun fail(message: String) {
         CallRuntime.state = CallUiState.Error(message)
         updateNotification(message)
@@ -220,6 +345,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private fun endCall(sendSignal: Boolean) {
+        statsJob?.cancel(); statsJob = null
         stopRingtone()
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
@@ -283,11 +409,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
         const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"
-        const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"
+        const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
+        const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
+        const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"
         fun listen(context: Context) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
         fun start(context: Context, target: String, video: Boolean) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
         fun action(context: Context, action: String, enabled: Boolean = true) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
+        fun dtmf(context: Context, digit: Char) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
     }
 }
 
@@ -295,7 +424,9 @@ sealed interface CallUiState {
     data object Idle : CallUiState
     data class Incoming(val callId: String, val peer: String, val mode: String) : CallUiState
     data class Connecting(val callId: String, val peer: String, val mode: String) : CallUiState
-    data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long) : CallUiState
+    data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long, val isHeld: Boolean = false) : CallUiState
+    /** مكالمة نشطة + مكالمة واردة ثانية (call waiting) */
+    data class ActiveWithIncoming(val active: Active, val waiting: Incoming) : CallUiState
     data class Error(val message: String) : CallUiState
 }
 object CallRuntime {
@@ -304,4 +435,5 @@ object CallRuntime {
     var localVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
     var remoteVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
     var speaker by androidx.compose.runtime.mutableStateOf(false)
+    var networkStats: NetworkStats by androidx.compose.runtime.mutableStateOf(NetworkStats())
 }

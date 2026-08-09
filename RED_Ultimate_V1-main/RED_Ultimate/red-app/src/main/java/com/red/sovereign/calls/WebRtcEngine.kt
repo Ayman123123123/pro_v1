@@ -22,6 +22,8 @@ import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
+import org.webrtc.RTCStatsReport
+import org.webrtc.RTCStatsCollectorCallback
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
@@ -35,12 +37,25 @@ import org.webrtc.audio.JavaAudioDeviceModule
 
 data class LocalMedia(val audioTrack: AudioTrack, val videoTrack: VideoTrack?)
 
+/**
+ * Real-time network quality stats for a call. Updated by [WebRtcEngine.pollStats].
+ */
+data class NetworkStats(
+    val rttMs: Long = 0L, // round-trip time
+    val packetLossPercent: Double = 0.0, // 0..100
+    val bandwidthKbps: Long = 0L,
+    val quality: Quality = Quality.UNKNOWN
+) {
+    enum class Quality { UNKNOWN, POOR, FAIR, GOOD, EXCELLENT }
+}
+
 class WebRtcEngine(private val context: Context, private val events: Events) {
     interface Events {
         fun onLocalDescription(description: SessionDescription)
         fun onIceCandidate(candidate: IceCandidate)
         fun onRemoteVideo(track: VideoTrack)
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
+        fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
     }
 
@@ -100,6 +115,44 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     fun setMicrophoneEnabled(enabled: Boolean) { localMedia?.audioTrack?.setEnabled(enabled) }
     fun setCameraEnabled(enabled: Boolean) { localMedia?.videoTrack?.setEnabled(enabled) }
     fun switchCamera() { (capturer as? org.webrtc.CameraVideoCapturer)?.switchCamera(null) }
+
+    /**
+     * Polls the peer connection stats and reports [NetworkStats] to the listener.
+     * Should be called periodically (e.g. every 2 seconds) during an active call.
+     */
+    fun pollStats() {
+        val pc = peer ?: return
+        pc.getStats(object : RTCStatsCollectorCallback {
+            override fun onStatsDelivered(report: RTCStatsReport) {
+                var rtt = 0L
+                var packetsLost = 0L
+                var packetsReceived = 0L
+                var bytesReceived = 0L
+                report.statsMap.values.forEach { stat ->
+                    when {
+                        stat.type == "remote-inbound-rtp" -> rtt = (stat.members["roundTripTime"] as? Number)?.toLong()?.times(1000)?.toLong() ?: rtt
+                        stat.type == "inbound-rtp" -> {
+                            packetsLost += (stat.members["packetsLost"] as? Number)?.toLong() ?: 0L
+                            packetsReceived += (stat.members["packetsReceived"] as? Number)?.toLong() ?: 0L
+                            bytesReceived += (stat.members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                        }
+                    }
+                }
+                val total = packetsLost + packetsReceived
+                val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
+                // 64 kbps = ~opus audio, 1 Mbps+ = full HD video
+                val kbps = bytesReceived * 8L / 1024L
+                val quality = when {
+                    rtt == 0L && packetsReceived == 0L -> NetworkStats.Quality.UNKNOWN
+                    rtt > 400 || lossPct > 10 -> NetworkStats.Quality.POOR
+                    rtt > 200 || lossPct > 5 -> NetworkStats.Quality.FAIR
+                    rtt > 100 || lossPct > 2 -> NetworkStats.Quality.GOOD
+                    else -> NetworkStats.Quality.EXCELLENT
+                }
+                events.onNetworkStats(NetworkStats(rtt, lossPct, kbps, quality))
+            }
+        })
+    }
 
     fun release() {
         runCatching { capturer?.stopCapture() }; capturer?.dispose(); textureHelper?.dispose()
