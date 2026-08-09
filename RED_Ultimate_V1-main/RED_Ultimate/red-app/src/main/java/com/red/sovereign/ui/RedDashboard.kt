@@ -144,13 +144,8 @@ import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.UnifiedCallOverlays
-import com.red.sovereign.calls.YounesConferenceOverlay
-import com.red.sovereign.calls.YounesLiveStreamOverlay
 import com.red.sovereign.calls.ConferenceService
-import com.red.sovereign.calls.ConferenceRuntime
-import com.red.sovereign.calls.YounesLiveStreamOverlay
 import com.red.sovereign.calls.LiveStreamService
-import com.red.sovereign.calls.LiveStreamRuntime
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
@@ -293,12 +288,16 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
+                // remember lambdas per item لتفادي إعادة التوليد كل recompose
                 MainSection.entries.forEach { item ->
+                    val itemLabel = item.label
+                    val isSelected = section == item
+                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) callHistory.load() } }
                     NavigationBarItem(
-                        selected = section == item,
-                        onClick = { section = item; showDinstar = false; if (item == MainSection.CALLS) callHistory.load() },
-                        icon = { Icon(item.icon, item.label) },
-                        label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+                        selected = isSelected,
+                        onClick = onClick,
+                        icon = { Icon(item.icon, itemLabel) },
+                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
                     )
                 }
             }
@@ -535,7 +534,6 @@ private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column
     Text(label, fontSize = 11.sp, maxLines = 1)
 }
 
-@Composable
 @Composable
 private fun PostCard(
     post: Post,
@@ -798,7 +796,7 @@ private fun ChatHubScreen(
         decrypted.add(item)
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
-    val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
+    // ملاحظة: `val conversation` معرّف في سطر سابق (ChatHubScreen scope) — لا نعيد حسابه هنا
     androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
         val conversationToRestore = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
         if (conversationToRestore != null) {
@@ -1472,7 +1470,6 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
     }
 }
 
-@Composable
 @Composable
 private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
