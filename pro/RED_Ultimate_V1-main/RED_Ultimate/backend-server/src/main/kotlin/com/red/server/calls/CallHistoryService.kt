@@ -6,19 +6,41 @@ import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.stereotype.Service
+import java.time.Duration
 import java.time.Instant
 
 @Service
-class CallHistoryService(private val mongo: MongoTemplate) {
+class CallHistoryService(
+    private val mongo: MongoTemplate,
+    private val publisher: CallEventPublisher
+) {
     fun start(initiator: String, target: String, targetLabel: String, type: CallType, route: CallRoute, requestedId: String? = null): CallHistoryDocument {
         val id = requestedId?.takeIf { it.isNotBlank() } ?: UuidV7.next()
         mongo.findById(id, CallHistoryDocument::class.java)?.let { return it }
-        return mongo.save(CallHistoryDocument(id, initiator, target, targetLabel, type, route, CallStatus.RINGING))
+        val doc = mongo.save(CallHistoryDocument(id, initiator, target, targetLabel, type, route, CallStatus.RINGING))
+        publisher.callStarted(id, initiator, target, type.name, route.name)
+        return doc
     }
 
-    fun answer(callId: String) = update(callId) { it.status = CallStatus.ACTIVE; it.answeredAt = Instant.now() }
-    fun end(callId: String, failed: Boolean = false) = update(callId) { it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED; it.endedAt = Instant.now() }
-    fun missed(callId: String) = update(callId) { it.status = CallStatus.MISSED; it.endedAt = Instant.now() }
+    fun answer(callId: String) = update(callId) {
+        it.status = CallStatus.ACTIVE
+        it.answeredAt = Instant.now()
+        publisher.callAnswered(callId)
+    }
+
+    fun end(callId: String, failed: Boolean = false) = update(callId) {
+        val now = Instant.now()
+        it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED
+        it.endedAt = now
+        val durationMs = if (it.answeredAt != null) Duration.between(it.answeredAt, now).toMillis() else 0L
+        publisher.callEnded(callId, durationMs, if (failed) "FAILED" else "NORMAL")
+    }
+
+    fun missed(callId: String) = update(callId) {
+        it.status = CallStatus.MISSED
+        it.endedAt = Instant.now()
+        publisher.callMissed(callId)
+    }
 
     fun history(redId: String, limit: Int): List<CallHistoryItem> {
         val query = Query(Criteria().orOperator(Criteria.where("initiatorId").`is`(redId), Criteria.where("targetId").`is`(redId)))

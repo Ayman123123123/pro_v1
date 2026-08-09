@@ -1,9 +1,12 @@
 package com.red.sovereign.core
 
+import android.content.Context
 import com.google.protobuf.ByteString
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.crypto.EncryptedEnvelope
 import com.red.sovereign.proto.RedProtos
+import com.red.sovereign.security.CertificatePinner
+import com.red.sovereign.security.SecureOkHttpClient
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -13,11 +16,12 @@ import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
 
 class RedWebSocketClient(
+    private val context: Context,
     private val tokens: TokenStore,
     private val onEnvelope: (RedProtos.RedRED) -> Unit,
     private val onState: (ConnectionState) -> Unit = {}
 ) {
-    private val client = OkHttpClient.Builder().pingInterval(25, TimeUnit.SECONDS).build()
+    private val client = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
     fun connect() {
@@ -32,8 +36,14 @@ class RedWebSocketClient(
                 runCatching { RedProtos.RedRED.parseFrom(bytes.toByteArray()) }.onSuccess(onEnvelope)
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = onState(ConnectionState.DISCONNECTED)
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) =
-                onState(if (response?.code == 401) ConnectionState.UNAUTHORIZED else ConnectionState.DISCONNECTED)
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                // Certificate pinning failure
+                if (CertificatePinner.isEnabled && t.message?.contains("Certificate pinning failure") == true) {
+                    onState(ConnectionState.DISCONNECTED)
+                } else {
+                    onState(if (response?.code == 401) ConnectionState.UNAUTHORIZED else ConnectionState.DISCONNECTED)
+                }
+            }
         })
     }
 

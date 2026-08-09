@@ -41,6 +41,23 @@ class MediaController(
         return ResponseEntity.noContent().build()
     }
 
+    @GetMapping("/users/{userId}/{fileName:.+}/thumb")
+    fun thumbnail(
+        @PathVariable userId: String,
+        @PathVariable fileName: String,
+        authentication: Authentication
+    ): ResponseEntity<StreamingResponseBody> {
+        val key = "users/$userId/$fileName"
+        access.requireDownloadAllowed(java.util.UUID.fromString(authentication.name), key)
+        val thumbKey = media.generateThumbnail(key)
+        val metadata = media.metadata(thumbKey)
+        val body = StreamingResponseBody { output -> media.stream(thumbKey, output) }
+        return ResponseEntity.ok()
+            .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "private, max-age=86400")
+            .contentType(runCatching { org.springframework.http.MediaType.parseMediaType(metadata.mimeType) }.getOrDefault(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM))
+            .body(body)
+    }
+
     @GetMapping("/users/{userId}/{fileName:.+}")
     fun download(
         @PathVariable userId: String,

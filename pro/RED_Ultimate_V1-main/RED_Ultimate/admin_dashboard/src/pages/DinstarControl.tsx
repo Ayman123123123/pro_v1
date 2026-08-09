@@ -6,6 +6,15 @@ import { apiFetch } from '../api';
 type Port = { index:number; radioType?:string; status?:string; callState?:string; signal?:number; signalRaw?:number; gprs?:string; numberMasked?:string; imsiMasked?:string; iccidMasked?:string; operator?:string };
 type Discovery = { success:boolean; gatewayIp:string; model:string; status:string; portsDetected?:number; message?:string };
 
+/** Yemen operators — CORRECTED (Wikipedia + ITU E.164): 71=Sabafon, 73=YOU, 77/78=YemenMobile, 70=Y Telecom, 10=Yemen4G */
+const YEMEN_OP: Record<string,{ar:string;en:string;clr:string}> = {
+  Sabafon:{ar:'سبأفون',en:'Sabafon',clr:'#E53935'}, MTN:{ar:'يو',en:'YOU',clr:'#FFB300'}, YOU:{ar:'يو',en:'YOU',clr:'#FFB300'},
+  YemenMobile:{ar:'يمن موبايل',en:'Yemen Mobile',clr:'#43A047'}, 'Yemen Mobile':{ar:'يمن موبايل',en:'Yemen Mobile',clr:'#43A047'},
+  YTelecom:{ar:'واي',en:'Y Telecom',clr:'#1E88E5'}, 'Y Telecom':{ar:'واي',en:'Y Telecom',clr:'#1E88E5'}, HiTel:{ar:'واي',en:'Y Telecom',clr:'#1E88E5'},
+  Yemen4G:{ar:'يمن 4G',en:'Yemen 4G',clr:'#7C4DFF'}, 'Yemen 4G':{ar:'يمن 4G',en:'Yemen 4G',clr:'#7C4DFF'},
+};
+const resolveOp=(o?:string)=>{if(!o||o==='UNKNOWN')return{ar:'غير معروف',en:'Unknown',clr:'#757575'};if(YEMEN_OP[o])return YEMEN_OP[o];for(const k of Object.keys(YEMEN_OP))if(o.includes(k))return YEMEN_OP[k];return{ar:o,en:o,clr:'#757575'};};
+
 export default function DinstarControl() {
   const [ports,setPorts]=useState<Port[]>([]); const [discovery,setDiscovery]=useState<Discovery|null>(null); const [capabilities,setCapabilities]=useState<Record<string,unknown>>({});
   const [cdr,setCdr]=useState<any[]>([]); const [loading,setLoading]=useState(false); const [ussdPort,setUssdPort]=useState<number|null>(null); const [ussd,setUssd]=useState('');
@@ -19,7 +28,7 @@ export default function DinstarControl() {
   const sendUssd=async()=>{if(ussdPort==null)return;try{await json(await apiFetch(`/api/admin/dinstar/ports/${ussdPort}/ussd`,{method:'POST',body:JSON.stringify({code:ussd})}));message.success('تم إرسال USSD');setUssdPort(null);setUssd('');}catch(e:any){message.error(e.message);}};
   const loadCdr=async()=>{try{const b=await json(await apiFetch('/api/admin/dinstar/cdr'));setCdr(b.cdr||b.query||[]);}catch(e:any){message.error(e.message);}};
   return <div style={{padding:20}}>
-    <Row justify="space-between" align="middle"><div><Typography.Title level={2}>DINSTAR UC2000-VE-8T</Typography.Title><Typography.Text type="secondary">جسر يونس الصوتي إلى 8 شرائح — التحكم الموثق فقط</Typography.Text></div><Button loading={loading} icon={<ReloadOutlined/>} onClick={load}>تحديث موثق</Button></Row>
+    <Row justify="space-between" align="middle"><div><Typography.Title level={2}>DINSTAR UC2000-VE-8G</Typography.Title><Typography.Text type="secondary">جسر يونس الصوتي إلى 8 شرائح — التحكم الموثق فقط</Typography.Text></div><Button loading={loading} icon={<ReloadOutlined/>} onClick={load}>تحديث موثق</Button></Row>
     <Alert style={{margin:'14px 0'}} type={discovery?.success?'success':'warning'} showIcon message={discovery?.success?`${discovery.model} متصل على ${discovery.gatewayIp}`:(discovery?.message||'البوابة غير متصلة')} description="المكالمات تخرج حصراً عبر Backend → Asterisk → PJSIP → DINSTAR. لا تستخدم اللوحة endpoint اتصال مباشرًا غير موثق."/>
     <Card title={<><SafetyCertificateOutlined/> حدود الأمان والقدرات</>} style={{marginBottom:16}}><Descriptions size="small" column={{xs:1,md:3}}>
       <Descriptions.Item label="Voice">Asterisk/PJSIP فقط</Descriptions.Item><Descriptions.Item label="SMS/USSD API">{capabilities.ussd?'موثق':'غير متاح'}</Descriptions.Item><Descriptions.Item label="Port Info">{capabilities.portInfo?'موثق':'غير متاح'}</Descriptions.Item>
@@ -27,7 +36,7 @@ export default function DinstarControl() {
     </Descriptions></Card>
     <Row gutter={[12,12]}>{ports.map(port=><Col xs={24} sm={12} lg={6} key={port.index}><Card title={`SIM ${port.index+1}`} extra={<Tag color={port.status==='REGISTERED'?'green':'orange'}>{port.status||'UNKNOWN'}</Tag>}>
       <div style={{textAlign:'center'}}><SignalFilled style={{fontSize:34,color:(port.signal||0)>55?'#00C896':'#E8B84A'}}/><Progress percent={port.signal||0} strokeColor="#00C896"/><Space wrap><Tag>{port.radioType||'UNKNOWN'}</Tag><Tag color="blue">{port.callState||'UNKNOWN'}</Tag><Tag>{port.gprs||'UNKNOWN'}</Tag></Space></div>
-      <Descriptions column={1} size="small" style={{marginTop:10}}><Descriptions.Item label="Number">{port.numberMasked||'غير معروف'}</Descriptions.Item><Descriptions.Item label="IMSI">{port.imsiMasked||'—'}</Descriptions.Item><Descriptions.Item label="ICCID">{port.iccidMasked||'—'}</Descriptions.Item></Descriptions>
+      <Descriptions column={1} size="small" style={{marginTop:10}}><Descriptions.Item label="Operator"><Tag color={resolveOp(port.operator).clr}>{resolveOp(port.operator).ar}</Tag></Descriptions.Item><Descriptions.Item label="Number">{port.numberMasked||'غير معروف'}</Descriptions.Item><Descriptions.Item label="IMSI">{port.imsiMasked||'—'}</Descriptions.Item><Descriptions.Item label="ICCID">{port.iccidMasked||'—'}</Descriptions.Item></Descriptions>
       <Space style={{marginTop:8}}><Button size="small" icon={<ApiOutlined/>} onClick={()=>{setUssdPort(port.index);setUssd('');}}>USSD</Button><Button size="small" danger icon={<ToolOutlined/>} onClick={()=>reset(port.index)}>Reset module</Button></Space>
     </Card></Col>)}</Row>
     {!ports.length&&<Card><Typography.Text type="secondary">لا توجد بيانات منافذ. تحقق من عنوان الجهاز وكلمة API ومن أن الحاسوب/الخادم يصل إلى شبكة 192.168.11.0/24.</Typography.Text></Card>}
