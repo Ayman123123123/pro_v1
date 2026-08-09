@@ -5,7 +5,10 @@
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -d "$DIR/RED_Ultimate_V1-main/RED_Ultimate" ]; then
+# عند وجود مجلد المشروع داخل الجذر (مثل RED_Ultimate_V1-main/run.sh)
+if [ -d "$DIR/RED_Ultimate" ]; then
+  cd "$DIR/RED_Ultimate"
+elif [ -d "$DIR/RED_Ultimate_V1-main/RED_Ultimate" ]; then
   cd "$DIR/RED_Ultimate_V1-main/RED_Ultimate"
 else
   cd "$DIR"
