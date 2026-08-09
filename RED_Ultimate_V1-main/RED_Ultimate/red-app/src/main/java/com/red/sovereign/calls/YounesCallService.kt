@@ -262,10 +262,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     /**
      * Notifies the user that a second call is waiting while another is active.
-     * Plays a short ringtone (not the full one) and updates the notification.
+     * Plays a short "call-waiting" tone (notification sound) instead of full ringtone,
+     * so the active call audio is not drowned out.
      */
     private fun notifyWaiting(waiting: CallUiState.Incoming) {
-        startRingtone() // رنة مختصرة فقط
+        // TYPE_NOTIFICATION = رنة مختصرة (نغمة "تنبيه")، ليست رنة كاملة
+        startRingtone(RingtoneManager.TYPE_NOTIFICATION, longArrayOf(0, 200, 100, 200))
         updateNotification("مكالمة يونس: ${waiting.peer} في الانتظار")
     }
 
@@ -357,8 +359,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun startRingtone() {
+        startRingtone(RingtoneManager.TYPE_RINGTONE, longArrayOf(0, 800, 400, 800))
+    }
+
+    private fun startRingtone(type: Int, vibrationPattern: LongArray) {
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            val uri = RingtoneManager.getDefaultUri(type)
             ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
                 isLooping = true
                 play()
@@ -370,9 +376,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             vibrator?.let { vib ->
                 if (android.os.Build.VERSION.SDK_INT >= 26) {
-                    vib.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400, 800), 0))
+                    vib.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0))
                 } else {
-                    @Suppress("DEPRECATION") vib.vibrate(longArrayOf(0, 800, 400, 800), 0)
+                    @Suppress("DEPRECATION") vib.vibrate(vibrationPattern, 0)
                 }
             }
         } catch (_: Exception) {}

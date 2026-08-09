@@ -39,6 +39,7 @@ object LiveStreamRuntime {
     var remoteVideo: VideoTrack? by mutableStateOf(null)
     var eglContext: org.webrtc.EglBase.Context? = null
     var isMuted by mutableStateOf(false)
+    var networkStats: NetworkStats by mutableStateOf(NetworkStats())
 }
 
 class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingClient.Listener {
@@ -149,13 +150,28 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         }
     }
 
+    override fun onNetworkStats(stats: NetworkStats) { LiveStreamRuntime.networkStats = stats }
+
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, isBroadcaster, System.currentTimeMillis())
+            startStatsPolling()
+        }
+    }
+
+    private var statsJob: kotlinx.coroutines.Job? = null
+    private fun startStatsPolling() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                engine?.pollStats()
+                kotlinx.coroutines.delay(2000)
+            }
         }
     }
 
     private fun stopStream() {
+        statsJob?.cancel(); statsJob = null
         if (streamId.isNotBlank()) signaling.leave(streamId, userId)
         signaling.close()
         engine?.release()
@@ -164,6 +180,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         LiveStreamRuntime.localVideo = null
         LiveStreamRuntime.remoteVideo = null
         LiveStreamRuntime.eglContext = null
+        LiveStreamRuntime.networkStats = NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
