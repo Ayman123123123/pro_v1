@@ -218,6 +218,50 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps([]).encode())
             return
 
+        if path == "/api/admin/dinstar/inventory":
+            inventory = []
+            for p in YEMEN_OPERATORS:
+                inventory.append({
+                    "gatewayId": "gateway_uuid_001",
+                    "gatewayName": "بوابة DINSTAR الرئيسية",
+                    "gatewayModel": "UC2000-VE-8G",
+                    "gatewayHost": "192.168.11.1",
+                    "portIndex": p["index"],
+                    "radioType": p["radioType"],
+                    "registrationState": p["status"],
+                    "callState": p["callState"],
+                    "signalPercent": p["signal"],
+                    "operatorLabel": p["operator"],
+                    "simLabel": None,
+                    "verificationState": "VERIFIED",
+                    "verificationMethod": "USSD",
+                    "msisdnMasked": p["numberMasked"],
+                    "verifiedAt": "2026-08-09T00:00:00Z"
+                })
+            self._set_headers(200)
+            self.wfile.write(json.dumps(inventory).encode())
+            return
+
+        # GET /api/admin/users/{userId}/overview — نظرة شاملة على المستخدم
+        m = re.match(r"^/api/admin/users/([^/]+)/overview$", path)
+        if m:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "userId": m.group(1),
+                "redId": "YNS-1234-5678",
+                "username": "new_user",
+                "displayName": "مستخدم جديد",
+                "status": "APPROVED",
+                "online": False,
+                "lastSeenAt": "2026-08-09T00:00:00Z",
+                "messages24h": 12,
+                "devices": [{"id": "dev_001", "deviceName": "Android", "platform": "ANDROID", "status": "APPROVED"}],
+                "posts": 3,
+                "stories": 1,
+                "pstnMinutesToday": 5
+            }).encode())
+            return
+
         # Fallback 404
         self._set_headers(404)
         self.wfile.write(json.dumps({"error": "NOT_FOUND", "path": path}).encode())
@@ -339,8 +383,44 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/admin/security/kill-switch") or path.startswith("/api/admin/security/wipe"):
-            self._set_headers(200)
-            self.wfile.write(json.dumps({"status": "OK"}).encode())
+            q = parse_qs(parsed.query)
+            if "kill-switch" in path:
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "ACTIVATED",
+                    "reason": (q.get("reason") or ["no_reason"])[0],
+                    "killSwitchEnabled": True,
+                    "timestamp": "2026-08-09T00:00:00Z"
+                }).encode())
+            else:
+                self._set_headers(200)
+                self.wfile.write(json.dumps({
+                    "status": "SENT",
+                    "userId": (q.get("userId") or ["user_uuid_001"])[0],
+                    "action": "WIPE",
+                    "timestamp": "2026-08-09T00:00:00Z",
+                    "commandId": "mock_wipe_cmd_001"
+                }).encode())
+            return
+
+        # POST /api/admin/users/{userId}/temporary-password — إعادة تعيين كلمة مؤقتة
+        m = re.match(r"^/api/admin/users/([^/]+)/temporary-password$", path)
+        if m:
+            self._set_headers(204)
+            self.wfile.write(b"")
+            return
+
+        # POST /api/admin/users/{userId}/remote-app-wipe — مسح عن بُعد
+        m = re.match(r"^/api/admin/users/([^/]+)/remote-app-wipe$", path)
+        if m:
+            self._set_headers(202)
+            self.wfile.write(json.dumps({
+                "status": "SENT",
+                "userId": m.group(1),
+                "action": "WIPE",
+                "timestamp": "2026-08-09T00:00:00Z",
+                "commandId": "mock_wipe_cmd_001"
+            }).encode())
             return
 
         self._set_headers(200)
@@ -360,6 +440,34 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/notifications") or path.startswith("/api/social/status") or path.startswith("/api/social/privacy"):
             self._set_headers(200)
             self.wfile.write(json.dumps({"status": "UPDATED"}).encode())
+            return
+        # PUT /api/admin/dinstar/inventory/{gatewayId}/ports/{portIndex} — تحديث جرد شريحة
+        m = re.match(r"^/api/admin/dinstar/inventory/([^/]+)/ports/(\d+)$", path)
+        if m:
+            port_index = int(m.group(2))
+            if port_index < 0 or port_index >= len(YEMEN_OPERATORS):
+                self._set_headers(404)
+                self.wfile.write(json.dumps({"error": "PORT_NOT_FOUND", "portIndex": port_index}).encode())
+                return
+            base = YEMEN_OPERATORS[port_index]
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "gatewayId": m.group(1),
+                "gatewayName": "بوابة DINSTAR الرئيسية",
+                "gatewayModel": "UC2000-VE-8G",
+                "gatewayHost": "192.168.11.1",
+                "portIndex": port_index,
+                "radioType": base["radioType"],
+                "registrationState": base["status"],
+                "callState": base["callState"],
+                "signalPercent": base["signal"],
+                "operatorLabel": data.get("operatorLabel") or base["operator"],
+                "simLabel": data.get("simLabel"),
+                "verificationState": data.get("verificationState") or "VERIFIED",
+                "verificationMethod": data.get("verificationMethod") or "USSD",
+                "msisdnMasked": data.get("lastFourDigits", base["numberMasked"][-4:]),
+                "verifiedAt": "2026-08-09T00:00:00Z"
+            }).encode())
             return
         self._set_headers(200)
         self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
