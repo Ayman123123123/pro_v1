@@ -27,6 +27,24 @@ class FeedApi(private val client: AuthorizedApiClient) {
     suspend fun thread(postId: String): ApiResult<List<Post>> =
         client.request("GET", "/api/feed/posts/$postId/thread").decode { json.decodeFromString<List<Post>>(it) }
 
+    suspend fun edit(postId: String, text: String): ApiResult<Post> =
+        client.request("PUT", "/api/feed/posts/$postId", json.encodeToString(EditPostRequest(text))).decode { json.decodeFromString<Post>(it) }
+
+    suspend fun hide(postId: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/feed/posts/$postId/hide")) {
+        is ApiResult.Success -> ApiResult.Success(result.code, Unit)
+        is ApiResult.Error -> result
+    }
+
+    suspend fun mute(authorRedId: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/feed/mute/$authorRedId")) {
+        is ApiResult.Success -> ApiResult.Success(result.code, Unit)
+        is ApiResult.Error -> result
+    }
+
+    suspend fun report(postId: String, reason: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/feed/posts/$postId/report", json.encodeToString(HidePostRequest(reason)))) {
+        is ApiResult.Success -> ApiResult.Success(result.code, Unit)
+        is ApiResult.Error -> result
+    }
+
     suspend fun delete(postId: String): ApiResult<Unit> = when (val result = client.request("DELETE", "/api/feed/posts/$postId")) {
         is ApiResult.Success -> ApiResult.Success(result.code, Unit)
         is ApiResult.Error -> result
