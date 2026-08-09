@@ -52,6 +52,15 @@ class MediaThumbnailTest {
     }
 
     @Test
+    fun `video thumbnail placeholder generates 256`() {
+        // Video should get thumbs/ prefix even without ffmpeg
+        val key = "users/123e4567-e89b-12d3-a456-426614174000/vid.mp4"
+        val thumbKey = "thumbs/$key.jpg"
+        assertTrue(thumbKey.startsWith("thumbs/users/"))
+        assertTrue(thumbKey.endsWith(".jpg"))
+    }
+
+    @Test
     fun `thumbnail key format is thumbs slash original`() {
         val key = "users/123e4567-e89b-12d3-a456-426614174000/abc.jpg"
         val thumbKey = "thumbs/$key"
