@@ -844,9 +844,17 @@ private fun ChatHubScreen(
                     TextButton({ showDirectory = true }) { Text("إضافة +", color = AqyalGold, fontSize = 12.sp) }
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(directory.contacts.filter { person ->
-                        conversations.none { it.peerId == person.redId && it.archived }
-                    }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }.thenBy { it.displayName }), key = { it.redId }) { person ->
+                    // نحسب الترتيب مرة واحدة لكل recompose بدلاً من تكرار في كل item
+                    val sortedContacts = remember(directory.contacts, conversations, directory) {
+                        directory.contacts
+                            .filter { person -> conversations.none { it.peerId == person.redId && it.archived } }
+                            .sortedWith(
+                                compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }
+                                    .thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }
+                                    .thenBy { it.displayName }
+                            )
+                    }
+                    items(sortedContacts, key = { it.redId }) { person ->
                         Column(Modifier.widthIn(max = 86.dp).clickable { target = person.redId }, horizontalAlignment = Alignment.CenterHorizontally) {
                             Avatar(person.displayName.take(1)); Text(person.displayName, maxLines = 1, fontSize = 11.sp); Text("@${person.username}", color = AqyalCyanGlow, maxLines = 1, fontSize = 9.sp)
                             IconButton({ selectedContact = person }, Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(16.dp)) }
