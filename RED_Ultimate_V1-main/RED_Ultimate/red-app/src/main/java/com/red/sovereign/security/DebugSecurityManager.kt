@@ -2,11 +2,14 @@ package com.red.sovereign.security
 
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import com.red.sovereign.BuildConfig
 import java.security.MessageDigest
 
 /** Applies strict security defaults in release and developer-friendly defaults in debug. */
 object DebugSecurityManager {
+    private const val TAG = "Security"
+
     fun isDebugBuild(): Boolean = BuildConfig.DEBUG
 
     fun shouldEnableCertificatePinning(): Boolean = !BuildConfig.DEBUG
@@ -19,9 +22,9 @@ object DebugSecurityManager {
         CertificatePinner.loadPins(context)
         CertificatePinner.setEnabled(shouldEnableCertificatePinning())
         if (shouldEnableLogging()) {
-            println("[Security] Debug build - certificate pinning disabled unless manually configured")
+            Log.i(TAG, "Debug build - certificate pinning disabled unless manually configured")
         } else {
-            println("[Security] Release build - strict TLS and configured pins enabled")
+            Log.i(TAG, "Release build - strict TLS and configured pins enabled")
         }
     }
 

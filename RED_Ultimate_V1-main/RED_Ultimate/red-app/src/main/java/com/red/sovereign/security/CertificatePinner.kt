@@ -2,6 +2,7 @@ package com.red.sovereign.security
 
 import android.content.Context
 import android.util.Base64
+import android.util.Log
 import com.red.sovereign.BuildConfig
 import java.security.MessageDigest
 import java.security.cert.Certificate
@@ -92,8 +93,10 @@ object CertificatePinner {
 
     fun printPins() {
         allPins().forEach { (host, pins) ->
-            println("Host: $host")
-            pins.forEach { println("  - $it") }
+            Log.i(TAG, "Host: $host")
+            pins.forEach { Log.i(TAG, "  - $it") }
         }
     }
+
+    private const val TAG = "CertificatePinner"
 }
