@@ -109,9 +109,9 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun edit(post: Post, newText: String) = viewModelScope.launch {
+    fun edit(post: Post, newText: String, done: () -> Unit = {}) = viewModelScope.launch {
         when (val result = api.edit(post.id, newText)) {
-            is ApiResult.Success -> replace(result.value)
+            is ApiResult.Success -> { replace(result.value); done() }
             is ApiResult.Error -> state = FeedState.Error(result.message)
         }
     }

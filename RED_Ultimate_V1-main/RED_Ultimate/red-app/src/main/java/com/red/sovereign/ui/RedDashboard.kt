@@ -338,6 +338,8 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     var filter by remember { mutableIntStateOf(0) }
     var threadPost by remember { mutableStateOf<Post?>(null) }
     var quotePost by remember { mutableStateOf<Post?>(null) }
+    var editPost by remember { mutableStateOf<Post?>(null) }
+    var editText by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
     val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
@@ -370,7 +372,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
             feed.state is FeedState.Error -> item { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message) }
             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = feed::edit, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -405,6 +407,15 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
             text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Card { Text(quoted.text, Modifier.padding(12.dp), color = Color.Gray) }; OutlinedTextField(quoteText, { quoteText = it }, Modifier.fillMaxWidth(), label = { Text("تعليقك") }, maxLines = 5) } },
             confirmButton = { Button({ feed.quote(quoted, quoteText) { quotePost = null; quoteText = "" } }, enabled = quoteText.isNotBlank() && feed.state != FeedState.Publishing) { Text("نشر الاقتباس") } },
             dismissButton = { TextButton({ quotePost = null; quoteText = "" }) { Text("إلغاء") } }
+        )
+    }
+    editPost?.let { post ->
+        AlertDialog(
+            onDismissRequest = { editPost = null; editText = "" },
+            title = { Text("تعديل المنشور") },
+            text = { OutlinedTextField(editText, { editText = it }, Modifier.fillMaxWidth(), label = { Text("النص الجديد") }, maxLines = 7) },
+            confirmButton = { Button({ feed.edit(post, editText) { editPost = null; editText = "" } }, enabled = editText.isNotBlank() && editText != post.text) { Text("حفظ التعديل") } },
+            dismissButton = { TextButton({ editPost = null; editText = "" }) { Text("إلغاء") } }
         )
     }
     val viewer = stories.viewer
