@@ -21,6 +21,13 @@ COPY RED_Ultimate/build-logic/ build-logic/
 COPY RED_Ultimate/wire-handler/ wire-handler/
 COPY RED_Ultimate/red-app/ red-app/
 COPY RED_Ultimate/shared-proto/ shared-proto/
+# المشروع يطلب compileSdk=37 وقاعدة الصورة تحمل 35 فقط — نثبّت platform 37 + build-tools 36
+# استباقياً حتى لا يضطر AGP للتنزيل أثناء البناء (شبكة الهدف متقلبة). المحاولة محمية:
+# إن غاب sdkmanager من الصورة نكمل ونعتمد على التنزيل التلقائي.
+RUN (command -v sdkmanager >/dev/null 2>&1 \
+      && yes | sdkmanager --licenses >/dev/null 2>&1 \
+      && sdkmanager "platforms;android-37" "build-tools;36.0.0") \
+    || echo "sdkmanager unavailable — relying on AGP auto-download"
 RUN --mount=type=cache,target=/root/.gradle/caches,sharing=locked \
     --mount=type=cache,target=/root/.gradle/wrapper,sharing=locked \
     sed -i 's/\r$//' gradlew \
