@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -44,6 +45,20 @@ class FeedController(private val feed: FeedService) {
 
     @GetMapping("/following")
     fun following(auth: Authentication) = feed.following(UUID.fromString(auth.name))
+
+    @PutMapping("/posts/{postId}")
+    fun edit(@PathVariable postId: String, @RequestBody request: EditPostRequest, auth: Authentication) =
+        feed.edit(UUID.fromString(auth.name), postId, request)
+
+    @PostMapping("/posts/{postId}/hide")
+    fun hide(@PathVariable postId: String, auth: Authentication) = feed.hide(UUID.fromString(auth.name), postId)
+
+    @PostMapping("/mute/{redId}")
+    fun mute(@PathVariable redId: String, auth: Authentication) = feed.mute(UUID.fromString(auth.name), redId)
+
+    @PostMapping("/posts/{postId}/report")
+    fun report(@PathVariable postId: String, @RequestBody request: HidePostRequest, auth: Authentication) =
+        feed.report(UUID.fromString(auth.name), postId, request)
 
     @DeleteMapping("/posts/{postId}")
     fun delete(@PathVariable postId: String, auth: Authentication) = feed.delete(UUID.fromString(auth.name), postId)

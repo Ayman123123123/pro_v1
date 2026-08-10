@@ -8,6 +8,7 @@ import io.minio.MinioClient
 import io.minio.PutObjectArgs
 import io.minio.RemoveObjectArgs
 import io.minio.StatObjectArgs
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
@@ -20,6 +21,7 @@ class MediaService(
     @Value("\${red.minio.bucket}") private val bucket: String,
     private val scanner: MediaSecurityScanner? = null
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
     @Synchronized
     fun ensureBucket() {
         if (!minio.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
@@ -132,7 +134,9 @@ class MediaService(
                 tmpVideo.delete()
                 tmpThumb.delete()
             }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            log.debug("Failed extracting ffmpeg video thumbnail: {}", e.message)
+        }
         // Fallback: generate placeholder 256x256 with play icon
         try {
             val placeholder = BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB)
@@ -155,7 +159,9 @@ class MediaService(
                 }
                 return thumbKey
             } finally { tmp.delete() }
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            log.debug("Failed writing placeholder video thumbnail: {}", e.message)
+        }
         return key
     }
 
@@ -189,7 +195,11 @@ class MediaService(
         val orphans = findOrphanKeys(all, referencedKeys)
         if (!dryRun) {
             orphans.forEach { key ->
-                try { minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build()) } catch (_: Exception) {}
+                try {
+                    minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
+                } catch (e: Exception) {
+                    log.warn("Failed removing orphan key {}: {}", key, e.message)
+                }
             }
         }
         return orphans
