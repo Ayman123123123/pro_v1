@@ -5,11 +5,11 @@
 
 ## الملفات
 
-### `VoiceRecorder-core.kt`
+### `VoiceRecorder-core.kt.archived`
 - **المسار الأصلي:** `com.red.sovereign.core.utils.VoiceRecorder`
 - **التاريخ:** 2026-08-09
-- **السبب:** Dead code — لم يكن مستخدماً. الـ `VoiceMessageViewModel` يستخدم `MediaRecorder` مباشرة.
-- **البديل النشط:** `com.red.sovereign.media.VoiceMessageViewModel`
+- **السبب:** أُعيد تفعيل نسخة محسّنة في `core/utils/VoiceRecorder.kt`، وبقيت هذه النسخة كأرشيف غير مترجم.
+- **البديل النشط:** `com.red.sovereign.core.utils.VoiceRecorder`
 
 ### `VoiceRecorder-features-chat.kt`
 - **المسار الأصلي:** `com.red.sovereign.features.chat.VoiceRecorder`
@@ -29,4 +29,4 @@
 
 - **لا تحذف** الملفات من هذا المجلد إلا بعد 6 أشهر من الأرشفة.
 - إذا احتجت استعادة ملف، انقله إلى مكانه الأصلي وأزل هذا الـ README.
-- الملفات هنا لا تُجمَع في الـ production build (لكن Gradle لا يستثنيها افتراضياً).
+- ملفات الأرشيف التي قد تسبب تكرار فئات يجب أن تبقى بامتداد غير `.kt` حتى لا تدخل build.
