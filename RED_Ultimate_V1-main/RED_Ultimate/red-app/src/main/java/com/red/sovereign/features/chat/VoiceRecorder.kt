@@ -1,35 +1,10 @@
 package com.red.sovereign.features.chat
 
-import android.media.MediaRecorder
-import java.io.File
-
 /**
- * 🎙️ YOUNES Voice Recorder — محرك تسجيل الرسائل الصوتية السيادية
+ * Compatibility alias for the old chat package voice recorder.
+ *
+ * The active implementation lives in `com.red.sovereign.core.utils.VoiceRecorder`
+ * with safer error handling. Keeping this alias preserves older imports from
+ * branch `arena/019fe4dd-pro-v1` without duplicating recorder logic.
  */
-class VoiceRecorder(private val outputDir: File) {
-    private var recorder: MediaRecorder? = null
-    private var currentFile: File? = null
-
-    fun startRecording() {
-        currentFile = File(outputDir, "VOICE_${System.currentTimeMillis()}.ogg")
-        recorder = MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.OGG)
-            setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
-            setAudioSamplingRate(48000)
-            setAudioEncodingBitRate(64000)
-            setOutputFile(currentFile?.absolutePath)
-            prepare()
-            start()
-        }
-    }
-
-    fun stopRecording(): File? {
-        recorder?.apply {
-            stop()
-            release()
-        }
-        recorder = null
-        return currentFile
-    }
-}
+typealias VoiceRecorder = com.red.sovereign.core.utils.VoiceRecorder

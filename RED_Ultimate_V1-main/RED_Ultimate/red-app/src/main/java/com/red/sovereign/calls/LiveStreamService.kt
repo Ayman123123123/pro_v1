@@ -39,11 +39,14 @@ object LiveStreamRuntime {
     var remoteVideo: VideoTrack? by mutableStateOf(null)
     var eglContext: org.webrtc.EglBase.Context? = null
     var isMuted by mutableStateOf(false)
+    var networkStats: NetworkStats by mutableStateOf(NetworkStats())
+    /** عدد المشاهدين النشطين — محدّث عبر signaling (PARTICIPANT_JOINED/LEFT) */
+    var viewerCount: Int by mutableStateOf(0)
 }
 
-class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingClient.Listener {
+class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingClient.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private lateinit var signaling: ConferenceSignalingClient
+    private lateinit var signaling: LiveStreamSignalingClient
     private var engine: WebRtcEngine? = null
     private var streamId = ""
     private var userId = ""
@@ -53,7 +56,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
-        signaling = ConferenceSignalingClient(this, TokenStore(this), this)
+        signaling = LiveStreamSignalingClient(this, TokenStore(this), this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,6 +74,11 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 LiveStreamRuntime.isMuted = !LiveStreamRuntime.isMuted
                 engine?.setMicrophoneEnabled(!LiveStreamRuntime.isMuted)
             }
+            ACTION_TOGGLE_VIDEO -> {
+                // للبث المباشر، التبديل يعني إيقاف/استئناف إرسال الفيديو (الكاميرا المحلية)
+                val isVideoOn = LiveStreamRuntime.localVideo?.enabled() == true
+                engine?.setCameraEnabled(!isVideoOn)
+            }
         }
         return START_NOT_STICKY
     }
@@ -79,15 +87,16 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         scope.launch {
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
-            engine?.create(isBroadcaster)
+            // Live streaming needs HD + simulcast for adaptive quality to viewers
+            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
             }
-            signaling.join(streamId, userId, isBroadcaster)
+            signaling.join(streamId, userId, if (isBroadcaster) "broadcaster" else "viewer")
         }
     }
 
-    override fun onSignal(signal: ConferenceSignal) {
+    override fun onSignal(signal: LiveStreamSignal) {
         when (signal.type) {
             "OFFER" -> {
                 signal.payload["sdp"]?.let {
@@ -110,31 +119,31 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                     )
                 )
             }
-        }
-    }
-
-    override fun onRoomState(participants: List<ConferenceParticipant>) {}
-    override fun onParticipantJoined(participant: ConferenceParticipant) {}
-    override fun onParticipantLeft(userId: String) {
-        if (!isBroadcaster && userId == streamId) {
-            stopStream()
+            "VIEWER_JOINED" -> {
+                if (isBroadcaster) LiveStreamRuntime.viewerCount += 1
+            }
+            "VIEWER_LEFT" -> {
+                if (isBroadcaster) LiveStreamRuntime.viewerCount = (LiveStreamRuntime.viewerCount - 1).coerceAtLeast(0)
+            }
         }
     }
 
     override fun onDisconnected() { stopStream() }
     override fun onError(message: String) {
         LiveStreamRuntime.state = LiveStreamUiState.Error(message)
-        // Auto-dismiss after 3s
         scope.launch {
             kotlinx.coroutines.delay(3000)
             if (LiveStreamRuntime.state is LiveStreamUiState.Error) LiveStreamRuntime.state = LiveStreamUiState.Idle
         }
-        stopStream()
+        scope.launch {
+            kotlinx.coroutines.delay(500)
+            stopStream()
+        }
     }
 
     override fun onLocalDescription(description: SessionDescription) {
         if (description.type == SessionDescription.Type.ANSWER) {
-            signaling.send(ConferenceSignal(type = "ANSWER", roomId = streamId, userId = userId, payload = mapOf("sdp" to description.description)))
+            signaling.sendAnswer(streamId, userId, description.description)
         } else {
             signaling.sendOffer(streamId, userId, description.description)
         }
@@ -150,13 +159,28 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
+    override fun onNetworkStats(stats: NetworkStats) { LiveStreamRuntime.networkStats = stats }
+
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, isBroadcaster, System.currentTimeMillis())
+            startStatsPolling()
+        }
+    }
+
+    private var statsJob: kotlinx.coroutines.Job? = null
+    private fun startStatsPolling() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                engine?.pollStats()
+                kotlinx.coroutines.delay(2000)
+            }
         }
     }
 
     private fun stopStream() {
+        statsJob?.cancel(); statsJob = null
         if (streamId.isNotBlank()) signaling.leave(streamId, userId)
         signaling.close()
         engine?.release()
@@ -164,6 +188,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         LiveStreamRuntime.state = LiveStreamUiState.Idle
         LiveStreamRuntime.localVideo = null
         LiveStreamRuntime.remoteVideo = null
+        LiveStreamRuntime.eglContext = null
+        LiveStreamRuntime.networkStats = NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -199,6 +225,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         const val ACTION_START = "com.red.sovereign.livestream.START"
         const val ACTION_STOP = "com.red.sovereign.livestream.STOP"
         const val ACTION_TOGGLE_MIC = "com.red.sovereign.livestream.TOGGLE_MIC"
+        const val ACTION_TOGGLE_VIDEO = "com.red.sovereign.livestream.TOGGLE_VIDEO"
         const val EXTRA_STREAM_ID = "stream_id"
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_BROADCASTER = "broadcaster"

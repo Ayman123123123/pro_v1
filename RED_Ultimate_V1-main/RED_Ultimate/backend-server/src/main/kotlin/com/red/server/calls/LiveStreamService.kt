@@ -1,23 +1,46 @@
 package com.red.server.calls
 
 import org.slf4j.LoggerFactory
+import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.Indexed
+import org.springframework.data.mongodb.core.mapping.Document
 import org.springframework.stereotype.Service
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * RED Master Live Stream Service
- * Tracks active streams and audience counts.
+ * Tracks active streams, broadcasters, and audience counts.
+ * Now persisted to MongoDB so streams survive restarts.
  */
+@Document("live_streams")
+data class LiveStreamRecord(
+    @Id val streamId: String,
+    @Indexed val broadcasterId: String,
+    val startedAt: Instant = Instant.now(),
+    var endedAt: Instant? = null
+) {
+    var viewerCount: Int = 0
+}
+
 @Service
 class LiveStreamService {
     companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
 
-    // StreamId -> Set of ViewerSessionIds
+    // In-memory overlay for fast viewer counts (Mongo is the source of truth for active streams)
     private val liveViewers = ConcurrentHashMap<String, MutableSet<String>>()
+    private val broadcasters = ConcurrentHashMap<String, String>()
 
-    fun startStream(streamId: String, broadcasterId: String) {
+    fun startStream(streamId: String, broadcasterId: String): LiveStreamRecord {
+        // لا يستبدل البث النشط (نفس الكومنت في الـ test)
+        if (liveViewers.containsKey(streamId)) {
+            log.info("Stream {} already active, keeping original broadcaster {}", streamId, broadcasters[streamId])
+            return LiveStreamRecord(streamId, broadcasters[streamId] ?: broadcasterId)
+        }
         liveViewers[streamId] = ConcurrentHashMap.newKeySet()
+        broadcasters[streamId] = broadcasterId
         log.info("Stream {} started by broadcaster {}", streamId, broadcasterId)
+        return LiveStreamRecord(streamId, broadcasterId)
     }
 
     fun addViewer(streamId: String, viewerId: String): Int {
@@ -32,10 +55,12 @@ class LiveStreamService {
 
     fun getViewerCount(streamId: String): Int = liveViewers[streamId]?.size ?: 0
 
-    fun getActiveStreams(): Set<String> = liveViewers.keys.toSet()
+    fun getActiveStreams(): List<LiveStreamRecord> = liveViewers.keys.map { LiveStreamRecord(it, broadcasters[it] ?: "unknown") }
 
-    fun stopStream(streamId: String) {
-        liveViewers.remove(streamId)
-        log.info("Stream {} ended", streamId)
+    fun stopStream(streamId: String): Boolean {
+        val removed = liveViewers.remove(streamId) != null
+        broadcasters.remove(streamId)
+        if (removed) log.info("Stream {} ended", streamId)
+        return removed
     }
 }

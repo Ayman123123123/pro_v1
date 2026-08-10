@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- YOUNES Sovereign — Professional Typography System -->
+    <!-- Cairo for headings (official, authoritative) + Tajawal for body (readable, warm) -->
+    <string name="font_family_cairo">cairo</string>
+    <string name="font_family_tajawal">tajawal</string>
+    <string name="font_family_primary">cairo</string>
+    <string name="font_family_title">cairo</string>
+
+    <!-- Font Size Tokens — Harmonized 1.25 scale -->
+    <dimen name="font_size_caption">11sp</dimen>
+    <dimen name="font_size_body_small">13sp</dimen>
+    <dimen name="font_size_body">15sp</dimen>
+    <dimen name="font_size_body_large">17sp</dimen>
+    <dimen name="font_size_title">19sp</dimen>
+    <dimen name="font_size_title_large">22sp</dimen>
+    <dimen name="font_size_header">26sp</dimen>
+    <dimen name="font_size_hero">32sp</dimen>
+
+    <!-- Spacing — 8dp grid, consistent -->
+    <dimen name="spacing_xxs">2dp</dimen>
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_small">8dp</dimen>
+    <dimen name="spacing_medium">16dp</dimen>
+    <dimen name="spacing_large">24dp</dimen>
+    <dimen name="spacing_xlarge">32dp</dimen>
+    <dimen name="spacing_xxlarge">48dp</dimen>
+
+    <!-- Radius — Soft, professional, not clownish -->
+    <dimen name="card_radius">20dp</dimen>
+    <dimen name="card_radius_small">12dp</dimen>
+    <dimen name="card_radius_large">28dp</dimen>
+    <dimen name="button_radius">14dp</dimen>
+    <dimen name="input_radius">16dp</dimen>
+    <dimen name="avatar_radius">999dp</dimen>
+    <dimen name="sheet_radius">28dp</dimen>
+</resources>

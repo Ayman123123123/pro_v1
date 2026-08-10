@@ -41,6 +41,7 @@ object ConferenceRuntime {
     val remoteVideos = androidx.compose.runtime.mutableStateMapOf<String, VideoTrack>()
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
+    var networkStats: NetworkStats by mutableStateOf(NetworkStats())
 }
 
 class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingClient.Listener {
@@ -54,7 +55,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
-        signaling = ConferenceSignalingClient(TokenStore(this), this)
+        signaling = ConferenceSignalingClient(this, TokenStore(this), this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -76,6 +77,25 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             ACTION_TOGGLE_VIDEO -> {
                 ConferenceRuntime.isVideoEnabled = !ConferenceRuntime.isVideoEnabled
                 engine?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+            }
+            ACTION_SET_QUALITY -> {
+                // Override adaptive bitrate — set by user manually
+                val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
+                engine?.let { eng ->
+                    val profile = when (quality) {
+                        "LOW" -> NetworkStats.BitrateProfile.LOW
+                        "HD" -> NetworkStats.BitrateProfile.HD
+                        "AUDIO" -> NetworkStats.BitrateProfile.AUDIO_ONLY
+                        else -> NetworkStats.BitrateProfile.STANDARD
+                    }
+                    eng.applyAdaptiveBitrate(ConferenceRuntime.networkStats.copy(quality = ConferenceRuntime.networkStats.quality))
+                    // force re-apply chosen profile
+                    if (profile == NetworkStats.BitrateProfile.AUDIO_ONLY) {
+                        eng.setCameraEnabled(false)
+                    } else {
+                        eng.setCameraEnabled(true)
+                    }
+                }
             }
         }
         return START_NOT_STICKY
@@ -136,7 +156,18 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onDisconnected() { leave() }
     override fun onError(message: String) {
         ConferenceRuntime.state = ConferenceUiState.Error(message)
-        leave()
+        // Auto-dismiss after 3s like YounesCallService
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (ConferenceRuntime.state is ConferenceUiState.Error) {
+                ConferenceRuntime.state = ConferenceUiState.Idle
+            }
+        }
+        // تأخير مغلق طفيف حتى يرى المستخدم رسالة الخطأ
+        scope.launch {
+            kotlinx.coroutines.delay(500)
+            leave()
+        }
     }
 
     override fun onLocalDescription(description: SessionDescription) {
@@ -158,13 +189,28 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
+    override fun onNetworkStats(stats: NetworkStats) { ConferenceRuntime.networkStats = stats }
+
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             ConferenceRuntime.state = ConferenceUiState.Active(roomId, System.currentTimeMillis())
+            startStatsPolling()
+        }
+    }
+
+    private var statsJob: kotlinx.coroutines.Job? = null
+    private fun startStatsPolling() {
+        statsJob?.cancel()
+        statsJob = scope.launch {
+            while (true) {
+                engine?.pollStats()
+                kotlinx.coroutines.delay(2000)
+            }
         }
     }
 
     private fun leave() {
+        statsJob?.cancel(); statsJob = null
         if (roomId.isNotBlank()) signaling.leave(roomId, userId)
         signaling.close()
         engine?.release()
@@ -173,6 +219,8 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         ConferenceRuntime.participants = emptyList()
         ConferenceRuntime.remoteVideos.clear()
         ConferenceRuntime.localVideo = null
+        ConferenceRuntime.eglContext = null
+        ConferenceRuntime.networkStats = NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -207,9 +255,11 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         const val ACTION_LEAVE = "com.red.sovereign.conference.LEAVE"
         const val ACTION_TOGGLE_MIC = "com.red.sovereign.conference.TOGGLE_MIC"
         const val ACTION_TOGGLE_VIDEO = "com.red.sovereign.conference.TOGGLE_VIDEO"
+        const val ACTION_SET_QUALITY = "com.red.sovereign.conference.SET_QUALITY"
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_VIDEO = "video"
+        const val EXTRA_QUALITY = "quality"
 
         fun join(context: Context, roomId: String, userId: String, video: Boolean) {
             val intent = Intent(context, ConferenceService::class.java).apply {

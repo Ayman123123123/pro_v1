@@ -21,7 +21,7 @@ fun ChatListScreen(
     val chats by chatViewModel.getConversations().collectAsState(initial = emptyList())
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("RED Sovereign") }) }
+        topBar = { TopAppBar(title = { Text("يونس") }) }
     ) { padding ->
         LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
             // إضافة ميزة القصص برمجياً

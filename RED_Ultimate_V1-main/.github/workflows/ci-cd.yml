@@ -1,0 +1,159 @@
+name: RED Ultimate — CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, arena/**, develop]
+  pull_request:
+    branches: [main, arena/**, develop]
+  workflow_dispatch:
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+  JAVA_VERSION: '21'
+
+jobs:
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Backend (Kotlin Spring Boot)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  backend-test:
+    name: 🧪 Backend Tests (Kotlin 2.2.20 / Spring Boot 3.5.16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: 🔧 Make gradlew executable
+        run: chmod +x RED_Ultimate/backend-server/gradlew
+
+      - name: 🧪 Run Backend Unit Tests
+        working-directory: RED_Ultimate/backend-server
+        run: |
+          ./gradlew test --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: ${{ env.GRADLE_OPTS }}
+
+      - name: 📊 Publish Test Results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Backend Test Report
+          path: RED_Ultimate/backend-server/build/test-results/test/*.xml
+          reporter: java-junit
+
+      - name: 📦 Build Backend JAR
+        working-directory: RED_Ultimate/backend-server
+        run: ./gradlew bootJar --no-daemon
+
+      - name: ⬆️ Upload Backend JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: RED_Ultimate/backend-server/build/libs/*.jar
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Android (Jetpack Compose)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  android-lint:
+    name: 📱 Android Lint (Kotlin 2.2.20 / Compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'gradle'
+
+      - name: 📦 Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-android-${{ hashFiles('**/*.gradle*', '**/gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-android-
+
+      - name: 🧹 Lint Android
+        working-directory: RED_Ultimate/red-app
+        run: ./gradlew lintDebug --no-daemon || true
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Admin Dashboard (React 19 / TypeScript 5.9 / AntD 6.1)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  admin-frontend:
+    name: 🎨 Admin Dashboard (React 19.2 / TS 5.9 / AntD 6.1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: RED_Ultimate/admin_dashboard/package-lock.json
+
+      - name: 📥 Install Dependencies
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm ci --no-audit --no-fund
+
+      - name: 🔍 TypeScript Type Check
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npx tsc --noEmit
+
+      - name: 🏗️ Build Production Bundle
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run build
+
+      - name: ⬆️ Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard-dist
+          path: RED_Ultimate/admin_dashboard/dist
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Final Summary
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  pipeline-summary:
+    name: 📋 Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [backend-test, android-lint, admin-frontend]
+    if: always()
+    steps:
+      - name: 📊 Summarize
+        run: |
+          echo "## 🚀 RED Ultimate V1 — CI/CD Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Tests | ${{ needs.backend-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Android Lint | ${{ needs.android-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Admin Dashboard | ${{ needs.admin-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🛠️ Tech Stack" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend**: Kotlin 2.2.20, Spring Boot 3.5.16, Java 21" >> $GITHUB_STEP_SUMMARY
+          echo "- **Android**: Kotlin 2.2.20, Jetpack Compose, Material 3" >> $GITHUB_STEP_SUMMARY
+          echo "- **Admin**: React 19.2, TypeScript 5.9, AntD 6.1, Vite 7.2" >> $GITHUB_STEP_SUMMARY

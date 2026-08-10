@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <application
         android:allowBackup="false"
@@ -29,9 +31,47 @@
             android:exported="false"
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service
+            android:name=".calls.ConferenceService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall" />
+        <service
+            android:name=".calls.LiveStreamService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall" />
+        <service
+            android:name=".calls.YounesConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".core.RedConnectionService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
+
+        <receiver
+            android:name=".calls.CallBootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".calls.PhoneStateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".core.network.SovereignNotificationRouter"
             android:exported="false"

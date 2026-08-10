@@ -40,6 +40,9 @@ fun ContactsScreen(
     onCall: (PublicRedProfile, Boolean) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var showQrScanner by remember { mutableStateOf(false) }
+    var showShareSheet by remember { mutableStateOf(false) }
+    var searchFocused by remember { mutableStateOf(false) }
     val filtered = directory.contacts.filter {
         query.isBlank() || it.displayName.contains(query, true) || it.username.contains(query, true) || it.redId.contains(query, true)
     }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenBy { it.displayName })
@@ -50,8 +53,8 @@ fun ContactsScreen(
                 title = { Column { Text("جهات الاتصال", fontWeight = FontWeight.Bold); Text("${directory.contacts.size} جهة • ${directory.onlineIds.size} متصل", color = Color.Gray, fontSize = 12.sp) } },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "رجوع") } },
                 actions = {
-                    IconButton(onClick = { /* TODO: QR scanner */ }) { Icon(Icons.Rounded.QrCodeScanner, "مسح RED ID") }
-                    IconButton(onClick = { /* TODO: Search */ }) { Icon(Icons.Default.Search, "بحث") }
+                    IconButton(onClick = { showQrScanner = true }) { Icon(Icons.Rounded.QrCodeScanner, "مسح RED ID") }
+                    IconButton(onClick = { searchFocused = true }) { Icon(Icons.Default.Search, "بحث") }
                 }
             )
         }
@@ -90,6 +93,39 @@ fun ContactsScreen(
                 }
             }
         }
+    }
+
+    // QR Scanner Sheet
+    if (showQrScanner) {
+        QrScannerSheet(
+            onDismiss = { showQrScanner = false },
+            onScanned = { redId ->
+                showQrScanner = false
+                // Try to find user in contacts; if found, open chat
+                val found = directory.contacts.firstOrNull { it.redId.equals(redId, ignoreCase = true) }
+                if (found != null) onChat(found)
+                // else could trigger an add-contact flow
+            }
+        )
+    }
+
+    // Focused Search Dialog
+    if (searchFocused) {
+        FocusedSearchDialog(
+            initialQuery = query,
+            onDismiss = { searchFocused = false },
+            onResultClick = { person ->
+                searchFocused = false
+                onChat(person)
+            }
+        )
+    }
+
+    // Share RED ID Sheet
+    if (showShareSheet) {
+        ShareRedIdSheet(
+            onDismiss = { showShareSheet = false }
+        )
     }
 }
 

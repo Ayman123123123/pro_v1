@@ -1,7 +1,7 @@
 package com.red.server.controllers
 
 import com.red.server.calls.LiveStreamService
-import com.red.server.calls.LiveStreamService.LiveStream
+import com.red.server.calls.LiveStreamRecord
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -27,7 +27,7 @@ import java.time.Instant
 class LiveStreamController(private val streams: LiveStreamService) {
 
     @GetMapping("/streams")
-    fun listStreams(): List<LiveStream> = streams.getActiveStreams()
+    fun listStreams(): List<LiveStreamRecord> = streams.getActiveStreams()
 
     @GetMapping("/streams/{streamId}/viewers")
     fun viewerCount(@PathVariable streamId: String): Map<String, Any> = mapOf(
@@ -49,7 +49,7 @@ class LiveStreamController(private val streams: LiveStreamService) {
     }
 
     @PostMapping("/admin/streams/{streamId}/start")
-    fun start(@PathVariable streamId: String, @RequestParam broadcasterId: String): LiveStream =
+    fun start(@PathVariable streamId: String, @RequestParam broadcasterId: String): LiveStreamRecord =
         streams.startStream(streamId, broadcasterId)
 
     @PostMapping("/admin/streams/{streamId}/stop")

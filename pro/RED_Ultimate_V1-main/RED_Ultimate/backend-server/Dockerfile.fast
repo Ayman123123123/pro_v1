@@ -1,0 +1,25 @@
+# ══════════════════════════════════════════════════════════════════
+# ⚡ Fast Dockerfile — Uses local pre-compiled JAR (Build in 2 seconds)
+# Requires: ./gradlew :backend-server:bootJar on host first
+# ══════════════════════════════════════════════════════════════════
+
+FROM eclipse-temurin:21-jre-jammy
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r redserver && useradd -r -g redserver -d /app -s /sbin/nologin redserver
+RUN mkdir -p /app/logs && chown -R redserver:redserver /app
+
+# Copy the pre-built JAR from host
+COPY backend-server/build/libs/*.jar app.jar
+
+USER redserver
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:-Xms256m -Xmx512m} -jar app.jar"]

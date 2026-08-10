@@ -38,6 +38,25 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, done: () -> Unit) = viewModelScope.launch {
+        val cleanOptions = options.map(String::trim).filter { it.length >= 2 }.distinct().take(6)
+        if (question.isBlank() || cleanOptions.size < 2) {
+            state = FeedState.Error("اكتب سؤالاً واضحاً وخيارين على الأقل")
+            return@launch
+        }
+        state = FeedState.Publishing
+        val request = CreatePostRequest(
+            text = question.trim(),
+            visibility = scope ?: "LOCAL_YEMEN",
+            pollOptions = cleanOptions,
+            pollDurationHours = durationHours.coerceIn(1, 168)
+        )
+        when (val result = api.create(request)) {
+            is ApiResult.Success -> { posts.add(0, result.value); state = FeedState.Ready; done() }
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
     fun follow(post: Post) = viewModelScope.launch {
         when (val result = api.follow(post.authorRedId)) {
             is ApiResult.Success -> state = FeedState.Message("تمت متابعة @${post.authorUsername}")
@@ -90,6 +109,34 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun edit(post: Post, newText: String, done: () -> Unit = {}) = viewModelScope.launch {
+        when (val result = api.edit(post.id, newText)) {
+            is ApiResult.Success -> { replace(result.value); done() }
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun hide(post: Post) = viewModelScope.launch {
+        when (val result = api.hide(post.id)) {
+            is ApiResult.Success -> posts.remove(post)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun mute(post: Post) = viewModelScope.launch {
+        when (val result = api.mute(post.authorRedId)) {
+            is ApiResult.Success -> { posts.removeAll { it.authorRedId == post.authorRedId }; state = FeedState.Message("تم كتم @${post.authorUsername}") }
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
+    fun report(post: Post, reason: String = "OTHER") = viewModelScope.launch {
+        when (val result = api.report(post.id, reason)) {
+            is ApiResult.Success -> state = FeedState.Message("تم الإبلاغ")
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+
     fun closeThread() { threadPosts.clear(); threadState = ThreadState.Idle }
 
     private fun replace(post: Post) {
@@ -107,3 +154,14 @@ sealed interface ThreadState {
 }
 
 sealed interface FeedState { data object Loading: FeedState; data object Ready: FeedState; data object Publishing: FeedState; data class Message(val text:String): FeedState; data class Error(val message:String): FeedState }
+
+    // Professional: Draft handling
+    fun saveDraft(text: String) { /* TODO: Save to EncryptedMediaCache as draft */ }
+    fun loadDraft(): String? = null // TODO: Load from cache
+    fun delete(post: Post) = viewModelScope.launch {
+        when (val result = api.delete(post.id)) {
+            is ApiResult.Success -> posts.remove(post)
+            is ApiResult.Error -> state = FeedState.Error(result.message)
+        }
+    }
+    fun refresh() = load(scope)

@@ -1,5 +1,6 @@
 package com.red.sovereign.features.calls
 
+import android.util.Log
 import org.webrtc.*
 import com.red.sovereign.core.network.MediasoupClient
 import javax.inject.Inject
@@ -8,6 +9,8 @@ class RedVoipMaster @Inject constructor(
     private val voipEngine: VoipEngine,
     private val mediasoupClient: MediasoupClient
 ) {
+    companion object { private const val TAG = "RED.VoipMaster" }
+
     private var pc: PeerConnection? = null
 
     /**
@@ -22,7 +25,7 @@ class RedVoipMaster @Inject constructor(
                 // الربط مع الواجهة (SurfaceViewRenderer)
             }
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
-                println("🔴 RED CALL: State $state")
+                Log.i(TAG, "PeerConnection state: $state")
             }
             // تنفيذ باقي الـ ObserverMethods إلزامي
             override fun onSignalingChange(s: PeerConnection.SignalingState?) {}

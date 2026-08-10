@@ -206,7 +206,11 @@ class RedConnectionService : Service() {
                         } else {
                             repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
-                            // TODO: Add notification logic back if needed, using repository preferences
+                            // Show notification for incoming encrypted message
+                            val preview = decodeMessagePreview(plaintext)
+                            if (SettingsRuntime.current.notificationEnabled) {
+                                notifyEncryptedMessage(message.senderId, preview)
+                            }
                         }
                         socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                     }
@@ -218,13 +222,43 @@ class RedConnectionService : Service() {
                 repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
             }
-            RedProtos.RedRED.SignalCase.DELETE -> Unit // TODO: Handle delete in repository
+            RedProtos.RedRED.SignalCase.DELETE -> {
+                val delete = envelope.delete
+                when (delete.targetCase) {
+                    RedProtos.RedDelete.TargetCase.MESSAGE_IDS -> {
+                        // حذف محلي فقط — لا يُحذف من الخادم
+                        delete.messageIdsList.forEach { msgId ->
+                            runCatching { repository.deleteLocalMessage(msgId) }
+                                .onFailure { android.util.Log.w("RedConnectionService", "delete failed for $msgId: ${it.message}") }
+                        }
+                    }
+                    RedProtos.RedDelete.TargetCase.CONVERSATION_ID -> {
+                        runCatching { repository.deleteConversation(delete.conversationId) }
+                            .onFailure { android.util.Log.w("RedConnectionService", "delete conv failed: ${it.message}") }
+                    }
+                    RedProtos.RedDelete.TargetCase.TARGET_NOT_SET -> Unit
+                }
+            }
             RedProtos.RedRED.SignalCase.TYPING -> {
                 val typing = envelope.typing
                 TypingEventBus.publish(TypingEvent(typing.conversationId, typing.userId, typing.isTyping))
             }
             else -> Unit
         }
+    }
+
+    /**
+     * فك تشفير preview للـ notification (نص عادي فقط، آمن)
+     */
+    private fun decodeMessagePreview(plaintext: ByteArray): String? {
+        return runCatching {
+            val text = String(plaintext, Charsets.UTF_8)
+            // لو كانت JSON، نستخرج text
+            val parsed = json.parseToJsonElement(text)
+            parsed.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull() ?: runCatching {
+            String(plaintext, Charsets.UTF_8).take(120)
+        }.getOrNull()
     }
 
     private fun notifyEncryptedMessage(sender: String, plaintext: String?) {
