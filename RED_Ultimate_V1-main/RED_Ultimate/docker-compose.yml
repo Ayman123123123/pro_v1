@@ -157,7 +157,10 @@ services:
       test: ["CMD-SHELL", "mongosh --quiet --username red_user --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      # First boot on Windows Docker Desktop (slow virtiofs I/O) needs well over
+      # 50s of mongod init; grace it instead of racing dependents into "unhealthy".
+      start_period: 40s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 7. Redis 7 ━━━━━━━━━━━━

@@ -5,7 +5,8 @@
 # ════════════════════════════════════════════════════════════════════════
 
 param(
-    [string]$ProjectRoot = "C:\Users\hpc01\Pictures\pro\RED_Ultimate_V1-main\RED_Ultimate"
+    # Default: the RED_Ultimate folder this script lives in (works from any clone path).
+    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 )
 
 $ErrorActionPreference = "Stop"
