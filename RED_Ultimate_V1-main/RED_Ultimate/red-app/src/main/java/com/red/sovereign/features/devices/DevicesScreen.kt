@@ -58,7 +58,9 @@ fun DevicesScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val api = remember { DevicesApi(TokenStore(context.applicationContext)) }
+    val tokens = remember { TokenStore(context.applicationContext) }
+    val api = remember { DevicesApi(tokens) }
+    val myDeviceId = tokens.deviceId
     var devices by remember { mutableStateOf<List<DeviceSession>>(emptyList()) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -83,9 +85,10 @@ fun DevicesScreen(
                         platform = remote.platform,
                         lastActiveAt = if (remote.status == "APPROVED") "نشط" else remote.status,
                         ipAddress = remote.identityFingerprint?.take(11) ?: "—",
-                        isCurrentDevice = false
+                        // 📍 تمييز جهاز المستخدم الحالي — لا يجوز فصله عن نفسه
+                        isCurrentDevice = remote.id == myDeviceId
                     )
-                }
+                }.sortedByDescending { it.isCurrentDevice } // جهازي الحالي يظهر أولًا
             }
             is ApiResult.Error -> loadError = result.message
         }

@@ -93,6 +93,13 @@ services:
       - "3478:3478/tcp"
       - "3478:3478/udp"
       - "45000-45050:45000-45050/udp"
+    healthcheck:
+      # صورة coturn لا تحوي curl — نفحص منفذ TURN عبر bash /dev/tcp
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
