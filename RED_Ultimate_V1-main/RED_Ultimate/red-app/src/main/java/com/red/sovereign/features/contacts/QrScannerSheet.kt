@@ -4,6 +4,12 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,15 +26,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.PlanarYUVLuminanceSource
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeReader
 import com.red.sovereign.ui.theme.YounesEmerald
+import java.util.concurrent.Executors
 
 /**
  * ════════════════════════════════════════════════════════════════════════
  *  QrScannerSheet — ماسح RED ID
- *  - يستخدم كاميرا الجهاز بمساعدة CameraX + ML Kit
- *  - هنا نوفر واجهة الـ fallback (manual entry + permission flow)
- *    ML Kit integration يمكن ربطه لاحقاً — حالياً نوفر manual entry
+ *  - مسح حقيقي عبر CameraX (PreviewView + ImageAnalysis) + فك ZXing حي
+ *  - مع إدخال يدوي كبديل، وطلب إذن الكاميرا عند الحاجة
  *  - يتحقق من صيغة RED ID (YNS-XXXX-XXXX)
  * ════════════════════════════════════════════════════════════════════════
  */
@@ -78,36 +89,63 @@ fun QrScannerSheet(
             )
             Spacer(Modifier.height(16.dp))
 
-            // Camera preview area (placeholder)
+            // 📷 ماسح QR حقيقي — CameraX Preview + تحليل ZXing حي
             if (hasCameraPermission) {
+                var scannedOnce by remember { mutableStateOf(false) }
+                val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black),
-                    contentAlignment = Alignment.Center
+                        .background(Color.Black)
                 ) {
-                    // Camera preview placeholder — integrate CameraX later
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.QrCodeScanner,
-                            null,
-                            tint = Color.White,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "الكاميرا جاهزة",
-                            color = Color.White,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            "سيتم الربط مع ML Kit Barcode قريباً",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 11.sp
-                        )
-                    }
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            val previewView = PreviewView(ctx)
+                            val executor = Executors.newSingleThreadExecutor()
+                            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                            cameraProviderFuture.addListener({
+                                val cameraProvider = cameraProviderFuture.get()
+                                val preview = Preview.Builder().build().also {
+                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                                }
+                                val analysis = ImageAnalysis.Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+                                analysis.setAnalyzer(executor) { imageProxy ->
+                                    if (!scannedOnce) {
+                                        decodeQrFromImage(imageProxy)?.let { raw ->
+                                            val normalized = normalizeRedIdInput(raw)
+                                            if (isValidRedId(normalized)) {
+                                                scannedOnce = true
+                                                onScanned(normalized)
+                                            }
+                                        }
+                                    }
+                                    imageProxy.close()
+                                }
+                                try {
+                                    cameraProvider.unbindAll()
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        CameraSelector.DEFAULT_BACK_CAMERA,
+                                        preview,
+                                        analysis
+                                    )
+                                } catch (_: Exception) { }
+                            }, ContextCompat.getMainExecutor(ctx))
+                            previewView
+                        }
+                    )
+                    // إطار التصويب
+                    Box(
+                        Modifier
+                            .size(140.dp)
+                            .align(Alignment.Center)
+                            .border(2.dp, YounesEmerald, RoundedCornerShape(12.dp))
+                    )
                 }
             } else {
                 Card(
@@ -175,6 +213,21 @@ fun QrScannerSheet(
         }
     }
 }
+
+/**
+ * يفك QR من إطار YUV_420_888 القادم من CameraX عبر ZXing الخالص.
+ * يستخدم مستوى Y (الإضاءة) فقط — كافٍ تمامًا للباركود ولا يحتاج تحويل ألوان.
+ */
+private fun decodeQrFromImage(image: ImageProxy): String? = runCatching {
+    val buffer = image.planes[0].buffer
+    val bytes = ByteArray(buffer.remaining())
+    buffer.get(bytes)
+    val source = PlanarYUVLuminanceSource(
+        bytes, image.planes[0].rowStride, image.height,
+        0, 0, image.width, image.height, false
+    )
+    QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source))).text
+}.getOrNull()
 
 /**
  * RED ID format: YNS-XXXX-XXXX (uppercase alphanumeric)
