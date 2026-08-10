@@ -9,6 +9,7 @@ val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
 
+@Suppress("DEPRECATION")
 android {
     namespace = "com.red.sovereign"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -57,7 +58,7 @@ android {
     packaging.resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
 }
 
-kotlin {
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
@@ -113,7 +114,7 @@ dependencies {
     // ─── Room — قاعدة بيانات محلية سيادية ────────────────────────────────────
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    kapt(libs.androidx.room.compiler)
+    kapt(libs.androidx.room.compiler.get().toString())
     implementation(libs.signal.android.database.sqlcipher)
 
     // ─── Accompanist — أذونات وتسهيلات Compose ─────────────────────────────────
