@@ -7,9 +7,10 @@
 FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
 
-# ⚠️ Fix DNS resolution issues inside Docker build (esp. on Windows)
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+# NOTE: Do NOT try to rewrite /etc/resolv.conf here — BuildKit mounts it read-only,
+# so any such RUN fails instantly ("cannot create /etc/resolv.conf: Read-only file
+# system"). If dependency downloads ever fail on DNS, fix the daemon once instead:
+# Docker Desktop → Settings → Docker Engine → { "dns": ["8.8.8.8", "1.1.1.1"] }.
 
 # Copy Gradle configurations & properties first for layer caching
 COPY gradle.properties gradle.properties
