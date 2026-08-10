@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-  namespace = "org.signal.baselineprofile"
+  namespace = "com.red.baselineprofile"
 
   compileSdk {
     version = release(libs.versions.compileSdk.get().toInt())
@@ -31,7 +31,7 @@ android {
     }
   }
 
-  targetProjectPath = ":Signal-Android"
+  targetProjectPath = ":app"
 
   flavorDimensions += listOf("distribution", "environment")
   productFlavors {

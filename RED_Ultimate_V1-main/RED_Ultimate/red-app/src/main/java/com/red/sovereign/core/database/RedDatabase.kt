@@ -42,7 +42,7 @@ abstract class RedDatabase : RoomDatabase() {
                     context.applicationContext,
                     RedDatabase::class.java,
                     "red_sovereign.db"
-                ).openHelperFactory(factory).build()
+                ).openHelperFactory(factory).addCallback(FtsCallback()).build()
                 INSTANCE = instance
                 instance
             }

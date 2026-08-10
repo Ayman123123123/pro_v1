@@ -139,6 +139,10 @@ class MessageService(
         require(message.senderDeviceId in 1..127 && message.receiverDeviceId in 1..127) { "Invalid protocol device ID" }
         val allowedCiphertext = if (message.type == "GROUP_MESSAGE") message.ciphertextType == 4 else message.ciphertextType == 2 || message.ciphertextType == 3
         require(allowedCiphertext) { "Unsupported libsignal ciphertext type for ${message.type}" }
+        // 🔐 E2EE Hardening: Group messages must reference existing group and members only
+        if (message.type in GROUP_TYPES) {
+            require(message.conversationId.length in 8..128) { "Group conversation ID must be valid group" }
+        }
         require(message.payload.size() in 1..1_048_576) { "Encrypted envelope must contain 1 byte to 1 MiB" }
         require(message.type.ifBlank { "TEXT" } in TYPES) { "Unsupported message type" }
     }

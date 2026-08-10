@@ -1,0 +1,259 @@
+package com.red.sovereign.calls
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import com.red.sovereign.MainActivity
+import com.red.sovereign.auth.ApiResult
+import com.red.sovereign.auth.TokenStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import org.webrtc.IceCandidate
+import org.webrtc.PeerConnection
+import org.webrtc.SessionDescription
+import org.webrtc.VideoTrack
+import java.util.UUID
+
+class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Listener, SensorEventListener {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var signaling: CallSignalingClient
+    private lateinit var telecom: TelecomBridge
+    private lateinit var audio: AudioManager
+    private var engine: WebRtcEngine? = null
+    private var target = ""
+    private var callId: String? = null
+    private var mode = "VOICE"
+    private var outgoingPending = false
+    private var incomingOffer: CallSignal? = null
+    private var pendingIce = mutableListOf<IceCandidate>()
+    private var remoteDescriptionSet = false
+    private var proximityLock: PowerManager.WakeLock? = null
+    private var audioFocus: AudioFocusRequest? = null
+
+    override fun onCreate() {
+        super.onCreate(); createChannel()
+        audio = getSystemService(AudioManager::class.java)
+        telecom = TelecomBridge(this).also { runCatching(it::register) }
+        signaling = CallSignalingClient(TokenStore(this), this)
+        val sensors = getSystemService(SensorManager::class.java)
+        sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_LISTEN -> { promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false); signaling.connect() }
+            ACTION_START -> {
+                outgoingPending = true
+                target = intent.getStringExtra(EXTRA_TARGET).orEmpty(); mode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
+                require(target.isNotBlank()); callId = UUID.randomUUID().toString()
+                scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
+                promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); signaling.connect()
+            }
+            ACTION_ACCEPT -> acceptIncoming()
+            ACTION_REJECT -> rejectIncoming()
+            ACTION_END -> endCall(sendSignal = true)
+            ACTION_MIC -> engine?.setMicrophoneEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
+            ACTION_CAMERA -> engine?.setCameraEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
+            ACTION_SWITCH_CAMERA -> engine?.switchCamera()
+            ACTION_SPEAKER -> setSpeaker(intent.getBooleanExtra(EXTRA_ENABLED, true))
+            ACTION_BLUETOOTH -> routeBluetooth()
+            ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onConnected() {
+        if (incomingOffer != null || !outgoingPending) return
+        scope.launch {
+            val created = createEngine(mode == "VIDEO")
+            if (created is ApiResult.Success) engine?.offer() else fail("تعذر إنشاء محرك WebRTC")
+        }
+    }
+
+    override fun onSignal(signal: CallSignal) {
+        when (signal.type) {
+            "OFFER" -> {
+                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode
+                CallRuntime.state = CallUiState.Incoming(callId.orEmpty(), target, mode)
+                scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
+                promote(incomingNotification(target, mode), media = false)
+            }
+            "ANSWER" -> signal.payload["sdp"]?.let { engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it)) { remoteDescriptionSet = true; flushIce() } }
+            "ICE" -> {
+                val candidate = IceCandidate(signal.payload["sdpMid"], signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0, signal.payload["candidate"].orEmpty())
+                if (remoteDescriptionSet) engine?.addIce(candidate) else pendingIce += candidate
+            }
+            "HOLD" -> { engine?.setMicrophoneEnabled(false); engine?.setCameraEnabled(false) }
+            "RESUME" -> { engine?.setMicrophoneEnabled(true); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
+            "END", "REJECT" -> endCall(sendSignal = false)
+            "UNAVAILABLE" -> { fail("الطرف الآخر غير متاح"); endCall(sendSignal = false) }
+            "BUSY" -> { fail("الطرف الآخر مشغول"); endCall(sendSignal = false) }
+        }
+    }
+
+    private fun acceptIncoming() {
+        val offer = incomingOffer ?: return
+        promote(notification("جارٍ قبول المكالمة…", true), media = true)
+        prepareAudio(); signaling.connect()
+        scope.launch {
+            if (createEngine(offer.mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
+            val sdp = offer.payload["sdp"] ?: return@launch fail("عرض المكالمة غير صالح")
+            engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
+            CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
+        }
+    }
+
+    private fun rejectIncoming() {
+        incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
+        endCall(sendSignal = false)
+    }
+
+    private suspend fun createEngine(video: Boolean): ApiResult<Unit> {
+        engine?.release(); engine = WebRtcEngine(this, this); CallRuntime.eglContext = engine?.eglContext
+        val result = engine!!.create(video)
+        if (result is ApiResult.Success) CallRuntime.localVideo = engine?.localMedia?.videoTrack
+        return result
+    }
+
+    override fun onLocalDescription(description: SessionDescription) {
+        val type = if (description.type == SessionDescription.Type.OFFER) "OFFER" else "ANSWER"
+        signaling.send(CallSignal(callId, target, type = type, mode = mode, payload = mapOf("sdp" to description.description)))
+        if (type == "OFFER") outgoingPending = false
+        CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
+    }
+
+    override fun onIceCandidate(candidate: IceCandidate) = signaling.send(CallSignal(callId, target, type = "ICE", mode = mode, payload = mapOf("sdpMid" to candidate.sdpMid.orEmpty(), "sdpMLineIndex" to candidate.sdpMLineIndex.toString(), "candidate" to candidate.sdp)))
+    override fun onRemoteVideo(track: VideoTrack) { CallRuntime.remoteVideo = track }
+    override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
+        when (state) {
+            PeerConnection.PeerConnectionState.CONNECTED -> { CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis()); updateNotification("مكالمة يونس نشطة") }
+            PeerConnection.PeerConnectionState.FAILED, PeerConnection.PeerConnectionState.CLOSED -> endCall(sendSignal = false)
+            else -> Unit
+        }
+    }
+    override fun onError(message: String) = fail(message)
+    override fun onDisconnected(permanent: Boolean) {
+        if (permanent && CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة")
+    }
+    override fun onCallUnavailable(reason: String) {
+        when (reason) {
+            "BUSY" -> fail("الطرف الآخر مشغول")
+            else -> fail("الطرف الآخر غير متاح")
+        }
+        endCall(sendSignal = false)
+    }
+
+    private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
+    private fun fail(message: String) { CallRuntime.state = CallUiState.Error(message); updateNotification(message) }
+
+    private fun prepareAudio() {
+        audio.mode = AudioManager.MODE_IN_COMMUNICATION
+        val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+        audioFocus = AudioFocusRequest.Builder(AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { }.build().also(audio::requestAudioFocus)
+        setSpeaker(mode == "VIDEO")
+    }
+
+    private fun setSpeaker(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val type = if (enabled) android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+            audio.availableCommunicationDevices.firstOrNull { it.type == type }?.let(audio::setCommunicationDevice)
+        } else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = enabled }
+        CallRuntime.speaker = enabled
+    }
+
+    private fun routeBluetooth() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
+        if (Build.VERSION.SDK_INT >= 31) {
+            audio.availableCommunicationDevices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET }?.let(audio::setCommunicationDevice)
+        } else @Suppress("DEPRECATION") run { audio.startBluetoothSco(); audio.isBluetoothScoOn = true }
+    }
+
+    override fun onSensorChanged(event: SensorEvent) {
+        if (mode == "VIDEO" || CallRuntime.speaker || CallRuntime.state !is CallUiState.Active) return
+        val near = event.values.firstOrNull()?.let { it < event.sensor.maximumRange } == true
+        if (near && proximityLock == null) proximityLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "younes:call-proximity").also { it.acquire(10 * 60_000L) }
+        else if (!near) { proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null }
+    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+
+    private fun endCall(sendSignal: Boolean) {
+        if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
+        engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
+        proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
+        audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
+        if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
+        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.state = CallUiState.Idle
+        updateNotification("جاهز لاستقبال مكالمات يونس")
+    }
+
+    private fun promote(value: android.app.Notification, media: Boolean) {
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+        if (media) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (mode == "VIDEO") type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, value, type)
+    }
+
+    private fun createChannel() = getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle("مكالمة يونس").setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, "إنهاء", serviceIntent(ACTION_END)).build()
+    private fun incomingNotification(peer: String, callMode: String) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(if (callMode == "VIDEO") "مكالمة فيديو واردة" else "مكالمة صوتية واردة").setContentText(peer).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true).setFullScreenIntent(appIntent(), true).addAction(0, "رفض", serviceIntent(ACTION_REJECT)).addAction(0, "فتح للقبول", appIntent()).build()
+    private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
+    private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    private fun serviceIntent(action: String) = PendingIntent.getService(this, action.hashCode(), Intent(this, YounesCallService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    override fun onDestroy() { getSystemService(SensorManager::class.java).unregisterListener(this); scope.cancel(); engine?.release(); super.onDestroy() }
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        private const val CHANNEL = "younes_calls"; private const val NOTIFICATION_ID = 7401
+        const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
+        const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
+        const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"
+        const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"
+        fun listen(context: Context) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
+        fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
+        fun start(context: Context, target: String, video: Boolean) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
+        fun action(context: Context, action: String, enabled: Boolean = true) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
+    }
+}
+
+sealed interface CallUiState {
+    data object Idle : CallUiState
+    data class Incoming(val callId: String, val peer: String, val mode: String) : CallUiState
+    data class Connecting(val callId: String, val peer: String, val mode: String) : CallUiState
+    data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long) : CallUiState
+    data class Error(val message: String) : CallUiState
+}
+object CallRuntime {
+    var state: CallUiState by androidx.compose.runtime.mutableStateOf(CallUiState.Idle)
+    var eglContext: org.webrtc.EglBase.Context? = null
+    var localVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
+    var remoteVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
+    var speaker by androidx.compose.runtime.mutableStateOf(false)
+}

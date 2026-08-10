@@ -1,14 +1,239 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    YOUNES/RED Sovereign - Professional Theme Styles
+    الهدف: نظام أنماط احترافي متسق يعزز تجربة المستخدم العربية
+-->
 <resources>
+    <!-- ===== THEME BASE ===== -->
     <style name="Theme.Younes" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <!-- الألوان الأساسية -->
+        <item name="android:colorPrimary">@color/yns_primary</item>
+        <item name="android:colorPrimaryDark">@color/yns_primary_dark</item>
+        <item name="android:colorAccent">@color/yns_secondary</item>
+        <item name="android:colorForeground">@color/yns_on_background</item>
+        <item name="android:colorBackground">@color/yns_background</item>
+        <item name="android:colorBackgroundCache">@color/yns_background</item>
+        <item name="android:colorHighlight">@color/yns_primary_light</item>
+        <item name="android:colorHint">@color/yns_text_tertiary</item>
+        <item name="android:colorError">@color/yns_error</item>
+        
+        <!-- النوافذ -->
+        <item name="android:windowBackground">@color/yns_background</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@color/younes_obsidian</item>
+        <item name="android:statusBarColor">@color/yns_status_bar</item>
+        <item name="android:navigationBarColor">@color/yns_navigation_bar</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:colorAccent">@color/younes_emerald</item>
-        <item name="android:windowBackground">@color/younes_obsidian</item>
+        
+        <!-- الخطوط -->
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColorPrimary">@color/yns_text_primary</item>
+        <item name="android:textColorSecondary">@color/yns_text_secondary</item>
+        <item name="android:textColorTertiary">@color/yns_text_tertiary</item>
+        <item name="android:textColorHint">@color/yns_text_tertiary</item>
+        
+        <!-- الأزرار -->
+        <item name="android:buttonStyle">@style/Widget.Younes.Button</item>
+        <item name="android:buttonStyleHighlight">@style/Widget.Younes.Button.Highlight</item>
+        
+        <!-- أزرار التبديل والإضافات المصغرة -->
+        <item name="android:checkboxStyle">@style/Widget.Younes.CheckBox</item>
+        <item name="android:radioButtonStyle">@style/Widget.Younes.RadioButton</item>
+        <item name="android:switchStyle">@style/Widget.Younes.Switch</item>
+        
+        <!-- الإدخالات -->
+        <item name="android:textInputStyle">@style/Widget.Younes.TextInputLayout</item>
+        <item name="android:editTextStyle">@style/Widget.Younes.EditText</item>
+        
+        <!--기타 -->
+        <item name="android:editTextColor">@color/yns_text_primary</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+        
+        <!-- الظلال والارتفاع -->
+        <item name="android:elevation">0dp</item>
+        <item name="android:outlineSpotShadowColor">@android:color/transparent</item>
+    </style>
+    
+    <!-- ===== BUTTON STYLES ===== -->
+    <style name="Widget.Younes.Button" parent="android:style/Widget.Button">
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingLeft">24dp</item>
+        <item name="android:paddingRight">24dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textColor">@color/yns_on_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Highlight">
+        <item name="android:background">@drawable/bg_button_primary_pressed</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Secondary">
+        <item name="android:background">@drawable/bg_button_secondary</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Text">
+        <item name="android:background">@drawable/bg_button_text</item>
+        <item name="android:textColor">@color/yns_primary</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingRight">16dp</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Icon">
+        <item name="android:background">@drawable/bg_button_icon</item>
+        <item name="android:minWidth">48dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:padding">12dp</item>
+    </style>
+    
+    <!-- ===== TEXT INPUT STYLES ===== -->
+    <style name="Widget.Younes.TextInputLayout">
+        <item name="android:background">@drawable/bg_text_input</item>
+        <item name="android:padding">16dp</item>
+    </style>
+    
+    <style name="Widget.Younes.EditText">
+        <item name="android:background">@null</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textColorHint">@color/yns_text_tertiary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textAlignment">viewStart</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <!-- ===== CHECKBOX & RADIO BUTTON ===== -->
+    <style name="Widget.Younes.CheckBox">
+        <item name="android:button">@drawable/bg_checkbox</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    
+    <style name="Widget.Younes.RadioButton">
+        <item name="android:button">@drawable/bg_radio_button</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    
+    <!-- ===== SWITCH ===== -->
+    <style name="Widget.Younes.Switch">
+        <item name="android:switchMinWidth">48dp</item>
+        <item name="android:switchPadding">8dp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    
+    <!-- ===== TEXT APPEARANCE STYLES ===== -->
+    <style name="TextAppearance.Younes.Headline1">
+        <item name="android:textSize">32sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Headline2">
+        <item name="android:textSize">24sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:lineSpacingMultiplier">1.25</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Headline3">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:lineSpacingMultiplier">1.3</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Title">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Subtitle">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/yns_text_secondary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Body">
+        <item name="android:textSize">16sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:lineSpacingMultiplier">1.5</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/yns_text_tertiary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Overline">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/yns_text_tertiary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.1</item>
+    </style>
+    
+    <!-- ===== ARABIC TEXT STYLES ===== -->
+    <style name="TextAppearance.Younes.Arabic.Headline">
+        <item name="android:textSize">28sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textDirection">rtl</item>
+        <item name="android:textAlignment">viewStart</item>
+        <item name="android:gravity">start</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Arabic.Body">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textDirection">rtl</item>
+        <item name="android:textAlignment">viewStart</item>
+        <item name="android:gravity">start</item>
+        <item name="android:lineSpacingMultiplier">1.6</item>
+    </style>
+    
+    <!-- ===== MATERIAL DESIGN 3 INSPIRED ===== -->
+    <style name="Widget.Younes.Card">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:elevation">2dp</item>
+        <item name="android:outlineSpotShadowColor">@android:color/transparent</item>
+    </style>
+    
+    <style name="Widget.Younes.EYEBROW">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/yns_text_tertiary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.1</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+    
+    <style name="Widget.Younes.Overline">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/yns_text_tertiary</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.06</item>
     </style>
 </resources>
