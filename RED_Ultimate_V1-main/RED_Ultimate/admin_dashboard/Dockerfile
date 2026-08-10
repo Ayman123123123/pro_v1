@@ -15,7 +15,7 @@ RUN npm ci --no-audit --no-fund
 
 # ─── Source layer — builds the modern App.tsx (16 pages, RTL dark) ───
 COPY . .
-# Use tolerant build (allows non-strict TS) — CI uses build:strict for enforcement
+# Production build is strict: TypeScript check + Vite bundle.
 RUN npm run build
 
 FROM nginx:1.27-alpine
