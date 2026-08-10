@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import org.slf4j.LoggerFactory
+import io.minio.MinioClient
 import java.time.Instant
 
 /**
@@ -18,6 +19,8 @@ class HealthController(
     private val mongoTemplate: MongoTemplate,
     private val redisTemplate: RedisTemplate<String, String>,
     private val jdbcTemplate: JdbcTemplate,
+    private val minioClient: MinioClient,
+    @Value("\${red.minio.bucket:red-media}") private val minioBucket: String,
     @Value("\${spring.datasource.url:}") private val dbUrl: String,
     @Value("\${red.dinstar.ip:}") private val dinstarIp: String,
     @Value("\${red.dinstar.port:443}") private val dinstarPort: Int,
@@ -51,6 +54,14 @@ class HealthController(
         }
         val redisOk = redisResult.getOrDefault(false)
 
+        // ─── فحص MinIO (تخزين الوسائط S3) ───
+        val minioResult = runCatching {
+            minioClient.bucketExists(
+                io.minio.BucketExistsArgs.builder().bucket(minioBucket).build()
+            )
+        }
+        val minioOk = minioResult.getOrDefault(false)
+
         // ─── فحص Flyway (آخر migration) ───
         val flywayResult = runCatching {
             jdbcTemplate.queryForObject(
@@ -59,7 +70,7 @@ class HealthController(
             )
         }
 
-        val allOk = mongoOk && redisOk && postgresOk
+        val allOk = mongoOk && redisOk && postgresOk && minioOk
         val totalMs = System.currentTimeMillis() - startMs
 
         if (!allOk) {
@@ -67,6 +78,7 @@ class HealthController(
             if (!mongoOk) down += "mongodb"
             if (!redisOk) down += "redis"
             if (!postgresOk) down += "postgresql"
+            if (!minioOk) down += "minio"
             log.warn("Health check DOWN — services unavailable: {} ({}ms)", down.joinToString(), totalMs)
         }
 
@@ -91,6 +103,11 @@ class HealthController(
                 "redis" to mapOf(
                     "status" to if (redisOk) "UP" else "DOWN",
                     "error" to if (!redisOk) (redisResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
+                ),
+                "minio" to mapOf(
+                    "status" to if (minioOk) "UP" else "DOWN",
+                    "bucket" to minioBucket,
+                    "error" to if (!minioOk) (minioResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
                 )
             ),
             "dinstar" to mapOf(
