@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "start": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit 2>/dev/null || echo '⚠️ tsc not found, skipping type check' ; vite build",
-    "preview": "vite preview --host 0.0.0.0",
+    "dev": "vite --host 0.0.0.0 --port 8088",
+    "start": "vite --host 0.0.0.0 --port 8088",
+    "build": "vite build",
+    "build:check": "tsc --noEmit",
+    "preview": "vite preview --host 0.0.0.0 --port 8088",
     "build:strict": "tsc --noEmit && vite build"
   },
   "dependencies": {
