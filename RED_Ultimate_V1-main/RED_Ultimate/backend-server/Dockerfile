@@ -16,8 +16,8 @@ COPY backend-server/ backend-server/
 WORKDIR /build/backend-server
 
 # Build the Spring Boot JAR (skipping tests for fast container deployment)
-RUN gradle bootJar --no-daemon -x test --stacktrace || \
-    gradle :backend-server:bootJar --no-daemon -x test
+# In this isolated context rootProject is "red-backend" (see backend-server/settings.gradle.kts), so the task is :bootJar
+RUN gradle bootJar --no-daemon -x test --stacktrace || gradle :bootJar --no-daemon -x test
 
 # ══════════════════════════════════════════════════════════════════
 # ═════════════════════════════════════════════════════════════════
