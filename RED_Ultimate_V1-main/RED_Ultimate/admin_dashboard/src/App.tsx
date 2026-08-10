@@ -18,6 +18,9 @@ import {
   BellOutlined,
   FileSearchOutlined,
   KeyOutlined,
+  VideoCameraOutlined,
+  MessageOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
@@ -39,6 +42,10 @@ const Approvals = lazy(() => import('./pages/Approvals'));
 const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
 const NotificationsCenter = lazy(() => import('./pages/NotificationsCenter'));
 const SystemLogs = lazy(() => import('./pages/SystemLogs'));
+const MediaCenter = lazy(() => import('./pages/MediaCenter'));
+const MessagingCenter = lazy(() => import('./pages/MessagingCenter'));
+const InfrastructureCenter = lazy(() => import('./pages/InfrastructureCenter'));
+const ModerationCenter = lazy(() => import('./pages/ModerationCenter'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -49,32 +56,40 @@ type PageKey =
   | 'content'
   | 'reports'
   | 'audit'
+  | 'moderation'
+  | 'messaging'
   | 'announcements'
   | 'featureflags'
   | 'backups'
   | 'security'
   | 'notifications'
   | 'logs'
+  | 'media'
+  | 'infrastructure'
   | 'master'
   | 'dinstar'
   | 'monitor'
   | 'diagnostics';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
-  // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية
+  // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
   { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية', group: 'main' },
   { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
   { key: 'approvals', icon: <SafetyCertificateOutlined />, label: 'الموافقات المعلقة', group: 'main' },
   { key: 'content', icon: <BarChartOutlined />, label: 'المحتوى', group: 'main' },
   { key: 'reports', icon: <AlertOutlined />, label: 'مراقبة المحتوى', group: 'main' },
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
-  // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات
+  { key: 'moderation', icon: <SafetyCertificateOutlined />, label: 'الإشراف السريع', group: 'main' },
+  { key: 'messaging', icon: <MessageOutlined />, label: 'مركز الرسائل', group: 'main' },
+  // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات + وسائط + بنية
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
   { key: 'backups', icon: <CloudUploadOutlined />, label: 'النسخ الاحتياطية', group: 'system' },
   { key: 'security', icon: <SafetyOutlined />, label: 'مركز الأمان', group: 'system' },
   { key: 'notifications', icon: <BellOutlined />, label: 'الإشعارات', group: 'system' },
   { key: 'logs', icon: <FileSearchOutlined />, label: 'سجل النظام الحي', group: 'system' },
+  { key: 'media', icon: <VideoCameraOutlined />, label: 'مركز الوسائط', group: 'system' },
+  { key: 'infrastructure', icon: <CloudServerOutlined />, label: 'البنية التحتية', group: 'system' },
   // Sovereign — التحكم السيادي + DINSTAR + مراقبة + تشخيص + واجهة قديمة للتوافق
   { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي (قديم)', group: 'sovereign' },
   { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR', group: 'sovereign' },
@@ -131,12 +146,16 @@ export default function App() {
       case 'content': return <ContentManagement />;
       case 'reports': return <Reports />;
       case 'audit': return <AuditLog />;
+      case 'moderation': return <ModerationCenter />;
+      case 'messaging': return <MessagingCenter />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;
       case 'security': return <SecurityCenter />;
       case 'notifications': return <NotificationsCenter />;
       case 'logs': return <SystemLogs />;
+      case 'media': return <MediaCenter />;
+      case 'infrastructure': return <InfrastructureCenter />;
       case 'master': return <MasterLayout />;
       case 'dinstar': return <DinstarControl />;
       case 'monitor': return <MasterOverview />;
