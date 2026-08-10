@@ -13,6 +13,8 @@ import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthApi
 import com.red.sovereign.auth.DeviceKeyManager
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.core.database.LocalHistoryEntity
+import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.crypto.DecryptedMessageBus
 import com.red.sovereign.crypto.SignalSessionManager
@@ -43,7 +45,7 @@ class RedConnectionService : Service() {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var tokenStore: TokenStore
-    private lateinit var messageStore: MessageStore
+    private lateinit var repository: LocalRepository
     private lateinit var signal: SignalSessionManager
     private lateinit var groupCrypto: GroupCryptoManager
     private lateinit var keyManager: DeviceKeyManager
@@ -53,11 +55,11 @@ class RedConnectionService : Service() {
         super.onCreate()
         createChannels()
         tokenStore = TokenStore(this)
-        messageStore = MessageStore(this)
+        repository = LocalRepository(this)
         signal = SignalSessionManager(this)
         groupCrypto = GroupCryptoManager(this)
         keyManager = DeviceKeyManager(this)
-        socket = RedWebSocketClient(tokenStore, ::onEnvelope, ::onState)
+        socket = RedWebSocketClient(this, tokenStore, ::onEnvelope, ::onState)
         scope.launch {
             if (signal.replenishPreKeys() is ApiResult.Error) {
                 notifyConnection("تعذر تحديث مفاتيح الجلسات الآمنة — ستتم المحاولة عند إعادة الاتصال")
@@ -117,7 +119,7 @@ class RedConnectionService : Service() {
                         }
                         firstId?.let {
                             val bytes = pending.text.toByteArray(Charsets.UTF_8); val timestamp = System.currentTimeMillis()
-                            messageStore.saveDecrypted(LocalMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, "GROUP_MESSAGE", timestamp, true))
+                            repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), bytes, "GROUP_MESSAGE", timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, timestamp, 0, type = "GROUP_MESSAGE", outgoing = true))
                         }
                     }
@@ -138,7 +140,7 @@ class RedConnectionService : Service() {
                     }
                     firstId?.let {
                         val timestamp = System.currentTimeMillis()
-                        messageStore.saveDecrypted(LocalMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
+                        repository.saveLocalHistory(LocalHistoryEntity(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
                         DecryptedMessageBus.publish(DecryptedMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
                     }
                 }
@@ -173,7 +175,7 @@ class RedConnectionService : Service() {
     private fun refreshAndReconnect() {
         val refresh = tokenStore.refreshToken ?: run { stopSelf(); return }
         scope.launch {
-            when (val result = AuthApi().refresh(refresh)) {
+            when (val result = AuthApi(applicationContext).refresh(refresh)) {
                 is ApiResult.Success -> { tokenStore.updateTokens(result.value); attempts = 0; socket.connect() }
                 is ApiResult.Error -> { notifyConnection("انتهت الجلسة — افتح يونس لتسجيل الدخول"); stopSelf() }
             }
@@ -193,7 +195,7 @@ class RedConnectionService : Service() {
                 val message = envelope.message
                 if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
                     runCatching {
-                        messageStore.save(message)
+                        repository.saveIncomingMessage(message)
                         when (message.type) {
                             "GROUP_MESSAGE" -> groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
                             else -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
@@ -202,30 +204,61 @@ class RedConnectionService : Service() {
                         if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
                         } else {
-                            messageStore.saveDecrypted(LocalMessage(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
+                            repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
-                            if (SettingsRuntime.current.messageNotifications && messageStore.conversationPreference(message.conversationId).third <= System.currentTimeMillis()) notifyEncryptedMessage(
-                                message.senderId,
-                                if (message.type == "TEXT" || message.type == "GROUP_MESSAGE") plaintext.toString(Charsets.UTF_8) else null
-                            )
+                            // Show notification for incoming encrypted message
+                            val preview = decodeMessagePreview(plaintext)
+                            if (SettingsRuntime.current.notificationEnabled) {
+                                notifyEncryptedMessage(message.senderId, preview)
+                            }
                         }
                         socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                     }
                 } else if (message.senderId == tokenStore.redId) {
-                    messageStore.save(message, "SENT")
+                    repository.saveIncomingMessage(message, outgoing = true)
                 }
             }
             RedProtos.RedRED.SignalCase.ACK -> {
-                messageStore.updateStatus(envelope.ack.messageId, envelope.ack.status)
+                repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
             }
-            RedProtos.RedRED.SignalCase.DELETE -> messageStore.delete(envelope.delete.messageId)
+            RedProtos.RedRED.SignalCase.DELETE -> {
+                val delete = envelope.delete
+                when (delete.targetCase) {
+                    RedProtos.RedDelete.TargetCase.MESSAGE_IDS -> {
+                        // حذف محلي فقط — لا يُحذف من الخادم
+                        delete.messageIdsList.forEach { msgId ->
+                            runCatching { repository.deleteLocalMessage(msgId) }
+                                .onFailure { android.util.Log.w("RedConnectionService", "delete failed for $msgId: ${it.message}") }
+                        }
+                    }
+                    RedProtos.RedDelete.TargetCase.CONVERSATION_ID -> {
+                        runCatching { repository.deleteConversation(delete.conversationId) }
+                            .onFailure { android.util.Log.w("RedConnectionService", "delete conv failed: ${it.message}") }
+                    }
+                    RedProtos.RedDelete.TargetCase.TARGET_NOT_SET -> Unit
+                }
+            }
             RedProtos.RedRED.SignalCase.TYPING -> {
                 val typing = envelope.typing
                 TypingEventBus.publish(TypingEvent(typing.conversationId, typing.userId, typing.isTyping))
             }
             else -> Unit
         }
+    }
+
+    /**
+     * فك تشفير preview للـ notification (نص عادي فقط، آمن)
+     */
+    private fun decodeMessagePreview(plaintext: ByteArray): String? {
+        return runCatching {
+            val text = String(plaintext, Charsets.UTF_8)
+            // لو كانت JSON، نستخرج text
+            val parsed = json.parseToJsonElement(text)
+            parsed.jsonObject["text"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull() ?: runCatching {
+            String(plaintext, Charsets.UTF_8).take(120)
+        }.getOrNull()
     }
 
     private fun notifyEncryptedMessage(sender: String, plaintext: String?) {

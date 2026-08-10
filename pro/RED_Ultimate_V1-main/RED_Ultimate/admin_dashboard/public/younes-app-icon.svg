@@ -1,0 +1,14 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 392) rotate(90) scale(560)"><stop stop-color="#102B47"/><stop offset="1" stop-color="#030712"/></radialGradient>
+    <linearGradient id="gold" x1="170" y1="86" x2="854" y2="928" gradientUnits="userSpaceOnUse"><stop stop-color="#FFE27A"/><stop offset="0.5" stop-color="#E8B84A"/><stop offset="1" stop-color="#91691D"/></linearGradient>
+    <linearGradient id="green" x1="300" y1="260" x2="720" y2="760" gradientUnits="userSpaceOnUse"><stop stop-color="#00E6A0"/><stop offset="1" stop-color="#35CBE0"/></linearGradient>
+  </defs>
+  <circle cx="512" cy="512" r="476" fill="url(#bg)" stroke="url(#gold)" stroke-width="34"/>
+  <circle cx="512" cy="512" r="426" stroke="#E8B84A" stroke-opacity="0.28" stroke-width="3" stroke-dasharray="16 18"/>
+  <path d="M218 354C284 254 392 194 513 194C716 194 878 348 878 536C878 686 774 815 626 862C649 825 662 782 662 736C662 577 532 448 373 448C316 448 263 464 218 493V354Z" fill="#071A2E" stroke="url(#gold)" stroke-width="26" stroke-linejoin="round"/>
+  <path d="M326 300L514 578L696 300H585L516 411L444 300H326Z" fill="url(#gold)"/>
+  <path d="M330 323C278 364 246 426 246 496C246 621 347 722 472 722C535 722 592 696 632 654L713 735L742 599C773 552 790 493 785 431" stroke="url(#green)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M370 700L338 778H650L620 700H370Z" fill="url(#gold)"/>
+  <text x="512" y="860" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="8" fill="url(#gold)">YOUNES</text>
+</svg>

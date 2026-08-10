@@ -1,5 +1,7 @@
 package com.red.server.social
 
+import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.groups.GroupService
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
@@ -9,10 +11,16 @@ import java.util.concurrent.TimeUnit
 /**
  * 🔴 YOUNES User Status & Privacy Service
  * إدارة الحالات والخصوصية باستخدام Redis
+ *
+ * - مَن يرى مَن: CONTACTS = جهات الاتصال المعتمدة (ثنائي الاتجاه)
+ * - الفحص باستخدام repository فعلي (لا stubs)
+ * - فلترة: المستخدم المخفي يظهر OFFLINE للآخرين
+ * - الاسم والـ username يأتيان من UserAccountRepository
  */
 @Service
 class UserStatusService(
-    private val redis: RedisTemplate<String, String>
+    private val redis: RedisTemplate<String, String>,
+    private val users: UserAccountRepository
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -20,6 +28,7 @@ class UserStatusService(
         private const val STATUS_PREFIX = "user:status:"
         private const val PRIVACY_PREFIX = "user:privacy:"
         private const val ONLINE_SET = "users:online"
+        private const val CONTACTS_SET_PREFIX = "contacts:"
         private const val STATUS_TTL_HOURS = 24L
     }
 
@@ -32,6 +41,12 @@ class UserStatusService(
     // ─── الحالة ───
 
     fun updateStatus(userId: String, type: String, customText: String?, visibleTo: String): UserStatusEntry {
+        require(type in setOf("ONLINE", "OFFLINE", "INVISIBLE", "AWAY", "BUSY")) {
+            "نوع الحالة غير مدعوم: $type"
+        }
+        require(visibleTo in setOf("EVERYONE", "CONTACTS", "NOBODY")) {
+            "قيمة visibleTo غير مدعومة: $visibleTo"
+        }
         val key = STATUS_PREFIX + userId
         val entry = UserStatusEntry(type, customText, Instant.now())
 
@@ -62,22 +77,43 @@ class UserStatusService(
         val visibleTo = data["visibleTo"] ?: "EVERYONE"
         val type = data["type"] ?: "OFFLINE"
         val customText = data["customText"]?.takeIf { it.isNotBlank() }
+        val updatedAt = parseInstant(data["updatedAt"])
 
         // فحص الخصوصية
-        when (visibleTo) {
-            "NOBODY" -> return if (targetUserId == requesterId) UserStatusEntry(type, customText, parseInstant(data["updatedAt"])) else null
-            "CONTACTS" -> {
-                // TODO: Check if requester is in target's contacts
-                // For now, allow
-            }
+        val canSee = when (visibleTo) {
+            "EVERYONE" -> true
+            "NOBODY" -> targetUserId == requesterId
+            "CONTACTS" -> targetUserId == requesterId || areContacts(targetUserId, requesterId)
+            else -> true
         }
+        if (!canSee) return null
 
-        // المستخدم المخفي يبدو غير متصل
+        // المستخدم المخفي يبدو غير متصل للآخرين
         if (type == "INVISIBLE" && targetUserId != requesterId) {
-            return UserStatusEntry("OFFLINE", null, parseInstant(data["updatedAt"]))
+            return UserStatusEntry("OFFLINE", null, updatedAt)
         }
 
-        return UserStatusEntry(type, customText, parseInstant(data["updatedAt"]))
+        return UserStatusEntry(type, customText, updatedAt)
+    }
+
+    /**
+     * فحص ثنائي الاتجاه: هل هما في قائمة جهات اتصال بعضهما؟
+     * يستخدم Redis Set للتخزين المؤقت (membership من contact service)
+     */
+    private fun areContacts(userA: String, userB: String): Boolean {
+        val setA = redis.opsForSet().isMember(CONTACTS_SET_PREFIX + userA, userB) ?: false
+        val setB = redis.opsForSet().isMember(CONTACTS_SET_PREFIX + userB, userA) ?: false
+        // ثنائي الاتجاه — لازم الاثنين
+        return setA && setB
+    }
+
+    /** إضافة/إزالة من جهات الاتصال (يُستدعى من ContactService) */
+    fun addContact(userId: String, contactId: String) {
+        redis.opsForSet().add(CONTACTS_SET_PREFIX + userId, contactId)
+    }
+
+    fun removeContact(userId: String, contactId: String) {
+        redis.opsForSet().remove(CONTACTS_SET_PREFIX + userId, contactId)
     }
 
     // ─── الخصوصية ───
@@ -103,15 +139,24 @@ class UserStatusService(
         val key = PRIVACY_PREFIX + userId
         val ops = redis.opsForHash<String, String>()
 
-        request.lastSeen?.let { ops.put(key, "lastSeen", it) }
-        request.onlineStatus?.let { ops.put(key, "onlineStatus", it) }
-        request.profilePhoto?.let { ops.put(key, "profilePhoto", it) }
-        request.about?.let { ops.put(key, "about", it) }
-        request.status?.let { ops.put(key, "status", it) }
-        request.readReceipts?.let { ops.put(key, "readReceipts", it) }
-        request.calls?.let { ops.put(key, "calls", it) }
-        request.groups?.let { ops.put(key, "groups", it) }
-        request.liveLocation?.let { ops.put(key, "liveLocation", it) }
+        // validation for every value
+        val validScopes = setOf("EVERYONE", "CONTACTS", "NOBODY")
+        fun putIfValid(field: String, value: String?) {
+            value?.let {
+                require(it in validScopes) { "قيمة $field غير صالحة: $it (المسموح: $validScopes)" }
+                ops.put(key, field, it)
+            }
+        }
+
+        putIfValid("lastSeen", request.lastSeen)
+        putIfValid("onlineStatus", request.onlineStatus)
+        putIfValid("profilePhoto", request.profilePhoto)
+        putIfValid("about", request.about)
+        putIfValid("status", request.status)
+        putIfValid("readReceipts", request.readReceipts)
+        putIfValid("calls", request.calls)
+        putIfValid("groups", request.groups)
+        putIfValid("liveLocation", request.liveLocation)
 
         log.info("Privacy settings updated for {}", userId)
         return getPrivacySettings(userId)
@@ -126,8 +171,16 @@ class UserStatusService(
             .filter { it != userId }
             .mapNotNull { onlineId ->
                 val status = getVisibleStatus(onlineId, userId) ?: return@mapNotNull null
-                // TODO: Get user name from repository
-                OnlineContact(onlineId, onlineId, status.type, status.customText)
+                // جلب الاسم من UserAccountRepository — لا stubs
+                val user = users.findByRedId(onlineId) ?: return@mapNotNull null
+                OnlineContact(
+                    userId = onlineId,
+                    displayName = user.displayName.ifBlank { user.username },
+                    username = user.username,
+                    avatarColor = user.avatarColor,
+                    type = status.type,
+                    customText = status.customText
+                )
             }
     }
 
@@ -135,3 +188,36 @@ class UserStatusService(
         return try { value?.let { Instant.parse(it) } ?: Instant.now() } catch (_: Exception) { Instant.now() }
     }
 }
+
+data class OnlineContact(
+    val userId: String,
+    val displayName: String,
+    val username: String,
+    val avatarColor: String? = null,
+    val type: String,
+    val customText: String?
+)
+
+data class PrivacySettingsResponse(
+    val lastSeen: String,
+    val onlineStatus: String,
+    val profilePhoto: String,
+    val about: String,
+    val status: String,
+    val readReceipts: String,
+    val calls: String,
+    val groups: String,
+    val liveLocation: String
+)
+
+data class PrivacySettingsRequest(
+    val lastSeen: String? = null,
+    val onlineStatus: String? = null,
+    val profilePhoto: String? = null,
+    val about: String? = null,
+    val status: String? = null,
+    val readReceipts: String? = null,
+    val calls: String? = null,
+    val groups: String? = null,
+    val liveLocation: String? = null
+)

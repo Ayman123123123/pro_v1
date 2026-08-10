@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
+.env
+secrets/

@@ -1,0 +1,815 @@
+package com.red.sovereign.megaphone;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.text.TextUtils;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
+import androidx.core.app.NotificationManagerCompat;
+
+import com.bumptech.glide.Glide;
+
+import org.signal.core.util.DiskUtil;
+import org.signal.core.util.MapUtil;
+import org.signal.core.util.SetUtil;
+import org.signal.core.util.TranslationDetection;
+import org.signal.core.util.logging.Log;
+import com.red.sovereign.R;
+import com.red.sovereign.backup.v2.MessageBackupTier;
+import com.red.sovereign.backup.v2.ui.BackupUpsellBottomSheet;
+import com.red.sovereign.backup.v2.ui.verify.VerifyBackupKeyActivity;
+import com.red.sovereign.components.settings.app.AppSettingsActivity;
+import com.red.sovereign.database.REDDatabase;
+import com.red.sovereign.database.model.MegaphoneRecord;
+import com.red.sovereign.database.model.RemoteMegaphoneRecord;
+import com.red.sovereign.dependencies.AppDependencies;
+import com.red.sovereign.jobmanager.impl.NetworkConstraint;
+import com.red.sovereign.keyvalue.PhoneNumberPrivacyValues.PhoneNumberDiscoverabilityMode;
+import com.red.sovereign.keyvalue.REDStore;
+import com.red.sovereign.keyvalue.protos.LeastActiveLinkedDevice;
+import com.red.sovereign.lock.REDPinReminderDialog;
+import com.red.sovereign.lock.REDPinReminders;
+import com.red.sovereign.lock.v2.CreateSvrPinActivity;
+import com.red.sovereign.lock.v2.SvrMigrationActivity;
+import com.red.sovereign.notifications.NotificationChannels;
+import com.red.sovereign.notifications.TurnOnNotificationsBottomSheet;
+import com.red.sovereign.profiles.AvatarHelper;
+import com.red.sovereign.profiles.manage.EditProfileActivity;
+import com.red.sovereign.profiles.username.NewWaysToConnectDialogFragment;
+import com.red.sovereign.recipients.Recipient;
+import com.red.sovereign.storage.StorageSyncHelper;
+import org.signal.core.util.ByteUnit;
+import com.red.sovereign.util.CommunicationActions;
+import com.red.sovereign.util.DateUtils;
+import com.red.sovereign.util.Environment;
+import com.red.sovereign.util.RemoteConfig;
+import org.signal.core.util.ServiceUtil;
+import com.red.sovereign.util.TextSecurePreferences;
+import com.red.sovereign.util.VersionTracker;
+import com.red.sovereign.util.dynamiclanguage.DynamicLanguageContextWrapper;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+/**
+ * Creating a new megaphone:
+ * - Add an enum to {@link Event}
+ * - Return a megaphone in {@link #forRecord(Context, MegaphoneRecord)}
+ * - Include the event in {@link #buildDisplayOrder(Context, Map)}
+ * <p>
+ * Common patterns:
+ * - For events that have a snooze-able recurring display schedule, use a {@link RecurringSchedule}.
+ * - For events guarded by feature flags, set a {@link ForeverSchedule} with false in
+ * {@link #buildDisplayOrder(Context, Map)}.
+ * - For events that change, return different megaphones in {@link #forRecord(Context, MegaphoneRecord)}
+ * based on whatever properties you're interested in.
+ */
+public final class Megaphones {
+
+  private static final String TAG = Log.tag(Megaphones.class);
+
+  private static final MegaphoneSchedule ALWAYS = new ForeverSchedule(true);
+  private static final MegaphoneSchedule NEVER  = new ForeverSchedule(false);
+
+  private static final Set<Event> DONATE_EVENTS                      = SetUtil.newHashSet(Event.BECOME_A_SUSTAINER, Event.DONATE_Q2_2022);
+  private static final long       MIN_TIME_BETWEEN_DONATE_MEGAPHONES = TimeUnit.DAYS.toMillis(30);
+
+  private Megaphones() {}
+
+  @WorkerThread
+  static @Nullable Megaphone getNextMegaphone(@NonNull Context context, @NonNull Map<Event, MegaphoneRecord> records) {
+    long currentTime = System.currentTimeMillis();
+
+    List<Megaphone> megaphones = buildDisplayOrder(context, records).entrySet().stream()
+                                                                    .filter(e -> {
+                                                                      MegaphoneRecord   record   = Objects.requireNonNull(records.get(e.getKey()));
+                                                                      MegaphoneSchedule schedule = e.getValue();
+
+                                                                      return !record.getFinished() && schedule.shouldDisplay(record.getInteractionCount(), record.getLastInteractionTime(), record.getFirstVisible(), currentTime);
+                                                                    })
+                                                                    .map(Map.Entry::getKey)
+                                                                    .map(records::get)
+                                                                    .map(record -> Megaphones.forRecord(context, record))
+                                                                    .filter(Objects::nonNull).collect(Collectors.toList());
+
+    if (megaphones.size() > 0) {
+      return megaphones.get(0);
+    } else {
+      return null;
+    }
+  }
+
+  /**
+   * The megaphones we want to display *in priority order*. This is a {@link LinkedHashMap}, so order is preserved.
+   * We will render the first applicable megaphone in this collection.
+   * <p>
+   * This is also when you would hide certain megaphones based on things like {@link RemoteConfig}.
+   */
+  private static Map<Event, MegaphoneSchedule> buildDisplayOrder(@NonNull Context context, @NonNull Map<Event, MegaphoneRecord> records) {
+    return new LinkedHashMap<>() {{
+      put(Event.PINS_FOR_ALL, new PinsForAllSchedule());
+      put(Event.CLIENT_DEPRECATED, REDStore.misc().isClientDeprecated() ? ALWAYS : NEVER);
+      put(Event.NEW_LINKED_DEVICE, shouldShowNewLinkedDeviceMegaphone() ? ALWAYS : NEVER);
+      put(Event.NOTIFICATIONS, shouldShowNotificationsMegaphone(context) ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(30)) : NEVER);
+      put(Event.GRANT_FULL_SCREEN_INTENT, shouldShowGrantFullScreenIntentPermission(context) ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(3)) : NEVER);
+      put(Event.BACKUP_SCHEDULE_PERMISSION, shouldShowBackupSchedulePermissionMegaphone(context) ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(3)) : NEVER);
+      put(Event.ONBOARDING, shouldShowOnboardingMegaphone(context) ? ALWAYS : NEVER);
+      put(Event.TURN_OFF_CENSORSHIP_CIRCUMVENTION, shouldShowTurnOffCircumventionMegaphone() ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(7)) : NEVER);
+      put(Event.REMOTE_MEGAPHONE, shouldShowRemoteMegaphone(records) ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(1)) : NEVER);
+      put(Event.LINKED_DEVICE_INACTIVE, shouldShowLinkedDeviceInactiveMegaphone() ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(3)) : NEVER);
+
+      // Specifically putting backup reminders here, above PIN reminders
+      put(Event.BACKUP_LOW_STORAGE_UPSELL, shouldShowBackupLowStorageUpsell(context) ? new BackupUpsellSchedule(records, TimeUnit.DAYS.toMillis(60), TimeUnit.DAYS.toMillis(120)) : NEVER);
+      put(Event.BACKUP_MEDIA_SIZE_UPSELL, shouldShowBackupMediaSizeUpsell() ? new BackupUpsellSchedule(records, TimeUnit.DAYS.toMillis(60), TimeUnit.DAYS.toMillis(120)) : NEVER);
+      put(Event.BACKUP_MESSAGE_COUNT_UPSELL, shouldShowBackupMessageCountUpsell(context) ? new BackupUpsellSchedule(records, TimeUnit.DAYS.toMillis(60)) : NEVER);
+      put(Event.BACKUPS_GENERIC_UPSELL, shouldShowGenericBackupsMegaphone(context) ? new BackupUpsellSchedule(records, TimeUnit.DAYS.toMillis(60)) : NEVER);
+      put(Event.VERIFY_BACKUP_KEY, new VerifyBackupKeyReminderSchedule());
+      put(Event.USE_NEW_ON_DEVICE_BACKUPS, shouldShowUseNewOnDeviceBackupsMegaphone() ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(14)) : NEVER);
+
+      // The Great Wall of PIN Reminder -- megaphones below this may not be seen by users who never do reminders
+      put(Event.PIN_REMINDER, new REDPinReminderSchedule());
+
+      // Feature-introduction megaphones should *probably* be added below this divider
+      put(Event.SET_UP_YOUR_USERNAME, shouldShowSetUpYourUsernameMegaphone(records) ? ALWAYS : NEVER);
+      put(Event.ADD_A_PROFILE_PHOTO, shouldShowAddAProfilePhotoMegaphone(context) ? ALWAYS : NEVER);
+      put(Event.PNP_LAUNCH, shouldShowPnpLaunchMegaphone() ? ALWAYS : NEVER);
+      put(Event.INACTIVE_PRIMARY, shouldShowInactivePrimaryMegaphone() ? RecurringSchedule.every(TimeUnit.DAYS.toMillis(7)) : NEVER);
+    }};
+  }
+
+  private static boolean shouldShowLinkedDeviceInactiveMegaphone() {
+    if (REDStore.account().isLinkedDevice()) {
+      return false;
+    }
+
+    LeastActiveLinkedDevice device = REDStore.misc().getLeastActiveLinkedDevice();
+    if (device == null) {
+      return false;
+    }
+
+    long expiringAt = device.lastActiveTimestamp + RemoteConfig.getLinkedDeviceLifespan();
+    long expiringIn = Math.max(expiringAt - System.currentTimeMillis(), 0);
+
+    return expiringIn < TimeUnit.DAYS.toMillis(7) && expiringIn > 0;
+  }
+
+  private static @Nullable Megaphone forRecord(@NonNull Context context, @NonNull MegaphoneRecord record) {
+    switch (record.getEvent()) {
+      case PINS_FOR_ALL:
+        return buildPinsForAllMegaphone(record);
+      case PIN_REMINDER:
+        return buildPinReminderMegaphone(context);
+      case CLIENT_DEPRECATED:
+        return buildClientDeprecatedMegaphone(context);
+      case ONBOARDING:
+        return buildOnboardingMegaphone();
+      case NOTIFICATIONS:
+        return buildNotificationsMegaphone(context);
+      case ADD_A_PROFILE_PHOTO:
+        return buildAddAProfilePhotoMegaphone(context);
+      case TURN_OFF_CENSORSHIP_CIRCUMVENTION:
+        return buildTurnOffCircumventionMegaphone(context);
+      case LINKED_DEVICE_INACTIVE:
+        return buildLinkedDeviceInactiveMegaphone(context);
+      case REMOTE_MEGAPHONE:
+        return buildRemoteMegaphone(context);
+      case BACKUP_SCHEDULE_PERMISSION:
+        return buildBackupPermissionMegaphone(context);
+      case SET_UP_YOUR_USERNAME:
+        return buildSetUpYourUsernameMegaphone(context);
+      case GRANT_FULL_SCREEN_INTENT:
+        return buildGrantFullScreenIntentPermission(context);
+      case PNP_LAUNCH:
+        return buildPnpLaunchMegaphone();
+      case NEW_LINKED_DEVICE:
+        return buildNewLinkedDeviceMegaphone(context);
+      case BACKUPS_GENERIC_UPSELL:
+        return buildBackupGenericUpsellMegaphone();
+      case BACKUP_MESSAGE_COUNT_UPSELL:
+        return buildBackupMessageCountUpsellMegaphone();
+      case BACKUP_MEDIA_SIZE_UPSELL:
+        return buildBackupMediaSizeUpsellMegaphone();
+      case BACKUP_LOW_STORAGE_UPSELL:
+        return buildBackupLowStorageUpsellMegaphone();
+      case VERIFY_BACKUP_KEY:
+        return buildVerifyBackupKeyMegaphone();
+      case USE_NEW_ON_DEVICE_BACKUPS:
+        return buildUseNewOnDeviceBackupsMegaphone();
+      case INACTIVE_PRIMARY:
+        return buildInactivePrimaryMegaphone();
+      default:
+        throw new IllegalArgumentException("Event not handled!");
+    }
+  }
+
+  private static Megaphone buildLinkedDeviceInactiveMegaphone(Context context) {
+    LeastActiveLinkedDevice device = REDStore.misc().getLeastActiveLinkedDevice();
+    if (device == null) {
+      throw new IllegalStateException("No linked device to show");
+    }
+
+    long expiringAt   = device.lastActiveTimestamp + RemoteConfig.getLinkedDeviceLifespan();
+    long expiringIn   = Math.max(expiringAt - System.currentTimeMillis(), 0);
+    int  expiringDays = (int) TimeUnit.MILLISECONDS.toDays(expiringIn);
+
+    return new Megaphone.Builder(Event.LINKED_DEVICE_INACTIVE, Megaphone.Style.BASIC)
+        .setTitle(R.string.LinkedDeviceInactiveMegaphone_title)
+        .setBody(context.getResources().getQuantityString(R.plurals.LinkedDeviceInactiveMegaphone_body, expiringDays, device.name, expiringDays))
+        .setImage(R.drawable.symbol_linked_device)
+        .setActionButton(R.string.LinkedDeviceInactiveMegaphone_got_it_button_label, (megaphone, listener) -> {
+          listener.onMegaphoneSnooze(Event.LINKED_DEVICE_INACTIVE);
+        })
+        .setSecondaryButton(R.string.LinkedDeviceInactiveMegaphone_dont_remind_button_label, (megaphone, listener) -> {
+          listener.onMegaphoneCompleted(Event.LINKED_DEVICE_INACTIVE);
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildPinsForAllMegaphone(@NonNull MegaphoneRecord record) {
+    if (PinsForAllSchedule.shouldDisplayFullScreen(record.getFirstVisible(), System.currentTimeMillis())) {
+      return new Megaphone.Builder(Event.PINS_FOR_ALL, Megaphone.Style.FULLSCREEN)
+          .enableSnooze(null)
+          .setOnVisibleListener((megaphone, listener) -> {
+            if (new NetworkConstraint.Factory(AppDependencies.getApplication()).create().isMet()) {
+              listener.onMegaphoneNavigationRequested(SvrMigrationActivity.createIntent(), SvrMigrationActivity.REQUEST_NEW_PIN);
+            }
+          })
+          .build();
+    } else {
+      return new Megaphone.Builder(Event.PINS_FOR_ALL, Megaphone.Style.BASIC)
+          .setImage(R.drawable.kbs_pin_megaphone)
+          .setTitle(R.string.KbsMegaphone__create_a_pin)
+          .setBody(R.string.KbsMegaphone__pins_keep_information_thats_stored_with_signal_encrytped)
+          .setActionButton(R.string.KbsMegaphone__create_pin, (megaphone, listener) -> {
+            Intent intent = CreateSvrPinActivity.getIntentForPinCreate(AppDependencies.getApplication());
+
+            listener.onMegaphoneNavigationRequested(intent, CreateSvrPinActivity.REQUEST_NEW_PIN);
+          })
+          .build();
+    }
+  }
+
+  @SuppressWarnings("CodeBlock2Expr")
+  private static @NonNull Megaphone buildPinReminderMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.PIN_REMINDER, Megaphone.Style.BASIC)
+        .setTitle(R.string.Megaphones_verify_your_signal_pin)
+        .setBody(R.string.Megaphones_well_occasionally_ask_you_to_verify_your_pin)
+        .setImage(R.drawable.kbs_pin_megaphone)
+        .setActionButton(R.string.Megaphones_verify_pin, (megaphone, controller) -> {
+          REDPinReminderDialog.show(controller.getMegaphoneActivity(), controller::onMegaphoneNavigationRequested, new REDPinReminderDialog.Callback() {
+            @Override
+            public void onReminderDismissed(boolean includedFailure) {
+              Log.i(TAG, "[PinReminder] onReminderDismissed(" + includedFailure + ")");
+
+              REDStore.pin().onEntrySkip(includedFailure);
+              controller.onMegaphoneSnooze(Event.PIN_REMINDER);
+              controller.onMegaphoneToastRequested(controller.getMegaphoneActivity().getString(REDPinReminders.getSkipReminderString(REDStore.pin().getCurrentInterval())));
+            }
+
+            @Override
+            public void onReminderCompleted(@NonNull String pin, boolean includedFailure) {
+              Log.i(TAG, "[PinReminder] onReminderCompleted(" + includedFailure + ")");
+              if (includedFailure) {
+                REDStore.pin().onEntrySuccessWithWrongGuess(pin);
+              } else {
+                REDStore.pin().onEntrySuccess(pin);
+              }
+
+              controller.onMegaphoneSnooze(Event.PIN_REMINDER);
+              controller.onMegaphoneToastRequested(controller.getMegaphoneActivity().getString(REDPinReminders.getReminderString(REDStore.pin().getCurrentInterval())));
+            }
+          });
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildClientDeprecatedMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.CLIENT_DEPRECATED, Megaphone.Style.FULLSCREEN)
+        .disableSnooze()
+        .setOnVisibleListener((megaphone, listener) -> listener.onMegaphoneNavigationRequested(new Intent(context, ClientDeprecatedActivity.class)))
+        .build();
+  }
+
+  private static @NonNull Megaphone buildOnboardingMegaphone() {
+    return new Megaphone.Builder(Event.ONBOARDING, Megaphone.Style.ONBOARDING)
+        .build();
+  }
+
+  private static @NonNull Megaphone buildNotificationsMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.NOTIFICATIONS, Megaphone.Style.BASIC)
+        .setTitle(R.string.NotificationsMegaphone_turn_on_notifications)
+        .setBody(R.string.NotificationsMegaphone_never_miss_a_message)
+        .setImage(R.drawable.megaphone_notifications_64)
+        .setActionButton(R.string.NotificationsMegaphone_turn_on, (megaphone, controller) -> {
+          if (Build.VERSION.SDK_INT >= 26) {
+            controller.onMegaphoneDialogFragmentRequested(TurnOnNotificationsBottomSheet.turnOnSystemNotificationsFragment(context));
+          } else {
+            controller.onMegaphoneNavigationRequested(AppSettingsActivity.notifications(context));
+          }
+        })
+        .setSecondaryButton(R.string.NotificationsMegaphone_not_now, (megaphone, controller) -> controller.onMegaphoneSnooze(Event.NOTIFICATIONS))
+        .build();
+  }
+
+  private static @NonNull Megaphone buildAddAProfilePhotoMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.ADD_A_PROFILE_PHOTO, Megaphone.Style.BASIC)
+        .setTitle(R.string.AddAProfilePhotoMegaphone__add_a_profile_photo)
+        .setImage(R.drawable.ic_add_a_profile_megaphone_image)
+        .setBody(R.string.AddAProfilePhotoMegaphone__choose_a_look_and_color)
+        .setActionButton(R.string.AddAProfilePhotoMegaphone__add_photo, (megaphone, listener) -> {
+          listener.onMegaphoneNavigationRequested(EditProfileActivity.getIntentForAvatarEdit(context));
+          listener.onMegaphoneCompleted(Event.ADD_A_PROFILE_PHOTO);
+        })
+        .setSecondaryButton(R.string.AddAProfilePhotoMegaphone__not_now, (megaphone, listener) -> {
+          listener.onMegaphoneCompleted(Event.ADD_A_PROFILE_PHOTO);
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildNewLinkedDeviceMegaphone(@NonNull Context context) {
+    String createdAt = DateUtils.getDateTimeString(context, Locale.getDefault(), REDStore.misc().getNewLinkedDeviceCreatedTime());
+    return new Megaphone.Builder(Event.NEW_LINKED_DEVICE, Megaphone.Style.BASIC)
+        .setTitle(R.string.NewLinkedDeviceNotification__you_linked_new_device)
+        .setBody(context.getString(R.string.NewLinkedDeviceMegaphone__a_new_device_was_linked, createdAt))
+        .setImage(R.drawable.symbol_linked_device)
+        .setActionButton(R.string.NewLinkedDeviceMegaphone__ok, (megaphone, listener) -> {
+          REDStore.misc().setNewLinkedDeviceId(0);
+          REDStore.misc().setNewLinkedDeviceCreatedTime(0);
+          listener.onMegaphoneSnooze(Event.NEW_LINKED_DEVICE);
+        })
+        .setSecondaryButton(R.string.NewLinkedDeviceMegaphone__view_device, (megaphone, listener) -> {
+          listener.onMegaphoneNavigationRequested(AppSettingsActivity.linkedDevices(context));
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildTurnOffCircumventionMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.TURN_OFF_CENSORSHIP_CIRCUMVENTION, Megaphone.Style.BASIC)
+        .setTitle(R.string.CensorshipCircumventionMegaphone_turn_off_censorship_circumvention)
+        .setImage(R.drawable.ic_censorship_megaphone_64)
+        .setBody(R.string.CensorshipCircumventionMegaphone_you_can_now_connect_to_the_signal_service)
+        .setActionButton(R.string.CensorshipCircumventionMegaphone_turn_off, (megaphone, listener) -> {
+          REDStore.settings().setCensorshipCircumventionEnabled(false);
+          listener.onMegaphoneSnooze(Event.TURN_OFF_CENSORSHIP_CIRCUMVENTION);
+        })
+        .setSecondaryButton(R.string.CensorshipCircumventionMegaphone_no_thanks, (megaphone, listener) -> {
+          listener.onMegaphoneSnooze(Event.TURN_OFF_CENSORSHIP_CIRCUMVENTION);
+        })
+        .build();
+  }
+
+  private static @Nullable Megaphone buildRemoteMegaphone(@NonNull Context context) {
+    RemoteMegaphoneRecord record = RemoteMegaphoneRepository.getRemoteMegaphoneToShow(System.currentTimeMillis());
+
+    if (record == null) {
+      Log.w(TAG, "No remote megaphone record when told to show one!");
+      return null;
+    }
+
+    Megaphone.Builder builder = new Megaphone.Builder(Event.REMOTE_MEGAPHONE, Megaphone.Style.BASIC)
+        .setTitle(record.getTitle())
+        .setBody(record.getBody());
+
+    if (record.getImageUri() != null) {
+      builder.setImageRequestBuilder(Glide.with(context).asDrawable().load(record.getImageUri()));
+    }
+
+    if (record.hasPrimaryAction()) {
+      //noinspection ConstantConditions
+      builder.setActionButton(record.getPrimaryActionText(), (megaphone, controller) -> {
+        RemoteMegaphoneRepository.getAction(Objects.requireNonNull(record.getPrimaryActionId()))
+                                 .run(context, controller, record);
+      });
+    }
+
+    if (record.hasSecondaryAction()) {
+      //noinspection ConstantConditions
+      builder.setSecondaryButton(record.getSecondaryActionText(), (megaphone, controller) -> {
+        RemoteMegaphoneRepository.getAction(Objects.requireNonNull(record.getSecondaryActionId()))
+                                 .run(context, controller, record);
+      });
+    }
+
+    builder.setOnVisibleListener((megaphone, controller) -> {
+      RemoteMegaphoneRepository.markShown(record.getUuid());
+    });
+
+    return builder.build();
+  }
+
+  @SuppressLint("InlinedApi")
+  private static Megaphone buildBackupPermissionMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.BACKUP_SCHEDULE_PERMISSION, Megaphone.Style.BASIC)
+        .setTitle(R.string.BackupSchedulePermissionMegaphone__cant_back_up_chats)
+        .setImage(R.drawable.ic_cant_backup_megaphone)
+        .setBody(R.string.BackupSchedulePermissionMegaphone__your_chats_are_no_longer_being_automatically_backed_up)
+        .setActionButton(R.string.BackupSchedulePermissionMegaphone__back_up_chats, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(new ReenableBackupsDialogFragment());
+        })
+        .setSecondaryButton(R.string.BackupSchedulePermissionMegaphone__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.BACKUP_SCHEDULE_PERMISSION);
+        })
+        .build();
+  }
+
+  public static @NonNull Megaphone buildSetUpYourUsernameMegaphone(@NonNull Context context) {
+    return new Megaphone.Builder(Event.SET_UP_YOUR_USERNAME, Megaphone.Style.BASIC)
+        .setTitle(R.string.NewWaysToConnectDialogFragment__new_ways_to_connect)
+        .setBody(R.string.SetUpYourUsername__introducing_phone_number_privacy)
+        .setImage(R.drawable.usernames_megaphone)
+        .setActionButton(R.string.SetUpYourUsername__learn_more, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(new NewWaysToConnectDialogFragment());
+        })
+        .setSecondaryButton(R.string.SetUpYourUsername__dismiss, (megaphone, controller) -> {
+          controller.onMegaphoneCompleted(Event.SET_UP_YOUR_USERNAME);
+        })
+        .build();
+  }
+
+  public static @NonNull Megaphone buildPnpLaunchMegaphone() {
+    return new Megaphone.Builder(Event.PNP_LAUNCH, Megaphone.Style.BASIC)
+        .setTitle(R.string.PnpLaunchMegaphone_title)
+        .setBody(R.string.PnpLaunchMegaphone_body)
+        .setImage(R.drawable.usernames_megaphone)
+        .setActionButton(R.string.PnpLaunchMegaphone_learn_more, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(new NewWaysToConnectDialogFragment());
+          controller.onMegaphoneCompleted(Event.PNP_LAUNCH);
+
+          REDStore.uiHints().setHasCompletedUsernameOnboarding(true);
+          REDDatabase.recipients().markNeedsSync(Recipient.self().getId());
+          StorageSyncHelper.scheduleSyncForDataChange();
+        })
+        .setSecondaryButton(R.string.PnpLaunchMegaphone_dismiss, (megaphone, controller) -> {
+          controller.onMegaphoneCompleted(Event.PNP_LAUNCH);
+
+          REDStore.uiHints().setHasCompletedUsernameOnboarding(true);
+          REDDatabase.recipients().markNeedsSync(Recipient.self().getId());
+          StorageSyncHelper.scheduleSyncForDataChange();
+        })
+        .build();
+  }
+
+  @SuppressLint("NewApi")
+  public static @NonNull Megaphone buildGrantFullScreenIntentPermission(@NonNull Context context) {
+    return new Megaphone.Builder(Event.GRANT_FULL_SCREEN_INTENT, Megaphone.Style.BASIC)
+        .setTitle(R.string.GrantFullScreenIntentPermission_megaphone_title)
+        .setBody(R.string.GrantFullScreenIntentPermission_megaphone_body)
+        .setImage(R.drawable.calling_64)
+        .setActionButton(R.string.GrantFullScreenIntentPermission_megaphone_turn_on, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(TurnOnNotificationsBottomSheet.turnOnFullScreenIntentFragment(context));
+        })
+        .setSecondaryButton(R.string.GrantFullScreenIntentPermission_megaphone_not_now, (megaphone, controller) -> {
+          controller.onMegaphoneCompleted(Event.GRANT_FULL_SCREEN_INTENT);
+        })
+        .build();
+  }
+
+  public static @NonNull Megaphone buildBackupGenericUpsellMegaphone() {
+    return new Megaphone.Builder(Event.BACKUPS_GENERIC_UPSELL, Megaphone.Style.BASIC)
+        .setImage(R.drawable.backups_megaphone_image)
+        .setTitle(R.string.TurnOnREDBackups__title)
+        .setBody(R.string.TurnOnREDBackups__body)
+        .setActionButton(R.string.TurnOnREDBackups__turn_on, (megaphone, controller) -> {
+          Intent intent = AppSettingsActivity.backupsSettings(controller.getMegaphoneActivity(), true);
+
+          controller.onMegaphoneNavigationRequested(intent);
+          controller.onMegaphoneSnooze(Event.BACKUPS_GENERIC_UPSELL);
+        })
+        .setSecondaryButton(R.string.TurnOnREDBackups__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneToastRequested(controller.getMegaphoneActivity().getString(R.string.TurnOnREDBackups__toast_not_now));
+          controller.onMegaphoneSnooze(Event.BACKUPS_GENERIC_UPSELL);
+        })
+        .build();
+  }
+
+  public static @NonNull Megaphone buildVerifyBackupKeyMegaphone() {
+    Megaphone.Builder builder = new Megaphone.Builder(Event.VERIFY_BACKUP_KEY, Megaphone.Style.BASIC)
+        .setImage(R.drawable.image_signal_backups_key)
+        .setTitle(R.string.VerifyBackupKey__title)
+        .setBody(R.string.VerifyBackupKey__body)
+        .setActionButton(R.string.VerifyBackupKey__verify, (megaphone, controller) -> {
+          Intent intent = VerifyBackupKeyActivity.createIntent(controller.getMegaphoneActivity());
+
+          controller.onMegaphoneNavigationRequested(intent, VerifyBackupKeyActivity.REQUEST_CODE);
+        });
+
+    if (!REDStore.backup().getHasSnoozedVerified()) {
+      builder.setSecondaryButton(R.string.VerifyBackupKey__not_now, (megaphone, controller) -> {
+        REDStore.backup().setHasSnoozedVerified(true);
+        controller.onMegaphoneToastRequested(controller.getMegaphoneActivity().getString(R.string.VerifyBackupKey__we_will_ask_again));
+        controller.onMegaphoneSnooze(Event.VERIFY_BACKUP_KEY);
+      });
+    }
+
+    return builder.build();
+  }
+
+  public static @NonNull Megaphone buildUseNewOnDeviceBackupsMegaphone() {
+    return new Megaphone.Builder(Event.USE_NEW_ON_DEVICE_BACKUPS, Megaphone.Style.BASIC)
+        .setImage(R.drawable.backups_megaphone_image)
+        .setTitle(R.string.UseNewOnDeviceBackups__title)
+        .setBody(R.string.UseNewOnDeviceBackups__body)
+        .setActionButton(R.string.UseNewOnDeviceBackups__upgrade, (megaphone, controller) -> {
+          Intent intent = AppSettingsActivity.upgradeLocalBackups(controller.getMegaphoneActivity());
+
+          controller.onMegaphoneNavigationRequested(intent);
+          controller.onMegaphoneSnooze(Event.USE_NEW_ON_DEVICE_BACKUPS);
+        })
+        .setSecondaryButton(R.string.UseNewOnDeviceBackups__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.USE_NEW_ON_DEVICE_BACKUPS);
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildInactivePrimaryMegaphone() {
+    return new Megaphone.Builder(Event.INACTIVE_PRIMARY, Megaphone.Style.BASIC)
+        .setImage(R.drawable.megaphone_inactive_primary)
+        .setTitle(R.string.InactivePrimary__title)
+        .setBody(R.string.InactivePrimary__body)
+        .setActionButton(R.string.InactivePrimary__got_it, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.INACTIVE_PRIMARY);
+        })
+        .setSecondaryButton(R.string.InactivePrimary__learn_more, ((megaphone, controller) -> {
+          CommunicationActions.openBrowserLink(
+              controller.getMegaphoneActivity(),
+              controller.getMegaphoneActivity().getString(R.string.inactive_primary_support)
+          );
+        }))
+        .build();
+  }
+
+  private static boolean shouldShowOnboardingMegaphone(@NonNull Context context) {
+    return REDStore.account().isPrimaryDevice() && REDStore.onboarding().hasOnboarding(context);
+  }
+
+  private static boolean shouldShowNewLinkedDeviceMegaphone() {
+    return REDStore.account().isPrimaryDevice() && REDStore.misc().getNewLinkedDeviceId() > 0 && !NotificationChannels.getInstance().areNotificationsEnabled();
+  }
+
+  private static boolean shouldShowTurnOffCircumventionMegaphone() {
+    return AppDependencies.getREDServiceNetworkAccess().isCensored() &&
+           REDStore.misc().isServiceReachableWithoutCircumvention();
+  }
+
+  private static boolean shouldShowNotificationsMegaphone(@NonNull Context context) {
+    boolean shouldShow = !REDStore.settings().isMessageNotificationsEnabled() ||
+                         !NotificationChannels.getInstance().isMessageChannelEnabled() ||
+                         !NotificationChannels.getInstance().isMessagesChannelGroupEnabled() ||
+                         !NotificationChannels.getInstance().areNotificationsEnabled();
+    if (shouldShow) {
+      Locale locale = DynamicLanguageContextWrapper.getUsersSelectedLocale(context);
+      if (!new TranslationDetection(context, locale)
+          .textExistsInUsersLanguage(R.string.NotificationsMegaphone_turn_on_notifications,
+                                     R.string.NotificationsMegaphone_never_miss_a_message,
+                                     R.string.NotificationsMegaphone_turn_on,
+                                     R.string.NotificationsMegaphone_not_now))
+      {
+        Log.i(TAG, "Would show NotificationsMegaphone but is not yet translated in " + locale);
+        return false;
+      }
+    }
+    return shouldShow;
+  }
+
+  private static boolean shouldShowAddAProfilePhotoMegaphone(@NonNull Context context) {
+    if (REDStore.misc().getHasEverHadAnAvatar()) {
+      return false;
+    }
+
+    boolean hasAnAvatar = AvatarHelper.hasAvatar(context, Recipient.self().getId());
+    if (hasAnAvatar) {
+      REDStore.misc().setHasEverHadAnAvatar(true);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Prompt megaphone 3 days after turning off phone number discovery when no username is set.
+   */
+  private static boolean shouldShowSetUpYourUsernameMegaphone(@NonNull Map<Event, MegaphoneRecord> records) {
+    boolean                        hasUsername                    = REDStore.account().isRegistered() && REDStore.account().getUsername() != null;
+    boolean                        hasCompleted                   = MapUtil.mapOrDefault(records, Event.SET_UP_YOUR_USERNAME, MegaphoneRecord::getFinished, false);
+    long                           phoneNumberDiscoveryDisabledAt = REDStore.phoneNumberPrivacy().getPhoneNumberDiscoverabilityModeTimestamp();
+    PhoneNumberDiscoverabilityMode listingMode                    = REDStore.phoneNumberPrivacy().getPhoneNumberDiscoverabilityMode();
+
+    return REDStore.account().isPrimaryDevice() &&
+           !hasUsername &&
+           listingMode == PhoneNumberDiscoverabilityMode.NOT_DISCOVERABLE &&
+           !hasCompleted &&
+           phoneNumberDiscoveryDisabledAt > 0 &&
+           (System.currentTimeMillis() - phoneNumberDiscoveryDisabledAt) >= TimeUnit.DAYS.toMillis(3);
+  }
+
+  private static boolean shouldShowPnpLaunchMegaphone() {
+    return REDStore.account().isPrimaryDevice() && TextUtils.isEmpty(REDStore.account().getUsername()) && !REDStore.uiHints().hasCompletedUsernameOnboarding();
+  }
+
+  private static boolean shouldShowInactivePrimaryMegaphone() {
+    return REDStore.account().isLinkedDevice() && REDStore.account().hasInactivePrimaryDeviceAlert();
+  }
+
+  private static boolean shouldShowGenericBackupsMegaphone(@NonNull Context context) {
+    if (!RemoteConfig.backupsMegaphone()) {
+      return false;
+    }
+
+    if (REDStore.backup().getLatestBackupTier() != null) {
+      return false;
+    }
+
+    if (!REDStore.account().isRegistered() || TextSecurePreferences.isUnauthorizedReceived(context) || REDStore.account().isLinkedDevice()) {
+      return false;
+    }
+
+    return VersionTracker.getDaysSinceFirstInstalled(context) > 7;
+  }
+
+  private static boolean shouldShowUseNewOnDeviceBackupsMegaphone() {
+    return REDStore.account().isPrimaryDevice() && Environment.Backups.isNewFormatSupportedForLocalBackup() && REDStore.settings().isBackupEnabled() && (RemoteConfig.upgradeBackupsMegaphone() || RemoteConfig.internalUser());
+  }
+
+  private static boolean shouldShowGrantFullScreenIntentPermission(@NonNull Context context) {
+    return Build.VERSION.SDK_INT >= 34 && !NotificationManagerCompat.from(context).canUseFullScreenIntent();
+  }
+
+  @WorkerThread
+  private static boolean shouldShowRemoteMegaphone(@NonNull Map<Event, MegaphoneRecord> records) {
+    boolean canShowLocalDonate = timeSinceLastDonatePrompt(Event.REMOTE_MEGAPHONE, records) > MIN_TIME_BETWEEN_DONATE_MEGAPHONES;
+    return RemoteMegaphoneRepository.hasRemoteMegaphoneToShow(canShowLocalDonate);
+  }
+
+  private static boolean shouldShowBackupSchedulePermissionMegaphone(@NonNull Context context) {
+    boolean backupsEnabled = REDStore.settings().isBackupEnabled() || REDStore.backup().getAreBackupsEnabled();
+    return REDStore.account().isPrimaryDevice() && Build.VERSION.SDK_INT >= 31 && backupsEnabled && !ServiceUtil.getAlarmManager(context).canScheduleExactAlarms();
+  }
+
+  /**
+   * Unfortunately lastSeen is only set today upon snoozing, which never happens to donate prompts.
+   * So we use firstVisible as a proxy.
+   */
+  private static long timeSinceLastDonatePrompt(@NonNull Event excludeEvent, @NonNull Map<Event, MegaphoneRecord> records) {
+    long lastSeenDonatePrompt = records.entrySet()
+                                       .stream()
+                                       .filter(e -> DONATE_EVENTS.contains(e.getKey()))
+                                       .filter(e -> !e.getKey().equals(excludeEvent))
+                                       .map(e -> e.getValue().getFirstVisible())
+                                       .filter(t -> t > 0)
+                                       .sorted()
+                                       .findFirst()
+                                       .orElse(0L);
+    return System.currentTimeMillis() - lastSeenDonatePrompt;
+  }
+
+  private static boolean shouldShowBackupMessageCountUpsell(@NonNull Context context) {
+    if (!REDStore.account().isRegistered() || TextSecurePreferences.isUnauthorizedReceived(context) || REDStore.account().isLinkedDevice()) {
+      return false;
+    }
+
+    if (REDStore.backup().getLatestBackupTier() != null) {
+      return false;
+    }
+
+    return REDDatabase.messages().getApproximateTotalMessageCount() > 1000;
+  }
+
+  private static boolean shouldShowBackupMediaSizeUpsell() {
+    if (!REDStore.account().isRegistered() || REDStore.account().isLinkedDevice() || !Environment.Backups.supportsGooglePlayBilling()) {
+      return false;
+    }
+
+    if (REDStore.backup().getLatestBackupTier() != MessageBackupTier.FREE) {
+      return false;
+    }
+
+    return REDDatabase.attachments().getApproximateTotalMediaSize() > ByteUnit.GIGABYTES.toBytes(1);
+  }
+
+  private static boolean shouldShowBackupLowStorageUpsell(@NonNull Context context) {
+    if (!REDStore.account().isRegistered() || TextSecurePreferences.isUnauthorizedReceived(context) || REDStore.account().isLinkedDevice() || !Environment.Backups.supportsGooglePlayBilling()) {
+      return false;
+    }
+
+    if (REDStore.backup().getLatestBackupTier() == MessageBackupTier.PAID) {
+      return false;
+    }
+
+    long available = DiskUtil.getAvailableSpace(context).getBytes();
+    long total     = DiskUtil.getTotalDiskSize(context).getBytes();
+
+    return total > 0 && ((double) available / total) < 0.10;
+  }
+
+  private static @NonNull Megaphone buildBackupMessageCountUpsellMegaphone() {
+    return new Megaphone.Builder(Event.BACKUP_MESSAGE_COUNT_UPSELL, Megaphone.Style.BASIC)
+        .setImage(R.drawable.megaphone_backup_message_count)
+        .setTitle(R.string.BackupMessagesUpsell__title)
+        .setBody(R.string.BackupMessagesUpsell__body)
+        .setActionButton(R.string.BackupMessagesUpsell__turn_on, (megaphone, controller) -> {
+          Intent intent = AppSettingsActivity.backupsSettings(controller.getMegaphoneActivity(), true);
+          controller.onMegaphoneNavigationRequested(intent);
+          controller.onMegaphoneSnooze(Event.BACKUP_MESSAGE_COUNT_UPSELL);
+        })
+        .setSecondaryButton(R.string.BackupMessagesUpsell__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.BACKUP_MESSAGE_COUNT_UPSELL);
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildBackupMediaSizeUpsellMegaphone() {
+    return new Megaphone.Builder(Event.BACKUP_MEDIA_SIZE_UPSELL, Megaphone.Style.BASIC)
+        .setImage(R.drawable.megaphone_backup_media_size)
+        .setTitle(R.string.BackupMediaUpsell__title)
+        .setBody(R.string.BackupMediaUpsell__body)
+        .setActionButton(R.string.BackupMediaUpsell__upgrade, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(BackupUpsellBottomSheet.create(false));
+          controller.onMegaphoneSnooze(Event.BACKUP_MEDIA_SIZE_UPSELL);
+        })
+        .setSecondaryButton(R.string.BackupMediaUpsell__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.BACKUP_MEDIA_SIZE_UPSELL);
+        })
+        .build();
+  }
+
+  private static @NonNull Megaphone buildBackupLowStorageUpsellMegaphone() {
+    boolean hasBackups = REDStore.backup().getLatestBackupTier() != null;
+
+    return new Megaphone.Builder(Event.BACKUP_LOW_STORAGE_UPSELL, Megaphone.Style.BASIC)
+        .setImage(R.drawable.megaphone_backup_storage_low)
+        .setTitle(R.string.BackupStorageUpsell__title)
+        .setBody(R.string.BackupStorageUpsell__body)
+        .setActionButton(hasBackups ? R.string.BackupStorageUpsell__upgrade : R.string.BackupStorageUpsell__turn_on, (megaphone, controller) -> {
+          controller.onMegaphoneDialogFragmentRequested(BackupUpsellBottomSheet.create(true));
+          controller.onMegaphoneSnooze(Event.BACKUP_LOW_STORAGE_UPSELL);
+        })
+        .setSecondaryButton(R.string.BackupStorageUpsell__not_now, (megaphone, controller) -> {
+          controller.onMegaphoneSnooze(Event.BACKUP_LOW_STORAGE_UPSELL);
+        })
+        .build();
+  }
+
+  public enum Event {
+    PINS_FOR_ALL("pins_for_all"),
+    PIN_REMINDER("pin_reminder"),
+    CLIENT_DEPRECATED("client_deprecated"),
+    ONBOARDING("onboarding"),
+    NOTIFICATIONS("notifications"),
+    ADD_A_PROFILE_PHOTO("add_a_profile_photo"),
+    BECOME_A_SUSTAINER("become_a_sustainer"),
+    DONATE_Q2_2022("donate_q2_2022"),
+    TURN_OFF_CENSORSHIP_CIRCUMVENTION("turn_off_censorship_circumvention"),
+    REMOTE_MEGAPHONE("remote_megaphone"),
+    LINKED_DEVICE_INACTIVE("linked_device_inactive"),
+    BACKUP_SCHEDULE_PERMISSION("backup_schedule_permission"),
+    SET_UP_YOUR_USERNAME("set_up_your_username"),
+    PNP_LAUNCH("pnp_launch"),
+    GRANT_FULL_SCREEN_INTENT("grant_full_screen_intent"),
+    NEW_LINKED_DEVICE("new_linked_device"),
+    BACKUPS_GENERIC_UPSELL("turn_on_signal_backups"),
+    BACKUP_MESSAGE_COUNT_UPSELL("backup_messages_upsell"),
+    BACKUP_MEDIA_SIZE_UPSELL("backup_media_upsell"),
+    BACKUP_LOW_STORAGE_UPSELL("backup_storage_upsell"),
+    VERIFY_BACKUP_KEY("verify_backup_key"),
+    USE_NEW_ON_DEVICE_BACKUPS("use_new_on_device_backups"),
+    INACTIVE_PRIMARY("inactive_primary");
+
+    private final String key;
+
+    Event(@NonNull String key) {
+      this.key = key;
+    }
+
+    public @NonNull String getKey() {
+      return key;
+    }
+
+    public static Event fromKey(@NonNull String key) {
+      for (Event event : values()) {
+        if (event.getKey().equals(key)) {
+          return event;
+        }
+      }
+      throw new IllegalArgumentException("No event for key: " + key);
+    }
+
+    public static boolean hasKey(@NonNull String key) {
+      for (Event event : values()) {
+        if (event.getKey().equals(key)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+}
