@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Tag, Space, Button, Modal, Form, Input, Select, message, Card,
+  Tabs, Table, Tag, Space, Button, Modal, Form, Input, Select, message, Card,
   Statistic, Row, Col, Typography, Empty, Progress, Alert, Popconfirm
 } from 'antd';
 import {
-  CloudUploadOutlined, DownloadOutlined, DeleteOutlined, ReloadOutlined,
+  CloudUploadOutlined, CopyOutlined, DownloadOutlined, DeleteOutlined, ReloadOutlined,
   DatabaseOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined,
   SyncOutlined, FileZipOutlined, HddOutlined, SafetyOutlined
 } from '@ant-design/icons';
@@ -225,14 +225,32 @@ export default function Backups() {
     },
   ];
 
+  const copy = (text: string) => navigator.clipboard.writeText(text).then(() => message.success('تم النسخ')).catch(() => message.error('فشل النسخ'));
+  const manualCommands = [
+    { title: '1. مفاتيح سلطة الهوية (الأهم)', cmd: 'tar -czf younes-identity-$(date +%F).tar.gz RED_Ultimate/secrets/ && gpg -c younes-identity-*.tar.gz', desc: 'يحتوي المفتاح الخاص P-256 — لا ترفعه إلى Git أبدًا' },
+    { title: '2. PostgreSQL', cmd: 'docker exec red-db-sql pg_dump -U admin red_sovereign | gzip > pg-$(date +%F).sql.gz', desc: 'الحسابات والأجهزة والشهادات و recovery codes' },
+    { title: '3. MongoDB', cmd: 'docker exec red-db-nosql mongodump --username red_user --password $MONGO_PASSWORD --authenticationDatabase admin --out /tmp/mongodump && docker cp red-db-nosql:/tmp/mongodump ./mongodump-$(date +%F)', desc: 'الرسائل المشفرة والقصص والمنشورات' },
+    { title: '4. Redis (AOF)', cmd: 'docker exec red-cache redis-cli -a $REDIS_PASSWORD --rdb /data/dump.rdb && docker cp red-cache:/data/dump.rdb ./redis-$(date +%F).rdb', desc: 'عدادات PSTN اليومية و rate limits' },
+    { title: '5. MinIO', cmd: 'mc mirror --overwrite minio/red-media ./minio-backup-$(date +%F)  # أو: docker exec red-storage tar -czf - /data | gzip > minio-$(date +%F).tar.gz', desc: 'صور وفيديو ومرفقات مشفرة' },
+  ];
+
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
         <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
-          <DatabaseOutlined /> النسخ الاحتياطية
+          <DatabaseOutlined /> النسخ الاحتياطية — موحدة
         </Title>
-        <Text type="secondary">إنشاء واستعادة وحذف النسخ الاحتياطية</Text>
+        <Text type="secondary">إنشاء واستعادة وحذف النسخ الاحتياطية — مدموج من BackupTab القديمة (أوامر يدوية حقيقية) — بيانات حقيقية</Text>
       </div>
+
+      <Tabs
+        type="card"
+        items={[
+          {
+            key: 'api',
+            label: <Space><CloudUploadOutlined /> عبر الواجهة (API)</Space>,
+            children: (
+              <Space direction="vertical" size="large" style={{ width: '100%' }}>
 
       {/* Stats */}
       <Row gutter={[16, 16]}>
@@ -373,6 +391,30 @@ export default function Backups() {
           </Form.Item>
         </Form>
       </Modal>
+              </Space>
+            ),
+          },
+          {
+            key: 'manual',
+            label: <Space><SafetyOutlined /> الأوامر اليدوية (5 أجزاء)</Space>,
+            children: (
+              <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Alert type="warning" showIcon message="النسخ الاحتياطي السيادي — 5 أجزاء معًا" description="فقدان أي جزء = فقدان حسابات أو رسائل أو وسائط. خزّنها مشفرة في مكانين منفصلين. النسخة ليست صالحة قبل restore drill." />
+                {manualCommands.map(item => (
+                  <Card key={item.title} title={item.title} extra={<Button icon={<CopyOutlined />} onClick={() => copy(item.cmd)}>نسخ</Button>}>
+                    <Paragraph type="secondary">{item.desc}</Paragraph>
+                    <Text code copyable style={{ display: 'block', whiteSpace: 'pre-wrap', background: '#0a0a0a', padding: 12, borderRadius: 8 }}>{item.cmd}</Text>
+                  </Card>
+                ))}
+                <Card title="◆ قائمة التحقق قبل الإنتاج" extra={<SafetyOutlined style={{ color: '#00C896' }} />}>
+                  <Text>• هل جربت الاستعادة على جهاز آخر؟ • هل تحققت من تسجيل دخول + فك تشفير رسالة + عرض صورة؟ • هل المفاتيح في خزنة offline؟</Text>
+                </Card>
+                <Alert type="info" showIcon message="تذكير" description="لا ترفع .env أو secrets/ أو *.pem أو dump إلى Git — هي في .gitignore لسبب." />
+              </Space>
+            ),
+          },
+        ]}
+      />
     </Space>
   );
 }
