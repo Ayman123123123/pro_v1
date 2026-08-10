@@ -1,0 +1,3 @@
+# Local resumable dependency cache; artifacts are verified by SHA-256 and never committed.
+*
+!.gitignore

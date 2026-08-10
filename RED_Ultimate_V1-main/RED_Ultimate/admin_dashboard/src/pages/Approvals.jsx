@@ -1,23 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Tag, Space, message } from 'antd';
-
 import { apiFetch } from '../api';
+
 const Approvals = () => {
     const [pendingUsers, setPendingUsers] = useState([]);
 
     useEffect(() => {
-        // جلب المستخدمين الذين ينتظرون الموافقة
-        apiFetch('/api/admin/pending-users')
+        // ✅ Fixed: was /api/admin/pending-users → correct /api/admin/users/pending
+        apiFetch('/api/admin/users/pending')
             .then(res => res.json())
-            .then(data => setPendingUsers(data));
+            .then(data => setPendingUsers(Array.isArray(data) ? data : []))
+            .catch(() => message.error('تعذر تحميل طلبات الموافقة'));
     }, []);
 
     const handleAction = (userId, status) => {
-        apiFetch(`/api/admin/approve/${userId}?status=${status}`, { method: 'POST' })
-            .then(() => {
-                message.success(`User ${status} successfully`);
-                setPendingUsers(pendingUsers.filter(u => u.id !== userId));
-            });
+        // ✅ Fixed: was /api/admin/approve/${id}?status= → correct POST /api/admin/users/action
+        apiFetch('/api/admin/users/action', {
+            method: 'POST',
+            body: JSON.stringify({ userId, action: status })
+        }).then(res => {
+            if (!res.ok) throw new Error('فشل الإجراء');
+            message.success(`User ${status} successfully`);
+            setPendingUsers(pendingUsers.filter(u => u.id !== userId));
+        }).catch(e => message.error(e.message));
     };
 
     const columns = [

@@ -16,7 +16,12 @@ import android.hardware.SensorManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+import android.media.Ringtone
+Manager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.os.VibratorManager.AUDIOFOCUS_GAIN_TRANSIENT
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -53,13 +58,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var pendingIce = mutableListOf<IceCandidate>()
     private var remoteDescriptionSet = false
     private var proximityLock: PowerManager.WakeLock? = null
+    private var ringtone: Ringtone? = null
+    private var vibrator: Vibrator? = null
     private var audioFocus: AudioFocusRequest? = null
 
     override fun onCreate() {
         super.onCreate(); createChannel()
         audio = getSystemService(AudioManager::class.java)
         telecom = TelecomBridge(this).also { runCatching(it::register) }
-        signaling = CallSignalingClient(TokenStore(this), this)
+        signaling = CallSignalingClient(this, TokenStore(this), this)
         val sensors = getSystemService(SensorManager::class.java)
         sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }
@@ -98,8 +105,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onSignal(signal: CallSignal) {
         when (signal.type) {
             "OFFER" -> {
-                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode
+                incomingOffer = signal; target = signal.sourceUserId.orEmpty(); callId = signal.callId; mode = signal.mode ?: "VOICE"
+                // Ensure overlay shows immediately even if app was in background
                 CallRuntime.state = CallUiState.Incoming(callId.orEmpty(), target, mode)
+                startRingtone()
                 scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(incomingNotification(target, mode), media = false)
             }
@@ -110,12 +119,20 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             "HOLD" -> { engine?.setMicrophoneEnabled(false); engine?.setCameraEnabled(false) }
             "RESUME" -> { engine?.setMicrophoneEnabled(true); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
+            "CANCELLED" -> {
+                // Another device answered — stop ringing on this device
+                incomingOffer = null
+                CallRuntime.state = CallUiState.Idle
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             "END", "REJECT" -> endCall(sendSignal = false)
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
         }
     }
 
     private fun acceptIncoming() {
+        stopRingtone()
         val offer = incomingOffer ?: return
         promote(notification("جارٍ قبول المكالمة…", true), media = true)
         prepareAudio(); signaling.connect()
@@ -128,7 +145,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun rejectIncoming() {
+        stopRingtone()
         incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
+        incomingOffer = null
         endCall(sendSignal = false)
     }
 
@@ -159,7 +178,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
-    private fun fail(message: String) { CallRuntime.state = CallUiState.Error(message); updateNotification(message) }
+    private fun fail(message: String) {
+        CallRuntime.state = CallUiState.Error(message)
+        updateNotification(message)
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (CallRuntime.state is CallUiState.Error) {
+                CallRuntime.state = CallUiState.Idle
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
+    }
 
     private fun prepareAudio() {
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
@@ -192,6 +222,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
     private fun endCall(sendSignal: Boolean) {
+        stopRingtone()
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
@@ -199,6 +230,35 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
         audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.state = CallUiState.Idle
         updateNotification("جاهز لاستقبال مكالمات يونس")
+    }
+
+    private fun startRingtone() {
+        try {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
+                isLooping = true
+                play()
+            }
+            vibrator = if (android.os.Build.VERSION.SDK_INT >= 31) {
+                (getSystemService(VibratorManager::class.java))?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            }
+            vibrator?.let { vib ->
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    vib.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400, 800), 0))
+                } else {
+                    @Suppress("DEPRECATION") vib.vibrate(longArrayOf(0, 800, 400, 800), 0)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun stopRingtone() {
+        try { ringtone?.stop() } catch (_: Exception) {}
+        ringtone = null
+        try { vibrator?.cancel() } catch (_: Exception) {}
+        vibrator = null
     }
 
     private fun promote(value: android.app.Notification, media: Boolean) {

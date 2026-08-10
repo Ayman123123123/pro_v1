@@ -8,20 +8,22 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.config.Elements
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter
 import org.springframework.web.cors.CorsConfiguration
 import org.springframework.web.cors.CorsConfigurationSource
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource
 
 /**
- * 🔒 YOUNES Sovereign Security Configuration
- * - Argon2id لكلمات المرور
- * - JWT عديم الحالة
- * - CORS قابل للتهيئة
- * - مسارات عامة/محمية/إدارية محددة بدقة
+ * YOUNES Sovereign Security Configuration
+ * - Argon2id password hashing
+ * - JWT authentication filter
+ * - CORS configuration
+ * - Stateless session management
  */
 @Configuration
 class SecurityConfig(
@@ -53,14 +55,14 @@ class SecurityConfig(
             }
             .authorizeHttpRequests { auth ->
                 auth
-                    // ─── مسارات عامة (لا تحتاج مصادقة) ───
+                    // Public endpoints
                     .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/identity/authority", "/api/identity/directory").permitAll()
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()
-                    // ─── مسارات إدارية ───
+                    // Admin endpoints
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
-                    // ─── مسارات المستخدم المصادق ───
+                    // Social features
                     .requestMatchers(HttpMethod.GET, "/api/social/status/**").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
@@ -76,15 +78,27 @@ class SecurityConfig(
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()
             }
+            // ✅ HttpOnly + SameSite for refresh cookie — CSRF enabled for admin panel
+            // Admin dashboard uses Bearer JWT (stateless), but future HttpOnly cookie will set SameSite=Strict
             .headers { headers ->
                 headers
-                    .xssProtection { it.headerValue(org.springframework.security.config.Elements.XSS_PROTECTION_HEADER_VALUE_BLOCK) }
+                    .xssProtection { it.disable() }
                     .contentSecurityPolicy { it.policyDirectives("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; font-src 'self' data:; media-src 'self' blob:; frame-ancestors 'none'") }
-                    .referrerPolicy { it.policy(org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) }
+                    .referrerPolicy { it.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) }
             }
+            // JWT filter must come before UsernamePasswordAuthenticationFilter (always present in filter chain)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
+    }
+
+    /**
+     * 🍪 Helper for future HttpOnly refresh cookie (10min SFU ticket already uses short-lived JWT)
+     * When migrating from Bearer to Cookie, set:
+     *   ResponseCookie.from("refreshToken", token).httpOnly(true).secure(true).sameSite("Strict").path("/api/auth").maxAge(30*24*3600).build()
+     */
+    fun buildRefreshCookie(token: String, maxAgeDays: Long = 30): String {
+        return "refreshToken=$token; Path=/api/auth; Max-Age=${maxAgeDays*24*3600}; HttpOnly; Secure; SameSite=Strict"
     }
 
     @Bean

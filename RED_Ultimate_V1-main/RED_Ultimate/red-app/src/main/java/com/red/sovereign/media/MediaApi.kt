@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.red.sovereign.auth.ApiResult
+import com.red.sovereign.media.EncryptedMediaCache
 import com.red.sovereign.auth.AuthorizedApiClient
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -27,14 +28,33 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
         return client.requestBytes(path, maximumBytes)
     }
 
+    private val encryptedCache by lazy { EncryptedMediaCache(context) }
+
     suspend fun downloadToPrivateCache(path: String, extension: String): ApiResult<File> {
         require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
         require(extension.matches(Regex("^[a-z0-9]{2,5}$")))
+        // Try encrypted cache first
+        val cacheKey = "story:$path"
+        encryptedCache.get(cacheKey)?.let { bytes ->
+            val tmp = File.createTempFile("story-cached-", ".$extension", context.cacheDir)
+            tmp.writeBytes(bytes)
+            if (tmp.length() in 1..100L * 1024 * 1024) return ApiResult.Success(200, tmp)
+        }
         val directory = File(context.cacheDir, "story_media").apply { mkdirs() }
         val digest = MessageDigest.getInstance("SHA-256").digest(path.toByteArray()).joinToString("") { "%02x".format(it) }
         val destination = File(directory, "$digest.$extension")
-        if (destination.isFile && destination.length() in 1..100L * 1024 * 1024) return ApiResult.Success(200, destination)
-        return client.requestFile(path, destination)
+        if (destination.isFile && destination.length() in 1..100L * 1024 * 1024) {
+            // Warm encrypted cache
+            try { encryptedCache.put(cacheKey, destination.readBytes()) } catch (_: Exception) {}
+            return ApiResult.Success(200, destination)
+        }
+        return when (val result = client.requestFile(path, destination)) {
+            is ApiResult.Success -> {
+                try { encryptedCache.put(cacheKey, result.value.readBytes()) } catch (_: Exception) {}
+                result
+            }
+            is ApiResult.Error -> result
+        }
     }
 
     fun clearPrivateCache() {

@@ -1,0 +1,16 @@
+.git
+.github
+**/.gradle
+**/build
+**/dist
+**/node_modules
+**/.idea
+**/*.iml
+RED_Ultimate/app
+RED_Ultimate/android
+RED_Ultimate/app-android
+RED_Ultimate/benchmark
+RED_Ultimate/microbenchmark
+RED_Ultimate/baseline-profile
+RED_Ultimate/secrets
+image-search

@@ -1,0 +1,3 @@
+-keep class com.red.sovereign.proto.** { *; }
+-keep class org.signal.libsignal.** { *; }
+-dontwarn org.signal.libsignal.**

@@ -54,7 +54,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
-        signaling = ConferenceSignalingClient(TokenStore(this), this)
+        signaling = ConferenceSignalingClient(this, TokenStore(this), this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -136,6 +136,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onDisconnected() { leave() }
     override fun onError(message: String) {
         ConferenceRuntime.state = ConferenceUiState.Error(message)
+        // Auto-dismiss after 3s like YounesCallService
+        scope.launch {
+            kotlinx.coroutines.delay(3000)
+            if (ConferenceRuntime.state is ConferenceUiState.Error) {
+                ConferenceRuntime.state = ConferenceUiState.Idle
+            }
+        }
         leave()
     }
 

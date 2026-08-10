@@ -51,6 +51,7 @@ dependencies {
 
     // Local S3-compatible object storage
     implementation("io.minio:minio:8.6.0")
+    implementation("org.jsoup:jsoup:1.18.1") // LinkCard Open Graph
 
     // OkHttp for Dinstar API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
