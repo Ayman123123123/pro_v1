@@ -18,4 +18,15 @@ class PstnApi(tokens: TokenStore) {
             is ApiResult.Error -> result
         }
     }
+
+    /**
+     * إنهاء مكالمة PSTN جارية — يطابق POST /api/pstn/calls/{callId}/hangup في الخادم
+     * ويُحرّر المنفذ في DinstarLoadBalancer (port اختياري: -1 = غير معروف).
+     */
+    suspend fun hangup(callId: String, port: Int = -1): ApiResult<Boolean> {
+        return when (val result = client.request("POST", "/api/pstn/calls/$callId/hangup", "{\"port\":$port}")) {
+            is ApiResult.Success -> ApiResult.Success(result.code, true)
+            is ApiResult.Error -> result.let { ApiResult.Error(it.code, it.message) }
+        }
+    }
 }
