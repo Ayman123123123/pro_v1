@@ -81,13 +81,18 @@ red:
   admin:
     username: ${RED_ADMIN_USERNAME:red_admin}
     password: ${RED_ADMIN_PASSWORD:}
-  storage:
-    endpoint: http://minio:9000
-    access-key: redadmin
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+    access-key: ${MINIO_ACCESS_KEY:redadmin}
     secret-key: ${MINIO_PASSWORD:}
-    bucket-media: red-media
-    bucket-avatars: red-avatars
-    bucket-stories: red-stories
+    bucket: ${MINIO_BUCKET:red-media}
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://minio:9000}
+    access-key: ${MINIO_ACCESS_KEY:redadmin}
+    secret-key: ${MINIO_PASSWORD:}
+    bucket-media: ${MINIO_BUCKET_MEDIA:red-media}
+    bucket-avatars: ${MINIO_BUCKET_AVATARS:red-avatars}
+    bucket-stories: ${MINIO_BUCKET_STORIES:red-stories}
   turn:
     secret: ${TURN_SECRET:}
     public-host: ${TURN_PUBLIC_HOST:127.0.0.1}

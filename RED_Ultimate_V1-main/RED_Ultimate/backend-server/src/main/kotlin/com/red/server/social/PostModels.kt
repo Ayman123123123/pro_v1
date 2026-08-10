@@ -87,6 +87,15 @@ data class FollowDocument(
     val createdAt: Instant = Instant.now()
 )
 
+@Document("hidden_posts")
+data class HiddenPost(@Id val id: String, @Indexed val userId: String, @Indexed val postId: String, val createdAt: Instant = Instant.now())
+
+@Document("muted_authors")
+data class MutedAuthor(@Id val id: String, @Indexed val userId: String, @Indexed val authorId: String, val createdAt: Instant = Instant.now())
+
+@Document("post_reports")
+data class PostReport(@Id val id: String, @Indexed val postId: String, @Indexed val reporterId: String, val reason: String, val status: String = "OPEN", val createdAt: Instant = Instant.now())
+
 data class CreatePostRequest(
     val text: String,
     val visibility: PostVisibility = PostVisibility.LOCAL_YEMEN,
@@ -106,4 +115,6 @@ data class CreatePostRequest(
 )
 data class ReactionRequest(val type: String, val active: Boolean)
 data class PollVoteRequest(val optionId: String)
+data class EditPostRequest(val text: String)
+data class HidePostRequest(val reason: String? = null)
 data class FeedResponse(val posts: List<PostDocument>, val nextCursor: String?)

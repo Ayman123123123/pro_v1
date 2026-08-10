@@ -283,6 +283,33 @@ class AdminV2Controller(
         return ResponseEntity.ok(mapOf("success" to true))
     }
 
+    @PutMapping("/users/pstn")
+    fun updatePstn(
+        @RequestBody body: Map<String, Any>,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val userId = body["userId"]?.toString() ?: return ResponseEntity.badRequest().body(mapOf("error" to "userId is required"))
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val enabled = body["enabled"] as? Boolean ?: true
+        val dailyLimit = (body["dailyLimit"] as? Number)?.toInt() ?: 100
+        user.pstnEnabled = enabled
+        user.pstnDailyLimit = dailyLimit
+        users.save(user)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_PSTN_UPDATED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            description = "Updated PSTN access: enabled=$enabled, limit=$dailyLimit"
+        )
+        return ResponseEntity.ok(mapOf("success" to true, "pstnEnabled" to enabled, "pstnDailyLimit" to dailyLimit))
+    }
+
     @DeleteMapping("/users/{userId}")
     fun deleteUser(
         @PathVariable userId: String,

@@ -43,6 +43,13 @@ class StoryService(private val mongo: MongoTemplate, private val users: UserAcco
         return response(story, mongo.count(Query(Criteria.where("storyId").`is`(storyId)), StoryView::class.java))
     }
 
+    fun react(userId: UUID, storyId: String, request: StoryReactionRequest) {
+        activeStory(storyId)
+        val emoji = request.emoji.trim()
+        require(emoji in setOf("❤️", "🔥", "😢", "👏", "😍", "🎉", "👍")) { "Unsupported story reaction" }
+        mongo.save(StoryReaction("$storyId:$userId", storyId, userId.toString(), emoji))
+    }
+
     fun delete(ownerId: UUID, storyId: String) {
         val story = activeStory(storyId)
         require(story.ownerId == ownerId.toString()) { "Only the owner can delete this story" }
