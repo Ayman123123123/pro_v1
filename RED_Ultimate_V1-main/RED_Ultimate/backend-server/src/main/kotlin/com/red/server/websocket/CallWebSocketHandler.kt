@@ -5,18 +5,20 @@ import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.springframework.stereotype.Component
+import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
-/** Authenticated WebRTC signaling router. The server injects sourceUserId from JWT. */
+/** Authenticated WebRTC signaling router with multi-device ringing. */
 @Component
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val history: CallHistoryService
 ) : TextWebSocketHandler() {
-    private val sessions = ConcurrentHashMap<String, MutableList<WebSocketSession>>()
+    private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
@@ -35,47 +37,46 @@ class CallWebSocketHandler(
         }
 
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)
-        val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen) ?: emptyList()
-        if (targets.isNotEmpty()) {
-            val json = objectMapper.writeValueAsString(outbound)
-            targets.forEach { it.sendMessage(TextMessage(json)) }
-            // Notify caller that at least one device is ringing
-            session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
-            // If ANSWER/REJECT from one device, cancel ringing on other devices of same user
-            if (type in setOf("ANSWER", "REJECT", "END")) {
-                val cancelType = if (type == "ANSWER") "CANCELLED" else type
-                val cancelMsg = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
-                targets.filter { it.id != session.id }.forEach { runCatching { it.sendMessage(TextMessage(cancelMsg)) } }
-            }
-        } else {
+        val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen).orEmpty()
+        if (targets.isEmpty()) {
             if (type == "OFFER") history.missed(callId)
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "UNAVAILABLE", "callId" to callId))))
+            return
+        }
+
+        val json = objectMapper.writeValueAsString(outbound)
+        targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+        session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
+
+        // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
+        if (type in setOf("ANSWER", "REJECT", "END")) {
+            val cancelType = if (type == "ANSWER") "CANCELLED" else type
+            val cancel = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
+            targets.filter { it.id != session.id }.forEach { target -> runCatching { target.sendMessage(TextMessage(cancel)) } }
         }
     }
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
         val redId = session.attributes["userId"] as? String ?: return
-        sessions.compute(redId) { _, list ->
-            val l = list ?: mutableListOf()
-            l.removeIf { !it.isOpen }
-            l.add(session)
-            l
-        }
+        val list = sessions.computeIfAbsent(redId) { CopyOnWriteArrayList() }
+        list.removeIf { !it.isOpen }
+        list.add(session)
     }
 
-    override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {
+    override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
         val redId = session.attributes["userId"] as? String
-        if (redId != null) {
+        if (redId == null) {
+            sessions.values.forEach { it.removeIf { candidate -> candidate.id == session.id } }
+        } else {
             sessions.computeIfPresent(redId) { _, list ->
                 list.removeIf { it.id == session.id }
-                if (list.isEmpty()) null else list
+                list.takeIf { it.isNotEmpty() }
             }
-        } else {
-            sessions.entries.removeIf { entry -> entry.value.any { it.id == session.id } }
         }
     }
 
-    private fun requireCallId(signal: IncomingCallSignal) = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+    private fun requireCallId(signal: IncomingCallSignal) =
+        requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
 }
 
 data class IncomingCallSignal(

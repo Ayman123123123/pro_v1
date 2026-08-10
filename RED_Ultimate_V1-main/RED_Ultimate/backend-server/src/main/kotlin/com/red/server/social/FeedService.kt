@@ -41,6 +41,10 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
 
     fun feed(userId: UUID, scope: FeedScope, before: Instant?, limit: Int): FeedResponse {
         val criteria = Criteria.where("deletedAt").`is`(null).and("parentId").`is`(null)
+        val hidden = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), HiddenPost::class.java).map(HiddenPost::postId)
+        val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
+        if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
+        if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
         when (scope) {
             FeedScope.ALL -> Unit
             FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
@@ -105,6 +109,33 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
     fun following(userId: UUID): List<String> {
         val ids = mongo.find(Query(Criteria.where("followerId").`is`(userId.toString())), FollowDocument::class.java).map(FollowDocument::followedId)
         return users.findAllById(ids.map(UUID::fromString)).map { it.redId }
+    }
+
+    fun edit(userId: UUID, postId: String, request: EditPostRequest): PostDocument {
+        val post = requireNotNull(activePost(postId)) { "Post not found" }
+        require(post.authorId == userId.toString()) { "Only the author can edit this post" }
+        val text = request.text.trim()
+        require(text.isNotEmpty() && text.length <= 10_000) { "Post text must contain 1-10000 characters" }
+        mongo.updateFirst(Query(Criteria.where("id").`is`(postId)), Update().set("text", text).set("editedAt", Instant.now()), PostDocument::class.java)
+        return requireNotNull(activePost(postId))
+    }
+
+    fun hide(userId: UUID, postId: String) {
+        require(activePost(postId) != null) { "Post not found" }
+        mongo.save(HiddenPost("$userId:$postId", userId.toString(), postId))
+    }
+
+    fun mute(userId: UUID, targetRedId: String) {
+        val target = users.findByRedId(targetRedId.trim().uppercase()) ?: throw NoSuchElementException("RED identity not found")
+        require(target.id != userId) { "Cannot mute yourself" }
+        mongo.save(MutedAuthor("$userId:${target.id}", userId.toString(), target.id.toString()))
+    }
+
+    fun report(userId: UUID, postId: String, request: HidePostRequest) {
+        require(activePost(postId) != null) { "Post not found" }
+        val reason = request.reason?.trim()?.takeIf { it.isNotEmpty() } ?: "OTHER"
+        require(reason.length <= 200) { "Report reason is too long" }
+        mongo.save(PostReport("$postId:$userId", postId, userId.toString(), reason.uppercase()))
     }
 
     fun delete(userId: UUID, postId: String) {
