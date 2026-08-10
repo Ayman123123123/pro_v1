@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    🔴 YOUNES Sovereign — Recording Button Background
+    Gradient + ripple + circular
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/yns_error">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="40"
+                android:startColor="@color/yns_error"
+                android:centerColor="#FFE05757"
+                android:endColor="@color/yns_error_light" />
+            <stroke
+                android:width="3dp"
+                android:color="@color/yns_error_light" />
+        </shape>
+    </item>
+</ripple>

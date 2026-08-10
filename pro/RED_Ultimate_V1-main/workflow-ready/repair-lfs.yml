@@ -1,0 +1,97 @@
+name: Extract LFS assets from Signal source
+
+# يستخرج المحتوى الفعلي لصور screenshots (مؤشرات LFS مكسورة) من مستودع
+# signalapp/Signal-Android حيث توجد الملفات الأصلية، ويرفعها كـ artifact
+# (يُستخدم GitHub Actions كوسيط لأن نطاقات GitHub CDN قد تكون محجوبة
+#  في بيئات التطوير المحلية، بينما تتوفر داخل runners).
+#
+# التشغيل اليدوي:  gh workflow run "Extract LFS assets from Signal source" --ref <branch>
+# أو تلقائيًا عند أي push.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "arena/**" ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  extract:
+    name: Extract PNG assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Read required OIDs
+        id: oids
+        run: |
+          wc -l < RED_Ultimate_V1-main/RED_Ultimate/scripts/lfs-oids.txt
+
+      - name: Clone Signal reference with LFS content
+        run: |
+          git clone --depth 1 https://github.com/signalapp/Signal-Android.git /tmp/signal-android
+          cd /tmp/signal-android
+          git lfs install
+          git lfs pull
+
+      - name: Match OIDs against Signal files
+        run: |
+          python3 - <<'EOF'
+          import hashlib, os, shutil, sys
+
+          SIGNAL = "/tmp/signal-android"
+          OUT = "/tmp/assets"
+          os.makedirs(OUT, exist_ok=True)
+
+          # خريطة sha256 -> مسار في استنساخ Signal
+          table = {}
+          for dp, dirs, files in os.walk(SIGNAL):
+              dirs[:] = [d for d in dirs if d not in (".git", "node_modules", ".gradle", "build")]
+              for name in files:
+                  if not name.lower().endswith((".png", ".jpg", ".jpeg")):
+                      continue
+                  p = os.path.join(dp, name)
+                  try:
+                      if os.path.getsize(p) < 200:
+                          continue
+                      h = hashlib.sha256(open(p, "rb").read()).hexdigest()
+                  except OSError:
+                      continue
+                  table.setdefault(h, p)
+
+          required = [ln.strip().removeprefix("sha256:") for ln in open(
+              "RED_Ultimate_V1-main/RED_Ultimate/scripts/lfs-oids.txt"
+          ) if ln.strip().startswith("sha256:")]
+
+          ok, missing = 0, []
+          for oid in required:
+              src = table.get(oid)
+              if not src:
+                  missing.append(oid)
+                  continue
+              shutil.copyfile(src, os.path.join(OUT, oid + ".png"))
+              ok += 1
+
+          print(f"تم استخراج {ok} أصل، ناقص {len(missing)}")
+          if missing:
+              open("/tmp/missing.txt", "w").write("\n".join(missing) + "\n")
+          EOF
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-assets
+          path: /tmp/assets
+          retention-days: 14
+
+      - name: Upload missing list
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-missing
+          path: /tmp/missing.txt
+          if-no-files-found: ignore

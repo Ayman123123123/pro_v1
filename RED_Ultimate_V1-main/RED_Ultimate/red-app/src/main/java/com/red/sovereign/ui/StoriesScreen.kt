@@ -39,19 +39,23 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
     }
     
     var progress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(story.id, viewer) {
+    var isPaused by remember { mutableStateOf(false) }
+    var isMuted by remember { mutableStateOf(false) }
+    LaunchedEffect(story.id, viewer, isPaused) {
+        if (isPaused) return@LaunchedEffect
         if (viewer is StoryViewerState.Image || viewer is StoryViewerState.Unsupported || viewer is StoryViewerState.Error) {
             progress = 0f
             val duration = 5000L
             val interval = 50L
             val steps = duration / interval
             for (i in 1..steps) {
+                if (isPaused) break
                 delay(interval)
                 progress = i.toFloat() / steps
             }
-            onNext()
+            if (!isPaused) onNext()
         } else if (viewer is StoryViewerState.Video) {
-            progress = 0f // Let the video player control advancement if possible, but for now we pause progress bar.
+            progress = 0f
         }
     }
     
@@ -59,6 +63,11 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Box(Modifier.fillMaxSize().pointerInput(Unit) {
             detectTapGestures(
+                onPress = {
+                    isPaused = true
+                    tryAwaitRelease()
+                    isPaused = false
+                },
                 onTap = { offset ->
                     if (offset.x < size.width * 0.3f) onPrev() else onNext()
                 }
@@ -68,6 +77,26 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                 is StoryViewerState.Loading -> CircularProgressIndicator(color = Color.White)
                 is StoryViewerState.Image -> Image(viewer.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
                 is StoryViewerState.Video -> StoryVideoPlayer(viewer.uri, Modifier.fillMaxSize())
+                is StoryViewerState.Text -> {
+                    val bg = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(story.backgroundColor ?: "#1565C0")) } catch (_: Exception) { Color(0xFF1565C0) }
+                    Box(Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) {
+                        Text(story.caption ?: "", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(24.dp))
+                    }
+                }
+                is StoryViewerState.Voice -> {
+                    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("رسالة صوتية", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(16.dp))
+                        com.red.sovereign.stories.VoiceStoryPlayer(
+                            mediaUrl = story.mediaUrl,
+                            durationMs = story.durationMs ?: 0L,
+                            waveform = story.waveform,
+                            onFinished = onNext
+                        )
+                    }
+                }
                 is StoryViewerState.Unsupported -> Text(viewer.message, color = Color.White)
                 is StoryViewerState.Error -> Text("تعذر تحميل الحالة: ${viewer.message}", color = MaterialTheme.colorScheme.error)
                 else -> Unit
@@ -106,7 +135,12 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                 )
             }
             
-            // Reply box
+            // Reactions + Reply box
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("❤️", "🔥", "😢", "👏").forEach { emoji ->
+                    AssistChip(onClick = { stories.react(story, emoji) }, label = { Text(emoji) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.2f)))
+                }
+            }
             var replyText by remember { mutableStateOf("") }
             val context = androidx.compose.ui.platform.LocalContext.current
             Row(Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
