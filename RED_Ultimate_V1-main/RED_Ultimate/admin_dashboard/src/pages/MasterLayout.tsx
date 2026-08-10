@@ -125,6 +125,7 @@ const MasterLayout: React.FC = () => {
           </Dropdown>
         </Header>
         <Content style={{ margin: '24px 16px', padding: 24, background: '#141414', borderRadius: borderRadiusLG, overflow: 'initial' }}>
+          <Alert type="info" showIcon style={{marginBottom:16}} message="واجهة موحدة — تم نقل كل ميزات هذه التبويبات إلى القائمة الرئيسية الجديدة (الموافقات، مركز الأمان، الإشعارات، السجل الحي) — هذه الواجهة للتوافق فقط — البيانات هنا حقيقية وموحدة مع الجديدة" description="استخدم القائمة الجانبية الرئيسية (16 صفحة) للوصول السريع — هذه التبويبات التسعة ستبقى لكنها تعرض نفس البيانات الحقيقية عبر نفس apiFetch" />
           {tabContent[currentTab] || <OverviewTab />}
         </Content>
       </Layout>

@@ -490,10 +490,10 @@ export async function getBackups() {
   return res.json();
 }
 
-export async function createBackup(type: 'FULL' | 'INCREMENTAL' | 'CONFIG_ONLY' | 'USER_DATA') {
+export async function createBackup(type: 'FULL' | 'INCREMENTAL' | 'CONFIG_ONLY' | 'USER_DATA', notes?: string) {
   const res = await apiFetch('/api/admin/backups', {
     method: 'POST',
-    body: JSON.stringify({ type })
+    body: JSON.stringify({ type, notes })
   });
   return res.json();
 }
@@ -522,6 +522,7 @@ export async function updateFeatureFlag(name: string, data: {
   rolloutPercentage?: number;
   targetUserIds?: string[];
   config?: Record<string, any>;
+  description?: string;
 }) {
   const res = await apiFetch(`/api/admin/feature-flags/${name}`, {
     method: 'PUT',
@@ -760,5 +761,76 @@ export async function publishStickerPack(packId: string) {
 
 export async function deleteStickerPack(packId: string) {
   const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' });
+  return res.json();
+}
+
+// ━━━━━━━━━━━━━━━━ 🏛️ Authority & User Intelligence (دمج القديم بالجديد — بيانات حقيقية) ━━━━━━━━━━━━━━━━
+export async function getPendingApprovals(): Promise<any[]> {
+  const res = await apiFetch('/api/admin/users/pending');
+  return res.json();
+}
+
+export async function approveRejectUser(userId: string, action: 'APPROVED' | 'REJECTED', reason?: string) {
+  const res = await apiFetch('/api/admin/users/action', {
+    method: 'POST',
+    body: JSON.stringify({ userId, action, reason: reason || null }),
+  });
+  return res.json();
+}
+
+export interface UserOverview {
+  user: any;
+  online: boolean;
+  messagesSent: number;
+  messagesReceived: number;
+  messages24h: number;
+  callsMade: number;
+  callsReceived: number;
+  redCalls: number;
+  pstnCalls: number;
+  passwordResetRequired: boolean;
+  remoteWipeStatus: string;
+  managedDeviceWipeAllowed: boolean;
+  securityEvents: any[];
+}
+
+export async function getUserOverview(userId: string): Promise<UserOverview> {
+  const res = await apiFetch(`/api/admin/users/${userId}/overview`);
+  return res.json();
+}
+
+export async function createTemporaryPassword(userId: string, temporaryPassword: string) {
+  const res = await apiFetch(`/api/admin/users/${userId}/temporary-password`, {
+    method: 'POST',
+    body: JSON.stringify({ temporaryPassword }),
+  });
+  return res.json();
+}
+
+export async function requestRemoteWipe(userId: string) {
+  const res = await apiFetch(`/api/admin/users/${userId}/remote-app-wipe`, { method: 'POST' });
+  return res.json();
+}
+
+export async function requestSecurityWipe(userId: string) {
+  const res = await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(userId)}`, { method: 'POST' });
+  return res.json();
+}
+
+export async function activateKillSwitch(reason: string) {
+  const res = await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
+  return res.json();
+}
+
+export async function updatePstnAccess(userId: string, enabled: boolean, dailyLimit: number) {
+  const res = await apiFetch('/api/admin/users/pstn', {
+    method: 'PUT',
+    body: JSON.stringify({ userId, enabled, dailyLimit }),
+  });
+  return res.json();
+}
+
+export async function getPstnUsers(): Promise<any[]> {
+  const res = await apiFetch('/api/admin/users');
   return res.json();
 }

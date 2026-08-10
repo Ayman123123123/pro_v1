@@ -3,14 +3,26 @@ import { Alert, Button, Card, Form, Input, Typography, Space, Tag } from 'antd';
 import { LockOutlined, UserOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { adminLogin } from '../api';
 
-export default function Login({ onSuccess }: { onSuccess: () => void }) {
+interface LoginProps {
+  onLogin?: (username: string, password: string) => Promise<void>;
+  onSuccess?: () => void;
+  isLoading?: boolean;
+}
+export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [internalLoading, setInternalLoading] = useState(false);
+  const loading = isLoading ?? internalLoading;
   const submit = async (values: { username: string; password: string }) => {
-    setLoading(true); setError('');
-    try { await adminLogin(values.username, values.password); onSuccess(); }
+    if (onLogin) {
+      try { setError(''); await onLogin(values.username, values.password); }
+      catch (e: any) { setError(e.message || 'تعذر تسجيل الدخول'); }
+      return;
+    }
+    // Fallback legacy — يدعم onSuccess القديم
+    setInternalLoading(true); setError('');
+    try { await adminLogin(values.username, values.password); onSuccess?.(); }
     catch (e: any) { setError(e.message || 'تعذر تسجيل الدخول'); }
-    finally { setLoading(false); }
+    finally { setInternalLoading(false); }
   };
   return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#030712', direction: 'rtl' }}>
     <Space direction="vertical" align="center" size="large">

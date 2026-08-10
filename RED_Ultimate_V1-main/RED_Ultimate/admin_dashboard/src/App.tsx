@@ -5,6 +5,7 @@ import {
   MobileOutlined,
   MonitorOutlined,
   SafetyOutlined,
+  SafetyCertificateOutlined,
   SettingOutlined,
   TeamOutlined,
   AlertOutlined,
@@ -14,6 +15,9 @@ import {
   FlagOutlined,
   NotificationOutlined,
   BarChartOutlined,
+  BellOutlined,
+  FileSearchOutlined,
+  KeyOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
@@ -31,36 +35,48 @@ const Backups = lazy(() => import('./pages/Backups'));
 const Announcements = lazy(() => import('./pages/Announcements'));
 const FeatureFlags = lazy(() => import('./pages/FeatureFlags'));
 const ContentManagement = lazy(() => import('./pages/ContentManagement'));
+const Approvals = lazy(() => import('./pages/Approvals'));
+const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
+const NotificationsCenter = lazy(() => import('./pages/NotificationsCenter'));
+const SystemLogs = lazy(() => import('./pages/SystemLogs'));
 
 const { Header, Sider, Content } = Layout;
 
 type PageKey =
   | 'dashboard'
   | 'users'
+  | 'approvals'
   | 'content'
   | 'reports'
   | 'audit'
   | 'announcements'
   | 'featureflags'
   | 'backups'
+  | 'security'
+  | 'notifications'
+  | 'logs'
   | 'master'
   | 'dinstar'
   | 'monitor'
   | 'diagnostics';
 
-const menuItems: { key: PageKey; icon: JSX.Element; label: string; group: string }[] = [
-  // Operations
+const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
+  // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية
   { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية', group: 'main' },
   { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
+  { key: 'approvals', icon: <SafetyCertificateOutlined />, label: 'الموافقات المعلقة', group: 'main' },
   { key: 'content', icon: <BarChartOutlined />, label: 'المحتوى', group: 'main' },
   { key: 'reports', icon: <AlertOutlined />, label: 'مراقبة المحتوى', group: 'main' },
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
-  // System
+  // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
   { key: 'backups', icon: <CloudUploadOutlined />, label: 'النسخ الاحتياطية', group: 'system' },
-  // Sovereign
-  { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي', group: 'sovereign' },
+  { key: 'security', icon: <SafetyOutlined />, label: 'مركز الأمان', group: 'system' },
+  { key: 'notifications', icon: <BellOutlined />, label: 'الإشعارات', group: 'system' },
+  { key: 'logs', icon: <FileSearchOutlined />, label: 'سجل النظام الحي', group: 'system' },
+  // Sovereign — التحكم السيادي + DINSTAR + مراقبة + تشخيص + واجهة قديمة للتوافق
+  { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي (قديم)', group: 'sovereign' },
   { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
@@ -111,12 +127,16 @@ export default function App() {
     switch (currentPage) {
       case 'dashboard': return <Dashboard />;
       case 'users': return <UserManagement />;
+      case 'approvals': return <Approvals />;
       case 'content': return <ContentManagement />;
       case 'reports': return <Reports />;
       case 'audit': return <AuditLog />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;
+      case 'security': return <SecurityCenter />;
+      case 'notifications': return <NotificationsCenter />;
+      case 'logs': return <SystemLogs />;
       case 'master': return <MasterLayout />;
       case 'dinstar': return <DinstarControl />;
       case 'monitor': return <MasterOverview />;
