@@ -25,7 +25,7 @@ import javax.crypto.spec.SecretKeySpec
 @RestController
 @RequestMapping("/api/calls")
 class IceServerController(
-    @Value("\${red.turn.host}") private val host: String,
+    @Value("\${red.turn.public-host:127.0.0.1}") private val host: String,
     @Value("\${red.turn.port:3478}") private val port: Int,
     @Value("\${red.turn.tls-port:5349}") private val tlsPort: Int,
     @Value("\${red.turn.443-port:443}") private val altPort: Int,

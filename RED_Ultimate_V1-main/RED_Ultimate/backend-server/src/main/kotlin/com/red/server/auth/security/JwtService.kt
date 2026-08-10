@@ -16,7 +16,7 @@ import javax.crypto.SecretKey
 
 @Service
 class JwtService(
-    @Value("\${red.security.jwt-secret}") private val configuredSecret: String,
+    @Value("\${red.jwt.secret}") private val configuredSecret: String,
     @Value("\${red.security.jwt-expiration-ms:3600000}") private val expirationMs: Long
 ) {
     private val key: SecretKey by lazy {
