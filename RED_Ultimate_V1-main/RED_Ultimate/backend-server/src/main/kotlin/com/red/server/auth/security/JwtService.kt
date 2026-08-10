@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.UUID
 import javax.crypto.SecretKey
@@ -62,7 +63,7 @@ class JwtService(
             .claim("sfuCanProduce", canProduce)
         return builder
             .issuedAt(Date.from(now))
-            .expiration(Date.from(now.plusMinutes(10))) // Short-lived ticket: 10 minutes
+            .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
             .signWith(key)
             .compact()
     }
