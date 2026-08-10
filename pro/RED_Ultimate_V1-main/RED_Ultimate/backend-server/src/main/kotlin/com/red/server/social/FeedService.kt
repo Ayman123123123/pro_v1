@@ -13,7 +13,7 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
-class FeedService(private val mongo: MongoTemplate, private val users: UserAccountRepository) {
+class FeedService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val linkCards: LinkCardService? = null) {
     fun create(userId: UUID, request: CreatePostRequest): PostDocument {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED)
@@ -23,11 +23,16 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         request.parentId?.let { require(activePost(it) != null) { "Parent post not found" } }
         request.quotePostId?.let { require(activePost(it) != null) { "Quoted post not found" } }
         val poll = buildPoll(request)
+        // 🔗 Auto-fetch link card for first URL in text (with SSRF protection)
+        val linkCard = Regex("""https?://[^\s]+|www\.[^\s]+""").find(text)?.value?.let { url ->
+            try { linkCards?.fetch(url) } catch (_: Exception) { null }
+        }
         val post = PostDocument(
             id = UuidV7.next(), authorId = user.id.toString(), authorRedId = user.redId,
             authorUsername = user.username, authorDisplayName = user.displayName, text = text,
             visibility = request.visibility, kind = if (poll == null) PostKind.POST else PostKind.POLL,
-            parentId = request.parentId, quotePostId = request.quotePostId, poll = poll, media = request.media
+            parentId = request.parentId, quotePostId = request.quotePostId, poll = poll, media = request.media,
+            linkCard = linkCard
         )
         mongo.save(post)
         request.parentId?.let { mongo.updateFirst(Query(Criteria.where("id").`is`(it)), Update().inc("replyCount", 1), PostDocument::class.java) }

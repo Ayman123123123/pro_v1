@@ -111,6 +111,11 @@ fun YounesLiveStreamOverlay() {
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    val stats = LiveStreamRuntime.networkStats
+                    Text("جودة الشبكة: ${stats.quality.name} · ${stats.rttMs}ms", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                    if (isBroadcaster) {
+                        Text("المشاهدون: ${LiveStreamRuntime.viewerCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
@@ -136,6 +141,21 @@ fun YounesLiveStreamOverlay() {
                         Icon(
                             imageVector = if (LiveStreamRuntime.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
                             contentDescription = "كتم/تفعيل الميكروفون",
+                            tint = Color.White
+                        )
+                    }
+                    IconButton(
+                        onClick = { LiveStreamService.action(context, LiveStreamService.ACTION_TOGGLE_VIDEO) },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(
+                                if (LiveStreamRuntime.localVideo?.enabled() == true) Color.White.copy(alpha = 0.2f) else Color.Red,
+                                RoundedCornerShape(28.dp)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Videocam,
+                            contentDescription = "كتم/تفعيل الكاميرا",
                             tint = Color.White
                         )
                     }

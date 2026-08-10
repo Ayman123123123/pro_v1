@@ -38,7 +38,7 @@ buildscript {
     }
     classpath(libs.androidx.benchmark.gradle.plugin)
     classpath(files("$rootDir/wire-handler/wire-handler-1.0.0.jar"))
-    classpath(libs.com.google.devtools.ksp.gradle.plugin)
+//  classpath(libs.com.google.devtools.ksp.gradle.plugin)
   }
 }
 

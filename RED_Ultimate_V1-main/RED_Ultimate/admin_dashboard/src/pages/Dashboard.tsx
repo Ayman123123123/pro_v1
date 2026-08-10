@@ -1,72 +1,334 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Card, Col, Row, Spin, Statistic, Tag } from 'antd';
-import { MessageOutlined, SafetyOutlined, UserOutlined, HddOutlined, PhoneOutlined, ApiOutlined } from '@ant-design/icons';
-import ReactEChartsCore from 'echarts-for-react/lib/core';
-import * as echarts from 'echarts/core';
-import { BarChart, LineChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-import { apiFetch } from '../api';
+import { useEffect, useState } from 'react';
+import { Card, Col, Row, Statistic, Spin, Alert, Progress, Tag, List, Typography, Space, Tooltip } from 'antd';
+import {
+  TeamOutlined,
+  AlertOutlined,
+  WarningOutlined,
+  CheckCircleOutlined,
+  CloudServerOutlined,
+  ClockCircleOutlined,
+  DatabaseOutlined,
+  ThunderboltOutlined,
+  DollarOutlined,
+  MessageOutlined,
+  PhoneOutlined,
+  UserAddOutlined,
+} from '@ant-design/icons';
+import ReactECharts from 'echarts-for-react';
+import {
+  getDashboardSummary,
+  getSystemAnalytics,
+  getSystemHealth,
+  getRealtimeMetrics,
+  type DashboardSummary,
+  type SystemHealth,
+  type RealtimeMetrics,
+} from '../api';
 
-echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+const { Title, Text } = Typography;
 
-const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState<any>(null);
-  const [error, setError] = useState('');
+interface AnalyticsRow {
+  statDate: string;
+  totalUsers: number;
+  newUsers: number;
+  activeUsersDau: number;
+  messagesSent: number;
+  voiceMessages: number;
+  callsTotal: number;
+  callsPstn: number;
+  dinstarBalanceRemaining: number;
+  storageUsedBytes: number;
+}
+
+export default function Dashboard() {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
+  const [health, setHealth] = useState<SystemHealth[]>([]);
+  const [realtime, setRealtime] = useState<RealtimeMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    const load = async () => {
+    let mounted = true;
+    const fetchAll = async () => {
       try {
-        const [monitor, master] = await Promise.allSettled([
-          apiFetch('/api/admin/monitor/stats'),
-          apiFetch('/api/master/v1/stats/realtime')
+        const [sum, healthData, rt] = await Promise.all([
+          getDashboardSummary(),
+          getSystemHealth(),
+          getRealtimeMetrics(),
         ]);
-        const merged: Record<string, unknown> = {};
-        const failures: string[] = [];
-        for (const [name, result] of [['monitor', monitor], ['master', master]] as const) {
-          if (result.status === 'rejected') { failures.push(`${name}: network`); continue; }
-          if (!result.value.ok) { failures.push(`${name}: HTTP ${result.value.status}`); continue; }
-          Object.assign(merged, await result.value.json());
-        }
-        if (Object.keys(merged).length > 0) setStats((previous:any) => ({ ...(previous || {}), ...merged }));
-        setError(failures.length ? `بعض مصادر المقاييس غير متاحة (${failures.join('، ')})` : '');
-      } catch (e:any) { setError(`تعذر قراءة المقاييس: ${e?.message || 'خطأ غير معروف'}`); }
+        if (!mounted) return;
+        setSummary(sum);
+        setHealth(healthData);
+        setRealtime(rt);
+
+        // Last 7 days
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 6);
+        const ana = await getSystemAnalytics(
+          start.toISOString().slice(0, 10),
+          end.toISOString().slice(0, 10)
+        );
+        if (mounted) setAnalytics(ana);
+      } catch (e: any) {
+        if (mounted) setError(e.message ?? 'تعذر تحميل لوحة الإدارة');
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
-    load(); const timer = setInterval(load, 5000); return () => clearInterval(timer);
+    fetchAll();
+    // Auto-refresh every 30s
+    const interval = setInterval(fetchAll, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
-  if (!stats && !error) return <Spin size="large" style={{display:'block',margin:'100px auto'}}/>;
-  if (!stats) return <Alert type="error" message={error} showIcon/>;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Spin size="large" tip="جاري تحميل لوحة الإدارة..." />
+      </div>
+    );
+  }
 
-  const chart = {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['العدد'], textStyle: { color: '#999' } },
-    xAxis: { type: 'category', data: ['المستخدمون', 'الرسائل 24س', 'ذاكرة JVM %', 'المكالمات'], axisLabel: { color: '#999' } },
-    yAxis: { type: 'value', axisLabel: { color: '#999' } },
-    series: [{ name: 'العدد', type: 'bar', data: [stats.active_users||0, stats.messages_24h||0, stats.jvm_memory_percent||0, stats.active_calls||0], itemStyle: { color: '#00C896' } }]
+  if (error) {
+    return <Alert type="error" message="خطأ في التحميل" description={error} showIcon />;
+  }
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+    if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(2)} MB`;
+    if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(2)} KB`;
+    return `${bytes} B`;
   };
 
-  return <div>
-    {error && <Alert type="warning" message={error} showIcon style={{marginBottom:12}}/>}
-    <Row gutter={[16,16]}>
-      <Col span={4}><Card><Statistic title="المستخدمون المتصلون" value={stats.active_users||0} prefix={<UserOutlined/>} valueStyle={{color:'#1890ff'}}/></Card></Col>
-      <Col span={4}><Card><Statistic title="رسائل آخر 24 ساعة" value={stats.messages_24h||0} prefix={<MessageOutlined/>} valueStyle={{color:'#52c41a'}}/></Card></Col>
-      <Col span={4}><Card><Statistic title="طلبات الموافقة" value={stats.pending_approvals||0} prefix={<SafetyOutlined/>} valueStyle={{color:'#faad14'}}/></Card></Col>
-      <Col span={4}><Card><Statistic title="ذاكرة JVM" value={stats.jvm_memory_percent||0} suffix="%" prefix={<HddOutlined/>} valueStyle={{color: (stats.jvm_memory_percent||0) > 80 ? '#f5222d' : '#52c41a'}}/></Card></Col>
-      <Col span={4}><Card><Statistic title="المكالمات النشطة" value={stats.active_calls||0} prefix={<PhoneOutlined/>} valueStyle={{color:'#722ed1'}}/></Card></Col>
-      <Col span={4}><Card><Statistic title="DINSTAR" value={stats.dinstar_online ? 'متصل' : 'غير متصل'} prefix={<ApiOutlined/>} valueStyle={{color: stats.dinstar_online ? '#52c41a' : '#f5222d'}}/></Card></Col>
-    </Row>
-    <Row gutter={16} style={{marginTop:16}}>
-      <Col span={16}><Card title="مقاييس حية — بيانات حقيقية فقط" style={{background:'#1a1a1a',borderColor:'#333'}}>
-        <ReactEChartsCore echarts={echarts} option={chart} style={{height:300}}/>
-      </Card></Col>
-      <Col span={8}><Card title="صحة المنظومة" style={{background:'#1a1a1a',borderColor:'#333'}}>
-        <Alert message={`PostgreSQL: ${stats.db_health||'UNKNOWN'}`} type={stats.db_health==='UP'?'success':'error'} showIcon/>
-        <Alert message={`MongoDB: ${stats.mongodb_health||'UNKNOWN'}`} type={stats.mongodb_health==='UP'?'success':'error'} showIcon style={{marginTop:8}}/>
-        <Alert message={`Redis: ${stats.redis_health||'UNKNOWN'}`} type={stats.redis_health==='UP'?'success':'error'} showIcon style={{marginTop:8}}/>
-        <Alert message={`Uptime: ${Math.round((stats.uptime_ms||0)/60000)} دقيقة`} type="info" showIcon style={{marginTop:8}}/>
-        <Alert message={`CPU cores: ${stats.cpu_cores||0}`} type="info" showIcon style={{marginTop:8}}/>
-      </Card></Col>
-    </Row>
-  </div>;
-};
-export default Dashboard;
+  const userChart = {
+    title: { text: 'المستخدمون النشطون', textStyle: { color: '#00E6A0' } },
+    tooltip: { trigger: 'axis' },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: analytics.map(a => a.statDate.slice(5)) },
+    yAxis: { type: 'value' },
+    series: [
+      {
+        name: 'إجمالي',
+        type: 'line',
+        data: analytics.map(a => a.totalUsers),
+        smooth: true,
+        itemStyle: { color: '#00E6A0' },
+        areaStyle: { color: 'rgba(0,230,160,0.2)' },
+      },
+      {
+        name: 'جدد',
+        type: 'line',
+        data: analytics.map(a => a.newUsers),
+        smooth: true,
+        itemStyle: { color: '#35CBE0' },
+      },
+    ],
+  };
+
+  const messageChart = {
+    title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#00E6A0' } },
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['رسائل', 'مكالمات', 'رسائل صوتية'], textStyle: { color: '#fff' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: analytics.map(a => a.statDate.slice(5)) },
+    yAxis: { type: 'value' },
+    series: [
+      { name: 'رسائل', type: 'bar', data: analytics.map(a => a.messagesSent), itemStyle: { color: '#00E6A0' } },
+      { name: 'مكالمات', type: 'bar', data: analytics.map(a => a.callsTotal), itemStyle: { color: '#E8B84A' } },
+      { name: 'رسائل صوتية', type: 'line', data: analytics.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#35CBE0' } },
+    ],
+  };
+
+  return (
+    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      {/* Header */}
+      <div>
+        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+          <ThunderboltOutlined /> لوحة الإدارة السيادية
+        </Title>
+        <Text type="secondary">
+          <ClockCircleOutlined /> آخر تحديث: {new Date().toLocaleString('ar-EG')}
+          {realtime && <Tag color="green" style={{ marginRight: 12 }}>مباشر</Tag>}
+        </Text>
+      </div>
+
+      {/* Critical Alerts */}
+      {summary && (summary.recentCriticalAlerts > 0 || summary.degradedComponents > 0) && (
+        <Alert
+          type="warning"
+          message="تنبيهات تحتاج انتباه"
+          description={
+            <Space>
+              {summary.recentCriticalAlerts > 0 && (
+                <Tag color="red">{summary.recentCriticalAlerts} تنبيهات حرجة</Tag>
+              )}
+              {summary.degradedComponents > 0 && (
+                <Tag color="orange">{summary.degradedComponents} مكونات متدهورة</Tag>
+              )}
+              {summary.activeBackups > 0 && (
+                <Tag color="blue">{summary.activeBackups} نسخ قيد التنفيذ</Tag>
+              )}
+            </Space>
+          }
+          showIcon
+        />
+      )}
+
+      {/* User Stats */}
+      {summary && (
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="إجمالي المستخدمين"
+                value={summary.analytics.totalUsers ?? 0}
+                prefix={<TeamOutlined style={{ color: '#00E6A0' }} />}
+                valueStyle={{ color: '#00E6A0' }}
+              />
+              <Text type="secondary">+{summary.analytics.newUsers24h ?? 0} آخر 24 ساعة</Text>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="في انتظار الموافقة"
+                value={summary.analytics.pendingUsers ?? 0}
+                prefix={<UserAddOutlined style={{ color: '#E8B84A' }} />}
+                valueStyle={{ color: '#E8B84A' }}
+              />
+              {summary.analytics.approvalRate != null && (
+                <Progress
+                  percent={Number(summary.analytics.approvalRate.toFixed(1))}
+                  size="small"
+                  showInfo={false}
+                  strokeColor="#E8B84A"
+                />
+              )}
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="البلاغات المعلقة"
+                value={Number(summary.pendingReports)}
+                prefix={<AlertOutlined style={{ color: '#FF6B6B' }} />}
+                valueStyle={{ color: '#FF6B6B' }}
+              />
+              <Text type="secondary">تحتاج مراجعة</Text>
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card>
+              <Statistic
+                title="المستخدمون المحظورون"
+                value={summary.analytics.bannedUsers ?? 0}
+                prefix={<WarningOutlined style={{ color: '#FF6B6B' }} />}
+                valueStyle={{ color: '#FF6B6B' }}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* Charts */}
+      {analytics.length > 0 && (
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={12}>
+            <Card title={<><TeamOutlined /> المستخدمون</>}>
+              <ReactECharts option={userChart} style={{ height: 280 }} />
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card title={<><MessageOutlined /> النشاط</>}>
+              <ReactECharts option={messageChart} style={{ height: 280 }} />
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* System Health */}
+      <Card title={<><CloudServerOutlined /> صحة النظام (آخر 5 دقائق)</>}>
+        {health.length === 0 ? (
+          <Alert type="info" message="لا توجد بيانات صحة حديثة" />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {health.map((h, idx) => {
+              const status = h.status as string;
+              const color = status === 'HEALTHY' ? 'green' : status === 'DEGRADED' ? 'orange' : 'red';
+              const icon = status === 'HEALTHY' ? <CheckCircleOutlined /> :
+                           status === 'DEGRADED' ? <WarningOutlined /> : <AlertOutlined />;
+              return (
+                <Col xs={24} sm={12} md={8} key={idx}>
+                  <Card size="small">
+                    <Space>
+                      <Tag color={color} icon={icon}>{h.component}</Tag>
+                      {h.cpuUsage != null && (
+                        <Tooltip title="CPU">
+                          <Tag><DatabaseOutlined /> {h.cpuUsage.toFixed(0)}%</Tag>
+                        </Tooltip>
+                      )}
+                      {h.memoryUsage != null && (
+                        <Tooltip title="Memory">
+                          <Tag color="cyan">{h.memoryUsage.toFixed(0)}%</Tag>
+                        </Tooltip>
+                      )}
+                    </Space>
+                  </Card>
+                </Col>
+              );
+            })}
+          </Row>
+        )}
+      </Card>
+
+      {/* Storage */}
+      {analytics.length > 0 && (
+        <Card title={<><DatabaseOutlined /> التخزين والـ DINSTAR</>}>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={12}>
+              <Statistic
+                title="التخزين المستخدم"
+                value={formatBytes(analytics[analytics.length - 1]?.storageUsedBytes ?? 0)}
+                prefix={<DatabaseOutlined style={{ color: '#35CBE0' }} />}
+                valueStyle={{ color: '#35CBE0' }}
+              />
+            </Col>
+            <Col xs={24} md={12}>
+              <Statistic
+                title="رصيد DINSTAR المتبقي"
+                value={analytics[analytics.length - 1]?.dinstarBalanceRemaining ?? 0}
+                prefix={<DollarOutlined style={{ color: '#E8B84A' }} />}
+                valueStyle={{ color: '#E8B84A' }}
+                suffix="ريال"
+              />
+            </Col>
+          </Row>
+        </Card>
+      )}
+
+      {/* Recent Activity */}
+      {analytics.length > 0 && (
+        <Card title="آخر النشاط اليومي">
+          <List
+            dataSource={analytics.slice(-5).reverse()}
+            renderItem={(item) => (
+              <List.Item>
+                <Space>
+                  <Tag color="cyan">{item.statDate}</Tag>
+                  <Text>{item.messagesSent} رسالة</Text>
+                  <Text>{item.callsTotal} مكالمة</Text>
+                  <Text type="secondary">+{item.newUsers} مستخدم جديد</Text>
+                </Space>
+              </List.Item>
+            )}
+          />
+        </Card>
+      )}
+    </Space>
+  );
+}

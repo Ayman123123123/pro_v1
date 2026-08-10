@@ -10,6 +10,9 @@ import androidx.lifecycle.viewModelScope
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.core.database.ContactEntity
+import com.red.sovereign.core.database.LocalRepository
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -22,6 +25,7 @@ import java.net.URLEncoder
 
 class DirectoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
+    private val repository = LocalRepository(application)
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     val results = mutableStateListOf<PublicRedProfile>()
     val contacts = mutableStateListOf<PublicRedProfile>()
@@ -29,7 +33,15 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     val onlineIds = mutableStateListOf<String>()
     var state: DirectoryState by mutableStateOf(DirectoryState.Idle); private set
 
-    init { refresh() }
+    init {
+        refresh()
+        viewModelScope.launch {
+            repository.getFriends().collectLatest { entities ->
+                contacts.clear()
+                contacts.addAll(entities.map { PublicRedProfile(it.redId, it.username, it.displayName) })
+            }
+        }
+    }
 
     fun refresh() = viewModelScope.launch {
         state = DirectoryState.Loading
@@ -41,9 +53,10 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
             json.decodeFromString<List<PublicRedProfile>>((contactResult as ApiResult.Success).value) to
                 json.decodeFromString<List<ContactRequest>>((requestResult as ApiResult.Success).value)
         }.onSuccess { (people, incoming) ->
-            contacts.clear(); contacts.addAll(people); requests.clear(); requests.addAll(incoming)
-            refreshPresence(people)
             state = DirectoryState.Ready
+            repository.saveContacts(people.map { ContactEntity(it.redId, it.username, it.displayName) })
+            requests.clear(); requests.addAll(incoming)
+            refreshPresence(people)
         }
             .onFailure { state = DirectoryState.Error("INVALID_CONTACT_RESPONSE") }
     }

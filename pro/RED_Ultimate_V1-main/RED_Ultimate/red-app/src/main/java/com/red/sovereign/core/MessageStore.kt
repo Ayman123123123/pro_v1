@@ -38,6 +38,11 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         db.execSQL("CREATE INDEX idx_messages_conversation ON messages(conversation_id, sequence_number DESC)")
         db.execSQL("CREATE INDEX idx_messages_status ON messages(status)")
         createLocalHistoryTables(db)
+        // 🔍 FTS5 for encrypted local search (never synced)
+        try { db.execSQL("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                messageId UNINDEXED, conversationId UNINDEXED, senderId UNINDEXED, content, tokenize='unicode61 "remove_diacritics 1"')
+        """.trimIndent()) } catch (_: Exception) {}
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
@@ -79,7 +84,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         writableDatabase.update("local_history", ContentValues().apply { put("status", status) }, "id = ?", arrayOf(messageId))
     }
 
-    fun delete(messageId: String) { writableDatabase.delete("messages", "id = ?", arrayOf(messageId)) }
+    fun delete(messageId: String) { writableDatabase.delete("messages", "id = ?", arrayOf(messageId)); try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {} }
 
     fun messages(conversationId: String, limit: Int = 100): List<StoredMessage> {
         val result = mutableListOf<StoredMessage>()
@@ -105,6 +110,29 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
             put("created_at", message.timestamp); put("outgoing", if (message.outgoing) 1 else 0)
             put("status", message.status)
         }, SQLiteDatabase.CONFLICT_REPLACE)
+        // 🔍 Index for local FTS search (plaintext only on device)
+        try {
+            val rich = runCatching { com.red.sovereign.core.RichMessage.decode(message.plaintext) }.getOrNull()
+            val indexText = rich?.text ?: message.plaintext.toString(Charsets.UTF_8)
+            if (indexText.length in 2..5000) {
+                writableDatabase.execSQL("INSERT OR REPLACE INTO messages_fts(messageId, conversationId, senderId, content) VALUES (?, ?, ?, ?)",
+                    arrayOf(message.id, message.conversationId, message.senderId, indexText))
+            }
+            // ⏳ Schedule disappearing deletion if expiresAt set
+            rich?.expiresAt?.let { expiresAt ->
+                val delay = expiresAt - System.currentTimeMillis()
+                if (delay in 1..604800000L) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        delete(message.id)
+                        writableDatabase.delete("local_history", "id = ?", arrayOf(message.id))
+                        writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(message.id))
+                    }, delay)
+                } else if (delay <= 0) {
+                    delete(message.id)
+                    writableDatabase.delete("local_history", "id = ?", arrayOf(message.id))
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun localHistory(conversationId: String, limit: Int = 200): List<LocalMessage> {
@@ -140,6 +168,32 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
     }
 
     fun search(query: String, limit: Int = 100): List<LocalMessage> {
+        // 🔍 Try FTS first (fast), fallback to linear scan
+        try {
+            val sanitized = query.trim().replace("\"", "\"\"").take(100)
+            if (sanitized.length >= 2) {
+                val ftsIds = mutableListOf<String>()
+                readableDatabase.rawQuery("SELECT messageId FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?", arrayOf("\"" + sanitized + "\"", limit.coerceIn(1,200).toString())).use { c ->
+                    while (c.moveToNext()) ftsIds += c.getString(0)
+                }
+                if (ftsIds.isNotEmpty()) {
+                    val placeholders = ftsIds.joinToString(",") { "?" }
+                    val result = mutableListOf<LocalMessage>()
+                    readableDatabase.query("local_history", null, "id IN ($placeholders)", ftsIds.toTypedArray(), null, null, "created_at DESC").use { cursor ->
+                        while (cursor.moveToNext()) result += LocalMessage(
+                            cursor.getString(cursor.getColumnIndexOrThrow("id")), cursor.getString(cursor.getColumnIndexOrThrow("conversation_id")),
+                            cursor.getString(cursor.getColumnIndexOrThrow("sender_id")),
+                            recordCipher.decrypt(cursor.getBlob(cursor.getColumnIndexOrThrow("encrypted_plaintext"))),
+                            cursor.getString(cursor.getColumnIndexOrThrow("message_type")), cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
+                            cursor.getInt(cursor.getColumnIndexOrThrow("outgoing")) == 1,
+                            cursor.getString(cursor.getColumnIndexOrThrow("status"))
+                        )
+                    }
+                    if (result.isNotEmpty()) return result
+                }
+            }
+        } catch (_: Exception) {}
+        // Fallback linear
         val needle = query.trim().lowercase(); if (needle.length < 2) return emptyList()
         val result = mutableListOf<LocalMessage>()
         readableDatabase.query("local_history", null, null, null, null, null, "created_at DESC", "1000").use { cursor ->

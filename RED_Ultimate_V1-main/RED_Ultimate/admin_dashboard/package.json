@@ -4,10 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "start": "vite --host 0.0.0.0",
-    "build": "tsc --noEmit 2>/dev/null || echo '⚠️ tsc not found, skipping type check' ; vite build",
-    "preview": "vite preview --host 0.0.0.0",
+    "dev": "vite --host 0.0.0.0 --port 8088",
+    "start": "vite --host 0.0.0.0 --port 8088",
+    "build": "tsc --noEmit && vite build",
+    "build:check": "tsc --noEmit",
+    "check:api": "node scripts/check-api-contract.mjs",
+    "check": "npm run check:api && npm run build:check",
+    "preview": "vite preview --host 0.0.0.0 --port 8088",
+    "build:fast": "vite build",
     "build:strict": "tsc --noEmit && vite build"
   },
   "dependencies": {

@@ -12,6 +12,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -127,6 +129,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -144,13 +147,8 @@ import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.UnifiedCallOverlays
-import com.red.sovereign.calls.YounesConferenceOverlay
-import com.red.sovereign.calls.YounesLiveStreamOverlay
 import com.red.sovereign.calls.ConferenceService
-import com.red.sovereign.calls.ConferenceRuntime
-import com.red.sovereign.calls.YounesLiveStreamOverlay
 import com.red.sovereign.calls.LiveStreamService
-import com.red.sovereign.calls.LiveStreamRuntime
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
@@ -174,6 +172,15 @@ import com.red.sovereign.media.VoiceManifest
 import com.red.sovereign.media.VoiceMessageState
 import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.media.VoiceNotePlayer
+import com.red.sovereign.media.voice.VoiceBubble
+import com.red.sovereign.media.voice.VoiceColors
+import com.red.sovereign.media.voice.VoicePreviewActions
+import com.red.sovereign.media.voice.VoiceRecorderPanel
+import com.red.sovereign.media.voice.VoiceRecordButton
+import com.red.sovereign.media.voice.VoiceTimerDisplay
+import com.red.sovereign.media.voice.VoiceWaveformCanvas
+import com.red.sovereign.media.voice.VoiceCancelProgressBar
+import com.red.sovereign.media.voice.VoiceLockIndicator
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
@@ -231,6 +238,22 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
+    // 🔧 إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
+    var showCallDialer by remember { mutableStateOf(false) }
+    var dialerRedId by remember { mutableStateOf("") }
+    var dialerVideo by remember { mutableStateOf(false) }
+    var pendingDialerTarget by remember { mutableStateOf<String?>(null) }
+    var pendingDialerVideo by remember { mutableStateOf(false) }
+    val dialerCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted = !pendingDialerVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val redId = pendingDialerTarget
+        if (audioGranted && cameraGranted && redId != null && redId.matches(RED_ID_PATTERN)) {
+            YounesCallService.start(context, redId, pendingDialerVideo)
+            section = MainSection.CALLS
+        }
+        pendingDialerTarget = null
+    }
     
     val feed: FeedViewModel = viewModel()
     // ... (rest of ViewModels)
@@ -270,19 +293,23 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             if (!showDinstar) when (section) {
                 MainSection.CHATS -> FloatingActionButton(onClick = { showDirectory = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
                 MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
-                MainSection.CALLS -> FloatingActionButton(onClick = { /* TODO: show dialer */ showDinstar = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Call, "مكالمة جديدة") }
+                MainSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
                 MainSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
                 else -> {}
             }
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
+                // remember lambdas per item لتفادي إعادة التوليد كل recompose
                 MainSection.entries.forEach { item ->
+                    val itemLabel = item.label
+                    val isSelected = section == item
+                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) callHistory.load() } }
                     NavigationBarItem(
-                        selected = section == item,
-                        onClick = { section = item; showDinstar = false; if (item == MainSection.CALLS) callHistory.load() },
-                        icon = { Icon(item.icon, item.label) },
-                        label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+                        selected = isSelected,
+                        onClick = onClick,
+                        icon = { Icon(item.icon, itemLabel) },
+                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
                     )
                 }
             }
@@ -321,6 +348,54 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     )
     if (showSettings) YounesSettingsSheet(account, settings, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
+
+    // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
+    if (showCallDialer) {
+        AlertDialog(
+            onDismissRequest = { showCallDialer = false; dialerRedId = ""; dialerVideo = false },
+            title = { Text("مكالمة جديدة عبر يونس") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: YNS-ABCD-EFGH أو RED-2345-6789", color = Color.Gray, fontSize = 12.sp)
+                    OutlinedTextField(
+                        value = dialerRedId,
+                        onValueChange = { dialerRedId = it.uppercase().take(14) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("YNS-XXXX-XXXX") },
+                        singleLine = true
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Checkbox(checked = dialerVideo, onCheckedChange = { dialerVideo = it })
+                        Text("مكالمة فيديو", fontSize = 14.sp)
+                    }
+                    val valid = dialerRedId.matches(RED_ID_PATTERN)
+                    if (dialerRedId.isNotBlank() && !valid) {
+                        Text("معرّف يونس غير صالح — يجب أن يكون بصيغة YNS-XXXX-XXXX", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                val perms = buildList {
+                    add(Manifest.permission.RECORD_AUDIO)
+                    if (dialerVideo) add(Manifest.permission.CAMERA)
+                }.toTypedArray()
+                Button(
+                    enabled = dialerRedId.matches(RED_ID_PATTERN),
+                    onClick = {
+                        val redId = dialerRedId
+                        val video = dialerVideo
+                        showCallDialer = false
+                        dialerRedId = ""
+                        dialerVideo = false
+                        pendingDialerTarget = redId
+                        pendingDialerVideo = video
+                        dialerCallPermissions.launch(perms)
+                    }
+                ) { Text(if (dialerVideo) "اتصال فيديو" else "اتصال صوتي") }
+            },
+            dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("إلغاء") } }
+        )
+    }
 }
 
 @Composable
@@ -471,7 +546,6 @@ private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column
     Text(label, fontSize = 11.sp, maxLines = 1)
 }
 
-@Composable
 @Composable
 private fun PostCard(
     post: Post,
@@ -734,7 +808,7 @@ private fun ChatHubScreen(
         decrypted.add(item)
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
-    val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
+    // ملاحظة: `val conversation` معرّف في سطر سابق (ChatHubScreen scope) — لا نعيد حسابه هنا
     androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
         val conversationToRestore = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
         if (conversationToRestore != null) {
@@ -782,9 +856,17 @@ private fun ChatHubScreen(
                     TextButton({ showDirectory = true }) { Text("إضافة +", color = AqyalGold, fontSize = 12.sp) }
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(directory.contacts.filter { person ->
-                        conversations.none { it.peerId == person.redId && it.archived }
-                    }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }.thenBy { it.displayName }), key = { it.redId }) { person ->
+                    // نحسب الترتيب مرة واحدة لكل recompose بدلاً من تكرار في كل item
+                    val sortedContacts = remember(directory.contacts, conversations, directory) {
+                        directory.contacts
+                            .filter { person -> conversations.none { it.peerId == person.redId && it.archived } }
+                            .sortedWith(
+                                compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }
+                                    .thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }
+                                    .thenBy { it.displayName }
+                            )
+                    }
+                    items(sortedContacts, key = { it.redId }) { person ->
                         Column(Modifier.widthIn(max = 86.dp).clickable { target = person.redId }, horizontalAlignment = Alignment.CenterHorizontally) {
                             Avatar(person.displayName.take(1)); Text(person.displayName, maxLines = 1, fontSize = 11.sp); Text("@${person.username}", color = AqyalCyanGlow, maxLines = 1, fontSize = 9.sp)
                             IconButton({ selectedContact = person }, Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(16.dp)) }
@@ -926,35 +1008,63 @@ private fun ChatHubScreen(
                 is AttachmentState.Exported -> Text("تم حفظ ${attachmentState.name} في الموقع الذي اخترته", color = YounesEmerald, style = MaterialTheme.typography.bodySmall)
                 AttachmentState.Idle -> Unit
             }
-            when (val voiceState = voiceMessages.state) {
-                is VoiceMessageState.Recording -> Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}" else "● تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        IconButton(voiceMessages::togglePause) { Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "استئناف" else "إيقاف مؤقت") }
-                        TextButton(voiceMessages::cancel) { Text("إلغاء") }
+            // 🎙️ Voice Recorder Panel — احترافي بالكامل
+            VoiceRecorderPanel(
+                state = voiceMessages.state,
+                elapsedSeconds = voiceMessages.elapsedSeconds,
+                waveform = voiceMessages.waveform,
+                isLocked = voiceMessages.isLocked,
+                cancelProgress = voiceMessages.cancelProgress,
+                hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+                onPress = { voiceMessages.lockRecording() },
+                onRelease = { voiceMessages.stopAndPreview(target, conversation) },
+                onLockRequest = { voiceMessages.lockRecording() },
+                onCancel = { voiceMessages.cancel() },
+                onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                onStopAndPreview = { voiceMessages.stopAndPreview(target, conversation) },
+                onSend = { voiceMessages.stopAndSend(target, conversation) },
+                onDiscard = { voiceMessages.discardPreview() },
+                onClick = {
+                    if (voiceMessages.state is VoiceMessageState.Recording) {
+                        voiceMessages.stopAndPreview(target, conversation)
+                    } else if (voiceMessages.state is VoiceMessageState.Preview) {
+                        voiceMessages.stopAndSend(target, conversation)
+                    } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        voiceMessages.start(target, conversation)
+                    } else {
+                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
-                    VoiceWaveform(voiceMessages.waveform, MaterialTheme.colorScheme.error, Modifier.fillMaxWidth().height(34.dp))
                 }
-                VoiceMessageState.Sending -> Text("جارٍ تشفير الرسالة الصوتية ورفعها…", color = AqyalGold, style = MaterialTheme.typography.bodySmall)
-                is VoiceMessageState.Sent -> Text("تم إرسال رسالة صوتية ${formatDuration(voiceState.durationSeconds)}", color = YounesEmerald, style = MaterialTheme.typography.bodySmall)
-                is VoiceMessageState.Error -> Text("تعذر التسجيل: ${voiceState.message}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                VoiceMessageState.Idle -> Unit
-            }
+            )
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton({ showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
                 IconButton({ showAttachmentSheet = true }, enabled = target.matches(RED_ID_PATTERN) && attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
-                IconButton({
-                    if (voiceMessages.state is VoiceMessageState.Recording) voiceMessages.stopAndSend(target, conversation)
-                    else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) voiceMessages.start(target, conversation)
-                    else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                }, enabled = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending) {
-                    Icon(if (voiceMessages.state is VoiceMessageState.Recording) Icons.Default.Stop else Icons.Default.Mic, if (voiceMessages.state is VoiceMessageState.Recording) "إيقاف وإرسال" else "تسجيل رسالة صوتية")
-                }
+                VoiceRecordButton(
+                    state = voiceMessages.state,
+                    isLocked = voiceMessages.isLocked,
+                    hasPermission = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending,
+                    onPress = { voiceMessages.lockRecording() },
+                    onRelease = { voiceMessages.stopAndPreview(target, conversation) },
+                    onLockRequest = { voiceMessages.lockRecording() },
+                    onCancel = { voiceMessages.cancel() },
+                    onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                    onClick = {
+                        if (voiceMessages.state is VoiceMessageState.Recording) {
+                            voiceMessages.stopAndPreview(target, conversation)
+                        } else if (voiceMessages.state is VoiceMessageState.Preview) {
+                            voiceMessages.stopAndSend(target, conversation)
+                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            voiceMessages.start(target, conversation)
+                        } else {
+                            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                )
                 Column(Modifier.weight(1f)) {
                     // Mentions @ + Hashtags # autocomplete
-                    val mentionQuery = Regex("@([A-Za-z0-9_.]{1,20})\$").find(messageText)?.groupValues?.get(1)
+                    val mentionQuery = USERNAME_PARTIAL.find(messageText)?.groupValues?.get(1)
                     if (mentionQuery != null && directory.contacts.isNotEmpty()) {
                         val suggestions = directory.contacts.filter { it.username.contains(mentionQuery, ignoreCase = true) || it.displayName.contains(mentionQuery, ignoreCase = true) }.take(3)
                         if (suggestions.isNotEmpty()) {
@@ -962,7 +1072,7 @@ private fun ChatHubScreen(
                                 Column {
                                     suggestions.forEach { person ->
                                         Row(Modifier.fillMaxWidth().clickable {
-                                            messageText = messageText.replace(Regex("@[A-Za-z0-9_.]{1,20}\$"), "@${person.redId} ")
+                                            messageText = messageText.replace(USERNAME_PARTIAL, "@${person.redId} ")
                                         }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text("@${person.username}", color = YounesEmerald, fontWeight = FontWeight.Bold)
                                             Text(" • ${person.displayName}", color = Color.Gray, fontSize = 12.sp)
@@ -972,14 +1082,14 @@ private fun ChatHubScreen(
                             }
                         }
                     }
-                    val hashtagQuery = Regex("#([\w\u0600-\u06FF]{1,20})\$").find(messageText)?.groupValues?.get(1)
+                    val hashtagQuery = HASHTAG_AUTOCOMPLETE.find(messageText)?.groupValues?.get(1)
                     if (hashtagQuery != null) {
                         val popular = listOf("مهم", "يمن", "تقنية", "عام", "خاص").filter { it.contains(hashtagQuery, ignoreCase = true) }.take(3)
                         if (popular.isNotEmpty()) {
                             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                                 Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     popular.forEach { tag ->
-                                        AssistChip(onClick = { messageText = messageText.replace(Regex("#[\w\u0600-\u06FF]{1,20}\$"), "#$tag ") }, label = { Text("#$tag", color = AqyalCyanGlow) })
+                                        AssistChip(onClick = { messageText = messageText.replace(HASHTAG_AUTOCOMPLETE, "#$tag ") }, label = { Text("#$tag", color = AqyalCyanGlow) })
                                     }
                                 }
                             }
@@ -1005,8 +1115,8 @@ private fun ChatHubScreen(
                         action = if (editingMessageId != null) "EDIT" else "MESSAGE",
                         text = messageText.trim(), replyTo = replyToMessage?.id, editOf = editingMessageId,
                         expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it },
-                        mentions = Regex("""@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}""").findAll(messageText).map { it.value }.toList(),
-                        hashtags = Regex("""#[\w\u0600-\u06FF]{2,30}""").findAll(messageText).map { it.value }.toList(),
+                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                        hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
                         disappearingMs = disappearingDurationMs
                     )
                     RedConnectionService.sendRichText(context, target, conversation, rich)
@@ -1409,12 +1519,11 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
 }
 
 @Composable
-@Composable
 private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     return Card(Modifier.fillMaxWidth().clickable {
         // Redial on tap — fixes history not calling
-        if (call.peerId.matches(Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$"))) {
+        if (call.peerId.matches(RED_ID_PATTERN)) {
             YounesCallService.start(context, call.peerId, call.type == "VIDEO")
         }
     }) {
@@ -1424,7 +1533,21 @@ private fun CallHistoryRow(call: CallHistoryItem) {
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(call.peerLabel.ifBlank { call.peerId }, fontWeight = FontWeight.Bold)
-            Text("${if (call.direction == "OUTGOING") "صادرة" else "واردة"} · ${call.status}", color = if (call.status == "MISSED") Color.Red else Color.Gray, fontSize = 12.sp)
+            Text(
+                buildString {
+                    append(if (call.direction == "OUTGOING") "صادرة" else "واردة")
+                    append(" · ")
+                    append(call.status)
+                    val durationSec = (call.endedAt?.toLongOrNull() ?: 0L) - (call.answeredAt?.toLongOrNull() ?: 0L)
+                    if (durationSec > 0) {
+                        append(" · ")
+                        val mm = durationSec / 60; val ss = durationSec % 60
+                        append("%d:%02d".format(mm, ss))
+                    }
+                },
+                color = if (call.status == "MISSED") Color.Red else Color.Gray,
+                fontSize = 12.sp
+            )
         }
         AssistChip({}, { Text(if (call.route == "DINSTAR") "DINSTAR صوت" else "يونس ${call.type}") }, enabled = false)
         }
@@ -1630,8 +1753,8 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
     if (rich.forwardOf != null) Text("معاد توجيهها", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val annotated = remember(rich.text, rich.mentions, rich.hashtags) {
         val t = rich.text
-        val mentions = rich.mentions + Regex("""@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}""").findAll(t).map { it.value }.toList()
-        val hashtags = rich.hashtags + Regex("""#[\w\u0600-\u06FF]{2,30}""").findAll(t).map { it.value }.toList()
+        val mentions = rich.mentions + RED_ID_PARTIAL.findAll(t).map { it.value }.toList()
+        val hashtags = rich.hashtags + HASHTAG_PARTIAL.findAll(t).map { it.value }.toList()
         androidx.compose.ui.text.buildAnnotatedString {
             append(t)
             mentions.forEach { m -> val idx = t.indexOf(m); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = YounesEmerald, fontWeight = FontWeight.Bold), idx, idx + m.length) }
@@ -1650,6 +1773,119 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
     }
     if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
+}
+
+@Composable
+private fun VoiceRecordingControls(
+    voiceState: VoiceMessageState.Recording,
+    voiceMessages: VoiceMessageViewModel,
+    isLocked: Boolean,
+    cancelProgress: Float
+) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var dragOffsetX by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+    var dragOffsetY by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
+
+    Column {
+        // ⏺️ شريط التسجيل العلوي
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(if (voiceState.paused) AqyalGold else MaterialTheme.colorScheme.error))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}"
+                else "● تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(voiceMessages::togglePause) {
+                Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "استئناف" else "إيقاف مؤقت")
+            }
+            TextButton(voiceMessages::cancel) { Text("إلغاء") }
+        }
+        VoiceWaveform(voiceMessages.waveform, MaterialTheme.colorScheme.error, Modifier.fillMaxWidth().height(34.dp))
+
+        // 🎚️ منطقة السحب — إذا السحب لليسار/الأسفل = إلغاء تدريجي
+        if (cancelProgress > 0f) {
+            Text(
+                "↩️ اسحب لمعاودة التسجيل • ${(cancelProgress * 100).toInt()}%",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+
+        // 🔒 إذا قُفل التسجيل، اعرض أزرار الإرسال والإلغاء
+        if (isLocked) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = voiceMessages::cancel,
+                    modifier = Modifier.weight(1f)
+                ) { Text("حذف") }
+                // الإرسال يتم عبر زر الإرسال الرئيسي في شريط الكتابة
+                OutlinedButton(
+                    onClick = { /* triggered via main send button */ },
+                    modifier = Modifier.weight(1f),
+                    enabled = false
+                ) { Text("🔒 مُقفل — استخدم زر الإرسال") }
+            }
+        } else {
+            // 🔓 نصيحة للمستخدم: اسحب للقفل أو ارفع الإصبع للإرسال
+            Text(
+                "💡 اسحب للأعلى للقفل • ارفع الإصبع للإرسال • اسحب للأسفل للإلغاء",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VoicePreviewControls(
+    duration: Int,
+    waveform: List<Int>,
+    onSend: () -> Unit,
+    onDiscard: () -> Unit,
+    isSending: Boolean
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.PlayArrow, null, tint = YounesEmerald)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "معاينة الرسالة الصوتية • ${formatDuration(duration)}",
+                color = YounesEmerald,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        VoiceWaveform(waveform, YounesEmerald, Modifier.fillMaxWidth().height(34.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDiscard,
+                modifier = Modifier.weight(1f),
+                enabled = !isSending
+            ) {
+                Icon(Icons.Default.Close, null); Text(" حذف")
+            }
+            Button(
+                onClick = onSend,
+                modifier = Modifier.weight(1f),
+                enabled = !isSending && duration >= 1
+            ) {
+                if (isSending) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White)
+                else { Icon(Icons.Default.Send, null); Text(" إرسال") }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1677,23 +1913,43 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
         if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(manifestJson)
     }
-    val downloaded = when (val current = attachments.state) {
-        is AttachmentState.Downloaded -> current.path to current.name
-        is AttachmentState.Exported -> current.path to current.name
+    val isDownloaded = when (val current = attachments.state) {
+        is AttachmentState.Downloaded -> current.name == manifest.name
+        is AttachmentState.Exported -> current.name == manifest.name
+        else -> false
+    }
+    val isDownloading = attachments.state is AttachmentState.Working
+    val downloadedUri = when (val current = attachments.state) {
+        is AttachmentState.Downloaded -> if (current.name == manifest.name) {
+            android.net.Uri.fromFile(java.io.File(current.path))
+        } else null
+        is AttachmentState.Exported -> if (current.name == manifest.name) {
+            android.net.Uri.fromFile(java.io.File(current.path))
+        } else null
         else -> null
     }
-    if (downloaded?.second == manifest.name) {
-        VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
-    } else Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.Mic, null, tint = if (item.outgoing) Color(0xFF00382A) else YounesEmerald)
-        Column(Modifier.weight(1f).padding(horizontal = 9.dp)) {
-            Text("رسالة صوتية", fontWeight = FontWeight.SemiBold)
-            VoiceWaveform(manifest.waveform, if (item.outgoing) Color(0xFF00513E) else YounesEmerald, Modifier.fillMaxWidth().height(30.dp))
-            Text("${formatDuration(manifest.durationSeconds)} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
-        }
-        IconButton({ attachments.download(manifestJson) }, enabled = attachments.state !is AttachmentState.Working) {
-            Icon(Icons.Default.Download, "تنزيل وتشغيل الرسالة الصوتية")
-        }
+
+    if (downloadedUri != null) {
+        // 🎙️ مشغّل احترافي مع waveform
+        VoiceNotePlayer(
+            uri = downloadedUri,
+            waveform = manifest.waveform,
+            durationSeconds = manifest.durationSeconds,
+            modifier = Modifier.fillMaxWidth()
+        )
+    } else {
+        // 💬 فقاعة احترافية قبل التنزيل
+        VoiceBubble(
+            manifest = manifest,
+            isOutgoing = item.outgoing,
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            onPlayPause = { attachments.download(manifestJson) },
+            onSeek = { /* no-op before download */ },
+            onSpeedChange = { /* no-op before download */ },
+            onDownload = { attachments.download(manifestJson) },
+            onWaveformTap = { attachments.download(manifestJson) }
+        )
     }
 }
 
@@ -1928,6 +2184,14 @@ private fun AttachmentSheet(
 }
 
 private val RED_ID_PATTERN = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
+// نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @username)
+private val RED_ID_PARTIAL = Regex("@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}")
+// الهاشتاجات العربية/اللاتينية
+private val HASHTAG_PARTIAL = Regex("#[\w\u0600-\u06FF]{2,30}")
+// اسم المستخدم للـ @ autocomplete
+private val USERNAME_PARTIAL = Regex("@([A-Za-z0-9_.]{1,20})$")
+// الهاشتاج لـ # autocomplete
+private val HASHTAG_AUTOCOMPLETE = Regex("#([\w\u0600-\u06FF]{1,20})$")
 private val EMOJI_CATEGORIES = listOf(
     "سريعة" to listOf("😀", "😂", "😍", "👍", "❤️", "🔥", "👏", "🙏", "🎉", "😢", "😮", "✅"),
     "الوجوه" to listOf("😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),
