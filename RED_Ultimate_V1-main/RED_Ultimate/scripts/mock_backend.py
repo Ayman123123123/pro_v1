@@ -73,6 +73,22 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+
+        if path == "/api/admin/dinstar/inventory":
+            self._set_headers(200)
+            gateways = [{
+                "gatewayId": "gateway_uuid_001",
+                "name": "UC2000-VE-8G Main",
+                "model": "UC2000-VE-8G",
+                "ip": "192.168.11.1",
+                "ports": [
+                    {"portIndex": p["index"], "operator": p["operator"], "status": p["status"], "signal": p["signal"], "numberMasked": p["numberMasked"], "note": "mock inventory"}
+                    for p in YEMEN_OPERATORS
+                ]
+            }]
+            self.wfile.write(json.dumps(gateways).encode())
+            return
+
         if path == "/api/admin/dinstar/status":
             self._set_headers(200)
             self.wfile.write(json.dumps(YEMEN_OPERATORS).encode())
@@ -365,6 +381,21 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+
+        if re.match(r"^/api/admin/users/[^/]+/temporary-password$", path):
+            self._set_headers(204)
+            return
+
+        if re.match(r"^/api/admin/users/[^/]+/remote-app-wipe$", path):
+            self._set_headers(202)
+            self.wfile.write(json.dumps({"commandId": f"wipe_{int(time.time())}", "status": "QUEUED"}).encode())
+            return
+
+        if path in ["/api/admin/security/wipe", "/api/admin/security/kill-switch"]:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SENT", "commandId": f"security_{int(time.time())}"}).encode())
+            return
+
         if path == "/api/pstn/calls":
             num = data.get("number", "777123456")
             self._set_headers(200)
@@ -383,8 +414,18 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
 
 
     def do_PUT(self):
+        path = urlparse(self.path).path
+        m = re.match(r"^/api/admin/dinstar/inventory/([^/]+)/ports/(\d+)$", path)
+        if m:
+            idx = int(m.group(2))
+            port = dict(YEMEN_OPERATORS[idx]) if 0 <= idx < len(YEMEN_OPERATORS) else {"index": idx}
+            port["portIndex"] = idx
+            port["updated"] = True
+            self._set_headers(200)
+            self.wfile.write(json.dumps(port).encode())
+            return
         self._set_headers(200)
-        self.wfile.write(json.dumps({"status": "OK", "path": urlparse(self.path).path}).encode())
+        self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
 
     def do_PATCH(self):
         self._set_headers(200)
