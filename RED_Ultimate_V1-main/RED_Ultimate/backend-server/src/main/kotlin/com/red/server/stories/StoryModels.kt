@@ -23,6 +23,11 @@ data class StoryDocument(
 @Document("story_views")
 data class StoryView(@Id val id: String, val storyId: String, val viewerId: String, val viewedAt: Instant = Instant.now())
 
+@Document("story_reactions")
+data class StoryReaction(@Id val id: String, val storyId: String, val userId: String, val emoji: String, val createdAt: Instant = Instant.now())
+
+data class StoryReactionRequest(val emoji: String)
+
 data class CreateStoryRequest(val mediaKey: String, val caption: String? = null)
 data class StoryResponse(
     val id: String, val ownerRedId: String, val ownerUsername: String, val ownerDisplayName: String,
