@@ -107,7 +107,10 @@ class HealthController(
                 "minio" to mapOf(
                     "status" to if (minioOk) "UP" else "DOWN",
                     "bucket" to minioBucket,
-                    "error" to if (!minioOk) (minioResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
+                    // bucketExists تُرجع false بلا استثناء عند غياب الـ bucket —
+                    // لذلك نميّز الرسالة بدل "unknown" المضللة
+                    "error" to if (!minioOk) (minioResult.exceptionOrNull()?.message?.take(100)
+                        ?: "bucket '$minioBucket' does not exist") else null
                 )
             ),
             "dinstar" to mapOf(
