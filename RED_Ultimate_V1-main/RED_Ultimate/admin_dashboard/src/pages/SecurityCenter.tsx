@@ -17,7 +17,14 @@ export default function SecurityCenter() {
     try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(r.content || r || []); } catch { /* ignore */ }
   };
   const loadPstn = async () => {
-    try { const data = await getPstnUsers(); const arr = Array.isArray(data) ? data : data.content || []; setPstnUsers(arr); setLimits(Object.fromEntries(arr.map((u:any)=>[u.id, u.pstnDailyLimit||10]))); } catch { message.error('تعذر تحميل صلاحيات PSTN'); }
+    try {
+      const data: any = await getPstnUsers();
+      const arr: any[] = Array.isArray(data) ? data : (data?.content ?? []);
+      setPstnUsers(arr);
+      setLimits(Object.fromEntries(arr.map((u: any) => [u.id, u.pstnDailyLimit || 10])));
+    } catch {
+      message.error('تعذر تحميل صلاحيات PSTN');
+    }
   };
   useEffect(() => { loadAudit(); loadPstn(); }, []);
 
