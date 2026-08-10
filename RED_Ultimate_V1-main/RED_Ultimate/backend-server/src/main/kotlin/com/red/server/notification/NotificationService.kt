@@ -9,8 +9,11 @@ import java.util.UUID
 /**
  * 🔔 YOUNES Notification Service
  * إدارة الإشعارات باستخدام Redis Lists + Hashes
+ *
+ * اسم bean صريح: يوجد NotificationService آخر (واجهة بريد/SMS) في حزمة services،
+ * وبلا اسم صريح يتصادم الاسم الافتراضي ويرفض Spring الإقلاع بـ ConflictingBeanDefinition.
  */
-@Service
+@Service("inAppNotificationService")
 class NotificationService(
     private val redis: RedisTemplate<String, String>
 ) {
