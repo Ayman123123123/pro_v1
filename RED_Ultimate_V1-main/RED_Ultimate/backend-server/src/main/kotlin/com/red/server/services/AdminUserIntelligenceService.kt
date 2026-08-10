@@ -32,7 +32,7 @@ data class AdminUserOverview(
     val redCalls: Long,
     val pstnCalls: Long,
     val passwordResetRequired: Boolean,
-    val remoteWipeStatus: String,
+    val remoteWipeStatus: String?,
     val managedDeviceWipeAllowed: Boolean,
     val securityEvents: List<AdminUserSecurityEvent>
 )

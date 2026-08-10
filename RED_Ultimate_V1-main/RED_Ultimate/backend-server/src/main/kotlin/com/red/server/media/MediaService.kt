@@ -3,6 +3,7 @@ package com.red.server.media
 import com.red.server.social.UuidV7
 import io.minio.BucketExistsArgs
 import io.minio.GetObjectArgs
+import io.minio.ListObjectsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
@@ -12,8 +13,17 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
+import java.awt.Color
+import java.awt.Font
+import java.awt.Graphics2D
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.io.File
 import java.io.OutputStream
+import java.util.concurrent.TimeUnit
+import javax.imageio.ImageIO
 import java.util.UUID
+import kotlin.jvm.JvmStatic
 
 @Service
 class MediaService(
@@ -183,7 +193,7 @@ class MediaService(
             io.minio.ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
         )
         for (item in result) {
-            val obj = item.getOrNull() ?: continue
+            val obj = try { item.get() } catch (_: Exception) { continue }
             keys += obj.objectName()
             if (keys.size >= limit) break
         }

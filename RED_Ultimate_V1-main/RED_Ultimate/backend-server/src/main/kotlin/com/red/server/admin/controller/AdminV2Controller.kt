@@ -88,7 +88,7 @@ class AdminV2Controller(
         @RequestParam(required = false) sortDir: String? = "desc",
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir), sortBy ?: "createdAt")
+        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir ?: "desc"), sortBy ?: "createdAt")
         val allUsers = users.findAll(pageable)
 
         val filtered = allUsers.content.filter { user ->
@@ -144,7 +144,7 @@ class AdminV2Controller(
             targetType = "USER",
             targetId = userId
         )
-        return ResponseEntity.ok(mapOf(
+        return ResponseEntity.ok(mapOf<String, Any>(
             "id" to user.id,
             "redId" to user.redId,
             "username" to user.username,
@@ -154,10 +154,10 @@ class AdminV2Controller(
             "pstnEnabled" to user.pstnEnabled,
             "pstnDailyLimit" to user.pstnDailyLimit,
             "createdAt" to user.createdAt,
-            "approvedAt" to user.approvedAt,
-            "approvedBy" to user.approvedBy,
-            "rejectionReason" to user.rejectionReason,
-            "lastSeen" to user.lastSeen
+            "approvedAt" to user.approvedAt as Any?,
+            "approvedBy" to user.approvedBy as Any?,
+            "rejectionReason" to user.rejectionReason as Any?,
+            "lastSeen" to user.lastSeen as Any?
         ))
     }
 
