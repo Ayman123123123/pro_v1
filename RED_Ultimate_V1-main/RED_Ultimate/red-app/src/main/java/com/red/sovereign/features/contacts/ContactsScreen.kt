@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.ui.theme.AqyalCyanGlow
@@ -37,8 +38,13 @@ fun ContactsScreen(
     directory: DirectoryViewModel,
     onBack: () -> Unit,
     onChat: (PublicRedProfile) -> Unit,
-    onCall: (PublicRedProfile, Boolean) -> Unit
+    onCall: (PublicRedProfile, Boolean) -> Unit,
+    onCreateGroup: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val tokens = remember { TokenStore(context.applicationContext) }
+    val myRedId = tokens.redId.orEmpty()
+    val myUsername = tokens.username.orEmpty()
     var query by remember { mutableStateOf("") }
     var showQrScanner by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
@@ -62,9 +68,9 @@ fun ContactsScreen(
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(vertical = 8.dp)) {
             item {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ContactActionRow(Icons.Rounded.GroupAdd, AqyalGold, "مجموعة جديدة", "أنشئ مجموعة مشفرة") {}
-                    ContactActionRow(Icons.Rounded.PersonAdd, YounesEmerald, "جهة اتصال جديدة", "أضف عبر RED ID أو username") {}
-                    ContactActionRow(Icons.Default.Share, AqyalCyanGlow, "دعوة عبر RED ID", "شارك YNS-XXXX-XXXX") {}
+                    ContactActionRow(Icons.Rounded.GroupAdd, AqyalGold, "مجموعة جديدة", "أنشئ مجموعة مشفرة") { onCreateGroup() }
+                    ContactActionRow(Icons.Rounded.PersonAdd, YounesEmerald, "جهة اتصال جديدة", "أضف عبر RED ID أو username") { showQrScanner = true }
+                    ContactActionRow(Icons.Default.Share, AqyalCyanGlow, "دعوة عبر RED ID", "شارك $myRedId") { showShareSheet = true }
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("بحث في جهات الاتصال...") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -121,10 +127,12 @@ fun ContactsScreen(
         )
     }
 
-    // Share RED ID Sheet
+    // Share RED ID Sheet — بمعرّف المستخدم الحقيقي من الجلسة المحلية
     if (showShareSheet) {
         ShareRedIdSheet(
-            onDismiss = { showShareSheet = false }
+            onDismiss = { showShareSheet = false },
+            redId = myRedId.ifBlank { "YNS-XXXX-XXXX" },
+            displayName = myUsername.ifBlank { "مستخدم يونس" }
         )
     }
 }

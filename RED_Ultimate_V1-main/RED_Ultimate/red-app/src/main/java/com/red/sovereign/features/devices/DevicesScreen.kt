@@ -19,7 +19,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.auth.ApiResult
+import com.red.sovereign.auth.DevicesApi
+import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.ui.theme.SovereignColors
+import kotlinx.coroutines.launch
 
 /**
  * 📱 YOUNES Devices Screen — الأجهزة النشطة
@@ -52,32 +56,42 @@ fun DevicesScreen(
     onLogoutDevice: (String) -> Unit = {},
     onNavigateToDinstar: (() -> Unit)? = null
 ) {
-    var devices by remember {
-        mutableStateOf(
-            listOf(
-                DeviceSession(
-                    id = "current",
-                    deviceName = "هاتف يونس الرئيسي",
-                    deviceType = DeviceType.ANDROID,
-                    platform = "Android 14",
-                    lastActiveAt = "الآن",
-                    ipAddress = "192.168.1.5",
-                    isCurrentDevice = true
-                ),
-                DeviceSession(
-                    id = "dinstar_gw",
-                    deviceName = "بوابة DINSTAR السيادية",
-                    deviceType = DeviceType.DINSTAR,
-                    platform = "Firmware 04240302",
-                    lastActiveAt = "متصل",
-                    ipAddress = "192.168.11.1",
-                    isDinstar = true,
-                    signalPercent = 85,
-                    portCount = 8
-                )
-            )
-        )
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val api = remember { DevicesApi(TokenStore(context.applicationContext)) }
+    var devices by remember { mutableStateOf<List<DeviceSession>>(emptyList()) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var reloadTrigger by remember { mutableIntStateOf(0) }
+
+    // 📡 جلب الأجهزة الحقيقية من الخادم (GET /api/devices) — لا بيانات وهمية
+    suspend fun reload() {
+        loading = true
+        when (val result = api.list()) {
+            is ApiResult.Success -> {
+                loadError = null
+                devices = result.value.map { remote ->
+                    DeviceSession(
+                        id = remote.id,
+                        deviceName = remote.deviceName,
+                        deviceType = when {
+                            remote.platform.contains("android", true) -> DeviceType.ANDROID
+                            remote.platform.contains("ios", true) -> DeviceType.IOS
+                            remote.platform.contains("web", true) -> DeviceType.WEB
+                            else -> DeviceType.UNKNOWN
+                        },
+                        platform = remote.platform,
+                        lastActiveAt = if (remote.status == "APPROVED") "نشط" else remote.status,
+                        ipAddress = remote.identityFingerprint?.take(11) ?: "—",
+                        isCurrentDevice = false
+                    )
+                }
+            }
+            is ApiResult.Error -> loadError = result.message
+        }
+        loading = false
     }
+    LaunchedEffect(reloadTrigger) { reload() }
 
     Column(
         modifier = Modifier
@@ -98,11 +112,28 @@ fun DevicesScreen(
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("الأجهزة المتصلة", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.White)
-                Text("${devices.size} جلسات نشطة", fontSize = 12.sp, color = Color.Gray)
+                Text(if (loading) "جارٍ التحميل…" else "${devices.size} جلسات نشطة", fontSize = 12.sp, color = Color.Gray)
+            }
+            // 🔄 زر تحديث يدوي
+            IconButton(onClick = { /* إعادة الجلب */ reloadTrigger++ }) {
+                Icon(Icons.Rounded.Refresh, "تحديث", tint = SovereignColors.Cyan)
             }
         }
 
         HorizontalDivider(color = Color.Gray.copy(alpha = 0.1f))
+
+        // ⚠️ شريط خطأ الشبكة — مع إعادة المحاولة
+        loadError?.let { err ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF43F5E).copy(alpha = 0.12f)),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("تعذر جلب الأجهزة: $err", color = Color(0xFFF43F5E), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { reloadTrigger++ }) { Text("إعادة") }
+                }
+            }
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -134,8 +165,16 @@ fun DevicesScreen(
                 DeviceCard(
                     device = device,
                     onLogout = {
-                        onLogoutDevice(device.id)
-                        devices = devices.filter { it.id != device.id }
+                        // 🔐 إلغاء حقيقي عبر DELETE /api/devices/{id} — يبطل توكنات الجهاز في الخادم
+                        scope.launch {
+                            when (api.revoke(device.id)) {
+                                is ApiResult.Success -> {
+                                    devices = devices.filter { it.id != device.id }
+                                    onLogoutDevice(device.id)
+                                }
+                                is ApiResult.Error -> loadError = "تعذر فصل الجهاز"
+                            }
+                        }
                     },
                     onNavigateToDinstar = onNavigateToDinstar
                 )
