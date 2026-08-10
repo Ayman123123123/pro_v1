@@ -107,8 +107,15 @@ class MediaSecurityScanner {
             header[10] == 0x79.toByte() && header[11] == 0x70.toByte()) {
             return true
         }
-        // fallback: box type في أي مكان (بعض الـ fragmented MP4)
-        return header.indexOf("ftyp".toByteArray(Charsets.US_ASCII)) in 4..11
+        // fallback: box type في أي موضع ضمن أول 12 بايت (بعض الـ fragmented MP4)
+        // ByteArray.indexOf يقبل عنصراً واحداً فقط — نبحث يدوياً عن التسلسل f,t,y,p
+        val f = 0x66.toByte(); val t = 0x74.toByte(); val y = 0x79.toByte(); val p = 0x70.toByte()
+        for (i in 4..8) {
+            if (i + 3 < header.size && header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
+                return true
+            }
+        }
+        return false
     }
 
     /**

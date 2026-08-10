@@ -88,7 +88,7 @@ class AdminV2Controller(
         @RequestParam(required = false) sortDir: String? = "desc",
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir), sortBy ?: "createdAt")
+        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir ?: "desc"), sortBy ?: "createdAt")
         val allUsers = users.findAll(pageable)
 
         val filtered = allUsers.content.filter { user ->
@@ -132,7 +132,7 @@ class AdminV2Controller(
     fun getUserDetail(
         @PathVariable userId: String,
         authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
+    ): ResponseEntity<Map<String, Any?>> {
         val user = users.findById(UUID.fromString(userId)).orElse(null)
             ?: return ResponseEntity.notFound().build()
         val adminId = UUID.fromString(authentication.name)

@@ -94,7 +94,7 @@ class MessageService(
     }
 
     fun pendingFor(receiverId: String, receiverDeviceId: Int, limit: Int = 500): List<MessageDocument> = mongo.find(
-        Query(Criteria.where("receiverId").`is`(receiverId).and("receiverDeviceId").`is`(receiverDeviceId).and("status").`is`("SENT").and("deletedAt").`is`(null))
+        Query(Criteria.where("receiverId").`is`(receiverId).and("receiverDeviceId").`is`(receiverDeviceId).and("status").`is`("SENT").and("deletedForEveryoneAt").`is`(null))
             .with(Sort.by(Sort.Direction.ASC, "createdAt")).limit(limit.coerceIn(1, 500)),
         MessageDocument::class.java
     )
@@ -103,7 +103,7 @@ class MessageService(
         val criteria = Criteria.where("conversationId").`is`(conversationId)
             .andOperator(Criteria().orOperator(Criteria.where("senderId").`is`(userId), Criteria.where("receiverId").`is`(userId)))
             .and("sequenceNumber").gte(fromSequence.coerceAtLeast(0))
-            .and("deletedAt").`is`(null)
+            .and("deletedForEveryoneAt").`is`(null)
         if (toSequence > 0) criteria.and("sequenceNumber").lte(toSequence)
         return mongo.find(Query(criteria).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(limit.coerceIn(1, 500)), MessageDocument::class.java)
     }
