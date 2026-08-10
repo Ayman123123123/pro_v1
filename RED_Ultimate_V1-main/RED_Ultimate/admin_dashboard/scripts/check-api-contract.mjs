@@ -100,8 +100,11 @@ function collect(file) {
   while ((m = re.exec(text)) !== null) {
     const raw = m[1];
     if (!raw.startsWith('/')) continue; // relative templates or objects
-    // extract method if statically visible on the same statement
-    const after = text.slice(m.index, m.index + 300);
+    // Extract method only from the current apiFetch/fetch statement.
+    // The old 300-char window could accidentally read method: from the next helper
+    // in api.ts and report false POST/DELETE contract failures.
+    const statementEnd = text.indexOf(';', m.index);
+    const after = text.slice(m.index, statementEnd === -1 ? m.index + 300 : statementEnd);
     const methodMatch = after.match(/method\s*:\s*['"]([A-Z]+)['"]/);
     found.push({ file: relative(ROOT, file), raw, method: methodMatch ? methodMatch[1] : 'GET', normalized: normalize(raw) });
   }

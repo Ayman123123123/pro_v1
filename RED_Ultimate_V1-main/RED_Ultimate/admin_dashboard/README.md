@@ -1,21 +1,72 @@
-# admin_dashboard/ — لوحة الإدارة القانونية
+# admin_dashboard/ — لوحة الإدارة القانونية الوحيدة
 
-> **الحالة:** نشط — تُبنى في CI وDocker Compose
+> **الحالة:** نشط — هذه هي لوحة الإدارة الوحيدة المعتمدة بعد توحيد نسخ `pro/` و`project/pro/` وحذف لوحات الأدمن المكررة.
 
 ## الوظيفة
 
-تطبيق React 19 + TypeScript/Vite/Ant Design لموافقة الحسابات والأجهزة، ضبط صلاحية DINSTAR وحدودها، عرض الصحة وسجل التدقيق. يتصل فقط بواجهات backend عبر Nginx؛ لا يتصل بقواعد البيانات مباشرة.
+تطبيق React 19 + TypeScript/Vite/Ant Design لإدارة منصة YOUNES/RED محليًا:
 
-## المحتوى
+- دخول المسؤول عبر `/api/auth/login`.
+- لوحة رئيسية ومقاييس حية.
+- إدارة المستخدمين والموافقات والأجهزة.
+- مراقبة المحتوى والبلاغات والإشراف.
+- إدارة الإعلانات وأعلام الميزات والنسخ الاحتياطية.
+- مركز الأمان: Kill Switch، remote wipe، صلاحيات PSTN، وسجل التدقيق.
+- DINSTAR/PSTN، SFU/media، الرسائل، الإشعارات، البنية التحتية، والسجلات الحية.
 
-`src/` الصفحات وعميل API، `Dockerfile` بناء إنتاجي، `dashboard.nginx.conf` تقديم SPA.
+اللوحة لا تتصل بقاعدة البيانات مباشرة؛ كل شيء يمر عبر backend/Nginx.
 
-## العلاقة بباقي المشروع
+## قرار التوحيد
 
-- راجع [`../settings.gradle.kts`](../settings.gradle.kts) لمعرفة ما يدخل البناء فعلًا؛ وجود المصدر لا يعني أنه مفعّل.
-- الحدود القانونية موثقة في [`../W0_MODULE_BOUNDARIES.md`](../W0_MODULE_BOUNDARIES.md).
-- خريطة النظام الكاملة في [`../docs/01-PROJECT-OVERVIEW.md`](../docs/01-PROJECT-OVERVIEW.md).
+تم اختيار هذه النسخة لأنها الأحدث والأجمل والأوسع. ميزات النسخ القديمة دُمجت داخل صفحات حديثة، ثم حُذفت نسخ لوحة الأدمن المكررة من:
+
+```text
+pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
+project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
+```
+
+راجع تقرير التوحيد:
+
+```text
+../../ADMIN_DASHBOARD_CONSOLIDATION_AR.md
+```
+
+## التشغيل
+
+```bash
+npm install
+RED_API_TARGET=http://127.0.0.1:8080 npm run dev
+```
+
+إنتاجيًا عبر Docker Compose، Nginx الرئيسي يمرر:
+
+```text
+/       -> admin-panel:3000
+/api    -> backend:8080
+/ws     -> backend WebSocket
+/sfu    -> media-sfu:4000
+```
 
 ## التحقق
 
-لا تُعلن ميزة هذا المجلد مكتملة إلا إذا دخلت بوابة البناء المناسبة واختبار runtime/جهازها. أسرار `.env` و`secrets/` ومفاتيح Android الخاصة لا تُحفظ في Git.
+```bash
+npm run build:check
+npm run check:api
+npm run build
+```
+
+`npm run build` صار صارمًا: TypeScript check + Vite bundle.
+
+## الملفات الأساسية
+
+- `src/App.tsx` — shell الحديث الوحيد.
+- `src/pages/Login.tsx` — دخول حديث مع فحص `/health`.
+- `src/api.ts` — عميل API موحد.
+- `scripts/check-api-contract.mjs` — فاحص عقد الواجهة والخادم.
+- `Dockerfile` + `dashboard.nginx.conf` — بناء وتقديم الإنتاج.
+
+## ملاحظات أمان مستقبلية
+
+- نقل refresh token من `localStorage` إلى HttpOnly cookie عند الانتقال للإنتاج العام.
+- عدم تمرير tokens في query string لأي SSE/WebSocket إلا بتذكرة قصيرة العمر.
+- إبقاء `RED_API_TARGET` واضحًا في التطوير لتجنب proxy loop.

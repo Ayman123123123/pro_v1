@@ -29,7 +29,6 @@ import './styles.css';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MasterOverview = lazy(() => import('./pages/MasterOverview'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
-const MasterLayout = lazy(() => import('./pages/MasterLayout'));
 const DinstarControl = lazy(() => import('./pages/DinstarControl'));
 const Diagnostics = lazy(() => import('./pages/Diagnostics'));
 const Reports = lazy(() => import('./pages/Reports'));
@@ -66,7 +65,6 @@ type PageKey =
   | 'logs'
   | 'media'
   | 'infrastructure'
-  | 'master'
   | 'dinstar'
   | 'monitor'
   | 'diagnostics';
@@ -90,8 +88,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'logs', icon: <FileSearchOutlined />, label: 'سجل النظام الحي', group: 'system' },
   { key: 'media', icon: <VideoCameraOutlined />, label: 'مركز الوسائط', group: 'system' },
   { key: 'infrastructure', icon: <CloudServerOutlined />, label: 'البنية التحتية', group: 'system' },
-  // Sovereign — التحكم السيادي + DINSTAR + مراقبة + تشخيص + واجهة قديمة للتوافق
-  { key: 'master', icon: <SafetyOutlined />, label: 'التحكم السيادي (قديم)', group: 'sovereign' },
+  // Sovereign — DINSTAR + مراقبة + تشخيص
   { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
@@ -156,7 +153,6 @@ export default function App() {
       case 'logs': return <SystemLogs />;
       case 'media': return <MediaCenter />;
       case 'infrastructure': return <InfrastructureCenter />;
-      case 'master': return <MasterLayout />;
       case 'dinstar': return <DinstarControl />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;

@@ -31,8 +31,8 @@ class AdminController(
     @GetMapping("/users/pending")
     fun getPendingUsers() = ResponseEntity.ok(approvalService.getPendingList())
 
-    @GetMapping("/users")
-    fun getUsers() = users.findAllByOrderByCreatedAtDesc().map { user ->
+    @GetMapping("/users/legacy")
+    fun getUsersLegacy() = users.findAllByOrderByCreatedAtDesc().map { user ->
         user.toResponse(devices.findAllByUserIdOrderByCreatedAtAsc(user.id))
     }
 

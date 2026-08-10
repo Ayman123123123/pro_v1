@@ -268,77 +268,6 @@ export async function getRealtimeMetrics() {
   return res.json();
 }
 
-// ━━━━━━━━━━━━━━━━ 📞 Calls Management ━━━━━━━━━━━━━━━━
-export async function getCallHistory(params: {
-  page?: number;
-  size?: number;
-  type?: string;
-  status?: string;
-  userId?: string;
-  startDate?: string;
-  endDate?: string;
-} = {}) {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined) searchParams.set(k, String(v));
-  });
-  const res = await apiFetch(`/api/admin/calls?${searchParams}`);
-  return res.json();
-}
-
-export async function terminateCall(callId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/calls/${callId}/terminate`, {
-    method: 'POST',
-    body: JSON.stringify({ reason })
-  });
-  return res.json();
-}
-
-// ━━━━━━━━━━━━━━━━ 📱 DINSTAR Management ━━━━━━━━━━━━━━━━
-export async function getDinstarPorts() {
-  const res = await apiFetch('/api/admin/dinstar/ports');
-  return res.json();
-}
-
-export async function toggleDinstarPort(portId: number, enabled: boolean) {
-  const res = await apiFetch(`/api/admin/dinstar/ports/${portId}/toggle`, {
-    method: 'POST',
-    body: JSON.stringify({ enabled })
-  });
-  return res.json();
-}
-
-export async function resetDinstarBalance(portId: number, amount: number) {
-  const res = await apiFetch(`/api/admin/dinstar/ports/${portId}/balance`, {
-    method: 'POST',
-    body: JSON.stringify({ amount })
-  });
-  return res.json();
-}
-
-export async function getDinstarStats() {
-  const res = await apiFetch('/api/admin/dinstar/stats');
-  return res.json();
-}
-
-// ━━━━━━━━━━━━━━━━ 👥 Groups Management ━━━━━━━━━━━━━━━━
-export async function getGroups(params: { page?: number; size?: number; search?: string } = {}) {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined) searchParams.set(k, String(v));
-  });
-  const res = await apiFetch(`/api/admin/groups?${searchParams}`);
-  return res.json();
-}
-
-export async function deleteGroup(groupId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/groups/${groupId}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ reason })
-  });
-  return res.json();
-}
-
 // ━━━━━━━━━━━━━━━━ 📝 Reports & Moderation ━━━━━━━━━━━━━━━━
 export async function getReports(params: {
   page?: number;
@@ -376,35 +305,6 @@ export async function assignReport(reportId: string, adminId: string) {
     method: 'POST',
     body: JSON.stringify({ adminId })
   });
-  return res.json();
-}
-
-// ━━━━━━━━━━━━━━━━ 📦 Media Management ━━━━━━━━━━━━━━━━
-export async function getMediaObjects(params: {
-  page?: number;
-  size?: number;
-  mimeType?: string;
-  userId?: string;
-  orphaned?: boolean;
-} = {}) {
-  const searchParams = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined) searchParams.set(k, String(v));
-  });
-  const res = await apiFetch(`/api/admin/media?${searchParams}`);
-  return res.json();
-}
-
-export async function deleteMedia(mediaKey: string, reason: string) {
-  const res = await apiFetch(`/api/admin/media/${encodeURIComponent(mediaKey)}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ reason })
-  });
-  return res.json();
-}
-
-export async function getStorageStats() {
-  const res = await apiFetch('/api/admin/storage/stats');
   return res.json();
 }
 
@@ -830,7 +730,7 @@ export async function updatePstnAccess(userId: string, enabled: boolean, dailyLi
   return res.json();
 }
 
-export async function getPstnUsers(): Promise<any[]> {
+export async function getPstnUsers(): Promise<any> {
   const res = await apiFetch('/api/admin/users');
   return res.json();
 }

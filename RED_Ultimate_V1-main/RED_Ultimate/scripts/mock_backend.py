@@ -73,6 +73,22 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+
+        if path == "/api/admin/dinstar/inventory":
+            self._set_headers(200)
+            gateways = [{
+                "gatewayId": "gateway_uuid_001",
+                "name": "UC2000-VE-8G Main",
+                "model": "UC2000-VE-8G",
+                "ip": "192.168.11.1",
+                "ports": [
+                    {"portIndex": p["index"], "operator": p["operator"], "status": p["status"], "signal": p["signal"], "numberMasked": p["numberMasked"], "note": "mock inventory"}
+                    for p in YEMEN_OPERATORS
+                ]
+            }]
+            self.wfile.write(json.dumps(gateways).encode())
+            return
+
         if path == "/api/admin/dinstar/status":
             self._set_headers(200)
             self.wfile.write(json.dumps(YEMEN_OPERATORS).encode())
@@ -137,6 +153,121 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
                 "gsmPorts": 8,
                 "registeredPorts": 8
             }).encode())
+            return
+
+
+        # Admin dashboard unified mock data (development only)
+        if path == "/api/admin/dashboard/summary":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "analytics": {"totalUsers": 128, "approvedUsers": 116, "pendingUsers": 3, "bannedUsers": 2, "newUsers24h": 9, "approvalRate": 91.4},
+                "pendingReports": 4,
+                "recentCriticalAlerts": 0,
+                "degradedComponents": 0,
+                "activeBackups": 0,
+                "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }).encode())
+            return
+
+        if path == "/api/admin/health":
+            self._set_headers(200)
+            self.wfile.write(json.dumps([
+                {"id": "backend", "component": "backend", "status": "HEALTHY", "cpuUsage": 18.0, "memoryUsage": 42.0, "activeConnections": 24, "averageResponseMs": 35, "errorRate": 0.01, "lastCheckAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                {"id": "postgres", "component": "postgres", "status": "HEALTHY", "cpuUsage": 8.0, "memoryUsage": 31.0, "activeConnections": 12, "averageResponseMs": 9, "errorRate": 0.0, "lastCheckAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                {"id": "sfu", "component": "media-sfu", "status": "HEALTHY", "cpuUsage": 11.0, "memoryUsage": 28.0, "activeConnections": 5, "averageResponseMs": 22, "errorRate": 0.0, "lastCheckAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            ]).encode())
+            return
+
+        if path == "/api/admin/metrics/realtime":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({
+                "users": {"online": 42, "approved": 116, "pending": 3},
+                "health": {},
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            }).encode())
+            return
+
+        if path == "/api/admin/analytics":
+            self._set_headers(200)
+            rows = []
+            for i in range(7):
+                rows.append({
+                    "statDate": f"2026-08-{4+i:02d}", "totalUsers": 100 + i * 4, "newUsers": 3 + i,
+                    "activeUsersDau": 40 + i * 2, "messagesSent": 900 + i * 120,
+                    "voiceMessages": 80 + i * 9, "callsTotal": 30 + i * 4, "callsPstn": 8 + i,
+                    "dinstarBalanceRemaining": 120000 - i * 2500, "storageUsedBytes": 2400000000 + i * 110000000
+                })
+            self.wfile.write(json.dumps(rows).encode())
+            return
+
+        if path == "/api/admin/users":
+            self._set_headers(200)
+            users = [
+                {"id":"user_uuid_001","redId":"YNS-0001","username":"admin","displayName":"مسؤول يونس","status":"APPROVED","role":"ADMIN","pstnEnabled":True,"pstnDailyLimit":100,"createdAt":"2026-08-01T10:00:00Z"},
+                {"id":"user_uuid_002","redId":"YNS-0002","username":"ahmed","displayName":"أحمد","status":"PENDING","role":"USER","pstnEnabled":False,"pstnDailyLimit":0,"createdAt":"2026-08-09T10:00:00Z"},
+                {"id":"user_uuid_003","redId":"YNS-0003","username":"ali","displayName":"علي","status":"APPROVED","role":"USER","pstnEnabled":True,"pstnDailyLimit":10,"createdAt":"2026-08-08T10:00:00Z"}
+            ]
+            self.wfile.write(json.dumps({"content": users, "page":0, "size":20, "totalElements":len(users), "totalPages":1}).encode())
+            return
+
+        if path == "/api/admin/users/pending":
+            self._set_headers(200)
+            self.wfile.write(json.dumps([{"id":"user_uuid_002","redId":"YNS-0002","username":"ahmed","displayName":"أحمد","createdAt":"2026-08-09T10:00:00Z","devices":[]}]).encode())
+            return
+
+        m_user_overview = re.match(r"^/api/admin/users/([^/]+)/overview$", path)
+        if m_user_overview:
+            self._set_headers(200)
+            uid = m_user_overview.group(1)
+            self.wfile.write(json.dumps({"user":{"id":uid,"redId":"YNS-0001","username":"admin","displayName":"مسؤول يونس"},"online":True,"messagesSent":1200,"messagesReceived":1180,"messages24h":87,"callsMade":14,"callsReceived":9,"redCalls":17,"pstnCalls":6,"passwordResetRequired":False,"remoteWipeStatus":"NONE","managedDeviceWipeAllowed":True,"securityEvents":[]}).encode())
+            return
+
+        if path.startswith("/api/admin/audit"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"content":[{"id":"audit_1","action":"ADMIN_LOGIN","actorId":"admin_uuid_001","targetId":"dashboard","createdAt":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}],"page":0,"size":20,"totalElements":1,"totalPages":1}).encode())
+            return
+
+        if path.startswith("/api/admin/reports") or path.startswith("/api/admin/security/alerts"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"content":[],"page":0,"size":20,"totalElements":0,"totalPages":0}).encode())
+            return
+
+        if path.startswith("/api/admin/announcements") or path.startswith("/api/admin/backups") or path.startswith("/api/admin/feature-flags"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps([]).encode())
+            return
+
+        if path.startswith("/api/admin/content/"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"content":[],"page":0,"size":20,"totalElements":0,"totalPages":0}).encode())
+            return
+
+        if path.startswith("/api/notifications"):
+            self._set_headers(200)
+            if path.endswith("/unread-count"):
+                self.wfile.write(json.dumps({"count": 0}).encode())
+            else:
+                self.wfile.write(json.dumps({"content":[],"page":0,"size":50,"totalElements":0,"totalPages":0}).encode())
+            return
+
+        if path.startswith("/api/social/"):
+            self._set_headers(200)
+            self.wfile.write(json.dumps({}).encode())
+            return
+
+        if path == "/api/master/v1/stats/realtime":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"active_users":42,"total_messages":12480,"messages_24h":1248,"pending_approvals":3,"system_load":"12%","db_health":"UP","gsm_signal":"STABLE","db_storage":"4.2 GB"}).encode())
+            return
+
+        if path == "/api/master/v1/media/active-calls":
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"activeCalls":1,"rooms":2,"peers":5}).encode())
+            return
+
+        if path == "/api/master/v1/hardware/dinstar/slots":
+            self._set_headers(200)
+            self.wfile.write(json.dumps(YEMEN_OPERATORS).encode())
             return
 
         # Overview & Master Diagnostics
@@ -250,6 +381,21 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
+
+        if re.match(r"^/api/admin/users/[^/]+/temporary-password$", path):
+            self._set_headers(204)
+            return
+
+        if re.match(r"^/api/admin/users/[^/]+/remote-app-wipe$", path):
+            self._set_headers(202)
+            self.wfile.write(json.dumps({"commandId": f"wipe_{int(time.time())}", "status": "QUEUED"}).encode())
+            return
+
+        if path in ["/api/admin/security/wipe", "/api/admin/security/kill-switch"]:
+            self._set_headers(200)
+            self.wfile.write(json.dumps({"status": "SENT", "commandId": f"security_{int(time.time())}"}).encode())
+            return
+
         if path == "/api/pstn/calls":
             num = data.get("number", "777123456")
             self._set_headers(200)
@@ -265,6 +411,29 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
 
         self._set_headers(200)
         self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
+
+
+    def do_PUT(self):
+        path = urlparse(self.path).path
+        m = re.match(r"^/api/admin/dinstar/inventory/([^/]+)/ports/(\d+)$", path)
+        if m:
+            idx = int(m.group(2))
+            port = dict(YEMEN_OPERATORS[idx]) if 0 <= idx < len(YEMEN_OPERATORS) else {"index": idx}
+            port["portIndex"] = idx
+            port["updated"] = True
+            self._set_headers(200)
+            self.wfile.write(json.dumps(port).encode())
+            return
+        self._set_headers(200)
+        self.wfile.write(json.dumps({"status": "OK", "path": path}).encode())
+
+    def do_PATCH(self):
+        self._set_headers(200)
+        self.wfile.write(json.dumps({"status": "OK", "path": urlparse(self.path).path}).encode())
+
+    def do_DELETE(self):
+        self._set_headers(200)
+        self.wfile.write(json.dumps({"status": "OK", "path": urlparse(self.path).path}).encode())
 
     def log_message(self, format, *args):
         pass  # Quiet logging

@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 8088",
     "start": "vite --host 0.0.0.0 --port 8088",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "build:check": "tsc --noEmit",
+    "check:api": "node scripts/check-api-contract.mjs",
+    "check": "npm run check:api && npm run build:check",
     "preview": "vite preview --host 0.0.0.0 --port 8088",
+    "build:fast": "vite build",
     "build:strict": "tsc --noEmit && vite build"
   },
   "dependencies": {
