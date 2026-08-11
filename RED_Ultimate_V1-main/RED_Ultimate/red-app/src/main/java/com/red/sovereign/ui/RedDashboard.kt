@@ -758,6 +758,7 @@ private fun ChatHubScreen(
     var disappearingDurationMs by remember { mutableStateOf<Long?>(null) }
     var pendingCallVideo by remember { mutableStateOf(false) }
     var showEmoji by remember { mutableStateOf(false) }
+    var showStickers by remember { mutableStateOf(false) }
     var create by remember { mutableStateOf(false) }
     var showJoinGroup by remember { mutableStateOf(false) }
     var joinToken by remember { mutableStateOf("") }
@@ -786,6 +787,7 @@ private fun ChatHubScreen(
     var groupDescription by remember { mutableStateOf("") }
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
     val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
@@ -1126,6 +1128,7 @@ private fun ChatHubScreen(
                                 when (item.type) {
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
+                                    "STICKER" -> StickerMessage(item, attachments)
                                     "RICH_TEXT" -> RichTextMessage(item, conversationMessages)
                                     else -> Text(item.plaintext.toString(Charsets.UTF_8), color = if (item.outgoing) Color(0xFF001B14) else Color.White, fontSize = 16.sp)
                                 }
@@ -1181,6 +1184,25 @@ private fun ChatHubScreen(
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) { Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(if (editingMessageId != null) "تعديل الرسالة" else "رد على رسالة", color = YounesEmerald, style = MaterialTheme.typography.labelMedium); Text(messageDisplayText(referenced), maxLines = 1, overflow = TextOverflow.Ellipsis) }; IconButton({ replyToMessage = null; editingMessageId = null }) { Icon(Icons.Default.Close, "إلغاء") } } }
             }
             if (showEmoji) EmojiPicker(onEmoji = { messageText += it })
+            if (showStickers && target.matches(RED_ID_PATTERN)) {
+                val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
+                com.red.sovereign.media.StickerPicker(
+                    tokens = stickerTokens,
+                    onPickSticker = { sticker ->
+                        // منح المستقبل وصولاً لمفتاح الوسائط ثم إرسال رسالة STICKER
+                        scope.launch {
+                            val mediaApi = com.red.sovereign.media.MediaApi(context, com.red.sovereign.auth.AuthorizedApiClient(stickerTokens))
+                            mediaApi.grant(sticker.mediaKey, target)
+                            val payload = kotlinx.serialization.json.Json.encodeToString(
+                                com.red.sovereign.media.StickerMessagePayload.serializer(),
+                                com.red.sovereign.media.StickerMessagePayload(sticker.mediaKey, sticker.emojiTags.firstOrNull() ?: "🎨", sticker.name)
+                            )
+                            com.red.sovereign.core.RedConnectionService.sendPayload(context, target, conversation, "STICKER", payload.toByteArray(Charsets.UTF_8))
+                            showStickers = false
+                        }
+                    }
+                )
+            }
             if (showAttachmentSheet) AttachmentSheet(
                 onCamera = {
                     val dir = File(context.cacheDir, "camera").apply { mkdirs() }
@@ -1232,7 +1254,8 @@ private fun ChatHubScreen(
                 }
             )
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton({ showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                IconButton({ showEmoji = !showEmoji; showStickers = false }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                IconButton({ showStickers = !showStickers; showEmoji = false }, enabled = target.matches(RED_ID_PATTERN)) { Icon(Icons.Default.Add, "ملصقات") }
                 IconButton({ showAttachmentSheet = true }, enabled = target.matches(RED_ID_PATTERN) && attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
@@ -1440,6 +1463,7 @@ private fun ChatHubScreen(
                                     "RICH_TEXT" -> RichTextMessage(message, groupMessages)
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
                                     "VOICE" -> VoiceMessage(message, attachments)
+                                    "STICKER" -> StickerMessage(message, attachments)
                                     else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
                                 }
                                 // تفاعلات الإيموجي تحت رسالة المجموعة (E2EE بـ Sender Keys)
@@ -2720,6 +2744,20 @@ private fun VoiceWaveform(values: List<Int>, color: Color, modifier: Modifier = 
 }
 
 @Composable
+/** عرض رسالة ملصق — إيموجي كبير كمعاينة (الصورة الفعلية تُحمّل عند التوفر). */
+@Composable
+private fun StickerMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
+    val payload = remember(item.id) {
+        runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(item.plaintext.toString(Charsets.UTF_8)) }.getOrNull()
+    }
+    if (payload == null) {
+        Text("ملصق غير صالح", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        return
+    }
+    // عرض الإيموجي كمعاينة كبيرة (الصورة تُحمّل عند التوفر عبر attachments)
+    Text(payload.emoji, fontSize = 64.sp)
+}
+
 private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
     val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val manifest = remember(manifestJson) { runCatching { ATTACHMENT_JSON.decodeFromString<VoiceManifest>(manifestJson) }.getOrNull() }

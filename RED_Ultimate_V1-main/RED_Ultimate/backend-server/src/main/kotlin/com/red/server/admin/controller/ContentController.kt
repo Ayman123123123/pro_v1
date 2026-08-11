@@ -399,4 +399,44 @@ class ContentController(
         val success = service.unsaveMessage(userId, UUID.fromString(messageId))
         return ResponseEntity.ok(mapOf("success" to success))
     }
+
+    // ━━━━━━━━━━━━━━━━ Stickers (للمستخدم) ━━━━━━━━━━━━━━━━
+    // الحزم الإدارية (إنشاء/نشر/حذف) أعلاه؛ هذه للمستخدم: استعراض + تثبيت.
+
+    /** الحزم المنشورة المتاحة لكل المستخدمين. */
+    @GetMapping("/sticker-packs/published")
+    fun getPublishedStickerPacks(): ResponseEntity<List<StickerPack>> =
+        ResponseEntity.ok(service.getPublishedStickerPacks())
+
+    /** الملصقات الفردية داخل حزمة (لعرضها في المنتقي). */
+    @GetMapping("/sticker-packs/{packId}/stickers")
+    fun getStickersInPack(@PathVariable packId: String): ResponseEntity<List<Sticker>> =
+        ResponseEntity.ok(service.getStickersInPack(UUID.fromString(packId)))
+
+    /** يثبّت المستخدم حزمة ملصقات (تظهر في منتقاه). */
+    @PostMapping("/sticker-packs/{packId}/install")
+    fun installStickerPack(@PathVariable packId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        return try {
+            val installed = service.installStickerPack(userId, UUID.fromString(packId))
+            ResponseEntity.ok(mapOf("success" to true, "installed" to installed))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("success" to false, "error" to (e.message ?: "NOT_FOUND")))
+        }
+    }
+
+    /** يُلغي تثبيت حزمة. */
+    @DeleteMapping("/sticker-packs/{packId}/install")
+    fun uninstallStickerPack(@PathVariable packId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        val success = service.uninstallStickerPack(userId, UUID.fromString(packId))
+        return ResponseEntity.ok(mapOf("success" to success))
+    }
+
+    /** حزم المستخدم المثبّتة. */
+    @GetMapping("/sticker-packs/installed")
+    fun getInstalledStickerPacks(authentication: Authentication): ResponseEntity<List<StickerPack>> {
+        val userId = UUID.fromString(authentication.name)
+        return ResponseEntity.ok(service.getInstalledStickerPacks(userId))
+    }
 }

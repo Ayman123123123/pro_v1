@@ -109,3 +109,12 @@ interface StickerPackRepository : JpaRepository<StickerPack, UUID> {
     fun findByCreatorIdOrderByCreatedAtDesc(creatorId: UUID): List<StickerPack>
     fun findByIsPublishedAndIsOfficial(isPublished: Boolean, isOfficial: Boolean): List<StickerPack>
 }
+
+interface StickerRepository : JpaRepository<Sticker, UUID> {
+    fun findByPackIdOrderByDisplayOrder(packId: UUID): List<Sticker>
+}
+
+interface UserStickerPackRepository : JpaRepository<UserStickerPack, UserStickerPackId> {
+    fun findByUserIdOrderByInstalledAtDesc(userId: UUID): List<UserStickerPack>
+    fun findByIdUserIdAndIdPackId(userId: UUID, packId: UUID): UserStickerPack?
+}

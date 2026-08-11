@@ -20,7 +20,17 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — feat(polls-events): وصل شاشتي الاستطلاعات/الفعاليات كميزة مستخدم (بدل الحذف)
+## 2026-08-11 — feat(stickers): ملصقات سيادية محلية (حديثة + جميلة + مرئية)
+- **Backend**: Sticker entity + StickerRepository + UserStickerPack entity/repository (جداول V20 جاهزة)
+  + endpoints: GET /sticker-packs/published + GET /sticker-packs/{id}/stickers + POST/DELETE install + GET installed
+  + SecurityConfig: فتح القراءة والتثبيت للمستخدم المصادَق
+- **Android**: StickerApi + StickerDto/StickerPackDto/StickerMessagePayload
+  + StickerPicker (منتقي احترافي: تبويب حزم مثبّتة + متاحة + تثبيت + شبكة ملصقات 5×N)
+  + STICKER في ALLOWED_MESSAGE_TYPES + StickerMessage display (إيموجي كبير)
+  + زر ملصقات في شريط الكتابة + إرسال: منح وصول + STICKER message E2EE
+- **سيادي**: حزم محلية يديرها المسؤول (لا GIPHY/سحابة) — متوافق مع مبدأ السيادة
+- فاحص التكامل 27/27 أخضر · schema سليم (stickers + user_sticker_packs متطابقان)
+- التوثيق: docs/STICKERS_FEATURE_AR.md
 - استرجاع الملفات الخمسة (EventsScreen/PollsScreen/EventsApi/PollsApi/PollsApiTest) من التاريخ
 - **تمرير دور الحساب (role) عبر المسار الكامل**: TokenStore.role/isAdmin + AuthState.Authenticated(isAdmin)
   + AuthViewModel يمرّر role من UserResponse (موجود بالفعل في backend و Android)

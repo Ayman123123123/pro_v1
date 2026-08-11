@@ -25,6 +25,8 @@ class ContentService(
     private val hashtagFollows: HashtagFollowRepository,
     private val savedMessages: SavedMessageRepository,
     private val stickerPacks: StickerPackRepository,
+    private val stickers: StickerRepository,
+    private val userStickerPacks: UserStickerPackRepository,
     private val json: ObjectMapper
 ) {
     // ━━━━━━━━━━━━━━━━ Polls ━━━━━━━━━━━━━━━━
@@ -347,5 +349,37 @@ class ContentService(
         return if (stickerPacks.existsById(packId)) {
             stickerPacks.deleteById(packId); true
         } else false
+    }
+
+    // ─── الملصقات للمستخدم (قراءة + تثبيت) ───────────────────────────────
+
+    /** الحزم المنشورة المتاحة لكل المستخدمين (المشتركين والمجانية). */
+    fun getPublishedStickerPacks(): List<StickerPack> =
+        stickerPacks.findByIsPublishedOrderByCreatedAtDesc(true)
+
+    /** الملصقات الفردية داخل حزمة (مرتبة بـ display_order). */
+    fun getStickersInPack(packId: UUID): List<Sticker> =
+        stickers.findByPackIdOrderByDisplayOrder(packId)
+
+    /** يثبّت مستخدم حزمة ملصقات (تظهر في منتقاه). */
+    fun installStickerPack(userId: UUID, packId: UUID): UserStickerPack {
+        require(stickerPacks.existsById(packId)) { "STICKER_PACK_NOT_FOUND" }
+        // إن كان مثبّتاً مسبقاً نُرجعه دون تكرار
+        userStickerPacks.findByIdUserIdAndIdPackId(userId, packId)?.let { return it }
+        val installed = UserStickerPack(userId = userId, packId = packId, installedAt = Instant.now())
+        return userStickerPacks.save(installed)
+    }
+
+    /** يُلغي تثبيت حزمة. */
+    fun uninstallStickerPack(userId: UUID, packId: UUID): Boolean {
+        val existing = userStickerPacks.findByIdUserIdAndIdPackId(userId, packId) ?: return false
+        userStickerPacks.delete(existing)
+        return true
+    }
+
+    /** حزم المستخدم المثبّتة. */
+    fun getInstalledStickerPacks(userId: UUID): List<StickerPack> {
+        val packIds = userStickerPacks.findByUserIdOrderByInstalledAtDesc(userId).map { it.packId }
+        return stickerPacks.findAllById(packIds)
     }
 }

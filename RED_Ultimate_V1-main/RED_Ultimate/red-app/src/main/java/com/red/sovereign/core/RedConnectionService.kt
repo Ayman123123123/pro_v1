@@ -448,7 +448,7 @@ class RedConnectionService : Service() {
         private const val EXTRA_GROUP = "group"
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_GROUP_RICH = "groupRich"
-        private val ALLOWED_MESSAGE_TYPES = setOf("TEXT", "RICH_TEXT", "FILE", "VOICE", "IMAGE", "VIDEO", "AUDIO")
+        private val ALLOWED_MESSAGE_TYPES = setOf("TEXT", "RICH_TEXT", "FILE", "VOICE", "IMAGE", "VIDEO", "AUDIO", "STICKER")
 
         fun start(context: Context) = context.startForegroundService(Intent(context, RedConnectionService::class.java))
         fun sendText(context: Context, targetRedId: String, conversationId: String, text: String) =
