@@ -6,6 +6,37 @@ name: red-sovereign
 # ══════════════════════════════════════════════════════════════════
 
 services:
+  # Copies host-owned 0600 authority keys into a Docker-managed volume with the
+  # backend runtime UID. This preserves strict host permissions while allowing
+  # the non-root Java process to read the signing key on native Linux Docker.
+  identity-init:
+    image: alpine:3.21
+    container_name: red-identity-init
+    restart: "no"
+    network_mode: none
+    read_only: true
+    command:
+      - sh
+      - -ec
+      - |
+        private=/source/red_identity_private_key.pem
+        public=/source/red_identity_public_key.pem
+        [ -f "$$private" ] && [ -s "$$private" ] || { echo '[identity] missing private key' >&2; exit 1; }
+        [ -f "$$public" ] && [ -s "$$public" ] || { echo '[identity] missing public key' >&2; exit 1; }
+        cp "$$private" /target/red_identity_private_key.pem.tmp
+        cp "$$public" /target/red_identity_public_key.pem.tmp
+        chown 10001:10001 /target/*.tmp
+        chmod 400 /target/red_identity_private_key.pem.tmp
+        chmod 444 /target/red_identity_public_key.pem.tmp
+        mv -f /target/red_identity_private_key.pem.tmp /target/red_identity_private_key.pem
+        mv -f /target/red_identity_public_key.pem.tmp /target/red_identity_public_key.pem
+        echo '[identity] authority keys staged for non-root backend'
+    volumes:
+      - ./secrets:/source:ro
+      - identity-secrets:/target
+    security_opt:
+      - no-new-privileges:true
+
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
   backend:
     build:
@@ -13,9 +44,6 @@ services:
       dockerfile: backend-server/Dockerfile
     container_name: red-backend
     restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
@@ -38,14 +66,24 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
       - RED_IDENTITY_PUBLIC_KEY_PATH=/run/secrets/red_identity_public_key.pem
+      - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_PORT=3478
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
+      # The backend is reachable externally only through our Nginx service. Nginx
+      # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
+      - RED_TRUST_X_FORWARDED_FOR=true
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
     volumes:
-      - ./secrets:/run/secrets:ro
+      - identity-secrets:/run/secrets:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    stop_grace_period: 30s
     depends_on:
+      identity-init: { condition: service_completed_successfully }
       db-postgres: { condition: service_healthy }
       db-mongo: { condition: service_healthy }
       cache-redis: { condition: service_healthy }
@@ -68,6 +106,11 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -185,7 +228,11 @@ services:
     container_name: red-storage
     restart: unless-stopped
     command: server /data --console-address ":9001"
-    ports: ["9000:9000", "9001:9001"]
+    # Management/API ports stay local to the host; public media access must pass
+    # through authenticated backend endpoints, never directly through MinIO.
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       - MINIO_ROOT_USER=redadmin
       - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
@@ -197,41 +244,62 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━ تهيئة شهادات TLS — ذاتية التوقيع بالتطوير ومعالجة تلقائية لجميع المسارات ━━━━
-  # يدعم التوافقية الكاملة مع /etc/ssl/private/privkey.pem و /etc/ssl/certs/ و /etc/ssl/red/
-  # ويعالج مشكلة فخ المجلدات الفارغة (Docker Bind Mount Trap) وتوليد الشهادات غير المكتمل
+  # ━━━━ تهيئة TLS للتطوير ━━━━
+  # الشهادة تُكتب في named volume واحد. قبل إعادة استخدامها نتحقق من:
+  # الصيغة، الصلاحية الزمنية، سلامة المفتاح، والتطابق التشفيري بينهما.
   certs-init:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: infrastructure/tls-init.Dockerfile
+    image: red-tls-init:local
     container_name: red-certs-init
     restart: "no"
+    environment:
+      - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
     command:
       - "sh"
-      - "-c"
+      - "-ec"
       - |
-        mkdir -p /etc/ssl/red /etc/ssl/certs /etc/ssl/private /var/www/certbot
-        for p in /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem /etc/ssl/certs/fullchain.pem /etc/ssl/certs/privkey.pem /etc/ssl/private/privkey.pem; do
-          if [ -d "$$p" ]; then echo "[fix] Removing directory mistaken for cert file: $$p"; rm -rf "$$p"; fi
+        case "$$TLS_SAN_IP" in
+          *[!0-9.]*|'') echo '[tls] TLS_SAN_IP must be an IPv4 address' >&2; exit 1 ;;
+        esac
+        printf '%s\n' "$$TLS_SAN_IP" | awk -F. 'NF != 4 { exit 1 } { for (i=1;i<=4;i++) if ($$i !~ /^[0-9]+$$/ || $$i > 255) exit 1 }' \
+          || { echo '[tls] TLS_SAN_IP must be a valid IPv4 address' >&2; exit 1; }
+        mkdir -p /etc/ssl/red /var/www/certbot
+        cert=/etc/ssl/red/fullchain.pem
+        key=/etc/ssl/red/privkey.pem
+        for path in "$$cert" "$$key"; do
+          if [ -d "$$path" ]; then
+            echo "[tls] removing directory mistaken for a certificate file: $$path"
+            rm -rf "$$path"
+          fi
         done
-        if [ -s /etc/ssl/red/fullchain.pem ] && [ -s /etc/ssl/red/privkey.pem ]; then
-          echo '[ok] TLS cert and private key already present and valid';
-        else
-          echo '[init] Generating resilient self-signed TLS cert & key...';
-          apk add --no-cache openssl >/dev/null 2>&1
-          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
-            -subj '/CN=red.local' \
-            -addext 'subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1' \
-            -keyout /etc/ssl/red/privkey.pem.tmp \
-            -out /etc/ssl/red/fullchain.pem.tmp
-          mv -f /etc/ssl/red/privkey.pem.tmp /etc/ssl/red/privkey.pem
-          mv -f /etc/ssl/red/fullchain.pem.tmp /etc/ssl/red/fullchain.pem
-          chmod 600 /etc/ssl/red/privkey.pem
-          chmod 644 /etc/ssl/red/fullchain.pem
-          echo '[ok] Self-signed TLS certs generated atomically';
+        valid=false
+        if [ -s "$$cert" ] && [ -s "$$key" ] \
+          && openssl x509 -in "$$cert" -noout -checkend 86400 >/dev/null 2>&1 \
+          && openssl pkey -in "$$key" -noout -check >/dev/null 2>&1 \
+          && openssl x509 -in "$$cert" -noout -ext subjectAltName 2>/dev/null | grep -F "IP Address:$$TLS_SAN_IP" >/dev/null; then
+          cert_pub="$$(openssl x509 -in "$$cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          key_pub="$$(openssl pkey -in "$$key" -pubout -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          [ -n "$$cert_pub" ] && [ "$$cert_pub" = "$$key_pub" ] && valid=true
         fi
-        ln -sf /etc/ssl/red/fullchain.pem /etc/ssl/certs/fullchain.pem
-        ln -sf /etc/ssl/red/privkey.pem /etc/ssl/certs/privkey.pem
-        ln -sf /etc/ssl/red/privkey.pem /etc/ssl/private/privkey.pem
-        chmod 755 /etc/ssl/private /etc/ssl/red /etc/ssl/certs 2>/dev/null || true
+        if [ "$$valid" != true ]; then
+          echo '[tls] generating a new atomic self-signed development certificate'
+          rm -f "$$cert.tmp" "$$key.tmp"
+          openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 825 \
+            -subj '/CN=red.local' \
+            -addext "subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1,IP:$$TLS_SAN_IP" \
+            -keyout "$$key.tmp" \
+            -out "$$cert.tmp"
+          openssl x509 -in "$$cert.tmp" -noout >/dev/null
+          openssl pkey -in "$$key.tmp" -noout -check >/dev/null
+          mv -f "$$key.tmp" "$$key"
+          mv -f "$$cert.tmp" "$$cert"
+        else
+          echo '[tls] existing certificate and private key passed validation'
+        fi
+        chmod 600 "$$key"
+        chmod 644 "$$cert"
     volumes:
       - red-certs:/etc/ssl/red
       - certbot-www:/var/www/certbot
@@ -246,35 +314,19 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - red-certs:/etc/ssl/red:ro
       - certbot-www:/var/www/certbot:ro
-    # Self-healing: معالجة ذاتية تضمن توفر المفتاح والشهادة والروابط التوافقية حتى لو شُغّلت الحاوية منفردة
+    # Keep the private key volume read-only in the traffic-serving container.
+    # Generation/repair belongs exclusively to certs-init; Nginx fails fast with
+    # an explicit message instead of attempting an impossible write to a :ro mount.
     entrypoint:
       - "/bin/sh"
-      - "-c"
+      - "-ec"
       - |
-        mkdir -p /etc/ssl/red /etc/ssl/certs /etc/ssl/private /var/www/certbot
-        for p in /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem /etc/ssl/certs/fullchain.pem /etc/ssl/certs/privkey.pem /etc/ssl/private/privkey.pem; do
-          if [ -d "$$p" ]; then echo "[fix] Removing directory mistaken for cert file: $$p"; rm -rf "$$p"; fi
+        for path in /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem; do
+          [ -f "$$path" ] && [ -s "$$path" ] || {
+            echo "[fatal] required TLS file is missing or invalid: $$path" >&2
+            exit 1
+          }
         done
-        if [ ! -s /etc/ssl/red/fullchain.pem ] || [ ! -s /etc/ssl/red/privkey.pem ]; then
-          echo '[fix] Generating fallback self-signed TLS certs...';
-          apk add --no-cache openssl >/dev/null 2>&1;
-          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
-            -subj '/CN=red.local' \
-            -addext 'subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1' \
-            -keyout /etc/ssl/red/privkey.pem.tmp \
-            -out /etc/ssl/red/fullchain.pem.tmp;
-          mv -f /etc/ssl/red/privkey.pem.tmp /etc/ssl/red/privkey.pem;
-          mv -f /etc/ssl/red/fullchain.pem.tmp /etc/ssl/red/fullchain.pem;
-          chmod 600 /etc/ssl/red/privkey.pem;
-          chmod 644 /etc/ssl/red/fullchain.pem;
-          echo '[fix] Fallback certs generated';
-        else
-          echo '[ok] TLS certs and private key present';
-        fi
-        ln -sf /etc/ssl/red/fullchain.pem /etc/ssl/certs/fullchain.pem;
-        ln -sf /etc/ssl/red/privkey.pem /etc/ssl/certs/privkey.pem;
-        ln -sf /etc/ssl/red/privkey.pem /etc/ssl/private/privkey.pem;
-        chmod 755 /etc/ssl/private 2>/dev/null || true;
         exec nginx -g 'daemon off;'
     depends_on:
       backend: { condition: service_healthy }
@@ -291,6 +343,9 @@ services:
     build: ./admin_dashboard
     container_name: red-admin-ui
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -303,6 +358,7 @@ volumes:
   mongo-data:
   redis-data:
   minio-data:
+  identity-secrets:
   red-certs:
   certbot-www:
 

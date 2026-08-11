@@ -3,8 +3,6 @@ package com.red.sovereign.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -40,6 +38,11 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
@@ -47,6 +50,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Copy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.QuickReply
@@ -94,7 +98,9 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -160,15 +166,19 @@ import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
+import com.red.sovereign.calls.CallRuntime
+import com.red.sovereign.calls.CallUiState
 import com.red.sovereign.calls.UnifiedCallOverlays
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.LiveStreamService
+import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.MessageStore
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.RedQualityManager
 import com.red.sovereign.core.ReactionEventBus
 import com.red.sovereign.core.RichMessage
 import com.red.sovereign.core.database.MessageReactionEntity
@@ -218,6 +228,7 @@ import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
 import java.io.File
+import java.util.UUID
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
@@ -296,7 +307,14 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         when (currentScreen) {
             SovereignScreen.DEVICES -> DevicesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.PRIVACY -> PrivacySettingsScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.EXPLORE -> RedExploreScreen(onStartLive = {}, onStartSpace = {})
+            SovereignScreen.EXPLORE -> {
+                val tokens = remember { TokenStore(context) }
+                RedExploreScreen(
+                    tokens = tokens,
+                    ownRedId = account.redId,
+                    onBack = { currentScreen = SovereignScreen.DASHBOARD }
+                )
+            }
             SovereignScreen.CREATE_GROUP -> CreateGroupScreen(
                 onBack = { currentScreen = SovereignScreen.DASHBOARD },
                 friends = directory.contacts,
@@ -329,7 +347,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 )
             }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.COMMUNITIES -> {
+                val tokens = remember { TokenStore(context) }
+                CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            }
             SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
@@ -342,7 +363,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         containerColor = Color.Transparent,
         floatingActionButton = {
             if (!showDinstar) when (section) {
-                MainSection.CHATS -> FloatingActionButton(onClick = { showDirectory = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
+                MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
                 MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
                 MainSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
                 MainSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
@@ -373,7 +394,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory)
+                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory) {
+                    currentScreen = SovereignScreen.EXPLORE
+                }
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
@@ -562,13 +585,14 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
             is StoryViewerState.Loading -> viewer.story.id
             is StoryViewerState.Image -> viewer.story.id
             is StoryViewerState.Video -> viewer.story.id
+            is StoryViewerState.Text -> viewer.story.id
+            is StoryViewerState.Voice -> viewer.story.id
             is StoryViewerState.Unsupported -> viewer.story.id
             is StoryViewerState.Error -> viewer.story.id
             StoryViewerState.Closed -> ""
         }
         StoryFullscreen(
             viewer = viewer,
-            storiesList = stories.stories,
             onClose = stories::closeViewer,
             onNext = {
                 val idx = stories.stories.indexOfFirst { it.id == currentStoryId }
@@ -585,6 +609,15 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
                 } else {
                     stories.closeViewer()
                 }
+            },
+            onReact = stories::react,
+            onReply = { story, text ->
+                RedConnectionService.sendRichText(
+                    context,
+                    story.ownerRedId,
+                    conversationId(account.redId, story.ownerRedId),
+                    RichMessage(action = "STORY_REPLY", text = text, replyTo = story.id)
+                )
             }
         )
     }
@@ -619,6 +652,7 @@ private fun PostCard(
     colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
     shape = RoundedCornerShape(24.dp)
 ) {
+    val context = LocalContext.current
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         var showMenu by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -708,7 +742,18 @@ private fun PostCard(
             PostAction(Icons.Default.FavoriteBorder, "${post.reactionCounts["LIKE"] ?: 0}", true) { onLike(post) }
             PostAction(Icons.AutoMirrored.Filled.Chat, post.replyCount.toString(), true, onThread)
             PostAction(Icons.Default.Repeat, "اقتباس", true, onQuote)
-            PostAction(Icons.Default.Share, "مشاركة", false) {}
+            PostAction(Icons.Default.Share, "مشاركة", true) {
+                val shareText = buildString {
+                    append(post.text)
+                    if (post.hashtags.isNotEmpty()) append("\n").append(post.hashtags.joinToString(" "))
+                    append("\n\nيونس · @").append(post.authorUsername)
+                }
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, shareText)
+                }
+                runCatching { context.startActivity(Intent.createChooser(intent, "مشاركة منشور يونس")) }
+            }
         }
     }
 }
@@ -1906,17 +1951,15 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel) {
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
     var showDinstarDialog by remember { mutableStateOf(false) }
-    var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
     var dinstarNumberInput by remember { mutableStateOf("") }
     var newCallTargetInput by remember { mutableStateOf("") }
-    var publicStreamSearchQuery by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
     var isBroadcaster by remember { mutableStateOf(false) }
     var roomInput by remember { mutableStateOf("") }
@@ -1939,7 +1982,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
             item { RoundCallAction(Icons.Default.Groups, "مؤتمر جماعي", AqyalCyanGlow, true) { showJoinDialog = true } }
             item { RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true } }
             item { RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true } }
-            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true) { showPublicStreamsSearchDialog = true } }
+            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true, onExplore) }
             item { RoundCallAction(Icons.Default.PhoneInTalk, "هاتف يمني", Color(0xFFE31E24), true) { showDinstarDialog = true } }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -2051,7 +2094,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
                     onClick = {
                         showLiveDialog = false
                         val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster)
+                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster, streamTitleInput.trim().ifBlank { "بث مباشر يونس" })
                         roomInput = ""
                         streamTitleInput = ""
                         streamPasswordInput = ""
@@ -2225,41 +2268,6 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
         )
     }
 
-    if (showPublicStreamsSearchDialog) {
-        AlertDialog(
-            onDismissRequest = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" },
-            title = { Text("اكتشاف البثوث العامة والمساحات 🌐") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = Color.Gray, fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = publicStreamSearchQuery,
-                        onValueChange = { publicStreamSearchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("اسم البث أو اسم الشخص أو المعرّف") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPublicStreamsSearchDialog = false
-                        val finalStreamId = publicStreamSearchQuery.trim().ifBlank { "public-stream-1" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, false)
-                        publicStreamSearchQuery = ""
-                    }
-                ) {
-                    Text("انضمام للبث المباشر")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -2744,7 +2752,6 @@ private fun VoiceWaveform(values: List<Int>, color: Color, modifier: Modifier = 
     }
 }
 
-@Composable
 /** عرض رسالة ملصق — إيموجي كبير كمعاينة (الصورة الفعلية تُحمّل عند التوفر). */
 @Composable
 private fun StickerMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
@@ -2759,6 +2766,7 @@ private fun StickerMessage(item: DecryptedMessage, attachments: AttachmentViewMo
     Text(payload.emoji, fontSize = 64.sp)
 }
 
+@Composable
 private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
     val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val manifest = remember(manifestJson) { runCatching { ATTACHMENT_JSON.decodeFromString<VoiceManifest>(manifestJson) }.getOrNull() }
@@ -3017,18 +3025,8 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
     }
 }
 
-private fun shouldAutoDownload(context: android.content.Context, sizeBytes: Long): Boolean {
-    val preferences = SettingsRuntime.current
-    if (sizeBytes > preferences.autoDownloadLimitMb * 1024L * 1024L) return false
-    val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
-    val network = manager.activeNetwork ?: return false
-    val capabilities = manager.getNetworkCapabilities(network) ?: return false
-    return when {
-        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> preferences.autoDownloadWifi
-        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> preferences.autoDownloadMobile
-        else -> false
-    }
-}
+private fun shouldAutoDownload(context: android.content.Context, sizeBytes: Long): Boolean =
+    RedQualityManager.shouldAutoDownload(context, sizeBytes)
 
 private fun groupRoleLabel(role: String) = when (role) { "OWNER" -> "المالك"; "ADMIN" -> "مسؤول"; else -> "عضو" }
 

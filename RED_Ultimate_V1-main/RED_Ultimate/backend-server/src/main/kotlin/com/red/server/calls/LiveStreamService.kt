@@ -10,8 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * RED Master Live Stream Service
- * Tracks active streams, broadcasters, and audience counts.
- * Now persisted to MongoDB so streams survive restarts.
+ * Tracks active streams, broadcasters, and audience counts for the running SFU session.
+ * Durable stream history belongs in analytics; active WebRTC sessions cannot survive a process restart.
  */
 @Document("live_streams")
 data class LiveStreamRecord(
@@ -50,8 +50,10 @@ class LiveStreamService {
         password: String?
     ): LiveStreamRecord {
         if (liveViewers.containsKey(streamId)) {
-            log.info("Stream {} already active, returning existing record", streamId)
-            return activeStreamRecords[streamId] ?: LiveStreamRecord(streamId, broadcasterId)
+            val existing = activeStreamRecords[streamId] ?: error("LIVE_STREAM_STATE_CORRUPT")
+            require(existing.broadcasterId == broadcasterId) { "STREAM_ID_ALREADY_OWNED" }
+            log.info("Stream {} already active for the same broadcaster", streamId)
+            return existing
         }
         val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
         val record = LiveStreamRecord(

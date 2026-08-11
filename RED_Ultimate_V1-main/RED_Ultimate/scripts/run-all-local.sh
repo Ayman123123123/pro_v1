@@ -41,28 +41,8 @@ CHOICE=${CHOICE:-1}
 
 case $CHOICE in
   1)
-    echo -e "${GREEN}🚀 جاري تشغيل الحاويات عبر Docker Compose...${NC}"
-    cd "$ROOT_DIR"
-    
-    # تجهيز ملف .env إن لم يكن موجوداً
-    if [ ! -f .env ]; then
-      echo -e "${YELLOW}⚙️ إنشاء ملف الإعدادات .env...${NC}"
-      cp .env.example .env
-      sed -i "s/192.168.1.50/$LOCAL_IP/g" .env
-    fi
-
-    # تشغيل Docker
-    if command -v docker &>/dev/null && docker info &>/dev/null; then
-      docker compose up -d --build
-      echo -e "${GREEN}✅ تم تشغيل جميع الخدمات بنجاح!${NC}"
-      echo -e "🔗 لوحة الإدارة: ${CYAN}http://$LOCAL_IP:8088${NC} أو ${CYAN}http://localhost:8088${NC}"
-      echo -e "🔗 الاتصال الآمن: ${CYAN}https://$LOCAL_IP:8443${NC}"
-      echo -e "🔗 واجهة الباكند: ${CYAN}http://$LOCAL_IP:8080/health${NC}"
-    else
-      echo -e "${RED}⚠️ Docker غير مشغل أو غير مثبت. جاري التحويل للتشغيل المحلي السريع...${NC}"
-      cd "$ROOT_DIR/admin_dashboard" && npm install && npm run dev &
-      python3 "$ROOT_DIR/scripts/mock_backend.py" &
-    fi
+    echo -e "${GREEN}🚀 جاري التشغيل الآمن عبر مسار التهيئة والفحص الموحّد...${NC}"
+    "$ROOT_DIR/scripts/local-first-run.sh" --server-ip "$LOCAL_IP"
     ;;
 
   2)
@@ -82,11 +62,13 @@ case $CHOICE in
     echo -e "${GREEN}📱 جاري بناء تطبيق الأندرويد...${NC}"
     cd "$ROOT_DIR"
     if [ -f "./gradlew" ]; then
-      ./gradlew assembleDebug
-      echo -e "${GREEN}✅ تم بناء الـ APK في: app/build/outputs/apk/debug/app-debug.apk${NC}"
+      ./gradlew :app:assembleDebug -PRED_SERVER_URL="http://$LOCAL_IP:8088" -PRED_SKIP_BUILD_LOGIC=true
+      APK="$(find red-app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+      [ -n "$APK" ] || { echo -e "${RED}❌ انتهى Gradle بلا ملف APK${NC}"; exit 1; }
+      echo -e "${GREEN}✅ تم بناء الـ APK في: $APK${NC}"
       if command -v adb &>/dev/null && adb devices | grep -q "device$"; then
         echo -e "${GREEN}📲 جاري التثبيت على الهاتف عبر ADB...${NC}"
-        adb install -r app/build/outputs/apk/debug/app-debug.apk
+        adb install -r "$APK"
       fi
     else
       echo -e "${YELLOW}افتح مجلد android في Android Studio واضغط Run على هاتفك.${NC}"

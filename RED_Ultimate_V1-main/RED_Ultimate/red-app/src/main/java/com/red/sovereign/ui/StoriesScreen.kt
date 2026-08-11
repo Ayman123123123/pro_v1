@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,24 +27,32 @@ import com.red.sovereign.stories.StoryViewerState
 import com.red.sovereign.stories.StoryVideoPlayer
 
 @Composable
-fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose: () -> Unit, onNext: () -> Unit, onPrev: () -> Unit) {
+fun StoryFullscreen(
+    viewer: StoryViewerState,
+    onClose: () -> Unit,
+    onNext: () -> Unit,
+    onPrev: () -> Unit,
+    onReact: (Story, String) -> Unit,
+    onReply: (Story, String) -> Unit
+) {
     if (viewer is StoryViewerState.Closed) return
-    
+
     val story = when (viewer) {
         is StoryViewerState.Loading -> viewer.story
         is StoryViewerState.Image -> viewer.story
         is StoryViewerState.Video -> viewer.story
+        is StoryViewerState.Text -> viewer.story
+        is StoryViewerState.Voice -> viewer.story
         is StoryViewerState.Unsupported -> viewer.story
         is StoryViewerState.Error -> viewer.story
         StoryViewerState.Closed -> error("unreachable")
     }
-    
+
     var progress by remember { mutableFloatStateOf(0f) }
     var isPaused by remember { mutableStateOf(false) }
-    var isMuted by remember { mutableStateOf(false) }
     LaunchedEffect(story.id, viewer, isPaused) {
         if (isPaused) return@LaunchedEffect
-        if (viewer is StoryViewerState.Image || viewer is StoryViewerState.Unsupported || viewer is StoryViewerState.Error) {
+        if (viewer is StoryViewerState.Image || viewer is StoryViewerState.Text || viewer is StoryViewerState.Unsupported || viewer is StoryViewerState.Error) {
             progress = 0f
             val duration = 5000L
             val interval = 50L
@@ -90,7 +99,7 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                         Text("رسالة صوتية", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(16.dp))
                         com.red.sovereign.stories.VoiceStoryPlayer(
-                            mediaUrl = story.mediaUrl,
+                            mediaUrl = viewer.uri.toString(),
                             durationMs = story.durationMs ?: 0L,
                             waveform = story.waveform,
                             onFinished = onNext
@@ -138,11 +147,10 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
             // Reactions + Reply box
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("❤️", "🔥", "😢", "👏").forEach { emoji ->
-                    AssistChip(onClick = { stories.react(story, emoji) }, label = { Text(emoji) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.2f)))
+                    AssistChip(onClick = { onReact(story, emoji) }, label = { Text(emoji) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.2f)))
                 }
             }
             var replyText by remember { mutableStateOf("") }
-            val context = androidx.compose.ui.platform.LocalContext.current
             Row(Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = replyText, onValueChange = { replyText = it },
@@ -157,10 +165,7 @@ fun StoryFullscreen(viewer: StoryViewerState, storiesList: List<Story>, onClose:
                     trailingIcon = {
                         if (replyText.isNotBlank()) {
                             IconButton({
-                                val rich = com.red.sovereign.core.RichMessage(
-                                    action = "STORY_REPLY", text = replyText.trim(), replyTo = story.id
-                                )
-                                com.red.sovereign.core.RedConnectionService.sendRichText(context, story.ownerRedId, "", rich)
+                                onReply(story, replyText.trim())
                                 replyText = ""
                                 onClose()
                             }) {

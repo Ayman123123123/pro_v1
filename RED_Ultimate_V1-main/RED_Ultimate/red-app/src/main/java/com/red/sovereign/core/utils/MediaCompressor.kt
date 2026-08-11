@@ -4,39 +4,56 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.media3.transformer.Transformer
+import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.effect.Presentation
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
+import androidx.media3.transformer.Transformer
 import java.io.File
 import java.io.FileOutputStream
 
 /**
- * 🖼️ YOUNES Media Compressor
- * ضغط الصور والفيديو قبل التشفير والرفع لـ MinIO
+ * YOUNES Media Compressor.
+ * Compresses media locally before E2EE encryption and upload to MinIO.
  */
 object MediaCompressor {
 
-    /**
-     * ضغط الصور: JPEG 85% لضمان التوازن بين الحجم والجودة
-     */
+    /** JPEG 85% balances readability, quality, and encrypted upload size. */
     fun compressImage(inputPath: String, outputPath: String): File {
-        val bitmap = BitmapFactory.decodeFile(inputPath)
-        val outputFile = File(outputPath)
-        FileOutputStream(outputFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        val bitmap = requireNotNull(BitmapFactory.decodeFile(inputPath)) {
+            "IMAGE_DECODE_FAILED"
         }
-        return outputFile
+        val outputFile = File(outputPath)
+        outputFile.parentFile?.mkdirs()
+        try {
+            FileOutputStream(outputFile).use { out ->
+                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)) {
+                    "IMAGE_COMPRESSION_FAILED"
+                }
+            }
+            return outputFile
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     /**
-     * ضغط الفيديو: 720p باستخدام Media3 لضمان التوافق والسرعة
+     * Transcodes video to H.264 and a 720px height while preserving aspect ratio.
+     * Media3 1.11 exports an EditedMediaItem; passing a raw MediaItem would keep
+     * the original resolution and make the old "720p" claim ineffective.
      */
     fun compressVideo(context: Context, inputUri: Uri, outputPath: String, listener: Transformer.Listener) {
-        val transformer = Transformer.Builder(context)
-            .setVideoMimeType("video/avc") // H.264
+        File(outputPath).parentFile?.mkdirs()
+        val videoEffects: List<Effect> = listOf(Presentation.createForHeight(720))
+        val editedMediaItem = EditedMediaItem.Builder(MediaItem.fromUri(inputUri))
+            .setEffects(Effects(emptyList(), videoEffects))
             .build()
-            
-        val mediaItem = MediaItem.fromUri(inputUri)
-        transformer.addListener(listener)
-        transformer.start(mediaItem, outputPath)
+        val transformer = Transformer.Builder(context)
+            .setVideoMimeType(MimeTypes.VIDEO_H264)
+            .addListener(listener)
+            .build()
+        transformer.start(editedMediaItem, outputPath)
     }
 }

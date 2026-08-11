@@ -22,7 +22,8 @@ class LiveStreamController(
     ): ResponseEntity<LiveStreamResponse> {
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        val streamId = "stream_${UUID.randomUUID().toString().take(12)}"
+        val streamId = request.streamId.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(12)}" }
+        require(streamId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) { "INVALID_STREAM_ID" }
         val record = liveStreamService.createStream(
             streamId = streamId,
             broadcasterId = user.id.toString(),
@@ -79,6 +80,7 @@ class LiveStreamController(
                 errorMessage = "كلمة السر غير صحيحة"
             ))
         }
+        liveStreamService.addViewer(streamId, authentication.name)
         return ResponseEntity.ok(JoinStreamResponse(
             authorized = true,
             streamId = record.streamId,
@@ -86,6 +88,26 @@ class LiveStreamController(
             isPrivate = record.isPrivate,
             broadcasterName = record.broadcasterName
         ))
+    }
+
+    @PostMapping("/{streamId}/leave")
+    fun leave(
+        @PathVariable streamId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        liveStreamService.removeViewer(streamId, authentication.name)
+        return ResponseEntity.ok(mapOf("streamId" to streamId, "viewerCount" to liveStreamService.getViewerCount(streamId)))
+    }
+
+    @PostMapping("/{streamId}/stop")
+    fun stop(
+        @PathVariable streamId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val record = liveStreamService.getStreamRecord(streamId)
+            ?: throw NoSuchElementException("Live stream not found or ended")
+        require(record.broadcasterId == authentication.name) { "ONLY_BROADCASTER_CAN_STOP" }
+        return ResponseEntity.ok(mapOf("streamId" to streamId, "stopped" to liveStreamService.stopStream(streamId)))
     }
 
     @PostMapping("/{streamId}/invite")
@@ -110,6 +132,7 @@ class LiveStreamController(
 }
 
 data class CreateStreamRequest(
+    val streamId: String = "",
     val title: String = "",
     val isPrivate: Boolean = false,
     val password: String? = null

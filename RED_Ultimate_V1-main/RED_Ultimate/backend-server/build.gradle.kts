@@ -79,3 +79,13 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// Produce one deterministic runtime artifact. Disabling the plain JVM JAR also
+// prevents Docker COPY globs from selecting two different files accidentally.
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    archiveFileName.set("red-backend.jar")
+}
+
+tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
+    enabled = false
+}

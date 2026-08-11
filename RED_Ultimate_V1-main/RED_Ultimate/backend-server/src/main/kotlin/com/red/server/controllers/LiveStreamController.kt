@@ -15,8 +15,8 @@ import java.time.Instant
  *
  *  - GET  /api/live/streams                       -> list of active streams
  *  - GET  /api/live/streams/{streamId}/viewers    -> current viewer count
- *  - POST /api/live/streams/{streamId}/viewers/join   (authenticated viewer)
- *  - POST /api/live/streams/{streamId}/viewers/leave  (authenticated viewer)
+ *  - POST /api/live/streams/{streamId}/viewers/join   (viewer identity comes from JWT)
+ *  - POST /api/live/streams/{streamId}/viewers/leave  (viewer identity comes from JWT)
  *  - POST /api/live/admin/streams/{streamId}/start (ADMIN, ?broadcasterId=redId)
  *  - POST /api/live/admin/streams/{streamId}/stop  (ADMIN)
  *
@@ -37,14 +37,14 @@ class LiveStreamController(private val streams: LiveStreamService) {
     )
 
     @PostMapping("/streams/{streamId}/viewers/join")
-    fun join(@PathVariable streamId: String, @RequestParam viewerId: String): Map<String, Any> {
-        streams.addViewer(streamId, viewerId)
+    fun join(@PathVariable streamId: String, authentication: org.springframework.security.core.Authentication): Map<String, Any> {
+        streams.addViewer(streamId, authentication.name)
         return mapOf("streamId" to streamId, "viewerCount" to streams.getViewerCount(streamId))
     }
 
     @PostMapping("/streams/{streamId}/viewers/leave")
-    fun leave(@PathVariable streamId: String, @RequestParam viewerId: String): Map<String, Any> {
-        streams.removeViewer(streamId, viewerId)
+    fun leave(@PathVariable streamId: String, authentication: org.springframework.security.core.Authentication): Map<String, Any> {
+        streams.removeViewer(streamId, authentication.name)
         return mapOf("streamId" to streamId, "viewerCount" to streams.getViewerCount(streamId))
     }
 

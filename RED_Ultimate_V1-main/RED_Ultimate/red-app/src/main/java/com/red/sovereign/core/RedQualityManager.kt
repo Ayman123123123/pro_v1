@@ -23,7 +23,8 @@ object RedQualityManager {
         val net = cm.activeNetwork ?: return NetworkTier.OFFLINE
         val cap = cm.getNetworkCapabilities(net) ?: return NetworkTier.OFFLINE
         return when {
-            cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> NetworkTier.WIFI
+            cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                cap.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> NetworkTier.WIFI
             cap.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> {
                 val down = cap.linkDownstreamBandwidthKbps
                 if (down >= 5000) NetworkTier.CELL_4G else NetworkTier.CELL_3G

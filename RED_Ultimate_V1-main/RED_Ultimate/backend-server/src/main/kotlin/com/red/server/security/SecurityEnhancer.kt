@@ -2,6 +2,7 @@ package com.red.server.security
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
@@ -11,7 +12,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Backend security interceptor: response headers, simple in-memory rate limiting and validators. */
 @Component
-class SecurityEnhancer : HandlerInterceptor {
+class SecurityEnhancer(
+    @Value("\${red.trust-x-forwarded-for:false}")
+    private val trustXForwardedFor: Boolean = false
+) : HandlerInterceptor {
     private val rateLimiter = ConcurrentHashMap<String, RateLimitEntry>()
 
     data class RateLimitEntry(
@@ -68,11 +72,20 @@ class SecurityEnhancer : HandlerInterceptor {
         }
     }
 
+    /**
+     * X-Forwarded-For is attacker-controlled unless the request arrived through
+     * a trusted proxy that replaces the incoming header. Docker Compose enables
+     * this setting only because nginx.conf sets XFF to `$remote_addr`.
+     */
     private fun getClientIp(request: HttpServletRequest): String {
-        val forwardedFor = request.getHeader("X-Forwarded-For")
-        return forwardedFor?.split(',')?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-            ?: request.remoteAddr
-            ?: "unknown"
+        if (trustXForwardedFor) {
+            request.getHeader("X-Forwarded-For")
+                ?.substringBefore(',')
+                ?.trim()
+                ?.takeIf(String::isNotEmpty)
+                ?.let { return it }
+        }
+        return request.remoteAddr ?: "unknown"
     }
 
     fun isIpLockedOut(ip: String): Boolean {

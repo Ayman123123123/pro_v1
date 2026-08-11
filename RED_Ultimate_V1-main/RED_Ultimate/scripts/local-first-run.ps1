@@ -134,10 +134,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose build failed" }
     & docker compose --env-file $EnvFile up -d
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose startup failed" }
-    # Nginx resolves Docker service names when loading its config. Recreate/restart after upstream
-    # containers so cached addresses cannot point at a replaced backend or SFU container.
-    & docker compose --env-file $EnvFile restart nginx
-    if ($LASTEXITCODE -ne 0) { throw "Nginx restart after upstream startup failed" }
+    # Nginx 1.27 tracks replaced upstream containers through Docker DNS dynamically.
     Start-Sleep -Seconds 3
 
     Write-Host -NoNewline "Waiting for backend"
@@ -182,7 +179,9 @@ if ($BuildAndroid) {
         if (-not $?) { throw "Verified libsignal prefetch failed" }
         $Artifacts = Join-Path $RepoRoot "local-artifacts"
         New-Item -ItemType Directory -Force $Artifacts | Out-Null
-        & docker build --file Dockerfile --target android-artifact --build-arg "RED_SERVER_URL=http://${ServerIp}:$HttpPort" --output "type=local,dest=$Artifacts" .
+        $tlsPinsMatch = [regex]::Match((Get-Content $EnvFile -Raw), '(?m)^RED_TLS_PINS=(.*)$')
+        $tlsPins = if ($tlsPinsMatch.Success) { $tlsPinsMatch.Groups[1].Value.Trim() } else { '' }
+        & docker build --file Dockerfile --target android-artifact --build-arg "RED_SERVER_URL=http://${ServerIp}:$HttpPort" --build-arg "RED_TLS_PINS=$tlsPins" --output "type=local,dest=$Artifacts" .
         if ($LASTEXITCODE -ne 0) { throw "Verified Android artifact build failed" }
         if (-not (Test-Path (Join-Path $Artifacts "red-app-debug.apk"))) { throw "Android build finished without an APK" }
         Write-Host "Verified APK saved under local-artifacts/red-app-debug.apk."

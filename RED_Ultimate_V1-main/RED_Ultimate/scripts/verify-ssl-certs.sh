@@ -1,135 +1,146 @@
 #!/usr/bin/env bash
-# ═══════════════════════════════════════════════════════════════════════
-# 🔍 YOUNES Platform — Comprehensive SSL/TLS Verification & Audit Tool
-# Validates:
-#  1. File existence and type (ensures files, not directories)
-#  2. Permissions (private key 0600, cert 0644, dir 0755)
-#  3. Expiration dates & days remaining
-#  4. Subject, Issuer, and SAN (Subject Alternative Names)
-#  5. Cryptographic Match (Public key vs Private key Modulus)
-#  6. Universal Symlink Consistency across /etc/ssl/private, /etc/ssl/certs, /etc/ssl/red
-# ═══════════════════════════════════════════════════════════════════════
-
-set -euo pipefail
+# Verify a TLS certificate/private-key pair without modifying either file.
+set -uo pipefail
 
 CERT_PATH="${1:-/etc/ssl/red/fullchain.pem}"
 KEY_PATH="${2:-/etc/ssl/red/privkey.pem}"
-
-echo "═══════════════════════════════════════════════════════════════════════"
-echo " 🛡️ TLS Certificate & Private Key Health Audit"
-echo "═══════════════════════════════════════════════════════════════════════"
-
+EXPIRY_WARNING_SECONDS="${TLS_EXPIRY_WARNING_SECONDS:-2592000}" # 30 days
 ERRORS=0
 WARNINGS=0
+TMP_DIR=""
 
-check_file() {
-  local path="$1"
-  local name="$2"
-  
-  if [[ ! -e "$path" ]]; then
-    echo "❌ CRITICAL: $name does not exist at '$path'"
-    ERRORS=$((ERRORS + 1))
+error() { printf '❌ %s\n' "$*"; ERRORS=$((ERRORS + 1)); }
+warn() { printf '⚠️  %s\n' "$*"; WARNINGS=$((WARNINGS + 1)); }
+ok() { printf '✅ %s\n' "$*"; }
+cleanup() { [[ -n "$TMP_DIR" ]] && rm -rf "$TMP_DIR"; }
+trap cleanup EXIT INT TERM
+
+printf '%s\n' '═══════════════════════════════════════════════════════════════════════'
+printf '%s\n' ' TLS certificate/private-key audit (read-only)'
+printf ' Certificate: %s\n Private key: %s\n' "$CERT_PATH" "$KEY_PATH"
+printf '%s\n' '═══════════════════════════════════════════════════════════════════════'
+
+command -v openssl >/dev/null 2>&1 || { error 'openssl is required'; exit 1; }
+command -v stat >/dev/null 2>&1 || { error 'stat is required'; exit 1; }
+
+check_regular_file() {
+  local path="$1" label="$2"
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
+    error "$label does not exist: $path"
     return 1
   fi
-
   if [[ -d "$path" ]]; then
-    echo "❌ CRITICAL: $name at '$path' is a DIRECTORY (Docker bind-mount trap!)"
-    ERRORS=$((ERRORS + 1))
+    error "$label is a directory (likely a Docker bind-mount trap): $path"
     return 1
   fi
-
+  if [[ ! -f "$path" ]]; then
+    error "$label is not a regular file: $path"
+    return 1
+  fi
   if [[ ! -s "$path" ]]; then
-    echo "❌ CRITICAL: $name at '$path' is EMPTY (0 bytes - incomplete generation)"
-    ERRORS=$((ERRORS + 1))
+    error "$label is empty: $path"
     return 1
   fi
-
-  echo "✅ $name: Present, valid file ($(wc -c < "$path") bytes)"
-  return 0
+  if [[ ! -r "$path" ]]; then
+    error "$label is not readable by the current user: $path"
+    return 1
+  fi
+  ok "$label exists ($(wc -c < "$path") bytes)"
 }
 
-# 1. Existence and Type Checks
-echo "1️⃣ Checking Certificate and Private Key Files..."
-check_file "$CERT_PATH" "Certificate (fullchain.pem)" || true
-check_file "$KEY_PATH" "Private Key (privkey.pem)" || true
+CERT_OK=1
+KEY_OK=1
+check_regular_file "$CERT_PATH" 'Certificate' || CERT_OK=0
+check_regular_file "$KEY_PATH" 'Private key' || KEY_OK=0
 
-# Check alternative paths
-echo ""
-echo "2️⃣ Checking Universal Symlink Paths..."
-for p in /etc/ssl/private/privkey.pem /etc/ssl/certs/fullchain.pem /etc/ssl/certs/privkey.pem /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem; do
-  if [[ -e "$p" ]]; then
-    if [[ -L "$p" ]]; then
-      echo "  ✓ $p -> $(readlink -f "$p")"
-    else
-      echo "  ✓ $p (regular file)"
-    fi
+if (( CERT_OK )); then
+  if openssl x509 -in "$CERT_PATH" -noout >/dev/null 2>&1; then
+    ok 'Certificate parses as X.509'
   else
-    echo "  ⚠️ Optional path not linked: $p"
-    WARNINGS=$((WARNINGS + 1))
+    error 'Certificate is not valid X.509/PEM'
+    CERT_OK=0
   fi
-done
-
-# 2. OpenSSL Parse and Expiry
-if [[ -s "$CERT_PATH" && ! -d "$CERT_PATH" ]]; then
-  echo ""
-  echo "3️⃣ Certificate Details & Expiration..."
-  SUBJECT=$(openssl x509 -in "$CERT_PATH" -noout -subject 2>/dev/null || echo "Unknown")
-  ISSUER=$(openssl x509 -in "$CERT_PATH" -noout -issuer 2>/dev/null || echo "Unknown")
-  START_DATE=$(openssl x509 -in "$CERT_PATH" -noout -startdate 2>/dev/null || echo "Unknown")
-  END_DATE=$(openssl x509 -in "$CERT_PATH" -noout -enddate 2>/dev/null || echo "Unknown")
-  
-  echo "  Subject:    $SUBJECT"
-  echo "  Issuer:     $ISSUER"
-  echo "  Valid From: $START_DATE"
-  echo "  Valid To:   $END_DATE"
-
-  # Expiry check
-  if openssl x509 -checkend 0 -noout -in "$CERT_PATH" >/dev/null 2>&1; then
-    echo "  Status:     ✅ VALID (Not Expired)"
-  else
-    echo "  Status:     ❌ EXPIRED!"
-    ERRORS=$((ERRORS + 1))
-  fi
-
-  # SAN check
-  echo ""
-  echo "4️⃣ Subject Alternative Names (SAN):"
-  openssl x509 -in "$CERT_PATH" -noout -text 2>/dev/null | grep -A 1 "Subject Alternative Name" || echo "  (None)"
 fi
 
-# 3. Cryptographic Modulus Match
-if [[ -s "$CERT_PATH" && -s "$KEY_PATH" && ! -d "$CERT_PATH" && ! -d "$KEY_PATH" ]]; then
-  echo ""
-  echo "5️⃣ Cryptographic Key Match Verification..."
-  PUB1=$(mktemp)
-  PUB2=$(mktemp)
-  if openssl pkey -in "$KEY_PATH" -pubout > "$PUB1" 2>/dev/null && \
-     openssl x509 -in "$CERT_PATH" -pubkey -noout > "$PUB2" 2>/dev/null; then
-    if cmp -s "$PUB1" "$PUB2"; then
-      echo "  ✅ PERFECT MATCH: Private key precisely corresponds to Public Certificate!"
-    else
-      echo "  ❌ CRYPTOGRAPHIC MISMATCH: Private key does NOT match certificate!"
-      ERRORS=$((ERRORS + 1))
-    fi
+if (( KEY_OK )); then
+  if openssl pkey -in "$KEY_PATH" -noout -check >/dev/null 2>&1; then
+    ok 'Private key parses and passes its integrity check'
   else
-    echo "  ❌ Error extracting public keys for comparison."
-    ERRORS=$((ERRORS + 1))
+    error 'Private key is invalid, encrypted without an available passphrase, or corrupt'
+    KEY_OK=0
   fi
-  rm -f "$PUB1" "$PUB2"
 fi
 
-# Summary
-echo ""
-echo "═══════════════════════════════════════════════════════════════════════"
-echo " 📊 Audit Summary:"
-echo "    Errors:   $ERRORS"
-echo "    Warnings: $WARNINGS"
-if [[ $ERRORS -eq 0 ]]; then
-  echo " 🟢 VERIFICATION PASSED: SSL/TLS Setup is healthy and ready for traffic!"
-  echo "═══════════════════════════════════════════════════════════════════════"
+# Permission checks follow symlinks and inspect the actual target.
+if (( KEY_OK )); then
+  key_mode="$(stat -L -c '%a' "$KEY_PATH" 2>/dev/null || true)"
+  if [[ "$key_mode" =~ ^[0-7]{3,4}$ ]]; then
+    key_perm=$((8#$key_mode))
+    if (( key_perm & 0077 )); then
+      error "Private key permissions are too broad ($key_mode); expected 600 or 400"
+    else
+      ok "Private key permissions are restrictive ($key_mode)"
+    fi
+  else
+    warn 'Could not determine private-key permissions'
+  fi
+fi
+
+if (( CERT_OK )); then
+  cert_mode="$(stat -L -c '%a' "$CERT_PATH" 2>/dev/null || true)"
+  if [[ "$cert_mode" =~ ^[0-7]{3,4}$ ]]; then
+    cert_perm=$((8#$cert_mode))
+    if (( cert_perm & 0022 )); then
+      error "Certificate is writable by group/others ($cert_mode)"
+    else
+      ok "Certificate is not group/other-writable ($cert_mode)"
+    fi
+  else
+    warn 'Could not determine certificate permissions'
+  fi
+fi
+
+if (( CERT_OK )); then
+  printf '\nSubject:    %s\n' "$(openssl x509 -in "$CERT_PATH" -noout -subject)"
+  printf 'Issuer:     %s\n' "$(openssl x509 -in "$CERT_PATH" -noout -issuer)"
+  printf 'Valid from: %s\n' "$(openssl x509 -in "$CERT_PATH" -noout -startdate | cut -d= -f2-)"
+  printf 'Valid to:   %s\n' "$(openssl x509 -in "$CERT_PATH" -noout -enddate | cut -d= -f2-)"
+
+  if ! openssl x509 -in "$CERT_PATH" -noout -checkend 0 >/dev/null 2>&1; then
+    error 'Certificate is expired or not currently valid'
+  elif ! openssl x509 -in "$CERT_PATH" -noout -checkend "$EXPIRY_WARNING_SECONDS" >/dev/null 2>&1; then
+    warn 'Certificate expires within the configured warning window (default: 30 days)'
+  else
+    ok 'Certificate is valid beyond the warning window'
+  fi
+
+  san_output="$(openssl x509 -in "$CERT_PATH" -noout -ext subjectAltName 2>/dev/null || true)"
+  if [[ -n "$san_output" ]]; then
+    printf '%s\n' "$san_output" | sed 's/^/  /'
+  else
+    warn 'Certificate has no Subject Alternative Name extension'
+  fi
+fi
+
+if (( CERT_OK && KEY_OK )); then
+  TMP_DIR="$(mktemp -d)"
+  if openssl x509 -in "$CERT_PATH" -pubkey -noout \
+       | openssl pkey -pubin -outform DER >"$TMP_DIR/cert.der" 2>/dev/null \
+    && openssl pkey -in "$KEY_PATH" -pubout -outform DER >"$TMP_DIR/key.der" 2>/dev/null; then
+    if cmp -s "$TMP_DIR/cert.der" "$TMP_DIR/key.der"; then
+      ok 'Certificate public key matches the private key'
+    else
+      error 'Certificate/private-key cryptographic mismatch'
+    fi
+  else
+    error 'Could not extract public keys for pair verification'
+  fi
+fi
+
+printf '\nErrors: %d | Warnings: %d\n' "$ERRORS" "$WARNINGS"
+if (( ERRORS == 0 )); then
+  ok 'TLS verification passed'
   exit 0
-else
-  echo " 🔴 VERIFICATION FAILED: Please run fix-red-proxy-certs.sh to repair."
-  echo "═══════════════════════════════════════════════════════════════════════"
-  exit 1
 fi
+printf '❌ TLS verification failed\n'
+exit 1

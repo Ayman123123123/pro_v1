@@ -109,8 +109,8 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/admin/content/sticker-packs/*/install").authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/api/admin/content/sticker-packs/*/install").authenticated()
 
-                    // Admin endpoints
-                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
+                    // Admin endpoints (including the legacy live-stream admin namespace)
+                    .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
                     // Social features
                     .requestMatchers(HttpMethod.GET, "/api/social/status/**").authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
