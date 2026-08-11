@@ -1,0 +1,28 @@
+groups:
+- name: younes-platform
+  rules:
+  - alert: BackendDown
+    expr: up{job="red-backend"} == 0
+    for: 2m
+    labels: {severity: critical}
+    annotations: {summary: "RED backend is unreachable"}
+  - alert: DependencyDown
+    expr: up{job=~"postgres|redis|mongodb|minio|media-sfu"} == 0
+    for: 3m
+    labels: {severity: critical}
+    annotations: {summary: "RED dependency {{ $labels.job }} is unreachable"}
+  - alert: BackendHighLatency
+    expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) > 1
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Backend p95 latency exceeds 1 second"}
+  - alert: BackendHighErrorRate
+    expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count[5m])), 1) > 0.05
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "Backend 5xx rate exceeds 5 percent"}
+  - alert: PostgreSQLTooManyConnections
+    expr: pg_stat_activity_count / clamp_min(pg_settings_max_connections, 1) > 0.85
+    for: 10m
+    labels: {severity: warning}
+    annotations: {summary: "PostgreSQL connections exceed 85 percent"}

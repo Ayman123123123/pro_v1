@@ -79,7 +79,7 @@ class SecurityConfig(
                     // المعرّفات (89,999) قابلًا للتعداد الكامل، فما كان
                     // صعبًا عمليًا صار زحفًا مباشرًا على الدليل كله.
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
-                    .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
+                    .requestMatchers("/health", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     // ── مشاركة المستخدم في المحتوى ──
                     //
