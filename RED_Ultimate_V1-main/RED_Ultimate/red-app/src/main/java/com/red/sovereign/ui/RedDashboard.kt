@@ -1168,6 +1168,7 @@ private fun ChatHubScreen(
                                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(group.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            if (lastGroupMsg != null) Text(relativeTime(lastGroupMsg.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp))
                                             if (unread > 0) {
                                                 Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
                                             } else {
@@ -2282,6 +2283,18 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
     else -> "$bytes B"
+}
+
+private fun relativeTime(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    val min = diff / 60000
+    return when {
+        diff < 60000 -> "الآن"
+        diff < 3600000 -> "${min}د"
+        diff < 86400000 -> "${diff / 3600000}س"
+        diff < 172800000 -> "أمس"
+        else -> java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(timestamp))
+    }
 }
 
 @Composable
