@@ -6,10 +6,7 @@ import com.red.server.database.RedisManager
 import com.red.server.messaging.DeleteService
 import com.red.server.messaging.MessageService
 import com.red.server.services.AdminUserIntelligenceService
-import com.red.server.websocket.ApprovedDeviceSessionGuard
-import com.red.server.websocket.WebSocketRateLimiter
 import com.red.sovereign.proto.RedProtos
-import com.red.sovereign.proto.RedProtos.RemoteWipe
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.BinaryMessage
@@ -30,10 +27,17 @@ class RedMasterHandler(
     private val accessGuard: ApprovedDeviceSessionGuard
 ) : BinaryWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
+
+    // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
+    // before a distributed gateway-level limit is applied.
     private val frameLimiter = WebSocketRateLimiter(maxMessages = 120, windowMillis = 60_000)
 
     override fun handleBinaryMessage(session: WebSocketSession, frame: BinaryMessage) {
-        if (!frameLimiter.tryAcquire(session.id) || !accessGuard.isStillAuthorized(
+        // Revalidate the long-lived socket on every frame: rate-limit first (cheap, in-memory),
+        // then confirm the account + device are still APPROVED so a revoked/disabled device is
+        // dropped immediately with POLICY_VIOLATION rather than after token expiry.
+        if (!frameLimiter.tryAcquire(session.id) ||
+            !accessGuard.isStillAuthorized(
                 session.attributes["accountId"] as? String,
                 session.attributes["deviceId"] as? String
             )
@@ -41,21 +45,29 @@ class RedMasterHandler(
             session.close(CloseStatus.POLICY_VIOLATION)
             return
         }
+
+        // Never let a malformed frame crash the handler thread — close the socket as BAD_DATA.
         val envelope = runCatching { RedProtos.RedRED.parseFrom(frame.payload) }.getOrElse {
             session.close(CloseStatus.BAD_DATA)
             return
         }
+
         when (envelope.signalCase) {
             RedProtos.RedRED.SignalCase.MESSAGE -> receiveMessage(session, envelope.message)
             RedProtos.RedRED.SignalCase.ACK -> receiveAck(session, envelope.ack)
             RedProtos.RedRED.SignalCase.TYPING -> receiveTyping(session, envelope.typing)
             RedProtos.RedRED.SignalCase.SYNC_REQ -> sync(session, envelope.syncReq)
             RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
-            RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> userIntelligence.markRemoteWipeAcknowledged(
-                UUID.fromString(session.attributes["accountId"] as String), envelope.remoteWipeAck.commandId
-            )
+            RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> receiveRemoteWipeAck(session, envelope.remoteWipeAck)
             else -> Unit
         }
+    }
+
+    private fun receiveRemoteWipeAck(session: WebSocketSession, ack: RedProtos.RemoteWipeAck) {
+        // The account UUID is set by JwtHandshakeInterceptor and already validated by accessGuard
+        // above, so it is a parseable UUID string here.
+        val accountId = session.attributes["accountId"] as? String ?: return
+        userIntelligence.markRemoteWipeAcknowledged(UUID.fromString(accountId), ack.commandId)
     }
 
     private fun receiveMessage(session: WebSocketSession, incoming: RedProtos.ChatMessage) {
@@ -108,6 +120,7 @@ class RedMasterHandler(
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
+        frameLimiter.remove(session.id)
         val redId = session.attributes["userId"] as? String ?: return
         sessions[redId]?.let { userSessions ->
             userSessions.remove(session.id)
@@ -146,11 +159,13 @@ class RedMasterHandler(
 
     /**
      * 🧨 إشعار فوري بمسح التطبيق عن بُعد (أمر إداري).
-     * لا يوجد نوع مخصص في shared-proto بعد، فنرسل رسالة SYSTEM best-effort عبر الجلسات المفتوحة —
-     * العميل يتعرف عليها إن فهمها وإلا يُسقطها بأمان؛ المسار القاطع يبقى RedSecurityService.sendWipeSignal
-     * وحالة remoteWipeStatus التي يفحصها التطبيق عند التشغيل.
+     * النوع المخصص RemoteWipe/RemoteWipeAck أصبح موجوداً في shared-proto الآن، لكن للتوافق مع
+     * إصدارات عميل Android الحالية نُبقي على رسالة SYSTEM بـ JSON كمسار الإشعار اللحظي best-effort —
+     * العميل يتعرف عليها ويرد بـ RemoteWipeAck{commandId} التي يعالجها receiveRemoteWipeAck لتعليم
+     * الحالة ACKNOWLEDGED. المسار القاطع يبقى RedSecurityService.sendWipeSignal وحالة remoteWipeStatus
+     * التي يفحصها التطبيق عند التشغيل.
      */
-    fun sendRemoteWipe(redId: String, commandId: String, reason: String) {
+    fun sendRemoteWipeNotification(redId: String, commandId: String, reason: String) {
         val payload = """{"command":"REMOTE_APP_WIPE","commandId":"$commandId","reason":"$reason"}"""
         val control = RedProtos.ChatMessage.newBuilder()
             .setId(commandId)
@@ -165,17 +180,20 @@ class RedMasterHandler(
         sendToUser(redId, RedProtos.RedRED.newBuilder().setMessage(control).build())
     }
 
-    private fun userId(session: WebSocketSession): String =
-        session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
-
-    // Remote wipe command sent to target device
-    fun sendRemoteWipe(redId: String, commandId: String, reason: String) {
+    /**
+     * إرسال أمر المسح الحقيقي باستخدام بروتوكول Proto الجديد.
+     * هذا يتم إرساله لكافة الأجهزة النشطة للمستخدم.
+     */
+    fun broadcastRemoteWipe(redId: String, commandId: String, reason: String) {
         val wipeMessage = RedProtos.RedRED.newBuilder()
-            .setRemoteWipe(RemoteWipe.newBuilder()
+            .setRemoteWipe(RedProtos.RemoteWipe.newBuilder()
                 .setCommandId(commandId)
                 .setReason(reason)
                 .build())
             .build()
         sendToUser(redId, wipeMessage)
     }
+
+    private fun userId(session: WebSocketSession): String =
+        session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
 }
