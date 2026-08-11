@@ -5,6 +5,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.ui.theme.SovereignColors
 
 /**
@@ -40,23 +43,46 @@ enum class GroupPrivacy(val label: String, val icon: ImageVector, val desc: Stri
 }
 
 @Composable
-fun CreateGroupScreen(onBack: () -> Unit = {}, onCreate: (name: String, privacy: String) -> Unit = { _, _ -> }) {
+fun CreateGroupScreen(
+    onBack: () -> Unit = {},
+    friends: List<PublicRedProfile> = emptyList(),
+    onCreate: (name: String, privacy: String, memberRedIds: List<String>) -> Unit = { _, _, _ -> }
+) {
     var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     var privacy by remember { mutableStateOf(GroupPrivacy.PRIVATE) }
-    
+    val selectedMembers = remember { androidx.compose.runtime.mutableStateMapOf<String, PublicRedProfile>() }
+    var memberSearch by remember { mutableStateOf("") }
+
+    val filteredFriends = remember(memberSearch, friends) {
+        val q = memberSearch.trim()
+        if (q.isEmpty()) friends
+        else friends.filter { it.displayName.contains(q, ignoreCase = true) || it.username.contains(q, ignoreCase = true) || it.redId.contains(q, ignoreCase = true) }
+    }
+
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, null, tint = Color.White) }
-            Text("إنشاء مجموعة سيادية", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Column {
+                Text("إنشاء مجموعة سيادية", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("اختر الأصدقاء الذين تريد إضافتهم", fontSize = 12.sp, color = Color.Gray)
+            }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = name, onValueChange = { name = it },
             label = { Text("اسم المجموعة") },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedBorderColor = SovereignColors.Cyan)
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = description, onValueChange = { description = it },
+            label = { Text("الوصف (اختياري)") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedBorderColor = SovereignColors.Cyan)
+        )
+        Spacer(Modifier.height(16.dp))
         Text("خصوصية المجموعة", color = SovereignColors.Cyan, fontWeight = FontWeight.Bold)
         GroupPrivacy.entries.forEach { level ->
             val isSelected = level == privacy
@@ -76,15 +102,64 @@ fun CreateGroupScreen(onBack: () -> Unit = {}, onCreate: (name: String, privacy:
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("إضافة أعضاء (${selectedMembers.size} مختار)", color = SovereignColors.Cyan, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            if (selectedMembers.isNotEmpty()) {
+                TextButton({ selectedMembers.clear() }) { Text("إلغاء التحديد", color = Color.Gray, fontSize = 12.sp) }
+            }
+        }
+        OutlinedTextField(
+            value = memberSearch, onValueChange = { memberSearch = it },
+            label = { Text("ابحث عن صديق…") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color.Gray, focusedBorderColor = SovereignColors.Cyan)
+        )
+        Spacer(Modifier.height(8.dp))
+        if (friends.isEmpty()) {
+            Text("لا يوجد أصدقاء بعد — أضف أصدقاء أولاً لتتمكن من إضافتهم للمجموعة", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(vertical = 16.dp))
+        } else {
+            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 260.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(filteredFriends, key = { it.redId }) { friend ->
+                    val checked = selectedMembers.containsKey(friend.redId)
+                    Surface(
+                        onClick = { if (checked) selectedMembers.remove(friend.redId) else selectedMembers[friend.redId] = friend },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (checked) SovereignColors.Cyan.copy(alpha = 0.12f) else SovereignColors.SurfaceNavy,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(Modifier.size(36.dp), shape = CircleShape, color = SovereignColors.SurfaceNavy) {
+                                Box(contentAlignment = Alignment.Center) { Text(friend.displayName.take(1), color = Color.White, fontWeight = FontWeight.Bold) }
+                            }
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(friend.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text("@${friend.username}", color = SovereignColors.Cyan, fontSize = 11.sp)
+                            }
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { if (it) selectedMembers[friend.redId] = friend else selectedMembers.remove(friend.redId) },
+                                colors = CheckboxDefaults.colors(checkedColor = SovereignColors.Cyan)
+                            )
+                        }
+                    }
+                }
+                if (filteredFriends.isEmpty()) {
+                    item { Text("لا توجد نتائج مطابقة", color = Color.Gray, modifier = Modifier.padding(12.dp)) }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         Button(
-            onClick = { onCreate(name.trim(), privacy.name) },
+            onClick = { onCreate(name.trim(), privacy.name, selectedMembers.keys.toList()) },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
             shape = RoundedCornerShape(14.dp),
             enabled = name.isNotBlank()
         ) {
-            Text("تأسيس المجموعة", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text("تأسيس المجموعة (${selectedMembers.size} عضو)", fontWeight = FontWeight.Bold, color = Color.Black)
         }
     }
 }

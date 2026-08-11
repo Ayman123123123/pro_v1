@@ -276,9 +276,13 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.DEVICES -> DevicesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.PRIVACY -> PrivacySettingsScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.EXPLORE -> RedExploreScreen(onStartLive = {}, onStartSpace = {})
-            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, onCreate = { name, privacy ->
-                groups.create(name, null, privacy) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
-            })
+            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(
+                onBack = { currentScreen = SovereignScreen.DASHBOARD },
+                friends = directory.contacts,
+                onCreate = { name, privacy, memberRedIds ->
+                    groups.create(name, null, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
+                }
+            )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, memberCount = selectedGroupMemberCount, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
