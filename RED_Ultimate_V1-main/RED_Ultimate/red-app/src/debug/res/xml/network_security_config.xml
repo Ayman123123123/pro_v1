@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Debug-only overlay: RED_SERVER_URL commonly points at a changing RFC1918 LAN
-     address. Release builds continue to use src/main's strict TLS-only policy. -->
+<!-- DEBUG-ONLY overlay: Allows cleartext for LAN development.
+     RED_SERVER_URL commonly points at a changing RFC1918 LAN address.
+     Release builds use src/main's strict TLS-only policy. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
@@ -8,4 +9,16 @@
             <certificates src="user" />
         </trust-anchors>
     </base-config>
+
+    <!-- Explicit LAN / emulator hosts allowed for cleartext in debug only -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">red.local</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

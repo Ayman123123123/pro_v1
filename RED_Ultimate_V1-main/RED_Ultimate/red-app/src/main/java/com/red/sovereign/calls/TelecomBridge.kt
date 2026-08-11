@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 class TelecomBridge(context: Context) {
     private val callsManager = CallsManager(context.applicationContext)
     private val scopes = ConcurrentHashMap<String, CallControlScope>()
+    private val heldStates = ConcurrentHashMap<String, Boolean>()
 
     fun register() {
         callsManager.registerAppWithTelecom(
@@ -47,13 +48,21 @@ class TelecomBridge(context: Context) {
             onAnswer = { onAnswer() },
             onDisconnect = {
                 scopes.remove(callId)
+                heldStates.remove(callId)
                 onDisconnect()
             },
-            onSetActive = { onActive() },
-            onSetInactive = { onInactive() }
+            onSetActive = {
+                heldStates[callId] = false
+                onActive()
+            },
+            onSetInactive = {
+                heldStates[callId] = true
+                onInactive()
+            }
         ) { scope ->
             // Store the scope so we can later set inactive/active from within the app
             scopes[callId] = scope
+            heldStates[callId] = false
         }
         return callId
     }
@@ -64,7 +73,9 @@ class TelecomBridge(context: Context) {
      */
     suspend fun hold(peer: String): Boolean {
         val scope = scopes[peer] ?: return false
-        return runCatching { scope.setInactive() }.isSuccess
+        val ok = runCatching { scope.setInactive() }.isSuccess
+        if (ok) heldStates[peer] = true
+        return ok
     }
 
     /**
@@ -72,7 +83,9 @@ class TelecomBridge(context: Context) {
      */
     suspend fun resume(peer: String): Boolean {
         val scope = scopes[peer] ?: return false
-        return runCatching { scope.setActive() }.isSuccess
+        val ok = runCatching { scope.setActive() }.isSuccess
+        if (ok) heldStates[peer] = false
+        return ok
     }
 
     /**
@@ -80,6 +93,7 @@ class TelecomBridge(context: Context) {
      */
     suspend fun disconnect(peer: String): Boolean {
         val scope = scopes.remove(peer) ?: return false
+        heldStates.remove(peer)
         return runCatching { scope.disconnect() }.isSuccess
     }
 
@@ -93,5 +107,5 @@ class TelecomBridge(context: Context) {
 
     fun hasCall(peer: String): Boolean = scopes.containsKey(peer)
 
-    fun isHeld(peer: String): Boolean = false // Real impl would track from CallControlScope state; placeholder for future
+    fun isHeld(peer: String): Boolean = heldStates[peer] == true
 }

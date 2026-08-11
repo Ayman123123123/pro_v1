@@ -44,6 +44,26 @@ protocol=udp
 bind=0.0.0.0
 EOF
 
+# NAT handling: if external addresses provided, configure them for proper RTP/SIP behind NAT
+if [ -n "${EXTERNAL_MEDIA_ADDRESS:-}" ]; then
+  echo "external_media_address=${EXTERNAL_MEDIA_ADDRESS}" >> "$CONFIG_DIR/pjsip.conf"
+fi
+if [ -n "${EXTERNAL_SIGNALING_ADDRESS:-}" ]; then
+  echo "external_signaling_address=${EXTERNAL_SIGNALING_ADDRESS}" >> "$CONFIG_DIR/pjsip.conf"
+fi
+# Local net detection for NAT (RED_LOCAL_NET env or auto-detect  private ranges)
+if [ -n "${ASTERISK_LOCAL_NET:-}" ]; then
+  for net in $(echo "$ASTERISK_LOCAL_NET" | tr ',' ' '); do
+    echo "local_net=$net" >> "$CONFIG_DIR/pjsip.conf"
+  done
+else
+  # Default private ranges to help NAT detection
+  echo "local_net=10.0.0.0/8" >> "$CONFIG_DIR/pjsip.conf"
+  echo "local_net=172.16.0.0/12" >> "$CONFIG_DIR/pjsip.conf"
+  echo "local_net=192.168.0.0/16" >> "$CONFIG_DIR/pjsip.conf"
+  echo "local_net=127.0.0.0/8" >> "$CONFIG_DIR/pjsip.conf"
+fi
+
 # ═══════════════════════════════════════════════════════════════════
 # النظير المجهول — يجب أن يُعرَّف صراحةً
 # ═══════════════════════════════════════════════════════════════════

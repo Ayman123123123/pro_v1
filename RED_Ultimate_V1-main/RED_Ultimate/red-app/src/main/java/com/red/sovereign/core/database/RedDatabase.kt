@@ -31,26 +31,72 @@ abstract class RedDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): RedDatabase {
             return INSTANCE ?: synchronized(this) {
-                val secureStore = SecureStore(context, "red_database_security")
-                var passphrase = secureStore.get("passphrase")
-                if (passphrase == null) {
-                    passphrase = java.util.UUID.randomUUID().toString()
-                    secureStore.put("passphrase", passphrase)
-                }
+                INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
+            }
+        }
 
-                val factory = SupportOpenHelperFactory(passphrase.toByteArray())
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    RedDatabase::class.java,
-                    "red_sovereign.db"
-                )
-                    .openHelperFactory(factory)
-                    // إضافة جدول تفاعلات الإيموجي (message_reactions) في الإصدار 2.
-                    .addMigrations(REACTION_MIGRATION_1_2)
-                    .addCallback(FtsCallback())
-                    .build()
-                INSTANCE = instance
-                instance
+        private fun buildDatabase(context: Context): RedDatabase {
+            val secureStore = SecureStore(context, "red_database_security")
+            var passphrase = secureStore.get("passphrase")
+            if (passphrase == null) {
+                passphrase = java.util.UUID.randomUUID().toString()
+                secureStore.put("passphrase", passphrase)
+            }
+
+            val factory = SupportOpenHelperFactory(passphrase.toByteArray())
+
+            // Safe open: if DB fails to open (wrong key after restore, corruption, SQLCipher upgrade),
+            // delete and recreate to avoid permanent crash. Corrupted file is backed up.
+            fun create(): RedDatabase = Room.databaseBuilder(
+                context.applicationContext,
+                RedDatabase::class.java,
+                "red_sovereign.db"
+            )
+                .openHelperFactory(factory)
+                .addMigrations(REACTION_MIGRATION_1_2)
+                .addCallback(FtsCallback())
+                .build()
+
+            return try {
+                create().also { db ->
+                    // Test open
+                    db.openHelper.writableDatabase
+                }
+            } catch (e: Exception) {
+                // Backup corrupted DB
+                try {
+                    val dbFile = context.getDatabasePath("red_sovereign.db")
+                    if (dbFile.exists()) {
+                        val backup = java.io.File(dbFile.parent, "red_sovereign.db.corrupted.${System.currentTimeMillis()}.bak")
+                        dbFile.renameTo(backup)
+                    }
+                } catch (_: Exception) {}
+                // Try with same passphrase after deleting -wal -shm
+                try {
+                    val dbFile = context.getDatabasePath("red_sovereign.db")
+                    java.io.File("${dbFile.absolutePath}-wal").delete()
+                    java.io.File("${dbFile.absolutePath}-shm").delete()
+                    dbFile.delete()
+                } catch (_: Exception) {}
+                try {
+                    create()
+                } catch (e2: Exception) {
+                    // Last resort: regenerate passphrase and recreate
+                    secureStore.remove("passphrase")
+                    val newPass = java.util.UUID.randomUUID().toString()
+                    secureStore.put("passphrase", newPass)
+                    val newFactory = SupportOpenHelperFactory(newPass.toByteArray())
+                    Room.databaseBuilder(
+                        context.applicationContext,
+                        RedDatabase::class.java,
+                        "red_sovereign.db"
+                    )
+                        .openHelperFactory(newFactory)
+                        .addMigrations(REACTION_MIGRATION_1_2)
+                        .addCallback(FtsCallback())
+                        .fallbackToDestructiveMigration()
+                        .build()
+                }
             }
         }
     }

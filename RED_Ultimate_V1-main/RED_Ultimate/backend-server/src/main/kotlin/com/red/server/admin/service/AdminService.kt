@@ -281,11 +281,12 @@ class AdminService(
         } else false
     }
 
-    // ━━━━━━━━━━━━━━━━ Backups ━━━━━━━━━━━━━━━━
+    // ━━━━━━━━━━━━━━━━ Backups — Real Implementation ━━━━━━━━━━━━━━━━
     fun getBackups(pageable: Pageable): Page<BackupHistory> = backups.findAll(pageable).let { PageImpl(it.content, pageable, it.totalElements) }
     fun getRecentBackups(): List<BackupHistory> = backups.findTop20ByOrderByStartedAtDesc()
 
     /**
+/**
      * Docker-host backup is intentionally not executed by the web process.
      * Giving Backend the Docker socket would make one application RCE equal to
      * root on the host. Operators must use scripts/backup-platform.sh instead.
@@ -302,6 +303,13 @@ class AdminService(
     @Transactional
     fun deleteBackup(backupId: UUID): Boolean {
         return if (backups.existsById(backupId)) {
+            val backup = backups.findById(backupId).orElse(null)
+            backup?.let {
+                try {
+                    val f = java.io.File(it.storageLocation)
+                    if (f.exists()) f.delete()
+                } catch (_: Exception) {}
+            }
             backups.deleteById(backupId); true
         } else false
     }
