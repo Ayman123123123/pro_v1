@@ -18,8 +18,9 @@
     "check:guards": "node scripts/check-frontend-guards.mjs",
     "check:server": "node scripts/check-dev-server.mjs",
     "check:integration": "node scripts/check-integration.mjs",
-    "check:live": "node scripts/check-dev-server.mjs && node scripts/check-integration.mjs",
-    "preview": "vite preview --host 0.0.0.0 --port 8088"
+    "check:live": "node scripts/check-dev-server.mjs && node scripts/check-integration.mjs && node scripts/check-asterisk-fleet.mjs",
+    "preview": "vite preview --host 0.0.0.0 --port 8088",
+    "check:asterisk": "node scripts/check-asterisk-fleet.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
