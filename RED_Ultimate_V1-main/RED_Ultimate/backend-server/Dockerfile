@@ -5,7 +5,7 @@
 #  Stage 2: Minimal Eclipse Temurin JRE 21 runtime (non-root)
 # ══════════════════════════════════════════════════════════════════════
 
-FROM gradle:8.12-jdk21 AS builder
+FROM gradle:8.14.3-jdk21 AS builder
 
 USER root
 WORKDIR /build

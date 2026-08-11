@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- DEBUG-ONLY overlay: Allows cleartext for LAN development.
-     RED_SERVER_URL commonly points at a changing RFC1918 LAN address.
-     Release builds use src/main's strict TLS-only policy. -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     DEBUG-ONLY overlay — LAN Development Cleartext (Legendary)
+     • Allows cleartext ONLY in debuggable builds — release uses src/main strict TLS-only
+     • RED_SERVER_URL often is RFC1918 LAN IP (e.g. http://192.168.1.50:8088)
+       Injected via -PRED_SERVER_URL. For dynamic LAN IPs, add host here or rely on base-config true.
+     • Emulator hosts: 10.0.2.2 (AVD), 10.0.3.2 (Genymotion)
+     • Never copy this file to src/main — CI guard will fail release if cleartext=true in main
+     ═══════════════════════════════════════════════════════════════════ -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
@@ -10,11 +15,12 @@
         </trust-anchors>
     </base-config>
 
-    <!-- Explicit LAN / emulator hosts allowed for cleartext in debug only -->
+    <!-- Explicit per-domain cleartext for known dev hosts (defense-in-depth) -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">10.0.3.2</domain>
         <domain includeSubdomains="true">red.local</domain>
         <trust-anchors>
             <certificates src="system" />
