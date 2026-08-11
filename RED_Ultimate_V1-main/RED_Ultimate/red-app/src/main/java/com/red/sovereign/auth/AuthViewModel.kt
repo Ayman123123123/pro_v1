@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -101,6 +102,35 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearPstnState() { pstnState = PstnState.Idle }
+
+    /** تحديث اسم المستخدم (username) على الخادم ثم محلياً. */
+    fun updateUsername(newUsername: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
+        val trimmed = newUsername.trim()
+        if (trimmed.length < 3 || trimmed.length > 20) { done(false, "اسم المستخدم يجب أن يكون 3-20 حرفاً"); return@launch }
+        val client = AuthorizedApiClient(TokenStore(getApplication()))
+        when (val result = client.request("PATCH", "/api/auth/username", Json.encodeToString(mapOf("username" to trimmed)))) {
+            is ApiResult.Success -> {
+                val updated = state
+                if (updated is AuthState.Authenticated) {
+                    state = updated.copy(username = trimmed)
+                    TokenStore(getApplication()).apply { if (get("username") != null) { /* تحديث اسم المستخدم المحفوظ */ } }
+                    done(true, "تم تحديث اسم المستخدم")
+                } else done(false, "لا يوجد حساب نشط")
+            }
+            is ApiResult.Error -> done(false, result.message ?: "فشل تحديث الاسم")
+        }
+    }
+
+    /** تحديث الاسم المعروض (display name) على الخادم ثم محلياً. */
+    fun updateDisplayName(newName: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
+        val trimmed = newName.trim()
+        if (trimmed.isBlank() || trimmed.length > 50) { done(false, "الاسم يجب أن يكون 1-50 حرفاً"); return@launch }
+        val client = AuthorizedApiClient(TokenStore(getApplication()))
+        when (val result = client.request("PATCH", "/api/auth/profile", Json.encodeToString(mapOf("displayName" to trimmed)))) {
+            is ApiResult.Success -> { done(true, "تم تحديث الاسم المعروض") }
+            is ApiResult.Error -> done(false, result.message ?: "فشل تحديث الاسم")
+        }
+    }
 
     fun logout() {
         tokens.clearSession()

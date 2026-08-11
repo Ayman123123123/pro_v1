@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ═══════════════════════════════════════════════════════════════
+         YOUNES Sovereign — Central String Resources
+         السلاسل النصية الرئيسية المركزية.
+         ملاحظة: ما زالت معظم النصوص مضمّنة داخل شاشات Compose؛ تم نقل
+         الأساسيات (اسم التطبيق وقنوات الإشعارات) هنا لتحسين قابلية
+         الترجمة والمراجعة. إعادة التوطين الشاملة خارج نطاق هذا التحديث.
+    ═══════════════════════════════════════════════════════════════ -->
+    <string name="app_name">يونس</string>
+
+    <!-- قنوات الإشعارات -->
+    <string name="channel_messages_name">رسائل يونس</string>
+    <string name="channel_messages_desc">إشعارات الرسائل المشفرة</string>
+    <string name="channel_calls_name">مكالمات يونس</string>
+    <string name="channel_calls_desc">إشعارات المكالمات</string>
+    <string name="channel_calls_incoming_name">مكالمة واردة</string>
+    <string name="channel_calls_incoming_desc">مكالمات واردة برنين وأولوية قصوى</string>
+    <string name="channel_service_name">خدمة يونس</string>
+    <string name="channel_service_desc">الاتصال الدائم المشفر</string>
+
+    <!-- إشعارات شائعة -->
+    <string name="notification_ongoing">مكالمة يونس</string>
+    <string name="notification_end">إنهاء</string>
+    <string name="notification_reject">رفض</string>
+    <string name="notification_accept">فتح للقبول</string>
+    <string name="incoming_video_call">مكالمة فيديو واردة</string>
+    <string name="incoming_voice_call">مكالمة صوتية واردة</string>
+
+    <!-- إشعارات الاتصال والرسائل -->
+    <string name="channel_connection_name">اتصال يونس المحلي</string>
+    <string name="notif_new_message_title">رسالة يونس جديدة</string>
+    <string name="notif_new_message_body">رسالة مشفرة من %1$s</string>
+    <string name="notif_group_message_title">رسالة مجموعة جديدة</string>
+    <string name="notif_voice_message_title">رسالة صوتية جديدة</string>
+    <string name="notif_connection_title">يونس — الاتصال السيادي</string>
+    <string name="status_connecting">جارٍ الاتصال…</string>
+    <string name="status_connected_local">متصل بخادم يونس المحلي</string>
+    <string name="status_connecting_local">جارٍ الاتصال بخادم يونس المحلي</string>
+    <string name="status_disconnected_retry">غير متصل — إعادة المحاولة خلال %1$d ثانية</string>
+    <string name="status_session_keys_low">مخزون مفاتيح الجلسات منخفض — ستتم إعادة المحاولة</string>
+    <string name="status_session_keys_error">تعذر تحديث مفاتيح الجلسات الآمنة — ستتم المحاولة عند إعادة الاتصال</string>
+    <string name="status_encryption_failed">فشل التشفير: %1$s</string>
+    <string name="status_session_expired">انتهت الجلسة — افتح يونس لتسجيل الدخول</string>
+    <string name="status_group_encryption_failed">تعذر تشفير المجموعة: %1$s</string>
+
+    <!-- قنوات إشعارات إضافية -->
+    <string name="channel_dinstar_name">Dinstar Gateway</string>
+    <string name="channel_system_name">نظام يونس</string>
+</resources>

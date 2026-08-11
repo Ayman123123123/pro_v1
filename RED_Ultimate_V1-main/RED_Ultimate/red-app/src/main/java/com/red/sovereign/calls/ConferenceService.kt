@@ -54,7 +54,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+        manager?.createNotificationChannel(NotificationChannel("red_calls", getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
         signaling = ConferenceSignalingClient(this, TokenStore(this), this)
     }
 
@@ -98,14 +98,14 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 }
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
         scope.launch {
             engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
             ConferenceRuntime.eglContext = engine?.eglContext
-            engine?.create(ConferenceRuntime.isVideoEnabled)
+            engine?.create(ConferenceRuntime.isVideoEnabled, simulcastEnabled = true, svc = true)
             ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled)
         }
@@ -227,16 +227,21 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     private fun promote() {
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val notif = NotificationCompat.Builder(this, "younes_calls")
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle("مؤتمر يونس")
-            .setContentText("جارٍ الاتصال بالمؤتمر...")
+        val isVideo = ConferenceRuntime.isVideoEnabled
+        val notif = NotificationCompat.Builder(this, "red_calls")
+            .setSmallIcon(if (isVideo) android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
+            .setContentTitle(if (isVideo) "مؤتمر فيديو يونس" else "مؤتمر يونس")
+            .setContentText("${ConferenceRuntime.participants.size} مشارك • جارٍ الاتصال بالمؤتمر...")
             .setContentIntent(intent)
-            .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(0xFF00C98C.toInt())
             .setOngoing(true)
+            .setSilent(true)
+            .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        if (ConferenceRuntime.isVideoEnabled) {
+        if (isVideo) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
         ServiceCompat.startForeground(this, 7402, notif, type)

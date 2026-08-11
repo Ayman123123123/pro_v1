@@ -58,6 +58,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var remoteDescriptionSet = false
     private var proximityLock: PowerManager.WakeLock? = null
     private var ringtone: Ringtone? = null
+    private var reconnect: CallReconnectManager? = null
     private var vibrator: Vibrator? = null
     private var audioFocus: AudioFocusRequest? = null
     private var recordingManager: CallRecordingManager? = null
@@ -70,6 +71,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         signaling = CallSignalingClient(this, TokenStore(this), this)
         val sensors = getSystemService(SensorManager::class.java)
         sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        // إعادة اتصال تلقائية عند انقطاع الإشارة (بدل إنهاء المكالمة)
+        reconnect = CallReconnectManager(
+            scope = scope,
+            onReconnect = {
+                runCatching { signaling.connect() }
+            },
+            onFailure = { fail("انقطع اتصال الإشارة") }
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -79,6 +88,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 outgoingPending = true
                 target = intent.getStringExtra(EXTRA_TARGET).orEmpty(); mode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
                 require(target.isNotBlank()); callId = UUID.randomUUID().toString()
+                // ضبط الحالة فوراً ليظهر الـ overlay والتبويب الصحيح بلا تأخير
+                CallRuntime.state = CallUiState.Connecting(callId, target, mode)
                 scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); signaling.connect()
             }
@@ -107,7 +118,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             ACTION_STOP_RECORDING -> stopRecording()
             ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
@@ -230,7 +241,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) = fail(message)
-    override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
+    override fun onDisconnected() {
+        // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً
+        if (CallRuntime.state !is CallUiState.Idle) {
+            updateNotification("انقطع الاتصال — جارٍ إعادة الاتصال…")
+            reconnect?.start()
+        }
+    }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
 
@@ -445,9 +462,33 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         ServiceCompat.startForeground(this, NOTIFICATION_ID, value, type)
     }
 
-    private fun createChannel() = getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
-    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle("مكالمة يونس").setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, "إنهاء", serviceIntent(ACTION_END)).build()
-    private fun incomingNotification(peer: String, callMode: String) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(if (callMode == "VIDEO") "مكالمة فيديو واردة" else "مكالمة صوتية واردة").setContentText(peer).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true).setFullScreenIntent(appIntent(), true).addAction(0, "رفض", serviceIntent(ACTION_REJECT)).addAction(0, "فتح للقبول", appIntent()).build()
+    private fun createChannel() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
+        // قناة المكالمات الواردة — أولوية قصوى مع رنين
+        manager.createNotificationChannel(NotificationChannel("red_calls_incoming", getString(com.red.sovereign.R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+            enableVibration(true)
+            setBypassDnd(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        })
+    }
+    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), serviceIntent(ACTION_END)).build()
+    private fun incomingNotification(peer: String, callMode: String) =
+        NotificationCompat.Builder(this, "red_calls_incoming")
+            .setSmallIcon(if (callMode == "VIDEO") android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
+            .setContentTitle(if (callMode == "VIDEO") getString(com.red.sovereign.R.string.incoming_video_call) else getString(com.red.sovereign.R.string.incoming_voice_call))
+            .setContentText(peer)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setColor(0xFF00C98C.toInt())
+            .setOnlyAlertOnce(false)
+            .setOngoing(true)
+            .setFullScreenIntent(appIntent(), true)
+            // رد فعلًا (يقبل المكالمة) — لا يفتح التطبيق فقط
+            .addAction(0, getString(com.red.sovereign.R.string.notification_accept), serviceIntent(ACTION_ACCEPT))
+            .addAction(0, getString(com.red.sovereign.R.string.notification_reject), serviceIntent(ACTION_REJECT))
+            .build()
     private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
     private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     private fun serviceIntent(action: String) = PendingIntent.getService(this, action.hashCode(), Intent(this, YounesCallService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -456,7 +497,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val CHANNEL = "younes_calls"; private const val NOTIFICATION_ID = 7401
+        private const val CHANNEL = "red_calls"; private const val NOTIFICATION_ID = 7401
         const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
         const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"

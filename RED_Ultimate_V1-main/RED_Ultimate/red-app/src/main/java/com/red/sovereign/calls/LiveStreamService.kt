@@ -55,7 +55,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+        manager?.createNotificationChannel(NotificationChannel("red_calls", getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
         signaling = LiveStreamSignalingClient(this, TokenStore(this), this)
     }
 
@@ -80,7 +80,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                 engine?.setCameraEnabled(!isVideoOn)
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
@@ -88,7 +88,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
             // Live streaming needs HD + simulcast for adaptive quality to viewers
-            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster)
+            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster, svc = isBroadcaster)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
             }
@@ -198,13 +198,17 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val title = if (isBroadcaster) "بث مباشر يونس" else "مشاهدة بث يونس"
         val text = if (isBroadcaster) "أنت تبث الآن مباشرة..." else "أنت تشاهد البث المباشر..."
-        val notif = NotificationCompat.Builder(this, "younes_calls")
-            .setSmallIcon(android.R.drawable.sym_action_call)
+        val notif = NotificationCompat.Builder(this, "red_calls")
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(intent)
-            .addAction(0, "إيقاف", PendingIntent.getService(this, 1, Intent(this, LiveStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(if (isBroadcaster) 0xFFE53935.toInt() else 0xFF00C98C.toInt())
             .setOngoing(true)
+            .setSilent(true)
+            .addAction(0, "إيقاف", PendingIntent.getService(this, 1, Intent(this, LiveStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
         if (isBroadcaster) {

@@ -4,6 +4,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 @Serializable
+data class InlinePoll(
+    val question: String,
+    val options: List<String>,
+    val pollId: String = "",
+    val isClosed: Boolean = false,
+    val votes: List<Int> = emptyList()
+)
+
+@Serializable
 data class RichMessage(
     val version: Int = 1,
     val action: String = "MESSAGE",
@@ -15,7 +24,8 @@ data class RichMessage(
     val expiresAt: Long? = null,
     val mentions: List<String> = emptyList(), // RED IDs mentioned via @
     val hashtags: List<String> = emptyList(), // # tags
-    val disappearingMs: Long? = null // 0=off, 3600000=1h, 86400000=24h, 604800000=7d
+    val disappearingMs: Long? = null, // 0=off, 3600000=1h, 86400000=24h, 604800000=7d
+    val poll: InlinePoll? = null // استطلاع مضمّن داخل الرسالة (مشفر)
 ) {
     init {
         require(action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY"))
