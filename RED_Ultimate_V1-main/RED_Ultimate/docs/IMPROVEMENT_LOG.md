@@ -20,3 +20,13 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
+## 2026-08-11 — feat: حزمة الميزات الأربع (A1 + A3 + B1 + B6)
+- **A1 البروفايل**: V25 migration (avatar_url + bio) + UserAccount + updateProfile + PublicRedProfile(avatarUrl)
+  + ProfileViewModel + ProfileScreen (صورة مشفّرة + بايو + QR) + MoreScreen
+- **A3 قفل البصمة**: androidx.biometric + AppLockScreen (BiometricPrompt) + appLockEnabled
+  + MainActivity.onResume lock + PrivacySettings toggle
+- **B1 تعديل/حذف للجميع**: مؤكد مكتمل (EDIT + DELETE for everyone في RichMessage + UI)
+- **B6 Presence + آخر ظهور**: presenceDetailed (PresenceInfo) + /api/contacts/presence/detailed
+  + DirectoryViewModel.lastSeenLabel + عرض في رأس المحادثة + hideLastSeen setting
+- التوثيق: docs/FOUR_FEATURES_BUNDLE_AR.md
+

@@ -229,6 +229,7 @@ import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
 import com.red.sovereign.features.profile.BackupScreen
+import com.red.sovereign.features.profile.ProfileScreen
 import com.red.sovereign.core.YounesId
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
@@ -239,7 +240,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -299,6 +300,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 }
             )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.PROFILE -> ProfileScreen(
+                redId = account.redId,
+                username = account.username,
+                displayName = account.username,
+                onBack = { currentScreen = SovereignScreen.DASHBOARD }
+            )
             SovereignScreen.GROUP_INFO -> {
                 val infoGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
                 SovereignGroupInfoScreen(
@@ -362,7 +369,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
                     onBackup = { currentScreen = SovereignScreen.BACKUP },
-                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES }
+                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
+                    onProfile = { currentScreen = SovereignScreen.PROFILE }
                 )
             }
         }
@@ -1006,7 +1014,7 @@ private fun ChatHubScreen(
                     Avatar((activePerson?.displayName ?: target).take(1))
                     Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                         Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
-                        Text(activePerson?.let { "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(activePerson?.let { val ls = directory.lastSeenLabel(it.redId); ls ?: "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton({ pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }) { Icon(Icons.Default.Call, "مكالمة صوتية عبر يونس") }
                     IconButton({ pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) }) { Icon(Icons.Default.Videocam, "مكالمة فيديو عبر يونس") }
@@ -2278,7 +2286,8 @@ private fun MoreScreen(
     onDevices: () -> Unit,
     onPrivacy: () -> Unit,
     onBackup: () -> Unit,
-    onCommunities: () -> Unit = {}
+    onCommunities: () -> Unit = {},
+    onProfile: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -2286,12 +2295,12 @@ private fun MoreScreen(
     ) {
         Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
         Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(account.username.take(1))
                 Column(Modifier.padding(horizontal = 12.dp)) {
-                    Text(account.username, style = MaterialTheme.typography.titleMedium)
-                    Text("@${account.username} · ${account.redId}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(account.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("البروفايل · الصورة والبايو والهوية", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
