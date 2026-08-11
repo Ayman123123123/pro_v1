@@ -110,7 +110,7 @@ const groupLabels: Record<string, string> = {
  * and every feature page remains reachable after the TypeScript UI migration.
  */
 export default function App() {
-  const [authenticated, setAuthenticated] = useState(() => Boolean(authStore.access() || authStore.refresh()));
+  const [authenticated, setAuthenticated] = useState(() => authStore.isAuthenticated());
   const [currentPage, setCurrentPage] = useState<PageKey>('dashboard');
   const [loginLoading, setLoginLoading] = useState(false);
 

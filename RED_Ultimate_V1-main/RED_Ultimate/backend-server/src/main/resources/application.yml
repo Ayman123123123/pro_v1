@@ -103,6 +103,10 @@ red:
   admin:
     username: ${RED_ADMIN_USERNAME:red_admin}
     password: ${RED_ADMIN_PASSWORD:}
+  # Production default is strict secure cookies. Local HTTP development must opt in
+  # explicitly with RED_ADMIN_COOKIE_SECURE=false; never weaken production globally.
+  admin-cookie:
+    secure: ${RED_ADMIN_COOKIE_SECURE:true}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://minio:9000}
     access-key: ${MINIO_ACCESS_KEY:redadmin}

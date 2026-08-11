@@ -96,15 +96,14 @@ class AdminV2Controller(
         val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status") } ?: "createdAt"
         val direction = runCatching { Sort.Direction.fromString(sortDir ?: "desc") }.getOrDefault(Sort.Direction.DESC)
         val pageable = PageRequest.of(page, safeSize, direction, safeSort)
-        val allUsers = users.findAll(pageable)
-
-        val filtered = allUsers.content.filter { user ->
-            (status == null || user.status.name == status) &&
-            (role == null || user.role.name == role) &&
-            (search == null || user.username.contains(search, ignoreCase = true) ||
-                user.displayName.contains(search, ignoreCase = true) ||
-                user.redId.contains(search, ignoreCase = true))
+        val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.let {
+            runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
         }
+        val parsedRole = role?.trim()?.takeIf(String::isNotEmpty)?.let {
+            runCatching { AccountRole.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_ROLE") }
+        }
+        val normalizedSearch = search?.trim()?.takeIf { it.length >= 2 }?.take(80)
+        val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
 
         val adminId = UUID.fromString(authentication.name)
         service.recordAudit(
@@ -116,7 +115,7 @@ class AdminV2Controller(
         )
 
         return ResponseEntity.ok(mapOf(
-            "content" to filtered.map { user -> mapOf(
+            "content" to allUsers.content.map { user -> mapOf(
                 "id" to user.id,
                 "redId" to user.redId,
                 "username" to user.username,

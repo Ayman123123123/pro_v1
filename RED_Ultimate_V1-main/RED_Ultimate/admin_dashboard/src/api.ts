@@ -1,19 +1,26 @@
 const ACCESS_KEY = 'red_admin_access';
 const REFRESH_KEY = 'red_admin_refresh';
+const CSRF_COOKIE = 'red_admin_csrf';
+
+function csrfToken(): string | undefined {
+  return document.cookie.split('; ').find((item) => item.startsWith(`${CSRF_COOKIE}=`))?.split('=').slice(1).join('=');
+}
 
 export const authStore = {
   access: () => sessionStorage.getItem(ACCESS_KEY),
   refresh: () => localStorage.getItem(REFRESH_KEY),
   set(access: string, refresh?: string) {
     sessionStorage.setItem(ACCESS_KEY, access);
+    // Browser-admin sessions intentionally have no JS-readable refresh token.
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+    else localStorage.removeItem(REFRESH_KEY);
   },
   clear() {
     sessionStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     window.dispatchEvent(new Event('younes:auth-expired'));
   },
-  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY)
+  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY) || !!csrfToken()
 };
 
 /**
@@ -37,16 +44,20 @@ let rotating: Promise<boolean> | null = null;
 
 async function performRotate(): Promise<boolean> {
   const refreshToken = authStore.refresh();
-  if (!refreshToken) { authStore.clear(); return false; }
+  // New admin sessions keep this secret in an HttpOnly cookie; old native/dev sessions may still carry it locally.
+  if (!refreshToken && !csrfToken()) { authStore.clear(); return false; }
   try {
+    const csrf = csrfToken();
     const response = await fetch('/api/auth/refresh', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken })
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
+      // Legacy token is accepted for native/older sessions; browser admin sessions use HttpOnly cookie.
+      body: JSON.stringify({ refreshToken: refreshToken || '' })
     });
     if (!response.ok) { authStore.clear(); return false; }
     const data = await response.json();
-    if (!data.accessToken || !data.refreshToken) { authStore.clear(); return false; }
-    authStore.set(data.accessToken, data.refreshToken);
+    if (!data.accessToken) { authStore.clear(); return false; }
+    authStore.set(data.accessToken, data.refreshToken || undefined);
     return true;
   } catch {
     // Keep the refresh token during a temporary network outage; it may still be valid.
@@ -67,7 +78,7 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
   const access = authStore.access();
   if (access) headers.set('Authorization', `Bearer ${access}`);
-  const response = await fetch(path, { ...init, headers });
+  const response = await fetch(path, { ...init, headers, credentials: init.credentials || 'same-origin' });
   if (response.status === 401 && retry) {
     const refreshed = await rotate();
     // إعادة المحاولة برمز الوصول الجديد الذي كتبه التجديد في المخزن.
@@ -79,21 +90,23 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
 // ━━━━━━━━━━━━━━━━ 🔐 Auth ━━━━━━━━━━━━━━━━
 export async function adminLogin(username: string, password: string) {
   const response = await fetch('/api/auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-RED-Admin-Web': '1' }, credentials: 'same-origin',
     body: JSON.stringify({ username, password })
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.user?.role !== 'ADMIN') throw new Error(data.error || 'بيانات المسؤول غير صحيحة');
-  authStore.set(data.accessToken, data.refreshToken);
+  authStore.set(data.accessToken, data.refreshToken || undefined);
   return data;
 }
 
 export async function adminLogout() {
   const refreshToken = authStore.refresh();
   if (refreshToken) {
+    const csrf = csrfToken();
     await apiFetch('/api/auth/logout', {
       method: 'POST',
-      body: JSON.stringify({ refreshToken })
+      headers: csrf ? { 'X-RED-CSRF': csrf } : undefined,
+      body: JSON.stringify({ refreshToken: refreshToken || '' })
     }).catch(() => {}); // Best-effort; clear tokens regardless
   }
   authStore.clear();

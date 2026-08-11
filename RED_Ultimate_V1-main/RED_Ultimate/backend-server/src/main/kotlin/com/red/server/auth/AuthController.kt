@@ -2,9 +2,11 @@ package com.red.server.auth
 
 import com.red.server.auth.model.AccountStatus
 import jakarta.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.http.ResponseCookie
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.security.core.Authentication
 import java.time.Instant
@@ -23,7 +25,8 @@ class AuthController(
     private val limits: RateLimitService,
     private val users: com.red.server.auth.repository.UserAccountRepository,
     private val media: com.red.server.media.MediaService,
-    @Value("\${red.trust-x-forwarded-for:false}") private val trustXForwardedFor: Boolean = false
+    @Value("\${red.trust-x-forwarded-for:false}") private val trustXForwardedFor: Boolean = false,
+    @Value("\${red.admin-cookie.secure:true}") private val adminCookieSecure: Boolean = true
 ) {
 
     @PostMapping("/register")
@@ -33,7 +36,7 @@ class AuthController(
     }
 
     @PostMapping("/login")
-    fun login(@RequestBody request: LoginRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
+    fun login(@RequestBody request: LoginRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<AuthResponse> {
         val rateIdentity = "${clientIp(servlet)}:${request.username}"
         limits.check("login", rateIdentity, 10, Duration.ofMinutes(15))
         val response = registration.login(request)
@@ -43,15 +46,31 @@ class AuthController(
             AccountStatus.PENDING -> HttpStatus.LOCKED
             AccountStatus.REJECTED, AccountStatus.SUSPENDED, AccountStatus.BANNED -> HttpStatus.FORBIDDEN
         }
-        return ResponseEntity.status(status).body(response)
+        return if (isAdminWebRequest(servlet, response)) {
+            writeAdminCookies(httpResponse, requireNotNull(response.refreshToken))
+            // The long-lived secret must never enter JavaScript for the admin SPA.
+            ResponseEntity.status(status).body(response.copy(refreshToken = null))
+        } else ResponseEntity.status(status).body(response)
     }
 
     @PostMapping("/refresh")
-    fun refresh(@RequestBody request: RefreshRequest): RefreshResponse = registration.refresh(request)
+    fun refresh(@RequestBody request: RefreshRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<RefreshResponse> {
+        val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
+        val usingCookie = !browserToken.isNullOrBlank()
+        if (usingCookie) requireValidCsrf(servlet)
+        val refreshed = registration.refresh(RefreshRequest(browserToken ?: request.refreshToken))
+        return if (usingCookie) {
+            writeAdminCookies(httpResponse, refreshed.refreshToken)
+            ResponseEntity.ok(refreshed.copy(refreshToken = ""))
+        } else ResponseEntity.ok(refreshed)
+    }
 
     @PostMapping("/logout")
-    fun logout(@RequestBody request: LogoutRequest): ResponseEntity<Void> {
-        registration.logout(request)
+    fun logout(@RequestBody request: LogoutRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<Void> {
+        val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
+        if (!browserToken.isNullOrBlank()) requireValidCsrf(servlet)
+        registration.logout(LogoutRequest(browserToken ?: request.refreshToken))
+        clearAdminCookies(httpResponse)
         return ResponseEntity.noContent().build()
     }
 
@@ -137,6 +156,30 @@ class AuthController(
         ))
     }
 
+    private fun isAdminWebRequest(request: HttpServletRequest, response: AuthResponse): Boolean =
+        request.getHeader("X-RED-Admin-Web") == "1" && response.user.role == com.red.server.auth.model.AccountRole.ADMIN && !response.refreshToken.isNullOrBlank()
+
+    private fun writeAdminCookies(response: HttpServletResponse, refreshToken: String) {
+        val csrf = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(java.security.SecureRandom()::nextBytes))
+        response.addHeader("Set-Cookie", ResponseCookie.from(ADMIN_REFRESH_COOKIE, refreshToken).httpOnly(true).secure(adminCookieSecure)
+            .sameSite("Strict").path("/api/auth").maxAge(Duration.ofDays(30)).build().toString())
+        response.addHeader("Set-Cookie", ResponseCookie.from(ADMIN_CSRF_COOKIE, csrf).httpOnly(false).secure(adminCookieSecure)
+            .sameSite("Strict").path("/api/auth").maxAge(Duration.ofDays(30)).build().toString())
+    }
+
+    private fun clearAdminCookies(response: HttpServletResponse) {
+        listOf(ADMIN_REFRESH_COOKIE, ADMIN_CSRF_COOKIE).forEach { name ->
+            response.addHeader("Set-Cookie", ResponseCookie.from(name, "").httpOnly(name == ADMIN_REFRESH_COOKIE).secure(adminCookieSecure)
+                .sameSite("Strict").path("/api/auth").maxAge(Duration.ZERO).build().toString())
+        }
+    }
+
+    private fun requireValidCsrf(request: HttpServletRequest) {
+        val cookie = request.cookies?.firstOrNull { it.name == ADMIN_CSRF_COOKIE }?.value
+        val header = request.getHeader("X-RED-CSRF")
+        require(!cookie.isNullOrBlank() && cookie == header) { "CSRF_VALIDATION_FAILED" }
+    }
+
     /**
      * Extracts client IP, only trusting X-Forwarded-For when configured.
      * ⚠️  X-Forwarded-For can be spoofed by clients unless behind a trusted reverse proxy.
@@ -153,6 +196,8 @@ class AuthController(
     }
 
     companion object {
+        private const val ADMIN_REFRESH_COOKIE = "red_admin_refresh"
+        private const val ADMIN_CSRF_COOKIE = "red_admin_csrf"
         /** أحرف وأرقام وشرطة سفلية ونقطة — بلا مسافات ولا رموز. */
         private val USERNAME_PATTERN = Regex("^[A-Za-z0-9_.]+$")
     }
