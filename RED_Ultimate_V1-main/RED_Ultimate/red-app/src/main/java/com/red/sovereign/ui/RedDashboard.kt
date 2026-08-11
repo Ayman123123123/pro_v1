@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -737,7 +738,10 @@ private fun ChatHubScreen(
     var showGroupPollDialog by remember { mutableStateOf(false) }
     var groupPollQuestion by remember { mutableStateOf("") }
     var groupPollOptions by remember { mutableStateOf(listOf("", "")) }
+    val messagesListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val groupUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+    val chatUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
     val groupPinnedMessages = remember { androidx.compose.runtime.mutableStateMapOf<String, DecryptedMessage>() }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
@@ -860,9 +864,13 @@ private fun ChatHubScreen(
     }
     LaunchedEffect(Unit) { DecryptedMessageBus.messages.collect { item ->
         decrypted.add(item)
-        // تتبع غير المقروء لرسائل المجموعة الواردة (ما لم تكن المجموعة مفتوحة حالياً)
-        if (!item.outgoing && item.conversationId.length > 32 && item.conversationId != groupConversationId) {
-            groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+        // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
+        if (!item.outgoing) {
+            if (item.conversationId.length > 32) {
+                if (item.conversationId != groupConversationId) groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+            } else {
+                if (item.conversationId != conversationId(account.redId, target)) chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
+            }
         }
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
@@ -977,11 +985,15 @@ private fun ChatHubScreen(
             }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
             val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.runtime.LaunchedEffect(conversationMessages.size, target) {
+                if (conversationMessages.isNotEmpty()) messagesListState.animateScrollToItem(conversationMessages.lastIndex)
+            }
+            LazyColumn(Modifier.weight(1f), state = messagesListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (target.isBlank()) {
                     val groupIds = groups.groups.map(Group::id).toSet()
                     items(conversations.filter { it.id !in groupIds }, key = { it.id }) { conv ->
-                        Card(Modifier.fillMaxWidth().clickable { target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        val unread = chatUnread[conv.id] ?: 0
+                        Card(Modifier.fillMaxWidth().clickable { chatUnread.remove(conv.id); target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                             val contact = directory.contacts.firstOrNull { it.redId == conv.peerId }
                             val displayName = contact?.displayName ?: conv.peerId
                             val isOnline = directory.isOnline(conv.peerId)
@@ -996,8 +1008,18 @@ private fun ChatHubScreen(
                                     Text(displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(conv.lastMessageText ?: "لا توجد رسائل", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                 }
-                                if (conv.pinned) Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(20.dp))
-                                if (conv.mutedUntil > System.currentTimeMillis()) Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp).padding(start = 4.dp))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    if (conv.lastMessageTimestamp > 0) Text(relativeTime(conv.lastMessageTimestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (unread > 0) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                    } else {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (conv.pinned) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(16.dp)) }
+                                            if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp)) }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1005,7 +1027,18 @@ private fun ChatHubScreen(
                 if (target.isNotBlank() && conversationMessages.isEmpty()) item {
                     Text("ابدأ المحادثة برسالة. التشفير يُنشأ على الجهاز ولا يرى الخادم النص.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
                 }
-                items(conversationMessages, key = { it.id }) { item ->
+                itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
+                    // فاصل تاريخ بين الأيام (مثل واتساب)
+                    val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
+                    if (showDate) {
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                    Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
                             Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
@@ -1262,7 +1295,10 @@ private fun ChatHubScreen(
                     }
                 }
                 val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
+                    if (groupMessages.isNotEmpty()) groupListState.animateScrollToItem(groupMessages.lastIndex)
+                }
+                LazyColumn(Modifier.weight(1f), state = groupListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (groupPinnedMessages.isNotEmpty()) {
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = 0.08f))) {
@@ -1282,7 +1318,17 @@ private fun ChatHubScreen(
                         }
                     }
                     if (groupMessages.isEmpty()) item { Text("محادثة جماعية مشفرة بـSender Keys. يتغير المفتاح تلقائيًا عند تغير العضوية.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
-                items(groupMessages, key = { it.id }) { message ->
+                itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
+                    val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
+                    if (showDate) {
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                    Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
                             Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { groupReplyToMessage = message }, onLongClick = { selectedChatMessage = message }),
@@ -2598,6 +2644,22 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
     else -> "$bytes B"
+}
+
+private fun isSameDay(a: Long, b: Long): Boolean {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = a }
+    val d1 = cal.get(java.util.Calendar.DAY_OF_YEAR); val y1 = cal.get(java.util.Calendar.YEAR)
+    cal.timeInMillis = b
+    return y1 == cal.get(java.util.Calendar.YEAR) && d1 == cal.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+private fun dateLabel(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    return when {
+        isSameDay(timestamp, now) -> "اليوم"
+        isSameDay(timestamp, now - 86400000L) -> "أمس"
+        else -> java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(timestamp))
+    }
 }
 
 private fun relativeTime(timestamp: Long): String {
