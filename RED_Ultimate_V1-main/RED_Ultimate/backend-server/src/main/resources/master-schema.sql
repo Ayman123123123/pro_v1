@@ -1,12 +1,14 @@
 -- ══════════════════════════════════════════════════════════════════
--- 🏛️ YOUNES Sovereign Master Schema
+-- 🏛️ YOUNES Sovereign Master Schema (V23 Sovereign Ultimate Edition)
 -- PostgreSQL + MongoDB + Redis — المخطط الرئيسي الكامل
 -- ══════════════════════════════════════════════════════════════════
 --
 -- قواعد البيانات:
 -- ┌────────────┬──────────────────────────────────────────────────────┐
 -- │ PostgreSQL  │ البيانات العلائقية: users, devices, groups, calls,  │
--- │             │ contacts, audit, billing, media_grants, privacy     │
+-- │             │ contacts, audit, billing, media_grants, privacy,    │
+-- │             │ call_qoe_telemetry, group_invite_links,             │
+-- │             │ channel_subscriber_preferences, session_fingerprints │
 -- ├────────────┼──────────────────────────────────────────────────────┤
 -- │ MongoDB     │ المستندات: messages, stories, posts, call_history,  │
 -- │             │ group_messages, live_streams, audio_spaces           │
@@ -35,24 +37,30 @@
 -- one_time_ec_prekeys: device_id, key_id, public_key, created_at, consumed_at
 -- one_time_kyber_prekeys: device_id, key_id, public_key, signature, created_at, consumed_at
 
--- 🔄 جلسات التحديث
+-- 🔄 جلسات التحديث وبصمات الأجهزة
 -- refresh_sessions: id, user_id, device_id, token_hash, created_at, expires_at, revoked_at
+-- device_session_fingerprints: id, user_id, device_id, ip_address, user_agent, location_country,
+--   is_suspicious, last_active_at, created_at
 
 -- 🔐 رموز الاسترداد
 -- recovery_codes: id, user_id, code_hash, created_at, used_at
 
--- 👥 المجموعات (SQL للعلاقات)
+-- 👥 المجموعات والقنوات (SQL للعلاقات)
 -- groups: id, name, description, owner_id, avatar_media_key, privacy,
 --   created_by_red_id, max_members, is_announcement, created_at, updated_at
 -- group_members: group_id, user_id, role, custom_title, is_muted, is_pinned, joined_at
 -- group_features: group_id, messages, media, voice_notes, polls, calls, live, links, files
 -- group_invites: id, group_id, inviter_id, invitee_id, status, expires_at, timestamps
+-- group_invite_links: id, group_id, creator_id, token_hash, max_uses, uses_count, expires_at, is_revoked, created_at
+-- channel_subscriber_preferences: id, community_id, user_id, notifications_enabled, is_muted, last_read_post_id, joined_at
 
--- 📞 سجل المكالمات
+-- 📞 سجل المكالمات وجودة الصوت والمرئيات
 -- call_history: id, caller_id, callee_id, callee_phone, call_type, call_route,
 --   direction, status, duration_ms, dinstar_port, signal_strength, max_participants,
 --   viewer_count, is_recorded, recording_media_key, timestamps
 -- call_participants: call_id, user_id, role, joined_at, left_at
+-- call_qoe_telemetry: id, call_id, user_id, route, duration_seconds, audio_bitrate_kbps,
+--   video_bitrate_kbps, packet_loss_percent, jitter_ms, rtt_ms, mos_score, created_at
 
 -- 🔔 الإشعارات
 -- user_notifications: id, user_id, type, title, body, sender_id, sender_name,
@@ -138,7 +146,7 @@
 -- posts: { id, authorId, authorRedId, authorUsername, authorDisplayName, text,
 --   visibility, kind, parentId, quotePostId, poll{options[], expiresAt, multiChoice},
 --   media[{objectKey, mimeType, width, height}], visibleTo, excludedUsers,
---   reactionCounts, replyCount, repostCount, createdAt, editedAt, deletedAt }
+--   reactionCounts, repostCount, createdAt, editedAt, deletedAt }
 -- post_reactions: { id, postId, userId, type, createdAt }
 -- poll_votes: { id, postId, userId, optionId, createdAt }
 -- follows: { id, followerId, followedId, createdAt }
@@ -175,7 +183,7 @@
 -- red:notify:queue:{userId}       — List: recent notifications (max 100)
 -- red:call:signaling:{callId}     — String: WebRTC signal JSON (TTL 30min)
 -- red:dinstar:status:{gwId}       — String: status JSON (TTL 2min)
--- red:dinstar:ports:{gwId}       A — Hash: port_index → port JSON
+-- red:dinstar:ports:{gwId}        — Hash: port_index → port JSON
 -- red:dinstar:loadbalancer        — Counter: round-robin port selection
 -- red:media:grant:{key}:{userId}  — String: "1" (TTL 1h)
 -- red:search:recent:{userId}      — List: recent search queries (max 20)
