@@ -539,6 +539,38 @@ await check('الرسائل الواردة من GSM تصل إلى اللوحة',
   return `${rows.length} رسالة واردة بنصّها ومنفذها`;
 });
 
+await check('عقد الإشراف يطابق ModerationController لا صفحة البلاغات', async () => {
+  // العطل: خادم التطوير كان يعيد شكل `reportDto` (reporterUsername /
+  // description) على مسار الإشراف، بينما المتحكّم الحقيقي يعيد
+  // reporterRedId / details. النتيجة صفحة «الثقة والسلامة» تعرض
+  // أعمدة فارغة رغم وجود البيانات.
+  const open = (await api('GET', '/api/admin/moderation/reports?status=OPEN', undefined, adminToken)).data;
+  assert(Array.isArray(open), 'يجب أن تكون مصفوفة');
+  assert(open.length > 0, 'لا بلاغات مفتوحة للفحص');
+  for (const r of open) {
+    for (const field of ['id', 'reporterRedId', 'category', 'status', 'createdAt']) {
+      assert(r[field] != null, `الحقل ${field} مفقود — الواجهة ستعرض عمودًا فارغًا`);
+    }
+    assert(/^[1-9][0-9]{4}$/.test(r.reporterRedId), `معرّف المُبلّغ ليس خماسيًا: ${r.reporterRedId}`);
+    assert(!('reporterUsername' in r), 'عاد شكل reportDto بدل عقد الإشراف');
+  }
+
+  // المعالجة تعيد البلاغ المحدَّث لا ردًّا فارغًا
+  const target = open[0];
+  const patched = await api('PATCH', `/api/admin/moderation/reports/${target.id}?status=RESOLVED`, undefined, adminToken);
+  assert(patched.status === 200, `المعالجة فشلت: ${patched.status}`);
+  assert(patched.data.status === 'RESOLVED', `الحالة لم تتغيّر: ${patched.data.status}`);
+  assert(patched.data.reporterRedId === target.reporterRedId, 'أُعيد بلاغ مختلف');
+
+  // لا يجوز إرجاع بلاغ إلى OPEN، ولا معالجة بلاغ غير موجود
+  const reopened = await api('PATCH', `/api/admin/moderation/reports/${target.id}?status=OPEN`, undefined, adminToken);
+  assert(reopened.status === 400, `إعادة الفتح يجب أن تُرفض، عاد ${reopened.status}`);
+  const missing = await api('PATCH', '/api/admin/moderation/reports/does-not-exist?status=RESOLVED', undefined, adminToken);
+  assert(missing.status === 404, `بلاغ مفقود يجب أن يعيد 404، عاد ${missing.status}`);
+
+  return `${open.length} بلاغًا بحقول العقد · معالجة تعيد الصف · 400 لإعادة الفتح · 404 للمفقود`;
+});
+
 console.log(`\n${'─'.repeat(60)}`);
 if (fail === 0) {
   console.log(`🎉 نجحت كل الفحوص: ${pass}/${pass} — التطبيق والخادم واللوحة على قاعدة واحدة`);

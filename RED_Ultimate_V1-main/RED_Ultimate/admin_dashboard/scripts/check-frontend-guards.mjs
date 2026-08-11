@@ -13,6 +13,10 @@
  *     يتوقف عند إخفاء التبويب وانقطاع الشبكة، حفاظًا على الخادم
  *     وعلى استعلامات بوابة DINSTAR الحقيقية.
  *  3) لا أسرار مكتوبة في الشيفرة (كلمات مرور/مفاتيح ثابتة).
+ *  4) تجديد الرمز في api.ts يجب أن يبقى محروسًا بحارس تزامن.
+ *     السبب: الخادم يدوّر رمز التجديد ويعتبر إعادة استعماله سرقةً
+ *     فيُبطل كل جلسات الحساب. طلبان متزامنان يصطدمان بـ401 معًا
+ *     يُجدّدان بالرمز نفسه ⇒ طرد فوري للمسؤول.
  *
  * التشغيل:  node scripts/check-frontend-guards.mjs
  */
@@ -81,6 +85,22 @@ for (const file of files) {
   });
 }
 
+// 4) حارس تزامن التجديد في api.ts — قاعدة ملف واحد لا سطر واحد.
+{
+  const apiPath = join(SRC, 'api.ts');
+  const api = readFileSync(apiPath, 'utf8');
+  // لا نطلب اسمًا بعينه؛ نطلب وجود وعد مشترك يُعاد استعماله ثم يُصفَّر.
+  const hasSharedPromise = /\brotating\b[\s\S]*?\bfinally\s*\(/.test(api);
+  const retriesOn401 = /status\s*===\s*401/.test(api);
+  if (retriesOn401 && !hasSharedPromise) {
+    violations.push({
+      rule: 'تجديد الرمز بلا حارس تزامن (يطرد المسؤول عند طلبات متوازية)',
+      at: 'api.ts',
+      detail: 'يلزم وعد تجديد مشترك يُصفَّر في finally بدل تجديد لكل طلب',
+    });
+  }
+}
+
 if (violations.length > 0) {
   console.error(`\n❌ حارس الواجهة رصد ${violations.length} مخالفة:\n`);
   for (const v of violations) {
@@ -90,4 +110,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log(`✅ حارس الواجهة: ${files.length} ملفًا مفحوصًا — لا مخالفات (أصول محلية، استطلاع مُدار، بلا أسرار).`);
+console.log(`✅ حارس الواجهة: ${files.length} ملفًا مفحوصًا — لا مخالفات (أصول محلية، استطلاع مُدار، بلا أسرار، تجديد محروس).`);
