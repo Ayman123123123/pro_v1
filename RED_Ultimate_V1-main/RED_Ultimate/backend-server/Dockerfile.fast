@@ -1,25 +1,29 @@
+# syntax=docker/dockerfile:1.7
 # ══════════════════════════════════════════════════════════════════
-# ⚡ Fast Dockerfile — Uses local pre-compiled JAR (Build in 2 seconds)
-# Requires: ./gradlew :backend-server:bootJar on host first
+# Fast local image — consumes the exact pre-compiled bootJar artifact.
+# Prerequisite: cd backend-server && ./gradlew clean bootJar
 # ══════════════════════════════════════════════════════════════════
-
 FROM eclipse-temurin:21-jre-jammy
+
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl tzdata \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends curl tzdata ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 redserver \
+    && useradd --system --uid 10001 --gid redserver --home-dir /app --shell /usr/sbin/nologin redserver \
+    && mkdir -p /app/logs \
+    && chown -R redserver:redserver /app
 
-RUN groupadd -r redserver && useradd -r -g redserver -d /app -s /sbin/nologin redserver
-RUN mkdir -p /app/logs && chown -R redserver:redserver /app
+# A fixed archive name prevents a stale *-plain.jar from making COPY ambiguous.
+COPY --chown=redserver:redserver backend-server/build/libs/red-backend.jar /app/app.jar
 
-# Copy the pre-built JAR from host
-COPY backend-server/build/libs/*.jar app.jar
+ENV JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport"
 
 USER redserver
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
 
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:-Xms256m -Xmx512m} -jar app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

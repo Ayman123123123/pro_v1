@@ -1,18 +1,25 @@
 package com.red.server.controllers
 
+import io.minio.BucketExistsArgs
+import io.minio.MinioClient
+import org.bson.Document
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
-import org.slf4j.LoggerFactory
-import io.minio.MinioClient
 import java.time.Instant
 
 /**
- * 🏥 YOUNES Sovereign Health Controller
- * فحص شامل مع تفاصيل كل خدمة + إصدار + وقت
+ * YOUNES readiness endpoint.
+ *
+ * This is deliberately stricter than a liveness probe: an HTTP 200 means every
+ * mandatory data service is usable. Docker/Nginx therefore cannot report a
+ * healthy platform while the response body quietly says DOWN.
  */
 @RestController
 class HealthController(
@@ -26,46 +33,48 @@ class HealthController(
     @Value("\${red.dinstar.port:443}") private val dinstarPort: Int,
     @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String
 ) {
-    companion object { private val log = LoggerFactory.getLogger(HealthController::class.java) }
+    companion object {
+        private val log = LoggerFactory.getLogger(HealthController::class.java)
+    }
 
     @GetMapping("/health")
-    fun health(): Map<String, Any> {
+    fun health(): ResponseEntity<Map<String, Any>> {
         val startMs = System.currentTimeMillis()
 
-        // ─── فحص PostgreSQL ───
         val postgresResult = runCatching {
-            val result = jdbcTemplate.queryForObject("SELECT 1", Int::class.java)
-            result == 1
+            jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1
         }
         val postgresOk = postgresResult.getOrDefault(false)
-        val postgresLatency = if (postgresOk) runCatching { jdbcTemplate.queryForObject("SELECT 1", Int::class.java); true }.getOrDefault(false) else false
 
-        // ─── فحص MongoDB ───
+        // MongoDatabase.name is a local accessor and does not contact MongoDB.
+        // A real ping is required for this endpoint to be a readiness signal.
         val mongoResult = runCatching {
-            mongoTemplate.db.name
-            true
+            val reply = mongoTemplate.executeCommand(Document("ping", 1))
+            (reply["ok"] as? Number)?.toDouble() == 1.0
         }
         val mongoOk = mongoResult.getOrDefault(false)
 
-        // ─── فحص Redis ───
         val redisResult = runCatching {
-            redisTemplate.connectionFactory?.connection?.ping()
-            true
+            val connection = requireNotNull(redisTemplate.connectionFactory?.connection) {
+                "Redis connection factory is unavailable"
+            }
+            try {
+                connection.ping()
+                true
+            } finally {
+                connection.close()
+            }
         }
         val redisOk = redisResult.getOrDefault(false)
 
-        // ─── فحص MinIO (تخزين الوسائط S3) ───
         val minioResult = runCatching {
-            minioClient.bucketExists(
-                io.minio.BucketExistsArgs.builder().bucket(minioBucket).build()
-            )
+            minioClient.bucketExists(BucketExistsArgs.builder().bucket(minioBucket).build())
         }
         val minioOk = minioResult.getOrDefault(false)
 
-        // ─── فحص Flyway (آخر migration) ───
         val flywayResult = runCatching {
             jdbcTemplate.queryForObject(
-                "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1",
+                "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1",
                 String::class.java
             )
         }
@@ -74,15 +83,22 @@ class HealthController(
         val totalMs = System.currentTimeMillis() - startMs
 
         if (!allOk) {
-            val down = mutableListOf<String>()
-            if (!mongoOk) down += "mongodb"
-            if (!redisOk) down += "redis"
-            if (!postgresOk) down += "postgresql"
-            if (!minioOk) down += "minio"
-            log.warn("Health check DOWN — services unavailable: {} ({}ms)", down.joinToString(), totalMs)
+            val down = buildList {
+                if (!mongoOk) add("mongodb")
+                if (!redisOk) add("redis")
+                if (!postgresOk) add("postgresql")
+                if (!minioOk) add("minio")
+            }
+            log.warn("Readiness DOWN — unavailable services: {} ({}ms)", down.joinToString(), totalMs)
+            postgresResult.exceptionOrNull()?.let { log.debug("PostgreSQL readiness failure", it) }
+            mongoResult.exceptionOrNull()?.let { log.debug("MongoDB readiness failure", it) }
+            redisResult.exceptionOrNull()?.let { log.debug("Redis readiness failure", it) }
+            minioResult.exceptionOrNull()?.let { log.debug("MinIO readiness failure", it) }
         }
 
-        return mapOf(
+        // Public readiness output contains stable error codes, not exception text
+        // that could disclose hosts, credentials, drivers, or internal topology.
+        val payload: Map<String, Any> = mapOf(
             "brand" to "YOUNES",
             "displayName" to "يونس",
             "status" to if (allOk) "UP" else "DOWN",
@@ -92,25 +108,22 @@ class HealthController(
             "services" to mapOf(
                 "postgresql" to mapOf(
                     "status" to if (postgresOk) "UP" else "DOWN",
-                    "database" to dbUrl.substringAfterLast("/").substringBefore("?"),
-                    "error" to if (!postgresOk) (postgresResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
+                    "database" to dbUrl.substringAfterLast('/').substringBefore('?'),
+                    "error" to if (postgresOk) null else "POSTGRESQL_UNAVAILABLE"
                 ),
                 "mongodb" to mapOf(
                     "status" to if (mongoOk) "UP" else "DOWN",
                     "database" to if (mongoOk) mongoTemplate.db.name else "unreachable",
-                    "error" to if (!mongoOk) (mongoResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
+                    "error" to if (mongoOk) null else "MONGODB_UNAVAILABLE"
                 ),
                 "redis" to mapOf(
                     "status" to if (redisOk) "UP" else "DOWN",
-                    "error" to if (!redisOk) (redisResult.exceptionOrNull()?.message?.take(100) ?: "unknown") else null
+                    "error" to if (redisOk) null else "REDIS_UNAVAILABLE"
                 ),
                 "minio" to mapOf(
                     "status" to if (minioOk) "UP" else "DOWN",
                     "bucket" to minioBucket,
-                    // bucketExists تُرجع false بلا استثناء عند غياب الـ bucket —
-                    // لذلك نميّز الرسالة بدل "unknown" المضللة
-                    "error" to if (!minioOk) (minioResult.exceptionOrNull()?.message?.take(100)
-                        ?: "bucket '$minioBucket' does not exist") else null
+                    "error" to if (minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE"
                 )
             ),
             "dinstar" to mapOf(
@@ -118,17 +131,15 @@ class HealthController(
                 "port" to dinstarPort,
                 "scheme" to dinstarScheme
             ),
-            "flyway" to mapOf(
-                "latestVersion" to flywayResult.getOrNull()
-            ),
+            "flyway" to mapOf("latestVersion" to flywayResult.getOrNull()),
             "system" to mapOf(
                 "javaVersion" to System.getProperty("java.version"),
-                "osName" to System.getProperty("os.name"),
                 "availableProcessors" to Runtime.getRuntime().availableProcessors(),
-                "maxMemoryMb" to Runtime.getRuntime().maxMemory() / 1024 / 1024,
-                "freeMemoryMb" to Runtime.getRuntime().freeMemory() / 1024 / 1024,
-                "usedMemoryMb" to (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024
+                "maxMemoryMb" to Runtime.getRuntime().maxMemory() / 1024 / 1024
             )
         )
+
+        val status = if (allOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
+        return ResponseEntity.status(status).body(payload)
     }
 }

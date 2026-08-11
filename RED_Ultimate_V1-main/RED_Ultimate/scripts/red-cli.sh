@@ -25,6 +25,15 @@ elif [[ -d "$ROOT_DIR/RED_Ultimate_V1-main/RED_Ultimate" ]]; then
 else
   PROJ_DIR="$ROOT_DIR"
 fi
+ENV_FILE="$PROJ_DIR/.env"
+
+compose_cmd() {
+  if [[ -f "$ENV_FILE" ]]; then
+    docker compose --env-file "$ENV_FILE" "$@"
+  else
+    docker compose "$@"
+  fi
+}
 
 banner() {
   echo -e "${CYAN}${BOLD}"
@@ -39,8 +48,8 @@ usage() {
   echo -e "${BOLD}Usage:${NC} $0 <command> [arguments]"
   echo ""
   echo -e "${YELLOW}Available Commands:${NC}"
-  echo "  health               Run full system & security diagnostic check"
-  echo "  test                 Execute all 1260+ automated regression test cases"
+  echo "  health               Run infrastructure checks and live Compose readiness"
+  echo "  test                 Execute the repository's measurable local quality gate"
   echo "  ssl:fix              Self-heal and restore NGINX SSL private keys & certs"
   echo "  ssl:generate         Generate high-security ECC/RSA certificates with SAN"
   echo "  ssl:production       Setup Let's Encrypt SSL with automated cron renewal"
@@ -59,11 +68,22 @@ CMD="${1:-}"
 
 case "$CMD" in
   health)
-    python3 "$SCRIPT_DIR/system_health_check.py"
+    cd "$PROJ_DIR"
+    python3 scripts/check-infrastructure.py
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      compose_cmd config --quiet
+      compose_cmd ps
+      HTTP_PORT="${RED_HTTP_PORT:-$(sed -n 's/^RED_HTTP_PORT=//p' "$ENV_FILE" 2>/dev/null | tail -n 1)}"
+      HTTP_PORT="${HTTP_PORT:-8088}"
+      curl --fail --silent --show-error "http://127.0.0.1:$HTTP_PORT/health" >/dev/null
+      echo -e "${GREEN}✅ Live readiness endpoint passed.${NC}"
+    else
+      echo -e "${YELLOW}⏭️  Docker daemon unavailable; live readiness skipped.${NC}"
+    fi
     ;;
 
   test)
-    python3 "$SCRIPT_DIR/test_runner.py"
+    "$PROJ_DIR/scripts/check-all.sh"
     ;;
 
   ssl:fix)
@@ -82,7 +102,16 @@ case "$CMD" in
 
   ssl:verify)
     shift
-    "$SCRIPT_DIR/verify-ssl-certs.sh" "$@"
+    if [[ "$#" -gt 0 ]]; then
+      "$SCRIPT_DIR/verify-ssl-certs.sh" "$@"
+    else
+      [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE" >&2; exit 1; }
+      cd "$PROJ_DIR"
+      compose_cmd run --rm --no-deps \
+        -v "$SCRIPT_DIR/verify-ssl-certs.sh:/usr/local/bin/verify-red-tls:ro" \
+        --entrypoint sh certs-init -ec \
+        'bash /usr/local/bin/verify-red-tls'
+    fi
     ;;
 
   dinstar:check)
@@ -99,21 +128,21 @@ case "$CMD" in
     SVC="${2:-}"
     cd "$PROJ_DIR"
     if [[ -n "$SVC" ]]; then
-      docker compose logs -f --tail 100 "$SVC"
+      compose_cmd logs -f --tail 100 "$SVC"
     else
-      docker compose logs -f --tail 50
+      compose_cmd logs -f --tail 50
     fi
     ;;
 
   up)
-    cd "$PROJ_DIR"
-    docker compose up -d --build
-    echo -e "${GREEN}✅ All services started successfully!${NC}"
+    # Delegate secret generation, Compose validation, and readiness waits to the
+    # canonical workflow instead of declaring success immediately after `up -d`.
+    "$PROJ_DIR/scripts/local-first-run.sh" "${SERVER_IP:-}"
     ;;
 
   down)
     cd "$PROJ_DIR"
-    docker compose down
+    compose_cmd down
     echo -e "${YELLOW}🛑 All services stopped.${NC}"
     ;;
 
@@ -121,9 +150,9 @@ case "$CMD" in
     SVC="${2:-}"
     cd "$PROJ_DIR"
     if [[ -n "$SVC" ]]; then
-      docker compose restart "$SVC"
+      compose_cmd restart "$SVC"
     else
-      docker compose restart
+      compose_cmd restart
     fi
     echo -e "${GREEN}✅ Restart complete!${NC}"
     ;;

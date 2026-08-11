@@ -125,7 +125,11 @@ const tagDto = (r) => ({
 const packDto = (r) => ({
   id: r.id, name: r.name, description: r.description, isOfficial: !!r.is_official,
   isPublished: !!r.is_published, isFree: !!r.is_free, priceCents: r.price_cents,
-  stickerCount: r.sticker_count, coverUrl: r.cover_url, createdAt: r.created_at,
+  stickerCount: r.sticker_count,
+  // Admin UI historically called this coverUrl; red-app's production DTO uses
+  // coverMediaKey. Return both while the clients converge on one contract.
+  coverUrl: r.cover_url, coverMediaKey: r.cover_url || '', previewMediaKey: null,
+  createdAt: r.created_at,
 });
 
 /** صفحة Spring Pageable كما يبنيها AdminV2Controller. */
@@ -1177,6 +1181,10 @@ const PARTICIPANT_ROUTES = [
   { method: 'POST', rx: /^\/api\/admin\/content\/events\/[^/]+\/checkin$/ },
   { method: 'GET', rx: /^\/api\/admin\/content\/polls\/active$/ },
   { method: 'GET', rx: /^\/api\/admin\/content\/events\/(live|upcoming)$/ },
+  { method: 'GET', rx: /^\/api\/admin\/content\/sticker-packs\/(published|installed)$/ },
+  { method: 'GET', rx: /^\/api\/admin\/content\/sticker-packs\/[^/]+\/stickers$/ },
+  { method: 'POST', rx: /^\/api\/admin\/content\/sticker-packs\/[^/]+\/install$/ },
+  { method: 'DELETE', rx: /^\/api\/admin\/content\/sticker-packs\/[^/]+\/install$/ },
 ];
 
 /**

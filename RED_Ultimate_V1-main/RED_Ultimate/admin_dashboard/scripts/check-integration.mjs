@@ -244,7 +244,11 @@ await check('٨ طلب صداقة → قبول → جهة اتصال متباد�
   assert(mine.some((c) => c.redId === '10001'), 'لم تُضف جهة الاتصال');
   const theirs = (await api('GET', '/api/contacts', undefined, adminToken)).data;
   assert(theirs.some((c) => c.redId === redId), 'العلاقة ليست متبادلة');
-  return 'متبادلة بين الطرفين';
+  const presence = await api('GET', '/api/contacts/presence/detailed?ids=10001', undefined, appToken);
+  assert(presence.status === 200, `الحضور المفصّل فشل: ${presence.status}`);
+  assert(typeof presence.data['10001']?.online === 'boolean', 'عقد online مفقود من الحضور المفصّل');
+  assert('lastSeen' in presence.data['10001'], 'عقد lastSeen مفقود من الحضور المفصّل');
+  return 'متبادلة بين الطرفين + حضور مفصّل';
 });
 
 await check('٩ ينشر في التغذية ويراه مستخدم آخر', async () => {
@@ -702,7 +706,49 @@ await check('مستخدم عادي يصوّت ويؤكّد حضوره، ولا �
   assert(again.status === 400 && again.data.error === 'ALREADY_VOTED',
     `التصويت المكرر يجب أن يُرفض، عاد ${again.status} ${again.data.error}`);
 
-  return `403 للإداري · تصويت ${before}→${after} · ALREADY_VOTED للمكرر`;
+  // مسارات الملصقات تحت /api/admin/content هي أيضًا أفعال مستخدم عادي.
+  const packs = await api('GET', '/api/admin/content/sticker-packs/published', undefined, userToken);
+  assert(packs.status === 200 && packs.data.length > 0, `الحزم المنشورة فشلت: ${packs.status}`);
+  const pack = packs.data[0];
+  const stickers = await api('GET', `/api/admin/content/sticker-packs/${pack.id}/stickers`, undefined, userToken);
+  assert(stickers.status === 200 && stickers.data.length > 0, `ملصقات الحزمة فشلت: ${stickers.status}`);
+  const installed = await api('POST', `/api/admin/content/sticker-packs/${pack.id}/install`, undefined, userToken);
+  assert(installed.status === 200 && installed.data.success, `تثبيت الحزمة فشل: ${installed.status}`);
+  const mine = await api('GET', '/api/admin/content/sticker-packs/installed', undefined, userToken);
+  assert(mine.status === 200 && mine.data.some((x) => x.id === pack.id), 'الحزمة المثبتة لم تظهر للمستخدم');
+  const removed = await api('DELETE', `/api/admin/content/sticker-packs/${pack.id}/install`, undefined, userToken);
+  assert(removed.status === 200 && removed.data.success, `إلغاء التثبيت فشل: ${removed.status}`);
+
+  // الاستكشاف ليس fixtures: إنشاء بث/مساحة يظهر فوراً لطرف آخر ويمكنه الانضمام.
+  const createdStream = await api('POST', '/api/livestream/create', { title: 'بث فحص حي', isPrivate: false }, userToken);
+  assert(createdStream.status === 200 && createdStream.data.streamId, `إنشاء البث فشل: ${createdStream.status}`);
+  const streams = await api('GET', '/api/livestream/public?query=فحص', undefined, adminToken);
+  assert(streams.status === 200 && streams.data.some((x) => x.streamId === createdStream.data.streamId), 'البث لم يظهر في الاستكشاف');
+  const joinedStream = await api('POST', `/api/livestream/${createdStream.data.streamId}/join`, {}, adminToken);
+  assert(joinedStream.status === 200 && joinedStream.data.authorized, 'تعذر الانضمام للبث');
+  const leftStream = await api('POST', `/api/livestream/${createdStream.data.streamId}/leave`, {}, adminToken);
+  assert(leftStream.status === 200 && leftStream.data.viewerCount === 0, 'عداد المشاهدين لم ينخفض بعد المغادرة');
+  const stoppedStream = await api('POST', `/api/livestream/${createdStream.data.streamId}/stop`, {}, userToken);
+  assert(stoppedStream.status === 200 && stoppedStream.data.stopped, 'صاحب البث لم يستطع إيقافه');
+
+  const createdSpace = await api('POST', '/api/conference/create', { title: 'مساحة فحص حية', isSpace: true }, userToken);
+  assert(createdSpace.status === 200 && createdSpace.data.roomId, `إنشاء المساحة فشل: ${createdSpace.status}`);
+  const spaces = await api('GET', '/api/conference/public?isSpace=true&query=فحص', undefined, adminToken);
+  assert(spaces.status === 200 && spaces.data.some((x) => x.roomId === createdSpace.data.roomId), 'المساحة لم تظهر في الاستكشاف');
+  const joinedSpace = await api('POST', `/api/conference/${createdSpace.data.roomId}/join`, {}, adminToken);
+  assert(joinedSpace.status === 200 && joinedSpace.data.authorized, 'تعذر الانضمام للمساحة');
+
+  const community = await api('POST', '/api/communities', {
+    name: 'مجتمع فحص حي', description: 'بيانات تنفيذية', category: 'TECH', isPublic: true,
+  }, userToken);
+  assert(community.status === 201 && community.data.isJoined, `إنشاء المجتمع فشل: ${community.status}`);
+  const joinedCommunity = await api('POST', `/api/communities/${community.data.id}/join`, {}, adminToken);
+  assert(joinedCommunity.status === 200 && joinedCommunity.data.isJoined && joinedCommunity.data.memberCount === 2,
+    'دورة انضمام المجتمع لم تُحفظ');
+  const leftCommunity = await api('POST', `/api/communities/${community.data.id}/leave`, {}, adminToken);
+  assert(leftCommunity.status === 204, `مغادرة المجتمع فشلت: ${leftCommunity.status}`);
+
+  return `403 للإداري · تصويت ${before}→${after} · ملصقات · بث · مساحة · مجتمع كامل`;
 });
 
 console.log(`\n${'─'.repeat(60)}`);

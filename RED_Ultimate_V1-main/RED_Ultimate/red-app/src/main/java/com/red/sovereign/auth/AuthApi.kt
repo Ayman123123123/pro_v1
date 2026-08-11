@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 class AuthApi(
     private val context: Context,
-    private val client: OkHttpClient = SecureOkHttpClient.build(context),
+    private val client: OkHttpClient = SecureOkHttpClient.getDefault(context),
     private val json: Json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 ) {
     suspend fun register(request: RegisterRequest): ApiResult<AuthResponse> =

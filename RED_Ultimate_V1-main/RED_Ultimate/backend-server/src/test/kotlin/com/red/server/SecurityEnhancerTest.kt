@@ -54,6 +54,31 @@ class SecurityEnhancerTest {
     }
 
     @Test
+    fun `untrusted forwarded header cannot evade rate limiting`() {
+        val untrusted = SecurityEnhancer(trustXForwardedFor = false)
+        repeat(SecurityEnhancer.MAX_REQUESTS_PER_MINUTE + 1) { index ->
+            val req = MockHttpServletRequest().apply {
+                setRemoteAddr("203.0.113.10")
+                addHeader("X-Forwarded-For", "198.51.100.$index")
+            }
+            val allowed = untrusted.preHandle(req, MockHttpServletResponse(), object {})
+            if (index == SecurityEnhancer.MAX_REQUESTS_PER_MINUTE) assertFalse(allowed)
+        }
+    }
+
+    @Test
+    fun `trusted proxy header identifies distinct clients`() {
+        val trusted = SecurityEnhancer(trustXForwardedFor = true)
+        repeat(SecurityEnhancer.MAX_REQUESTS_PER_MINUTE + 1) { index ->
+            val req = MockHttpServletRequest().apply {
+                setRemoteAddr("172.20.0.10")
+                addHeader("X-Forwarded-For", "198.51.100.$index")
+            }
+            assertTrue(trusted.preHandle(req, MockHttpServletResponse(), object {}))
+        }
+    }
+
+    @Test
     fun `isValidEmail returns correct results`() {
         assertTrue(securityEnhancer.isValidEmail("test@example.com"))
         assertTrue(securityEnhancer.isValidEmail("user.name+tag@domain.co.uk"))

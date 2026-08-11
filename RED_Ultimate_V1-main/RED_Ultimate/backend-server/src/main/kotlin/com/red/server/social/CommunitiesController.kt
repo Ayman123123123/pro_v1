@@ -40,7 +40,8 @@ class CommunitiesController(
         authentication: Authentication?
     ): List<CommunityResponse> {
         val userId = optionalUserId(authentication)
-        val query = Query().with(Sort.by(Sort.Direction.DESC, "createdAt"))
+        val query = Query(Criteria.where("archived").ne(true))
+            .with(Sort.by(Sort.Direction.DESC, "createdAt"))
         if (!search.isNullOrBlank()) {
             query.addCriteria(
                 Criteria().orOperator(

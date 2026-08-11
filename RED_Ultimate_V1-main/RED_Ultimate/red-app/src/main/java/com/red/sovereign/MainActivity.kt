@@ -36,6 +36,10 @@ import com.red.sovereign.ui.theme.SovereignBackground
 class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val localNetworkPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Log.i("LocalNetwork", if (granted) "LAN access granted" else "LAN access denied")
+    }
+    private var localNetworkPermissionRequested = false
 
     /** المعرّف المستهدف من الإشعار (conversationId + sender) لفتح المحادثة مباشرة. */
     private var deepLinkConversation by mutableStateOf<String?>(null)
@@ -127,6 +131,19 @@ class MainActivity : ComponentActivity() {
                 enterPictureInPictureMode(params)
             }
         } catch (_: Exception) {}
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // targetSdk 37 enforces this runtime permission before OkHttp/WebSocket
+        // can reach the sovereign LAN server. Request it before login/discovery.
+        if (Build.VERSION.SDK_INT >= 37 &&
+            !localNetworkPermissionRequested &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
+        ) {
+            localNetworkPermissionRequested = true
+            localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }
     }
 
     /** قفل التطبيق عند العودة للواجهة إن كان AppLock مفعّلاً ومستخدم مُصادق عليه. */

@@ -10,8 +10,9 @@ RUN --mount=type=cache,target=/home/gradle/.gradle/caches,sharing=locked \
     gradle clean build --no-daemon > /tmp/gradle-build.log 2>&1 \
     || (echo '=== RED_BACKEND_GRADLE_FAILURE ==='; tail -n 120 /tmp/gradle-build.log; exit 1)
 
-FROM ghcr.io/cirruslabs/android-sdk:35 AS android-builder
+FROM ghcr.io/cirruslabs/android-sdk:36@sha256:f9b3ea9ed2b5fc9522adae82c7b4622ab7aa54207ef532c8e615a347dca08f31 AS android-builder
 ARG RED_SERVER_URL=http://127.0.0.1
+ARG RED_TLS_PINS=
 ARG RED_TARGET_ABI=arm64-v8a
 WORKDIR /build/RED_Ultimate
 COPY RED_Ultimate/build.gradle.kts RED_Ultimate/settings.gradle.kts RED_Ultimate/gradle.properties RED_Ultimate/gradlew ./
@@ -21,8 +22,8 @@ COPY RED_Ultimate/build-logic/ build-logic/
 COPY RED_Ultimate/wire-handler/ wire-handler/
 COPY RED_Ultimate/red-app/ red-app/
 COPY RED_Ultimate/shared-proto/ shared-proto/
-# المشروع يطلب compileSdk=37 وقاعدة الصورة تحمل 35 فقط — نثبّت platform 37 + build-tools 36
-# استباقياً حتى لا يضطر AGP للتنزيل أثناء البناء (شبكة الهدف متقلبة). المحاولة محمية:
+# The pinned image supplies JDK 21 and Android 16 tooling. Install API 37 plus
+# AGP 9.2's supported Build Tools 36 before Gradle starts (network is less reliable later).
 # إن غاب sdkmanager من الصورة نكمل ونعتمد على التنزيل التلقائي.
 RUN (command -v sdkmanager >/dev/null 2>&1 \
       && yes | sdkmanager --licenses >/dev/null 2>&1 \
@@ -36,7 +37,7 @@ RUN --mount=type=cache,target=/root/.gradle/caches,sharing=locked \
     && sh ./gradlew \
        -Dorg.gradle.jvmargs="-Xmx3g -Xms256m -XX:MaxMetaspaceSize=768m" \
        -Dkotlin.daemon.jvmargs="-Xmx2g -XX:MaxMetaspaceSize=512m" \
-       :app:testDebugUnitTest :app:assembleDebug -PRED_SERVER_URL="$RED_SERVER_URL" -PRED_TARGET_ABI="$RED_TARGET_ABI" -PRED_SKIP_BUILD_LOGIC=true \
+       :app:testDebugUnitTest :app:assembleDebug -PRED_SERVER_URL="$RED_SERVER_URL" -PRED_TLS_PINS="$RED_TLS_PINS" -PRED_TARGET_ABI="$RED_TARGET_ABI" -PRED_SKIP_BUILD_LOGIC=true \
        --dependency-verification strict --no-configuration-cache --no-daemon > /tmp/android-build.log 2>&1 \
     || (echo '=== RED_ANDROID_GRADLE_FAILURE ==='; tail -n 160 /tmp/android-build.log; exit 1)
 
@@ -83,7 +84,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/backend-server/build/libs/*.jar app.jar
+COPY --from=builder /build/backend-server/build/libs/red-backend.jar app.jar
 COPY --from=android-builder /build/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk /opt/red-app-debug.apk
 COPY --from=admin-builder /build/admin/dist /opt/red-admin-dashboard
 COPY --from=sfu-check /tmp/red-sfu-check-ok /opt/verification/red-sfu-check-ok

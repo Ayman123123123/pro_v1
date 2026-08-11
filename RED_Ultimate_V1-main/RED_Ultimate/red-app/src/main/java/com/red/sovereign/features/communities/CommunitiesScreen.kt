@@ -356,8 +356,10 @@ private fun CommunityCard(
                         }
                     }
                 }
-                community.isJoined -> OutlinedButton(onClick = onJoin, enabled = false) {
-                    Text("منضم", fontSize = 12.sp)
+                community.isJoined -> OutlinedButton(onClick = onLeave) {
+                    Icon(Icons.Default.Logout, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("مغادرة", fontSize = 12.sp)
                 }
                 else -> Button(onClick = onJoin, colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) {
                     Text("انضم", fontSize = 12.sp)

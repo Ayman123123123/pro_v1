@@ -202,6 +202,7 @@ class ConferenceController(
                 errorMessage = "كلمة السر غير صحيحة"
             ))
         }
+        roomService.addParticipant(roomId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
             roomId = record.roomId,
@@ -209,6 +210,25 @@ class ConferenceController(
             isSpace = record.isSpace,
             hostName = record.hostName
         ))
+    }
+
+    @PostMapping("/{roomId}/leave")
+    fun leaveRoom(
+        @PathVariable roomId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        roomService.removeParticipant(roomId, authentication.name)
+        return ResponseEntity.ok(mapOf("roomId" to roomId, "participantCount" to roomService.getParticipantCount(roomId)))
+    }
+
+    @PostMapping("/{roomId}/close")
+    fun closeRoom(
+        @PathVariable roomId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val record = roomService.getRoom(roomId) ?: throw NoSuchElementException("Room not found")
+        require(record.hostId == authentication.name) { "ONLY_HOST_CAN_CLOSE" }
+        return ResponseEntity.ok(mapOf("roomId" to roomId, "closed" to roomService.closeRoom(roomId)))
     }
 
     @PostMapping("/{roomId}/invite")

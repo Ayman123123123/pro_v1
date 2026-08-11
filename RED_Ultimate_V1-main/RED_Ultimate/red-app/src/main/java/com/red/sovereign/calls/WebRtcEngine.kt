@@ -4,6 +4,7 @@ import android.content.Context
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.core.RedQualityManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -142,6 +143,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     // الإعدادات الحالية
     private var currentBitrateProfile: NetworkStats.BitrateProfile = NetworkStats.BitrateProfile.STANDARD
+    private var cameraRequestedByUser: Boolean = true
     private var hasVideo: Boolean = false
     private var svcEnabled: Boolean = false
     private var lastStats: NetworkStats = NetworkStats()
@@ -170,7 +172,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      */
     suspend fun create(video: Boolean, simulcastEnabled: Boolean = true, svc: Boolean = false): ApiResult<Unit> {
         hasVideo = video
+        cameraRequestedByUser = video
         svcEnabled = svc
+        currentBitrateProfile = initialBitrateProfile()
         val ice = loadIce() ?: return ApiResult.Error(null, "ICE_CONFIGURATION_FAILED")
         val servers = ice.iceServers.map { value ->
             PeerConnection.IceServer.builder(value.urls)
@@ -218,7 +222,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             applyCodecPreferences(svcEnabled)
             // Simulcast أو VP9-SVC حسب الوضع
             if (simulcastEnabled) {
-                applySimulcast(sender, NetworkStats.BitrateProfile.HD, svcEnabled)
+                applySimulcast(sender, currentBitrateProfile, svcEnabled)
             }
         }
         localMedia = LocalMedia(audio, videoTrack)
@@ -290,7 +294,10 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     fun setRemote(description: SessionDescription, after: (() -> Unit)? = null) = peer?.setRemoteDescription(sdpObserver(after = after), description)
     fun addIce(candidate: IceCandidate) { peer?.addIceCandidate(candidate) }
     fun setMicrophoneEnabled(enabled: Boolean) { localMedia?.audioTrack?.setEnabled(enabled) }
-    fun setCameraEnabled(enabled: Boolean) { localMedia?.videoTrack?.setEnabled(enabled) }
+    fun setCameraEnabled(enabled: Boolean) {
+        cameraRequestedByUser = enabled
+        applyEffectiveCameraState()
+    }
     fun switchCamera() { (capturer as? org.webrtc.CameraVideoCapturer)?.switchCamera(null) }
 
     /**
@@ -302,13 +309,18 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         val recommended = NetworkStats.recommendBitrate(stats.quality)
         if (recommended == currentBitrateProfile) return
         currentBitrateProfile = recommended
-        if (recommended == NetworkStats.BitrateProfile.AUDIO_ONLY) {
-            // نوقف الفيديو لتوفير bandwidth
-            setCameraEnabled(false)
-        } else {
-            setCameraEnabled(true)
+        // Network adaptation must never overwrite the user's camera choice.
+        // It may suspend video temporarily, then restore it only if the user
+        // still requested video when network quality recovers.
+        applyEffectiveCameraState()
+        if (recommended != NetworkStats.BitrateProfile.AUDIO_ONLY) {
             applySimulcast(videoSender, recommended, svcEnabled)
         }
+    }
+
+    private fun applyEffectiveCameraState() {
+        val networkAllowsVideo = currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY
+        localMedia?.videoTrack?.setEnabled(hasVideo && cameraRequestedByUser && networkAllowsVideo)
     }
 
     fun currentBitrate() = currentBitrateProfile
@@ -381,8 +393,21 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         videoSource = factory.createVideoSource(false)
         textureHelper = SurfaceTextureHelper.create("YounesCamera", egl.eglBaseContext)
         selected.initialize(textureHelper, context, videoSource?.capturerObserver)
-        selected.startCapture(NetworkStats.BitrateProfile.HD.videoWidth, NetworkStats.BitrateProfile.HD.videoHeight, NetworkStats.BitrateProfile.HD.videoFramerate)
-        return factory.createVideoTrack("younes-video", videoSource).apply { setEnabled(true) }
+        val profile = currentBitrateProfile.takeUnless { it == NetworkStats.BitrateProfile.AUDIO_ONLY }
+            ?: NetworkStats.BitrateProfile.LOW
+        selected.startCapture(profile.videoWidth, profile.videoHeight, profile.videoFramerate)
+        return factory.createVideoTrack("younes-video", videoSource).apply {
+            setEnabled(cameraRequestedByUser && currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY)
+        }
+    }
+
+    private fun initialBitrateProfile(): NetworkStats.BitrateProfile {
+        val profile = RedQualityManager.videoProfile(context)
+        return when {
+            profile.videoKbps >= 1_000 && profile.videoHeight >= 720 -> NetworkStats.BitrateProfile.HD
+            profile.videoKbps >= 500 -> NetworkStats.BitrateProfile.STANDARD
+            else -> NetworkStats.BitrateProfile.LOW
+        }
     }
 
     private fun camera(enumerator: CameraEnumerator): VideoCapturer? {

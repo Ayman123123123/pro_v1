@@ -127,6 +127,17 @@ const callDto = (c) => ({
   startedAt: c.started_at, answeredAt: c.answered_at, endedAt: c.ended_at,
 });
 
+const stickerPackDto = (p) => ({
+  id: p.id, name: p.name, description: p.description,
+  coverMediaKey: p.cover_url || '', previewMediaKey: null,
+  stickerCount: p.sticker_count, isOfficial: !!p.is_official, isFree: !!p.is_free,
+});
+
+const stickerDto = (s) => ({
+  id: s.id, packId: s.pack_id, name: s.name, mediaKey: s.media_key,
+  emojiTags: JSON.parse(s.emoji_tags || '[]'), displayOrder: s.display_order,
+});
+
 // ─────────────────────────── التسجيل ───────────────────────────
 const ok = (data) => ({ status: 200, data });
 const created = (data) => ({ status: 201, data });
@@ -410,6 +421,22 @@ module.exports = function registerAppRoutes(on) {
     const cutoff = Date.now() - 120000;
     return ok(Object.fromEntries(allowed.map((r) =>
       [r.red_id, r.last_seen ? Date.parse(r.last_seen) >= cutoff : false])));
+  });
+
+  on('GET', '/api/contacts/presence/detailed', (_p, q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const requested = String(q.get('ids') || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+    if (requested.length > 100) return bad('At most 100 contact IDs may be checked at once');
+    const allowed = all(`SELECT u.red_id, u.last_seen FROM contacts c JOIN users u ON u.id = c.contact_id
+                         WHERE c.owner_id = ?`, me.id)
+      .filter((r) => requested.includes(r.red_id));
+    const cutoff = Date.now() - 120000;
+    return ok(Object.fromEntries(allowed.map((r) => {
+      const lastSeen = r.last_seen ? Date.parse(r.last_seen) : null;
+      const online = lastSeen !== null && lastSeen >= cutoff;
+      return [r.red_id, { online, lastSeen: online ? Date.now() : lastSeen }];
+    })));
   });
 
   on('GET', '/api/contacts/requests', (_p, _q, _b, ctx) => {
@@ -872,6 +899,144 @@ module.exports = function registerAppRoutes(on) {
   on('GET', '/api/groups/join-requests', () => ok([]));
   on('POST', '/api/groups/:groupId/join-requests/:requestId', () => noContent());
 
+  // ═══ حزم الملصقات للمستخدم ═══
+  // هذه المسارات تقع تاريخيًا تحت /api/admin/content، لكن SecurityConfig
+  // يصنفها كأفعال مستخدم مصادَق لا كأفعال مسؤول.
+  on('GET', '/api/admin/content/sticker-packs/published', (_p, _q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    return ok(all('SELECT * FROM sticker_packs WHERE is_published=1 ORDER BY created_at DESC').map(stickerPackDto));
+  });
+
+  on('GET', '/api/admin/content/sticker-packs/installed', (_p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    return ok(all(`SELECT p.* FROM user_sticker_packs u
+                   JOIN sticker_packs p ON p.id=u.pack_id
+                   WHERE u.user_id=? ORDER BY u.installed_at DESC`, me.id).map(stickerPackDto));
+  });
+
+  on('GET', '/api/admin/content/sticker-packs/:packId/stickers', (p, _q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    if (!get('SELECT 1 present FROM sticker_packs WHERE id=?', p.packId)) return notFound('STICKER_PACK_NOT_FOUND');
+    return ok(all('SELECT * FROM stickers WHERE pack_id=? ORDER BY display_order', p.packId).map(stickerDto));
+  });
+
+  on('POST', '/api/admin/content/sticker-packs/:packId/install', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    if (!get('SELECT 1 present FROM sticker_packs WHERE id=?', p.packId)) return notFound('STICKER_PACK_NOT_FOUND');
+    run(`INSERT INTO user_sticker_packs (user_id,pack_id,installed_at)
+         VALUES (?,?,?) ON CONFLICT(user_id,pack_id) DO NOTHING`, me.id, p.packId, nowIso());
+    return ok({ success: true, packId: p.packId });
+  });
+
+  on('DELETE', '/api/admin/content/sticker-packs/:packId/install', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const existed = !!get('SELECT 1 present FROM user_sticker_packs WHERE user_id=? AND pack_id=?', me.id, p.packId);
+    run('DELETE FROM user_sticker_packs WHERE user_id=? AND pack_id=?', me.id, p.packId);
+    return ok({ success: existed });
+  });
+
+  // ═══ الاستكشاف: بث مباشر + مساحات صوتية ═══
+  // حالة تنفيذية حقيقية داخل خادم التطوير؛ لا fixtures ثابتة في واجهة Android.
+  const liveStreams = new Map();
+  const conferenceRooms = new Map();
+  const communities = new Map();
+  const communityDto = (community, me) => ({
+    id: community.id, name: community.name, description: community.description,
+    category: community.category, tags: community.tags, isPublic: community.isPublic,
+    createdBy: community.createdBy, createdByUsername: community.createdByUsername,
+    avatarColor: community.avatarColor, rules: community.rules,
+    memberCount: community.members.size,
+    myRole: community.createdBy === me.id ? 'ADMIN' : (community.members.has(me.id) ? 'MEMBER' : null),
+    isJoined: community.members.has(me.id), createdAt: community.createdAt, updatedAt: community.updatedAt,
+  });
+
+  on('GET', '/api/livestream/public', (_p, q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const query = String(q.get('query') || '').trim().toLowerCase();
+    return ok([...liveStreams.values()].filter((stream) => !stream.isPrivate &&
+      (!query || `${stream.title} ${stream.broadcasterName} ${stream.broadcasterRedId} ${stream.streamId}`.toLowerCase().includes(query))));
+  });
+
+  on('POST', '/api/livestream/create', (_p, _q, body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const title = String(body?.title || '').trim();
+    if (title.length < 3 || title.length > 120) return bad('STREAM_TITLE_INVALID');
+    const requestedId = String(body?.streamId || '').trim();
+    if (requestedId && !/^[A-Za-z0-9_-]{8,128}$/.test(requestedId)) return bad('INVALID_STREAM_ID');
+    const streamId = requestedId || `stream_${uuid().replaceAll('-', '').slice(0, 12)}`;
+    const existing = liveStreams.get(streamId);
+    if (existing && existing.broadcasterRedId !== me.red_id) return { status: 409, data: { error: 'STREAM_ID_ALREADY_OWNED' } };
+    if (existing) return ok(existing);
+    const stream = {
+      streamId, title, broadcasterName: me.display_name, broadcasterRedId: me.red_id,
+      isPrivate: !!body?.isPrivate, viewerCount: 0, inviteLink: `younes://livestream/${streamId}`,
+    };
+    liveStreams.set(streamId, stream);
+    return ok(stream);
+  });
+
+  on('POST', '/api/livestream/:streamId/join', (p, _q, _body, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const stream = liveStreams.get(p.streamId);
+    if (!stream) return notFound('LIVE_STREAM_NOT_FOUND');
+    stream.viewerCount += 1;
+    return ok({ authorized: true, streamId: stream.streamId, title: stream.title,
+      isPrivate: stream.isPrivate, broadcasterName: stream.broadcasterName });
+  });
+  on('POST', '/api/livestream/:streamId/leave', (p, _q, _body, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const stream = liveStreams.get(p.streamId);
+    if (!stream) return notFound('LIVE_STREAM_NOT_FOUND');
+    stream.viewerCount = Math.max(0, stream.viewerCount - 1);
+    return ok({ streamId: stream.streamId, viewerCount: stream.viewerCount });
+  });
+  on('POST', '/api/livestream/:streamId/stop', (p, _q, _body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const stream = liveStreams.get(p.streamId);
+    if (!stream) return notFound('LIVE_STREAM_NOT_FOUND');
+    if (stream.broadcasterRedId !== me.red_id) return { status: 403, data: { error: 'ONLY_BROADCASTER_CAN_STOP' } };
+    liveStreams.delete(p.streamId);
+    return ok({ streamId: p.streamId, stopped: true });
+  });
+
+  on('GET', '/api/conference/public', (_p, q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const query = String(q.get('query') || '').trim().toLowerCase();
+    const spaceOnly = q.get('isSpace') === 'true';
+    return ok([...conferenceRooms.values()].filter((room) => !room.isPrivate &&
+      (!spaceOnly || room.isSpace) &&
+      (!query || `${room.title} ${room.hostName} ${room.hostRedId} ${room.roomId}`.toLowerCase().includes(query))));
+  });
+
+  on('POST', '/api/conference/create', (_p, _q, body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const title = String(body?.title || '').trim();
+    if (title.length < 3 || title.length > 120) return bad('ROOM_TITLE_INVALID');
+    const roomId = String(body?.roomId || '').trim() || `room_${uuid().replaceAll('-', '').slice(0, 12)}`;
+    const room = {
+      roomId, title, hostName: me.display_name, hostRedId: me.red_id,
+      isSpace: body?.isSpace !== false, isPrivate: !!body?.isPrivate, participantCount: 0,
+      inviteLink: `younes://${body?.isSpace !== false ? 'space' : 'conference'}/${roomId}`,
+    };
+    conferenceRooms.set(roomId, room);
+    return ok(room);
+  });
+
+  on('POST', '/api/conference/:roomId/join', (p, _q, _body, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    room.participantCount += 1;
+    return ok({ authorized: true, roomId: room.roomId, title: room.title,
+      isSpace: room.isSpace, hostName: room.hostName });
+  });
+
   // ═══ المكالمات ═══
   on('GET', '/api/calls/history', (_p, q, _b, ctx) => {
     const me = currentUser(ctx);
@@ -934,17 +1099,62 @@ module.exports = function registerAppRoutes(on) {
   on('POST', '/api/stories/:storyId/view', () => noContent());
   on('POST', '/api/stories/:storyId/react', () => noContent());
 
-  on('GET', '/api/communities', (_p, _q, _b, ctx) => {
+  on('GET', '/api/communities', (_p, q, _b, ctx) => {
     const me = currentUser(ctx);
-    return me ? ok([]) : unauthorized();
+    if (!me) return unauthorized();
+    const query = String(q.get('search') || '').trim().toLowerCase();
+    return ok([...communities.values()]
+      .filter((community) => !query || `${community.name} ${community.description || ''} ${community.tags.join(' ')}`.toLowerCase().includes(query))
+      .map((community) => communityDto(community, me)));
   });
-  on('POST', '/api/communities', (_p, _q, b, ctx) => {
+  on('POST', '/api/communities', (_p, _q, body, ctx) => {
     const me = currentUser(ctx);
-    return me ? created({ id: uuid(), name: b?.name || '', createdAt: nowIso() }) : unauthorized();
+    if (!me) return unauthorized();
+    const name = String(body?.name || '').trim();
+    if (name.length < 2 || name.length > 100) return bad('COMMUNITY_NAME_INVALID');
+    const id = uuid();
+    const now = nowIso();
+    const community = {
+      id, name, description: body?.description || null, category: body?.category || 'GENERAL',
+      tags: Array.isArray(body?.tags) ? body.tags.slice(0, 10) : [], isPublic: body?.isPublic !== false,
+      createdBy: me.id, createdByUsername: me.username, avatarColor: body?.avatarColor || '#45B7D1',
+      rules: body?.rules || null, members: new Set([me.id]), createdAt: now, updatedAt: now,
+    };
+    communities.set(id, community);
+    return created(communityDto(community, me));
   });
-  on('GET', '/api/communities/:id', (p) => ok({ id: p.id, name: '', members: [] }));
-  on('POST', '/api/communities/:id/join', () => noContent());
-  on('POST', '/api/communities/:id/leave', () => noContent());
+  on('GET', '/api/communities/:id', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const community = communities.get(p.id);
+    return community ? ok(communityDto(community, me)) : notFound('COMMUNITY_NOT_FOUND');
+  });
+  on('POST', '/api/communities/:id/join', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const community = communities.get(p.id);
+    if (!community) return notFound('COMMUNITY_NOT_FOUND');
+    community.members.add(me.id); community.updatedAt = nowIso();
+    return ok(communityDto(community, me));
+  });
+  on('POST', '/api/communities/:id/leave', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const community = communities.get(p.id);
+    if (!community) return notFound('COMMUNITY_NOT_FOUND');
+    if (community.createdBy === me.id) return bad('OWNER_CANNOT_LEAVE');
+    community.members.delete(me.id); community.updatedAt = nowIso();
+    return noContent();
+  });
+  on('DELETE', '/api/communities/:id', (p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const community = communities.get(p.id);
+    if (!community) return notFound('COMMUNITY_NOT_FOUND');
+    if (community.createdBy !== me.id) return { status: 403, data: { error: 'COMMUNITY_ADMIN_REQUIRED' } };
+    communities.delete(p.id);
+    return noContent();
+  });
 };
 
 module.exports.currentUser = currentUser;
