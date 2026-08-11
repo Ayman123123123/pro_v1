@@ -9,25 +9,39 @@ import android.speech.SpeechRecognizer
 import java.util.Locale
 
 /**
- * Live captioning أثناء المكالمة.
+ * Live captioning — تجريبي ومعطّل افتراضيًا أثناء مكالمة WebRTC نشطة.
  *
- * يستخدم Android SpeechRecognizer المحلي (Whisper صغير مدرب على الجهاز، لا يوجد API call).
- * ملاحظة: SpeechRecognizer يحتل الـ mic — لا يعمل مع مكالمة نشطة.
- * البديل: server-side STT (Whisper-large عبر backend) للنسخة الكاملة.
+ * التحذير الصادق:
+ * - Android SpeechRecognizer ليس Whisper محليًا. قد يستخدم خدمة Google السحابية
+ *   حسب الجهاز، وقد يتطلب اتصال إنترنت، وقد يرسل الصوت لخوادم خارجية.
+ * - يحتل الميكروفون وقد يتعارض مع WebRTC (الذي يحتكر mic).
+ * - لذلك هذا الكلاس غير متصل افتراضيًا ولا يُستدعى في SovereignActiveCallScreen.
+ *   الاستخدام الموصى به للإنتاج: server-side STT (Whisper-large عبر backend)
+ *   عبر بث صوتي منفصل بعد موافقة المستخدم الصريحة.
  *
- * Privacy: لا يُرسل أي صوت لخادم خارجي. كل التحويل محلي.
+ * الخصوصية: لا يُفعل إلا بموافقة صريحة من المستخدم في الإعدادات، ويعرض تحذيرًا.
  */
 class CallCaptionManager(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
     private val buffer = StringBuilder()
     var onCaption: ((String) -> Unit)? = null
+    var isActive: Boolean = false
+        private set
 
     /**
-     * يبدأ البث الحي للنص. يجب استدعاؤها فقط إذا الـ device supports speech recognition
-     * والـ mic مشغول بمكالمة (Android سيستخدم الـ mic إذا كان متاح).
+     * يبدأ البث الحي للنص — فقط إذا لم تكن هناك مكالمة WebRTC نشطة.
+     * يجب استدعاؤه بعد موافقة المستخدم وفهم مخاطره.
      */
     fun start() {
+        if (isActive) return
         if (!SpeechRecognizer.isRecognitionAvailable(context)) return
+        // لا تبدأ إذا كانت هناك مكالمة WebRTC نشطة (يتعارض mic)
+        if (com.red.sovereign.calls.CallRuntime.state !is com.red.sovereign.calls.CallUiState.Idle &&
+            com.red.sovereign.calls.ConferenceRuntime.state !is com.red.sovereign.calls.ConferenceUiState.Idle &&
+            com.red.sovereign.calls.LiveStreamRuntime.state !is com.red.sovereign.calls.LiveStreamUiState.Idle) {
+            // WebRTC active — don't steal mic
+            return
+        }
         val rec = SpeechRecognizer.createSpeechRecognizer(context).apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) { /* UI ready */ }
@@ -51,6 +65,7 @@ class CallCaptionManager(private val context: Context) {
             })
         }
         recognizer = rec
+        isActive = true
         restart()
     }
 
@@ -65,6 +80,7 @@ class CallCaptionManager(private val context: Context) {
     }
 
     fun stop() {
+        isActive = false
         recognizer?.stopListening()
         recognizer?.destroy()
         recognizer = null

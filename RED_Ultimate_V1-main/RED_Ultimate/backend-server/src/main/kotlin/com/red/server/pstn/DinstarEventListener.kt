@@ -54,10 +54,18 @@ class DinstarEventListener(
         log.info("DINSTAR line {} hung up — cause: {}", lineNumber, cause)
 
         // Automatic port release in load balancer when channel hangs up from Asterisk / Dinstar
+        // Supports up to 32 ports (UC2000-VE-32G) not just 0..7
         val port = lineNumber.filter { it.isDigit() }.toIntOrNull()
-        if (port != null && port in 0..7) {
+        if (port != null && port in 0..31) {
             loadBalancer.releasePort(port)
-            log.info("DINSTAR port {} released in load balancer on Asterisk hangup", port)
+            log.info("DINSTAR port {} released in load balancer on Asterisk hangup (broad release)", port)
+        } else {
+            // Fallback: try to extract port from channel name like PJSIP/dinstar-gw-192-168-1-1-5
+            val fallbackPort = Regex("""[-_](\d+)$""").find(channel)?.groupValues?.get(1)?.toIntOrNull()
+            if (fallbackPort != null && fallbackPort in 0..31) {
+                loadBalancer.releasePort(fallbackPort)
+                log.info("DINSTAR port {} released via fallback parsing", fallbackPort)
+            }
         }
     }
 

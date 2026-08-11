@@ -42,8 +42,17 @@ services:
     build:
       context: .
       dockerfile: backend-server/Dockerfile
+    image: red-backend:local
     container_name: red-backend
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
@@ -70,7 +79,9 @@ services:
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
+      - BACKUP_ROOT=/backups
       # The backend is reachable externally only through our Nginx service. Nginx
       # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
       - RED_TRUST_X_FORWARDED_FOR=true
@@ -78,6 +89,7 @@ services:
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
     volumes:
       - identity-secrets:/run/secrets:ro
+      - backup-data:/backups
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
@@ -99,11 +111,19 @@ services:
   # ━━━━━━━━━━━━ 2. VoIP/Conference SFU ━━━━━━━━━━━━
   media-sfu:
     build: ./media-sfu
+    image: red-media-sfu:local
     container_name: red-media-sfu
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
+      - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
@@ -120,9 +140,18 @@ services:
 
   # ━━━━━━━━━━━━ 3. TURN/STUN Relay ━━━━━━━━━━━━
   coturn:
-    image: coturn/coturn
+    image: coturn/coturn:4.6.2-r10
     container_name: red-turn
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    environment:
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
+      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
     command:
       - --no-cli
       - --log-file=stdout
@@ -132,6 +161,7 @@ services:
       - --realm=red.sovereign
       - --min-port=45000
       - --max-port=45050
+      - --external-ip=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-127.0.0.1}}/${TURN_INTERNAL_IP:-}
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
@@ -148,13 +178,23 @@ services:
   # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
   pstn-gateway:
     build: ./pstn-asterisk
+    image: red-pstn-gateway:local
     container_name: red-pstn-gateway
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
+      - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
+      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"
@@ -166,11 +206,20 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 5. PostgreSQL 16 ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 5. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━
+  # pg_trgm extension requires superuser on managed Postgres. The migration V* that
+  # creates CREATE EXTENSION IF NOT EXISTS pg_trgm should run only on self-hosted
+  # postgres where admin is superuser (as here). For managed DB, pre-create extension manually.
   db-postgres:
-    image: postgres:16
+    image: postgres:16.6-bookworm
     container_name: red-db-sql
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
@@ -188,9 +237,15 @@ services:
 
   # ━━━━━━━━━━━━ 6. MongoDB 8 ━━━━━━━━━━━━
   db-mongo:
-    image: mongo:8
+    image: mongo:8.0.6-noble
     container_name: red-db-nosql
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - MONGO_INITDB_ROOT_USERNAME=red_user
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
@@ -206,12 +261,18 @@ services:
       start_period: 40s
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 7. Redis 7 ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 7. Redis 7 — volatile-lru to avoid evicting active sessions ━━━━━━━━━━━━
   cache-redis:
-    image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    image: redis:7.4.2-bookworm
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru", "--save", "900 1", "--save", "300 10"]
     container_name: red-cache
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes: ["redis-data:/data"]
@@ -222,11 +283,17 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
   minio:
-    image: minio/minio
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     container_name: red-storage
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     command: server /data --console-address ":9001"
     # Management/API ports stay local to the host; public media access must pass
     # through authenticated backend endpoints, never directly through MinIO.
@@ -304,11 +371,17 @@ services:
       - red-certs:/etc/ssl/red
       - certbot-www:/var/www/certbot
 
-  # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI — pinned + mem limits ━━━━━━━━━━━━
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.27.4-alpine
     container_name: red-proxy
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
     ports: ["${RED_HTTP_PORT:-8088}:80", "${RED_HTTPS_PORT:-8443}:443"]
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
@@ -341,8 +414,15 @@ services:
 
   admin-panel:
     build: ./admin_dashboard
+    image: red-admin-ui:local
     container_name: red-admin-ui
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
@@ -353,11 +433,16 @@ services:
       retries: 3
     networks: ["red-net"]
 
+  # ━━━━━━━━━━━━ 10. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
+  # Host must run chrony/ntpd. Backend health can verify clock skew via /health.
+  # so NTP sync is expected at host level, not container runtime download.
+
 volumes:
   postgres-data:
   mongo-data:
   redis-data:
   minio-data:
+  backup-data:
   identity-secrets:
   red-certs:
   certbot-www:

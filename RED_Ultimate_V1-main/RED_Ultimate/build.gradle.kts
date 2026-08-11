@@ -182,7 +182,7 @@ tasks.register("clean", Delete::class) {
 tasks.register("format") {
   group = "Formatting"
   description = "Runs the ktlint formatter on all sources in this project and included builds"
-  dependsOn(*subprojects.mapNotNull { tasks.findByPath(":${it.path}:ktlintFormat") }.toTypedArray())
+  dependsOn(*subprojects.mapNotNull { tasks.findByPath("${it.path}:ktlintFormat") }.toTypedArray())
   if (buildLogicIncluded.get()) {
     dependsOn(
       gradle.includedBuild("build-logic").task(":plugins:ktlintFormat"),
