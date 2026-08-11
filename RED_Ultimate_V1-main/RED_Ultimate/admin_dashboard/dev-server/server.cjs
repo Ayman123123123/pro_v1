@@ -22,6 +22,10 @@
  * ⚠️ تطوير محلي فقط: بلا مصادقة حقيقية، وغير مُضمَّن في صورة Docker.
  *    الإنتاج يمر عبر backend-server + PostgreSQL/Mongo/Redis/MinIO.
  */
+if (process.env.NODE_ENV === 'production' || process.env.RED_RUNTIME_MODE === 'production') {
+  throw new Error('The SQLite dev-server is a test double and must never run in production. Use backend-server with PostgreSQL/MongoDB/Redis/MinIO.');
+}
+
 const http = require('node:http');
 const crypto = require('node:crypto');
 const d = require('./db.cjs');
@@ -1207,6 +1211,8 @@ appRoutes(on);
 
 // ───────────────────────────── الخادم ─────────────────────────────
 const server = http.createServer((req, res) => {
+  res.setHeader('X-RED-Development-Server', 'sqlite-test-double');
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Device-Id');
@@ -1280,13 +1286,6 @@ server.on('upgrade', (req, socket) => {
 
   socket.write(wsFrame(`${nowIso()}  INFO  [dev-server] بدأ بث السجل الحي — مصدره سجل التدقيق الفعلي`));
   let lastSeen = nowIso();
-  const rotating = [
-    'INFO  [dinstar] استعلام حالة المنافذ — 7/8 مسجلة',
-    'WARN  [media-sfu] ارتفاع زمن الاستجابة إلى 240ms',
-    'INFO  [messages] توجيه رسالة مشفرة (metadata فقط)',
-    'INFO  [health] فحص دوري: postgresql=UP redis=UP minio=UP',
-  ];
-  let i = 0;
   const timer = setInterval(() => {
     if (socket.destroyed) return clearInterval(timer);
     try {
@@ -1296,7 +1295,7 @@ server.on('upgrade', (req, socket) => {
         lastSeen = row.created_at;
         socket.write(wsFrame(`${row.created_at}  ${row.severity.padEnd(5)} [audit] ${row.action} — ${row.description || ''}`));
       }
-      if (fresh.length === 0) socket.write(wsFrame(`${nowIso()}  ${rotating[i++ % rotating.length]}`));
+      if (fresh.length === 0) socket.write(wsFrame(`${nowIso()}  INFO  [dev-server] لا أحداث تدقيق جديدة؛ هذا heartbeat لخادم التطوير فقط.`));
     } catch { /* أُغلقت القاعدة */ }
   }, 2000);
   socket.on('close', () => clearInterval(timer));
