@@ -75,7 +75,8 @@ class ContentService(
         val poll = polls.findById(pollId).orElse(null)
             ?: throw NoSuchElementException("POLL_NOT_FOUND")
         if (poll.status != "ACTIVE") throw IllegalStateException("POLL_NOT_ACTIVE")
-        if (poll.endsAt != null && poll.endsAt!!.isBefore(Instant.now()))
+        val pollEndsAt = poll.endsAt // local copy — mutable var cannot smart-cast
+        if (pollEndsAt != null && pollEndsAt.isBefore(Instant.now()))
             throw IllegalStateException("POLL_ENDED")
 
         // تحقق أن كل خيار ينتمي لهذا الاستطلاع — يمنع التصويت بخيار من استطلاع آخر
@@ -173,7 +174,8 @@ class ContentService(
         if (event.status != "SCHEDULED" && event.status != "LIVE") return null
         val rsvpDeadline = event.rsvpDeadline // نسخة محلية — الخاصية قابلة للتعديل فلا smart-cast
         if (rsvpDeadline != null && rsvpDeadline.isBefore(Instant.now())) return null
-        if (event.maxAttendees != null && event.currentAttendees >= event.maxAttendees!! &&
+        val maxAttendees = event.maxAttendees // local copy — mutable var
+        if (maxAttendees != null && event.currentAttendees >= maxAttendees &&
             status == "GOING") return null
 
         val existing = eventAttendees.findByEventIdAndUserId(eventId, userId)

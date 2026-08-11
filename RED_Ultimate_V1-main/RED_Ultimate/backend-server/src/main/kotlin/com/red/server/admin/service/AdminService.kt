@@ -173,9 +173,12 @@ class AdminService(
         if (!flag.enabled) return false
         val expiresAt = flag.expiresAt // نسخة محلية — expiresAt قابلة للتعديل فلا smart-cast
         if (expiresAt != null && expiresAt.isBefore(Instant.now())) return false
-        if (userId != null && flag.targetUserIds != null) {
-            val targets = flag.targetUserIds!!.split(",").map { it.trim() }
-            if (targets.contains(userId.toString())) return true
+        if (userId != null) {
+            val targetIds = flag.targetUserIds // local copy — mutable property cannot smart-cast
+            if (targetIds != null) {
+                val targets = targetIds.split(",").map { it.trim() }
+                if (targets.contains(userId.toString())) return true
+            }
         }
         return flag.rolloutPercentage >= 100 ||
             (flag.rolloutPercentage > 0 && (userId?.hashCode()?.toLong()?.rem(100)?.toInt() ?: 0) < flag.rolloutPercentage)
