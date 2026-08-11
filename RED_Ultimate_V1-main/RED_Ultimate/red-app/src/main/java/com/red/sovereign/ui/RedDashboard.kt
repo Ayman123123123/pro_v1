@@ -43,6 +43,11 @@ import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Copy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Forward
+import androidx.compose.material.icons.filled.QuickReply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
@@ -729,6 +734,7 @@ private fun ChatHubScreen(
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
     val context = LocalContext.current
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
+    val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
     
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
@@ -955,7 +961,7 @@ private fun ChatHubScreen(
                 items(conversationMessages, key = { it.id }) { item ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp).clickable { selectedChatMessage = item },
+                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
                             colors = CardDefaults.cardColors(containerColor = if (item.outgoing) YounesEmerald.copy(alpha = .82f) else AqyalSurfaceRaised.copy(alpha = .94f)),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1204,7 +1210,7 @@ private fun ChatHubScreen(
                 items(groupMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp).clickable { groupReplyToMessage = message },
+                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { groupReplyToMessage = message }, onLongClick = { selectedChatMessage = message }),
                             colors = CardDefaults.cardColors(containerColor = if (message.outgoing) YounesEmerald.copy(alpha = .82f) else MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1294,23 +1300,57 @@ private fun ChatHubScreen(
     }
     selectedChatMessage?.let { message ->
         val payload = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-        AlertDialog(
+        val isGroupMsg = message.conversationId.length > 32
+        ModalBottomSheet(
             onDismissRequest = { selectedChatMessage = null },
-            title = { Text("خيارات الرسالة") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton({ replyToMessage = message; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("رد") }
-                OutlinedButton({ pendingForwardMessage = message; showDirectory = true; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("إعادة توجيه") }
-                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") OutlinedButton({ editingMessageId = message.id; messageText = payload.text; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("تعديل") }
-                if (message.outgoing) Button({
-                    RedConnectionService.sendRichText(context, target, message.conversationId, RichMessage(action = "DELETE", deleteOf = message.id))
-                    selectedChatMessage = null
-                }, Modifier.fillMaxWidth()) { Text("حذف لدى الجميع") }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { option -> AssistChip({ disappearingDurationMs = option.second; selectedChatMessage = null }, { Text(option.first) }) }
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // المعاينة: الرسالة المحددة
+                Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(if (message.outgoing) "أنت" else (if (isGroupMsg) message.senderRedId.take(12) else "المرسل"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-            } },
-            confirmButton = { TextButton({ selectedChatMessage = null }) { Text("إغلاق") } }
-        )
+
+                MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
+                    replyToMessage = message; selectedChatMessage = null
+                }
+                MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
+                    pendingForwardMessage = message; showDirectory = true; selectedChatMessage = null
+                }
+                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
+                    MessageActionRow(Icons.Default.Edit, "تعديل", "عدّل النص المرسل") {
+                        editingMessageId = message.id; messageText = payload.text; selectedChatMessage = null
+                    }
+                }
+                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
+                    MessageActionRow(Icons.Default.Copy, "نسخ", "انسخ النص") {
+                        val ctx = LocalContext.current
+                        val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", payload.text))
+                        selectedChatMessage = null
+                    }
+                }
+                if (message.outgoing) {
+                    MessageActionRow(Icons.Default.Delete, "حذف لدى الجميع", "احذف الرسالة لدى الكل") {
+                        val convId = if (isGroupMsg) message.conversationId else message.conversationId
+                        val tgt = if (isGroupMsg) "" else target
+                        RedConnectionService.sendRichText(context, tgt, convId, RichMessage(action = "DELETE", deleteOf = message.id))
+                        selectedChatMessage = null
+                    }
+                }
+                MessageActionRow(Icons.Default.NotificationsOff, "كتم", "أوقف الإشعارات مؤقتاً") { selectedChatMessage = null }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { (label, ms) ->
+                        OutlinedButton({ disappearingDurationMs = ms; selectedChatMessage = null }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                    }
+                }
+                TextButton({ selectedChatMessage = null }, Modifier.align(Alignment.CenterHorizontally)) { Text("إغلاق", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
     selectedContact?.let { person ->
         AlertDialog(
@@ -2294,6 +2334,21 @@ private fun relativeTime(timestamp: Long): String {
         diff < 86400000 -> "${diff / 3600000}س"
         diff < 172800000 -> "أمس"
         else -> java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(timestamp))
+    }
+}
+
+@Composable
+private fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(YounesEmerald.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = YounesEmerald, modifier = Modifier.size(22.dp))
+            }
+            Column(Modifier.padding(start = 14.dp)) {
+                Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+        }
     }
 }
 
