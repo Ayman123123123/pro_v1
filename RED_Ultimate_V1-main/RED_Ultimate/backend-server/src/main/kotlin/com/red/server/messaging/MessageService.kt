@@ -33,6 +33,16 @@ class MessageService(
         mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
         mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
         mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+        // V26: فهارس إضافية للميزات الجديدة
+        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
+        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
+        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
+        // فهارس المجموعات والقنوات
+        try {
+            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
+            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
+        } catch (_: Exception) {}
     }
 
     fun processIncoming(message: RedProtos.ChatMessage): MessageDocument {
@@ -131,6 +141,8 @@ class MessageService(
     )
 
     private fun enforceNotBlocked(senderRedId: String, receiverRedId: String) {
+        // V26: ملاحظة لنفسي — لا حظر للذات
+        if (senderRedId == receiverRedId) return
         val sender = users.findByRedId(senderRedId) ?: throw NoSuchElementException("Sender identity not found")
         val receiver = users.findByRedId(receiverRedId) ?: throw NoSuchElementException("Receiver identity not found")
         val blocked = jdbc.queryForObject(
@@ -160,9 +172,21 @@ class MessageService(
         val id = runCatching { UUID.fromString(message.id) }.getOrElse { throw IllegalArgumentException("Message ID must be UUID v7") }
         require(id.version() == 7) { "Message ID must be UUID v7" }
         require(message.senderId.matches(RED_ID)) { "Invalid sender YOUNES ID" }
-        require(message.receiverId.matches(RED_ID) && message.receiverId != message.senderId) { "Invalid receiver YOUNES ID" }
+        require(message.receiverId.matches(RED_ID)) { "Invalid receiver YOUNES ID" }
         require(message.conversationId.length in 8..128) { "Invalid conversation ID" }
         require(message.senderDeviceId in 1..127 && message.receiverDeviceId in 1..127) { "Invalid protocol device ID" }
+        // V26: السماح بملاحظة لنفسي — sender == receiver مسموح فقط لمحادثة ذاتية
+        if (message.senderId == message.receiverId) {
+            require(
+                message.conversationId.contains("self") ||
+                message.conversationId.contains("note") ||
+                message.conversationId == message.senderId ||
+                message.conversationId.contains(message.senderId)
+            ) { "Self-message must use self conversation" }
+        } else {
+            // للتحقق العادي نتأكد أن المحادثة ليست ذاتية
+            require(message.senderId != message.receiverId || message.conversationId.contains("self")) { "Invalid receiver YOUNES ID" }
+        }
         val allowedCiphertext = if (message.type == "GROUP_MESSAGE") message.ciphertextType == 4 else message.ciphertextType == 2 || message.ciphertextType == 3
         require(allowedCiphertext) { "Unsupported libsignal ciphertext type for ${message.type}" }
         // 🔐 E2EE Hardening: Group messages must reference existing group and members only

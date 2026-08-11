@@ -26,6 +26,8 @@ import java.time.Instant
 
 @Document("messages")
 @CompoundIndex(name = "conv_seq", def = "{'conversationId': 1, 'sequenceNumber': -1}")
+@CompoundIndex(name = "pinned_conv", def = "{'conversationId': 1, 'isPinned': 1, 'pinnedAt': -1}")
+@CompoundIndex(name = "sender_created", def = "{'senderId': 1, 'createdAt': -1}")
 data class MessageDocument(
     @Id val id: String? = null,
     @Indexed(unique = true) val uuid: String,
@@ -46,11 +48,23 @@ data class MessageDocument(
     // الرد والتحويل
     val replyToMessageUuid: String? = null,
     val forwardedFromConversationId: String? = null,
+    var forwardCount: Int = 0,
     // التفاعل
     val reactions: List<MessageReaction> = emptyList(),
+    // التثبيت — V26: يدعم تثبيت 5 رسائل لكل محادثة
+    @Indexed var isPinned: Boolean = false,
+    var pinnedAt: Instant? = null,
+    var pinnedBy: String? = null,
     // الحذف
     var deletedForSenderAt: Instant? = null,
     var deletedForEveryoneAt: Instant? = null,
+    // التعديل — V26: سجل التعديلات
+    var editVersion: Int = 1,
+    var originalCreatedAt: Instant? = null,
+    // الاختفاء المرن — V26: 0=دائم، 30..604800 ثانية، -1=بعد القراءة
+    var disappearAfterSeconds: Int? = null,
+    var disappearAt: Instant? = null,
+    var viewOnce: Boolean = false,
     // التوقيتات
     val createdAt: Instant = Instant.now(),
     var deliveredAt: Instant? = null,
@@ -279,6 +293,8 @@ data class SpaceSpeaker(
 
 @Document("group_messages")
 @CompoundIndex(name = "group_seq", def = "{'groupId': 1, 'sequenceNumber': -1}")
+@CompoundIndex(name = "group_pinned", def = "{'groupId': 1, 'isPinned': 1, 'pinnedAt': -1}")
+@CompoundIndex(name = "group_sender_created", def = "{'groupId': 1, 'senderId': 1, 'createdAt': -1}")
 data class GroupMessageDocument(
     @Id val id: String? = null,
     @Indexed(unique = true) val uuid: String,
@@ -292,9 +308,18 @@ data class GroupMessageDocument(
     @Indexed var status: String = "SENT",
     val attachments: List<MessageAttachment> = emptyList(),
     val replyToMessageUuid: String? = null,
+    var forwardCount: Int = 0,
     val reactions: List<MessageReaction> = emptyList(),
+    @Indexed var isPinned: Boolean = false,
+    var pinnedAt: Instant? = null,
+    var pinnedBy: String? = null,
     var deletedForSenderAt: Instant? = null,
     var deletedForEveryoneAt: Instant? = null,
+    var editVersion: Int = 1,
+    var originalCreatedAt: Instant? = null,
+    var disappearAfterSeconds: Int? = null,
+    var disappearAt: Instant? = null,
+    var viewOnce: Boolean = false,
     val createdAt: Instant = Instant.now(),
     var deliveredAt: Instant? = null,
     var readAt: Instant? = null,
@@ -322,4 +347,132 @@ data class NotificationArchiveDocument(
     val isRead: Boolean = false,
     val createdAt: Instant = Instant.now(),
     val readAt: Instant? = null
+)
+
+// ════════════════════════════════════════════════════
+// 📌 الرسائل المثبتة — مرآة سريعة لـ pinned_messages (Postgres) في MongoDB
+// ════════════════════════════════════════════════════
+
+@Document("pinned_messages")
+@CompoundIndex(name = "conv_pinned", def = "{'conversationId': 1, 'pinnedAt': -1}")
+data class PinnedMessageDocument(
+    @Id val id: String,
+    @Indexed val conversationId: String? = null,
+    @Indexed val groupId: String? = null,
+    @Indexed val channelId: String? = null,
+    @Indexed(unique = true) val messageUuid: String,
+    val messageType: String = "PRIVATE",
+    @Indexed val pinnedBy: String,
+    val pinnedAt: Instant = Instant.now(),
+    val expiresAt: Instant? = null,
+    val displayOrder: Int = 0
+)
+
+// ════════════════════════════════════════════════════
+// 📝 سجل تعديلات الرسائل — للتدقيق والتراجع
+// ════════════════════════════════════════════════════
+
+@Document("message_edit_history")
+@CompoundIndex(name = "message_version", def = "{'messageUuid': 1, 'editedAt': -1}")
+data class MessageEditHistoryDocument(
+    @Id val id: String,
+    @Indexed val messageUuid: String,
+    val conversationId: String? = null,
+    val groupId: String? = null,
+    @Indexed val editorId: String,
+    val previousPayload: ByteArray? = null,
+    val editVersion: Int = 1,
+    val editReason: String? = null,
+    val editedAt: Instant = Instant.now()
+)
+
+// ════════════════════════════════════════════════════
+// 📢 القنوات — بث أحادي لجمهور كبير (مثل تيليجرام)
+// ════════════════════════════════════════════════════
+
+@Document("channels")
+data class ChannelDocument(
+    @Id val id: String,
+    @Indexed val name: String,
+    @Indexed(unique = true) val username: String? = null,
+    val description: String? = null,
+    val avatarMediaKey: String? = null,
+    @Indexed val ownerId: String,
+    val isPublic: Boolean = true,
+    val isVerified: Boolean = false,
+    var subscriberCount: Int = 0,
+    var messageCount: Int = 0,
+    val allowComments: Boolean = false,
+    val allowReactions: Boolean = true,
+    val isArchived: Boolean = false,
+    val createdAt: Instant = Instant.now(),
+    var updatedAt: Instant = Instant.now()
+)
+
+@Document("channel_members")
+@CompoundIndex(name = "channel_user", def = "{'channelId': 1, 'userId': 1}")
+data class ChannelMemberDocument(
+    @Id val id: String,
+    @Indexed val channelId: String,
+    @Indexed val userId: String,
+    val role: String = "SUBSCRIBER", // OWNER, ADMIN, MODERATOR, SUBSCRIBER
+    val isMuted: Boolean = false,
+    val isBanned: Boolean = false,
+    val joinedAt: Instant = Instant.now(),
+    var lastReadMessageId: String? = null
+)
+
+@Document("channel_messages")
+@CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': -1}")
+data class ChannelMessageDocument(
+    @Id val id: String? = null,
+    @Indexed(unique = true) val uuid: String,
+    @Indexed val channelId: String,
+    @Indexed val senderId: String,
+    val senderDeviceId: Int,
+    var payload: ByteArray,
+    val messageType: String = "TEXT",
+    val ciphertextType: Int,
+    val sequenceNumber: Long = 0,
+    var status: String = "SENT",
+    val attachments: List<MessageAttachment> = emptyList(),
+    var forwardCount: Int = 0,
+    val reactions: List<MessageReaction> = emptyList(),
+    var isPinned: Boolean = false,
+    var pinnedAt: Instant? = null,
+    var viewCount: Int = 0,
+    val createdAt: Instant = Instant.now(),
+    var editedAt: Instant? = null,
+    var deletedAt: Instant? = null
+)
+
+// ════════════════════════════════════════════════════
+// 📝 ملاحظة لنفسي — إعدادات محادثة الذات
+// ════════════════════════════════════════════════════
+
+@Document("note_to_self")
+data class NoteToSelfDocument(
+    @Id val userId: String,
+    val conversationId: String,
+    val isPinned: Boolean = true,
+    val createdAt: Instant = Instant.now(),
+    var updatedAt: Instant = Instant.now()
+)
+
+// ════════════════════════════════════════════════════
+// ⏰ إعدادات الاختفاء المرن
+// ════════════════════════════════════════════════════
+
+@Document("disappearing_settings")
+data class DisappearingSettingsDocument(
+    @Id val id: String,
+    val conversationId: String? = null,
+    val groupId: String? = null,
+    val channelId: String? = null,
+    val userId: String? = null,
+    val disappearAfterSeconds: Int = 0, // 0=دائم، 30..604800، -1=بعد القراءة
+    val mode: String = "AFTER_SEND",
+    val enabled: Boolean = true,
+    val updatedAt: Instant = Instant.now(),
+    val updatedBy: String? = null
 )
