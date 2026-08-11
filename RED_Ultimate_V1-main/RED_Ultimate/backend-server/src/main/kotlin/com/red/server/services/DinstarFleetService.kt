@@ -52,6 +52,16 @@ class DinstarFleetService(
 
         /** عدد الإخفاقات المتتالية قبل اعتبار البوابة ساقطة. */
         private const val FAILURE_THRESHOLD = 3
+
+        /**
+         * أدنى درجة ثقة للضمّ التلقائي.
+         *
+         * 70 = ردّ على `get_port_info` (45) + رقم تسلسلي (25). أي جهاز
+         * يجتاز هذين تحدّث بالبروتوكول وأفصح عن هويته. الردّ وحده (45)
+         * لا يكفي: خادم وكيل أو جهاز آخر على المنفذ نفسه قد يردّ
+         * بمصادفة، وضمّه يعني ابتلاع مكالمات حقيقية صامتًا.
+         */
+        internal const val MIN_ADOPT_CONFIDENCE = 70
     }
 
     data class Gateway(
@@ -210,8 +220,66 @@ class DinstarFleetService(
         val portCount: Int,
         val serialNumber: String?,
         val firmwareVersion: String?,
-        val registeredPorts: Int
+        val registeredPorts: Int,
+        /** عنوان MAC إن أفصحت عنه البوابة — يُستخدم لتأكيد المُصنّع. */
+        val macAddress: String? = null,
+        /**
+         * درجة الثقة في أن هذا جهاز DINSTAR فعلًا (0..100).
+         * تُجمَّع من إشارات مستقلة بدل الاكتفاء بردٍّ على المسار.
+         */
+        val confidence: Int = 0,
+        /** الإشارات التي رُصدت — تُعرض للمسؤول قبل الضم. */
+        val signals: List<String> = emptyList()
     )
+
+    /**
+     * بصمة المُصنّع: OUI المسجّلة رسميًا لـ Dinstar Technologies.
+     * المصدر: سجل IEEE، النطاق F8:A0:3D:00:00:00–F8:A0:3D:FF:FF:FF.
+     *
+     * تأكيد إضافي لا شرط: الجهاز خلف NAT أو بمحوّل شبكة مستبدل قد لا
+     * يُفصح عن MAC، ورفضه لذلك يعني تفويت جهاز سليم.
+     */
+    private val DINSTAR_OUI = setOf("F8:A0:3D")
+
+    /**
+     * حساب درجة الثقة من إشارات مستقلة.
+     *
+     * الرد على `get_port_info` بمصادقة Digest دليل قوي لكنه ليس قاطعًا
+     * وحده. تجميع إشارات متعددة يمنع ضمّ جهاز غير مقصود إلى الأسطول
+     * ثم توجيه مكالمات إليه.
+     */
+    internal fun scoreIdentity(
+        portsResponded: Boolean,
+        serialNumber: String?,
+        macAddress: String?,
+        radioTypesKnown: Boolean,
+        statusResponded: Boolean
+    ): Pair<Int, List<String>> {
+        var score = 0
+        val signals = mutableListOf<String>()
+        if (portsResponded) {
+            score += 45
+            signals += "ردّ على get_port_info بمصادقة Digest"
+        }
+        if (!serialNumber.isNullOrBlank()) {
+            score += 25
+            signals += "أفصح عن رقم تسلسلي"
+        }
+        val oui = macAddress?.uppercase()?.replace('-', ':')?.take(8)
+        if (oui != null && oui in DINSTAR_OUI) {
+            score += 20
+            signals += "عنوان MAC ضمن نطاق Dinstar المسجّل ($oui)"
+        }
+        if (radioTypesKnown) {
+            score += 5
+            signals += "أنواع الراديو معروفة"
+        }
+        if (statusResponded) {
+            score += 5
+            signals += "ردّ على get_status"
+        }
+        return score.coerceAtMost(100) to signals
+    }
 
     /**
      * فحص نطاقات الإدارة بحثًا عن بوابات DINSTAR.
@@ -254,15 +322,35 @@ class DinstarFleetService(
         if (!isPrivateAddress(host)) return null
         val client = connections.clientFor(host, apiPort, scheme)
 
-        val portInfo = runCatching { client.getPortInfo() }.getOrNull() ?: return null
+        val query = runCatching { client.queryPorts() }.getOrNull() ?: return null
+        val portInfo = query.ports
         if (portInfo.isEmpty()) return null
 
-        // get_status اختياري: بعض الإصدارات لا تُفصح عن التسلسلي.
+        // get_status اختياري: لا تدعمه الإصدارات الأقدم من 1102.
         val status = runCatching { client.getDeviceStatus() }.getOrNull().orEmpty()
 
         val portCount = portInfo.size
         val model = inferModel(portInfo, status, portCount)
         val registered = portInfo.count { (it["reg"]?.toString() ?: "").equals("REGISTERED", true) }
+
+        // التسلسلي من get_port_info أولًا لأنه مضمون في كل استجابة،
+        // ثم من get_status كتأكيد. بغير ذلك تفقد الأجهزة القديمة
+        // هويتها الثابتة وتُعرَّف بعنوان DHCP متبدّل.
+        val serial = query.serialNumber
+            ?: (status["sn"] ?: status["serial_number"])?.toString()?.takeIf { it.isNotBlank() }
+
+        val mac = (status["mac"] ?: status["mac_address"])?.toString()?.takeIf { it.isNotBlank() }
+        val radioKnown = portInfo.any {
+            val t = it["type"]?.toString()?.uppercase().orEmpty()
+            t.isNotBlank() && t != "UNKNOWN"
+        }
+        val (confidence, signals) = scoreIdentity(
+            portsResponded = true,
+            serialNumber = serial,
+            macAddress = mac,
+            radioTypesKnown = radioKnown,
+            statusResponded = status.isNotEmpty()
+        )
 
         return DiscoveredGateway(
             host = host,
@@ -270,9 +358,12 @@ class DinstarFleetService(
             scheme = scheme,
             model = model,
             portCount = portCount,
-            serialNumber = (status["sn"] ?: status["serial_number"])?.toString(),
+            serialNumber = serial,
             firmwareVersion = (status["version"] ?: status["firmware_version"])?.toString(),
-            registeredPorts = registered
+            registeredPorts = registered,
+            macAddress = mac,
+            confidence = confidence,
+            signals = signals
         )
     }
 
@@ -297,17 +388,30 @@ class DinstarFleetService(
         return if (hasLte) "UC2000-VE-8T" else "UC2000-VE-8G"
     }
 
-    /** تسجيل نتائج الفحص في السجل دفعةً واحدة. */
+    /**
+     * تسجيل نتائج الفحص في السجل دفعةً واحدة.
+     *
+     * يُضَم فقط ما بلغت ثقته [MIN_ADOPT_CONFIDENCE]. الضمّ يعني توجيه
+     * مكالمات حقيقية إلى الجهاز، وجهاز غير مقصود في الأسطول أسوأ من
+     * جهاز مفقود منه: الأول يبتلع المكالمات صامتًا. ما دون الحد يُعاد
+     * للمسؤول ليقرّره يدويًا.
+     */
     fun adoptDiscovered(found: List<DiscoveredGateway>, siteLabel: String? = null): List<UUID> =
-        found.mapIndexed { i, g ->
+        found.filter { it.confidence >= MIN_ADOPT_CONFIDENCE }.mapIndexed { i, g ->
             upsertGateway(
                 host = g.host, apiPort = g.apiPort, scheme = g.scheme,
                 model = g.model, portCount = g.portCount,
                 name = "DINSTAR ${g.model} @ ${g.host}",
                 serialNumber = g.serialNumber, firmwareVersion = g.firmwareVersion,
+                macAddress = g.macAddress,
                 siteLabel = siteLabel, routingPriority = 100 + i,
                 discoveryMethod = "SUBNET_SCAN",
-                capabilities = mapOf("portsDetected" to g.portCount, "registeredAtDiscovery" to g.registeredPorts)
+                capabilities = mapOf(
+                    "portsDetected" to g.portCount,
+                    "registeredAtDiscovery" to g.registeredPorts,
+                    "identityConfidence" to g.confidence,
+                    "identitySignals" to g.signals
+                )
             )
         }
 

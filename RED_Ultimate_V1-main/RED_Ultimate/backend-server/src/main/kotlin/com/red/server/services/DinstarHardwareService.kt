@@ -44,6 +44,18 @@ class DinstarHardwareService(
     companion object {
         private val log = LoggerFactory.getLogger(DinstarHardwareService::class.java)
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * رموز القبول. 202 = «قُبل وسيُنفَّذ لاحقًا» ترجعه العمليات
+         * غير المتزامنة (`send_sms`، `send_ussd`).
+         */
+        private val ACCEPTED_CODES = setOf(200, 202)
+
+        /** الحد الموثق للمستلمين في طلب `send_sms` الواحد. */
+        const val MAX_SMS_RECIPIENTS = 128
+
+        /** الحد الموثق لحجم نص الرسالة. */
+        const val MAX_SMS_TEXT_BYTES = 1500
     }
 
     /**
@@ -154,7 +166,7 @@ class DinstarHardwareService(
         requireValidPort(port)
         // set_port_info uses GET with query parameters per the official Dinstar API documentation
         val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
-        require(apiSuccess(response)) { "DINSTAR rejected module reset" }
+        require(apiSuccess(response)) { "تعذّرت إعادة تشغيل الوحدة: ${apiErrorMessage(response)}" }
         return mapOf("status" to "SUCCEEDED", "port" to port)
     }
 
@@ -162,7 +174,7 @@ class DinstarHardwareService(
         requireValidPort(port)
         require(text.matches(Regex("^[*#0-9]{2,30}$"))) { "Invalid USSD code" }
         val response = postJson("/api/send_ussd", mapOf("port" to listOf(port), "command" to "send", "text" to text))
-        require(apiSuccess(response)) { "DINSTAR rejected USSD request" }
+        require(apiSuccess(response)) { "تعذّر إرسال USSD: ${apiErrorMessage(response)}" }
         return response
     }
 
@@ -194,11 +206,13 @@ class DinstarHardwareService(
 
     /**
      * إرسال SMS — POST /api/send_sms
-     * 
-     * @param text محتوى الرسالة (حتى 60 بايت لـ GSM7BIT)
+     *
+     * المصدر: «Dinstar GSM Gateway HTTP API» §2 (الإصدار 1.1، 2019-10-16).
+     *
+     * @param text محتوى الرسالة. الحد 1500 بايت لكامل الطلب.
      * @param params قائمة المستلمين: [{number: "777123456", user_id: 1}]
-     * @param ports منافذ محددة (اختياري، null = جميع المنافذ)
-     * @param encoding GSM7BIT أو UCS2
+     * @param ports منافذ محددة (اختياري، null = تختار البوابة)
+     * @param encoding `GSM7BIT` أو `UCS2` — تُترجَم إلى قيم البوابة
      */
     fun sendSms(
         text: String,
@@ -208,19 +222,35 @@ class DinstarHardwareService(
     ): Map<String, Any?> {
         require(text.isNotBlank()) { "SMS text is required" }
         require(params.isNotEmpty()) { "At least one recipient is required" }
-        require(params.size <= 32) { "Maximum 32 recipients per request" }
+        // الحد الموثق 128 مستلمًا لا 32؛ الرقم 32 يخص query_sms_result
+        // فقط. الحد الأضيق كان يرفض دفعات مشروعة قبل أن تصل للبوابة.
+        require(params.size <= MAX_SMS_RECIPIENTS) {
+            "الحد الأقصى $MAX_SMS_RECIPIENTS مستلمًا في الطلب الواحد"
+        }
+        // الحد 1500 بايت لنص الطلب، والعربية بـ UTF-8 حتى 3 بايت للحرف
+        require(text.toByteArray(Charsets.UTF_8).size <= MAX_SMS_TEXT_BYTES) {
+            "نص الرسالة يتجاوز $MAX_SMS_TEXT_BYTES بايت"
+        }
         require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
-        
+
         val body = mutableMapOf<String, Any>(
             "text" to text,
             "param" to params,
-            "encoding" to encoding,
+            // البوابة تتوقع 'gsm-7bit' أو 'unicode'. إرسال "GSM7BIT"
+            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode':
+            // رسالة ASCII تُرسَل UCS2 فتهبط سعتها من 160 حرفًا إلى 70
+            // وتتضاعف أجزاؤها وتكلفتها.
+            "encoding" to wireEncoding(encoding),
             "request_status_report" to true
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
-        
+
         return postJson("/api/send_sms", body)
     }
+
+    /** ترجمة ترميزنا الداخلي إلى القيمة التي تفهمها البوابة. */
+    private fun wireEncoding(encoding: String): String =
+        if (encoding == "GSM7BIT") "gsm-7bit" else "unicode"
 
     /** جلب نتائج إرسال SMS — POST /api/query_sms_result */
     fun querySmsResult(userIds: List<Int> = emptyList(), numbers: List<String> = emptyList()): Map<String, Any?> {
@@ -298,7 +328,7 @@ class DinstarHardwareService(
             mapOf("port" to ports.joinToString(","), "info_type" to "type,imei,imsi,iccid,number,reg,slot,callstate,signal,gprs"),
             host
         )
-        require(apiSuccess(response)) { "DINSTAR get_port_info failed" }
+        require(apiSuccess(response)) { "تعذّر استعلام المنافذ: ${apiErrorMessage(response)}" }
         @Suppress("UNCHECKED_CAST")
         return response["info"] as? List<Map<String, Any?>> ?: emptyList()
     }
@@ -487,7 +517,39 @@ class DinstarHardwareService(
         require(configuredScheme in setOf("http", "https") && isPrivateAddress(host)) { "DINSTAR must use HTTP(S) on a private management address" }
     }.toHttpUrl()
 
-    private fun apiSuccess(response: Map<String, Any?>) = (response["error_code"] as? Number)?.toInt() == 200
+    /**
+     * هل قبلت البوابة الطلب؟
+     *
+     * التوثيق الرسمي («Dinstar GSM Gateway HTTP API» §2.3 و§7.3) يميّز:
+     * - **200** طُلب ونُفِّذ.
+     * - **202** قُبل وسيُنفَّذ لاحقًا — ترجعه `send_sms` و`send_ussd`
+     *   لأنهما غير متزامنين بطبيعتهما (الرسالة تدخل طابورًا).
+     *
+     * كان الشرط `== 200` يرفض 202، فكل أمر USSD ناجح يُرمى
+     * `IllegalArgumentException` ويُسجَّل فشلًا رغم تنفيذه فعلًا على
+     * الشبكة. المسؤول يرى «فشل» ثم يعيد المحاولة فيُرسَل الأمر مرتين.
+     *
+     * أما 400 و413 و500 و550 فأخطاء حقيقية تُرفض.
+     */
+    private fun apiSuccess(response: Map<String, Any?>): Boolean =
+        (response["error_code"] as? Number)?.toInt() in ACCEPTED_CODES
+
+    /** رسالة الخطأ الموثقة المقابلة للرمز — أوضح من رقم مجرّد. */
+    private fun apiErrorMessage(response: Map<String, Any?>): String {
+        val code = (response["error_code"] as? Number)?.toInt()
+        val meaning = when (code) {
+            400 -> "صيغة الطلب غير صالحة"
+            404 -> "المهمة غير موجودة"
+            413 -> "عدد المستلمين أو حجم النص يتجاوز الحد"
+            486 -> "المنفذ مشغول حاليًا"
+            500 -> "خطأ داخلي في البوابة"
+            503 -> "المنفذ غير مسجّل على الشبكة"
+            550 -> "لا يوجد منفذ متاح للإرسال"
+            null -> "استجابة بلا error_code"
+            else -> "رمز غير موثق"
+        }
+        return "البوابة ردّت $code — $meaning"
+    }
     private fun isPrivateAddress(host: String) = runCatching { InetAddress.getByName(host).isSiteLocalAddress }.getOrDefault(false)
     private fun mask(value: String?): String? = value?.takeIf { it.isNotBlank() && it != "null" }?.let { "••••${it.takeLast(4)}" }
     private fun unsupported(message: String): Nothing = throw ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, message)

@@ -28,7 +28,7 @@ type Gateway = {
   id: string; name: string; model: string; host: string; scheme: string; apiPort: number;
   portCount: number; enabled: boolean; healthState: string; routingPriority: number;
   pjsipEndpoint?: string; siteLabel?: string; serialNumber?: string;
-  firmwareVersion?: string; consecutiveFailures?: number;
+  firmwareVersion?: string; macAddress?: string | null; consecutiveFailures?: number;
 };
 type FleetPorts = {
   gateways: { gateway: Gateway; ports: Port[]; error?: string | null }[];
@@ -37,6 +37,17 @@ type FleetPorts = {
 type ModelInfo = {
   model: string; portCount: number; simSlots: number; supportsVolte: boolean;
   radioCapability: string; codecs: string[];
+};
+/**
+ * نتيجة فحص عنوان قبل تسجيله.
+ * `confidence` مجموع إشارات مستقلة (0..100) لا مجرد «ردّ/لم يردّ»:
+ * ضمّ جهاز غير مقصود إلى الأسطول يعني ابتلاعه مكالمات حقيقية صامتًا.
+ */
+type ProbeResult = {
+  reachable: boolean; host?: string; model?: string; portCount?: number;
+  serialNumber?: string | null; firmwareVersion?: string | null;
+  macAddress?: string | null; registeredPorts?: number;
+  confidence: number; signals: string[]; adoptable?: boolean; message?: string;
 };
 
 /** مشغلو اليمن: 71 سبأفون · 73 يو · 77/78 يمن موبايل · 70 واي */
@@ -87,6 +98,8 @@ export default function DinstarControl() {
   const [addOpen, setAddOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [routeResult, setRouteResult] = useState<any>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<ProbeResult | null>(null);
   const [form] = Form.useForm();
   const [routeForm] = Form.useForm();
 
@@ -161,6 +174,30 @@ export default function DinstarControl() {
       const b = await json(await apiFetch('/api/admin/dinstar/cdr'));
       setCdr(b.cdr || b.query || []);
     } catch (e: any) { message.error(e.message); }
+  };
+
+  /**
+   * فحص العنوان قبل التسجيل.
+   *
+   * يملأ الطراز وعدد المنافذ من الجهاز نفسه بدل تخمين المسؤول:
+   * الطراز الخاطئ يعني الاستعلام عن منافذ غير موجودة.
+   */
+  const probeHost = async () => {
+    const host = form.getFieldValue('host');
+    if (!host) { message.warning('أدخل العنوان أولًا'); return; }
+    setProbing(true); setProbeResult(null);
+    try {
+      const b: ProbeResult = await json(await apiFetch('/api/admin/dinstar/fleet/probe', {
+        method: 'POST', body: JSON.stringify({ host }),
+      }));
+      setProbeResult(b);
+      if (b.reachable && b.model) {
+        // نملأ ما اكتشفه الجهاز فعلًا
+        form.setFieldsValue({ model: b.model });
+      }
+    } catch (e: any) {
+      message.error(e.message || 'تعذر فحص العنوان');
+    } finally { setProbing(false); }
   };
 
   const addGateway = async () => {
@@ -375,6 +412,12 @@ export default function DinstarControl() {
           key={gateway.id}
           title={<Space><Tag color="blue">{gateway.model}</Tag>{gateway.host}
             {gateway.serialNumber && <Typography.Text type="secondary" style={{ fontSize: 12 }}>SN {gateway.serialNumber}</Typography.Text>}
+            {/* بادئة OUI تؤكد المُصنّع — F8:A0:3D مسجّلة لـ Dinstar في IEEE */}
+            {gateway.macAddress && (
+              <Tooltip title="عنوان MAC — البادئة F8:A0:3D مسجّلة لـ Dinstar Technologies">
+                <Typography.Text type="secondary" style={{ fontSize: 12 }} code>{gateway.macAddress}</Typography.Text>
+              </Tooltip>
+            )}
           </Space>}
           style={{ marginBottom: 16 }}
         >
@@ -418,8 +461,47 @@ export default function DinstarControl() {
               message: 'يجب أن يكون عنوانًا خاصًا على شبكة الإدارة (RFC 1918)',
             },
           ]}>
-            <Input placeholder="192.168.11.1" />
+            <Input
+              placeholder="192.168.11.1"
+              onChange={() => setProbeResult(null)}
+              addonAfter={
+                <Button type="link" size="small" loading={probing} onClick={probeHost} style={{ padding: 0 }}>
+                  فحص
+                </Button>
+              }
+            />
           </Form.Item>
+
+          {probeResult && (
+            <Alert
+              style={{ marginBottom: 16 }}
+              type={probeResult.reachable ? (probeResult.adoptable ? 'success' : 'warning') : 'error'}
+              showIcon
+              message={probeResult.reachable
+                ? `استجاب جهاز — درجة الثقة ${probeResult.confidence}/100`
+                : 'لا توجد استجابة get_port_info مصادَقة على هذا العنوان'}
+              description={probeResult.reachable ? (
+                <>
+                  <Descriptions size="small" column={1} style={{ marginBottom: 8 }}>
+                    <Descriptions.Item label="الطراز المكتشف">{probeResult.model || '—'}</Descriptions.Item>
+                    <Descriptions.Item label="المنافذ">{probeResult.portCount ?? '—'}</Descriptions.Item>
+                    <Descriptions.Item label="الرقم التسلسلي">{probeResult.serialNumber || '—'}</Descriptions.Item>
+                    <Descriptions.Item label="عنوان MAC">{probeResult.macAddress || 'لم يُفصح عنه'}</Descriptions.Item>
+                  </Descriptions>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>الإشارات المرصودة:</Typography.Text>
+                  <ul style={{ margin: '4px 0 0', paddingInlineStart: 18, fontSize: 12 }}>
+                    {probeResult.signals.map((sig) => <li key={sig}>{sig}</li>)}
+                  </ul>
+                  {!probeResult.adoptable && (
+                    <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                      الثقة دون الحد الآمن للضم التلقائي — راجع الجهاز قبل التسجيل.
+                    </Typography.Text>
+                  )}
+                </>
+              ) : probeResult.message}
+            />
+          )}
+
           <Form.Item name="model" label="الطراز" rules={[{ required: true }]}>
             <Select options={models.map((m) => ({
               value: m.model,
