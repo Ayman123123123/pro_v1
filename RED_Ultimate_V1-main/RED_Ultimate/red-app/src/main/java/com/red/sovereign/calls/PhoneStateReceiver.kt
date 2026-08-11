@@ -26,17 +26,17 @@ class PhoneStateReceiver : BroadcastReceiver() {
                     showPstnReminderNotification(context, incomingNumber)
                 }
                 // Silence current RED ringer to avoid acoustic conflict
-                YounesCallService.silenceRinger()
+                YounesCallService.silenceRinger(context)
             }
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 // User picked up PSTN — pause any media, but don't auto-end RED
                 if (CallRuntime.state is CallUiState.Active) {
-                    YounesCallService.holdActiveCall()
+                    YounesCallService.holdActiveCall(context)
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 // PSTN ended — resume RED ringer/UI if a RED call is incoming
-                YounesCallService.resumeRinger()
+                YounesCallService.resumeRinger(context)
             }
         }
     }

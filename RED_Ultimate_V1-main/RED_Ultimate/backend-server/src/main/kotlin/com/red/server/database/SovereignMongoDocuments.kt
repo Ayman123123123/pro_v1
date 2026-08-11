@@ -181,8 +181,8 @@ data class StoryView(
 @Document("story_reactions")
 data class StoryReaction(
     @Id val id: String,
-    val storyId: String,
-    val userId: String,
+    @Indexed val storyId: String,
+    @Indexed val userId: String,
     val emoji: String,
     val createdAt: Instant = Instant.now()
 )
@@ -225,10 +225,10 @@ data class Poll(val options: List<PollOption>, val expiresAt: Instant?, val mult
 data class PollOption(val id: String, val text: String, val votes: Long = 0)
 
 @Document("post_reactions")
-data class PostReaction(@Id val id: String, val postId: String, val userId: String, val type: String, val createdAt: Instant = Instant.now())
+data class PostReaction(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val type: String, val createdAt: Instant = Instant.now())
 
 @Document("poll_votes")
-data class PollVote(@Id val id: String, val postId: String, val userId: String, val optionId: String, val createdAt: Instant = Instant.now())
+data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, @Indexed val optionId: String, val createdAt: Instant = Instant.now())
 
 @Document("follows")
 data class FollowDocument(@Id val id: String, @Indexed val followerId: String, @Indexed val followedId: String, val createdAt: Instant = Instant.now())

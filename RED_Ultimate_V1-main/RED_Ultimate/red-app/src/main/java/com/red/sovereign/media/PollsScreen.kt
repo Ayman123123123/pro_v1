@@ -210,7 +210,8 @@ class PollsViewModel(private val api: PollsApi) : ViewModel() {
 @Composable
 fun PollsScreen(
     tokens: TokenStore,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isAdmin: Boolean = false
 ) {
     val context = LocalContext.current
     val client = remember(tokens) { AuthorizedApiClient(tokens) }
@@ -239,8 +240,10 @@ fun PollsScreen(
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = Color.White)
                     }
-                    IconButton(onClick = { vm.showCreate() }) {
-                        Icon(Icons.Default.Add, contentDescription = "إنشاء", tint = Primary)
+                    if (isAdmin) {
+                        IconButton(onClick = { vm.showCreate() }) {
+                            Icon(Icons.Default.Add, contentDescription = "إنشاء استطلاع", tint = Primary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -296,8 +299,8 @@ fun PollsScreen(
                 onToggle = vm::toggleOptionVote,
                 onSubmitVote = vm::submitVote,
                 onClose = vm::closeDetail,
-                onClosePoll = { vm.closePoll(detail.poll.id) },
-                onDelete = { vm.deletePoll(detail.poll.id) }
+                onClosePoll = if (isAdmin) ({ vm.closePoll(detail.poll.id) }) else null,
+                onDelete = if (isAdmin) ({ vm.deletePoll(detail.poll.id) }) else null
             )
         }
 
@@ -437,8 +440,8 @@ private fun PollDetailSheet(
     onToggle: (String) -> Unit,
     onSubmitVote: () -> Unit,
     onClose: () -> Unit,
-    onClosePoll: () -> Unit,
-    onDelete: () -> Unit
+    onClosePoll: (() -> Unit)?,
+    onDelete: (() -> Unit)?
 ) {
     var showActions by remember { mutableStateOf(false) }
 
@@ -461,8 +464,11 @@ private fun PollDetailSheet(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = { showActions = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = Color.White)
+                // زر الخيارات الإدارية — يظهر فقط للمشرف
+                if (onClosePoll != null || onDelete != null) {
+                    IconButton(onClick = { showActions = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = Color.White)
+                    }
                 }
             }
 
@@ -522,23 +528,27 @@ private fun PollDetailSheet(
         }
     }
 
-    if (showActions) {
+    if (showActions && (onClosePoll != null || onDelete != null)) {
         AlertDialog(
             onDismissRequest = { showActions = false },
             title = { Text("إجراءات الاستطلاع") },
             text = { Text("ماذا تريد أن تفعل بهذا الاستطلاع؟") },
             confirmButton = {
-                TextButton(onClick = {
-                    showActions = false
-                    onClosePoll()
-                }) { Text("إغلاق", color = Warning) }
+                if (onClosePoll != null) {
+                    TextButton(onClick = {
+                        showActions = false
+                        onClosePoll()
+                    }) { Text("إغلاق", color = Warning) }
+                }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = {
-                        showActions = false
-                        onDelete()
-                    }) { Text("حذف", color = Danger) }
+                    if (onDelete != null) {
+                        TextButton(onClick = {
+                            showActions = false
+                            onDelete()
+                        }) { Text("حذف", color = Danger) }
+                    }
                     TextButton(onClick = { showActions = false }) { Text("إلغاء") }
                 }
             }

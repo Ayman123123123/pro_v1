@@ -18,6 +18,9 @@ data class ContactRequestResponse(
 data class ReportRequest(val redId: String, val category: String, val details: String? = null)
 data class ReportResponse(val id: UUID, val status: String)
 
+/** معلومات حضور مفصّلة: online + آخر ظهور (epoch ms أو null إن غير متاح). */
+data class PresenceInfo(val online: Boolean, val lastSeen: Long?)
+
 @Service
 class ContactService(
     private val jdbc: JdbcTemplate,
@@ -25,14 +28,14 @@ class ContactService(
     private val redis: RedisTemplate<String, String>
 ) {
     fun contacts(ownerId: UUID): List<PublicRedProfile> = jdbc.query(
-        """SELECT u.red_id,u.username,u.full_name FROM red_contacts c JOIN users u ON u.id=c.contact_id
+        """SELECT u.red_id,u.username,u.full_name,u.avatar_url FROM red_contacts c JOIN users u ON u.id=c.contact_id
            WHERE c.owner_id=? AND u.status='APPROVED' ORDER BY lower(u.full_name),lower(u.username)""",
         ::profileRow,
         ownerId
     )
 
     fun incoming(recipientId: UUID): List<ContactRequestResponse> = jdbc.query(
-        """SELECT r.id,r.created_at,u.red_id,u.username,u.full_name FROM contact_requests r
+        """SELECT r.id,r.created_at,u.red_id,u.username,u.full_name,u.avatar_url FROM contact_requests r
            JOIN users u ON u.id=r.requester_id WHERE r.recipient_id=? AND r.status='PENDING'
            ORDER BY r.created_at""",
         { rs, _ -> ContactRequestResponse(rs.getObject("id", UUID::class.java), profileRow(rs, 0), rs.getTimestamp("created_at").toInstant()) },
@@ -48,6 +51,27 @@ class ContactService(
         val cutoff = (System.currentTimeMillis() - PRESENCE_WINDOW_MS).toDouble()
         return allowed.associateWith { redId ->
             (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
+        }
+    }
+
+    /**
+     * Presence مفصّل: يعود بـ { redId -> {online, lastSeen} }.
+     * lastSeen يُؤخذ من UserAccount.last_seen (يُحدّث عند تسجيل الدخول والنشاط).
+     * يُستخدم لعرض "آخر ظهور" في الواجهة — مع احترام إخفاء آخر ظهور (لا يُكشف إن اختفى).
+     */
+    fun presenceDetailed(ownerId: UUID, requestedIds: List<String>): Map<String, PresenceInfo> {
+        require(requestedIds.size <= 100) { "At most 100 contact IDs may be checked at once" }
+        val requested = requestedIds.map { it.uppercase() }.toSet()
+        if (requested.isEmpty()) return emptyMap()
+        val allowed = contacts(ownerId).asSequence().map(PublicRedProfile::redId).filter(requested::contains).toList()
+        val cutoff = (System.currentTimeMillis() - PRESENCE_WINDOW_MS).toDouble()
+        // جلب lastSeen من قاعدة البيانات لكل جهة الاتصال المسموح بها
+        val lastSeenMap = allowed.associateWith { redId ->
+            users.findByRedId(redId)?.lastSeen
+        }
+        return allowed.associateWith { redId ->
+            val online = (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
+            PresenceInfo(online, if (online) System.currentTimeMillis() else lastSeenMap[redId])
         }
     }
 
@@ -110,7 +134,7 @@ class ContactService(
     }
 
     fun blocked(ownerId: UUID): List<PublicRedProfile> = jdbc.query(
-        "SELECT u.red_id,u.username,u.full_name FROM user_blocks b JOIN users u ON u.id=b.blocked_id WHERE b.blocker_id=? ORDER BY b.created_at DESC",
+        "SELECT u.red_id,u.username,u.full_name,u.avatar_url FROM user_blocks b JOIN users u ON u.id=b.blocked_id WHERE b.blocker_id=? ORDER BY b.created_at DESC",
         ::profileRow,
         ownerId
     )
@@ -134,7 +158,8 @@ class ContactService(
         (jdbc.queryForObject("SELECT COUNT(*) FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)", Int::class.java, first, second, second, first) ?: 0) > 0
 
     private fun profileRow(rs: ResultSet, ignored: Int) = PublicRedProfile(
-        rs.getString("red_id"), rs.getString("username"), rs.getString("full_name")
+        rs.getString("red_id"), rs.getString("username"), rs.getString("full_name"),
+        rs.getString("avatar_url")
     )
 
     companion object {

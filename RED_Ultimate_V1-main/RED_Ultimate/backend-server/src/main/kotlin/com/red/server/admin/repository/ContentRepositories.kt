@@ -4,6 +4,7 @@ import com.red.server.admin.model.*
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.time.Instant
@@ -26,6 +27,11 @@ interface PollRepository : JpaRepository<Poll, UUID> {
 interface PollOptionRepository : JpaRepository<PollOption, UUID> {
     fun findByPollIdOrderByOptionOrder(pollId: UUID): List<PollOption>
     fun findByPollId(pollId: UUID): List<PollOption>
+
+    /** حذف مجمّع لكل خيارات استطلاع — بديل N+1 (findByPollId.forEach delete). */
+    @Modifying
+    @Query("DELETE FROM PollOption p WHERE p.pollId = :pollId")
+    fun deleteAllByPollId(@Param("pollId") pollId: UUID)
 }
 
 interface PollVoteRepository : JpaRepository<PollVote, UUID> {
@@ -33,6 +39,11 @@ interface PollVoteRepository : JpaRepository<PollVote, UUID> {
     fun findByPollIdAndUserId(pollId: UUID, userId: UUID): List<PollVote>
     fun countByPollId(pollId: UUID): Long
     fun countByPollIdAndUserId(pollId: UUID, userId: UUID): Long
+
+    /** حذف مجمّع لكل أصوات استطلاع — يمنع بقاء أصوات يتيمة عند حذف الاستطلاع. */
+    @Modifying
+    @Query("DELETE FROM PollVote v WHERE v.pollId = :pollId")
+    fun deleteAllByPollId(@Param("pollId") pollId: UUID)
 }
 
 // ━━━━━━━━━━━━━━━━ Events ━━━━━━━━━━━━━━━━
@@ -97,4 +108,13 @@ interface StickerPackRepository : JpaRepository<StickerPack, UUID> {
     fun findByIsOfficialOrderByCreatedAtDesc(isOfficial: Boolean): List<StickerPack>
     fun findByCreatorIdOrderByCreatedAtDesc(creatorId: UUID): List<StickerPack>
     fun findByIsPublishedAndIsOfficial(isPublished: Boolean, isOfficial: Boolean): List<StickerPack>
+}
+
+interface StickerRepository : JpaRepository<Sticker, UUID> {
+    fun findByPackIdOrderByDisplayOrder(packId: UUID): List<Sticker>
+}
+
+interface UserStickerPackRepository : JpaRepository<UserStickerPack, UserStickerPackId> {
+    fun findByUserIdOrderByInstalledAtDesc(userId: UUID): List<UserStickerPack>
+    fun findByIdUserIdAndIdPackId(userId: UUID, packId: UUID): UserStickerPack?
 }

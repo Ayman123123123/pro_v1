@@ -58,9 +58,11 @@ class ContentController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val adminId = UUID.fromString(authentication.name)
-        val question = body["question"] as String
+        val question = body["question"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_QUESTION"))
         @Suppress("UNCHECKED_CAST")
-        val options = (body["options"] as List<String>).filter { it.isNotBlank() }
+        val options = (body["options"] as? List<*>)?.mapNotNull { it as? String }?.filter { it.isNotBlank() }
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_OPTIONS"))
         val poll = service.createPoll(
             creatorId = adminId,
             question = question,
@@ -98,10 +100,25 @@ class ContentController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val userId = UUID.fromString(authentication.name)
-        @Suppress("UNCHECKED_CAST")
-        val optionIds = (body["optionIds"] as List<String>).map { UUID.fromString(it) }
-        service.vote(UUID.fromString(pollId), userId, optionIds)
-        return ResponseEntity.ok(mapOf("success" to true))
+        // تحويل آمن بدل `as List<String>` الذي يرمي ClassCastException (500) عند جسم مشوّه
+        val rawIds = body["optionIds"] as? List<*>
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_OPTION_IDS"))
+        val optionIds = try {
+            rawIds.map { UUID.fromString(it as? String ?: throw IllegalArgumentException()) }
+        } catch (_: Exception) {
+            return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "INVALID_OPTION_IDS"))
+        }
+        return try {
+            service.vote(UUID.fromString(pollId), userId, optionIds)
+            ResponseEntity.ok(mapOf("success" to true))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("success" to false, "error" to (e.message ?: "POLL_NOT_FOUND")))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("success" to false, "error" to (e.message ?: "INVALID_OPTION")))
+        } catch (e: IllegalStateException) {
+            // POLL_NOT_ACTIVE / POLL_ENDED / ALREADY_VOTED
+            ResponseEntity.status(409).body(mapOf("success" to false, "error" to (e.message ?: "VOTE_REJECTED")))
+        }
     }
 
     // ━━━━━━━━━━━━━━━━ Events ━━━━━━━━━━━━━━━━
@@ -129,19 +146,31 @@ class ContentController(
     fun getLiveEvents(): ResponseEntity<List<Event>> =
         ResponseEntity.ok(service.getLiveEvents())
 
+    /** تفاصيل فعالية واحدة — يُستدعى من تطبيق المستخدم (GET لم يكن معرّفاً، فقط DELETE). */
+    @GetMapping("/events/{eventId}")
+    fun getEventDetail(@PathVariable eventId: String): ResponseEntity<Event> {
+        val event = service.getEvent(UUID.fromString(eventId))
+        return if (event != null) ResponseEntity.ok(event)
+        else ResponseEntity.notFound().build()
+    }
+
     @PostMapping("/events")
     fun createEvent(
         @RequestBody body: Map<String, Any?>,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val adminId = UUID.fromString(authentication.name)
+        val title = body["title"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_TITLE"))
+        val startsAtStr = body["startsAt"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_STARTS_AT"))
         val event = service.createEvent(
             creatorId = adminId,
-            title = body["title"] as String,
+            title = title,
             description = body["description"] as? String,
             locationName = body["locationName"] as? String,
             locationAddress = body["locationAddress"] as? String,
-            startsAt = Instant.parse(body["startsAt"] as String),
+            startsAt = Instant.parse(startsAtStr),
             endsAt = (body["endsAt"] as? String)?.let { Instant.parse(it) },
             eventType = body["eventType"] as? String ?: "MEETING",
             visibility = body["visibility"] as? String ?: "PUBLIC",
@@ -265,10 +294,14 @@ class ContentController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val adminId = UUID.fromString(authentication.name)
+        val name = body["name"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_NAME"))
+        val coverMediaKey = body["coverMediaKey"] as? String
+            ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_COVER"))
         val pack = service.createStickerPack(
-            name = body["name"] as String,
+            name = name,
             description = body["description"] as? String,
-            coverMediaKey = body["coverMediaKey"] as String,
+            coverMediaKey = coverMediaKey,
             creatorId = adminId,
             isOfficial = body["isOfficial"] as? Boolean ?: false,
             isFree = body["isFree"] as? Boolean ?: true,
@@ -367,5 +400,45 @@ class ContentController(
         val userId = UUID.fromString(authentication.name)
         val success = service.unsaveMessage(userId, UUID.fromString(messageId))
         return ResponseEntity.ok(mapOf("success" to success))
+    }
+
+    // ━━━━━━━━━━━━━━━━ Stickers (للمستخدم) ━━━━━━━━━━━━━━━━
+    // الحزم الإدارية (إنشاء/نشر/حذف) أعلاه؛ هذه للمستخدم: استعراض + تثبيت.
+
+    /** الحزم المنشورة المتاحة لكل المستخدمين. */
+    @GetMapping("/sticker-packs/published")
+    fun getPublishedStickerPacks(): ResponseEntity<List<StickerPack>> =
+        ResponseEntity.ok(service.getPublishedStickerPacks())
+
+    /** الملصقات الفردية داخل حزمة (لعرضها في المنتقي). */
+    @GetMapping("/sticker-packs/{packId}/stickers")
+    fun getStickersInPack(@PathVariable packId: String): ResponseEntity<List<Sticker>> =
+        ResponseEntity.ok(service.getStickersInPack(UUID.fromString(packId)))
+
+    /** يثبّت المستخدم حزمة ملصقات (تظهر في منتقاه). */
+    @PostMapping("/sticker-packs/{packId}/install")
+    fun installStickerPack(@PathVariable packId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        return try {
+            val installed = service.installStickerPack(userId, UUID.fromString(packId))
+            ResponseEntity.ok(mapOf("success" to true, "installed" to installed))
+        } catch (e: NoSuchElementException) {
+            ResponseEntity.status(404).body(mapOf("success" to false, "error" to (e.message ?: "NOT_FOUND")))
+        }
+    }
+
+    /** يُلغي تثبيت حزمة. */
+    @DeleteMapping("/sticker-packs/{packId}/install")
+    fun uninstallStickerPack(@PathVariable packId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        val success = service.uninstallStickerPack(userId, UUID.fromString(packId))
+        return ResponseEntity.ok(mapOf("success" to success))
+    }
+
+    /** حزم المستخدم المثبّتة. */
+    @GetMapping("/sticker-packs/installed")
+    fun getInstalledStickerPacks(authentication: Authentication): ResponseEntity<List<StickerPack>> {
+        val userId = UUID.fromString(authentication.name)
+        return ResponseEntity.ok(service.getInstalledStickerPacks(userId))
     }
 }

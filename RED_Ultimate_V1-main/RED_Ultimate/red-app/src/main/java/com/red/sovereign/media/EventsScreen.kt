@@ -184,7 +184,7 @@ class EventsViewModel(private val api: EventsApi) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EventsScreen(tokens: TokenStore, onBack: () -> Unit) {
+fun EventsScreen(tokens: TokenStore, onBack: () -> Unit, isAdmin: Boolean = false) {
     val client = remember(tokens) { AuthorizedApiClient(tokens) }
     val api = remember(client) { EventsApi(client) }
     val vm: EventsViewModel = viewModel(
@@ -209,8 +209,10 @@ fun EventsScreen(tokens: TokenStore, onBack: () -> Unit) {
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "تحديث", tint = Color.White)
                     }
-                    IconButton(onClick = { vm.showCreate() }) {
-                        Icon(Icons.Default.Add, contentDescription = "إنشاء", tint = Primary)
+                    if (isAdmin) {
+                        IconButton(onClick = { vm.showCreate() }) {
+                            Icon(Icons.Default.Add, contentDescription = "إنشاء فعالية", tint = Primary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Surface)
@@ -258,8 +260,8 @@ fun EventsScreen(tokens: TokenStore, onBack: () -> Unit) {
                 detail = detail,
                 onRsvp = vm::rsvp,
                 onClose = vm::closeDetail,
-                onCancel = { reason -> vm.cancel(reason) },
-                onDelete = { vm.delete() }
+                onCancel = if (isAdmin) ({ reason -> vm.cancel(reason) }) else null,
+                onDelete = if (isAdmin) ({ vm.delete() }) else null
             )
         }
 
@@ -396,8 +398,8 @@ private fun EventDetailSheet(
     detail: EventDetailDto,
     onRsvp: (String) -> Unit,
     onClose: () -> Unit,
-    onCancel: (String) -> Unit,
-    onDelete: () -> Unit
+    onCancel: ((String) -> Unit)?,
+    onDelete: (() -> Unit)?
 ) {
     var showCancelDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -520,25 +522,27 @@ private fun EventDetailSheet(
 
             Spacer(Modifier.height(16.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = { showCancelDialog = true },
-                    modifier = Modifier.weight(1f),
-                    enabled = event.status != "CANCELLED" && event.status != "ENDED",
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Warning)
-                ) { Text("إلغاء الفعالية") }
-                OutlinedButton(
-                    onClick = { showDeleteConfirm = true },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
-                ) { Text("حذف") }
+            // أزرار إدارية — تظهر فقط للمشرف (isAdmin). المستخدم العادي يرى RSVP فقط.
+            if (onCancel != null && onDelete != null) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { showCancelDialog = true },
+                        modifier = Modifier.weight(1f),
+                        enabled = event.status != "CANCELLED" && event.status != "ENDED",
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Warning)
+                    ) { Text("إلغاء الفعالية") }
+                    OutlinedButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger)
+                    ) { Text("حذف") }
+                }
+                Spacer(Modifier.height(20.dp))
             }
-
-            Spacer(Modifier.height(20.dp))
         }
     }
 
-    if (showCancelDialog) {
+    if (showCancelDialog && onCancel != null) {
         var reason by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
@@ -563,7 +567,7 @@ private fun EventDetailSheet(
         )
     }
 
-    if (showDeleteConfirm) {
+    if (showDeleteConfirm && onDelete != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("حذف نهائي؟") },

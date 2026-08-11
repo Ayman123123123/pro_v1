@@ -51,25 +51,7 @@ class UserAccount(
     var rejectionReason: String? = null,
 
     @Column(name = "last_seen")
-    var lastSeen: Instant? = null,
-
-    @Column(name = "avatar_color", length = 7)
-    var avatarColor: String? = null,
-
-    @Column(name = "password_reset_required", nullable = false)
-    var passwordResetRequired: Boolean = false,
-
-    @Column(name = "password_reset_issued_at")
-    var passwordResetIssuedAt: Instant? = null,
-
-    @Column(name = "remote_wipe_status", length = 20)
-    var remoteWipeStatus: String? = null,
-
-    @Column(name = "remote_wipe_requested_at")
-    var remoteWipeRequestedAt: Instant? = null,
-
-    @Column(name = "managed_device_wipe_allowed", nullable = false)
-    var managedDeviceWipeAllowed: Boolean = false,
+    var lastSeen: Long? = null,
 
     @Column(name = "pstn_enabled", nullable = false)
     var pstnEnabled: Boolean = false,
@@ -77,14 +59,15 @@ class UserAccount(
     @Column(name = "pstn_daily_limit", nullable = false)
     var pstnDailyLimit: Int = 0,
 
+    // ━━━ عمليات الأمان (الأعمدة مُنشأة في V17__User_Security_Operations.sql) ━━━
     @Column(name = "password_reset_required", nullable = false)
     var passwordResetRequired: Boolean = false,
 
     @Column(name = "password_reset_issued_at")
     var passwordResetIssuedAt: Instant? = null,
 
-    @Column(name = "remote_wipe_status", length = 20)
-    var remoteWipeStatus: String? = null,
+    @Column(name = "remote_wipe_status", nullable = false, length = 20)
+    var remoteWipeStatus: String = "NONE",
 
     @Column(name = "remote_wipe_requested_at")
     var remoteWipeRequestedAt: Instant? = null,
@@ -93,7 +76,19 @@ class UserAccount(
     var remoteWipeCompletedAt: Instant? = null,
 
     @Column(name = "managed_device_wipe_allowed", nullable = false)
-    var managedDeviceWipeAllowed: Boolean = false
+    var managedDeviceWipeAllowed: Boolean = false,
+
+    // لون عرض ثابت للمستخدم (العمود مُنشأ في V19__User_Avatar_Color.sql)
+    @Column(name = "avatar_color", length = 20)
+    var avatarColor: String? = null,
+
+    // مفتاح الوسائط المشفّر (objectKey) لصورة البروفايل (العمود مُنشأ في V25)
+    @Column(name = "avatar_url", length = 255)
+    var avatarUrl: String? = null,
+
+    // نص تعريفي قصير يعرضه المستخدم (العمود مُنشأ في V25)
+    @Column(name = "bio", length = 280)
+    var bio: String? = null
 )
 
 enum class AccountStatus {

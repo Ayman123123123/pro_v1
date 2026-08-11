@@ -543,9 +543,13 @@ class AdminV2Controller(
         authentication: Authentication
     ): ResponseEntity<SystemAnnouncement> {
         val adminId = UUID.fromString(authentication.name)
+        val title = body["title"] as? String
+            ?: return ResponseEntity.badRequest().build()
+        val annBody = body["body"] as? String
+            ?: return ResponseEntity.badRequest().build()
         val ann = service.createAnnouncement(
-            title = body["title"] as String,
-            body = body["body"] as String,
+            title = title,
+            body = annBody,
             type = body["type"] as? String ?: "INFO",
             targetAudience = body["targetAudience"] as? String ?: "ALL",
             priority = (body["priority"] as? Number)?.toInt() ?: 0,

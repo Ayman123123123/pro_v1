@@ -12,7 +12,7 @@ class NotificationConfig {
     fun emailProperties(): EmailProperties {
         return EmailProperties(
             smtpHost = "${SMTP_HOST}",
-            smtpPort = SMTP_PORT.toInt(),
+            smtpPort = SMTP_PORT.toIntOrNull() ?: 587,
             smtpAuth = SMTP_AUTH.toBoolean(),
             startTls = START_TLS.toBoolean(),
             username = SMTP_USERNAME,

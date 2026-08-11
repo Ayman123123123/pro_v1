@@ -34,4 +34,24 @@ class AuthExceptionHandler {
     @ExceptionHandler(NoSuchElementException::class)
     fun notFound(error: NoSuchElementException): ResponseEntity<Map<String, String>> =
         ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to (error.message ?: "NOT_FOUND")))
+
+    /** IllegalStateException — حالة غير صالحة (مثل POLL_NOT_ACTIVE / ALREADY_VOTED) → 409 Conflict */
+    @ExceptionHandler(IllegalStateException::class)
+    fun conflict(error: IllegalStateException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to (error.message ?: "CONFLICT")))
+
+    /** ClassCastException — جسم مشوَّه (تحويل غير آمن) → 400 بدل 500 */
+    @ExceptionHandler(ClassCastException::class)
+    fun badCast(error: ClassCastException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST_BODY"))
+
+    /** NumberFormatException — رقم مشوَّه (مثل toInt() على نص) → 400 بدل 500 */
+    @ExceptionHandler(NumberFormatException::class)
+    fun badNumber(error: NumberFormatException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_NUMBER_FORMAT"))
+
+    /** NullPointerException — مرجع null غير متوقع → 400 بدل 500 (لا تسريب stack trace) */
+    @ExceptionHandler(NullPointerException::class)
+    fun badNull(error: NullPointerException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST"))
 }
