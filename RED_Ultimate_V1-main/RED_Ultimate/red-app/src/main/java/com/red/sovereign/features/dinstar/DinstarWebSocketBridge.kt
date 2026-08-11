@@ -62,9 +62,28 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
             val json = org.json.JSONObject(text)
             val type = json.optString("type", "")
             when (type) {
-                "DINSTAR_PORT_STATUS" -> _wsEvents.emit(DinstarWsEvent.PortStatusChanged(json.optInt("port"), json.optString("callState"), json.optInt("signal")))
+                "DINSTAR_PORT_STATUS" -> _wsEvents.emit(
+                    DinstarWsEvent.PortStatusChanged(
+                        // معرّف البوابة: بدونه لا يُعرف أي جهاز تغيّر منفذه
+                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = json.optInt("port"),
+                        callState = json.optString("callState"),
+                        // optInt تُرجع 0 عند الغياب، و0 قراءةٌ صالحة تعني
+                        // ‎-113 dBm. التمييز بين «غياب القيمة» و«أضعف قيمة»
+                        // ضروري، لذا null صراحةً.
+                        signalDbm = if (json.isNull("signalDbm")) null else json.optInt("signalDbm"),
+                        signalUsable = json.optBoolean("signalUsable", false)
+                    )
+                )
                 "DINSTAR_CDR" -> _wsEvents.emit(DinstarWsEvent.CdrReceived(text))
-                "DINSTAR_SMS" -> _wsEvents.emit(DinstarWsEvent.IncomingSms(json.optInt("port"), json.optString("number"), json.optString("text")))
+                "DINSTAR_SMS" -> _wsEvents.emit(
+                    DinstarWsEvent.IncomingSms(
+                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = json.optInt("port"),
+                        number = json.optString("number"),
+                        text = json.optString("text")
+                    )
+                )
                 "HEARTBEAT" -> _wsEvents.emit(DinstarWsEvent.Heartbeat)
             }
         }
@@ -76,8 +95,19 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
 sealed class DinstarWsEvent {
     object Connected : DinstarWsEvent()
     object Heartbeat : DinstarWsEvent()
-    data class PortStatusChanged(val port: Int, val callState: String, val signal: Int) : DinstarWsEvent()
+    data class PortStatusChanged(
+        val gatewayId: String?,
+        val port: Int,
+        val callState: String,
+        val signalDbm: Int?,
+        val signalUsable: Boolean
+    ) : DinstarWsEvent()
     data class CdrReceived(val payload: String) : DinstarWsEvent()
-    data class IncomingSms(val port: Int, val number: String, val text: String) : DinstarWsEvent()
+    data class IncomingSms(
+        val gatewayId: String?,
+        val port: Int,
+        val number: String,
+        val text: String
+    ) : DinstarWsEvent()
     data class Error(val message: String) : DinstarWsEvent()
 }

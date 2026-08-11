@@ -173,15 +173,45 @@ const systemHealth = () => {
 };
 
 const OPERATORS = ['Sabafon', 'YOU', 'Yemen Mobile', 'Y Telecom', 'Yemen Mobile', 'Sabafon', 'YOU', 'Yemen Mobile'];
-const dinstarSlots = () =>
+
+/**
+ * تفسير قراءة الإشارة الخام حسب 3GPP TS 27.007 §8.5 — نسخة مطابقة
+ * لـ `DinstarSignal.kt` في الخادم. أي انحراف بينهما يعني أن اللوحة
+ * تُختبر على منطق غير الذي يعمل في الإنتاج.
+ *
+ * القيمة 99 تعني «غير قابلة للكشف» أي لا شبكة، وليست إشارة كاملة.
+ */
+const interpretSignal = (raw) => {
+  if (raw == null || raw === 99 || raw === 199) {
+    return { signalRaw: raw ?? null, signalDbm: null, signal: null, signalUsable: false, signalLabel: 'NO_SIGNAL' };
+  }
+  let dbm = null;
+  if (raw >= 0 && raw <= 31) dbm = 2 * raw - 113;
+  else if (raw >= 100 && raw <= 191) dbm = raw - 216;
+  else return { signalRaw: raw, signalDbm: null, signal: null, signalUsable: false, signalLabel: 'OUT_OF_RANGE' };
+  const signal = Math.trunc(Math.max(0, Math.min(100, ((dbm + 113) / 62) * 100)));
+  const label = dbm >= -65 ? 'EXCELLENT' : dbm >= -80 ? 'GOOD' : dbm >= -95 ? 'FAIR' : dbm >= -100 ? 'WEAK' : 'UNUSABLE';
+  return { signalRaw: raw, signalDbm: dbm, signal, signalUsable: dbm >= -100, signalLabel: label };
+};
+
+/**
+ * منافذ بوابة محاكاة. الحالات مختارة لتغطي ما يجب أن تتعامل معه
+ * اللوحة والموزّع:
+ *   • المنفذ 5: غير مسجّل — لا شبكة إطلاقًا.
+ *   • المنفذ 7: **مسجّل لكن قراءته 99** — هذه هي الحالة التي كانت
+ *     تظهر بإشارة 100% ويختارها الموزّع أولًا رغم أنها ميتة.
+ *   • المنفذ 3: إشارة ضعيفة تحت العتبة (‎-103 dBm) فلا تصلح للمكالمات.
+ */
+const dinstarSlots = (gatewayIndex = 0) =>
   Array.from({ length: 8 }, (_, index) => {
     const registered = index !== 5;
+    const rawByPort = [22, 19, 25, 5, 17, null, 28, 99];
+    const raw = registered ? rawByPort[index] : null;
     return {
-      index, port: index, radioType: 'GSM',
+      index, port: index, radioType: gatewayIndex === 1 ? 'LTE' : 'GSM',
       status: registered ? 'REGISTERED' : 'UNREGISTERED',
       callState: index === 2 ? 'ACTIVE' : index === 6 ? 'DIALING' : 'IDLE',
-      signal: registered ? Math.min(99, 55 + ((index * 7 + Math.floor(Date.now() / 5000)) % 40)) : 0,
-      signalRaw: registered ? 18 + (index % 8) : 0,
+      ...interpretSignal(raw),
       gprs: registered ? 'ATTACHED' : 'DETACHED',
       numberMasked: registered ? `+9677${index}****${index}${index}` : null,
       imsiMasked: registered ? `4210${index}******${index}` : null,
@@ -204,6 +234,7 @@ const on = (method, pattern, handler) => routes.push({ method, pattern, handler 
 const appRoutes = require('./app-routes.cjs');
 const ok = (data) => ({ status: 200, data });
 const notFound = (error = 'NOT_FOUND') => ({ status: 404, data: { error } });
+const bad = (error = 'BAD_REQUEST') => ({ status: 400, data: { error } });
 
 function match(pattern, pathname) {
   const p = pattern.split('/').filter(Boolean);
@@ -711,6 +742,179 @@ on('POST', '/api/admin/dinstar/ports/:port/ussd', (p, _q, b) => {
   recordAudit({ adminId: adminRow().id, action: 'DINSTAR_USSD_SENT', category: 'SYSTEM',
     targetId: p.port, description: b?.code });
   return ok({ success: true, port: Number(p.port), code: b?.code, response: 'رصيدك 1,250 ريال' });
+});
+
+// ── أسطول DINSTAR: عدة أجهزة ──
+/** عناوين RFC 1918 + الاسترجاع — نطاق الإدارة المسموح للبوابات. */
+const PRIVATE_HOST = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/;
+
+const gwRow = (r) => ({
+  id: r.id, name: r.name, model: r.model, host: r.host, scheme: r.scheme,
+  apiPort: r.api_port, portCount: r.port_count, enabled: !!r.enabled,
+  healthState: r.health_state, routingPriority: r.routing_priority,
+  pjsipEndpoint: r.pjsip_endpoint, siteLabel: r.site_label,
+  serialNumber: r.serial_number, firmwareVersion: r.firmware_version,
+  consecutiveFailures: r.consecutive_failures,
+});
+
+on('GET', '/api/admin/dinstar/fleet', () =>
+  ok(all('SELECT * FROM telecom_gateways ORDER BY routing_priority ASC, name ASC').map(gwRow)));
+
+/** الطرازات المدعومة — مطابقة لـ DinstarModelProfile.kt */
+on('GET', '/api/admin/dinstar/fleet/models', () => ok([
+  { model: 'UC2000-VE-8G', portCount: 8, simSlots: 8, supportsVolte: false,
+    radioCapability: 'GSM 850/900/1800/1900 MHz',
+    codecs: ['G.711A', 'G.711U', 'G.723.1', 'G.729A', 'G.729B'] },
+  { model: 'UC2000-VE-8T', portCount: 8, simSlots: 8, supportsVolte: true,
+    radioCapability: 'LTE-FDD/LTE-TDD/WCDMA/GSM — النطاقات حسب متغيّر الراديو',
+    codecs: ['G.711A', 'G.711U', 'G.723.1', 'G.729A', 'G.729B', 'G.722', 'AMR'] },
+  { model: 'UC2000-VE-4G', portCount: 4, simSlots: 4, supportsVolte: false,
+    radioCapability: 'GSM 850/900/1800/1900 MHz',
+    codecs: ['G.711A', 'G.711U', 'G.723.1', 'G.729A', 'G.729B'] },
+  { model: 'UC2000-VE-4T', portCount: 4, simSlots: 4, supportsVolte: true,
+    radioCapability: 'LTE-FDD/LTE-TDD/WCDMA/GSM — النطاقات حسب متغيّر الراديو',
+    codecs: ['G.711A', 'G.711U', 'G.723.1', 'G.729A', 'G.729B', 'G.722', 'AMR'] },
+].map((m) => ({ ...m, hotSwappableSim: true, httpApiAuth: 'HTTP Digest (Basic على الإصدارات الأقدم)',
+  sipProtocol: 'SIP v2.0 (RFC3261) over UDP/TCP/TLS', mediaProtocol: 'RTP/SRTP',
+  carrierCompatibilityRequiresLiveRegistration: true }))));
+
+/** كل منافذ الأسطول: البوابة المعطّلة لا تُستعلم، والمجاميع تفرّق بين المسجّل والصالح. */
+on('GET', '/api/admin/dinstar/fleet/ports', () => {
+  const gateways = all('SELECT * FROM telecom_gateways WHERE enabled = 1 ORDER BY routing_priority ASC');
+  const perGateway = gateways.map((g, i) => ({
+    gateway: gwRow(g),
+    ports: dinstarSlots(i).slice(0, g.port_count),
+    error: null,
+  }));
+  const flat = perGateway.flatMap((x) => x.ports);
+  return ok({
+    gateways: perGateway,
+    totals: {
+      gateways: gateways.length,
+      online: gateways.filter((g) => g.health_state === 'ONLINE').length,
+      ports: flat.length,
+      registered: flat.filter((p) => p.status === 'REGISTERED').length,
+      // الفارق الجوهري: مسجّلة ≠ صالحة للاتصال
+      usable: flat.filter((p) => p.signalUsable === true).length,
+    },
+  });
+});
+
+on('GET', '/api/admin/dinstar/fleet/:id/ports', (p) => {
+  const g = get('SELECT * FROM telecom_gateways WHERE id = ?', p.id);
+  if (!g) return notFound('GATEWAY_NOT_FOUND');
+  const order = all('SELECT id FROM telecom_gateways ORDER BY routing_priority ASC').findIndex((r) => r.id === p.id);
+  return ok(dinstarSlots(Math.max(0, order)).slice(0, g.port_count));
+});
+
+/** فحص عنوان قبل تسجيله. */
+on('POST', '/api/admin/dinstar/fleet/probe', (_p, _q, b) => {
+  const host = (b?.host || '').trim();
+  if (!host) return bad('HOST_REQUIRED');
+  // خاصة فقط — نفس شرط DinstarConnectionFactory
+  if (!PRIVATE_HOST.test(host)) return bad('PRIVATE_ADDRESS_REQUIRED');
+  const existing = get('SELECT * FROM telecom_gateways WHERE host = ?', host);
+  if (!existing) return ok({ reachable: false, message: `لا توجد استجابة get_port_info مصادَقة على ${host}` });
+  return ok({
+    reachable: true, host, model: existing.model, portCount: existing.port_count,
+    serialNumber: existing.serial_number, firmwareVersion: existing.firmware_version,
+    registeredPorts: dinstarSlots(0).slice(0, existing.port_count).filter((x) => x.status === 'REGISTERED').length,
+  });
+});
+
+/** تسجيل بوابة يدويًا. */
+on('POST', '/api/admin/dinstar/fleet', (_p, _q, b) => {
+  const host = (b?.host || '').trim();
+  if (!host) return bad('HOST_REQUIRED');
+  // نفس شرط DinstarFleetService.upsertGateway: البوابات على شبكة إدارة
+  // خاصة حصرًا. بدون هذا الفحص يمكن توجيه مكالمات إلى عنوان على
+  // الإنترنت العام، والثقة العمياء بشهادة TLS تصبح ثغرة حقيقية.
+  if (!PRIVATE_HOST.test(host)) return bad('PRIVATE_ADDRESS_REQUIRED');
+  const model = b?.model || 'UC2000-VE-8G';
+  const known = { 'UC2000-VE-8G': 8, 'UC2000-VE-8T': 8, 'UC2000-VE-4G': 4, 'UC2000-VE-4T': 4 };
+  if (!(model in known)) return bad('UNSUPPORTED_MODEL');
+  if (get('SELECT 1 x FROM telecom_gateways WHERE host = ? AND api_port = ?', host, b?.apiPort ?? 443)) {
+    return bad('GATEWAY_ALREADY_REGISTERED');
+  }
+  const id = uuid();
+  run(`INSERT INTO telecom_gateways
+       (id,name,vendor,model,host,scheme,api_port,port_count,enabled,health_state,
+        routing_priority,pjsip_endpoint,site_label,discovery_method,created_at)
+       VALUES (?,?,'DINSTAR',?,?,?,?,?,1,'UNKNOWN',?,?,?,'MANUAL',?)`,
+  id, b?.name || `DINSTAR ${model} @ ${host}`, model, host, b?.scheme || 'https',
+  b?.apiPort ?? 443, known[model], b?.routingPriority ?? 100,
+  b?.pjsipEndpoint || null, b?.siteLabel || null, nowIso());
+  recordAudit({ adminId: adminRow().id, action: 'DINSTAR_GATEWAY_REGISTERED', category: 'SYSTEM',
+    targetId: id, description: `${model} @ ${host}` });
+  return { status: 201, data: { id, host, model } };
+});
+
+on('POST', '/api/admin/dinstar/fleet/:id/enabled', (p, _q, b) => {
+  const g = get('SELECT * FROM telecom_gateways WHERE id = ?', p.id);
+  if (!g) return notFound('GATEWAY_NOT_FOUND');
+  const enabled = b?.enabled !== false;
+  run('UPDATE telecom_gateways SET enabled = ? WHERE id = ?', enabled ? 1 : 0, p.id);
+  recordAudit({ adminId: adminRow().id, category: 'SYSTEM', targetId: p.id,
+    action: enabled ? 'DINSTAR_GATEWAY_ENABLED' : 'DINSTAR_GATEWAY_DISABLED', description: g.name });
+  return ok({ id: p.id, enabled });
+});
+
+on('DELETE', '/api/admin/dinstar/fleet/:id', (p) => {
+  const g = get('SELECT * FROM telecom_gateways WHERE id = ?', p.id);
+  if (!g) return notFound('GATEWAY_NOT_FOUND');
+  run('DELETE FROM telecom_gateways WHERE id = ?', p.id);
+  recordAudit({ adminId: adminRow().id, action: 'DINSTAR_GATEWAY_REMOVED', category: 'SYSTEM',
+    targetId: p.id, description: g.name });
+  return ok({ id: p.id, removed: true });
+});
+
+/** سجل قرارات التوجيه — يُظهر لماذا اختير منفذ ولماذا استُبعد غيره. */
+on('GET', '/api/admin/dinstar/fleet/routing/decisions', () =>
+  ok(all(`SELECT * FROM gateway_route_decisions ORDER BY created_at DESC LIMIT 100`).map((r) => ({
+    id: r.id, gatewayId: r.gateway_id, portIndex: r.port_index,
+    destinationPrefix: r.destination_prefix, matchedOperator: r.matched_operator,
+    score: r.score, reason: r.reason, outcome: r.outcome, createdAt: r.created_at,
+  }))));
+
+/**
+ * محاكاة اختيار المنفذ — نفس منطق DinstarLoadBalancer.selectPort:
+ * يستبعد غير المسجّل والمشغول و**غير الصالح إشارةً**، ويرجّح مطابقة
+ * المشغل. يُستخدم للتحقق من أن اللوحة لا تَعِد بمسار غير موجود.
+ */
+on('POST', '/api/admin/dinstar/fleet/routing/select', (_p, _q, b) => {
+  const target = (b?.number || '').replace(/\D/g, '');
+  const local = target.startsWith('967') ? target.slice(3) : target.replace(/^0/, '');
+  const PREFIX = { 71: 'Sabafon', 73: 'YOU', 77: 'YemenMobile', 78: 'YemenMobile', 70: 'YTelecom' };
+  const wanted = PREFIX[local.slice(0, 2)] || null;
+  const norm = (o) => (!o ? '' : /sabafon|سبأفون/i.test(o) ? 'Sabafon'
+    : /mtn|you|يو/i.test(o) ? 'YOU' : /yemen ?mobile|يمن موبايل/i.test(o) ? 'YemenMobile'
+      : /y telecom|hitel|واي/i.test(o) ? 'YTelecom' : o);
+
+  const gateways = all('SELECT * FROM telecom_gateways WHERE enabled = 1 ORDER BY routing_priority ASC');
+  const rejected = [];
+  const scored = [];
+  gateways.forEach((g, gi) => {
+    dinstarSlots(gi).slice(0, g.port_count).forEach((port) => {
+      if (port.status !== 'REGISTERED') return rejected.push({ gateway: g.host, port: port.index, why: 'REJECTED_OFFLINE' });
+      if (port.callState === 'ACTIVE' || port.callState === 'DIALING') return rejected.push({ gateway: g.host, port: port.index, why: 'REJECTED_BUSY' });
+      if (!port.signalUsable) return rejected.push({ gateway: g.host, port: port.index, why: 'REJECTED_NO_SIGNAL', signalRaw: port.signalRaw });
+      const match = wanted && norm(port.operator) === wanted;
+      scored.push({
+        gatewayId: g.id, gatewayHost: g.host, pjsipEndpoint: g.pjsip_endpoint,
+        portIndex: port.index, operator: port.operator, signalDbm: port.signalDbm,
+        score: port.signal * 1.0 + (match ? 35 : 0) - g.routing_priority * 0.5,
+        onNet: !!match,
+      });
+    });
+  });
+  if (!scored.length) return { status: 503, data: { error: 'NO_USABLE_PORT', rejected } };
+  const best = scored.sort((a, b2) => b2.score - a.score)[0];
+  run(`INSERT INTO gateway_route_decisions
+       (id,gateway_id,port_index,destination_prefix,matched_operator,score,reason,outcome,created_at)
+       VALUES (?,?,?,?,?,?,?,'SELECTED',?)`,
+  uuid(), best.gatewayId, best.portIndex, local.slice(0, 2) || null, best.operator,
+  best.score, `signal=${best.signalDbm}dBm${best.onNet ? ' on-net' : ''}`, nowIso());
+  return ok({ selected: best, targetOperator: wanted, rejected });
 });
 
 // ── master/v1 ──
