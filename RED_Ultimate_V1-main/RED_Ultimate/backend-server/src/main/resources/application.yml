@@ -132,6 +132,14 @@ red:
   rate-limit:
     enabled: true
     default-requests-per-minute: 60
+  # Lifecycle defaults are deliberately conservative. Change only after legal,
+  # billing and incident-response retention requirements are approved.
+  retention:
+    audit-days: ${RED_RETENTION_AUDIT_DAYS:365}
+    cdr-days: ${RED_RETENTION_CDR_DAYS:365}
+    health-days: ${RED_RETENTION_HEALTH_DAYS:90}
+    telemetry-days: ${RED_RETENTION_TELEMETRY_DAYS:90}
+    batch-size: ${RED_RETENTION_BATCH_SIZE:10000}
 
 logging:
   level:
