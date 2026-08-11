@@ -719,6 +719,7 @@ private fun ChatHubScreen(
     var groupConversationId by remember { mutableStateOf<String?>(null) }
     var showGroupEmoji by remember { mutableStateOf(false) }
     var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
+    val groupUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
     var deleteGroupId by remember { mutableStateOf<String?>(null) }
@@ -824,6 +825,10 @@ private fun ChatHubScreen(
     }
     LaunchedEffect(Unit) { DecryptedMessageBus.messages.collect { item ->
         decrypted.add(item)
+        // تتبع غير المقروء لرسائل المجموعة الواردة (ما لم تكن المجموعة مفتوحة حالياً)
+        if (!item.outgoing && item.conversationId.length > 32 && item.conversationId != groupConversationId) {
+            groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+        }
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
     // ملاحظة: `val conversation` معرّف في سطر سابق (ChatHubScreen scope) — لا نعيد حسابه هنا
@@ -1156,13 +1161,18 @@ private fun ChatHubScreen(
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
                             val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
-                            Card(Modifier.fillMaxWidth().clickable { groupConversationId = group.id }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            val unread = groupUnread[group.id] ?: 0
+                            Card(Modifier.fillMaxWidth().clickable { groupUnread.remove(group.id); groupConversationId = group.id }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     GroupAvatar(group, groups)
                                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(group.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                            Surface(shape = RoundedCornerShape(8.dp), color = YounesEmerald.copy(alpha = 0.15f)) { Text(" ${group.members.size} ", fontSize = 11.sp, color = YounesEmerald, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                            if (unread > 0) {
+                                                Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                            } else {
+                                                Surface(shape = RoundedCornerShape(8.dp), color = YounesEmerald.copy(alpha = 0.15f)) { Text(" ${group.members.size} ", fontSize = 11.sp, color = YounesEmerald, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                            }
                                         }
                                         Text(
                                             lastGroupMsg?.let { msg ->
