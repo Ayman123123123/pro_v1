@@ -50,6 +50,23 @@ class DinstarFleetService(
         /** حد أقصى صارم لعدد العناوين المفحوصة في عملية واحدة. */
         private const val MAX_SCAN_HOSTS = 254
 
+        /**
+         * الاسم يدخل سلسلة قناة Asterisk (`PJSIP/${EXTEN}@${GW}`)، فأي
+         * فاصلة أو محرف تحكم فيه يسمح بحقن وجهة أخرى. نفس النمط
+         * المفروض في `PstnManager.dialGsm` وفي حارس الـ dialplan.
+         */
+        private val PJSIP_ENDPOINT_PATTERN = Regex("^[A-Za-z0-9_-]{1,64}$")
+
+        /**
+         * اسم نظير PJSIP مشتقّ من العنوان — يطابق ما يولّده
+         * `pstn-asterisk/docker-entrypoint.sh` بالضبط:
+         *   192.168.11.1 → dinstar-gw-192-168-11-1
+         *
+         * الاشتقاق (لا الترقيم بالموضع) يمنع الاختلال الصامت عند إعادة
+         * ترتيب `DINSTAR_IPS` أو حذف عنوان من وسطها.
+         */
+        fun defaultPjsipEndpoint(host: String): String = "dinstar-gw-" + host.replace('.', '-')
+
         /** عدد الإخفاقات المتتالية قبل اعتبار البوابة ساقطة. */
         private const val FAILURE_THRESHOLD = 3
 
@@ -146,6 +163,18 @@ class DinstarFleetService(
         require(isPrivateAddress(host)) { "DINSTAR gateways must live on a private management address" }
         DinstarModelProfile.parse(model) // يرفض الطرازات غير المدعومة
 
+        // اسم نظير PJSIP يُشتق من العنوان ما لم يُحدَّد صراحةً.
+        //
+        // كان يُخزَّن نصًّا حرًّا، وAsterisk يرقّم نظراءه بموضع العنوان في
+        // `DINSTAR_IPS`. الجانبان لا يربطهما إلا العُرف — وقد اختلّا:
+        // Asterisk يبدأ من 0 والبذور من 1، فكل مكالمة تخرج من البوابة
+        // الخطأ، و`dinstar-gw-3` لا وجود له فتسقط مكالماته.
+        // الاشتقاق من العنوان يجعل الطرفين يتفقان بلا ترتيب مشترك.
+        val endpointName = pjsipEndpoint?.trim()?.takeIf { it.isNotEmpty() } ?: defaultPjsipEndpoint(host)
+        require(endpointName.matches(PJSIP_ENDPOINT_PATTERN)) {
+            "اسم نظير PJSIP غير صالح: $endpointName"
+        }
+
         val id = gatewayIdFor(serialNumber, host, apiPort)
         jdbc.update(
             """INSERT INTO telecom_gateways
@@ -163,7 +192,7 @@ class DinstarFleetService(
                  mac_address=COALESCE(EXCLUDED.mac_address, telecom_gateways.mac_address),
                  last_seen_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP""",
             id, name, model, host, scheme, apiPort, portCount,
-            mapper.writeValueAsString(capabilities), pjsipEndpoint, siteLabel,
+            mapper.writeValueAsString(capabilities), endpointName, siteLabel,
             routingPriority, serialNumber, firmwareVersion, macAddress, discoveryMethod
         )
         return id

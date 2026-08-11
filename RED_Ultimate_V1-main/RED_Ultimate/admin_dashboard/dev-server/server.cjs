@@ -921,6 +921,23 @@ function scoreIdentity({ portsResponded, serialNumber, macAddress, radioTypesKno
   return { confidence: Math.min(score, 100), signals };
 }
 
+/**
+ * اسم نظير PJSIP مشتقّ من العنوان — يطابق
+ * `DinstarFleetService.defaultPjsipEndpoint` و`docker-entrypoint.sh`:
+ *   192.168.11.1 → dinstar-gw-192-168-11-1
+ *
+ * كان يُخزَّن `null` عند إغفاله، وAsterisk يرقّم نظراءه بالموضع في
+ * `DINSTAR_IPS`. الطرفان لا يربطهما إلا العُرف — وقد اختلّا فعلًا
+ * (Asterisk من 0 والبذور من 1)، فكانت المكالمات تخرج من البوابة
+ * الخطأ. الاشتقاق يجعلهما يتفقان بلا ترتيب مشترك.
+ */
+const PJSIP_ENDPOINT = /^[A-Za-z0-9_-]{1,64}$/;
+function pjsipEndpointFor(host, explicit) {
+  const name = (explicit || '').trim() || `dinstar-gw-${host.replace(/\./g, '-')}`;
+  if (!PJSIP_ENDPOINT.test(name)) throw new Error(`INVALID_PJSIP_ENDPOINT: ${name}`);
+  return name;
+}
+
 const PRIVATE_HOST = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/;
 
 const gwRow = (r) => ({
@@ -1028,7 +1045,7 @@ on('POST', '/api/admin/dinstar/fleet', (_p, _q, b) => {
        VALUES (?,?,'DINSTAR',?,?,?,?,?,1,'UNKNOWN',?,?,?,'MANUAL',?)`,
   id, b?.name || `DINSTAR ${model} @ ${host}`, model, host, b?.scheme || 'https',
   b?.apiPort ?? 443, known[model], b?.routingPriority ?? 100,
-  b?.pjsipEndpoint || null, b?.siteLabel || null, nowIso());
+  pjsipEndpointFor(host, b?.pjsipEndpoint), b?.siteLabel || null, nowIso());
   recordAudit({ adminId: adminRow().id, action: 'DINSTAR_GATEWAY_REGISTERED', category: 'SYSTEM',
     targetId: id, description: `${model} @ ${host}` });
   return { status: 201, data: { id, host, model } };
