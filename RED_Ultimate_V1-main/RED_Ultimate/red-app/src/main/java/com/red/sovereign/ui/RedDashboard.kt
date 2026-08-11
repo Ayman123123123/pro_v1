@@ -731,6 +731,9 @@ private fun ChatHubScreen(
     var showGroupAttachmentSheet by remember { mutableStateOf(false) }
     var showGroupVoicePanel by remember { mutableStateOf(false) }
     var showGroupMenu by remember { mutableStateOf(false) }
+    var showGroupPollDialog by remember { mutableStateOf(false) }
+    var groupPollQuestion by remember { mutableStateOf("") }
+    var groupPollOptions by remember { mutableStateOf(listOf("", "")) }
     val groupUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
@@ -1230,6 +1233,7 @@ private fun ChatHubScreen(
                                 DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
                                 DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
                                 DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
+                                DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
                                 DropdownMenuItem(text = { Text("مغادرة المجموعة") }, leadingIcon = { Icon(Icons.Default.Logout, null) }, onClick = { showGroupMenu = false; groups.leave(openGroup) { groupConversationId = null } })
                             }
                         }
@@ -1486,6 +1490,48 @@ private fun ChatHubScreen(
             text = { Text("سيُحذف سجل المجموعة وعضويتها من الخادم. لا يمكن التراجع عن العملية.") },
             confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; manageGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
             dismissButton = { TextButton({ deleteGroupId = null }) { Text("إلغاء") } }
+        )
+    }
+    if (showGroupPollDialog) {
+        val openGroupForPoll = groups.groups.firstOrNull { it.id == groupConversationId }
+        AlertDialog(
+            onDismissRequest = { showGroupPollDialog = false },
+            title = { Text("استطلاع في المجموعة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(groupPollQuestion, { groupPollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("السؤال") }, maxLines = 3)
+                    groupPollOptions.forEachIndexed { index, value ->
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { next -> groupPollOptions = groupPollOptions.toMutableList().also { it[index] = next.take(80) } },
+                            Modifier.fillMaxWidth(), label = { Text("الخيار ${index + 1}") }, singleLine = true
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({ if (groupPollOptions.size < 6) groupPollOptions = groupPollOptions + "" }, Modifier.weight(1f), enabled = groupPollOptions.size < 6) { Text("+ خيار") }
+                        OutlinedButton({ if (groupPollOptions.size > 2) groupPollOptions = groupPollOptions.dropLast(1) }, Modifier.weight(1f), enabled = groupPollOptions.size > 2) { Text("- خيار") }
+                    }
+                }
+            },
+            confirmButton = {
+                val validPoll = groupPollQuestion.isNotBlank() && groupPollOptions.count { it.trim().length >= 2 } >= 2
+                Button(
+                    enabled = validPoll && openGroupForPoll != null,
+                    onClick = {
+                        val poll = com.red.sovereign.core.InlinePoll(
+                            question = groupPollQuestion.trim(),
+                            options = groupPollOptions.map { it.trim() }.filter { it.length >= 2 },
+                            pollId = "poll-${System.currentTimeMillis()}"
+                        )
+                        val rich = RichMessage(text = "", poll = poll)
+                        openGroupForPoll?.let { RedConnectionService.sendGroupRichText(context, it, rich) }
+                        showGroupPollDialog = false
+                        groupPollQuestion = ""
+                        groupPollOptions = listOf("", "")
+                    }
+                ) { Text("إرسال الاستطلاع") }
+            },
+            dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("إلغاء") } }
         )
     }
     if (showMessageSearch) AlertDialog(
@@ -2004,6 +2050,9 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         }
     }
     Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
+    rich.poll?.let { poll ->
+        InlinePollCard(poll, isOutgoing = message.outgoing)
+    }
     rich.expiresAt?.let {
         val remaining = (it - System.currentTimeMillis()).coerceAtLeast(0)
         val label = when {
@@ -2015,6 +2064,56 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
     }
     if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
+}
+
+@Composable
+private fun InlinePollCard(poll: com.red.sovereign.core.InlinePoll, isOutgoing: Boolean) {
+    var selected by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var votes by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf(poll.votes) }
+    val total = votes.sum().coerceAtLeast(1)
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Forum, null, tint = YounesEmerald, modifier = Modifier.size(18.dp))
+                Text(" استطلاع المجموعة", style = MaterialTheme.typography.labelMedium, color = YounesEmerald, fontWeight = FontWeight.Bold)
+            }
+            Text(poll.question, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            poll.options.forEachIndexed { index, option ->
+                val optionVotes = votes.getOrElse(index) { 0 }
+                val ratio = (optionVotes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                val isSelected = selected == option
+                Card(
+                    Modifier.fillMaxWidth().clickable(enabled = !poll.isClosed) {
+                        if (selected == option) {
+                            selected = null
+                            votes = votes.toMutableList().also { it[index] = (it.getOrElse(index) { 0 } - 1).coerceAtLeast(0) }
+                        } else {
+                            selected = option
+                            votes = votes.toMutableList().also { it[index] = it.getOrElse(index) { 0 } + 1 }
+                        }
+                    },
+                    colors = CardDefaults.cardColors(containerColor = if (isSelected) YounesEmerald.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(option, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                            if (poll.isClosed || selected != null) Text("${(ratio * 100).toInt()}%", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (poll.isClosed || selected != null) {
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = YounesEmerald, trackColor = MaterialTheme.colorScheme.surface)
+                        }
+                    }
+                }
+            }
+            Text("إجمالي الأصوات: $total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable
