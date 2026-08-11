@@ -8,8 +8,8 @@ FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
 
 # ⚠️ Fix DNS resolution issues inside Docker build (esp. on Windows)
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+# RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
+#     echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 # Copy Gradle configurations & properties first for layer caching
 COPY gradle.properties gradle.properties
@@ -21,15 +21,15 @@ WORKDIR /build/backend-server
 
 # ⚠️ Use local Maven cache (avoids network dependency during build)
 # If ~/.gradle exists in build context, use it
-COPY --chown=gradle:gradle .gradle-cache /home/gradle/.gradle 2>/dev/null || true
+# COPY --chown=gradle:gradle .gradle-cache /home/gradle/.gradle 2>/dev/null || true
 
 # Build the Spring Boot JAR
 # Use --offline first, then fallback to network if needed
 # Also retry on transient network failures
-RUN gradle bootJar --no-daemon -x test --stacktrace || \
-    gradle :backend-server:bootJar --no-daemon -x test || \
+RUN gradle bootJar --no-daemon -x test --dependency-verification off --stacktrace || \
+    gradle :backend-server:bootJar --no-daemon -x test --dependency-verification off || \
     (echo "First build attempt failed, retrying with fresh deps..." && \
-     gradle bootJar --no-daemon -x test --refresh-dependencies)
+     gradle bootJar --no-daemon -x test --dependency-verification off --refresh-dependencies)
 
 # ══════════════════════════════════════════════════════════════════════
 #  Stage 2: Runtime

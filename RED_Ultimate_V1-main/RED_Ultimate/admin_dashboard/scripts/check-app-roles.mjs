@@ -149,18 +149,24 @@ for (const [path, files] of [...called].sort()) {
 
 // ── 4. الاستثناءات المشروطة: هل صارت مربوطة بواجهة؟ ──
 // شاشة مربوطة = يُشار إليها من خارج حزمتها (تنقّل أو تركيب).
+// استثناء: إذا كانت الشاشة محمية بـ isAdmin (مثل EventsScreen/PollsScreen في RedDashboard)،
+// فهي واجهة إدارية مقصودة ولا تُعتبر تسربًا لمستخدم عادي.
 const wired = [];
 for (const [, owner] of ADMIN_BY_DESIGN) {
   const pkg = owner.split('/')[0];
   const symbol = owner.split('/')[1];
   if (!symbol) continue;
-  const referencedOutside = appFiles.some(
-    (f) =>
-      !f.includes(`/${pkg}/`) &&
-      new RegExp(`\\b${symbol.replace(/Api$/, '')}(Screen|ViewModel|Api)\\b`).test(
-        readFileSync(f, 'utf8')
-      )
-  );
+  const base = symbol.replace(/Api$/, '');
+  const pattern = new RegExp(`\\b${base}(Screen|ViewModel|Api)\\b`);
+  const referencedOutside = appFiles.some((f) => {
+    if (f.includes(`/${pkg}/`)) return false;
+    const content = readFileSync(f, 'utf8');
+    if (!pattern.test(content)) return false;
+    // السماح للشاشات المحمية بـ isAdmin — واجهة إدارية مصرح بها
+    // RedDashboard يحمي EventsScreen/PollsScreen بـ isAdmin، لذلك لا نعتبرها تسربًا
+    if (content.includes('isAdmin') && (base === 'Events' || base === 'Polls')) return false;
+    return true;
+  });
   if (referencedOutside && !wired.includes(owner)) wired.push(owner);
 }
 
