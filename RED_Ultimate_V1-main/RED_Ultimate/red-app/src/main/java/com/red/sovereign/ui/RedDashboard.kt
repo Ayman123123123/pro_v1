@@ -116,6 +116,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -2350,28 +2351,49 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         is AttachmentState.Exported -> current.path to current.name
         else -> null
     }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        if (downloaded?.second == manifest.name) {
-            val file = java.io.File(downloaded.first)
-            val bitmap = remember(file.lastModified()) {
-                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-                android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
-            }
-            if (bitmap != null) {
+    val isWorking = attachments.state is AttachmentState.Working
+    if (downloaded?.second == manifest.name) {
+        val file = java.io.File(downloaded.first)
+        val bitmap = remember(file.lastModified()) {
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+            android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
+        }
+        if (bitmap != null) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
                 androidx.compose.foundation.Image(
                     bitmap, contentDescription = "صورة",
-                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Fit
+                    modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                        val uri = android.net.Uri.fromFile(file)
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "image/*")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching { context.startActivity(intent) }
+                    },
+                    contentScale = ContentScale.Crop
                 )
+                // شارة الحجم والتحقق المشفر
+                Surface(Modifier.padding(6.dp), shape = RoundedCornerShape(8.dp), color = Color.Black.copy(alpha = 0.6f)) {
+                    Text(" ✓ مشفرة • ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                }
             }
-        } else {
-            Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(4.dp))
-                    Text("صورة", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-                        Icon(Icons.Default.Download, "تنزيل")
+        }
+    } else {
+        Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                if (isWorking) {
+                    CircularProgressIndicator(color = YounesEmerald, strokeWidth = 3.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("جارٍ فك التشفير…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                } else {
+                    Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(52.dp))
+                    Spacer(Modifier.height(6.dp))
+                    Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
+                    Text("${formatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                        Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
+                        }
                     }
                 }
             }
@@ -2392,20 +2414,39 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
     }
     if (downloaded?.second == manifest.name) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
-            StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth().height(220.dp))
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+                StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
+                Surface(
+                    Modifier.align(Alignment.Center).size(52.dp),
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f),
+                    onClick = {
+                        val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "video/*")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching { context.startActivity(intent) }
+                    }
+                ) {
+                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
+                }
+            }
         }
     } else {
+        val isWorking = attachments.state is AttachmentState.Working
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
-            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(YounesEmerald.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Videocam, null, tint = YounesEmerald, modifier = Modifier.size(34.dp))
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
-                IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-                    Icon(Icons.Default.Download, "تنزيل الفيديو")
+                if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
+                else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                    Icon(Icons.Default.Download, "تنزيل الفيديو", tint = YounesEmerald)
                 }
             }
         }
@@ -2425,10 +2466,13 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
     }
     if (downloaded?.second == manifest.name) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(30.dp))
-                    Text(manifest.name, Modifier.padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(AqyalCyanGlow.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(20.dp))
+                    }
+                    Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
                 VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
             }
@@ -2457,14 +2501,28 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
         if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, modifier = Modifier.size(32.dp))
-        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-            Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-            Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
-        }
-        IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-            Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق")
+    val isWorking = attachments.state is AttachmentState.Working
+    val fileColor = when {
+        manifest.mimeType.contains("pdf") -> AqyalCyanGlow
+        manifest.mimeType.contains("zip") || manifest.mimeType.contains("compressed") -> AqyalGold
+        manifest.mimeType.contains("text") || manifest.mimeType.contains("word") -> Color(0xFF4FC3F7)
+        manifest.mimeType.contains("sheet") || manifest.mimeType.contains("excel") -> YounesEmerald
+        manifest.mimeType.contains("presentation") || manifest.mimeType.contains("powerpoint") -> Color(0xFFF06292)
+        else -> AqyalCyanGlow
+    }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(fileColor.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = fileColor, modifier = Modifier.size(30.dp))
+            }
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+            }
+            if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
+            else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
+            }
         }
     }
 }
