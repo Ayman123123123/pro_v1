@@ -839,12 +839,24 @@ on('POST', '/api/admin/dinstar/sms/send', (_p, _q, b) => {
     return bad(`SMS_TEXT_TOO_LONG: ${bytes} بايت > ${SMS_MAX_TEXT_BYTES}`);
   }
 
+  // بوابة اختيارية من الأسطول. العنوان يصل من طلب HTTP، فتمريره بلا
+  // فحص يجعل الخادم يطلب أي عنوان يختاره المرسِل (SSRF). يطابق
+  // التحقق في DinstarHardwareService.sendSms.
+  const gatewayHost = typeof b?.gatewayHost === 'string' ? b.gatewayHost.trim() : '';
+  if (gatewayHost && !PRIVATE_HOST.test(gatewayHost)) {
+    return bad('PRIVATE_ADDRESS_REQUIRED');
+  }
+  if (gatewayHost && !get('SELECT id FROM telecom_gateways WHERE host = ?', gatewayHost)) {
+    return notFound('GATEWAY_NOT_REGISTERED');
+  }
+
   const encoding = smsWireEncoding(b?.encoding);
   const taskId = smsTaskSeq++;
   const ports = Array.isArray(b?.port) && b.port.length ? b.port : [0];
   param.forEach((r, i) => smsOutbox.push({
     taskId, userId: r?.user_id ?? i, number: String(r?.number || ''),
     port: ports[i % ports.length], status: 'SENT', encoding,
+    gatewayHost: gatewayHost || null,
     sentAt: new Date().toISOString(),
   }));
 
