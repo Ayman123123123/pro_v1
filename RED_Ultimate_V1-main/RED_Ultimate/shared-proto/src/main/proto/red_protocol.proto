@@ -13,6 +13,8 @@ message RedRED {
         SyncRequest sync_req = 3;
         TypingRED typing = 4;
         DeleteRED delete = 5;
+        RemoteWipe remote_wipe = 6;
+        RemoteWipeAck remote_wipe_ack = 7;
     }
 }
 
@@ -53,4 +55,17 @@ message DeleteRED {
     string message_id = 1;
     string conversation_id = 2;
     bool for_everyone = 3;
+}
+
+// Server-issued command for the authenticated device to erase YOUNES application data.
+// This is an application wipe, never an unmanaged Android factory reset.
+message RemoteWipe {
+    string command_id = 1;
+    string reason = 2;
+}
+
+// Device-side acknowledgement that a REMOTE_APP_WIPE command was received and applied.
+// The server maps this to AdminUserIntelligenceService.markRemoteWipeAcknowledged.
+message RemoteWipeAck {
+    string command_id = 1;
 }
