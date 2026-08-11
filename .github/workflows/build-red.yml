@@ -83,6 +83,7 @@ jobs:
           ROOT="project/pro/RED_Ultimate_V1-main/RED_Ultimate"
           cd "$ROOT"
           python3 scripts/check-android-integrity.py
+          python3 scripts/check-kotlin-static.py
 
       - name: Build
         id: build
