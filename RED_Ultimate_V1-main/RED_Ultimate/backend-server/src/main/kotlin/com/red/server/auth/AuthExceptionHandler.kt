@@ -27,6 +27,10 @@ class AuthExceptionHandler {
     fun refreshReuse(): ResponseEntity<Map<String, String>> =
         ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "REFRESH_TOKEN_REUSE_DETECTED"))
 
+    @ExceptionHandler(UnsupportedOperationException::class)
+    fun notImplemented(error: UnsupportedOperationException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(mapOf("error" to (error.message ?: "NOT_IMPLEMENTED")))
+
     @ExceptionHandler(IllegalArgumentException::class)
     fun badRequest(error: IllegalArgumentException): ResponseEntity<Map<String, String>> =
         ResponseEntity.badRequest().body(mapOf("error" to (error.message ?: "INVALID_REQUEST")))

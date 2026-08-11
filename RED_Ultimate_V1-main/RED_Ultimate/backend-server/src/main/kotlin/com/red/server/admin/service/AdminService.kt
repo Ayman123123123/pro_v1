@@ -285,38 +285,19 @@ class AdminService(
     fun getBackups(pageable: Pageable): Page<BackupHistory> = backups.findAll(pageable).let { PageImpl(it.content, pageable, it.totalElements) }
     fun getRecentBackups(): List<BackupHistory> = backups.findTop20ByOrderByStartedAtDesc()
 
-    @Transactional
-    fun startBackup(backupType: String, adminId: UUID, notes: String? = null): BackupHistory {
-        return backups.save(BackupHistory(
-            backupType = backupType,
-            storageLocation = "/backups/${backupType.lowercase()}/${UUID.randomUUID()}.bak",
-            sizeBytes = 0,
-            status = "IN_PROGRESS",
-            triggeredBy = "MANUAL",
-            initiatedBy = adminId,
-            notes = notes
-        ))
-    }
+    /**
+     * Docker-host backup is intentionally not executed by the web process.
+     * Giving Backend the Docker socket would make one application RCE equal to
+     * root on the host. Operators must use scripts/backup-platform.sh instead.
+     */
+    fun startBackup(backupType: String, adminId: UUID, notes: String? = null): BackupHistory =
+        throw UnsupportedOperationException("BACKUP_OPERATOR_WORKFLOW_REQUIRED")
 
-    @Transactional
-    fun completeBackup(backupId: UUID, sizeBytes: Long, checksum: String): BackupHistory? {
-        val backup = backups.findById(backupId).orElse(null) ?: return null
-        backup.status = "COMPLETED"
-        backup.sizeBytes = sizeBytes
-        backup.checksum = checksum
-        backup.completedAt = Instant.now()
-        return backups.save(backup)
-    }
+    fun completeBackup(backupId: UUID, sizeBytes: Long, checksum: String): BackupHistory? =
+        throw UnsupportedOperationException("BACKUP_OPERATOR_WORKFLOW_REQUIRED")
 
-    @Transactional
-    fun restoreBackup(backupId: UUID, confirmCode: String): Boolean {
-        if (confirmCode != "RESTORE_CONFIRM") return false
-        val backup = backups.findById(backupId).orElse(null) ?: return false
-        backup.lastRestoredAt = Instant.now()
-        backup.restoreCount += 1
-        backups.save(backup)
-        return true
-    }
+    fun restoreBackup(backupId: UUID, confirmCode: String): Boolean =
+        throw UnsupportedOperationException("RESTORE_OPERATOR_WORKFLOW_REQUIRED")
 
     @Transactional
     fun deleteBackup(backupId: UUID): Boolean {
