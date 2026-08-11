@@ -80,7 +80,15 @@ class UserAccount(
 
     // لون عرض ثابت للمستخدم (العمود مُنشأ في V19__User_Avatar_Color.sql)
     @Column(name = "avatar_color", length = 20)
-    var avatarColor: String? = null
+    var avatarColor: String? = null,
+
+    // مفتاح الوسائط المشفّر (objectKey) لصورة البروفايل (العمود مُنشأ في V25)
+    @Column(name = "avatar_url", length = 255)
+    var avatarUrl: String? = null,
+
+    // نص تعريفي قصير يعرضه المستخدم (العمود مُنشأ في V25)
+    @Column(name = "bio", length = 280)
+    var bio: String? = null
 )
 
 enum class AccountStatus {

@@ -16,9 +16,10 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         GroupEntity::class,
         CallLogEntity::class,
         StoryEntity::class,
-        DraftEntity::class
+        DraftEntity::class,
+        MessageReactionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
@@ -42,10 +43,33 @@ abstract class RedDatabase : RoomDatabase() {
                     context.applicationContext,
                     RedDatabase::class.java,
                     "red_sovereign.db"
-                ).openHelperFactory(factory).addCallback(FtsCallback()).build()
+                )
+                    .openHelperFactory(factory)
+                    // إضافة جدول تفاعلات الإيموجي (message_reactions) في الإصدار 2.
+                    .addMigrations(REACTION_MIGRATION_1_2)
+                    .addCallback(FtsCallback())
+                    .build()
                 INSTANCE = instance
                 instance
             }
         }
+    }
+}
+
+/** إضافة جدول message_reactions دون فقدان البيانات المشفّرة الموجودة. */
+private val REACTION_MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `message_reactions` (
+                `messageId` TEXT NOT NULL,
+                `conversationId` TEXT NOT NULL,
+                `senderId` TEXT NOT NULL,
+                `emoji` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`messageId`, `senderId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_conversationId` ON `message_reactions` (`conversationId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_messageId` ON `message_reactions` (`messageId`)")
     }
 }

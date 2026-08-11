@@ -45,8 +45,10 @@ class SovereignNotificationRouter : Service() {
     private fun createChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            // الأهمية يجب أن تطابق YounesApplication/ConferenceService/LiveStreamService (IMPORTANCE_HIGH)
+            // وإلا يثبّت أندرويد أول إنشاء ويتجاهل الباقي — سلوك غير حتمي حسب ترتيب التشغيل.
             nm.createNotificationChannel(NotificationChannel(CHANNEL_MESSAGES, getString(com.red.sovereign.R.string.channel_messages_name), NotificationManager.IMPORTANCE_HIGH))
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_CALLS, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_MAX))
+            nm.createNotificationChannel(NotificationChannel(CHANNEL_CALLS, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
             nm.createNotificationChannel(NotificationChannel(CHANNEL_DINSTAR, getString(com.red.sovereign.R.string.channel_dinstar_name), NotificationManager.IMPORTANCE_LOW))
             nm.createNotificationChannel(NotificationChannel("red_system", getString(com.red.sovereign.R.string.channel_system_name), NotificationManager.IMPORTANCE_MIN))
         }

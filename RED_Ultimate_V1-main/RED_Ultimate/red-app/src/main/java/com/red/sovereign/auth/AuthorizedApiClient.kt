@@ -3,6 +3,8 @@ package com.red.sovereign.auth
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -27,7 +29,7 @@ class AuthorizedApiClient(
             .header("Authorization", "Bearer $access")
             .method(method, if (method == "GET" || method == "DELETE") null else body ?: ByteArray(0).toRequestBody(JSON))
             .build()
-        executeWithRefresh(build(token)) { build(it) }
+        executeWithRefresh(token, build(token)) { build(it) }
     }
 
     suspend fun download(path: String, target: File): ApiResult<File> = withContext(Dispatchers.IO) {
@@ -37,7 +39,7 @@ class AuthorizedApiClient(
             .header("Authorization", "Bearer $access")
             .get()
             .build()
-        val result = executeResponseWithRefresh(build(token)) { build(it) }
+        val result = executeResponseWithRefresh(token, build(token)) { build(it) }
         when (result) {
             is ApiResult.Error -> result
             is ApiResult.Success -> {
@@ -45,47 +47,74 @@ class AuthorizedApiClient(
                     if (!response.isSuccessful) return@withContext ApiResult.Error(response.code, response.body?.string())
                     target.parentFile?.mkdirs()
                     response.body?.byteStream()?.use { input -> FileOutputStream(target).use { input.copyTo(it) } }
-                    ApiResult.Success(target)
+                    ApiResult.Success(200, target)
                 }
             }
         }
     }
 
-    private fun executeWithRefresh(initial: Request, rebuild: (String) -> Request): ApiResult<String> {
-        executeResponseWithRefresh(initial, rebuild).let { result ->
+    private suspend fun executeWithRefresh(originalToken: String, initial: Request, rebuild: (String) -> Request): ApiResult<String> {
+        executeResponseWithRefresh(originalToken, initial, rebuild).let { result ->
             return when (result) {
                 is ApiResult.Error -> result
                 is ApiResult.Success -> result.value.use { response ->
-                    if (response.isSuccessful) ApiResult.Success(response.body?.string().orEmpty())
+                    if (response.isSuccessful) ApiResult.Success(response.code, response.body?.string().orEmpty())
                     else ApiResult.Error(response.code, response.body?.string())
                 }
             }
         }
     }
 
-    private fun executeResponseWithRefresh(initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
+    /**
+     * ينفّذ الطلب مع تجديد التوكن عند 401 — مع حماية سباق التحديث.
+     *
+     * دون الحارس: طلبات متوازية تتلقى 401 معًا ⇒ كلٌّ يُرسل نفس توكن التحديث ⇒
+     * الأول ينجح ويُبطل التوكن ⇒ الباقي يستعمل توكنًا مُبطلًا ⇒ الخادم يعتبره سرقة
+     * ⇒ إبطال عائلة الجلسة كلها على كل الأجهزة (RefreshTokenService يعاقب بإعادة الاستخدام).
+     *
+     * الحل: Mutex مشترك (عبر كائنات العميل المختلفة) + فحص مزدوج — إن جدّد طلبٌ
+     * آخر التوكن أثناء انتظارنا للقفل، نُعيد المحاولة بالتوكن الجديد دون تجديد.
+     */
+    private suspend fun executeResponseWithRefresh(originalToken: String, initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
         val first = runCatching { client.newCall(initial).execute() }.getOrElse {
-            // Trigger smart background IP auto-discovery if connection fails due to IP change
             ServerEndpoint.autoDiscover(tokens.context)
             return ApiResult.Error(null, "NETWORK_ERROR")
         }
-        if (first.code != 401) return ApiResult.Success(first)
+        if (first.code != 401) return ApiResult.Success(first.code, first)
         first.close()
-        val refresh = tokens.refreshToken ?: return ApiResult.Error(401, "UNAUTHENTICATED")
-        val refreshed = when (val result = kotlinx.coroutines.runBlocking { auth.refresh(refresh) }) {
-            is ApiResult.Success -> result.value
-            is ApiResult.Error -> return ApiResult.Error(401, "UNAUTHENTICATED")
-        }
-        tokens.updateTokens(refreshed)
-        val second = runCatching { client.newCall(rebuild(refreshed.accessToken)).execute() }
-            .getOrElse {
-                ServerEndpoint.autoDiscover(tokens.context)
-                return ApiResult.Error(null, "NETWORK_ERROR")
+
+        return REFRESH_MUTEX.withLock {
+            // فحص مزدوج: ربما جدّد طلب متوازٍ التوكن أثناء انتظارنا القفل
+            val currentAccess = tokens.accessToken
+            if (currentAccess != null && currentAccess != originalToken) {
+                // التوكن تغيّر ⇒ نُعيد المحاولة بالجديد دون استدعاء refresh
+                val retry = runCatching { client.newCall(rebuild(currentAccess)).execute() }.getOrElse {
+                    ServerEndpoint.autoDiscover(tokens.context)
+                    return@withLock ApiResult.Error(null, "NETWORK_ERROR")
+                }
+                if (retry.code != 401) return@withLock ApiResult.Success(retry.code, retry)
+                retry.close()
+                return@withLock ApiResult.Error(401, "UNAUTHENTICATED")
             }
-        return ApiResult.Success(second)
+            // لا يزال نفس التوكن ⇒ نجدّد فعليًا (استدعاء suspend مباشر — لا runBlocking)
+            val refresh = tokens.refreshToken ?: return@withLock ApiResult.Error(401, "UNAUTHENTICATED")
+            val refreshed = when (val result = auth.refresh(refresh)) {
+                is ApiResult.Success -> result.value
+                is ApiResult.Error -> return@withLock ApiResult.Error(401, "UNAUTHENTICATED")
+            }
+            tokens.updateTokens(refreshed)
+            val second = runCatching { client.newCall(rebuild(refreshed.accessToken)).execute() }
+                .getOrElse {
+                    ServerEndpoint.autoDiscover(tokens.context)
+                    return@withLock ApiResult.Error(null, "NETWORK_ERROR")
+                }
+            ApiResult.Success(second.code, second)
+        }
     }
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+        /** حارس تحديث التوكن — مشترك عبر كل كائنات AuthorizedApiClient لتجنب السباق. */
+        private val REFRESH_MUTEX = Mutex()
     }
 }

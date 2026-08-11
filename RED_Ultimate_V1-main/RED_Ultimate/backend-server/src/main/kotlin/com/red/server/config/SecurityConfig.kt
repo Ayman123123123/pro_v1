@@ -100,8 +100,14 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/admin/content/events/*/checkin").authenticated()
                     // قراءة المحتوى المنشور متاحة لكل مصادَق؛ الإنشاء
                     // والتعديل والحذف تبقى إدارية عبر القاعدة التالية.
-                    .requestMatchers(HttpMethod.GET, "/api/admin/content/polls/active").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/api/admin/content/events/live", "/api/admin/content/events/upcoming").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/polls", "/api/admin/content/polls/active").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/polls/*").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/events", "/api/admin/content/events/live", "/api/admin/content/events/upcoming").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/events/*").authenticated()
+                    // الملصقات: استعراض المنشورة + ملصقات الحزمة + المثبّتة (للمستخدم)
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/sticker-packs/published", "/api/admin/content/sticker-packs/installed", "/api/admin/content/sticker-packs/*/stickers").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/sticker-packs/*/install").authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/api/admin/content/sticker-packs/*/install").authenticated()
 
                     // Admin endpoints
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")

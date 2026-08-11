@@ -26,6 +26,8 @@ echo "════════════════════════�
 echo "[1/6] تطابق الكيانات مع قاعدة البيانات"
 check "check-schema-consistency.py" python3 scripts/check-schema-consistency.py
 check "check-catalog-accessors.py" python3 scripts/check-catalog-accessors.py
+check "check-android-integrity.py" python3 scripts/check-android-integrity.py
+check "check-kotlin-static.py" python3 scripts/check-kotlin-static.py
 
 echo "[2/6] عقد API (لوحة ↔ خادم)"
 check "npm run check:api" bash -c "cd admin_dashboard && npm run check:api"

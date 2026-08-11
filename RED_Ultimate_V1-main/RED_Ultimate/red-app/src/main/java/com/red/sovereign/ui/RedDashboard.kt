@@ -169,7 +169,9 @@ import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.MessageStore
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.ReactionEventBus
 import com.red.sovereign.core.RichMessage
+import com.red.sovereign.core.database.MessageReactionEntity
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.crypto.DecryptedMessageBus
 import com.red.sovereign.crypto.SafetyQrScanner
@@ -218,6 +220,7 @@ import com.red.sovereign.features.contacts.ContactsScreen
 import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
 import com.red.sovereign.features.devices.DevicesScreen
@@ -226,8 +229,13 @@ import com.red.sovereign.features.privacy.PrivacySettingsScreen
 import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
+import com.red.sovereign.features.media.MediaGalleryDialog
 import com.red.sovereign.features.profile.BackupScreen
+import com.red.sovereign.features.profile.ProfileScreen
 import com.red.sovereign.core.YounesId
+import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.media.EventsScreen
+import com.red.sovereign.media.PollsScreen
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
@@ -237,7 +245,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -297,6 +305,20 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 }
             )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.PROFILE -> ProfileScreen(
+                redId = account.redId,
+                username = account.username,
+                displayName = account.username,
+                onBack = { currentScreen = SovereignScreen.DASHBOARD }
+            )
+            SovereignScreen.EVENTS -> {
+                val tokens = remember { TokenStore(context) }
+                EventsScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD }, isAdmin = account.isAdmin)
+            }
+            SovereignScreen.POLLS -> {
+                val tokens = remember { TokenStore(context) }
+                PollsScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD }, isAdmin = account.isAdmin)
+            }
             SovereignScreen.GROUP_INFO -> {
                 val infoGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
                 SovereignGroupInfoScreen(
@@ -360,7 +382,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
                     onBackup = { currentScreen = SovereignScreen.BACKUP },
-                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES }
+                    onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
+                    onProfile = { currentScreen = SovereignScreen.PROFILE },
+                    onEvents = { currentScreen = SovereignScreen.EVENTS },
+                    onPolls = { currentScreen = SovereignScreen.POLLS }
                 )
             }
         }
@@ -722,6 +747,7 @@ private fun ChatHubScreen(
     var showMessageSearch by remember { mutableStateOf(false) }
     var messageSearchQuery by remember { mutableStateOf("") }
     var showMediaGallery by remember { mutableStateOf(false) }
+    var showGroupMediaGallery by remember { mutableStateOf(false) }
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
@@ -733,6 +759,7 @@ private fun ChatHubScreen(
     var disappearingDurationMs by remember { mutableStateOf<Long?>(null) }
     var pendingCallVideo by remember { mutableStateOf(false) }
     var showEmoji by remember { mutableStateOf(false) }
+    var showStickers by remember { mutableStateOf(false) }
     var create by remember { mutableStateOf(false) }
     var showJoinGroup by remember { mutableStateOf(false) }
     var joinToken by remember { mutableStateOf("") }
@@ -761,9 +788,12 @@ private fun ChatHubScreen(
     var groupDescription by remember { mutableStateOf("") }
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
     val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
+    // تفاعلات الإيموجي: messageId -> قائمة التفاعلات (للعرض السريع تحت كل رسالة)
+    val reactionsByMessage = remember { androidx.compose.runtime.mutableStateMapOf<String, List<MessageReactionEntity>>() }
     
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -778,6 +808,19 @@ private fun ChatHubScreen(
             if (index != -1) {
                 decrypted[index] = decrypted[index].copy(status = ack.status)
             }
+        }
+    }
+    // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        ReactionEventBus.events.collect { event ->
+            val current = reactionsByMessage[event.messageId].orEmpty()
+            val withoutSender = current.filterNot { it.senderId == event.senderId }
+            val updated = if (event.remove || event.emoji == null) {
+                withoutSender
+            } else {
+                withoutSender + MessageReactionEntity(event.messageId, event.conversationId, event.senderId, event.emoji, event.timestamp)
+            }
+            reactionsByMessage[event.messageId] = updated.sortedBy { it.timestamp }
         }
     }
     androidx.compose.runtime.LaunchedEffect(typingUsers) {
@@ -896,6 +939,16 @@ private fun ChatHubScreen(
             }
         }
     }
+    // تحميل تفاعلات المحادثة المفتوحة من التخزين المحلي (مشفّر)
+    androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
+        val convId = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
+        if (convId != null) {
+            repository.reactionsForConversation(convId).collect { all ->
+                reactionsByMessage.clear()
+                all.groupBy { it.messageId }.forEach { (msgId, list) -> reactionsByMessage[msgId] = list.sortedBy { it.timestamp } }
+            }
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         if (tab == 0) Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (directory.requests.isNotEmpty()) {
@@ -979,7 +1032,7 @@ private fun ChatHubScreen(
                     Avatar((activePerson?.displayName ?: target).take(1))
                     Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                         Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
-                        Text(activePerson?.let { "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(activePerson?.let { val ls = directory.lastSeenLabel(it.redId); ls ?: "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     IconButton({ pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }) { Icon(Icons.Default.Call, "مكالمة صوتية عبر يونس") }
                     IconButton({ pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) }) { Icon(Icons.Default.Videocam, "مكالمة فيديو عبر يونس") }
@@ -1076,9 +1129,24 @@ private fun ChatHubScreen(
                                 when (item.type) {
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
+                                    "STICKER" -> StickerMessage(item, attachments)
                                     "RICH_TEXT" -> RichTextMessage(item, conversationMessages)
                                     else -> Text(item.plaintext.toString(Charsets.UTF_8), color = if (item.outgoing) Color(0xFF001B14) else Color.White, fontSize = 16.sp)
                                 }
+                                // تفاعلات الإيموجي تحت الرسالة (E2EE)
+                                MessageReactions(
+                                    reactions = reactionsByMessage[item.id].orEmpty(),
+                                    currentRedId = account.redId,
+                                    onToggle = { emoji ->
+                                        val mine = reactionsByMessage[item.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                                        if (mine) RedConnectionService.removeReaction(context, target, conversation, item.id)
+                                        else RedConnectionService.sendReaction(context, target, conversation, item.id, emoji)
+                                        // تحديث محلي فوري لاستجابة الواجهة قبل وصول الحدث عبر الـ bus
+                                        val current = reactionsByMessage[item.id].orEmpty()
+                                        val withoutMine = current.filterNot { it.senderId == account.redId }
+                                        reactionsByMessage[item.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(item.id, conversation, account.redId, emoji, System.currentTimeMillis())
+                                    }
+                                )
                                 if (item.outgoing) {
                                     val ticks = when (item.status) {
                                         "READ" -> "✓✓ (مقروء)"
@@ -1117,6 +1185,25 @@ private fun ChatHubScreen(
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) { Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(if (editingMessageId != null) "تعديل الرسالة" else "رد على رسالة", color = YounesEmerald, style = MaterialTheme.typography.labelMedium); Text(messageDisplayText(referenced), maxLines = 1, overflow = TextOverflow.Ellipsis) }; IconButton({ replyToMessage = null; editingMessageId = null }) { Icon(Icons.Default.Close, "إلغاء") } } }
             }
             if (showEmoji) EmojiPicker(onEmoji = { messageText += it })
+            if (showStickers && target.matches(RED_ID_PATTERN)) {
+                val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
+                com.red.sovereign.media.StickerPicker(
+                    tokens = stickerTokens,
+                    onPickSticker = { sticker ->
+                        // منح المستقبل وصولاً لمفتاح الوسائط ثم إرسال رسالة STICKER
+                        scope.launch {
+                            val mediaApi = com.red.sovereign.media.MediaApi(context, com.red.sovereign.auth.AuthorizedApiClient(stickerTokens))
+                            mediaApi.grant(sticker.mediaKey, target)
+                            val payload = kotlinx.serialization.json.Json.encodeToString(
+                                com.red.sovereign.media.StickerMessagePayload.serializer(),
+                                com.red.sovereign.media.StickerMessagePayload(sticker.mediaKey, sticker.emojiTags.firstOrNull() ?: "🎨", sticker.name)
+                            )
+                            com.red.sovereign.core.RedConnectionService.sendPayload(context, target, conversation, "STICKER", payload.toByteArray(Charsets.UTF_8))
+                            showStickers = false
+                        }
+                    }
+                )
+            }
             if (showAttachmentSheet) AttachmentSheet(
                 onCamera = {
                     val dir = File(context.cacheDir, "camera").apply { mkdirs() }
@@ -1168,7 +1255,8 @@ private fun ChatHubScreen(
                 }
             )
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton({ showEmoji = !showEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                IconButton({ showEmoji = !showEmoji; showStickers = false }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                IconButton({ showStickers = !showStickers; showEmoji = false }, enabled = target.matches(RED_ID_PATTERN)) { Icon(Icons.Default.Add, "ملصقات") }
                 IconButton({ showAttachmentSheet = true }, enabled = target.matches(RED_ID_PATTERN) && attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
@@ -1308,6 +1396,7 @@ private fun ChatHubScreen(
                             DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
                                 DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
                                 DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
+                                DropdownMenuItem(text = { Text("الوسائط المشتركة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; showGroupMediaGallery = true })
                                 DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
                                 DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
                                 DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
@@ -1375,8 +1464,22 @@ private fun ChatHubScreen(
                                     "RICH_TEXT" -> RichTextMessage(message, groupMessages)
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
                                     "VOICE" -> VoiceMessage(message, attachments)
+                                    "STICKER" -> StickerMessage(message, attachments)
                                     else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
                                 }
+                                // تفاعلات الإيموجي تحت رسالة المجموعة (E2EE بـ Sender Keys)
+                                MessageReactions(
+                                    reactions = reactionsByMessage[message.id].orEmpty(),
+                                    currentRedId = account.redId,
+                                    onToggle = { emoji ->
+                                        val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                                        if (mine) RedConnectionService.removeGroupReaction(context, openGroup, message.id)
+                                        else RedConnectionService.sendGroupReaction(context, openGroup, message.id, emoji)
+                                        val current = reactionsByMessage[message.id].orEmpty()
+                                        val withoutMine = current.filterNot { it.senderId == account.redId }
+                                        reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, openGroup.id, account.redId, emoji, System.currentTimeMillis())
+                                    }
+                                )
                             }
                         }
                     }
@@ -1473,6 +1576,27 @@ private fun ChatHubScreen(
                         Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
+
+                // تفاعل سريع بالإيموجي — أعلى القائمة (E2EE)
+                ReactionEmojiBar(onPick = { emoji ->
+                    val convId = message.conversationId
+                    val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                    if (isGroupMsg) {
+                        val grp = groups.groups.firstOrNull { it.id == convId }
+                        if (grp != null) {
+                            if (mine) RedConnectionService.removeGroupReaction(context, grp, message.id)
+                            else RedConnectionService.sendGroupReaction(context, grp, message.id, emoji)
+                        }
+                    } else {
+                        if (mine) RedConnectionService.removeReaction(context, target, convId, message.id)
+                        else RedConnectionService.sendReaction(context, target, convId, message.id, emoji)
+                    }
+                    // تحديث محلي فوري
+                    val current = reactionsByMessage[message.id].orEmpty()
+                    val withoutMine = current.filterNot { it.senderId == account.redId }
+                    reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, convId, account.redId, emoji, System.currentTimeMillis())
+                    selectedChatMessage = null
+                })
 
                 MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
                     replyToMessage = message; selectedChatMessage = null
@@ -1698,33 +1822,19 @@ private fun ChatHubScreen(
     }
     if (showMediaGallery && target.isNotBlank()) {
         val convKey = conversationId(account.redId, target)
-        val mediaMsgs = decrypted.filter { it.conversationId == convKey && (it.type == "IMAGE" || it.type == "VIDEO" || it.type == "FILE" || it.type == "AUDIO") }
-        AlertDialog(
-            onDismissRequest = { showMediaGallery = false },
-            title = { Text("الوسائط المشتركة (${mediaMsgs.size})") },
-            text = {
-                if (mediaMsgs.isEmpty()) {
-                    Text("لا توجد وسائط مشتركة بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    LazyColumn(Modifier.height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(mediaMsgs, key = { it.id }) { m ->
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    when (m.type) {
-                                        "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald)
-                                        "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow)
-                                        "AUDIO" -> Icon(Icons.Default.MusicNote, null, tint = AqyalGold)
-                                        else -> Icon(Icons.Default.InsertDriveFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Text(if (m.type == "RICH_TEXT") messageDisplayText(m) else "وسيط مشفر", Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                                    Text(relativeTime(m.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ showMediaGallery = false }) { Text("إغلاق") } }
+        MediaGalleryDialog(
+            title = "الوسائط المشتركة",
+            messages = decrypted.filter { it.conversationId == convKey },
+            attachments = attachments,
+            onDismiss = { showMediaGallery = false }
+        )
+    }
+    if (showGroupMediaGallery && groupConversationId != null) {
+        MediaGalleryDialog(
+            title = "وسائط المجموعة",
+            messages = decrypted.filter { it.conversationId == groupConversationId },
+            attachments = attachments,
+            onDismiss = { showGroupMediaGallery = false }
         )
     }
     if (showMessageSearch) AlertDialog(
@@ -2203,7 +2313,10 @@ private fun MoreScreen(
     onDevices: () -> Unit,
     onPrivacy: () -> Unit,
     onBackup: () -> Unit,
-    onCommunities: () -> Unit = {}
+    onCommunities: () -> Unit = {},
+    onProfile: () -> Unit = {},
+    onEvents: () -> Unit = {},
+    onPolls: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -2211,12 +2324,12 @@ private fun MoreScreen(
     ) {
         Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
         Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(account.username.take(1))
                 Column(Modifier.padding(horizontal = 12.dp)) {
-                    Text(account.username, style = MaterialTheme.typography.titleMedium)
-                    Text("@${account.username} · ${account.redId}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text(account.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("البروفايل · الصورة والبايو والهوية", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -2227,6 +2340,8 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Settings, "الإعدادات العامة", "الهوية والأجهزة والخادم والجلسة", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
         MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
         MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
+        MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
+        MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
     }
 }
 
@@ -2408,6 +2523,8 @@ private fun resolveRichMessages(source: List<DecryptedMessage>): List<DecryptedM
         when {
             rich?.action == "DELETE" && rich.deleteOf != null -> visible.remove(rich.deleteOf)
             rich?.action == "EDIT" && rich.editOf != null -> visible[rich.editOf]?.let { original -> visible[rich.editOf] = original.copy(plaintext = RichMessage.encode(RichMessage(text = rich.text, replyTo = RichMessage.decode(original.plaintext)?.replyTo))) }
+            // التفاعلات ليست رسائل — تُعرض كـ chips عبر جدول message_reactions، فلا تُدرج هنا
+            rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE" -> Unit
             rich?.expiresAt != null && rich.expiresAt <= System.currentTimeMillis() -> Unit
             else -> visible[message.id] = message
         }
@@ -2628,6 +2745,20 @@ private fun VoiceWaveform(values: List<Int>, color: Color, modifier: Modifier = 
 }
 
 @Composable
+/** عرض رسالة ملصق — إيموجي كبير كمعاينة (الصورة الفعلية تُحمّل عند التوفر). */
+@Composable
+private fun StickerMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
+    val payload = remember(item.id) {
+        runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(item.plaintext.toString(Charsets.UTF_8)) }.getOrNull()
+    }
+    if (payload == null) {
+        Text("ملصق غير صالح", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        return
+    }
+    // عرض الإيموجي كمعاينة كبيرة (الصورة تُحمّل عند التوفر عبر attachments)
+    Text(payload.emoji, fontSize = 64.sp)
+}
+
 private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
     val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val manifest = remember(manifestJson) { runCatching { ATTACHMENT_JSON.decodeFromString<VoiceManifest>(manifestJson) }.getOrNull() }
@@ -2947,6 +3078,66 @@ private fun MessageActionRow(icon: ImageVector, title: String, detail: String, o
             Column(Modifier.padding(start = 14.dp)) {
                 Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
                 Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/**
+ * عرض تفاعلات الإيموجي تحت رسالة (chips مع العد). الضغط على إيموجي = toggle
+ * (إزالة إن كان تفاعلك، لا شيء إن لم يكن). E2EE: الإيموجي محلي فقط.
+ */
+@Composable
+private fun MessageReactions(
+    reactions: List<MessageReactionEntity>,
+    currentRedId: String,
+    onToggle: (emoji: String) -> Unit
+) {
+    if (reactions.isEmpty()) return
+    // تجميع حسب الإيموجي مع العد، مرتب تنازلياً حسب العد
+    val grouped = remember(reactions) {
+        reactions.groupBy { it.emoji }
+            .mapValues { it.value.size }
+            .entries.sortedByDescending { it.value }
+            .associate { it.key to it.value }
+    }
+    val myEmoji = remember(reactions, currentRedId) {
+        reactions.firstOrNull { it.senderId == currentRedId }?.emoji
+    }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        items(grouped.entries.toList(), key = { it.key }) { (emoji, count) ->
+            val mine = emoji == myEmoji
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (mine) YounesEmerald.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (mine) YounesEmerald else androidx.compose.ui.graphics.Color.Transparent),
+                modifier = Modifier.clickable { onToggle(emoji) }
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(emoji, fontSize = 14.sp)
+                    Text(count.toString(), fontSize = 11.sp, color = if (mine) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+    }
+}
+
+/** قائمة الإيموجي السريعة للتفاعل — تظهر أعلى قائمة إجراءات الرسالة. */
+@Composable
+private fun ReactionEmojiBar(onPick: (String) -> Unit) {
+    val quick = remember { listOf("👍", "❤️", "😂", "🙏", "🔥", "👏", "😮", "😢", "🎉", "💯") }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        items(quick) { emoji ->
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(40.dp).clickable { onPick(emoji) }
+            ) {
+                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 22.sp) }
             }
         }
     }

@@ -261,7 +261,8 @@ class CommunitiesController(
         }
 
         mongo.updateFirst(Query(Criteria.where("id").`is`(id)), update, CommunityDocument::class.java)
-        val updated = mongo.findById(id, CommunityDocument::class.java)!!
+        val updated = mongo.findById(id, CommunityDocument::class.java)
+            ?: return ResponseEntity.notFound().build()
         val memberCount = currentMemberCount(id)
         return ResponseEntity.ok(updated.toResponse(my.role, memberCount))
     }

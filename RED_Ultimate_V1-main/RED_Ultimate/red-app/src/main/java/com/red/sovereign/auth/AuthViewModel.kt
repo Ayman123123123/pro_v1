@@ -144,7 +144,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (val result = withServerDiscoveryRetry { api.refresh(refresh) }) {
             is ApiResult.Success -> {
                 tokens.updateTokens(result.value)
-                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled)
+                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
             }
             is ApiResult.Error -> { tokens.clearSession(); state = AuthState.Welcome }
         }
@@ -155,7 +155,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "APPROVED" -> {
                 tokens.save(response)
                 pendingCredentials = null
-                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled)
+                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
             }
             "PENDING" -> {
                 pendingCredentials = username to password
@@ -220,7 +220,7 @@ sealed interface AuthState {
     data object RecoveryComplete : AuthState
     data object Submitting : AuthState
     data class Pending(val redId: String, val username: String, val recoveryCodes: List<String>) : AuthState
-    data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean) : AuthState
+    data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean, val isAdmin: Boolean = false) : AuthState
     data class Rejected(val reason: String?) : AuthState
     data object Suspended : AuthState
     data object Banned : AuthState

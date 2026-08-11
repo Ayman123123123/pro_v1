@@ -19,6 +19,9 @@ class ContactController(private val contacts: ContactService) {
     /** Presence is visible only for an established contact, never for arbitrary directory identities. */
     @GetMapping("/presence") fun presence(@RequestParam ids: String, auth: Authentication) =
         contacts.presence(userId(auth), ids.split(',').map(String::trim).filter(String::isNotEmpty))
+    /** Presence مفصّل مع آخر ظهور — يُستخدم لعرض "آخر ظهور" في الواجهة. */
+    @GetMapping("/presence/detailed") fun presenceDetailed(@RequestParam ids: String, auth: Authentication) =
+        contacts.presenceDetailed(userId(auth), ids.split(',').map(String::trim).filter(String::isNotEmpty))
     @GetMapping("/requests") fun requests(auth: Authentication) = contacts.incoming(userId(auth))
     @PostMapping("/requests/{redId}") fun request(@PathVariable redId: String, auth: Authentication) = contacts.request(userId(auth), redId)
     @PostMapping("/requests/{requestId}/accept") fun accept(@PathVariable requestId: UUID, auth: Authentication): ResponseEntity<Void> {

@@ -27,6 +27,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setCallNotifications(value: Boolean) = update(state.copy(callNotifications = value))
     fun setDataSaverCalls(value: Boolean) = update(state.copy(dataSaverCalls = value))
     fun setDefaultPlaybackSpeed(value: Float) = update(state.copy(defaultPlaybackSpeed = value.takeIf { it in setOf(1f, 1.5f, 2f) } ?: 1f))
+    fun setAppLockEnabled(value: Boolean) = update(state.copy(appLockEnabled = value))
+    fun setHideLastSeen(value: Boolean) = update(state.copy(hideLastSeen = value))
 
     fun clearCache() {
         getApplication<Application>().cacheDir.listFiles()?.forEach(::deleteRecursivelySafe)
@@ -51,6 +53,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             .putBoolean("call_notifications", value.callNotifications)
             .putBoolean("data_saver_calls", value.dataSaverCalls)
             .putFloat("playback_speed", value.defaultPlaybackSpeed)
+            .putBoolean("app_lock_enabled", value.appLockEnabled)
+            .putBoolean("hide_last_seen", value.hideLastSeen)
             .apply()
         SettingsRuntime.update(value)
     }
@@ -70,7 +74,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         messageNotifications = preferences.getBoolean("message_notifications", true),
         callNotifications = preferences.getBoolean("call_notifications", true),
         dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
-        defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f)
+        defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
+        appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
+        hideLastSeen = preferences.getBoolean("hide_last_seen", false)
     ).also(SettingsRuntime::update)
 
     private fun cacheSize(root: File): Long = root.walkBottomUp().filter(File::isFile).sumOf(File::length)
@@ -92,7 +98,9 @@ data class YounesSettings(
     val messageNotifications: Boolean = true,
     val callNotifications: Boolean = true,
     val dataSaverCalls: Boolean = true,
-    val defaultPlaybackSpeed: Float = 1f
+    val defaultPlaybackSpeed: Float = 1f,
+    val appLockEnabled: Boolean = false,
+    val hideLastSeen: Boolean = false
 )
 
 object SettingsRuntime {
@@ -115,7 +123,9 @@ object SettingsRuntime {
             messageNotifications = preferences.getBoolean("message_notifications", true),
             callNotifications = preferences.getBoolean("call_notifications", true),
             dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
-            defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f)
+            defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
+            appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
+            hideLastSeen = preferences.getBoolean("hide_last_seen", false)
         ))
     }
 
