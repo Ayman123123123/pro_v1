@@ -717,6 +717,7 @@ private fun ChatHubScreen(
     var joinToken by remember { mutableStateOf("") }
     var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
+    var showGroupEmoji by remember { mutableStateOf(false) }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
     var deleteGroupId by remember { mutableStateOf<String?>(null) }
@@ -1169,6 +1170,7 @@ private fun ChatHubScreen(
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو جماعي", tint = YounesEmerald) }
                         IconButton({ onManageGroup(openGroup.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                     }
                 }
@@ -1200,8 +1202,10 @@ private fun ChatHubScreen(
                 }
                 Row(verticalAlignment = Alignment.Bottom) {
                     OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة جماعية مشفرة…") }, maxLines = 4)
+                    IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
                     FilledIconButton({ RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim()); groupMessageText = "" }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
                 }
+                if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
             }
         }
     }
