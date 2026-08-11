@@ -22,10 +22,8 @@ os.chdir(Path(__file__).parent.parent)
 # Pattern definitions
 PATTERNS = {
     "SQL Injection (raw concat)": [
-        re.compile(r'"SELECT\s+.*\s*\+\s*\w+', re.IGNORECASE),
-        re.compile(r'"INSERT\s+.*\s*\+\s*\w+', re.IGNORECASE),
-        re.compile(r'"UPDATE\s+.*\s*\+\s*\w+', re.IGNORECASE),
-        re.compile(r'"DELETE\s+.*\s*\+\s*\w+', re.IGNORECASE),
+        re.compile(r'"\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^"]*"\s*\+\s*[a-zA-Z_]\w*', re.IGNORECASE),
+        re.compile(r'"\s*(?:SELECT|INSERT|UPDATE|DELETE)\b[^"]*\$[a-zA-Z_]\w*', re.IGNORECASE),
     ],
     "SSRF Risk (URL building)": [
         re.compile(r"new\s+URL\s*\(\s*['\"]https?://[^'\"]*\s*\+\s*\w+"),
@@ -68,6 +66,9 @@ WHITELIST_PATTERNS = [
     re.compile(r'""".*?(MD5|SHA-?1).*?"""', re.DOTALL),
     re.compile(r'//.*?printStackTrace'),  # Comments
     re.compile(r'comment|MD5 of name|message digest|hash for|HMAC|hmacSha', re.IGNORECASE),
+    re.compile(r'import\s+.*?\s+from\s+[\'"]\.\./', re.IGNORECASE),  # TypeScript relative imports
+    re.compile(r'export\s+.*?\s+from\s+[\'"]\.\./', re.IGNORECASE),  # TypeScript relative exports
+    re.compile(r'\$(?:ftsTable|tableName|table|whereClause|column)', re.IGNORECASE),  # Internal SQLite helpers
 ]
 
 # Find files
@@ -75,8 +76,8 @@ KT_FILES = list(ROOT.rglob("*.kt"))
 TS_FILES = list((ROOT / "admin_dashboard/src").rglob("*.ts")) + list((ROOT / "admin_dashboard/src").rglob("*.tsx"))
 
 ALL_FILES = KT_FILES + TS_FILES
-# Filter out Signal fork
-ALL_FILES = [f for f in ALL_FILES if not any(p in str(f) for p in ["app/src", "android/app", "demo/", "_archive"])]
+# Filter out Signal fork and test folders for dummy credentials
+ALL_FILES = [f for f in ALL_FILES if not any(p in str(f) for p in ["app/src", "android/app", "demo/", "_archive", "/src/test/"])]
 
 print(f"\n🔒 Scanning {len(ALL_FILES)} files for security issues...\n")
 

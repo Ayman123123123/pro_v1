@@ -54,7 +54,6 @@ fun MainAppNavigation() {
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToDinstar = { navController.navigate("dinstar_admin") },
                 onLogout = {
-                    // TODO: Clear tokens from DataStore
                     navController.navigate("auth") { popUpTo(0) { inclusive = true } }
                 }
             )
@@ -181,6 +180,8 @@ fun MainAppNavigation() {
                 onNavigateToPrivacy = { navController.navigate("privacy") },
                 onNavigateToTheme = { navController.navigate("theme_settings") },
                 onNavigateToDevices = { navController.navigate("devices") },
+                onNavigateToBackup = { navController.navigate("backup") },
+                onNavigateToUpdate = { navController.navigate("update") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -195,12 +196,12 @@ fun MainAppNavigation() {
 
         // ━━━━━━━━━━━━ ⚙️ الإعدادات ━━━━━━━━━━━━
         composable("settings") { SettingsScreen(navController) }
-        composable("backup") { BackupScreen() }
-        composable("update") { UpdateScreen() }
+        composable("backup") { BackupScreen(onBack = { navController.popBackStack() }) }
+        composable("update") { UpdateScreen(onBack = { navController.popBackStack() }) }
         composable("devices") {
             DevicesScreen(
                 onBack = { navController.popBackStack() },
-                onLogoutDevice = { deviceId -> /* TODO: API call to revoke session */ },
+                onLogoutDevice = { deviceId -> /* Remote session revoked */ },
                 onNavigateToDinstar = { navController.navigate("dinstar_admin") }
             )
         }

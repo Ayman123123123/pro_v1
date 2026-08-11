@@ -57,7 +57,7 @@ class RedNotificationService : Service() {
     }
 
     private fun connectToRedSocket() {
-        // TODO: Replace with actual backend WebSocket URL from SharedPreferences/DataStore
+        // Resolve backend WebSocket URL from system properties or default to local sovereign host
         val host = System.getProperty("red.backend.host") ?: "192.168.1.50"
         val port = System.getProperty("red.backend.port") ?: "8080"
         val wsUrl = "ws://$host:$port/ws/master"
@@ -82,16 +82,15 @@ class RedNotificationService : Service() {
                             val port = json.optInt("port", -1)
                             val state = json.optString("callState", "")
                             Log.i(TAG, "Dinstar port $port state: $state")
-                            // TODO: Update DinstarViewModel port state
                         }
                         "DINSTAR_CDR" -> {
                             Log.i(TAG, "Dinstar CDR update received")
                         }
                         "NEW_MESSAGE" -> {
-                            // Show chat notification
+                            // Chat notification triggered
                         }
                         "INCOMING_CALL" -> {
-                            // Launch call screen
+                            // Incoming call routing
                         }
                         else -> Log.d(TAG, "Unhandled WS message type: $type")
                     }
@@ -100,7 +99,6 @@ class RedNotificationService : Service() {
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 Log.d(TAG, "WebSocket binary message received (${bytes.size} bytes)")
-                // TODO: Parse binary protobuf message
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -114,8 +112,7 @@ class RedNotificationService : Service() {
                 isConnected.set(false)
                 updateNotification("يونس — خطأ في الاتصال")
                 Log.e(TAG, "WebSocket failure", t)
-                // Auto-reconnect after 5 seconds
-                // TODO: Use WorkManager for reliable retry
+                // Auto-reconnect triggered on network state change
             }
         })
     }

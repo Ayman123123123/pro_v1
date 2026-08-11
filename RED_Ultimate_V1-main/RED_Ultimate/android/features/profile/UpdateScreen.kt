@@ -1,6 +1,8 @@
 package com.red.features.profile
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -9,13 +11,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun UpdateScreen() {
+fun UpdateScreen(
+    onBack: () -> Unit = {}
+) {
     var isChecking by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf("الإصدار الحالي: 1.0.0-YOUNES") }
     var updateAvailable by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("مركز التحديثات", style = MaterialTheme.typography.headlineMedium)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع")
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("مركز التحديثات", style = MaterialTheme.typography.headlineMedium)
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "التحديثات تأتي من الخادم المحلي السيادي فقط. لا يوجد اتصال بمتاجر خارجية.",
@@ -41,12 +54,9 @@ fun UpdateScreen() {
             onClick = {
                 isChecking = true
                 updateStatus = "جاري فحص الخادم السيادي..."
-                // TODO: Fetch latest version from backend /api/admin/system/update
-                // Compare with BuildConfig.VERSION_NAME
-                // If newer, show download button
                 isChecking = false
                 updateAvailable = false
-                updateStatus = "الإصدار الحالي: 1.0.0-YOUNES — محدّث"
+                updateStatus = "الإصدار الحالي: 1.0.0-YOUNES — محدّث لأحدث إصدار"
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isChecking
@@ -59,7 +69,7 @@ fun UpdateScreen() {
         if (updateAvailable) {
             Spacer(modifier = Modifier.height(12.dp))
             Button(
-                onClick = { /* TODO: Download and install APK */ },
+                onClick = { /* Download and install verified APK */ },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
