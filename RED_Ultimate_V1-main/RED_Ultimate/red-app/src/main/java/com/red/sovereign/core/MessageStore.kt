@@ -64,7 +64,11 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_local_history_conversation ON local_history(conversation_id, created_at DESC)")
         db.execSQL("""CREATE TABLE IF NOT EXISTS conversation_preferences (
             conversation_id TEXT PRIMARY KEY, pinned INTEGER NOT NULL DEFAULT 0,
-            archived INTEGER NOT NULL DEFAULT 0, muted_until INTEGER NOT NULL DEFAULT 0)""")
+            archived INTEGER NOT NULL DEFAULT 0, muted_until INTEGER NOT NULL DEFAULT 0,
+            custom_name TEXT DEFAULT NULL, wallpaper INTEGER NOT NULL DEFAULT 0)""")
+        // ترقية الجداول القديمة بإضافة الأعمدة الجديدة بأمان
+        runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN custom_name TEXT DEFAULT NULL") }
+        runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN wallpaper INTEGER NOT NULL DEFAULT 0") }
     }
 
     fun save(message: RedProtos.ChatMessage, status: String = "DELIVERED") {
@@ -216,6 +220,24 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
         writableDatabase.update("conversation_preferences", ContentValues().apply { put(field, value) }, "conversation_id=?", arrayOf(conversationId))
     }
+
+    /** تخزين/استرجاع الاسم المخصص للمحادثة (تجاوز اسم الصديق). */
+    fun setConversationCustomName(conversationId: String, name: String) {
+        writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
+        writableDatabase.update("conversation_preferences", ContentValues().apply { put("custom_name", name) }, "conversation_id=?", arrayOf(conversationId))
+    }
+    fun conversationCustomName(conversationId: String): String? = readableDatabase.query(
+        "conversation_preferences", arrayOf("custom_name"), "conversation_id=?", arrayOf(conversationId), null, null, null
+    ).use { if (it.moveToFirst()) it.getString(0)?.takeIf(String::isNotBlank) else null }
+
+    /** تخزين/استرجاع معرّف خلفية المحادثة (0=افتراضي، 1..n=ألوان/تدرجات). */
+    fun setConversationWallpaper(conversationId: String, wallpaperId: Int) {
+        writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
+        writableDatabase.update("conversation_preferences", ContentValues().apply { put("wallpaper", wallpaperId) }, "conversation_id=?", arrayOf(conversationId))
+    }
+    fun conversationWallpaper(conversationId: String): Int = readableDatabase.query(
+        "conversation_preferences", arrayOf("wallpaper"), "conversation_id=?", arrayOf(conversationId), null, null, null
+    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     fun conversationPreference(conversationId: String): Triple<Boolean, Boolean, Long> = readableDatabase.query(
         "conversation_preferences", arrayOf("pinned", "archived", "muted_until"), "conversation_id=?", arrayOf(conversationId), null, null, null
