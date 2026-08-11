@@ -8,3 +8,7 @@ local.properties
 .idea/
 .env
 secrets/
+# Operator-created encrypted platform backups
+backups/
+*.tar.gz.gpg
+*.tar.gz.gpg.sha256

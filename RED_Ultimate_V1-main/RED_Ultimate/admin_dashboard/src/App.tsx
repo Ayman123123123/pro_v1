@@ -21,6 +21,7 @@ import {
   VideoCameraOutlined,
   MessageOutlined,
   CloudServerOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
@@ -46,6 +47,7 @@ const MediaCenter = lazy(() => import('./pages/MediaCenter'));
 const MessagingCenter = lazy(() => import('./pages/MessagingCenter'));
 const InfrastructureCenter = lazy(() => import('./pages/InfrastructureCenter'));
 const ModerationCenter = lazy(() => import('./pages/ModerationCenter'));
+const DataOverview = lazy(() => import('./pages/DataOverview'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -68,11 +70,13 @@ type PageKey =
   | 'infrastructure'
   | 'dinstar'
   | 'monitor'
-  | 'diagnostics';
+  | 'diagnostics'
+  | 'data-overview';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
   { key: 'dashboard', icon: <DashboardOutlined />, label: 'الرئيسية', group: 'main' },
+  { key: 'data-overview', icon: <DatabaseOutlined />, label: 'جرد بيانات المنصة', group: 'main' },
   { key: 'users', icon: <TeamOutlined />, label: 'المستخدمون', group: 'main' },
   { key: 'approvals', icon: <SafetyCertificateOutlined />, label: 'الموافقات المعلقة', group: 'main' },
   { key: 'content', icon: <BarChartOutlined />, label: 'المحتوى', group: 'main' },
@@ -106,7 +110,7 @@ const groupLabels: Record<string, string> = {
  * and every feature page remains reachable after the TypeScript UI migration.
  */
 export default function App() {
-  const [authenticated, setAuthenticated] = useState(() => Boolean(authStore.access() || authStore.refresh()));
+  const [authenticated, setAuthenticated] = useState(() => authStore.isAuthenticated());
   const [currentPage, setCurrentPage] = useState<PageKey>('dashboard');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -139,6 +143,7 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard': return <Dashboard />;
+      case 'data-overview': return <DataOverview />;
       case 'users': return <UserManagement />;
       case 'approvals': return <Approvals />;
       case 'content': return <ContentManagement />;

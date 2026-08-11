@@ -3,7 +3,9 @@ package com.red.server.admin.controller
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
 import com.red.server.admin.service.AdminService
-import com.red.server.auth.model.UserAccount
+import com.red.server.auth.RedApprovalService
+import com.red.server.auth.model.AccountRole
+import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -29,7 +31,8 @@ class AdminV2Controller(
     private val featureFlags: FeatureFlagRepository,
     private val userReports: UserReportRepository,
     private val announcements: SystemAnnouncementRepository,
-    private val backups: BackupHistoryRepository
+    private val backups: BackupHistoryRepository,
+    private val approval: RedApprovalService
 ) {
     // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
     @GetMapping("/dashboard/summary")
@@ -88,16 +91,19 @@ class AdminV2Controller(
         @RequestParam(required = false) sortDir: String? = "desc",
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir ?: "desc"), sortBy ?: "createdAt")
-        val allUsers = users.findAll(pageable)
-
-        val filtered = allUsers.content.filter { user ->
-            (status == null || user.status.name == status) &&
-            (role == null || user.role.name == role) &&
-            (search == null || user.username.contains(search, ignoreCase = true) ||
-                user.displayName.contains(search, ignoreCase = true) ||
-                user.redId.contains(search, ignoreCase = true))
+        require(page >= 0) { "PAGE_MUST_NOT_BE_NEGATIVE" }
+        val safeSize = size.coerceIn(1, 100)
+        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status") } ?: "createdAt"
+        val direction = runCatching { Sort.Direction.fromString(sortDir ?: "desc") }.getOrDefault(Sort.Direction.DESC)
+        val pageable = PageRequest.of(page, safeSize, direction, safeSort)
+        val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.let {
+            runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
         }
+        val parsedRole = role?.trim()?.takeIf(String::isNotEmpty)?.let {
+            runCatching { AccountRole.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_ROLE") }
+        }
+        val normalizedSearch = search?.trim()?.takeIf { it.length >= 2 }?.take(80)
+        val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
 
         val adminId = UUID.fromString(authentication.name)
         service.recordAudit(
@@ -109,7 +115,7 @@ class AdminV2Controller(
         )
 
         return ResponseEntity.ok(mapOf(
-            "content" to filtered.map { user -> mapOf(
+            "content" to allUsers.content.map { user -> mapOf(
                 "id" to user.id,
                 "redId" to user.redId,
                 "username" to user.username,
@@ -161,131 +167,55 @@ class AdminV2Controller(
         ))
     }
 
+    /**
+     * كل انتقال لحالة الحساب يمر عبر RedApprovalService: اعتماد الجهاز،
+     * إصدار الشهادة، وإبطال الجلسات ليست عمليات اختيارية في الواجهة.
+     */
     @PostMapping("/users/{userId}/approve")
-    fun approveUser(
-        @PathVariable userId: String,
-        authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        user.status = com.red.server.auth.model.AccountStatus.APPROVED
-        user.approvedAt = Instant.now()
-        user.approvedBy = adminId
-        users.save(user)
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = "USER_APPROVED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId,
-            description = "Approved user ${user.username}"
-        )
-        return ResponseEntity.ok(mapOf("success" to true, "user" to mapOf("id" to user.id, "status" to user.status.name)))
-    }
+    fun approveUser(@PathVariable userId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> =
+        accountAction(userId, AccountStatus.APPROVED, null, authentication)
 
     @PostMapping("/users/{userId}/reject")
     fun rejectUser(
         @PathVariable userId: String,
         @RequestBody(required = false) body: Map<String, String?> = emptyMap(),
         authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        user.status = com.red.server.auth.model.AccountStatus.REJECTED
-        user.rejectionReason = body["reason"]
-        users.save(user)
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = "USER_REJECTED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId,
-            description = "Rejected user ${user.username}: ${body["reason"]}"
-        )
-        return ResponseEntity.ok(mapOf("success" to true))
-    }
+    ): ResponseEntity<Map<String, Any>> = accountAction(userId, AccountStatus.REJECTED, body["reason"], authentication)
 
     @PostMapping("/users/{userId}/ban")
     fun banUser(
         @PathVariable userId: String,
-        @RequestBody body: Map<String, Any?>,
+        @RequestBody(required = false) body: Map<String, Any?> = emptyMap(),
         authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        user.status = com.red.server.auth.model.AccountStatus.BANNED
-        users.save(user)
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = "USER_BANNED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId,
-            description = "Banned user ${user.username}: ${body["reason"]}",
-            severity = "WARNING"
-        )
-        return ResponseEntity.ok(mapOf("success" to true))
-    }
+    ): ResponseEntity<Map<String, Any>> = accountAction(userId, AccountStatus.BANNED, body["reason"] as? String, authentication)
 
     @PostMapping("/users/{userId}/unban")
-    fun unbanUser(
-        @PathVariable userId: String,
-        authentication: Authentication
-    ): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        user.status = com.red.server.auth.model.AccountStatus.APPROVED
-        users.save(user)
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = "USER_UNBANNED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId
-        )
-        return ResponseEntity.ok(mapOf("success" to true))
+    fun unbanUser(@PathVariable userId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        // الحظر يلغي شهادات الأجهزة عمداً؛ إعادة الفتح لا يجوز أن تعيد جهازاً
+        // مرفوضاً إلى الحياة. يلزم enrolment جديد ثم approval صريح.
+        throw IllegalStateException("UNBAN_REQUIRES_DEVICE_REENROLLMENT")
     }
 
     @PutMapping("/users/{userId}/role")
+    @org.springframework.transaction.annotation.Transactional
     fun promoteUser(
         @PathVariable userId: String,
         @RequestBody body: Map<String, String>,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        val newRole = com.red.server.auth.model.AccountRole.valueOf(body["role"] ?: "USER")
-        user.role = newRole
-        users.save(user)
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = "USER_PROMOTED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId,
-            description = "Changed role to ${newRole.name}"
-        )
-        return ResponseEntity.ok(mapOf("success" to true))
+        val target = users.findById(UUID.fromString(userId)).orElse(null) ?: return ResponseEntity.notFound().build()
+        // لا توجد طبقة SUPER_ADMIN بعد؛ لذلك لا يمكن لهذه الـ API منح ADMIN أو
+        // تعديل دور مسؤول. هذا يمنع تصعيد امتياز ذاتي/أفقي حتى يكتمل RBAC الحقيقي.
+        require(target.role != AccountRole.ADMIN) { "ADMIN_ROLE_CHANGE_REQUIRES_SUPER_ADMIN" }
+        val requested = body["role"]?.uppercase() ?: "USER"
+        require(requested == AccountRole.USER.name) { "ADMIN_PROMOTION_REQUIRES_SUPER_ADMIN" }
+        target.role = AccountRole.USER
+        users.save(target)
+        service.recordAudit(adminId, authentication.name, "USER_ROLE_CONFIRMED", "SECURITY", "USER", userId,
+            "Role retained as USER; privileged role changes require SUPER_ADMIN", severity = "WARNING")
+        return ResponseEntity.ok(mapOf("success" to true, "role" to target.role.name))
     }
-
-    // ملاحظة: PUT /api/admin/users/pstn يملكه PstnAuthorizationController (DTO مُتحقق + تدقيق
-    // موحد عبر AuditService + تصفير الحد عند التعطيل). أُزيلت النسخة المكررة هنا — تسجيل
-    // نفس الفعل والمسار في كنترولرين يسقط الإقلاع بـ Ambiguous mapping.
 
     @DeleteMapping("/users/{userId}")
     fun deleteUser(
@@ -293,27 +223,21 @@ class AdminV2Controller(
         @RequestParam(required = false) hard: Boolean = false,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val user = users.findById(UUID.fromString(userId)).orElse(null)
-            ?: return ResponseEntity.notFound().build()
-        if (hard) {
-            users.delete(user)
-        } else {
-            user.status = com.red.server.auth.model.AccountStatus.BANNED
-            users.save(user)
-        }
-
-        service.recordAudit(
-            adminId = adminId,
-            adminUsername = authentication.principal.toString(),
-            action = if (hard) "USER_DELETED" else "USER_BANNED",
-            category = "USER",
-            targetType = "USER",
-            targetId = userId,
-            severity = "WARNING"
-        )
-        return ResponseEntity.ok(mapOf("success" to true))
+        require(!hard) { "HARD_DELETE_DISABLED_USE_RETENTION_WORKFLOW" }
+        return accountAction(userId, AccountStatus.BANNED, "ADMIN_SOFT_DELETE", authentication)
     }
+
+    private fun accountAction(userId: String, action: AccountStatus, reason: String?, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val targetId = UUID.fromString(userId)
+        require(targetId != adminId) { "SELF_ACCOUNT_ACTION_FORBIDDEN" }
+        val updated = approval.processAction(targetId, action, reason?.trim()?.take(500), adminId)
+        service.recordAudit(adminId, authentication.name, "ACCOUNT_${action.name}", "USER", "USER", userId,
+            "Account transition completed through the central approval workflow", severity = if (action == AccountStatus.BANNED) "WARNING" else "INFO")
+        return ResponseEntity.ok(mapOf("success" to true, "user" to mapOf("id" to updated.id, "status" to updated.status.name)))
+    }
+
+    // PSTN authorization is owned by PstnAuthorizationController.
 
     // ━━━━━━━━━━━━━━━━ 🛡️ Audit Log ━━━━━━━━━━━━━━━━
     @GetMapping("/audit")

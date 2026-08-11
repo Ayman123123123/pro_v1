@@ -232,7 +232,7 @@ class MediaService(
     }
 
     private fun validateKey(key: String) {
-        require(key.matches(Regex("^users/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.[a-z0-9]{2,5}$"))) { "Invalid media key" }
+        require(key.matches(Regex("^(?:users|thumbs/users)/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.[a-z0-9]{2,5}$"))) { "Invalid media key" }
     }
 
     companion object {

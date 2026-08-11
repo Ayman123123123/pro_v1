@@ -15,6 +15,9 @@ data class StoryDocument(
     val mediaKey: String,
     val mediaType: String,
     val caption: String?,
+    /** جمهور القصة؛ الافتراضي الآمن هو جهات الاتصال المتبادلة فقط. */
+    val visibility: StoryVisibility = StoryVisibility.CONTACTS,
+    val allowedUserIds: Set<String> = emptySet(),
     val createdAt: Instant = Instant.now(),
     @Indexed val expiresAt: Instant,
     var deletedAt: Instant? = null
@@ -26,9 +29,14 @@ data class StoryView(@Id val id: String, val storyId: String, val viewerId: Stri
 @Document("story_reactions")
 data class StoryReaction(@Id val id: String, val storyId: String, val userId: String, val emoji: String, val createdAt: Instant = Instant.now())
 
+enum class StoryVisibility { CONTACTS, EVERYONE, SELECTED }
 data class StoryReactionRequest(val emoji: String)
-
-data class CreateStoryRequest(val mediaKey: String, val caption: String? = null)
+data class CreateStoryRequest(
+    val mediaKey: String,
+    val caption: String? = null,
+    val visibility: StoryVisibility = StoryVisibility.CONTACTS,
+    val allowedUserIds: Set<String> = emptySet()
+)
 data class StoryResponse(
     val id: String, val ownerRedId: String, val ownerUsername: String, val ownerDisplayName: String,
     val mediaUrl: String, val mediaType: String, val caption: String?, val createdAt: Instant,

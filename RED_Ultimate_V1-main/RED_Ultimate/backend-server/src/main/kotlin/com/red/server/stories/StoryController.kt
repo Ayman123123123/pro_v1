@@ -14,7 +14,7 @@ import java.util.UUID
 @RequestMapping("/api/stories")
 class StoryController(private val stories: StoryService) {
     @PostMapping fun create(@RequestBody request: CreateStoryRequest, auth: Authentication) = stories.create(UUID.fromString(auth.name), request)
-    @GetMapping fun active() = stories.active()
+    @GetMapping fun active(auth: Authentication) = stories.active(UUID.fromString(auth.name))
     @PostMapping("/{id}/view") fun viewed(@PathVariable id: String, auth: Authentication) = stories.viewed(UUID.fromString(auth.name), id)
     @PostMapping("/{id}/react") fun react(@PathVariable id: String, @RequestBody request: StoryReactionRequest, auth: Authentication) = stories.react(UUID.fromString(auth.name), id, request)
     @DeleteMapping("/{id}") fun delete(@PathVariable id: String, auth: Authentication) = stories.delete(UUID.fromString(auth.name), id)
