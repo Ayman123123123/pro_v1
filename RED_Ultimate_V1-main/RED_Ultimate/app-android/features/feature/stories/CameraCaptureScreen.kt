@@ -50,7 +50,7 @@ fun CameraCaptureScreen(onImageCaptured: (Uri) -> Unit) {
                         cameraProvider.unbindAll()
                         cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, imageCapture)
                     } catch (e: Exception) {
-                        e.printStackTrace()
+                        android.util.Log.e("CameraCaptureScreen", "Failed to bind camera lifecycle", e)
                     }
                 }, ContextCompat.getMainExecutor(ctx))
                 previewView
@@ -77,7 +77,7 @@ fun CameraCaptureScreen(onImageCaptured: (Uri) -> Unit) {
                             onImageCaptured(Uri.fromFile(file))
                         }
                         override fun onError(exception: ImageCaptureException) {
-                            exception.printStackTrace()
+                            android.util.Log.e("CameraCaptureScreen", "Error taking picture", exception)
                         }
                     })
                 },

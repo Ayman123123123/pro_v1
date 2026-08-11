@@ -33,9 +33,9 @@ class PstnCallService(
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED) { "Account is not approved" }
         require(user.pstnEnabled && user.pstnDailyLimit > 0) { "PSTN access is not enabled for this account" }
-        
+
         val number = normalizeYemeniNumber(suppliedNumber)
-        
+
         // Rate limiting with Redis atomic counter
         val day = LocalDate.now(ZoneId.of("Asia/Aden"))
         val key = "red:pstn:daily:${user.id}:$day"
@@ -54,7 +54,7 @@ class PstnCallService(
             val selection = loadBalancer.selectPort(number)
                 ?: throw IllegalStateException("No DINSTAR port with a usable signal is available")
             log.info("PSTN dial: user={} number={} gateway={} port={}",
-                user.redId, number, selection.gatewayHost, selection.portIndex)
+                user.redId, maskNumber(number), selection.gatewayHost, selection.portIndex)
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
@@ -62,6 +62,10 @@ class PstnCallService(
             redis.opsForValue().decrement(key)
             throw IllegalStateException("Asterisk rejected the PSTN call", it)
         }
+    }
+
+    private fun maskNumber(number: String): String {
+        return if (number.length > 5) "${number.take(3)}••••${number.takeLast(2)}" else "••••"
     }
 
     /**
