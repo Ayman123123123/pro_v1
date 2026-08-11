@@ -205,7 +205,9 @@ await check('٦ صار قابلًا للاكتشاف في دليل RED لمست�
 });
 
 await check('٧ حزمة مفاتيحه العامة متاحة للتشفير الطرفي', async () => {
-  const dir = (await api('GET', `/api/identity/directory/${redId}`)).data;
+  // الدليل صار يتطلب مصادقة (كان مكشوفًا): نمرّر رمز مستخدم آخر
+  // لأن هذا هو السيناريو الواقعي — طرف يريد مراسلة صاحب المعرّف.
+  const dir = (await api('GET', `/api/identity/directory/${redId}`, undefined, adminToken)).data;
   assert(dir.redId === redId, 'redId غير مطابق');
   assert(dir.devices.length === 1, `عدد الأجهزة ${dir.devices.length}`);
   const dev = dir.devices[0];
@@ -490,12 +492,31 @@ await check('البحث في الدليل محكوم بحدّ معدل يمنع 
   // اختصار المعرّف إلى 5 أرقام يجعل الفضاء قابلًا للتعداد بالكامل،
   // فالحماية انتقلت من طول المعرّف إلى ضبط المعدل. سقوط هذا الفحص
   // يعني أن الدليل كله صار قابلًا للحصاد من حساب معتمد واحد.
+  // ⚠️ عزل: هذا الفحص يستنفد ميزانية المسؤول عمدًا، والنافذة منزلقة
+  // لمدة دقيقة. لو استُهلكت ميزانية المسؤول لأفسد ذلك كل فحص لاحق
+  // يبحث في الدليل — بل وأفسد إعادة تشغيل السكربت خلال الدقيقة نفسها.
+  // لذلك نُنشئ حسابًا خاصًا بهذا الفحص ونستنفد ميزانيته هو.
+  const victim = `ratelimit_${Date.now().toString(36)}`;
+  const reg = (await api('POST', '/api/auth/register', {
+    username: victim, displayName: 'فحص حدّ المعدل', password: 'Passw0rd#2026',
+    deviceName: 'RateProbe', platform: 'ANDROID', identityFingerprint: 'rl:00:01',
+  })).data;
+  await api('POST', '/api/admin/users/action',
+    { userId: reg.user.id, action: 'APPROVED', reason: 'فحص آلي' }, adminToken);
+  const probeToken = (await api('POST', '/api/auth/login',
+    { username: victim, password: 'Passw0rd#2026' })).data.accessToken;
+  assert(probeToken, 'تعذّر تسجيل دخول حساب الفحص');
+
   let limited = null;
   for (let i = 0; i < 40; i++) {
-    const r = await api('GET', '/api/directory/search?query=38715', undefined, adminToken);
+    const r = await api('GET', '/api/directory/search?query=38715', undefined, probeToken);
     if (r.status === 429) { limited = r; break; }
   }
   assert(limited, 'لم يُفعَّل حدّ المعدل بعد 40 طلبًا — الدليل مكشوف');
+
+  // الحدّ لكل مستخدم لا عام: المسؤول يجب أن يبقى قادرًا على البحث.
+  const admin = await api('GET', '/api/directory/search?query=38715', undefined, adminToken);
+  assert(admin.status === 200, `الحدّ سرى على مستخدم آخر — يجب أن يكون لكل حساب (${admin.status})`);
   assert(limited.data.error === 'DIRECTORY_RATE_LIMITED', `رمز غير متوقع: ${limited.data.error}`);
   assert(limited.data.retryAfterSeconds > 0, 'يجب إبلاغ العميل بمدة الانتظار');
   return `429 DIRECTORY_RATE_LIMITED بعد الحدّ · retryAfter=${limited.data.retryAfterSeconds}s`;
@@ -569,6 +590,32 @@ await check('عقد الإشراف يطابق ModerationController لا صفحة
   assert(missing.status === 404, `بلاغ مفقود يجب أن يعيد 404، عاد ${missing.status}`);
 
   return `${open.length} بلاغًا بحقول العقد · معالجة تعيد الصف · 400 لإعادة الفتح · 404 للمفقود`;
+});
+
+await check('حزم المفاتيح ومخزون prekey لا تُكشف بلا مصادقة', async () => {
+  // كان `/api/identity/directory` معلَّمًا permitAll، فأمكن حصاد
+  // المفاتيح العامة والبصمات وشهادات التخويل بلا حساب. والأخطر:
+  // كل نداء لـ `…/prekey` يستهلك مفتاحًا لمرة واحدة استهلاكًا فعليًا،
+  // فحلقة بسيطة تستنزف مخزون أي مستخدم وتُدهور جلساته الجديدة.
+  const anon = await api('GET', '/api/identity/directory/10001');
+  assert(anon.status === 401, `الدليل يجب أن يرفض بلا رمز، عاد ${anon.status}`);
+
+  const authed = await api('GET', '/api/identity/directory/10001', undefined, adminToken);
+  assert(authed.status === 200, `المستخدم المصادَق يجب أن يقرأ الدليل، عاد ${authed.status}`);
+  const device = authed.data.devices?.[0];
+  assert(device?.deviceId, 'لا جهاز معتمد للفحص');
+
+  const anonPrekey = await api('GET', `/api/identity/directory/10001/${device.deviceId}/prekey`);
+  assert(anonPrekey.status === 401, `استهلاك prekey يجب أن يُرفض بلا رمز، عاد ${anonPrekey.status}`);
+
+  const authedPrekey = await api('GET', `/api/identity/directory/10001/${device.deviceId}/prekey`, undefined, adminToken);
+  assert(authedPrekey.status === 200, `المصادَق يجب أن يستهلك prekey، عاد ${authedPrekey.status}`);
+
+  // لا يُعاد أي مفتاح خاص مهما كانت الصلاحية
+  const body = JSON.stringify(authedPrekey.data).toLowerCase();
+  assert(!body.includes('privatekey'), 'تسرّب مفتاح خاص في حزمة prekey');
+
+  return '401 للمجهول على المسارين · 200 للمصادَق · بلا مفاتيح خاصة';
 });
 
 console.log(`\n${'─'.repeat(60)}`);
