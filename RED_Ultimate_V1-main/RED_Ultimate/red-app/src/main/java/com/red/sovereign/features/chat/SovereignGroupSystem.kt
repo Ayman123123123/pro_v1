@@ -5,8 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,7 +40,7 @@ enum class GroupPrivacy(val label: String, val icon: ImageVector, val desc: Stri
 }
 
 @Composable
-fun CreateGroupScreen(onBack: () -> Unit = {}) {
+fun CreateGroupScreen(onBack: () -> Unit = {}, onCreate: (name: String, privacy: String) -> Unit = { _, _ -> }) {
     var name by remember { mutableStateOf("") }
     var privacy by remember { mutableStateOf(GroupPrivacy.PRIVATE) }
     
@@ -80,7 +78,7 @@ fun CreateGroupScreen(onBack: () -> Unit = {}) {
         }
         Spacer(Modifier.weight(1f))
         Button(
-            onClick = { },
+            onClick = { onCreate(name.trim(), privacy.name) },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
             shape = RoundedCornerShape(14.dp),
@@ -94,6 +92,7 @@ fun CreateGroupScreen(onBack: () -> Unit = {}) {
 @Composable
 fun SovereignGroupInfoScreen(
     groupName: String,
+    memberCount: Int = 0,
     onBack: () -> Unit = {}
 ) {
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian)) {
@@ -108,7 +107,7 @@ fun SovereignGroupInfoScreen(
                 Spacer(Modifier.width(16.dp))
                 Column {
                     Text(groupName, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("مجموعة مشفرة • 8 أعضاء", fontSize = 12.sp, color = Color.Gray)
+                    Text("مجموعة مشفرة • ${memberCount.coerceAtLeast(1)} أعضاء", fontSize = 12.sp, color = Color.Gray)
                 }
             }
         }
@@ -121,17 +120,12 @@ fun SovereignGroupInfoScreen(
             }
         }
         
-        // Members list simplified for now
+        // قائمة الأعضاء الحقيقية تُدار من GroupViewModel عبر إدارة المجموعة.
         if (selectedTab == 0) {
-            LazyColumn(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(8) { i ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(Modifier.size(40.dp), shape = CircleShape, color = SovereignColors.SurfaceNavy) {
-                            Box(contentAlignment = Alignment.Center) { Text("ع", color = Color.White) }
-                        }
-                        Text(" عضو يونس $i", modifier = Modifier.padding(start = 12.dp), color = Color.White)
-                    }
-                }
+            Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Rounded.Groups, null, tint = SovereignColors.Cyan, modifier = Modifier.size(48.dp))
+                Text("${memberCount.coerceAtLeast(1)} عضو", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
+                Text("ادارة الأعضاء والأدوار تتم من شاشة إدارة المجموعة", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
             }
         }
     }

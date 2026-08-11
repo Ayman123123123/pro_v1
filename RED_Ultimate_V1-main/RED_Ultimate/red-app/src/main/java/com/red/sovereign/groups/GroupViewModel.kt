@@ -40,7 +40,11 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
             repository.getGroups().collectLatest { entities ->
                 groups.clear()
                 groups.addAll(entities.map { entity ->
-                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString())
+                    // الحفاظ على عدد الأعضاء عند إعادة التحميل من قاعدة البيانات المحلية
+                    // (قائمة Group.members تأتي من الخادم؛ نحتفظ بالعدد المحفوظ محلياً).
+                    val memberCount = entity.memberCount.coerceAtLeast(0)
+                    val placeholderMembers = if (memberCount > 0) List(memberCount) { GroupMember("", entity.id, "", "", "", "MEMBER", "") } else emptyList()
+                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString(), members = placeholderMembers)
                 })
             }
         }
@@ -61,9 +65,9 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun create(name: String, description: String?, done: () -> Unit) = viewModelScope.launch {
+    fun create(name: String, description: String?, privacy: String = "PRIVATE", done: () -> Unit) = viewModelScope.launch {
         state = GroupState.Saving
-        when (val result = client.request("POST", "/api/groups", json.encodeToString(CreateGroupRequest(name, description)))) {
+        when (val result = client.request("POST", "/api/groups", json.encodeToString(CreateGroupRequest(name, description, privacy)))) {
             is ApiResult.Success -> decodeAndStore(result.value, prepend = true, done)
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }

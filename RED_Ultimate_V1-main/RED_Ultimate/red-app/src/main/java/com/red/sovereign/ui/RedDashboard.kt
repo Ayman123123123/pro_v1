@@ -231,6 +231,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupName by remember { mutableStateOf("") }
+    var selectedGroupMemberCount by remember { mutableStateOf(0) }
     var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
@@ -275,9 +276,11 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.DEVICES -> DevicesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.PRIVACY -> PrivacySettingsScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.EXPLORE -> RedExploreScreen(onStartLive = {}, onStartSpace = {})
-            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, onCreate = { name, privacy ->
+                groups.create(name, null, privacy) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
+            })
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, memberCount = selectedGroupMemberCount, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
@@ -942,7 +945,7 @@ private fun ChatHubScreen(
                             )
                         ) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                Text(if (item.outgoing) "أنت" else item.senderRedId, color = if (item.outgoing) Color(0xB8002018) else AqyalCyanGlow, fontSize = 10.sp)
+                                Text(if (item.outgoing) "أنت" else (activePerson?.displayName ?: item.senderRedId), color = if (item.outgoing) Color(0xB8002018) else AqyalCyanGlow, fontSize = 10.sp)
                                 when (item.type) {
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
@@ -1143,6 +1146,7 @@ private fun ChatHubScreen(
                                     GroupAvatar(group, groups); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(group.name, fontWeight = FontWeight.Bold); Text("${group.members.size} أعضاء · ${group.description.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                     IconButton({
                                         selectedGroupName = group.name
+                                        selectedGroupMemberCount = group.members.size
                                         currentScreen = SovereignScreen.GROUP_INFO
                                     }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                                 }
