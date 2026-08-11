@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Switch, Space, Statistic, message, Tooltip, Badge } from 'antd';
 import { MobileOutlined, SignalFilled, ReloadOutlined, CheckCircleOutlined, WarningOutlined, ApiOutlined } from '@ant-design/icons';
 import { apiFetch } from '../../api';
+import { usePolling } from '../../hooks/usePolling';
 
 interface PortSlot {
   index: number;
@@ -65,7 +66,7 @@ const DinstarTab: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-    const refresh = async () => {
+    const refresh = useCallback(async () => {
         setLoading(true);
         try {
             const [dResp, sResp] = await Promise.allSettled([
@@ -77,9 +78,10 @@ const DinstarTab: React.FC = () => {
             setLastRefresh(new Date());
         } catch { message.error('تعذر الاتصال بالبوابة'); }
         finally { setLoading(false); }
-    };
+    }, []);
 
-    useEffect(() => { refresh(); const it = setInterval(refresh, 5000); return () => clearInterval(it); }, []);
+    // استطلاع كل 5 ثوانٍ يتوقف تلقائيًا عند إخفاء التبويب أو انقطاع الشبكة
+    usePolling(refresh, 5000);
 
     const avgSignal = slots.length > 0 ? Math.round(slots.reduce((s, p) => s + (p.signal || 0), 0) / slots.length) : 0;
     const registeredCount = slots.filter(s => s.status === 'REGISTERED').length;

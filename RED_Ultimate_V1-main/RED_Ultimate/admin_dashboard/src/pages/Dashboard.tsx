@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Card, Col, Row, Statistic, Spin, Alert, Progress, Tag, List, Typography, Space, Tooltip } from 'antd';
 import {
   TeamOutlined,
@@ -14,7 +14,8 @@ import {
   PhoneOutlined,
   UserAddOutlined,
 } from '@ant-design/icons';
-import ReactECharts from 'echarts-for-react';
+import Chart, { type ChartOption } from '../components/Chart';
+import { usePolling } from '../hooks/usePolling';
 import {
   getDashboardSummary,
   getSystemAnalytics,
@@ -48,43 +49,36 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchAll = async () => {
-      try {
-        const [sum, healthData, rt] = await Promise.all([
-          getDashboardSummary(),
-          getSystemHealth(),
-          getRealtimeMetrics(),
-        ]);
-        if (!mounted) return;
-        setSummary(sum);
-        setHealth(healthData);
-        setRealtime(rt);
+  const fetchAll = useCallback(async () => {
+    try {
+      const [sum, healthData, rt] = await Promise.all([
+        getDashboardSummary(),
+        getSystemHealth(),
+        getRealtimeMetrics(),
+      ]);
+      setSummary(sum);
+      setHealth(healthData);
+      setRealtime(rt);
 
-        // Last 7 days
-        const end = new Date();
-        const start = new Date();
-        start.setDate(start.getDate() - 6);
-        const ana = await getSystemAnalytics(
-          start.toISOString().slice(0, 10),
-          end.toISOString().slice(0, 10)
-        );
-        if (mounted) setAnalytics(ana);
-      } catch (e: any) {
-        if (mounted) setError(e.message ?? 'تعذر تحميل لوحة الإدارة');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    fetchAll();
-    // Auto-refresh every 30s
-    const interval = setInterval(fetchAll, 30000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+      // Last 7 days
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 6);
+      const ana = await getSystemAnalytics(
+        start.toISOString().slice(0, 10),
+        end.toISOString().slice(0, 10)
+      );
+      setAnalytics(ana);
+      setError(null);
+    } catch (e: any) {
+      setError(e.message ?? 'تعذر تحميل لوحة الإدارة');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // تحديث كل 30 ثانية، ويتوقف تلقائيًا عندما يكون التبويب مخفيًا أو الجهاز دون اتصال
+  usePolling(fetchAll, 30000);
 
   if (loading) {
     return (
@@ -105,7 +99,7 @@ export default function Dashboard() {
     return `${bytes} B`;
   };
 
-  const userChart = {
+  const userChart: ChartOption = {
     title: { text: 'المستخدمون النشطون', textStyle: { color: '#00E6A0' } },
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
@@ -130,7 +124,7 @@ export default function Dashboard() {
     ],
   };
 
-  const messageChart = {
+  const messageChart: ChartOption = {
     title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#00E6A0' } },
     tooltip: { trigger: 'axis' },
     legend: { data: ['رسائل', 'مكالمات', 'رسائل صوتية'], textStyle: { color: '#fff' } },
@@ -240,12 +234,12 @@ export default function Dashboard() {
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <Card title={<><TeamOutlined /> المستخدمون</>}>
-              <ReactECharts option={userChart} style={{ height: 280 }} />
+              <Chart option={userChart} style={{ height: 280 }} />
             </Card>
           </Col>
           <Col xs={24} lg={12}>
             <Card title={<><MessageOutlined /> النشاط</>}>
-              <ReactECharts option={messageChart} style={{ height: 280 }} />
+              <Chart option={messageChart} style={{ height: 280 }} />
             </Card>
           </Col>
         </Row>

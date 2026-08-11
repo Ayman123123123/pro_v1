@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Card, Col, Progress, Row, Statistic, Tag } from 'antd';
 import { ApiOutlined, DatabaseFilled, SafetyCertificateFilled, ThunderboltFilled } from '@ant-design/icons';
 import { apiFetch } from '../api';
+import { usePolling } from '../hooks/usePolling';
 
 const MasterOverview: React.FC = () => {
   const [stats,setStats]=useState<any>({}); const [slots,setSlots]=useState<any[]>([]);
-  useEffect(()=>{ const load=async()=>{ const [s,d]=await Promise.all([apiFetch('/api/master/v1/stats/realtime'),apiFetch('/api/master/v1/hardware/dinstar/slots')]); if(s.ok)setStats(await s.json()); if(d.ok)setSlots(await d.json()); }; load(); const t=setInterval(load,5000); return()=>clearInterval(t); },[]);
+  const load=useCallback(async()=>{ const [s,d]=await Promise.all([apiFetch('/api/master/v1/stats/realtime'),apiFetch('/api/master/v1/hardware/dinstar/slots')]); if(s.ok)setStats(await s.json()); if(d.ok)setSlots(await d.json()); },[]);
+  // مراقبة حية كل 5 ثوانٍ تتوقف عند إخفاء التبويب
+  usePolling(load,5000);
   const signals=slots.map(x=>Number(x.signal||0)).filter(Number.isFinite); const signal=signals.length?Math.round(signals.reduce((a,b)=>a+b,0)/signals.length):0;
   return <div style={{padding:24}}>
     <h1>YOUNES Sovereign Master Control</h1>
