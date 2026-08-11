@@ -8,6 +8,7 @@ import com.red.server.auth.repository.UserAccountRepository
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
@@ -19,6 +20,7 @@ import java.util.UUID
  */
 @RestController
 @RequestMapping("/api/admin")
+@PreAuthorize("hasRole('ADMIN')")
 class AdminV2Controller(
     private val service: AdminService,
     private val users: UserAccountRepository,

@@ -5,6 +5,7 @@ import com.red.server.admin.repository.*
 import com.red.server.admin.service.ContentService
 import org.springframework.data.domain.PageRequest
 import org.springframework.http.ResponseEntity
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
@@ -15,6 +16,7 @@ import java.util.UUID
  */
 @RestController
 @RequestMapping("/api/admin/content")
+@PreAuthorize("hasRole('ADMIN')")
 class ContentController(
     private val service: ContentService,
     private val polls: PollRepository,

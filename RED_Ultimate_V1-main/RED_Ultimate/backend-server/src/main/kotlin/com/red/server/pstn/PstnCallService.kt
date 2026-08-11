@@ -49,7 +49,7 @@ class PstnCallService(
 
         return runCatching {
             val slot = loadBalancer.getOptimalSlotWfq(number)
-            log.info("PSTN dial: user={} number={} slot={}/8", user.redId, number, slot + 1)
+            log.info("PSTN dial: user={} number={} slot={}/8", user.redId, maskNumber(number), slot + 1)
             val actionId = pstn.dialGsm(number)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, slot)
@@ -57,6 +57,10 @@ class PstnCallService(
             redis.opsForValue().decrement(key)
             throw IllegalStateException("Asterisk rejected the PSTN call", it)
         }
+    }
+
+    private fun maskNumber(number: String): String {
+        return if (number.length > 5) "${number.take(3)}••••${number.takeLast(2)}" else "••••"
     }
 
     /**
