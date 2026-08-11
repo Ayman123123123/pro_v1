@@ -38,25 +38,45 @@ npm install
 RED_API_TARGET=http://127.0.0.1:8080 npm run dev
 ```
 
-### تشغيل كامل بلا خادم حقيقي (تطوير)
+### تشغيل كامل بقاعدة بيانات حقيقية (تطوير)
 
 لا يتطلب JDK ولا PostgreSQL/Mongo/Redis/MinIO:
 
 ```bash
-npm run mock     # نافذة 1 — خادم وهمي على 8080
-npm run dev      # نافذة 2 — اللوحة على 8088
+npm run dev:server         # نافذة 1 — خادم التطوير على 8080 (SQLite)
+npm run dev                # نافذة 2 — اللوحة على 8088
+npm run dev:server:reset   # لإعادة القاعدة إلى بيانات أولية نظيفة
 ```
 
-`mock-backend.cjs` يخدم **86 مسارًا** بأشكال مطابقة حرفيًا لعقد
-`AdminV2Controller.kt` (صفحات `{content,totalElements}` مقابل مصفوفات صريحة)،
-ويبث سجلًا حيًا حقيقيًا عبر WebSocket على `/ws/admin/logs` بعد تذكرة
-`POST /api/admin/ws-ticket`. الإجراءات (موافقة/حظر/نشر/إنشاء) تُعدّل الحالة
-في الذاكرة فيظهر أثرها في الواجهة.
+`dev-server/` خادم تطوير مدعوم بقاعدة **SQLite حقيقية على القرص** عبر
+`node:sqlite` المدمج في Node 22 — بلا أي حزمة جديدة في `package.json`
+(متوافق مع `DEPENDENCY_POLICY.md`).
+
+- `dev-server/db.cjs` — المخطط مشتق من كيانات JPA الحقيقية
+  (`UserAccount` · `UserDevice` · `AdminAuditLog` · `AdminSessions` · `ContentModels`)،
+  مع بيانات أولية عربية و30 يومًا من التحليلات.
+- `dev-server/server.cjs` — **92 مسارًا** بأشكال مطابقة حرفيًا لعقد
+  `AdminV2Controller.kt` (صفحات `{content,totalElements}` مقابل مصفوفات صريحة).
+
+**كل إجراء يكتب فعليًا في القاعدة ويبقى بعد إعادة التشغيل.** الموافقة تنفّذ
+منطق `RedApprovalService.processAction` كاملًا: تغيير الحالة، تسجيل
+`approvedAt/approvedBy`، **إصدار شهادة تفويض موقّعة بـ ECDSA P-256**
+(بنفس صيغة `DeviceCertificateService`: `v1|userId|redId|deviceId|fingerprint|issuedAt|expiresAt`)،
+وعند الرفض/الحظر: إبطال جلسات التحديث وإلغاء الأجهزة. حسابات `ADMIN`
+محمية من الحظر، وكل إجراء يولّد سجل تدقيق `ACCOUNT_<الحالة>` يُبَث مباشرة
+في صفحة السجل الحي عبر WebSocket بعد تذكرة `POST /api/admin/ws-ticket`.
+
+التسجيل (`POST /api/auth/register`) متاح أيضًا بنفس قواعد
+`RegistrationService`: **بلا رقم هاتف ولا بريد ولا OTP**، والحساب والجهاز
+كلاهما `PENDING` حتى موافقة المسؤول — وهو المسار الذي تظهر به صفوف جديدة
+في صفحة الموافقات.
 
 أي مسار غير معرّف يُعيد **404 صريحًا** ويُسجَّل في الطرفية — بدل رد نجاح
 عام كان يُخفي النقص ثم ينهار في الواجهة بـ `undefined.filter`.
 
 > للتطوير المحلي فقط: بلا مصادقة حقيقية، وغير مُضمَّن في صورة Docker.
+> ملف القاعدة `dev-server/data/` مستبعد من Git ويُبنى تلقائيًا عند أول تشغيل.
+> الإنتاج يمر عبر `backend-server` الحقيقي مع PostgreSQL/Mongo/Redis/MinIO.
 
 إنتاجيًا عبر Docker Compose، Nginx الرئيسي يمرر:
 
@@ -72,6 +92,7 @@ npm run dev      # نافذة 2 — اللوحة على 8088
 ```bash
 npm run check        # عقد API + حارس الواجهة + فحص الأنواع (يشغّلها CI أيضًا)
 npm run build        # tsc --noEmit ثم حزمة Vite للإنتاج
+npm run check:server # فحص تنفيذي: كل إجراء يغيّر الحالة فعليًا (يتطلب dev:server مشغّلًا)
 ```
 
 `npm run build` صارم: TypeScript check + Vite bundle.
@@ -85,6 +106,24 @@ npm run build        # tsc --noEmit ثم حزمة Vite للإنتاج
 2. `setInterval` خام بدل `usePolling`.
 3. أي سر مكتوب داخل الشيفرة.
 
+## عطل مُصلَح: صف الموافقة لا يختفي
+
+**العرض:** الموافقة على مستخدم في «الموافقات المعلقة» تُظهر رسالة نجاح، لكن
+الصف يبقى في القائمة بعد التحديث.
+
+**السبب الجذري:** الخادم الوهمي السابق كان يرد `{success:true}` على
+`POST /api/admin/users/action` **دون تغيير أي حالة**. الواجهة كانت سليمة:
+`handleAction()` يستدعي الإجراء ثم `await load()`، فيُعيد الجلب نفس القائمة.
+نفس النمط كان يصيب كل المسارات الكاتبة (النشر، الحظر، حل البلاغات...).
+
+**الإصلاح:** استُبدل الخادم الوهمي بخادم مدعوم بـ SQLite ينفّذ منطق
+`RedApprovalService.processAction` الحقيقي ويكتب التغيير في القاعدة.
+
+**طريقة التحقق:** `npm run check:server` — كل فحص يتبع النمط
+«نفّذ ← أعد الجلب ← تأكد أن الحالة تغيّرت»، وهو النمط الوحيد الذي يكشف
+هذه الفئة من الأعطال. الفحص يُنشئ بياناته بنفسه عبر التسجيل، فينجح
+مرارًا على نفس القاعدة.
+
 ## الملفات الأساسية
 
 - `src/App.tsx` — shell الحديث الوحيد.
@@ -95,7 +134,9 @@ npm run build        # tsc --noEmit ثم حزمة Vite للإنتاج
 - `src/hooks/usePolling.ts` — استطلاع دوري يتوقف عند إخفاء التبويب/انقطاع الشبكة ويمنع تداخل الطلبات.
 - `scripts/check-api-contract.mjs` — فاحص عقد الواجهة والخادم.
 - `scripts/check-frontend-guards.mjs` — حارس Local-first والاستطلاع والأسرار.
-- `mock-backend.cjs` — خادم تطوير وهمي (86 مسارًا + بث WebSocket) مطابق لعقد الخادم.
+- `dev-server/db.cjs` — قاعدة SQLite حقيقية (مخطط مشتق من كيانات JPA) + إصدار شهادات ECDSA والتحقق منها.
+- `dev-server/server.cjs` — خادم تطوير (92 مسارًا + بث WebSocket) مطابق لعقد الخادم، كل إجراء يكتب في القاعدة.
+- `scripts/check-dev-server.mjs` — 25 فحصًا تنفيذيًا: نفّذ الإجراء ← أعد الجلب ← تأكد أن الحالة تغيّرت.
 - `Dockerfile` + `dashboard.nginx.conf` — بناء وتقديم الإنتاج.
 
 ## الخطوط
