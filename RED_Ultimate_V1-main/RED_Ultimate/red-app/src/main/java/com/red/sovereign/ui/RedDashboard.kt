@@ -1797,9 +1797,15 @@ private fun ChatHubScreen(
 @Composable
 private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel) {
     var filter by remember { mutableStateOf("الكل") }
+    var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
+    var showDinstarDialog by remember { mutableStateOf(false) }
+    var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
+    var dinstarNumberInput by remember { mutableStateOf("") }
+    var newCallTargetInput by remember { mutableStateOf("") }
+    var publicStreamSearchQuery by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
     var isBroadcaster by remember { mutableStateOf(false) }
     var roomInput by remember { mutableStateOf("") }
@@ -1810,13 +1816,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
         "DINSTAR" -> call.route == "DINSTAR"; else -> true
     } }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("سجل موحد لكل مكالمة من المحادثات والمجموعات والبث والمساحات والهاتف اليمني.", color = Color.LightGray)
-        Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RoundCallAction(Icons.Default.Groups, "جماعية", AqyalCyanGlow, true) { showJoinDialog = true }
-            RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true }
-            // 🎙️ المساحات الصوتية مفعلة — مؤتمر صوتي فقط (بلا كاميرا) عبر نفس مسار SFU
-            RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true }
+        Text("مركز المكالمات والبث المباشر 📞", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("سجل موحد للاتصالات والمؤتمرات والبث الحية والمساحات الصوتية والهاتف اليمني.", color = Color.LightGray)
+        
+        // Dedicated Quick Action Buttons
+        LazyRow(
+            Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item { RoundCallAction(Icons.Default.Call, "مكالمة جديدة", Color(0xFF00C98C), true) { showNewCallDialog = true } }
+            item { RoundCallAction(Icons.Default.Groups, "مؤتمر جماعي", AqyalCyanGlow, true) { showJoinDialog = true } }
+            item { RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true } }
+            item { RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true } }
+            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true) { showPublicStreamsSearchDialog = true } }
+            item { RoundCallAction(Icons.Default.PhoneInTalk, "هاتف يمني", Color(0xFFE31E24), true) { showDinstarDialog = true } }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
@@ -1865,26 +1878,60 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
         )
     }
 
+    var streamTitleInput by remember { mutableStateOf("") }
+    var isPrivateStream by remember { mutableStateOf(false) }
+    var streamPasswordInput by remember { mutableStateOf("") }
+
     if (showLiveDialog) {
         AlertDialog(
-            onDismissRequest = { showLiveDialog = false; roomInput = ""; isBroadcaster = false },
-            title = { Text("بث مباشر يونس") },
+            onDismissRequest = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false },
+            title = { Text("مركز البث المباشر 🔴") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("اختر طبيعة المشاركة في البث:", color = Color.Gray, fontSize = 14.sp)
+                    Text("انضم لمشاهدة بث عام عبر البحث بالاسم/المعرف أو أنشئ بثك الخاص:", color = Color.Gray, fontSize = 13.sp)
+                    
                     OutlinedTextField(
                         value = roomInput,
                         onValueChange = { roomInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف البث (مثال: stream-abc)") },
+                        placeholder = { Text("معرف البث أو رابط الدعوة (مثال: stream-123)") },
                         singleLine = true
                     )
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Checkbox(checked = isBroadcaster, onCheckedChange = { isBroadcaster = it })
-                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp)
+                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    if (isBroadcaster) {
+                        OutlinedTextField(
+                            value = streamTitleInput,
+                            onValueChange = { streamTitleInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("عنوان البث (مثال: بث سيادي عام)") },
+                            singleLine = true
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(checked = isPrivateStream, onCheckedChange = { isPrivateStream = it })
+                            Text("بث خاص بكلمة سر 🔒", fontSize = 14.sp)
+                        }
+
+                        if (isPrivateStream) {
+                            OutlinedTextField(
+                                value = streamPasswordInput,
+                                onValueChange = { streamPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("كلمة سر البث الخاص") },
+                                singleLine = true
+                            )
+                        }
                     }
                 }
             },
@@ -1892,16 +1939,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
                 Button(
                     onClick = {
                         showLiveDialog = false
-                        LiveStreamService.start(context, roomInput.trim(), ownUserId, isBroadcaster)
+                        val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
+                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster)
                         roomInput = ""
+                        streamTitleInput = ""
+                        streamPasswordInput = ""
+                        isPrivateStream = false
                     },
-                    enabled = roomInput.trim().isNotBlank()
+                    enabled = roomInput.trim().isNotBlank() || isBroadcaster
                 ) {
-                    Text("بدء")
+                    Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLiveDialog = false; roomInput = ""; isBroadcaster = false }) {
+                TextButton(onClick = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false }) {
                     Text("إلغاء")
                 }
             }
@@ -1952,6 +2003,147 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
             },
             dismissButton = {
                 TextButton(onClick = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showDinstarDialog) {
+        val operator = YemeniOperatorDetector.getOperatorInfo(dinstarNumberInput)
+        AlertDialog(
+            onDismissRequest = { showDinstarDialog = false; dinstarNumberInput = "" },
+            title = { Text("لوحة اتصال الهاتف اليمني (DINSTAR GSM)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("اتصال آمن ومباشر بأي رقم هاتف يمني ثابت أو محمول عبر بوابات Dinstar GSM:", color = Color.Gray, fontSize = 13.sp)
+                    
+                    OutlinedTextField(
+                        value = dinstarNumberInput,
+                        onValueChange = { dinstarNumberInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("أدخل الرقم (مثال: 777123456)") },
+                        singleLine = true
+                    )
+
+                    if (operator != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(operator.brandColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text("الشبكة المكتشفة: ${operator.name}", color = operator.brandColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(operator.technology, color = Color.White, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDinstarDialog = false
+                        val intent = Intent(context, YounesCallService::class.java).apply {
+                            action = YounesCallService.ACTION_START
+                            putExtra(YounesCallService.EXTRA_TARGET, dinstarNumberInput.trim())
+                            putExtra(YounesCallService.EXTRA_MODE, "VOICE")
+                        }
+                        ContextCompat.startForegroundService(context, intent)
+                        dinstarNumberInput = ""
+                    },
+                    enabled = dinstarNumberInput.trim().length >= 6
+                ) {
+                    Text("اتصال خطي عبر GSM")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDinstarDialog = false; dinstarNumberInput = "" }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showNewCallDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
+            title = { Text("مكالمة جديدة مشفرة E2EE 📞") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("أدخل معرّف يونس (RED ID) الخاص بصديقك للاتصال المشفر الفوري:", color = Color.Gray, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = newCallTargetInput,
+                        onValueChange = { newCallTargetInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("معرف يونس (مثال: red-user-123)") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            showNewCallDialog = false
+                            YounesCallService.start(context, newCallTargetInput.trim(), video = false)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) {
+                        Text("صوتية")
+                    }
+                    Button(
+                        onClick = {
+                            showNewCallDialog = false
+                            YounesCallService.start(context, newCallTargetInput.trim(), video = true)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) {
+                        Text("فيديو")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCallDialog = false; newCallTargetInput = "" }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showPublicStreamsSearchDialog) {
+        AlertDialog(
+            onDismissRequest = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" },
+            title = { Text("اكتشاف البثوث العامة والمساحات 🌐") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = Color.Gray, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = publicStreamSearchQuery,
+                        onValueChange = { publicStreamSearchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("اسم البث أو اسم الشخص أو المعرّف") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPublicStreamsSearchDialog = false
+                        val finalStreamId = publicStreamSearchQuery.trim().ifBlank { "public-stream-1" }
+                        LiveStreamService.start(context, finalStreamId, ownUserId, false)
+                        publicStreamSearchQuery = ""
+                    }
+                ) {
+                    Text("انضمام للبث المباشر")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" }) {
                     Text("إلغاء")
                 }
             }

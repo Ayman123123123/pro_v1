@@ -214,6 +214,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         if (videoTrack != null) {
             val sender = peer?.addTrack(videoTrack, listOf("younes-stream"))
             videoSender = sender
+            // ضبط أولوية الكوديكس بناءً على نوع المكالمة (H.264 للفردي / VP9 للجماعي)
+            applyCodecPreferences(svcEnabled)
             // Simulcast أو VP9-SVC حسب الوضع
             if (simulcastEnabled) {
                 applySimulcast(sender, NetworkStats.BitrateProfile.HD, svcEnabled)
@@ -221,6 +223,32 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         }
         localMedia = LocalMedia(audio, videoTrack)
         return ApiResult.Success(200, Unit)
+    }
+
+    /**
+     * تضبط أولوية الكوديكس عبر RtpTransceiver.setCodecPreferences.
+     * المكالمات الفردية 1:1 -> تفضيل H.264 (تسريع عتادي وتقليل حرارة الجهاز واستهلاك البطارية).
+     * المؤتمرات والجماعي -> تفضيل VP9 / VP9-SVC (توفير البنطاق العريض وطبقات الجودة التكيفية).
+     */
+    private fun applyCodecPreferences(svcEnabled: Boolean) {
+        val pc = peer ?: return
+        val videoTransceivers = pc.transceivers.filter {
+            it.mediaType == org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO
+        }
+        if (videoTransceivers.isEmpty()) return
+
+        val capabilities = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
+        val sortedCodecs = capabilities.codecs.sortedByDescending { codec ->
+            when {
+                svcEnabled && codec.name.equals("VP9", ignoreCase = true) -> 10
+                !svcEnabled && codec.name.equals("H264", ignoreCase = true) -> 10
+                codec.name.equals("VP8", ignoreCase = true) -> 5
+                else -> 1
+            }
+        }
+        videoTransceivers.forEach { transceiver ->
+            runCatching { transceiver.setCodecPreferences(sortedCodecs) }
+        }
     }
 
     /**
@@ -247,6 +275,18 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     fun offer() = peer?.createOffer(sdpObserver(setLocal = true), MediaConstraints())
     fun answer() = peer?.createAnswer(sdpObserver(setLocal = true), MediaConstraints())
+
+    /**
+     * Re-negotiates ICE candidates with IceRestart=true constraint.
+     * Essential for seamless network transitions (Wi-Fi -> 4G/LTE or IP change) during an active call.
+     */
+    fun restartIce() {
+        val constraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
+        }
+        peer?.createOffer(sdpObserver(setLocal = true), constraints)
+    }
+
     fun setRemote(description: SessionDescription, after: (() -> Unit)? = null) = peer?.setRemoteDescription(sdpObserver(after = after), description)
     fun addIce(candidate: IceCandidate) { peer?.addIceCandidate(candidate) }
     fun setMicrophoneEnabled(enabled: Boolean) { localMedia?.audioTrack?.setEnabled(enabled) }

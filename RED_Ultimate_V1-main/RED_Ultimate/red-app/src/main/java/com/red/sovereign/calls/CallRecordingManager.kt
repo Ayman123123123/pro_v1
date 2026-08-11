@@ -76,34 +76,46 @@ class CallRecordingManager(
     }
 
     /**
-     * يوقف التسجيل ويشفر الملف بـ AES-GCM.
+     * يوقف التسجيل ويشفر الملف بـ AES-GCM تلقائياً ويقوم بمسح الملف المؤقت الخام فوراً.
      * Returns a [CallRecording] descriptor with the encrypted path.
      */
     suspend fun stop(): CallRecording? = withContext(Dispatchers.IO) {
         if (!isRecording) return@withContext null
         val recorder = mediaRecorder
-        val file = outputFile
+        val tempRawFile = outputFile
         try {
             recorder?.stop()
         } catch (_: Exception) { /* may throw if too short */ }
         recorder?.release()
         mediaRecorder = null
         isRecording = false
-        if (file == null || !file.exists()) return@withContext null
-        // Encrypt the raw m4a bytes
-        val raw = file.readBytes()
-        val encrypted = cipher.encrypt(raw)
-        // Overwrite with encrypted bytes (delete raw, then write encrypted)
-        file.delete()
-        FileOutputStream(file).use { it.write(encrypted) }
-        CallRecording(
-            callId = callId,
-            filePath = file.absolutePath,
-            sizeBytes = file.length(),
-            encrypted = true,
-            createdAt = System.currentTimeMillis(),
-            durationMs = 0L // filled from MediaRecorder metadata if available
-        )
+        if (tempRawFile == null || !tempRawFile.exists()) return@withContext null
+
+        val dir = File(context.cacheDir, "recordings").apply { mkdirs() }
+        val encFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
+
+        try {
+            // Encrypt raw M4A audio bytes using AES-GCM
+            val raw = tempRawFile.readBytes()
+            val encrypted = cipher.encrypt(raw)
+            FileOutputStream(encFile).use { it.write(encrypted) }
+            
+            // Wipe raw unencrypted file from disk
+            tempRawFile.delete()
+
+            CallRecording(
+                callId = callId,
+                filePath = encFile.absolutePath,
+                sizeBytes = encFile.length(),
+                encrypted = true,
+                createdAt = System.currentTimeMillis(),
+                durationMs = 0L
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("CallRecording", "Failed to encrypt recording: ${e.message}")
+            tempRawFile.delete()
+            null
+        }
     }
 
     fun isRecording() = isRecording
