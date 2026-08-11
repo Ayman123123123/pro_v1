@@ -15,7 +15,12 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
-class StoryService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val media: MediaService) {
+class StoryService(
+    private val mongo: MongoTemplate,
+    private val users: UserAccountRepository,
+    private val media: MediaService,
+    private val jdbc: org.springframework.jdbc.core.JdbcTemplate
+) {
     fun create(userId: UUID, request: CreateStoryRequest): StoryResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(request.mediaKey.startsWith("users/$userId/")) { "Story media must belong to the account" }
@@ -25,26 +30,28 @@ class StoryService(private val mongo: MongoTemplate, private val users: UserAcco
         val caption = request.caption?.trim()?.takeIf(String::isNotEmpty)
         require(caption == null || caption.length <= 500) { "Story caption is too long" }
         val story = mongo.save(StoryDocument(UuidV7.next(), user.id.toString(), user.redId, user.username, user.displayName,
-            request.mediaKey, metadata.mimeType, caption, expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)))
+            request.mediaKey, metadata.mimeType, caption, request.visibility, request.allowedUserIds, expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)))
         return response(story, 0)
     }
 
-    fun active(): List<StoryResponse> {
+    fun active(viewerId: UUID): List<StoryResponse> {
         val now = Instant.now()
         return mongo.find(Query(Criteria.where("expiresAt").gt(now).and("deletedAt").`is`(null))
-            .with(Sort.by(Sort.Direction.DESC, "createdAt")), StoryDocument::class.java).map { story ->
+            .with(Sort.by(Sort.Direction.DESC, "createdAt")), StoryDocument::class.java).filter { story -> canAccess(viewerId, story) }.map { story ->
             response(story, mongo.count(Query(Criteria.where("storyId").`is`(story.id)), StoryView::class.java))
         }
     }
 
     fun viewed(viewerId: UUID, storyId: String): StoryResponse {
         val story = activeStory(storyId)
+        require(canAccess(viewerId, story)) { "Story is not visible to this account" }
         mongo.save(StoryView("$storyId:$viewerId", storyId, viewerId.toString()))
         return response(story, mongo.count(Query(Criteria.where("storyId").`is`(storyId)), StoryView::class.java))
     }
 
     fun react(userId: UUID, storyId: String, request: StoryReactionRequest) {
-        activeStory(storyId)
+        val story = activeStory(storyId)
+        require(canAccess(userId, story)) { "Story is not visible to this account" }
         val emoji = request.emoji.trim()
         require(emoji in setOf("❤️", "🔥", "😢", "👏", "😍", "🎉", "👍")) { "Unsupported story reaction" }
         mongo.save(StoryReaction("$storyId:$userId", storyId, userId.toString(), emoji))
@@ -80,6 +87,16 @@ class StoryService(private val mongo: MongoTemplate, private val users: UserAcco
     private fun activeStory(id: String): StoryDocument = mongo.findOne(Query(Criteria.where("id").`is`(id)
         .and("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)), StoryDocument::class.java)
         ?: throw NoSuchElementException("Story not found")
+
+    /** Same authorization rule is duplicated in MediaAccessService for direct media URLs. */
+    private fun canAccess(viewerId: UUID, story: StoryDocument): Boolean {
+        if (story.ownerId == viewerId.toString() || story.visibility == StoryVisibility.EVERYONE) return true
+        if (story.visibility == StoryVisibility.SELECTED) return viewerId.toString() in story.allowedUserIds
+        val owner = UUID.fromString(story.ownerId)
+        val blocked = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?))", Boolean::class.java, owner, viewerId, viewerId, owner) == true
+        if (blocked) return false
+        return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
+    }
 
     private fun response(story: StoryDocument, views: Long) = StoryResponse(story.id, story.ownerRedId, story.ownerUsername,
         story.ownerDisplayName, "/api/media/${story.mediaKey}", story.mediaType, story.caption, story.createdAt, story.expiresAt, views)

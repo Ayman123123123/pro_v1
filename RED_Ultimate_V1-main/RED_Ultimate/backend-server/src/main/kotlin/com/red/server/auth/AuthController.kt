@@ -22,6 +22,7 @@ class AuthController(
     private val recovery: RecoveryService,
     private val limits: RateLimitService,
     private val users: com.red.server.auth.repository.UserAccountRepository,
+    private val media: com.red.server.media.MediaService,
     @Value("\${red.trust-x-forwarded-for:false}") private val trustXForwardedFor: Boolean = false
 ) {
 
@@ -117,6 +118,12 @@ class AuthController(
         require(avatarUrl == null || avatarUrl.length <= 255) { "AVATAR_URL_TOO_LONG" }
 
         val caller = UUID.fromString(authentication.name)
+        // الصورة مرجع MinIO وليس URL حرّاً: لا يجوز ربط ملف الغير أو رابط خارجي.
+        if (avatarUrl != null) {
+            require(avatarUrl.startsWith("users/$caller/")) { "AVATAR_MUST_BELONG_TO_ACCOUNT" }
+            require(media.exists(avatarUrl)) { "AVATAR_MEDIA_NOT_FOUND" }
+            require(media.metadata(avatarUrl).mimeType.startsWith("image/")) { "AVATAR_MUST_BE_IMAGE" }
+        }
         val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
         user.displayName = trimmed
         user.bio = bio

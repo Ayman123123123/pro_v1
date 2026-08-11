@@ -226,7 +226,7 @@ export async function unbanUser(userId: string) {
   return res.json();
 }
 
-export async function promoteUser(userId: string, role: 'USER' | 'ADMIN' | 'MODERATOR') {
+export async function promoteUser(userId: string, role: 'USER' | 'ADMIN') {
   const res = await apiFetch(`/api/admin/users/${userId}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role })
