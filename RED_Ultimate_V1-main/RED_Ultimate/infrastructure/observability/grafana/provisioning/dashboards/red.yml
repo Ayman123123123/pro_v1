@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: RED Operations
+    orgId: 1
+    folder: RED Operations
+    type: file
+    disableDeletion: false
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

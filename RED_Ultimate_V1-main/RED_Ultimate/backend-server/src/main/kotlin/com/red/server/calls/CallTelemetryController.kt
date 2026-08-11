@@ -33,6 +33,7 @@ data class CallTelemetryDocument(
 interface CallTelemetryRepository : MongoRepository<CallTelemetryDocument, String> {
     fun countByQualityAtEndAndReceivedAtAfter(quality: String, after: Instant): Long
     fun findByReceivedAtAfter(after: Instant): List<CallTelemetryDocument>
+    fun deleteByReceivedAtBefore(before: Instant): Long
 }
 
 @RestController

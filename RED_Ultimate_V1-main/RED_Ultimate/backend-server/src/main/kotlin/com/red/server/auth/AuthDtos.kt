@@ -35,8 +35,8 @@ data class LoginRequest(
     val deviceId: UUID? = null
 )
 
-data class RefreshRequest(val refreshToken: String)
-data class LogoutRequest(val refreshToken: String)
+data class RefreshRequest(val refreshToken: String = "")
+data class LogoutRequest(val refreshToken: String = "")
 
 data class ApprovalActionRequest(
     val userId: UUID,

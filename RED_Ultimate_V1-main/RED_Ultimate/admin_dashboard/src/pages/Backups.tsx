@@ -227,11 +227,9 @@ export default function Backups() {
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(() => message.success('تم النسخ')).catch(() => message.error('فشل النسخ'));
   const manualCommands = [
-    { title: '1. مفاتيح سلطة الهوية (الأهم)', cmd: 'tar -czf younes-identity-$(date +%F).tar.gz RED_Ultimate/secrets/ && gpg -c younes-identity-*.tar.gz', desc: 'يحتوي المفتاح الخاص P-256 — لا ترفعه إلى Git أبدًا' },
-    { title: '2. PostgreSQL', cmd: 'docker exec red-db-sql pg_dump -U admin red_sovereign | gzip > pg-$(date +%F).sql.gz', desc: 'الحسابات والأجهزة والشهادات و recovery codes' },
-    { title: '3. MongoDB', cmd: 'docker exec red-db-nosql mongodump --username red_user --password $MONGO_PASSWORD --authenticationDatabase admin --out /tmp/mongodump && docker cp red-db-nosql:/tmp/mongodump ./mongodump-$(date +%F)', desc: 'الرسائل المشفرة والقصص والمنشورات' },
-    { title: '4. Redis (AOF)', cmd: 'docker exec red-cache redis-cli -a $REDIS_PASSWORD --rdb /data/dump.rdb && docker cp red-cache:/data/dump.rdb ./redis-$(date +%F).rdb', desc: 'عدادات PSTN اليومية و rate limits' },
-    { title: '5. MinIO', cmd: 'mc mirror --overwrite minio/red-media ./minio-backup-$(date +%F)  # أو: docker exec red-storage tar -czf - /data | gzip > minio-$(date +%F).tar.gz', desc: 'صور وفيديو ومرفقات مشفرة' },
+    { title: '1. نسخة كاملة مشفرة', cmd: 'export BACKUP_GPG_RECIPIENT="Operations Backup Key <backup@example.invalid>" && ./scripts/backup-platform.sh', desc: 'ينسخ PostgreSQL وMongoDB وRedis وMinIO ومفاتيح الهوية، ثم ينشئ GPG archive وSHA-256 manifest.' },
+    { title: '2. تحقق من نسخة قبل الاستعادة', cmd: './scripts/restore-platform.sh /secure/offsite/younes-platform-<timestamp>.tar.gz.gpg --verify-only', desc: 'يفك التشفير ويتحقق من كل checksums دون تعديل أي خدمة أو بيانات.' },
+    { title: '3. استعادة مدروسة', cmd: 'I_UNDERSTAND_THIS_DESTROYS_CURRENT_DATA=RESTORE_YOUNES_PLATFORM ./scripts/restore-platform.sh /secure/offsite/younes-platform-<timestamp>.tar.gz.gpg --apply', desc: 'تنفذ فقط بعد Restore Drill ناجح في بيئة معزولة وموافقة تغيير موثقة.' },
   ];
 
   return (
@@ -240,7 +238,7 @@ export default function Backups() {
         <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
           <DatabaseOutlined /> النسخ الاحتياطية — موحدة
         </Title>
-        <Text type="secondary">إنشاء واستعادة وحذف النسخ الاحتياطية — مدموج من BackupTab القديمة (أوامر يدوية حقيقية) — بيانات حقيقية</Text>
+        <Text type="secondary">سجل النسخ السابقة ودليل النسخ والاستعادة التشغيلي المشفر</Text>
       </div>
 
       <Tabs
@@ -251,6 +249,7 @@ export default function Backups() {
             label: <Space><CloudUploadOutlined /> عبر الواجهة (API)</Space>,
             children: (
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <Alert type="warning" showIcon message="لا تنفّذ لوحة الويب النسخ أو الاستعادة" description="هذه العملية تتطلب Docker Host وصلاحية للـ volumes؛ تنفيذها داخل Backend يمنح التطبيق صلاحية root على الخادم. استخدم scripts/backup-platform.sh وscripts/restore-platform.sh، ثم سجل الناتج بعد Restore Drill." />
 
       {/* Stats */}
       <Row gutter={[16, 16]}>
@@ -299,13 +298,8 @@ export default function Backups() {
       {/* Actions */}
       <Card>
         <Space>
-          <Button
-            type="primary"
-            icon={<CloudUploadOutlined />}
-            onClick={handleCreate}
-            size="large"
-          >
-            إنشاء نسخة احتياطية جديدة
+          <Button type="primary" icon={<CloudUploadOutlined />} size="large" disabled>
+            النسخ يتم عبر مشغل النظام
           </Button>
           <Button icon={<ReloadOutlined />} onClick={load}>تحديث</Button>
         </Space>

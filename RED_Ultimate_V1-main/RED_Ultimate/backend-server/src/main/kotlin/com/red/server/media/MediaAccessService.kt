@@ -30,12 +30,21 @@ class MediaAccessService(private val mongo: MongoTemplate, private val jdbc: Jdb
         val avatarGroup = mongo.findOne(Query(Criteria.where("avatarMediaKey").`is`(key)), GroupDocument::class.java)
         if (avatarGroup != null && mongo.exists(Query(Criteria.where("id").`is`("${avatarGroup.id}:$accountId")), GroupMember::class.java)) return
 
-        val activeStory = mongo.exists(
+        val story = mongo.findOne(
             Query(Criteria.where("mediaKey").`is`(key)
-                .and("expiresAt").gt(Instant.now())
-                .and("deletedAt").`is`(null)),
+                .and("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)),
             StoryDocument::class.java
         )
-        if (!activeStory) throw ResponseStatusException(HttpStatus.FORBIDDEN, "Media object is not accessible to this account")
+        if (story != null && canAccessStory(accountId, story)) return
+        throw ResponseStatusException(HttpStatus.FORBIDDEN, "Media object is not accessible to this account")
+    }
+
+    private fun canAccessStory(viewerId: UUID, story: StoryDocument): Boolean {
+        if (story.ownerId == viewerId.toString() || story.visibility.name == "EVERYONE") return true
+        if (story.visibility.name == "SELECTED") return viewerId.toString() in story.allowedUserIds
+        val owner = runCatching { UUID.fromString(story.ownerId) }.getOrNull() ?: return false
+        val blocked = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?))", Boolean::class.java, owner, viewerId, viewerId, owner) == true
+        if (blocked) return false
+        return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
     }
 }

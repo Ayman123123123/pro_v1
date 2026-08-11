@@ -79,7 +79,7 @@ class SecurityConfig(
                     // المعرّفات (89,999) قابلًا للتعداد الكامل، فما كان
                     // صعبًا عمليًا صار زحفًا مباشرًا على الدليل كله.
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
-                    .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
+                    .requestMatchers("/health", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     // ── مشاركة المستخدم في المحتوى ──
                     //
@@ -116,6 +116,9 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
                     .requestMatchers("/api/notifications/**").authenticated()
+                    // Telemetry aggregates are an operations signal, not public user data.
+                    // Keep the upload authenticated, but restrict the aggregated admin view.
+                    .requestMatchers(HttpMethod.GET, "/api/calls/telemetry/stats").hasRole("ADMIN")
                     .requestMatchers("/api/calls/**", "/api/calls/ice-servers", "/api/calls/telemetry").authenticated()
                     .requestMatchers("/api/recordings/**").authenticated()
                     .requestMatchers("/api/stories/**").authenticated()
@@ -159,7 +162,7 @@ class SecurityConfig(
         val configuration = CorsConfiguration().apply {
             allowedOriginPatterns = configuredAllowedOrigins.split(',').map(String::trim).filter(String::isNotEmpty)
             allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            allowedHeaders = listOf("Authorization", "Content-Type", "X-Requested-With", "X-Device-Id")
+            allowedHeaders = listOf("Authorization", "Content-Type", "X-Requested-With", "X-Device-Id", "X-RED-Admin-Web", "X-RED-CSRF")
             exposedHeaders = listOf("Location", "X-Total-Count")
             allowCredentials = true
             maxAge = 3600

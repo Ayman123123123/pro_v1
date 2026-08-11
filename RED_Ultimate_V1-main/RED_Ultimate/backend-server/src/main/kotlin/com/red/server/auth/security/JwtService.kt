@@ -17,8 +17,11 @@ import javax.crypto.SecretKey
 @Service
 class JwtService(
     @Value("\${red.jwt.secret}") private val configuredSecret: String,
-    @Value("\${red.security.jwt-expiration-ms:3600000}") private val expirationMs: Long
+    @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long
 ) {
+    private val expirationMs: Long
+        get() = accessExpirationMinutes.coerceIn(1, 60 * 24) * 60_000
+
     private val key: SecretKey by lazy {
         require(configuredSecret.length >= 32 && configuredSecret != "change-me-in-production-please") {
             "JWT_SECRET must contain at least 32 random characters"

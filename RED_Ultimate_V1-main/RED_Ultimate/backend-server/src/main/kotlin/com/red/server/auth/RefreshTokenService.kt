@@ -16,7 +16,7 @@ import java.util.Base64
 @Service
 class RefreshTokenService(
     private val sessions: RefreshSessionRepository,
-    @Value("\${red.security.refresh-expiration-days:30}") private val expirationDays: Long
+    @Value("\${red.jwt.refresh-expiration-days:30}") private val expirationDays: Long
 ) {
     private val random = SecureRandom()
 

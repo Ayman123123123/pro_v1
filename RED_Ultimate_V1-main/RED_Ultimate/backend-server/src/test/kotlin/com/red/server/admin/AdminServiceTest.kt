@@ -254,39 +254,18 @@ class AdminServiceTest {
     // ━━━━━━━━━━━━━━━━ Backups Tests ━━━━━━━━━━━━━━━━
 
     @Test
-    fun `startBackup creates in-progress backup`() {
-        val adminId = UUID.randomUUID()
-        val backup = service.startBackup("FULL", adminId, "Test")
-        assertEquals("IN_PROGRESS", backup.status)
-        assertEquals("MANUAL", backup.triggeredBy)
+    fun `web service refuses to pretend it performed a host backup or restore`() {
+        val error = assertThrows<UnsupportedOperationException> {
+            service.startBackup("FULL", UUID.randomUUID(), "Test")
+        }
+        assertEquals("BACKUP_OPERATOR_WORKFLOW_REQUIRED", error.message)
+        assertThrows<UnsupportedOperationException> {
+            service.completeBackup(UUID.randomUUID(), 1024L, "abc123")
+        }
+        val restore = assertThrows<UnsupportedOperationException> {
+            service.restoreBackup(UUID.randomUUID(), "RESTORE_CONFIRM")
+        }
+        assertEquals("RESTORE_OPERATOR_WORKFLOW_REQUIRED", restore.message)
     }
 
-    @Test
-    fun `completeBackup updates status and size`() {
-        val backupId = UUID.randomUUID()
-        val backup = BackupHistory(id = backupId, status = "IN_PROGRESS")
-        whenever(backups.findById(backupId)).thenReturn(Optional.of(backup))
-
-        val result = service.completeBackup(backupId, 1024L, "abc123")
-        assertNotNull(result)
-        assertEquals("COMPLETED", result!!.status)
-        assertEquals(1024L, result.sizeBytes)
-        assertEquals("abc123", result.checksum)
-    }
-
-    @Test
-    fun `restoreBackup fails with wrong confirmation`() {
-        val backupId = UUID.randomUUID()
-        assertFalse(service.restoreBackup(backupId, "WRONG_CODE"))
-    }
-
-    @Test
-    fun `restoreBackup succeeds with correct confirmation`() {
-        val backupId = UUID.randomUUID()
-        val backup = BackupHistory(id = backupId, status = "COMPLETED")
-        whenever(backups.findById(backupId)).thenReturn(Optional.of(backup))
-
-        assertTrue(service.restoreBackup(backupId, "RESTORE_CONFIRM"))
-        assertEquals(1, backup.restoreCount)
-    }
 }

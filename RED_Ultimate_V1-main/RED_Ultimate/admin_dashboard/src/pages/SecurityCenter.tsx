@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message, Tabs, Typography, InputNumber, Switch } from 'antd';
 import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined, PhoneOutlined, KeyOutlined, AuditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { activateKillSwitch, requestSecurityWipe, updatePstnAccess, getPstnUsers, getAuditLog } from '../api';
+import { activateKillSwitch, requestSecurityWipe, updatePstnAccess, getPstnUsers, getAuditLog, apiFetch } from '../api';
 
 // 🔴 مدموج من SecurityTab + PstnAccessTab القديمتين — كل الميزات في صفحة واحدة موحدة — بيانات حقيقية
 export default function SecurityCenter() {
@@ -12,6 +12,7 @@ export default function SecurityCenter() {
   const [events, setEvents] = useState<any[]>([]);
   const [pstnUsers, setPstnUsers] = useState<any[]>([]);
   const [limits, setLimits] = useState<Record<string, number>>({});
+  const [operational, setOperational] = useState<any>(null);
 
   const loadAudit = async () => {
     try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(r.content || r || []); } catch { /* ignore */ }
@@ -26,7 +27,14 @@ export default function SecurityCenter() {
       message.error('تعذر تحميل صلاحيات PSTN');
     }
   };
-  useEffect(() => { loadAudit(); loadPstn(); }, []);
+  const loadOperational = async () => {
+    try {
+      const response = await apiFetch('/api/admin/operations/overview');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setOperational(await response.json());
+    } catch { message.error('تعذر تحميل مقاييس الأمان الحية'); }
+  };
+  useEffect(() => { loadAudit(); loadPstn(); loadOperational(); }, []);
 
   const handleKill = async () => {
     if (!reason.trim()) return message.error('أدخل سبب تفعيل Kill Switch');
@@ -62,10 +70,10 @@ export default function SecurityCenter() {
             children: (
               <Space direction="vertical" size="middle" style={{width:'100%'}}>
                 <Row gutter={[16,16]}>
-                  <Col span={6}><Card><Statistic title="مستوى التهديد" value="محصن" prefix={<SafetyOutlined />} valueStyle={{color:'#52c41a'}} /></Card></Col>
-                  <Col span={6}><Card><Statistic title="الأجهزة المحظورة" value="—" prefix={<LockOutlined />} valueStyle={{color:'#ff4d4f'}} /></Card></Col>
-                  <Col span={6}><Card><Statistic title="الجلسات النشطة" value="—" prefix={<SafetyOutlined />} valueStyle={{color:'#1890ff'}} /></Card></Col>
-                  <Col span={6}><Card><Statistic title="نقاط الأمان" value="100%" prefix={<SafetyOutlined />} valueStyle={{color:'#52c41a'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="تنبيهات أمنية آخر 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:(operational?.moderation?.securityAlerts24h ?? 0) > 0 ? '#ff4d4f' : '#52c41a'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="الأجهزة الملغاة" value={operational?.devices?.revoked ?? 0} prefix={<LockOutlined />} valueStyle={{color:'#ff4d4f'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="جلسات التجديد النشطة" value={operational?.devices?.activeRefreshSessions ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:'#1890ff'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="بلاغات قيد المعالجة" value={operational?.moderation?.openReports ?? 0} prefix={<ExclamationCircleOutlined />} valueStyle={{color:(operational?.moderation?.openReports ?? 0) > 0 ? '#faad14' : '#52c41a'}} /></Card></Col>
                 </Row>
                 <Row gutter={[16,16]}>
                   <Col span={12}>
@@ -78,7 +86,7 @@ export default function SecurityCenter() {
                     </Card>
                   </Col>
                   <Col span={12}>
-                    <Card title={<Space><AuditOutlined /> أحداث الأمان الأخيرة</Space>} extra={<Button size="small" onClick={loadAudit}>تحديث</Button>}>
+                    <Card title={<Space><AuditOutlined /> أحداث الأمان الأخيرة</Space>} extra={<Space><Button size="small" onClick={loadOperational}>المقاييس</Button><Button size="small" onClick={loadAudit}>التدقيق</Button></Space>}>
                       <Table dataSource={events} rowKey="id" size="small" pagination={{pageSize:6}} locale={{emptyText:'لا توجد أحداث'}} columns={[
                         {title:'الإجراء', dataIndex:'action', render:(v:string)=><Tag color={v?.includes('KILL')?'red':'blue'}>{v}</Tag>},
                         {title:'الهدف', dataIndex:'targetId', render:(v:string)=>v||'—'},

@@ -1,0 +1,58 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: [observability]
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=30d]
+    volumes:
+      - ./infrastructure/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    expose: ["9090"]
+    networks: [red-net]
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    profiles: [observability]
+    command: [--config.file=/etc/alertmanager/alertmanager.yml]
+    volumes: [./infrastructure/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro]
+    expose: ["9093"]
+    networks: [red-net]
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    expose: ["3000"]
+    networks: [red-net]
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    profiles: [observability]
+    command: [--config.file=/etc/blackbox_exporter/config.yml]
+    volumes: [./infrastructure/observability/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro]
+    networks: [red-net]
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    profiles: [observability]
+    environment:
+      DATA_SOURCE_NAME: postgresql://admin:${DB_PASSWORD:?DB_PASSWORD is required}@db-postgres:5432/red_sovereign?sslmode=disable
+    networks: [red-net]
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    profiles: [observability]
+    environment:
+      REDIS_ADDR: redis://cache-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    networks: [red-net]
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43.1
+    profiles: [observability]
+    command: [--mongodb.uri=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/admin?authSource=admin]
+    networks: [red-net]
+volumes:
+  prometheus-data:
+  grafana-data:

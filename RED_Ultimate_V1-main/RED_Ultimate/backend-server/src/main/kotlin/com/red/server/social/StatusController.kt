@@ -1,13 +1,10 @@
 package com.red.server.social
 
-import com.red.server.auth.model.UserAccount
-import com.red.server.auth.repository.UserAccountRepository
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
-import java.util.UUID
 
 /**
  * 🔴 YOUNES Sovereign Status & Privacy Controller
@@ -16,7 +13,6 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/social")
 class StatusController(
-    private val userAccountRepository: UserAccountRepository,
     private val statusService: UserStatusService
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -28,9 +24,9 @@ class StatusController(
     @GetMapping("/status/{userId}")
     fun getStatus(
         @PathVariable userId: String,
-        @AuthenticationPrincipal requester: UserAccount
+        authentication: Authentication
     ): ResponseEntity<StatusResponse> {
-        val status = statusService.getVisibleStatus(userId, requester.id.toString())
+        val status = statusService.getVisibleStatus(userId, authentication.name)
             ?: return ResponseEntity.ok(StatusResponse(userId, "OFFLINE", null, null))
 
         return ResponseEntity.ok(StatusResponse(
@@ -47,11 +43,11 @@ class StatusController(
     @PutMapping("/status")
     fun updateMyStatus(
         @RequestBody request: UpdateStatusRequest,
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<StatusResponse> {
-        log.info("User {} updating status to {}", user.id, request.type)
-        val updated = statusService.updateStatus(user.id.toString(), request.type, request.customText, request.visibleTo)
-        return ResponseEntity.ok(StatusResponse(user.id.toString(), updated.type, updated.customText, updated.updatedAt))
+        log.info("User {} updating status to {}", authentication.name, request.type)
+        val updated = statusService.updateStatus(authentication.name, request.type, request.customText, request.visibleTo)
+        return ResponseEntity.ok(StatusResponse(authentication.name, updated.type, updated.customText, updated.updatedAt))
     }
 
     /**
@@ -59,9 +55,9 @@ class StatusController(
      */
     @GetMapping("/privacy")
     fun getPrivacySettings(
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<PrivacySettingsResponse> {
-        val settings = statusService.getPrivacySettings(user.id.toString())
+        val settings = statusService.getPrivacySettings(authentication.name)
         return ResponseEntity.ok(settings)
     }
 
@@ -71,10 +67,10 @@ class StatusController(
     @PutMapping("/privacy")
     fun updatePrivacySettings(
         @RequestBody request: PrivacySettingsRequest,
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<PrivacySettingsResponse> {
-        log.info("User {} updating privacy settings", user.id)
-        val updated = statusService.updatePrivacySettings(user.id.toString(), request)
+        log.info("User {} updating privacy settings", authentication.name)
+        val updated = statusService.updatePrivacySettings(authentication.name, request)
         return ResponseEntity.ok(updated)
     }
 
@@ -84,9 +80,9 @@ class StatusController(
      */
     @GetMapping("/online-contacts")
     fun getOnlineContacts(
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<List<OnlineContact>> {
-        val contacts = statusService.getOnlineContacts(user.id.toString())
+        val contacts = statusService.getOnlineContacts(authentication.name)
         return ResponseEntity.ok(contacts)
     }
 }
