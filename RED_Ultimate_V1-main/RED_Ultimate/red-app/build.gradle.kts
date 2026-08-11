@@ -162,6 +162,7 @@ dependencies {
 
     // ─── Biometric — قفل التطبيق بالبصمة/الوجه ────────────────────────────────
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.security.crypto)
 
     testImplementation("junit:junit:4.13.2")
 }
