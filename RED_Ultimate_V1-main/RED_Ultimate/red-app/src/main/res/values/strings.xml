@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ═══════════════════════════════════════════════════════════════
+         YOUNES Sovereign — Central String Resources
+         السلاسل النصية الرئيسية المركزية.
+         ملاحظة: ما زالت معظم النصوص مضمّنة داخل شاشات Compose؛ تم نقل
+         الأساسيات (اسم التطبيق وقنوات الإشعارات) هنا لتحسين قابلية
+         الترجمة والمراجعة. إعادة التوطين الشاملة خارج نطاق هذا التحديث.
+    ═══════════════════════════════════════════════════════════════ -->
+    <string name="app_name">يونس</string>
+
+    <!-- قنوات الإشعارات -->
+    <string name="channel_messages_name">رسائل يونس</string>
+    <string name="channel_messages_desc">إشعارات الرسائل المشفرة</string>
+    <string name="channel_calls_name">مكالمات يونس</string>
+    <string name="channel_calls_desc">إشعارات المكالمات الواردة</string>
+    <string name="channel_service_name">خدمة يونس</string>
+    <string name="channel_service_desc">الاتصال الدائم المشفر</string>
+
+    <!-- إشعارات شائعة -->
+    <string name="notification_ongoing">مكالمة يونس</string>
+    <string name="notification_end">إنهاء</string>
+    <string name="notification_reject">رفض</string>
+    <string name="notification_accept">فتح للقبول</string>
+    <string name="incoming_video_call">مكالمة فيديو واردة</string>
+    <string name="incoming_voice_call">مكالمة صوتية واردة</string>
+</resources>
