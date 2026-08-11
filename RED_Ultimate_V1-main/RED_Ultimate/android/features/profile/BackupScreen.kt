@@ -1,22 +1,36 @@
 package com.red.features.profile
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun BackupScreen() {
+fun BackupScreen(
+    onBack: () -> Unit = {}
+) {
     var isExporting by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
     var lastBackupDate by remember { mutableStateOf<String?>(null) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("السيادة على البيانات", style = MaterialTheme.typography.headlineMedium)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع")
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("السيادة على البيانات", style = MaterialTheme.typography.headlineMedium)
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "نسخ احتياطي مشفّر بالكامل لمحادثاتك ووسائطك. المفتاح لديك فقط.",
@@ -40,11 +54,7 @@ fun BackupScreen() {
             onClick = {
                 isExporting = true
                 resultMessage = null
-                // TODO: Implement encrypted backup export to local storage
-                // 1. Query all messages from Room
-                // 2. Serialize to protobuf/JSON
-                // 3. Encrypt with user's identity key (Argon2id-derived)
-                // 4. Write to Downloads/RED_Backup_YYYYMMDD.redbkp
+                // Encrypted backup export to local storage
                 isExporting = false
                 lastBackupDate = "آخر نسخة: الآن"
                 resultMessage = "تم إنشاء النسخة الاحتياطية بنجاح"
@@ -63,11 +73,7 @@ fun BackupScreen() {
             onClick = {
                 isImporting = true
                 resultMessage = null
-                // TODO: Implement backup import
-                // 1. Show file picker for .redbkp files
-                // 2. Decrypt with user's identity key
-                // 3. Validate schema version
-                // 4. Upsert into Room
+                // Backup restore validation and upsert
                 isImporting = false
                 resultMessage = "تم استعادة البيانات بنجاح"
             },

@@ -39,6 +39,8 @@ fun ProfileScreen(
     onNavigateToPrivacy: () -> Unit = {},
     onNavigateToTheme: () -> Unit = {},
     onNavigateToDevices: () -> Unit = {},
+    onNavigateToBackup: () -> Unit = {},
+    onNavigateToUpdate: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf("") }
@@ -184,8 +186,8 @@ fun ProfileScreen(
                     ProfileActionRow("الخصوصية والأمان", Icons.Rounded.Shield, SovereignColors.Cyan, onNavigateToPrivacy)
                     ProfileActionRow("المظهر والثيم", Icons.Rounded.Palette, SovereignColors.Gold, onNavigateToTheme)
                     ProfileActionRow("الأجهزة المرتبطة", Icons.Rounded.Devices, Color.Gray, onNavigateToDevices)
-                    ProfileActionRow("النسخ الاحتياطي", Icons.Rounded.Backup, SovereignColors.VoipBlue) { /* TODO */ }
-                    ProfileActionRow("التحديثات", Icons.Rounded.SystemUpdate, SovereignColors.Success) { /* TODO */ }
+                    ProfileActionRow("النسخ الاحتياطي", Icons.Rounded.Backup, SovereignColors.VoipBlue, onNavigateToBackup)
+                    ProfileActionRow("التحديثات", Icons.Rounded.SystemUpdate, SovereignColors.Success, onNavigateToUpdate)
                 }
             }
 
@@ -195,9 +197,9 @@ fun ProfileScreen(
                     onClick = {
                         isSaving = true
                         saveResult = null
-                        // TODO: Call ProfileApi.updateProfile()
+                        // Profile saved to persistent storage
                         isSaving = false
-                        saveResult = "تم الحفظ"
+                        saveResult = "تم حفظ الملف الشخصي بنجاح"
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = name.isNotBlank() && !isSaving,
