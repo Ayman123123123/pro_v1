@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 8088",
     "start": "vite --host 0.0.0.0 --port 8088",
-    "mock": "node mock-backend.cjs",
+    "dev:server": "node dev-server/server.cjs",
+    "dev:server:reset": "node dev-server/server.cjs --reset",
+    "mock": "node dev-server/server.cjs",
     "build": "tsc --noEmit && vite build",
     "build:check": "tsc --noEmit",
     "build:fast": "vite build",
@@ -14,6 +16,7 @@
     "check": "npm run check:api && npm run check:guards && npm run build:check",
     "check:api": "node scripts/check-api-contract.mjs",
     "check:guards": "node scripts/check-frontend-guards.mjs",
+    "check:server": "node scripts/check-dev-server.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8088"
   },
   "dependencies": {
