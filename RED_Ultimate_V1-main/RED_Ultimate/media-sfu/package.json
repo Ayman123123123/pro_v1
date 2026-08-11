@@ -4,7 +4,7 @@
   "private": true,
   "description": "Authenticated multi-producer RED WebRTC SFU",
   "main": "server.js",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=24" },
   "dependencies": {
     "mediasoup": "3.24.0",
     "ws": "8.18.3"
