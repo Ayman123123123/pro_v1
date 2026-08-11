@@ -1198,7 +1198,7 @@ private fun ChatHubScreen(
                         IconButton({ onManageGroup(openGroup.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                     }
                 }
-                val groupMessages = decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") }
+                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (groupMessages.isEmpty()) item { Text("محادثة جماعية مشفرة بـSender Keys. يتغير المفتاح تلقائيًا عند تغير العضوية.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
                 items(groupMessages, key = { it.id }) { message ->
