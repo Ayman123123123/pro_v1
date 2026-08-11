@@ -20,7 +20,15 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — feat(media-gallery): معرض وسائط احترافي للفردية والمجموعات
+## 2026-08-11 — fix: فحص عميق آخر — إصلاح ٣ عيوب في الكود الذي أضفته + ٤ فحوصات حارس
+- **AppLock عطل تصريف:** LocalFragmentActivity محذوف من Compose الحديث (BOM 2026.06) → cast من LocalContext
+- **AppLock ثغرة أمنية:** onFailure { onUnlocked() } كان يفتح التطبيق عند أي فشل بصمة → القفل تجميلي
+  → الفشل الآن يبقي التطبيق مقفلاً + onAuthenticationFailed/Error تعرض رسالة + زر معطّل إن لا بصمة
+- **MediaGallery عيب تصميم:** كل خلية قرأت attachments.state (حالة مشتركة واحدة) → كل الصور تظهر نفسها
+  → أزلت فك التشفير من الخلايا (أيقونات نوع نظيفة)؛ فك التشفير عند فتح الرسالة الكاملة
+- حارس التكامل: +4 فحوصات (27 إجمالاً): LocalFragmentActivity / AppLock bypass / MediaGallery shared-state
+- ما تأكد سليماً: لا SQL injection · لا تسريب أسرار في logs · ddl-auto: validate · media-sfu سليم
+- التوثيق: docs/DEEP_AUDIT_2_AR.md
 - RedDao + LocalRepository: `mediaForConversation(convId)` Flow (by type) — أسرع من فلترة الذاكرة
 - MediaGallery.kt (جديد): شبكة صور مصغّرة 3xN + فلترة بالنوع (الكل/صور/فيديو/ملفات/صوت)
   + صور مصغّرة فعلية (فك تشفير E2EE) + شارة تشغيل للفيديو + قائمة للملفات/الصوت

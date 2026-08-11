@@ -139,6 +139,37 @@ check(
     "CoroutineScope محلي لكل نداء = نطاق يتيم لا يموت",
 )
 
+# ─── 12. AppLock: LocalFragmentActivity محذوف من Compose الحديث ─────────
+applock = (RED_APP / "security/AppLockScreen.kt").read_text(encoding="utf-8")
+applock_code = "\n".join(l for l in applock.splitlines() if not l.strip().startswith("//"))
+check(
+    "AppLock: لا LocalFragmentActivity (محذوف من Compose الحديث)",
+    "LocalFragmentActivity" not in applock_code,
+    "استخدم (LocalContext.current) as? FragmentActivity بدلاً منه",
+)
+
+# ─── 13. AppLock: الفشل لا يفتح التطبيق (أمن) ───────────────────────────
+# onUnlocked يجب أن يُستدعى فقط من onAuthenticationSucceeded، لا من onFailure
+check(
+    "AppLock: الفشل لا يفتح التطبيق (القفل إجباري)",
+    "onFailure { onUnlocked() }" not in applock and ".onFailure { onUnlocked() }" not in applock,
+    "onFailure { onUnlocked() } يجعل القفل تجميلياً — أي فشل بصمة يفتح التطبيق",
+)
+check(
+    "AppLock: onAuthenticationSucceeded يفتح التطبيق",
+    "onAuthenticationSucceeded" in applock and "onUnlocked()" in applock,
+    "النجاح وحده يجب أن يفتح التطبيق",
+)
+
+# ─── 14. MediaGallery: لا مشاركة حالة AttachmentViewModel بين الخلايا ────
+gallery = (RED_APP / "features/media/MediaGallery.kt").read_text(encoding="utf-8")
+# قراءة attachments.state في خلية الشبكة = كل الخلايا تعرض نفس الصورة (عيب)
+check(
+    "MediaGallery: لا قراءة attachments.state في خلية الشبكة (حالة مشتركة)",
+    "attachments.state as? AttachmentState.Downloaded" not in gallery,
+    "AttachmentViewModel مصمّم لرسالة واحدة — مشاركته بين الخلايا تعرض نفس الصورة للكل",
+)
+
 
 # ─── الخلاصة ──────────────────────────────────────────────────────────
 print("════════════════════════════════════════════════")

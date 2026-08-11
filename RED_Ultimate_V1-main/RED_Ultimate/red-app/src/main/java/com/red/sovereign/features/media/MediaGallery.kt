@@ -1,6 +1,5 @@
 package com.red.sovereign.features.media
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,15 +40,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.media.AttachmentManifest
-import com.red.sovereign.media.AttachmentState
 import com.red.sovereign.media.AttachmentViewModel
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
@@ -155,7 +151,10 @@ fun MediaGalleryDialog(
     )
 }
 
-/** خلية شبكة: صورة مصغّرة للصور، أيقونة تشغيل للفيديو، مع فك تشفير عند الطلب. */
+/** خلية شبكة: أيقونة نوع واضحة (صورة/فيديو) + شارة تشغيل للفيديو.
+ *  لا نحاول فك تشفير كل صورة هنا — AttachmentViewModel مصمّم لرسالة واحدة،
+ *  ومشاركة حالته بين كل الخلايا تُظهر نفس الصورة لجميع الخلايا (عيب).
+ *  الحل النظيف: أيقونات نوع + النقر يفتح الرسالة الكاملة (حيث يُفك التشفير فعلياً). */
 @Composable
 private fun MediaThumbnail(item: DecryptedMessage, attachments: AttachmentViewModel) {
     val isVideo = item.type == "VIDEO"
@@ -165,24 +164,10 @@ private fun MediaThumbnail(item: DecryptedMessage, attachments: AttachmentViewMo
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // صورة مصغّرة فعلية إن كانت الصورة مُحمّلة (مشفّرة E2EE)
-            val downloadedPath = (attachments.state as? AttachmentState.Downloaded)?.path
-            val bmp = remember(downloadedPath) {
-                if (downloadedPath != null) {
-                    runCatching {
-                        val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
-                        android.graphics.BitmapFactory.decodeFile(downloadedPath, opts)?.asImageBitmap()
-                    }.getOrNull()
-                } else null
-            }
-            if (bmp != null) {
-                Image(bmp, "وسيط", Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-            } else {
-                when (item.type) {
-                    "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(28.dp))
-                    "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow, modifier = Modifier.size(28.dp))
-                    else -> Icon(Icons.Default.InsertDriveFile, null, modifier = Modifier.size(28.dp))
-                }
+            when (item.type) {
+                "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(32.dp))
+                "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow, modifier = Modifier.size(32.dp))
+                else -> Icon(Icons.Default.InsertDriveFile, null, modifier = Modifier.size(28.dp))
             }
             if (isVideo) {
                 // شارة تشغيل فوق الفيديو

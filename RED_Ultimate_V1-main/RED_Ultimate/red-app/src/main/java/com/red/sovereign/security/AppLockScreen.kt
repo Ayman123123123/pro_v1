@@ -26,11 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFragmentActivity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 import androidx.core.content.ContextCompat
@@ -45,8 +45,11 @@ import androidx.core.content.ContextCompat
 @Composable
 fun AppLockScreen(onUnlocked: () -> Unit) {
     val context = LocalContext.current
-    val activity = LocalFragmentActivity.current
+    // LocalFragmentActivity أُزيل من Compose الحديث — النمط القياسي: cast من Context.
+    // MainActivity يرث ComponentActivity الذي يرث FragmentActivity، فالcast آمن.
+    val activity = context as? FragmentActivity
     val executor = ContextCompat.getMainExecutor(context)
+    var statusMessage by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
 
     // فحص توفر البصمة
     val biometricManager = BiometricManager.from(context)
@@ -64,16 +67,30 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
         .build()
 
     fun showPrompt() {
-        if (activity == null) { onUnlocked(); return }
+        if (activity == null) {
+            // لا Activity متاحة — لا نفتح التطبيق (نبقي مقفلاً)، نطلب من المستخدم المحاولة مجدداً
+            statusMessage = "تعذّر بدء المصادقة — حاول مرة أخرى"
+            return
+        }
+        // الأمان: الفشل لا يفتح التطبيق — فقط النجاح هو الذي يفتحه.
         val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 onUnlocked()
             }
+            override fun onAuthenticationFailed() {
+                statusMessage = "بصمة غير صحيحة — حاول مرة أخرى"
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                // خطأ (إلغاء/قفل مؤقت/فشل متكرر) — نبقي التطبيق مقفلاً، نعرض السبب
+                statusMessage = errString.toString().ifBlank { "تعذّرت المصادقة — حاول مرة أخرى" }
+            }
         })
-        runCatching { prompt.authenticate(promptInfo) }.onFailure { onUnlocked() }
+        runCatching { prompt.authenticate(promptInfo) }
+            .onFailure { statusMessage = "تعذّر بدء المصادقة — حاول مرة أخرى" }
+        // لا onUnlocked() عند الفشل — القفل إجباري
     }
 
-    // إطلاق البصمة تلقائياً عند ظهور الشاشة
+    // إطلاق البصمة تلقائياً عند ظهور الشاشة (فقط إن كانت متوفرة)
     LaunchedEffect(Unit) {
         if (canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS) {
             showPrompt()
@@ -104,10 +121,23 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
         Spacer(Modifier.height(32.dp))
         Button(
             { showPrompt() },
-            Modifier.clip(RoundedCornerShape(16.dp))
+            enabled = canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS,
+            modifier = Modifier.clip(RoundedCornerShape(16.dp))
         ) {
             Icon(Icons.Default.Lock, null)
             Text(" فتح بالبصمة")
+        }
+        // رسالة الحالة (فشل/إرشاد) — تبقى التطبيق مقفلاً حتى النجاح
+        statusMessage?.let { msg ->
+            Spacer(Modifier.height(16.dp))
+            Text(msg, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+        }
+        if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "لا توجد بصمة/نمط مُسجّل على الجهاز. فعّل قفل الشاشة من إعدادات Android أولاً.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
+            )
         }
     }
 }
