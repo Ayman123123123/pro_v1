@@ -15,12 +15,15 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.red.sovereign.MainActivity
+import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
@@ -329,20 +332,48 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
+    private var leaving = false
     private fun leave() {
+        if (leaving) return
+        leaving = true
         statsJob?.cancel(); statsJob = null
-        if (roomId.isNotBlank()) signaling.leave(roomId, userId)
-        signaling.close()
-        engine?.release()
-        engine = null
-        ConferenceRuntime.state = ConferenceUiState.Idle
-        ConferenceRuntime.participants = emptyList()
-        ConferenceRuntime.remoteVideos.clear()
-        ConferenceRuntime.localVideo = null
-        ConferenceRuntime.eglContext = null
-        ConferenceRuntime.networkStats = NetworkStats()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        val closingRoomId = roomId
+        val closingUserId = userId
+        // 1) إشارة WebSocket للمغادرة الفورية للغرفة (إبلاغ باقي المشاركين)
+        if (closingRoomId.isNotBlank()) {
+            runCatching { signaling.leave(closingRoomId, closingUserId) }
+        }
+        // 2) إبلاغ الخادم عبر REST لتصفية العداد وتحديث isSpace/public listing
+        //    وتجنب غرف عالقة بعد انقطاع WebSocket. نفذها بمهلة قصيرة لا تعطل إغلاق الخدمة.
+        scope.launch {
+            if (closingRoomId.isNotBlank()) {
+                withTimeoutOrNull(3000) {
+                    runCatching {
+                        val api = AuthorizedApiClient(TokenStore(this@ConferenceService))
+                        // مغادرة عادية
+                        api.request("POST", "/api/conference/$closingRoomId/leave", "{}")
+                        // إذا كان المضيف هو من يغادر، حاول إغلاق الغرفة أيضًا (may fail if not host, ignore)
+                        runCatching { api.request("POST", "/api/conference/$closingRoomId/close", "{}") }
+                    }
+                }
+            }
+            withContext(Dispatchers.Main.immediate) {
+                // 3) تنظيف محلي نهائي
+                signaling.close()
+                engine?.release()
+                engine = null
+                ConferenceRuntime.state = ConferenceUiState.Idle
+                ConferenceRuntime.participants = emptyList()
+                ConferenceRuntime.remoteVideos.clear()
+                ConferenceRuntime.localVideo = null
+                ConferenceRuntime.eglContext = null
+                ConferenceRuntime.networkStats = NetworkStats()
+                ConferenceRuntime.reactions = emptyList()
+                ConferenceRuntime.pinnedMessage = ""
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
     }
 
     private fun showIncomingInvitationNotification(roomId: String, userId: String, inviter: String, isVideo: Boolean) {

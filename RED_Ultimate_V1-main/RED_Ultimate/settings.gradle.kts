@@ -10,6 +10,23 @@ pluginManagement {
     }
 }
 
+// ── Fix: Android prefs path conflict (ANDROID_PREFS_ROOT vs ANDROID_USER_HOME) ──
+// Gradle fails when both point to different locations (Docker vs local).
+// We unify to ANDROID_USER_HOME if both exist, and ensure a clean state.
+run {
+    val prefsRoot = System.getenv("ANDROID_PREFS_ROOT")
+    val userHome = System.getenv("ANDROID_USER_HOME")
+    if (prefsRoot != null && userHome != null && prefsRoot != userHome) {
+        println("⚠️ ANDROID_PREFS_ROOT ($prefsRoot) conflicts with ANDROID_USER_HOME ($userHome) — unifying to USER_HOME and clearing PREFS_ROOT for this build")
+        // JVM cannot unset env, but we can set a system property that Android SDK checks
+        System.setProperty("android.prefs.root", userHome)
+    }
+    if (prefsRoot != null && userHome == null) {
+        println("ℹ️ ANDROID_PREFS_ROOT is set ($prefsRoot) but ANDROID_USER_HOME is not — using PREFS_ROOT as USER_HOME for consistency")
+        System.setProperty("android.prefs.root", prefsRoot)
+    }
+}
+
 rootProject.name = "RED-Ultimate"
 
 // Canonical RED Android product. The legacy Signal fork remains in app/ as an

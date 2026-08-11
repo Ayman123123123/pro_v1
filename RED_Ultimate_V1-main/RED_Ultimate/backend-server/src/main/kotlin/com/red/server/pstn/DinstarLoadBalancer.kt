@@ -287,6 +287,25 @@ class DinstarLoadBalancer(
             // فتبدو الشريحة أبدًا «الأقل استخدامًا» وتُختار دائمًا.
             if (current > 0) current - 1 else 0
         }
+        // أيضًا حرر النسخة المحلية القديمة للتوافق
+        if (gatewayId != null) {
+            portUsage[usageKey(null, port)]?.updateAndGet { if (it > 0) it - 1 else 0 }
+        }
+    }
+
+    /** تحرير لمن وضع البوابة الواحدة (legacy) — يحرر local وكل البوابات التي تحمل نفس المنفذ */
+    fun releasePort(port: Int) {
+        // local
+        releasePort(null, port)
+        // كل البوابات التي لديها نفس المنفذ (for broad cleanup on hangup without gatewayId)
+        portUsage.keys.filter { it.endsWith("#$port") }.forEach { key ->
+            portUsage[key]?.updateAndGet { if (it > 0) it - 1 else 0 }
+        }
+    }
+
+    /** تحرير كل المنافذ العالقة — يستخدمها heartbeat لمنع التعليق */
+    fun releaseAll() {
+        portUsage.forEach { (_, counter) -> counter.set(0) }
     }
 
     @Deprecated("استخدم selectPort التي تراعي الأسطول وصلاحية الإشارة",
