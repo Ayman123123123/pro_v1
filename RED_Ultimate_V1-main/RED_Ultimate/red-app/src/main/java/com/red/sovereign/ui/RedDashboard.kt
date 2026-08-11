@@ -890,10 +890,14 @@ private fun ChatHubScreen(
                         }
                         directory.requests.forEach { request ->
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Avatar(request.requester.displayName.take(1)); Column(Modifier.weight(1f).padding(horizontal = 9.dp)) { Text(request.requester.displayName, color = Color.White); Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp) }
-                                    TextButton({ directory.resolve(request, false) }) { Text("رفض", color = Color.Gray) }
-                                    Button({ directory.resolve(request, true) }, colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول") }
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(request.requester.displayName.take(1))
+                                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                        Text(request.requester.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                        Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("رفض", color = Color.Gray) }
+                                    Button({ directory.resolve(request, true) }, Modifier.height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول", color = Color(0xFF002118)) }
                                 }
                             }
                         }
@@ -924,9 +928,22 @@ private fun ChatHubScreen(
                             )
                     }
                     items(sortedContacts, key = { it.redId }) { person ->
-                        Column(Modifier.widthIn(max = 86.dp).clickable { target = person.redId }, horizontalAlignment = Alignment.CenterHorizontally) {
-                            Avatar(person.displayName.take(1)); Text(person.displayName, maxLines = 1, fontSize = 11.sp); Text("@${person.username}", color = AqyalCyanGlow, maxLines = 1, fontSize = 9.sp)
-                            IconButton({ selectedContact = person }, Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(16.dp)) }
+                        val online = directory.isOnline(person.redId)
+                        Card(
+                            Modifier.widthIn(max = 150.dp).clickable { target = person.redId },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(contentAlignment = Alignment.BottomEnd) {
+                                    Avatar(person.displayName.take(1))
+                                    if (online) Box(Modifier.size(12.dp).clip(CircleShape).background(Color(0xFF00C98C)).border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(person.displayName, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, overflow = TextOverflow.Ellipsis)
+                                Text(if (online) "متصل" else "@${person.username}", color = if (online) YounesEmerald else AqyalCyanGlow, maxLines = 1, fontSize = 10.sp)
+                                IconButton({ selectedContact = person }, Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
                         }
                     }
                 }
