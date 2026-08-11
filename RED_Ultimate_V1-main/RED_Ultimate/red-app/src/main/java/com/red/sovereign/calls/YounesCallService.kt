@@ -88,6 +88,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 outgoingPending = true
                 target = intent.getStringExtra(EXTRA_TARGET).orEmpty(); mode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
                 require(target.isNotBlank()); callId = UUID.randomUUID().toString()
+                // ضبط الحالة فوراً ليظهر الـ overlay والتبويب الصحيح بلا تأخير
+                CallRuntime.state = CallUiState.Connecting(callId, target, mode)
                 scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); signaling.connect()
             }
