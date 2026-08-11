@@ -200,12 +200,23 @@ fun SovereignGroupInfoScreen(
                 Icon(Icons.Rounded.ArrowBack, null, tint = Color.White)
             }
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(Modifier.size(68.dp), shape = CircleShape, color = SovereignColors.SurfaceNavy) {
+                // أيقونة/صورة المجموعة
+                group?.let { g ->
+                    androidx.compose.runtime.LaunchedEffect(g.avatarUrl) { groups.loadAvatar(g) }
+                    val avatarImg = groups.avatars[g.id]
+                    if (avatarImg != null) {
+                        androidx.compose.foundation.Image(avatarImg, g.name, Modifier.size(68.dp).clip(CircleShape), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                    } else {
+                        Surface(Modifier.size(68.dp), shape = CircleShape, color = SovereignColors.SurfaceNavy) {
+                            Box(contentAlignment = Alignment.Center) { Text(g.name.take(1), color = SovereignColors.Cyan, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                } ?: Surface(Modifier.size(68.dp), shape = CircleShape, color = SovereignColors.SurfaceNavy) {
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Groups, null, tint = SovereignColors.Cyan, modifier = Modifier.size(36.dp)) }
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(group?.name ?: "المجموعة", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(group?.name ?: "المجموعة", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                     Text(group?.description?.takeIf(String::isNotBlank) ?: "مجموعة مشفرة", fontSize = 13.sp, color = Color.Gray, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.Lock, null, tint = SovereignColors.Success, modifier = Modifier.size(14.dp))
