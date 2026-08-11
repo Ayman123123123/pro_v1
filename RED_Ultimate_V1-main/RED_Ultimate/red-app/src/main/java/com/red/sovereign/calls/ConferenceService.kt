@@ -98,14 +98,14 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 }
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
         scope.launch {
             engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
             ConferenceRuntime.eglContext = engine?.eglContext
-            engine?.create(ConferenceRuntime.isVideoEnabled)
+            engine?.create(ConferenceRuntime.isVideoEnabled, simulcastEnabled = true, svc = true)
             ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled)
         }

@@ -58,6 +58,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var remoteDescriptionSet = false
     private var proximityLock: PowerManager.WakeLock? = null
     private var ringtone: Ringtone? = null
+    private var reconnect: CallReconnectManager? = null
     private var vibrator: Vibrator? = null
     private var audioFocus: AudioFocusRequest? = null
     private var recordingManager: CallRecordingManager? = null
@@ -70,6 +71,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         signaling = CallSignalingClient(this, TokenStore(this), this)
         val sensors = getSystemService(SensorManager::class.java)
         sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        // إعادة اتصال تلقائية عند انقطاع الإشارة (بدل إنهاء المكالمة)
+        reconnect = CallReconnectManager(
+            scope = scope,
+            onReconnect = {
+                runCatching { signaling.connect() }
+            },
+            onFailure = { fail("انقطع اتصال الإشارة") }
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -107,7 +116,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             ACTION_STOP_RECORDING -> stopRecording()
             ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
@@ -230,7 +239,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) = fail(message)
-    override fun onDisconnected() { if (CallRuntime.state !is CallUiState.Idle) fail("انقطع اتصال الإشارة") }
+    override fun onDisconnected() {
+        // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً
+        if (CallRuntime.state !is CallUiState.Idle) {
+            updateNotification("انقطع الاتصال — جارٍ إعادة الاتصال…")
+            reconnect?.start()
+        }
+    }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
 

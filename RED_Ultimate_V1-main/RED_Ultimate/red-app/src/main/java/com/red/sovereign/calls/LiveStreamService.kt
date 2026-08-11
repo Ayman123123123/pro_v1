@@ -80,7 +80,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                 engine?.setCameraEnabled(!isVideoOn)
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onConnected() {
@@ -88,7 +88,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
             // Live streaming needs HD + simulcast for adaptive quality to viewers
-            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster)
+            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster, svc = isBroadcaster)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
             }
