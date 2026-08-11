@@ -374,7 +374,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE }
     )
-    if (showSettings) YounesSettingsSheet(account, settings, viewModel::logout) { showSettings = false }
+    if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
 
     // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
@@ -1356,7 +1356,11 @@ private fun ChatHubScreen(
                         ) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 if (!message.outgoing) {
-                                    val nameColors = listOf(Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF3F51B5), Color(0xFF00BCD4), Color(0xFFFF9800), Color(0xFF795548))
+                                    // ألوان هادئة ومتناسقة مع الهوية (لا مهرجان ألوان)
+                                    val nameColors = listOf(
+                                        Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674), Color(0xFFC9A7E8),
+                                        Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
+                                    )
                                     val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
                                     Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
