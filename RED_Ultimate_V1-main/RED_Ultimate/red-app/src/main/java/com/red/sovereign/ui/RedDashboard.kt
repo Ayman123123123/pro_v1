@@ -284,7 +284,15 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
                 }
             )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, memberCount = selectedGroupMemberCount, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.GROUP_INFO -> {
+                val infoGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
+                SovereignGroupInfoScreen(
+                    group = infoGroup,
+                    groups = groups,
+                    friends = directory.contacts,
+                    onBack = { currentScreen = SovereignScreen.DASHBOARD }
+                )
+            }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
