@@ -70,7 +70,10 @@ fun ContactsScreen(
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ContactActionRow(Icons.Rounded.GroupAdd, AqyalGold, "مجموعة جديدة", "أنشئ مجموعة مشفرة") { onCreateGroup() }
                     ContactActionRow(Icons.Rounded.PersonAdd, YounesEmerald, "جهة اتصال جديدة", "أضف عبر RED ID أو username") { showQrScanner = true }
-                    ContactActionRow(Icons.Default.Share, AqyalCyanGlow, "دعوة عبر RED ID", "شارك $myRedId") { showShareSheet = true }
+                    ContactActionRow(
+                        Icons.Default.Share, AqyalCyanGlow, "دعوة عبر RED ID",
+                        if (myRedId.isNotBlank()) "شارك $myRedId" else "هويتك غير متاحة — سجّل الدخول أولًا"
+                    ) { if (myRedId.isNotBlank()) showShareSheet = true }
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("بحث في جهات الاتصال...") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true, shape = RoundedCornerShape(14.dp))
                 }
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -127,11 +130,13 @@ fun ContactsScreen(
         )
     }
 
-    // Share RED ID Sheet — بمعرّف المستخدم الحقيقي من الجلسة المحلية
-    if (showShareSheet) {
+    // مشاركة RED ID — بمعرّف المستخدم الحقيقي من الجلسة المحلية.
+    // لا يُعرض معرّف وهمي عند غياب الجلسة: مشاركة "YNS-XXXX-XXXX" تعني أن
+    // المستقبِل لا يستطيع إضافتك، وهو فشل صامت أسوأ من رسالة صريحة.
+    if (showShareSheet && myRedId.isNotBlank()) {
         ShareRedIdSheet(
             onDismiss = { showShareSheet = false },
-            redId = myRedId.ifBlank { "YNS-XXXX-XXXX" },
+            redId = myRedId,
             displayName = myUsername.ifBlank { "مستخدم يونس" }
         )
     }

@@ -242,10 +242,113 @@ CREATE TABLE IF NOT EXISTS kv (
   value TEXT NOT NULL
 );
 
+/* ───────── جداول التطبيق (red-app) — نفس القاعدة التي تقرأها اللوحة ─────────
+   مصدرها: ContactService (red_contacts/contact_requests/blocks) و
+   PublicDirectoryController و FeedModels.kt و GroupModels.kt و
+   CallHistoryModels.kt. المستخدم الذي يعتمده المسؤول في اللوحة يصبح فورًا
+   قابلًا للاكتشاف في دليل التطبيق — هذا هو الربط الفعلي بين الثلاثة. */
+
+CREATE TABLE IF NOT EXISTS contacts (
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contact_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (owner_id, contact_id)
+);
+
+CREATE TABLE IF NOT EXISTS contact_requests (
+  id TEXT PRIMARY KEY,
+  requester_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contact_blocks (
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (owner_id, blocked_id)
+);
+
+/* مفاتيح الجهاز العامة فقط — المفاتيح الخاصة لا تغادر الهاتف إطلاقًا */
+CREATE TABLE IF NOT EXISTS device_prekeys (
+  device_id TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+  registration_id INTEGER NOT NULL,
+  protocol_device_id INTEGER NOT NULL,
+  identity_key TEXT NOT NULL,
+  signed_pre_key_id INTEGER NOT NULL,
+  signed_pre_key TEXT NOT NULL,
+  signed_pre_key_signature TEXT NOT NULL,
+  kyber_pre_key_id INTEGER NOT NULL,
+  kyber_pre_key TEXT NOT NULL,
+  kyber_pre_key_signature TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS posts (
+  id TEXT PRIMARY KEY,
+  author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  visibility TEXT NOT NULL DEFAULT 'LOCAL_YEMEN',
+  kind TEXT NOT NULL DEFAULT 'POST',
+  parent_id TEXT,
+  quote_post_id TEXT,
+  hashtags TEXT NOT NULL DEFAULT '[]',
+  mentions TEXT NOT NULL DEFAULT '[]',
+  poll TEXT,
+  reply_count INTEGER NOT NULL DEFAULT 0,
+  repost_count INTEGER NOT NULL DEFAULT 0,
+  is_hidden INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  edited_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS post_reactions (
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  PRIMARY KEY (post_id, user_id, type)
+);
+
+CREATE TABLE IF NOT EXISTS groups_tbl (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  avatar_url TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES groups_tbl(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'MEMBER',
+  joined_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS call_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  peer_id TEXT NOT NULL,
+  peer_label TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  type TEXT NOT NULL,
+  route TEXT NOT NULL DEFAULT 'RED',
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  answered_at TEXT,
+  ended_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+CREATE INDEX IF NOT EXISTS idx_contacts_owner ON contacts(owner_id);
+CREATE INDEX IF NOT EXISTS idx_requests_recipient ON contact_requests(recipient_id, status);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_members_group ON group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_calls_user ON call_history(user_id, started_at DESC);
 `);
 
 // ───────────────────── سلطة الهوية: مفاتيح ECDSA ─────────────────────
@@ -328,6 +431,11 @@ function seedIfEmpty() {
     (id,user_id,device_name,platform,identity_fingerprint,status,authorization_certificate,certificate_expires_at,created_at,approved_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)`);
 
+  /**
+   * معرّفات RED بصيغة الخادم الحقيقية: YNS-XXXX-XXXX من أبجدية
+   * RedIdGenerator.kt نفسها (بلا 0/1/I/O لمنع اللبس البصري).
+   * ثابتة عمدًا كي تبقى قابلة للرجوع إليها في التوثيق والفحوص.
+   */
   const people = [
     ['younes_sovereign', 'يونس السيادي', 'APPROVED', 'ADMIN', 1, 100, 0],
     ['ahmed_dev', 'أحمد المطور', 'PENDING', 'USER', 0, 0, 1],
@@ -341,11 +449,17 @@ function seedIfEmpty() {
     ['layla_n', 'ليلى ناصر', 'PENDING', 'USER', 0, 0, 0],
   ];
 
+  const SEED_RED_IDS = [
+    'YNS-7K4M-82QX', 'YNS-QD3T-9WHB', 'YNS-5NRF-KC72', 'YNS-J8PV-34XD', 'YNS-2GHS-QM9L',
+    'YNS-BT6W-PZ48', 'YNS-9XLC-K5RT', 'YNS-M42D-HV7N', 'YNS-P7QB-3JKF', 'YNS-46VZ-TSGW',
+  ];
+
   people.forEach(([username, displayName, status, role, pstn, limit, daysAgo], i) => {
     const id = uuid();
+    const redId = SEED_RED_IDS[i];
     const created = iso(daysAgo, i);
     insertUser.run(
-      id, `RED-${1000 + i * 7}`, username, displayName, status, role, pstn, limit,
+      id, redId, username, displayName, status, role, pstn, limit,
       created, created,
       status === 'APPROVED' ? created : null,
       status === 'APPROVED' ? iso(0, i) : null
@@ -360,7 +474,7 @@ function seedIfEmpty() {
     let certExp = null;
     if (deviceStatus === 'APPROVED') {
       const issued = issueDeviceCertificate(
-        { id, red_id: `RED-${1000 + i * 7}` },
+        { id, red_id: redId },
         { id: deviceId, identity_fingerprint: fingerprint }
       );
       cert = issued.compact;
@@ -508,6 +622,66 @@ function seedIfEmpty() {
       groupsCreated: 3 + (i % 3),
       storageUsedBytes: (240 + i * 2) * 1073741824,
     }));
+  }
+
+  // ───────── بيانات التطبيق: جهات اتصال ومنشورات ومجموعات ومكالمات ─────────
+  // مبنية على المستخدمين المعتمدين أنفسهم، فما يعتمده المسؤول يظهر في التطبيق.
+  const approved = db.prepare("SELECT * FROM users WHERE status='APPROVED' ORDER BY created_at").all();
+  const byName = (u) => approved.find((x) => x.username === u);
+  const owner = byName('younes_sovereign');
+
+  if (owner && approved.length > 2) {
+    const insContact = db.prepare('INSERT OR IGNORE INTO contacts (owner_id,contact_id,created_at) VALUES (?,?,?)');
+    // شبكة جهات اتصال متبادلة بين كل المعتمدين
+    approved.forEach((a) => approved.forEach((b) => {
+      if (a.id !== b.id) insContact.run(a.id, b.id, iso(5));
+    }));
+
+    const insReq = db.prepare('INSERT INTO contact_requests (id,requester_id,recipient_id,status,created_at) VALUES (?,?,?,?,?)');
+    const sara = byName('sara_ops'); const khaled = byName('khaled_m');
+    if (sara && khaled) {
+      db.prepare('DELETE FROM contacts WHERE owner_id=? AND contact_id=?').run(owner.id, khaled.id);
+      db.prepare('DELETE FROM contacts WHERE owner_id=? AND contact_id=?').run(khaled.id, owner.id);
+      insReq.run(uuid(), khaled.id, owner.id, 'PENDING', iso(0, 3));
+    }
+
+    const insPost = db.prepare(`INSERT INTO posts (id,author_id,text,visibility,kind,hashtags,mentions,poll,reply_count,repost_count,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const insReact = db.prepare('INSERT OR IGNORE INTO post_reactions (post_id,user_id,type) VALUES (?,?,?)');
+    const feed = [
+      [owner, 'شبكة RED السيادية تعمل بالكامل دون شرائح اتصال. الهوية معرّف RED فقط.', ['سيادة_رقمية', 'RED'], 0],
+      [byName('sara_ops'), 'تم تفعيل التشفير الطرفي لمجموعات العمل هذا الأسبوع.', ['تشفير'], 3],
+      [byName('omar_t'), 'جودة المكالمات عبر WebRTC ممتازة حتى على شبكة ضعيفة.', ['مكالمات'], 9],
+      [byName('fahd_k'), 'من يريد الانضمام لمجموعة المطورين؟ أرسلوا طلب عبر RED ID.', ['تطوير'], 22],
+    ];
+    feed.forEach(([author, text, tags, hoursAgo], i) => {
+      if (!author) return;
+      const pid = uuid();
+      insPost.run(pid, author.id, text, 'LOCAL_YEMEN', 'POST', JSON.stringify(tags), '[]', null, 0, 0, iso(0, hoursAgo));
+      approved.slice(0, 2 + (i % 3)).forEach((u) => insReact.run(pid, u.id, i % 2 === 0 ? 'LIKE' : 'FIRE'));
+    });
+
+    const insGroup = db.prepare('INSERT INTO groups_tbl (id,name,description,owner_id,created_at) VALUES (?,?,?,?,?)');
+    const insMember = db.prepare('INSERT INTO group_members (id,group_id,user_id,role,joined_at) VALUES (?,?,?,?,?)');
+    [['فريق العمليات', 'تنسيق العمليات اليومية'], ['مطوّرو RED', 'نقاشات تقنية مشفّرة']]
+      .forEach(([name, desc], gi) => {
+        const gid = uuid();
+        insGroup.run(gid, name, desc, owner.id, iso(7 - gi));
+        insMember.run(uuid(), gid, owner.id, 'OWNER', iso(7 - gi));
+        approved.filter((u) => u.id !== owner.id).slice(0, 3).forEach((u) =>
+          insMember.run(uuid(), gid, u.id, 'MEMBER', iso(6 - gi)));
+      });
+
+    const insCall = db.prepare(`INSERT INTO call_history (id,user_id,peer_id,peer_label,direction,type,route,status,started_at,answered_at,ended_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    approved.filter((u) => u.id !== owner.id).slice(0, 4).forEach((peer, i) => {
+      const started = iso(0, i * 5 + 1);
+      const answered = i % 3 === 0 ? null : started;
+      insCall.run(uuid(), owner.id, peer.red_id, peer.display_name,
+        i % 2 === 0 ? 'OUTGOING' : 'INCOMING', i % 3 === 0 ? 'VIDEO' : 'AUDIO', 'RED',
+        answered ? 'ANSWERED' : 'MISSED', started, answered,
+        answered ? new Date(Date.parse(started) + 180000).toISOString() : null);
+    });
   }
 
   return true;

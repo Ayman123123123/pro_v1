@@ -192,7 +192,16 @@ const dinstarSlots = () =>
 
 // ───────────────────────────── التوجيه ─────────────────────────────
 const routes = [];
+/**
+ * التسجيل الأول يفوز عند التطابق. المسارات المعرّفة في هذا الملف تُسجَّل
+ * قبل مسارات التطبيق، فيستطيع `/api/auth/login` هنا أن يغلّف نسخة التطبيق
+ * (يضيف فتح جلسة إدارية) دون أن تتعارض النسختان.
+ */
 const on = (method, pattern, handler) => routes.push({ method, pattern, handler });
+
+// مسارات تطبيق الهاتف (red-app) على نفس القاعدة — تُسجَّل في نهاية الملف
+// بعد مسارات اللوحة، لتغطية /api/contacts/* و/api/feed/* و/api/groups/* إلخ.
+const appRoutes = require('./app-routes.cjs');
 const ok = (data) => ({ status: 200, data });
 const notFound = (error = 'NOT_FOUND') => ({ status: 404, data: { error } });
 
@@ -211,80 +220,31 @@ function match(pattern, pathname) {
 // ── الصحة والمصادقة ──
 on('GET', '/health', () => ok({ status: 'UP', service: 'red-dev-server', db: 'sqlite', timestamp: nowIso() }));
 on('GET', '/sfu-health', () => ok({ status: 'UP', workers: 4, rooms: 2, peers: 5 }));
-on('POST', '/api/auth/login', (_p, _q, body, ctx) => {
-  const admin = adminRow();
-  // كل دخول يفتح جلسة إدارية حقيقية تظهر في صفحة الجلسات ويمكن إنهاؤها
-  run(`INSERT INTO admin_sessions (id,admin_id,admin_username,ip_address,user_agent,is_current,created_at,last_activity_at,expires_at)
-       VALUES (?,?,?,?,?,1,?,?,?)`,
-    uuid(), admin.id, admin.username, ctx?.ip || '127.0.0.1', ctx?.userAgent || 'dev-client',
-    nowIso(), nowIso(), new Date(Date.now() + 12 * 3600000).toISOString());
-  recordAudit({ adminId: admin.id, action: 'ADMIN_LOGIN', category: 'SECURITY', description: 'دخول المسؤول' });
-  return ok({
-    accessToken: `dev.access.${Date.now()}`,
-    refreshToken: `dev.refresh.${Date.now()}`,
-    user: { id: admin.id, username: body?.username || admin.username, role: 'ADMIN', displayName: admin.display_name },
-  });
-});
-on('POST', '/api/auth/refresh', () =>
-  ok({ accessToken: `dev.access.${Date.now()}`, refreshToken: `dev.refresh.${Date.now()}` }));
-
 /**
- * التسجيل — الطريق الوحيد الذي يظهر به مستخدم في "الموافقات المعلقة".
- * منقول عن RegistrationService.register: بلا رقم هاتف ولا بريد ولا OTP،
- * والحساب والجهاز كلاهما PENDING حتى موافقة المسؤول.
+ * تسجيل الدخول الموحّد — نفس المسار الذي يستخدمه التطبيق واللوحة، تمامًا
+ * كما في الخادم الحقيقي (AuthController واحد لا اثنان).
+ *
+ * كان هذا سببًا مباشرًا لعطل «لا يوجد RED ID في التطبيق»: النسخة السابقة
+ * كانت تُرجع دائمًا حساب المسؤول وبلا حقل redId إطلاقًا، بينما
+ * red-app/auth/AuthModels.kt يُعرّف UserResponse.redId كحقل إلزامي — فيفشل
+ * فك الترميز ويبقى TokenStore.redId فارغًا في كل شاشات التطبيق.
+ *
+ * التفويض الحقيقي في appRoutes.loginAccount: يتحقق من المستخدم المطلوب،
+ * ويمنع غير المعتمدين، ويعيد UserResponse كاملًا بـ redId.
  */
-const USERNAME_RE = /^[a-zA-Z][a-zA-Z0-9_.]{2,31}$/;
-const COMMON_PASSWORDS = new Set([
-  '123456789012', 'password1234', 'qwerty123456', 'admin12345678',
-  'younes123456', 'red123456789', '111111111111', '000000000000',
-]);
-
-const nextRedId = () => {
-  const max = all("SELECT red_id FROM users WHERE red_id LIKE 'RED-%'")
-    .reduce((m, r) => Math.max(m, Number(r.red_id.slice(4)) || 0), 999);
-  return `RED-${max + 7}`;
-};
-
-on('POST', '/api/auth/register', (_p, _q, b) => {
-  const username = String(b?.username || '').trim().toLowerCase();
-  const displayName = String(b?.displayName || '').trim();
-  const password = String(b?.password || '');
-  const bad = (error) => ({ status: 400, data: { error } });
-
-  if (!USERNAME_RE.test(username)) return bad('Username must be 3-32 characters and contain only letters, numbers, dot or underscore');
-  if (displayName.length < 2 || displayName.length > 100) return bad('Display name must be 2-100 visible characters');
-  if (password.length < 12 || password.length > 128) return bad('Password must contain 12-128 characters');
-  if (password.toLowerCase().includes(username)) return bad('Password must not contain the username');
-  if (COMMON_PASSWORDS.has(password.toLowerCase())) return bad('Password is too common');
-  if (get('SELECT id FROM users WHERE lower(username) = ?', username)) return bad('Username is already registered');
-
-  const id = uuid();
-  const ts = nowIso();
-  const redId = nextRedId();
-  run(`INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at)
-       VALUES (?,?,?,?,'PENDING','USER',0,0,?,?)`, id, redId, username, displayName, ts, ts);
-
-  // بصمة هوية الجهاز فقط — المفاتيح الخاصة لا تغادر الجهاز أبدًا
-  const dev = b?.device || {};
-  const fingerprint = (crypto.createHash('sha256')
-    .update(String(dev.identityKey || username)).digest('hex').slice(0, 60).match(/.{5}/g) || []).join(' ');
-  const deviceId = uuid();
-  run(`INSERT INTO devices (id,user_id,device_name,platform,identity_fingerprint,status,created_at)
-       VALUES (?,?,?,?,?,'PENDING',?)`,
-    deviceId, id, dev.deviceName || 'جهاز جديد', dev.platform || 'ANDROID', fingerprint, ts);
-
-  recordAudit({ action: 'ACCOUNT_REGISTERED', category: 'USER', targetType: 'USER', targetId: id,
-    description: `${redId} — بانتظار موافقة المسؤول` });
-
-  return ok({
-    status: 'PENDING',
-    user: userDto(get('SELECT * FROM users WHERE id = ?', id)),
-    deviceId,
-    recoveryCodes: Array.from({ length: 6 }, () => crypto.randomBytes(5).toString('hex').toUpperCase()),
-    message: 'ACCOUNT_PENDING_ADMIN_APPROVAL',
-  });
+on('POST', '/api/auth/login', (_p, _q, body, ctx) => {
+  const result = appRoutes.loginAccount(body);
+  // الدخول الإداري الناجح يفتح جلسة تظهر في صفحة الجلسات ويمكن إنهاؤها
+  if (result.status === 200 && result.data?.user?.role === 'ADMIN' && result.data.accessToken) {
+    const u = result.data.user;
+    run(`INSERT INTO admin_sessions (id,admin_id,admin_username,ip_address,user_agent,is_current,created_at,last_activity_at,expires_at)
+         VALUES (?,?,?,?,?,1,?,?,?)`,
+      uuid(), u.id, u.username, ctx?.ip || '127.0.0.1', ctx?.userAgent || 'dev-client',
+      nowIso(), nowIso(), new Date(Date.now() + 12 * 3600000).toISOString());
+    recordAudit({ adminId: u.id, action: 'ADMIN_LOGIN', category: 'SECURITY', description: 'دخول المسؤول' });
+  }
+  return result;
 });
-on('POST', '/api/auth/logout', () => ok({ success: true }));
 on('POST', '/api/admin/ws-ticket', () =>
   ok({ ticket: crypto.randomBytes(32).toString('base64url'), expiresInSeconds: 30 }));
 
@@ -506,8 +466,7 @@ on('GET', '/api/admin/security/device-certificate/:deviceId', (p) => {
   if (!dev.authorization_certificate) return ok({ valid: false, reason: 'NO_CERTIFICATE', status: dev.status });
   return ok({ ...d.verifyDeviceCertificate(dev.authorization_certificate), status: dev.status });
 });
-on('GET', '/api/identity/authority', () =>
-  ok({ publicKey: d.identityAuthority().publicKeyBase64, algorithm: 'SHA256withECDSA', curve: 'prime256v1' }));
+// /api/identity/authority معرّف في app-routes.cjs (يستخدمه التطبيق واللوحة معًا)
 
 // ── أعلام الميزات ──
 on('GET', '/api/admin/feature-flags', () =>
@@ -797,6 +756,9 @@ on('PUT', '/api/social/privacy', () => ok({ success: true }));
 on('PUT', '/api/social/status', () => ok({ success: true }));
 on('GET', '/api/social/status/:userId', (p) => ok({ userId: p.userId, type: 'ONLINE', customText: null }));
 
+// مسارات التطبيق تُسجَّل الآن — بعد كل مسارات اللوحة أعلاه.
+appRoutes(on);
+
 // ───────────────────────────── الخادم ─────────────────────────────
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -817,7 +779,7 @@ const server = http.createServer((req, res) => {
         const params = match(route.pattern, parsed.pathname);
         if (!params) continue;
         const result = route.handler(params, parsed.searchParams, body, {
-          ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'],
+          ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'], headers: req.headers,
         });
         res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8' });
         return res.end(JSON.stringify(result.data));
