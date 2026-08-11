@@ -140,7 +140,19 @@ class DinstarConnectionFactory(
          * المنافذ يُشتق من الطراز بدل تثبيته على 8.
          */
         @Suppress("UNCHECKED_CAST")
-        fun getPortInfo(portCount: Int = 8): List<Map<String, Any?>> {
+        fun getPortInfo(portCount: Int = 8): List<Map<String, Any?>> =
+            queryPorts(portCount).ports
+
+        /**
+         * استعلام المنافذ مع الاحتفاظ بالرقم التسلسلي.
+         *
+         * توثيق `get_port_info` (§10.3) ينص على أن **كل استجابة تحمل
+         * حقل `sn`** = الرقم التسلسلي للبوابة. كان يُهمَل ويُقرأ التسلسلي
+         * من `get_status` وحده، وهو أمر لا تدعمه الإصدارات الأقدم من
+         * 1102 — فتفقد تلك الأجهزة هويتها الثابتة وتُعرَّف بعنوانها
+         * الشبكي الذي يتبدّل مع DHCP.
+         */
+        fun queryPorts(portCount: Int = 8): PortQuery {
             val response = getJson(
                 "/api/get_port_info",
                 mapOf(
@@ -149,10 +161,21 @@ class DinstarConnectionFactory(
                 )
             )
             require(isSuccess(response)) { "DINSTAR get_port_info failed on $endpointLabel" }
-            return response["info"] as? List<Map<String, Any?>> ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val ports = response["info"] as? List<Map<String, Any?>> ?: emptyList()
+            return PortQuery(
+                ports = ports,
+                serialNumber = response["sn"]?.toString()?.takeIf { it.isNotBlank() }
+            )
         }
 
         fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
+
+        /** نتيجة استعلام المنافذ مع هوية الجهاز المرافقة. */
+        data class PortQuery(
+            val ports: List<Map<String, Any?>>,
+            val serialNumber: String?
+        )
 
         private fun execute(request: Request): Map<String, Any?> {
             val withAccept = request.newBuilder().header("Accept", "application/json").build()

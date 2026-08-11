@@ -425,6 +425,45 @@ await check('قرارات التوجيه تُسجَّل بلا كشف رقم ا�
   return `${decisions.length} قرارًا — البادئة فقط`;
 });
 
+
+await check('التعرّف على الجهاز يجمع إشارات مستقلة لا ردًّا واحدًا', async () => {
+  // جهاز بعنوان MAC ضمن نطاق Dinstar المسجّل ⇒ ثقة كاملة
+  const withMac = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.1' })).data;
+  assert(withMac.reachable === true, 'البوابة المعروفة يجب أن تكون قابلة للوصول');
+  assert(withMac.confidence === 100, `ثقة متوقعة 100 لا ${withMac.confidence}`);
+  assert(withMac.signals.length >= 4, 'يجب رصد أربع إشارات على الأقل');
+  assert(withMac.signals.some((x) => x.includes('F8:A0:3D')),
+    'لم تُرصد بادئة OUI المسجّلة لـ Dinstar');
+  assert(withMac.adoptable === true, 'جهاز بثقة كاملة يجب أن يكون قابلًا للضم');
+
+  // جهاز بلا MAC: الثقة تنخفض لكنه يبقى قابلًا للضم — غياب MAC
+  // وارد خلف NAT ولا يصح أن يمنع التعرّف
+  const noMac = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.3' })).data;
+  assert(noMac.confidence === 80, `ثقة متوقعة 80 بلا MAC لا ${noMac.confidence}`);
+  assert(noMac.adoptable === true, 'غياب MAC وحده يجب ألا يمنع الضم');
+  assert(!noMac.signals.some((x) => x.includes('MAC')), 'لا يصح رصد إشارة MAC وهو غائب');
+
+  // عنوان لا جهاز عليه
+  const absent = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.99' })).data;
+  assert(absent.reachable === false, 'عنوان بلا جهاز يجب ألا يكون قابلًا للوصول');
+  assert(absent.confidence === 0, 'عنوان بلا جهاز يجب أن تكون ثقته صفرًا');
+
+  return `100 مع MAC · 80 بدونه · 0 لعنوان فارغ`;
+});
+
+await check('الرقم التسلسلي هو هوية البوابة لا عنوانها الشبكي', async () => {
+  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
+  assert(fleet.length >= 2, 'يلزم جهازان على الأقل');
+  const serials = fleet.map((g) => g.serialNumber).filter(Boolean);
+  assert(serials.length >= 2, 'البوابات يجب أن تُفصح عن أرقام تسلسلية');
+  assert(new Set(serials).size === serials.length, 'الأرقام التسلسلية ليست فريدة');
+  // العنوان يتبدّل مع DHCP؛ التسلسلي ثابت مدى حياة الجهاز
+  const macs = fleet.map((g) => g.macAddress).filter(Boolean);
+  assert(macs.every((m) => /^F8:A0:3D:/i.test(m)),
+    'عنوان MAC خارج نطاق Dinstar المسجّل');
+  return `${serials.length} رقمًا تسلسليًا فريدًا · ${macs.length} عنوان MAC ضمن نطاق Dinstar`;
+});
+
 console.log(`\n${'─'.repeat(60)}`);
 if (fail === 0) {
   console.log(`🎉 نجحت كل الفحوص: ${pass}/${pass} — التطبيق والخادم واللوحة على قاعدة واحدة`);

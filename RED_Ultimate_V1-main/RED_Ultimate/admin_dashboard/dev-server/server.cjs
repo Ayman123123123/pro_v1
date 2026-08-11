@@ -746,6 +746,33 @@ on('POST', '/api/admin/dinstar/ports/:port/ussd', (p, _q, b) => {
 
 // ── أسطول DINSTAR: عدة أجهزة ──
 /** عناوين RFC 1918 + الاسترجاع — نطاق الإدارة المسموح للبوابات. */
+/**
+ * OUI المسجّلة رسميًا لـ Dinstar Technologies في سجل IEEE.
+ * النطاق F8:A0:3D:00:00:00–F8:A0:3D:FF:FF:FF.
+ */
+const DINSTAR_OUI = new Set(['F8:A0:3D']);
+
+/** أدنى ثقة للضمّ التلقائي — يطابق DinstarFleetService.MIN_ADOPT_CONFIDENCE. */
+const MIN_ADOPT_CONFIDENCE = 70;
+
+/**
+ * درجة الثقة في أن الجهاز بوابة DINSTAR — مطابقة لـ
+ * DinstarFleetService.scoreIdentity. الردّ على المسار وحده ليس دليلًا
+ * قاطعًا؛ تجميع إشارات مستقلة يمنع ضمّ جهاز غير مقصود ثم توجيه
+ * مكالمات حقيقية إليه.
+ */
+function scoreIdentity({ portsResponded, serialNumber, macAddress, radioTypesKnown, statusResponded }) {
+  let score = 0;
+  const signals = [];
+  if (portsResponded) { score += 45; signals.push('ردّ على get_port_info بمصادقة Digest'); }
+  if (serialNumber) { score += 25; signals.push('أفصح عن رقم تسلسلي'); }
+  const oui = macAddress ? macAddress.toUpperCase().replace(/-/g, ':').slice(0, 8) : null;
+  if (oui && DINSTAR_OUI.has(oui)) { score += 20; signals.push(`عنوان MAC ضمن نطاق Dinstar المسجّل (${oui})`); }
+  if (radioTypesKnown) { score += 5; signals.push('أنواع الراديو معروفة'); }
+  if (statusResponded) { score += 5; signals.push('ردّ على get_status'); }
+  return { confidence: Math.min(score, 100), signals };
+}
+
 const PRIVATE_HOST = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/;
 
 const gwRow = (r) => ({
@@ -754,6 +781,7 @@ const gwRow = (r) => ({
   healthState: r.health_state, routingPriority: r.routing_priority,
   pjsipEndpoint: r.pjsip_endpoint, siteLabel: r.site_label,
   serialNumber: r.serial_number, firmwareVersion: r.firmware_version,
+  macAddress: r.mac_address || null,
   consecutiveFailures: r.consecutive_failures,
 });
 
@@ -814,10 +842,19 @@ on('POST', '/api/admin/dinstar/fleet/probe', (_p, _q, b) => {
   // خاصة فقط — نفس شرط DinstarConnectionFactory
   if (!PRIVATE_HOST.test(host)) return bad('PRIVATE_ADDRESS_REQUIRED');
   const existing = get('SELECT * FROM telecom_gateways WHERE host = ?', host);
-  if (!existing) return ok({ reachable: false, message: `لا توجد استجابة get_port_info مصادَقة على ${host}` });
+  if (!existing) return ok({ reachable: false, confidence: 0, signals: [], message: `لا توجد استجابة get_port_info مصادَقة على ${host}` });
+  const { confidence, signals } = scoreIdentity({
+    portsResponded: true,
+    serialNumber: existing.serial_number,
+    macAddress: existing.mac_address,
+    radioTypesKnown: true,
+    statusResponded: true,
+  });
   return ok({
     reachable: true, host, model: existing.model, portCount: existing.port_count,
     serialNumber: existing.serial_number, firmwareVersion: existing.firmware_version,
+    macAddress: existing.mac_address || null,
+    confidence, signals, adoptable: confidence >= MIN_ADOPT_CONFIDENCE,
     registeredPorts: dinstarSlots(0).slice(0, existing.port_count).filter((x) => x.status === 'REGISTERED').length,
   });
 });
