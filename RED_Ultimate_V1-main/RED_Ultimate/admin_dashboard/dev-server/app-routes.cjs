@@ -332,6 +332,37 @@ module.exports = function registerAppRoutes(on) {
     return me ? ok(userResponse(me)) : unauthorized();
   });
 
+  /**
+   * تعديل اسم المستخدم — يطابق AuthController.updateUsername.
+   * الحدود نفسها (3..20 وأحرف مقيّدة) لأن التحقق في التطبيق وحده
+   * يُلتفّ عليه بطلب HTTP مباشر.
+   */
+  on('PATCH', '/api/auth/username', (_p, _q, b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const username = String(b?.username || '').trim();
+    if (username.length < 3 || username.length > 20) return bad('USERNAME_LENGTH_INVALID');
+    if (!/^[A-Za-z0-9_.]+$/.test(username)) return bad('USERNAME_CHARSET_INVALID');
+    const clash = get(
+      'SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ?', username, me.id,
+    );
+    if (clash) return { status: 409, data: { error: 'USERNAME_TAKEN' } };
+    run('UPDATE users SET username = ?, updated_at = ? WHERE id = ?',
+      username, new Date().toISOString(), me.id);
+    return ok({ username });
+  });
+
+  /** تعديل الاسم المعروض — غير فريد بخلاف اسم المستخدم. */
+  on('PATCH', '/api/auth/profile', (_p, _q, b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const displayName = String(b?.displayName || '').trim();
+    if (!displayName || displayName.length > 50) return bad('DISPLAY_NAME_LENGTH_INVALID');
+    run('UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?',
+      displayName, new Date().toISOString(), me.id);
+    return ok({ displayName });
+  });
+
   // ═══ الدليل العام ═══
   on('GET', '/api/directory/search', (_p, q, _b, ctx) => {
     const me = currentUser(ctx);

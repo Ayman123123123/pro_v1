@@ -27,15 +27,21 @@ class YounesApplication : Application() {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
         listOf(
-            NotificationChannel("red_messages", "رسائل يونس", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "إشعارات الرسائل المشفرة"
+            NotificationChannel("red_messages", getString(R.string.channel_messages_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(R.string.channel_messages_desc)
             },
-            NotificationChannel("red_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "إشعارات المكالمات الواردة"
-                setSound(null, null)
+            NotificationChannel("red_calls", getString(R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(R.string.channel_calls_desc)
             },
-            NotificationChannel("red_service", "خدمة يونس", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "الاتصال الدائم المشفر"
+            // قناة المكالمات الواردة — أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
+            NotificationChannel("red_calls_incoming", getString(R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+                description = getString(R.string.channel_calls_incoming_desc)
+                enableVibration(true)
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            },
+            NotificationChannel("red_service", getString(R.string.channel_service_name), NotificationManager.IMPORTANCE_LOW).apply {
+                description = getString(R.string.channel_service_desc)
             }
         ).forEach { manager.createNotificationChannel(it) }
     }

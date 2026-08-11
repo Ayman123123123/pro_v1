@@ -18,6 +18,9 @@ interface RedDao {
     @Query("UPDATE local_history SET status = :status WHERE id = :id")
     suspend fun updateMessageStatus(id: String, status: String)
 
+    @Query("UPDATE local_history SET encryptedPlaintext = :plaintext WHERE id = :id")
+    suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray)
+
     // --- Conversations ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConversation(conversation: ConversationEntity)
@@ -36,6 +39,9 @@ interface RedDao {
 
     @Query("UPDATE conversations SET mutedUntil = :until WHERE id = :id")
     suspend fun setMutedUntil(id: String, until: Long)
+
+    @Query("UPDATE conversations SET lastMessageText = :preview, lastMessageTimestamp = :ts, unreadCount = CASE WHEN :isIncoming = 1 THEN unreadCount + 1 ELSE unreadCount END WHERE id = :id")
+    suspend fun updateConversationLast(id: String, preview: String, ts: Long, isIncoming: Int)
 
     // --- Contacts ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -85,4 +91,16 @@ interface RedDao {
 
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deleteMessage(messageId: String)
+
+    @Query("DELETE FROM local_history WHERE conversationId = :convId")
+    suspend fun deleteLocalHistoryByConversation(convId: String)
+
+    @Query("DELETE FROM messages WHERE conversationId = :convId")
+    suspend fun deleteMessagesByConversation(convId: String)
+
+    @Query("DELETE FROM conversations WHERE id = :convId")
+    suspend fun deleteConversationRow(convId: String)
+
+    @Query("SELECT * FROM local_history WHERE encryptedPlaintext LIKE :query ORDER BY createdAt DESC")
+    suspend fun searchAllMessages(query: String): List<LocalHistoryEntity>
 }

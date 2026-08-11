@@ -1,7 +1,5 @@
 package com.red.sovereign.ui
 
-import com.red.sovereign.core.YounesId
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
@@ -33,6 +31,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,6 +44,12 @@ import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Copy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Forward
+import androidx.compose.material.icons.filled.QuickReply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
@@ -55,6 +60,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -81,6 +88,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.automirrored.filled.*
@@ -91,6 +99,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingActionButton
@@ -108,6 +118,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -216,6 +227,7 @@ import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
 import com.red.sovereign.features.profile.BackupScreen
+import com.red.sovereign.core.YounesId
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
@@ -229,10 +241,10 @@ private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREAT
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
+fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, deepLinkSender: String? = null, deepLinkConversation: String? = null) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
-    var selectedGroupName by remember { mutableStateOf("") }
+    var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
@@ -277,9 +289,23 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             SovereignScreen.DEVICES -> DevicesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.PRIVACY -> PrivacySettingsScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.EXPLORE -> RedExploreScreen(onStartLive = {}, onStartSpace = {})
-            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.CREATE_GROUP -> CreateGroupScreen(
+                onBack = { currentScreen = SovereignScreen.DASHBOARD },
+                friends = directory.contacts,
+                onCreate = { name, privacy, memberRedIds ->
+                    groups.create(name, null, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
+                }
+            )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.GROUP_INFO -> SovereignGroupInfoScreen(groupName = selectedGroupName, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            SovereignScreen.GROUP_INFO -> {
+                val infoGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
+                SovereignGroupInfoScreen(
+                    group = infoGroup,
+                    groups = groups,
+                    friends = directory.contacts,
+                    onBack = { currentScreen = SovereignScreen.DASHBOARD }
+                )
+            }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.COMMUNITIES -> CommunitiesScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
             SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
@@ -323,8 +349,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false)
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true)
+                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
+                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory)
                 else -> MoreScreen(
                     account,
@@ -349,7 +375,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE }
     )
-    if (showSettings) YounesSettingsSheet(account, settings, viewModel::logout) { showSettings = false }
+    if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
 
     // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
@@ -680,14 +706,22 @@ private fun ChatHubScreen(
     safety: SafetyViewModel,
     attachments: AttachmentViewModel,
     voiceMessages: VoiceMessageViewModel,
-    showGroups: Boolean
+    showGroups: Boolean,
+    deepLinkSender: String? = null,
+    deepLinkConversation: String? = null,
+    onManageGroup: (String) -> Unit = {}
 ) {
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
+    // فتح محادثة من إشعار رسالة
+    LaunchedEffect(deepLinkSender, deepLinkConversation) {
+        if (!showGroups && deepLinkSender != null && deepLinkSender.matches(RED_ID_PATTERN)) target = deepLinkSender
+    }
     var showDirectory by remember { mutableStateOf(false) }
     var showMessageSearch by remember { mutableStateOf(false) }
     var messageSearchQuery by remember { mutableStateOf("") }
+    var showMediaGallery by remember { mutableStateOf(false) }
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
@@ -702,8 +736,23 @@ private fun ChatHubScreen(
     var create by remember { mutableStateOf(false) }
     var showJoinGroup by remember { mutableStateOf(false) }
     var joinToken by remember { mutableStateOf("") }
-    var selectedGroupId by remember { mutableStateOf<String?>(null) }
+    var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
+    var showGroupEmoji by remember { mutableStateOf(false) }
+    var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
+    var showGroupAttachmentSheet by remember { mutableStateOf(false) }
+    var showGroupVoicePanel by remember { mutableStateOf(false) }
+    var showGroupMenu by remember { mutableStateOf(false) }
+    var showGroupPollDialog by remember { mutableStateOf(false) }
+    var groupPollQuestion by remember { mutableStateOf("") }
+    var groupPollOptions by remember { mutableStateOf(listOf("", "")) }
+    val messagesListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val groupListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val groupUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+    val chatUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+    val groupPinnedMessages = remember { androidx.compose.runtime.mutableStateMapOf<String, DecryptedMessage>() }
+    val blockedIds = remember { mutableStateListOf<String>() }
+    LaunchedEffect(Unit) { blockedIds.clear(); blockedIds.addAll(directory.blocked) }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
     var deleteGroupId by remember { mutableStateOf<String?>(null) }
@@ -713,6 +762,7 @@ private fun ChatHubScreen(
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
     val context = LocalContext.current
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
+    val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
     
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
@@ -777,11 +827,26 @@ private fun ChatHubScreen(
         if (uri != null && target.isNotBlank()) attachments.send(uri, target, conversationId(account.redId, target))
     }
     val groupAvatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val group = groups.groups.firstOrNull { it.id == selectedGroupId }
+        val group = groups.groups.firstOrNull { it.id == groupConversationId }
         if (uri != null && group != null) groups.updateAvatar(group, uri)
     }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) attachments.exportTo(uri)
+    }
+    // 📎 مرفقات المجموعة — تُرسل عبر مسار تشفير المجموعة (Sender Keys)
+    val groupFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val group = groups.groups.firstOrNull { it.id == groupConversationId }
+        if (uri != null && group != null) attachments.sendToGroup(uri, group)
+    }
+    val groupCameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            val file = File(context.cacheDir, "camera/latest_photo.jpg")
+            val group = groups.groups.firstOrNull { it.id == groupConversationId }
+            if (file.isFile && group != null) {
+                val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                attachments.sendToGroup(providerUri, group)
+            }
+        }
     }
     val cameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -809,6 +874,14 @@ private fun ChatHubScreen(
     }
     LaunchedEffect(Unit) { DecryptedMessageBus.messages.collect { item ->
         decrypted.add(item)
+        // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
+        if (!item.outgoing) {
+            if (item.conversationId.length > 32) {
+                if (item.conversationId != groupConversationId) groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+            } else {
+                if (item.conversationId != conversationId(account.redId, target)) chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
+            }
+        }
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
     // ملاحظة: `val conversation` معرّف في سطر سابق (ChatHubScreen scope) — لا نعيد حسابه هنا
@@ -836,10 +909,14 @@ private fun ChatHubScreen(
                         }
                         directory.requests.forEach { request ->
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Avatar(request.requester.displayName.take(1)); Column(Modifier.weight(1f).padding(horizontal = 9.dp)) { Text(request.requester.displayName, color = Color.White); Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp) }
-                                    TextButton({ directory.resolve(request, false) }) { Text("رفض", color = Color.Gray) }
-                                    Button({ directory.resolve(request, true) }, colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول") }
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Avatar(request.requester.displayName.take(1))
+                                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                        Text(request.requester.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                        Text("@${request.requester.username} • ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("رفض", color = Color.Gray) }
+                                    Button({ directory.resolve(request, true) }, Modifier.height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول", color = Color(0xFF002118)) }
                                 }
                             }
                         }
@@ -870,9 +947,22 @@ private fun ChatHubScreen(
                             )
                     }
                     items(sortedContacts, key = { it.redId }) { person ->
-                        Column(Modifier.widthIn(max = 86.dp).clickable { target = person.redId }, horizontalAlignment = Alignment.CenterHorizontally) {
-                            Avatar(person.displayName.take(1)); Text(person.displayName, maxLines = 1, fontSize = 11.sp); Text("@${person.username}", color = AqyalCyanGlow, maxLines = 1, fontSize = 9.sp)
-                            IconButton({ selectedContact = person }, Modifier.size(28.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(16.dp)) }
+                        val online = directory.isOnline(person.redId)
+                        Card(
+                            Modifier.widthIn(max = 150.dp).clickable { target = person.redId },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(contentAlignment = Alignment.BottomEnd) {
+                                    Avatar(person.displayName.take(1))
+                                    if (online) Box(Modifier.size(12.dp).clip(CircleShape).background(Color(0xFF00C98C)).border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(person.displayName, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, overflow = TextOverflow.Ellipsis)
+                                Text(if (online) "متصل" else "@${person.username}", color = if (online) YounesEmerald else AqyalCyanGlow, maxLines = 1, fontSize = 10.sp)
+                                IconButton({ selectedContact = person }, Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
                         }
                     }
                 }
@@ -898,17 +988,34 @@ private fun ChatHubScreen(
                         ConferenceService.join(context, room, account.redId, true)
                     }) { Icon(Icons.Default.Groups, "مؤتمر فيديو جماعي") }
                     IconButton({ showMessageSearch = true }) { Icon(Icons.Default.Search, "البحث في المحادثة") }
+                    IconButton({ showMediaGallery = true }) { Icon(Icons.Default.Photo, "الوسائط المشتركة") }
                     IconButton({ safety.open(target) }) { Icon(Icons.Default.Security, "رمز الأمان") }
                     if (activePerson != null) IconButton({ selectedContact = activePerson }) { Icon(Icons.Default.MoreVert, "خيارات المحادثة") }
                 }
             }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
             val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.runtime.LaunchedEffect(conversationMessages.size, target) {
+                if (conversationMessages.isNotEmpty()) messagesListState.animateScrollToItem(conversationMessages.lastIndex)
+            }
+            val chatWallpaperId = localMessages.conversationWallpaper(conversation)
+            val chatWallpaperBrush = when (chatWallpaperId) {
+                1 -> androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF1A3A5F), Color(0xFF0A1628)))
+                2 -> androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF004D3A), Color(0xFF0A1628)))
+                3 -> androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF3D2E00), Color(0xFF0A1628)))
+                4 -> androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF2A0A2A), Color(0xFF0A1628)))
+                5 -> androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF002F4A), Color(0xFF0A1628)))
+                else -> null
+            }
+            LazyColumn(
+                Modifier.weight(1f).then(if (chatWallpaperBrush != null) Modifier.background(chatWallpaperBrush) else Modifier),
+                state = messagesListState, verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 if (target.isBlank()) {
                     val groupIds = groups.groups.map(Group::id).toSet()
                     items(conversations.filter { it.id !in groupIds }, key = { it.id }) { conv ->
-                        Card(Modifier.fillMaxWidth().clickable { target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        val unread = chatUnread[conv.id] ?: 0
+                        Card(Modifier.fillMaxWidth().clickable { chatUnread.remove(conv.id); target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                             val contact = directory.contacts.firstOrNull { it.redId == conv.peerId }
                             val displayName = contact?.displayName ?: conv.peerId
                             val isOnline = directory.isOnline(conv.peerId)
@@ -923,8 +1030,18 @@ private fun ChatHubScreen(
                                     Text(displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(conv.lastMessageText ?: "لا توجد رسائل", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                 }
-                                if (conv.pinned) Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(20.dp))
-                                if (conv.mutedUntil > System.currentTimeMillis()) Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp).padding(start = 4.dp))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    if (conv.lastMessageTimestamp > 0) Text(relativeTime(conv.lastMessageTimestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (unread > 0) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                    } else {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (conv.pinned) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(16.dp)) }
+                                            if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp)) }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -932,10 +1049,21 @@ private fun ChatHubScreen(
                 if (target.isNotBlank() && conversationMessages.isEmpty()) item {
                     Text("ابدأ المحادثة برسالة. التشفير يُنشأ على الجهاز ولا يرى الخادم النص.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
                 }
-                items(conversationMessages, key = { it.id }) { item ->
+                itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
+                    // فاصل تاريخ بين الأيام (مثل واتساب)
+                    val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
+                    if (showDate) {
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                    Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp).clickable { selectedChatMessage = item },
+                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
                             colors = CardDefaults.cardColors(containerColor = if (item.outgoing) YounesEmerald.copy(alpha = .82f) else AqyalSurfaceRaised.copy(alpha = .94f)),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -944,7 +1072,7 @@ private fun ChatHubScreen(
                             )
                         ) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                Text(if (item.outgoing) "أنت" else item.senderRedId, color = if (item.outgoing) Color(0xB8002018) else AqyalCyanGlow, fontSize = 10.sp)
+                                Text(if (item.outgoing) "أنت" else (activePerson?.displayName ?: item.senderRedId), color = if (item.outgoing) Color(0xB8002018) else AqyalCyanGlow, fontSize = 10.sp)
                                 when (item.type) {
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
@@ -1140,13 +1268,30 @@ private fun ChatHubScreen(
                     groups.groups.isEmpty() -> EmptyState(Icons.Default.Groups, "لا توجد مجموعات", "أنشئ مجموعة محلية بأدوار مالك ومسؤول وعضو.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
-                            Card(Modifier.fillMaxWidth().clickable { groupConversationId = group.id }) {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    GroupAvatar(group, groups); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(group.name, fontWeight = FontWeight.Bold); Text("${group.members.size} أعضاء · ${group.description.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                                    IconButton({
-                                        selectedGroupName = group.name
-                                        currentScreen = SovereignScreen.GROUP_INFO
-                                    }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
+                            val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
+                            val unread = groupUnread[group.id] ?: 0
+                            Card(Modifier.fillMaxWidth().clickable { groupUnread.remove(group.id); groupConversationId = group.id }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    GroupAvatar(group, groups)
+                                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(group.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            if (lastGroupMsg != null) Text(relativeTime(lastGroupMsg.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 6.dp))
+                                            if (unread > 0) {
+                                                Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                            } else {
+                                                Surface(shape = RoundedCornerShape(8.dp), color = YounesEmerald.copy(alpha = 0.15f)) { Text(" ${group.members.size} ", fontSize = 11.sp, color = YounesEmerald, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                            }
+                                        }
+                                        Text(
+                                            lastGroupMsg?.let { msg ->
+                                                val t = if (msg.type == "RICH_TEXT") RichMessage.decode(msg.plaintext)?.text.orEmpty() else msg.plaintext.toString(Charsets.UTF_8)
+                                                (if (msg.outgoing) "أنت: " else "@" + msg.senderRedId.take(8) + ": ") + t
+                                            } ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    IconButton({ onManageGroup(group.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                                 }
                             }
                         }
@@ -1157,16 +1302,58 @@ private fun ChatHubScreen(
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ selectedGroupId = openGroup.id }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو جماعي", tint = YounesEmerald) }
+                        Box {
+                            IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
+                            DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
+                                DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
+                                DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
+                                DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
+                                DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
+                                DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
+                                DropdownMenuItem(text = { Text("مغادرة المجموعة") }, leadingIcon = { Icon(Icons.Default.Logout, null) }, onClick = { showGroupMenu = false; groups.leave(openGroup) { groupConversationId = null } })
+                            }
+                        }
                     }
                 }
-                val groupMessages = decrypted.filter { it.conversationId == openGroup.id && it.type == "GROUP_MESSAGE" }
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
+                androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
+                    if (groupMessages.isNotEmpty()) groupListState.animateScrollToItem(groupMessages.lastIndex)
+                }
+                LazyColumn(Modifier.weight(1f), state = groupListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (groupPinnedMessages.isNotEmpty()) {
+                        item {
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = 0.08f))) {
+                                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Star, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                                        Text(" رسائل مثبتة (${groupPinnedMessages.size})", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                    }
+                                    groupPinnedMessages.values.forEach { pm ->
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(messageDisplayText(pm), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                                            IconButton({ groupPinnedMessages.remove(pm.id) }) { Icon(Icons.Default.Close, "إلغاء تثبيت", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (groupMessages.isEmpty()) item { Text("محادثة جماعية مشفرة بـSender Keys. يتغير المفتاح تلقائيًا عند تغير العضوية.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
-                items(groupMessages, key = { it.id }) { message ->
+                itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
+                    val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
+                    if (showDate) {
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                    Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                }
+                            }
+                        }
+                    }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp),
+                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { groupReplyToMessage = message }, onLongClick = { selectedChatMessage = message }),
                             colors = CardDefaults.cardColors(containerColor = if (message.outgoing) YounesEmerald.copy(alpha = .82f) else MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1176,20 +1363,62 @@ private fun ChatHubScreen(
                         ) {
                             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                 if (!message.outgoing) {
-                                    val nameColors = listOf(Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFF3F51B5), Color(0xFF00BCD4), Color(0xFFFF9800), Color(0xFF795548))
+                                    // ألوان هادئة ومتناسقة مع الهوية (لا مهرجان ألوان)
+                                    val nameColors = listOf(
+                                        Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674), Color(0xFFC9A7E8),
+                                        Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
+                                    )
                                     val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
                                     Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
-                                Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+                                when (message.type) {
+                                    "RICH_TEXT" -> RichTextMessage(message, groupMessages)
+                                    "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
+                                    "VOICE" -> VoiceMessage(message, attachments)
+                                    else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+                                }
                             }
                         }
                     }
                 }
                 }
-                Row(verticalAlignment = Alignment.Bottom) {
-                    OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة جماعية مشفرة…") }, maxLines = 4)
-                    FilledIconButton({ RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim()); groupMessageText = "" }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                groupReplyToMessage?.let { ref ->
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("رد على ${if (ref.outgoing) "نفسك" else ref.senderRedId.take(12)}", color = YounesEmerald, style = MaterialTheme.typography.labelMedium)
+                                Text(messageDisplayText(ref), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton({ groupReplyToMessage = null }) { Icon(Icons.Default.Close, "إلغاء الرد") }
+                        }
+                    }
                 }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    IconButton({ showGroupAttachmentSheet = true }) { Icon(Icons.Default.AttachFile, "إرفاق بالمجموعة") }
+                    OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") }, maxLines = 4)
+                    IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                    FilledIconButton({
+                        if (groupReplyToMessage != null) {
+                            val rich = RichMessage(text = groupMessageText.trim(), replyTo = groupReplyToMessage?.id)
+                            RedConnectionService.sendGroupRichText(context, openGroup, rich)
+                        } else {
+                            RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim())
+                        }
+                        groupMessageText = ""; groupReplyToMessage = null; showGroupEmoji = false
+                    }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                }
+                if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
+                if (showGroupAttachmentSheet) AttachmentSheet(
+                    onCamera = {
+                        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+                        val file = File(dir, "latest_photo.jpg")
+                        val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                        groupCameraPicker.launch(providerUri)
+                    },
+                    onGallery = { groupFilePicker.launch(arrayOf("image/*", "video/*")) },
+                    onDocument = { groupFilePicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    onDismiss = { showGroupAttachmentSheet = false }
+                )
             }
         }
     }
@@ -1230,54 +1459,138 @@ private fun ChatHubScreen(
     }
     selectedChatMessage?.let { message ->
         val payload = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-        AlertDialog(
+        val isGroupMsg = message.conversationId.length > 32
+        ModalBottomSheet(
             onDismissRequest = { selectedChatMessage = null },
-            title = { Text("خيارات الرسالة") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton({ replyToMessage = message; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("رد") }
-                OutlinedButton({ pendingForwardMessage = message; showDirectory = true; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("إعادة توجيه") }
-                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") OutlinedButton({ editingMessageId = message.id; messageText = payload.text; selectedChatMessage = null }, Modifier.fillMaxWidth()) { Text("تعديل") }
-                if (message.outgoing) Button({
-                    RedConnectionService.sendRichText(context, target, message.conversationId, RichMessage(action = "DELETE", deleteOf = message.id))
-                    selectedChatMessage = null
-                }, Modifier.fillMaxWidth()) { Text("حذف لدى الجميع") }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { option -> AssistChip({ disappearingDurationMs = option.second; selectedChatMessage = null }, { Text(option.first) }) }
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // المعاينة: الرسالة المحددة
+                Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(if (message.outgoing) "أنت" else (if (isGroupMsg) message.senderRedId.take(12) else "المرسل"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-            } },
-            confirmButton = { TextButton({ selectedChatMessage = null }) { Text("إغلاق") } }
-        )
+
+                MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
+                    replyToMessage = message; selectedChatMessage = null
+                }
+                MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
+                    pendingForwardMessage = message; showDirectory = true; selectedChatMessage = null
+                }
+                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
+                    MessageActionRow(Icons.Default.Edit, "تعديل", "عدّل النص المرسل") {
+                        editingMessageId = message.id; messageText = payload.text; selectedChatMessage = null
+                    }
+                }
+                if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
+                    MessageActionRow(Icons.Default.Copy, "نسخ", "انسخ النص") {
+                        val ctx = LocalContext.current
+                        val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", payload.text))
+                        selectedChatMessage = null
+                    }
+                }
+                if (message.outgoing) {
+                    MessageActionRow(Icons.Default.Delete, "حذف لدى الجميع", "احذف الرسالة لدى الكل") {
+                        val convId = if (isGroupMsg) message.conversationId else message.conversationId
+                        val tgt = if (isGroupMsg) "" else target
+                        RedConnectionService.sendRichText(context, tgt, convId, RichMessage(action = "DELETE", deleteOf = message.id))
+                        selectedChatMessage = null
+                    }
+                }
+                MessageActionRow(if (groupPinnedMessages.containsKey(message.id)) Icons.Default.Star else Icons.Default.StarBorder, if (groupPinnedMessages.containsKey(message.id)) "إلغاء التثبيت" else "تثبيت", "تثبيت هذه الرسالة أعلى المحادثة") {
+                    if (groupPinnedMessages.containsKey(message.id)) groupPinnedMessages.remove(message.id)
+                    else groupPinnedMessages[message.id] = message
+                    selectedChatMessage = null
+                }
+                MessageActionRow(Icons.Default.NotificationsOff, "كتم", "أوقف الإشعارات مؤقتاً") { selectedChatMessage = null }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { (label, ms) ->
+                        OutlinedButton({ disappearingDurationMs = ms; selectedChatMessage = null }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                    }
+                }
+                TextButton({ selectedChatMessage = null }, Modifier.align(Alignment.CenterHorizontally)) { Text("إغلاق", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
     selectedContact?.let { person ->
-        AlertDialog(
+        val conversationKey = remember(person.redId) { conversationId(account.redId, person.redId) }
+        val preference = localMessages.conversationPreference(conversationKey)
+        var editingName by remember(person.redId) { mutableStateOf(localMessages.conversationCustomName(conversationKey) ?: person.displayName) }
+        var selectedWallpaper by remember(person.redId) { mutableStateOf(localMessages.conversationWallpaper(conversationKey)) }
+        ModalBottomSheet(
             onDismissRequest = { selectedContact = null; reportDetails = "" },
-            title = { Text(person.displayName) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("@${person.username}\n${person.redId}", color = AqyalCyanGlow)
-                    OutlinedTextField(reportDetails, { reportDetails = it }, Modifier.fillMaxWidth(), label = { Text("تفاصيل بلاغ اختياري") }, maxLines = 4)
-                    OutlinedButton({ safety.open(person.redId); selectedContact = null }, Modifier.fillMaxWidth()) { Text("رمز الأمان والتحقق") }
-                    val conversationKey = conversationId(account.redId, person.redId)
-                    val preference = localMessages.conversationPreference(conversationKey)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton({ localMessages.setConversationPreference(conversationKey, "pinned", if (preference.first) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.first) "إلغاء التثبيت" else "تثبيت") }
-                        OutlinedButton({ localMessages.setConversationPreference(conversationKey, "archived", if (preference.second) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.second) "إلغاء الأرشفة" else "أرشفة") }
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // رأس الصديق
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(person.displayName.take(1))
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(localMessages.conversationCustomName(conversationKey) ?: person.displayName, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("@${person.username} • ${person.redId}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "muted_until", System.currentTimeMillis() + 8 * 60 * 60 * 1000L) }, Modifier.fillMaxWidth()) { Text("كتم 8 ساعات") }
-                    OutlinedButton({ directory.remove(person); selectedContact = null }, Modifier.fillMaxWidth()) { Text("إزالة من الأصدقاء") }
-                    OutlinedButton({ directory.report(person, "SPAM", reportDetails); reportDetails = "" }, Modifier.fillMaxWidth()) { Text("إبلاغ عن إزعاج/احتيال") }
-                    Button({ directory.block(person); selectedContact = null }, Modifier.fillMaxWidth()) { Text("حظر المستخدم") }
                 }
-            },
-            confirmButton = { TextButton({ selectedContact = null; reportDetails = "" }) { Text("إغلاق") } }
-        )
+
+                // إعادة تسمية المحادثة
+                OutlinedTextField(editingName, { editingName = it.take(50) }, Modifier.fillMaxWidth(), label = { Text("اسم المحادثة (تجاوز)") }, singleLine = true)
+                Button({
+                    localMessages.setConversationCustomName(conversationKey, editingName.trim())
+                    editingName = editingName.trim()
+                }, Modifier.fillMaxWidth(), enabled = editingName.isNotBlank() && editingName != person.displayName) { Text("حفظ الاسم") }
+
+                // الخلفية — اختيار تدرج لوني
+                Text("خلفية المحادثة", color = YounesEmerald, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                val wallpapers = listOf(0, 1, 2, 3, 4, 5)
+                val wpColors = listOf(
+                    Color(0xFF0A1628), Color(0xFF1A3A5F), Color(0xFF004D3A), Color(0xFF3D2E00), Color(0xFF2A0A2A), Color(0xFF002F4A)
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(wallpapers) { id ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).clickable { selectedWallpaper = id; localMessages.setConversationWallpaper(conversationKey, id) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = wpColors[id]
+                            ) { if (selectedWallpaper == id) Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Check, null, tint = Color.White) } }
+                        }
+                    }
+                }
+
+                // تثبيت / أرشفة / كتم
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "pinned", if (preference.first) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.first) "إلغاء التثبيت" else "تثبيت", fontSize = 12.sp) }
+                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "archived", if (preference.second) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.second) "إلغاء الأرشفة" else "أرشفة", fontSize = 12.sp) }
+                }
+                OutlinedButton({ localMessages.setConversationPreference(conversationKey, "muted_until", if (preference.third > System.currentTimeMillis()) 0 else System.currentTimeMillis() + 8 * 60 * 60 * 1000L) }, Modifier.fillMaxWidth()) { Text(if (preference.third > System.currentTimeMillis()) "إلغاء الكتم" else "كتم 8 ساعات") }
+                OutlinedButton({ safety.open(person.redId); selectedContact = null }, Modifier.fillMaxWidth()) { Text("رمز الأمان والتحقق") }
+
+                // الحظر / فك الحظر
+                val isBlocked = person.redId in blockedIds
+                Button({
+                    if (isBlocked) directory.unblock(person) else directory.block(person)
+                    selectedContact = null
+                }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = if (isBlocked) YounesEmerald else MaterialTheme.colorScheme.error)) {
+                    Text(if (isBlocked) "فك الحظر" else "حظر المستخدم", color = if (isBlocked) Color(0xFF002118) else Color.White)
+                }
+
+                // إزالة / بلاغ
+                OutlinedButton({ directory.remove(person); selectedContact = null }, Modifier.fillMaxWidth()) { Text("إزالة من الأصدقاء") }
+                OutlinedTextField(reportDetails, { reportDetails = it }, Modifier.fillMaxWidth(), label = { Text("تفاصيل بلاغ اختياري") }, maxLines = 2)
+                OutlinedButton({ directory.report(person, "SPAM", reportDetails); reportDetails = "" }, Modifier.fillMaxWidth()) { Text("إبلاغ عن إزعاج/احتيال") }
+            }
+        }
     }
-    val selectedGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
+    val selectedGroup = groups.groups.firstOrNull { it.id == manageGroupId }
     if (selectedGroup != null) {
         val myRole = selectedGroup.members.firstOrNull { it.redId == account.redId }?.role
         val canManage = myRole == "OWNER" || myRole == "ADMIN"
         AlertDialog(
-            onDismissRequest = { selectedGroupId = null },
+            onDismissRequest = { manageGroupId = null },
             title = { Text(selectedGroup.name) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1308,10 +1621,10 @@ private fun ChatHubScreen(
                     }
                 }
             },
-            confirmButton = { TextButton({ selectedGroupId = null }) { Text("إغلاق") } },
+            confirmButton = { TextButton({ manageGroupId = null }) { Text("إغلاق") } },
             dismissButton = {
                 if (myRole == "OWNER") TextButton({ deleteGroupId = selectedGroup.id }) { Text("حذف المجموعة", color = MaterialTheme.colorScheme.error) }
-                else TextButton({ groups.leave(selectedGroup) { selectedGroupId = null; groupConversationId = null } }) { Text("مغادرة", color = MaterialTheme.colorScheme.error) }
+                else TextButton({ groups.leave(selectedGroup) { manageGroupId = null; groupConversationId = null } }) { Text("مغادرة", color = MaterialTheme.colorScheme.error) }
             }
         )
     }
@@ -1325,7 +1638,7 @@ private fun ChatHubScreen(
                 OutlinedButton({ groups.updateRole(selectedGroup, managedMember, if (managedMember.role == "ADMIN") "MEMBER" else "ADMIN"); selectedGroupMember = null }, Modifier.fillMaxWidth()) {
                     Text(if (managedMember.role == "ADMIN") "إرجاعه إلى عضو" else "ترقيته إلى مسؤول")
                 }
-                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; selectedGroupId = null } }, Modifier.fillMaxWidth()) { Text("نقل ملكية المجموعة إليه") }
+                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; manageGroupId = null } }, Modifier.fillMaxWidth()) { Text("نقل ملكية المجموعة إليه") }
             }
             Button({ groups.removeMember(selectedGroup, managedMember); selectedGroupMember = null }, Modifier.fillMaxWidth()) { Text("إزالة من المجموعة") }
             Text("تغيير العضوية يجب أن يدور Sender Key عندما تكتمل محادثة المجموعات المشفرة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -1337,8 +1650,81 @@ private fun ChatHubScreen(
             onDismissRequest = { deleteGroupId = null },
             title = { Text("حذف ${deleting.name} نهائيًا؟") },
             text = { Text("سيُحذف سجل المجموعة وعضويتها من الخادم. لا يمكن التراجع عن العملية.") },
-            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; selectedGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
+            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; manageGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
             dismissButton = { TextButton({ deleteGroupId = null }) { Text("إلغاء") } }
+        )
+    }
+    if (showGroupPollDialog) {
+        val openGroupForPoll = groups.groups.firstOrNull { it.id == groupConversationId }
+        AlertDialog(
+            onDismissRequest = { showGroupPollDialog = false },
+            title = { Text("استطلاع في المجموعة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(groupPollQuestion, { groupPollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("السؤال") }, maxLines = 3)
+                    groupPollOptions.forEachIndexed { index, value ->
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { next -> groupPollOptions = groupPollOptions.toMutableList().also { it[index] = next.take(80) } },
+                            Modifier.fillMaxWidth(), label = { Text("الخيار ${index + 1}") }, singleLine = true
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton({ if (groupPollOptions.size < 6) groupPollOptions = groupPollOptions + "" }, Modifier.weight(1f), enabled = groupPollOptions.size < 6) { Text("+ خيار") }
+                        OutlinedButton({ if (groupPollOptions.size > 2) groupPollOptions = groupPollOptions.dropLast(1) }, Modifier.weight(1f), enabled = groupPollOptions.size > 2) { Text("- خيار") }
+                    }
+                }
+            },
+            confirmButton = {
+                val validPoll = groupPollQuestion.isNotBlank() && groupPollOptions.count { it.trim().length >= 2 } >= 2
+                Button(
+                    enabled = validPoll && openGroupForPoll != null,
+                    onClick = {
+                        val poll = com.red.sovereign.core.InlinePoll(
+                            question = groupPollQuestion.trim(),
+                            options = groupPollOptions.map { it.trim() }.filter { it.length >= 2 },
+                            pollId = "poll-${System.currentTimeMillis()}"
+                        )
+                        val rich = RichMessage(text = "", poll = poll)
+                        openGroupForPoll?.let { RedConnectionService.sendGroupRichText(context, it, rich) }
+                        showGroupPollDialog = false
+                        groupPollQuestion = ""
+                        groupPollOptions = listOf("", "")
+                    }
+                ) { Text("إرسال الاستطلاع") }
+            },
+            dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("إلغاء") } }
+        )
+    }
+    if (showMediaGallery && target.isNotBlank()) {
+        val convKey = conversationId(account.redId, target)
+        val mediaMsgs = decrypted.filter { it.conversationId == convKey && (it.type == "IMAGE" || it.type == "VIDEO" || it.type == "FILE" || it.type == "AUDIO") }
+        AlertDialog(
+            onDismissRequest = { showMediaGallery = false },
+            title = { Text("الوسائط المشتركة (${mediaMsgs.size})") },
+            text = {
+                if (mediaMsgs.isEmpty()) {
+                    Text("لا توجد وسائط مشتركة بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(Modifier.height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(mediaMsgs, key = { it.id }) { m ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    when (m.type) {
+                                        "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald)
+                                        "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow)
+                                        "AUDIO" -> Icon(Icons.Default.MusicNote, null, tint = AqyalGold)
+                                        else -> Icon(Icons.Default.InsertDriveFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(if (m.type == "RICH_TEXT") messageDisplayText(m) else "وسيط مشفر", Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Text(relativeTime(m.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ showMediaGallery = false }) { Text("إغلاق") } }
         )
     }
     if (showMessageSearch) AlertDialog(
@@ -1412,9 +1798,15 @@ private fun ChatHubScreen(
 @Composable
 private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel) {
     var filter by remember { mutableStateOf("الكل") }
+    var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
+    var showDinstarDialog by remember { mutableStateOf(false) }
+    var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
+    var dinstarNumberInput by remember { mutableStateOf("") }
+    var newCallTargetInput by remember { mutableStateOf("") }
+    var publicStreamSearchQuery by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
     var isBroadcaster by remember { mutableStateOf(false) }
     var roomInput by remember { mutableStateOf("") }
@@ -1425,13 +1817,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
         "DINSTAR" -> call.route == "DINSTAR"; else -> true
     } }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("سجل موحد لكل مكالمة من المحادثات والمجموعات والبث والمساحات والهاتف اليمني.", color = Color.LightGray)
-        Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            RoundCallAction(Icons.Default.Groups, "جماعية", AqyalCyanGlow, true) { showJoinDialog = true }
-            RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true }
-            // 🎙️ المساحات الصوتية مفعلة — مؤتمر صوتي فقط (بلا كاميرا) عبر نفس مسار SFU
-            RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true }
+        Text("مركز المكالمات والبث المباشر 📞", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("سجل موحد للاتصالات والمؤتمرات والبث الحية والمساحات الصوتية والهاتف اليمني.", color = Color.LightGray)
+        
+        // Dedicated Quick Action Buttons
+        LazyRow(
+            Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item { RoundCallAction(Icons.Default.Call, "مكالمة جديدة", Color(0xFF00C98C), true) { showNewCallDialog = true } }
+            item { RoundCallAction(Icons.Default.Groups, "مؤتمر جماعي", AqyalCyanGlow, true) { showJoinDialog = true } }
+            item { RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true } }
+            item { RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true } }
+            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true) { showPublicStreamsSearchDialog = true } }
+            item { RoundCallAction(Icons.Default.PhoneInTalk, "هاتف يمني", Color(0xFFE31E24), true) { showDinstarDialog = true } }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
@@ -1480,26 +1879,60 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
         )
     }
 
+    var streamTitleInput by remember { mutableStateOf("") }
+    var isPrivateStream by remember { mutableStateOf(false) }
+    var streamPasswordInput by remember { mutableStateOf("") }
+
     if (showLiveDialog) {
         AlertDialog(
-            onDismissRequest = { showLiveDialog = false; roomInput = ""; isBroadcaster = false },
-            title = { Text("بث مباشر يونس") },
+            onDismissRequest = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false },
+            title = { Text("مركز البث المباشر 🔴") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("اختر طبيعة المشاركة في البث:", color = Color.Gray, fontSize = 14.sp)
+                    Text("انضم لمشاهدة بث عام عبر البحث بالاسم/المعرف أو أنشئ بثك الخاص:", color = Color.Gray, fontSize = 13.sp)
+                    
                     OutlinedTextField(
                         value = roomInput,
                         onValueChange = { roomInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف البث (مثال: stream-abc)") },
+                        placeholder = { Text("معرف البث أو رابط الدعوة (مثال: stream-123)") },
                         singleLine = true
                     )
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Checkbox(checked = isBroadcaster, onCheckedChange = { isBroadcaster = it })
-                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp)
+                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    if (isBroadcaster) {
+                        OutlinedTextField(
+                            value = streamTitleInput,
+                            onValueChange = { streamTitleInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("عنوان البث (مثال: بث سيادي عام)") },
+                            singleLine = true
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(checked = isPrivateStream, onCheckedChange = { isPrivateStream = it })
+                            Text("بث خاص بكلمة سر 🔒", fontSize = 14.sp)
+                        }
+
+                        if (isPrivateStream) {
+                            OutlinedTextField(
+                                value = streamPasswordInput,
+                                onValueChange = { streamPasswordInput = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("كلمة سر البث الخاص") },
+                                singleLine = true
+                            )
+                        }
                     }
                 }
             },
@@ -1507,16 +1940,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
                 Button(
                     onClick = {
                         showLiveDialog = false
-                        LiveStreamService.start(context, roomInput.trim(), ownUserId, isBroadcaster)
+                        val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
+                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster)
                         roomInput = ""
+                        streamTitleInput = ""
+                        streamPasswordInput = ""
+                        isPrivateStream = false
                     },
-                    enabled = roomInput.trim().isNotBlank()
+                    enabled = roomInput.trim().isNotBlank() || isBroadcaster
                 ) {
-                    Text("بدء")
+                    Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLiveDialog = false; roomInput = ""; isBroadcaster = false }) {
+                TextButton(onClick = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false }) {
                     Text("إلغاء")
                 }
             }
@@ -1567,6 +2004,147 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel)
             },
             dismissButton = {
                 TextButton(onClick = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showDinstarDialog) {
+        val operator = YemeniOperatorDetector.getOperatorInfo(dinstarNumberInput)
+        AlertDialog(
+            onDismissRequest = { showDinstarDialog = false; dinstarNumberInput = "" },
+            title = { Text("لوحة اتصال الهاتف اليمني (DINSTAR GSM)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("اتصال آمن ومباشر بأي رقم هاتف يمني ثابت أو محمول عبر بوابات Dinstar GSM:", color = Color.Gray, fontSize = 13.sp)
+                    
+                    OutlinedTextField(
+                        value = dinstarNumberInput,
+                        onValueChange = { dinstarNumberInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("أدخل الرقم (مثال: 777123456)") },
+                        singleLine = true
+                    )
+
+                    if (operator != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(operator.brandColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text("الشبكة المكتشفة: ${operator.name}", color = operator.brandColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(operator.technology, color = Color.White, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDinstarDialog = false
+                        val intent = Intent(context, YounesCallService::class.java).apply {
+                            action = YounesCallService.ACTION_START
+                            putExtra(YounesCallService.EXTRA_TARGET, dinstarNumberInput.trim())
+                            putExtra(YounesCallService.EXTRA_MODE, "VOICE")
+                        }
+                        ContextCompat.startForegroundService(context, intent)
+                        dinstarNumberInput = ""
+                    },
+                    enabled = dinstarNumberInput.trim().length >= 6
+                ) {
+                    Text("اتصال خطي عبر GSM")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDinstarDialog = false; dinstarNumberInput = "" }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showNewCallDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
+            title = { Text("مكالمة جديدة مشفرة E2EE 📞") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("أدخل معرّف يونس (RED ID) الخاص بصديقك للاتصال المشفر الفوري:", color = Color.Gray, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = newCallTargetInput,
+                        onValueChange = { newCallTargetInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("معرف يونس (مثال: red-user-123)") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            showNewCallDialog = false
+                            YounesCallService.start(context, newCallTargetInput.trim(), video = false)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) {
+                        Text("صوتية")
+                    }
+                    Button(
+                        onClick = {
+                            showNewCallDialog = false
+                            YounesCallService.start(context, newCallTargetInput.trim(), video = true)
+                            newCallTargetInput = ""
+                        },
+                        enabled = newCallTargetInput.trim().isNotBlank()
+                    ) {
+                        Text("فيديو")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCallDialog = false; newCallTargetInput = "" }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    if (showPublicStreamsSearchDialog) {
+        AlertDialog(
+            onDismissRequest = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" },
+            title = { Text("اكتشاف البثوث العامة والمساحات 🌐") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = Color.Gray, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = publicStreamSearchQuery,
+                        onValueChange = { publicStreamSearchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("اسم البث أو اسم الشخص أو المعرّف") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPublicStreamsSearchDialog = false
+                        val finalStreamId = publicStreamSearchQuery.trim().ifBlank { "public-stream-1" }
+                        LiveStreamService.start(context, finalStreamId, ownUserId, false)
+                        publicStreamSearchQuery = ""
+                    }
+                ) {
+                    Text("انضمام للبث المباشر")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" }) {
                     Text("إلغاء")
                 }
             }
@@ -1857,6 +2435,9 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         }
     }
     Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
+    rich.poll?.let { poll ->
+        InlinePollCard(poll, isOutgoing = message.outgoing)
+    }
     rich.expiresAt?.let {
         val remaining = (it - System.currentTimeMillis()).coerceAtLeast(0)
         val label = when {
@@ -1868,6 +2449,56 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
     }
     if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
+}
+
+@Composable
+private fun InlinePollCard(poll: com.red.sovereign.core.InlinePoll, isOutgoing: Boolean) {
+    var selected by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var votes by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf(poll.votes) }
+    val total = votes.sum().coerceAtLeast(1)
+    Card(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Forum, null, tint = YounesEmerald, modifier = Modifier.size(18.dp))
+                Text(" استطلاع المجموعة", style = MaterialTheme.typography.labelMedium, color = YounesEmerald, fontWeight = FontWeight.Bold)
+            }
+            Text(poll.question, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            poll.options.forEachIndexed { index, option ->
+                val optionVotes = votes.getOrElse(index) { 0 }
+                val ratio = (optionVotes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                val isSelected = selected == option
+                Card(
+                    Modifier.fillMaxWidth().clickable(enabled = !poll.isClosed) {
+                        if (selected == option) {
+                            selected = null
+                            votes = votes.toMutableList().also { it[index] = (it.getOrElse(index) { 0 } - 1).coerceAtLeast(0) }
+                        } else {
+                            selected = option
+                            votes = votes.toMutableList().also { it[index] = it.getOrElse(index) { 0 } + 1 }
+                        }
+                    },
+                    colors = CardDefaults.cardColors(containerColor = if (isSelected) YounesEmerald.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(option, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                            if (poll.isClosed || selected != null) Text("${(ratio * 100).toInt()}%", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (poll.isClosed || selected != null) {
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = YounesEmerald, trackColor = MaterialTheme.colorScheme.surface)
+                        }
+                    }
+                }
+            }
+            Text("إجمالي الأصوات: $total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 @Composable
@@ -2079,28 +2710,49 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         is AttachmentState.Exported -> current.path to current.name
         else -> null
     }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        if (downloaded?.second == manifest.name) {
-            val file = java.io.File(downloaded.first)
-            val bitmap = remember(file.lastModified()) {
-                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-                android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
-            }
-            if (bitmap != null) {
+    val isWorking = attachments.state is AttachmentState.Working
+    if (downloaded?.second == manifest.name) {
+        val file = java.io.File(downloaded.first)
+        val bitmap = remember(file.lastModified()) {
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+            android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
+        }
+        if (bitmap != null) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
                 androidx.compose.foundation.Image(
                     bitmap, contentDescription = "صورة",
-                    modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Fit
+                    modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
+                        val uri = android.net.Uri.fromFile(file)
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "image/*")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching { context.startActivity(intent) }
+                    },
+                    contentScale = ContentScale.Crop
                 )
+                // شارة الحجم والتحقق المشفر
+                Surface(Modifier.padding(6.dp), shape = RoundedCornerShape(8.dp), color = Color.Black.copy(alpha = 0.6f)) {
+                    Text(" ✓ مشفرة • ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                }
             }
-        } else {
-            Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(4.dp))
-                    Text("صورة", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-                        Icon(Icons.Default.Download, "تنزيل")
+        }
+    } else {
+        Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                if (isWorking) {
+                    CircularProgressIndicator(color = YounesEmerald, strokeWidth = 3.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("جارٍ فك التشفير…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                } else {
+                    Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(52.dp))
+                    Spacer(Modifier.height(6.dp))
+                    Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
+                    Text("${formatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                        Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
+                        }
                     }
                 }
             }
@@ -2121,20 +2773,39 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
     }
     if (downloaded?.second == manifest.name) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
-            StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth().height(220.dp))
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
+                StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
+                Surface(
+                    Modifier.align(Alignment.Center).size(52.dp),
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f),
+                    onClick = {
+                        val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "video/*")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching { context.startActivity(intent) }
+                    }
+                ) {
+                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
+                }
+            }
         }
     } else {
+        val isWorking = attachments.state is AttachmentState.Working
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
-            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(YounesEmerald.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Videocam, null, tint = YounesEmerald, modifier = Modifier.size(34.dp))
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
-                IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-                    Icon(Icons.Default.Download, "تنزيل الفيديو")
+                if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
+                else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                    Icon(Icons.Default.Download, "تنزيل الفيديو", tint = YounesEmerald)
                 }
             }
         }
@@ -2154,10 +2825,13 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
     }
     if (downloaded?.second == manifest.name) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(30.dp))
-                    Text(manifest.name, Modifier.padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(AqyalCyanGlow.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(20.dp))
+                    }
+                    Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
                 VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
             }
@@ -2186,14 +2860,28 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
         if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, modifier = Modifier.size(32.dp))
-        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-            Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-            Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
-        }
-        IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
-            Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق")
+    val isWorking = attachments.state is AttachmentState.Working
+    val fileColor = when {
+        manifest.mimeType.contains("pdf") -> AqyalCyanGlow
+        manifest.mimeType.contains("zip") || manifest.mimeType.contains("compressed") -> AqyalGold
+        manifest.mimeType.contains("text") || manifest.mimeType.contains("word") -> Color(0xFF4FC3F7)
+        manifest.mimeType.contains("sheet") || manifest.mimeType.contains("excel") -> YounesEmerald
+        manifest.mimeType.contains("presentation") || manifest.mimeType.contains("powerpoint") -> Color(0xFFF06292)
+        else -> AqyalCyanGlow
+    }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(fileColor.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = fileColor, modifier = Modifier.size(30.dp))
+            }
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+            }
+            if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
+            else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
+            }
         }
     }
 }
@@ -2219,6 +2907,49 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
     else -> "$bytes B"
+}
+
+private fun isSameDay(a: Long, b: Long): Boolean {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = a }
+    val d1 = cal.get(java.util.Calendar.DAY_OF_YEAR); val y1 = cal.get(java.util.Calendar.YEAR)
+    cal.timeInMillis = b
+    return y1 == cal.get(java.util.Calendar.YEAR) && d1 == cal.get(java.util.Calendar.DAY_OF_YEAR)
+}
+
+private fun dateLabel(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    return when {
+        isSameDay(timestamp, now) -> "اليوم"
+        isSameDay(timestamp, now - 86400000L) -> "أمس"
+        else -> java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(timestamp))
+    }
+}
+
+private fun relativeTime(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    val min = diff / 60000
+    return when {
+        diff < 60000 -> "الآن"
+        diff < 3600000 -> "${min}د"
+        diff < 86400000 -> "${diff / 3600000}س"
+        diff < 172800000 -> "أمس"
+        else -> java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(timestamp))
+    }
+}
+
+@Composable
+private fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(YounesEmerald.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = YounesEmerald, modifier = Modifier.size(22.dp))
+            }
+            Column(Modifier.padding(start = 14.dp)) {
+                Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+        }
+    }
 }
 
 @Composable

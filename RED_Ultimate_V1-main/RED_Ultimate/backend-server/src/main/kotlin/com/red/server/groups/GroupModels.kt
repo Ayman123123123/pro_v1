@@ -28,7 +28,7 @@ data class GroupMember(
 )
 
 enum class GroupRole { OWNER, ADMIN, MEMBER }
-data class CreateGroupRequest(val name: String, val description: String? = null)
+data class CreateGroupRequest(val name: String, val description: String? = null, val privacy: String = "PRIVATE")
 data class AddGroupMemberRequest(val redId: String, val role: GroupRole = GroupRole.MEMBER)
 data class UpdateGroupRoleRequest(val role: GroupRole)
 data class TransferGroupOwnershipRequest(val targetUserId: java.util.UUID)
