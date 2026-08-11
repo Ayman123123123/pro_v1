@@ -22,3 +22,14 @@ scrape_configs:
   - job_name: media-sfu
     metrics_path: /health
     static_configs: [{targets: ['media-sfu:4000']}]
+  - job_name: tls-certificate
+    metrics_path: /probe
+    params: {module: [https_tls]}
+    static_configs: [{targets: ['https://nginx:443/health']}]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

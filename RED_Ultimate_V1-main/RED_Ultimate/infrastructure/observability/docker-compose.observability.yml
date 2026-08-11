@@ -26,7 +26,14 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./infrastructure/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infrastructure/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     expose: ["3000"]
+    networks: [red-net]
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    profiles: [observability]
+    command: [--config.file=/etc/blackbox_exporter/config.yml]
+    volumes: [./infrastructure/observability/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro]
     networks: [red-net]
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0

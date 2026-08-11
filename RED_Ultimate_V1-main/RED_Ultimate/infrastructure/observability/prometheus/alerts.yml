@@ -26,3 +26,8 @@ groups:
     for: 10m
     labels: {severity: warning}
     annotations: {summary: "PostgreSQL connections exceed 85 percent"}
+  - alert: TlsCertificateExpiringSoon
+    expr: probe_ssl_earliest_cert_expiry - time() < 1209600
+    for: 1h
+    labels: {severity: warning}
+    annotations: {summary: "TLS certificate expires within 14 days"}
