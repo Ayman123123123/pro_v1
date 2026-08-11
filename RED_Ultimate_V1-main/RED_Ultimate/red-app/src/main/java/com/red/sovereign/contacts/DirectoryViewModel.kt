@@ -3,6 +3,7 @@ package com.red.sovereign.contacts
 import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -19,9 +20,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.URLEncoder
 
-@Serializable data class PublicRedProfile(val redId: String, val username: String, val displayName: String)
+@Serializable data class PublicRedProfile(val redId: String, val username: String, val displayName: String, val avatarUrl: String? = null)
 @Serializable data class ContactRequest(val id: String, val requester: PublicRedProfile, val createdAt: String)
 @Serializable data class ReportRequest(val redId: String, val category: String, val details: String? = null)
+@Serializable data class PresenceInfo(val online: Boolean, val lastSeen: Long? = null)
 
 class DirectoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
@@ -32,6 +34,8 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     val blocked = mutableStateListOf<String>()
     val requests = mutableStateListOf<ContactRequest>()
     val onlineIds = mutableStateListOf<String>()
+    /** آخر ظهور لكل جهة اتصال — redId -> epoch ms. يُستخدم لعرض "آخر ظهور". */
+    val lastSeenByContact = mutableStateMapOf<String, Long>()
     var state: DirectoryState by mutableStateOf(DirectoryState.Idle); private set
 
     init {
@@ -69,10 +73,37 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun refreshPresence(people: List<PublicRedProfile>) {
         if (people.isEmpty()) { onlineIds.clear(); return }
         val ids = URLEncoder.encode(people.joinToString(",") { it.redId }, "UTF-8")
-        when (val response = client.request("GET", "/api/contacts/presence?ids=$ids")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<Map<String, Boolean>>(response.value) }
-                .onSuccess { presence -> onlineIds.clear(); onlineIds.addAll(presence.filterValues { it }.keys) }
-            is ApiResult.Error -> Unit // Presence is optional; contacts remain usable while offline.
+        // نستخدم endpoint مفصّل لجلب online + lastSeen معاً
+        when (val response = client.request("GET", "/api/contacts/presence/detailed?ids=$ids")) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<Map<String, PresenceInfo>>(response.value) }
+                .onSuccess { presence ->
+                    onlineIds.clear()
+                    lastSeenByContact.clear()
+                    presence.forEach { (redId, info) ->
+                        if (info.online) onlineIds.add(redId)
+                        info.lastSeen?.let { lastSeenByContact[redId] = it }
+                    }
+                }
+            is ApiResult.Error -> {
+                // fallback للـ endpoint البسيط إن فشل المفصّل
+                val simple = client.request("GET", "/api/contacts/presence?ids=$ids")
+                if (simple is ApiResult.Success) runCatching { json.decodeFromString<Map<String, Boolean>>(simple.value) }
+                    .onSuccess { p -> onlineIds.clear(); onlineIds.addAll(p.filterValues { it }.keys) }
+            }
+        }
+    }
+
+    /** آخر ظهور لجهة اتصال — يرجع النص المناسب للعرض أو null إن غير متاح. */
+    fun lastSeenLabel(redId: String): String? {
+        if (redId in onlineIds) return "متصل الآن"
+        val lastSeen = lastSeenByContact[redId] ?: return null
+        val diff = System.currentTimeMillis() - lastSeen
+        return when {
+            diff < 60_000 -> "آخر ظهور: الآن"
+            diff < 3_600_000 -> "آخر ظهور: ${diff / 60_000} دقيقة"
+            diff < 86_400_000 -> "آخر ظهور: ${diff / 3_600_000} ساعة"
+            diff < 604_800_000 -> "آخر ظهور: ${diff / 86_400_000} يوم"
+            else -> "آخر ظهور: " + java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(lastSeen))
         }
     }
 
@@ -119,7 +150,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun unblock(profile: PublicRedProfile) = viewModelScope.launch {
-        when (val response = client.request("POST", "/api/contacts/${profile.redId}/unblock")) {
+        when (val response = client.request("DELETE", "/api/contacts/${profile.redId}/block")) {
             is ApiResult.Success -> { blocked.removeAll { it == profile.redId }; state = DirectoryState.Message("تم فك الحظر عن @${profile.username}") }
             is ApiResult.Error -> state = DirectoryState.Error(response.message)
         }

@@ -85,6 +85,29 @@ interface RedDao {
     @Query("SELECT * FROM local_history WHERE conversationId = :convId AND encryptedPlaintext LIKE :query")
     suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
 
+    /** وسائط محادثة (صور/فيديو/ملفات/صوت) — مرتبة بالأحدث أولاً. أساس معرض الوسائط. */
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND messageType IN ('IMAGE','VIDEO','FILE','AUDIO') ORDER BY createdAt DESC")
+    fun mediaForConversation(convId: String): Flow<List<LocalHistoryEntity>>
+
+    // --- Reactions (E2EE: emoji مخزّن محلياً بعد فك التشفير) ---
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertReaction(reaction: MessageReactionEntity)
+
+    @Query("DELETE FROM message_reactions WHERE messageId = :messageId AND senderId = :senderId")
+    suspend fun deleteReaction(messageId: String, senderId: String)
+
+    @Query("DELETE FROM message_reactions WHERE messageId = :messageId AND senderId = :senderId AND emoji = :emoji")
+    suspend fun deleteReactionIfEmoji(messageId: String, senderId: String, emoji: String)
+
+    @Query("SELECT * FROM message_reactions WHERE conversationId = :convId ORDER BY timestamp ASC")
+    fun reactionsForConversation(convId: String): Flow<List<MessageReactionEntity>>
+
+    @Query("SELECT * FROM message_reactions WHERE messageId = :messageId ORDER BY timestamp ASC")
+    suspend fun reactionsForMessage(messageId: String): List<MessageReactionEntity>
+
+    @Query("DELETE FROM message_reactions WHERE conversationId = :convId")
+    suspend fun deleteReactionsByConversation(convId: String)
+
     // --- Delete ---
     @Query("DELETE FROM local_history WHERE id = :messageId")
     suspend fun deleteLocalHistory(messageId: String)

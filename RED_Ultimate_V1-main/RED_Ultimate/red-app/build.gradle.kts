@@ -123,5 +123,8 @@ dependencies {
     // ─── Accompanist — أذونات وتسهيلات Compose ─────────────────────────────────
     implementation(libs.accompanist.permissions)
 
+    // ─── Biometric — قفل التطبيق بالبصمة/الوجه ────────────────────────────────
+    implementation(libs.androidx.biometric)
+
     testImplementation("junit:junit:4.13.2")
 }

@@ -61,7 +61,7 @@ class PublicDirectoryController(
         return matches
             .filter { it.status == AccountStatus.APPROVED }
             .filter { it.id != caller }
-            .map { PublicRedProfile(it.redId, it.username, it.displayName) }
+            .map { PublicRedProfile(it.redId, it.username, it.displayName, it.avatarUrl) }
     }
 
     companion object {
@@ -71,4 +71,9 @@ class PublicDirectoryController(
     }
 }
 
-data class PublicRedProfile(val redId: String, val username: String, val displayName: String)
+data class PublicRedProfile(
+    val redId: String,
+    val username: String,
+    val displayName: String,
+    val avatarUrl: String? = null
+)

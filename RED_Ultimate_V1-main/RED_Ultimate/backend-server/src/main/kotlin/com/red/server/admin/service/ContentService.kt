@@ -25,6 +25,8 @@ class ContentService(
     private val hashtagFollows: HashtagFollowRepository,
     private val savedMessages: SavedMessageRepository,
     private val stickerPacks: StickerPackRepository,
+    private val stickers: StickerRepository,
+    private val userStickerPacks: UserStickerPackRepository,
     private val json: ObjectMapper
 ) {
     // ━━━━━━━━━━━━━━━━ Polls ━━━━━━━━━━━━━━━━
@@ -69,13 +71,21 @@ class ContentService(
 
     @Transactional
     fun vote(pollId: UUID, userId: UUID, optionIds: List<UUID>) {
-        val poll = polls.findById(pollId).orElse(null) ?: return
-        if (poll.status != "ACTIVE") return
-        if (poll.endsAt != null && poll.endsAt!!.isBefore(Instant.now())) return
+        require(optionIds.isNotEmpty()) { "NO_OPTIONS" }
+        val poll = polls.findById(pollId).orElse(null)
+            ?: throw NoSuchElementException("POLL_NOT_FOUND")
+        if (poll.status != "ACTIVE") throw IllegalStateException("POLL_NOT_ACTIVE")
+        if (poll.endsAt != null && poll.endsAt!!.isBefore(Instant.now()))
+            throw IllegalStateException("POLL_ENDED")
 
-        // Check if user already voted
+        // تحقق أن كل خيار ينتمي لهذا الاستطلاع — يمنع التصويت بخيار من استطلاع آخر
+        val validOptionIds = pollOptions.findByPollId(pollId).map { it.id }.toSet()
+        val invalid = optionIds.filter { it !in validOptionIds }
+        require(invalid.isEmpty()) { "INVALID_OPTION" }
+
+        // Check if user already voted — رفض صريح بدل العودة الصامتة
         val existing = pollVotes.countByPollIdAndUserId(pollId, userId)
-        if (existing > 0) return
+        if (existing > 0) throw IllegalStateException("ALREADY_VOTED")
 
         optionIds.forEach { optionId ->
             pollVotes.save(PollVote(pollId = pollId, optionId = optionId, userId = userId))
@@ -100,7 +110,9 @@ class ContentService(
     @Transactional
     fun deletePoll(pollId: UUID): Boolean {
         return if (polls.existsById(pollId)) {
-            pollOptions.findByPollId(pollId).forEach { pollOptions.delete(it) }
+            // حذف مجمّع (بديل N+1) + حذف الأصوات لمنع اليتم
+            pollOptions.deleteAllByPollId(pollId)
+            pollVotes.deleteAllByPollId(pollId)
             polls.deleteById(pollId); true
         } else false
     }
@@ -127,6 +139,9 @@ class ContentService(
 
     fun getUpcomingEvents(): List<Event> = events.findUpcoming(Instant.now())
     fun getLiveEvents(): List<Event> = events.findLive()
+
+    /** تفاصيل فعالية واحدة — يُستدعى من تطبيق المستخدم لعرض صفحة الفعالية قبل RSVP. */
+    fun getEvent(eventId: UUID): Event? = events.findById(eventId).orElse(null)
 
     @Transactional
     fun createEvent(
@@ -334,5 +349,39 @@ class ContentService(
         return if (stickerPacks.existsById(packId)) {
             stickerPacks.deleteById(packId); true
         } else false
+    }
+
+    // ─── الملصقات للمستخدم (قراءة + تثبيت) ───────────────────────────────
+
+    /** الحزم المنشورة المتاحة لكل المستخدمين (المشتركين والمجانية). */
+    fun getPublishedStickerPacks(): List<StickerPack> =
+        stickerPacks.findByIsPublishedOrderByCreatedAtDesc(true)
+
+    /** الملصقات الفردية داخل حزمة (مرتبة بـ display_order). */
+    fun getStickersInPack(packId: UUID): List<Sticker> =
+        stickers.findByPackIdOrderByDisplayOrder(packId)
+
+    /** يثبّت مستخدم حزمة ملصقات (تظهر في منتقاه). */
+    @Transactional
+    fun installStickerPack(userId: UUID, packId: UUID): UserStickerPack {
+        require(stickerPacks.existsById(packId)) { "STICKER_PACK_NOT_FOUND" }
+        // إن كان مثبّتاً مسبقاً نُرجعه دون تكرار
+        userStickerPacks.findByIdUserIdAndIdPackId(userId, packId)?.let { return it }
+        val installed = UserStickerPack(userId = userId, packId = packId, installedAt = Instant.now())
+        return userStickerPacks.save(installed)
+    }
+
+    /** يُلغي تثبيت حزمة. */
+    @Transactional
+    fun uninstallStickerPack(userId: UUID, packId: UUID): Boolean {
+        val existing = userStickerPacks.findByIdUserIdAndIdPackId(userId, packId) ?: return false
+        userStickerPacks.delete(existing)
+        return true
+    }
+
+    /** حزم المستخدم المثبّتة. */
+    fun getInstalledStickerPacks(userId: UUID): List<StickerPack> {
+        val packIds = userStickerPacks.findByUserIdOrderByInstalledAtDesc(userId).map { it.packId }
+        return stickerPacks.findAllById(packIds)
     }
 }

@@ -4,6 +4,7 @@ import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -35,6 +36,9 @@ data class CallTelemetryEvent(
 object CallTelemetry {
     private val queue = ConcurrentLinkedQueue<CallTelemetryEvent>()
     private val json = Json { ignoreUnknownKeys = true }
+    /** نطاق مشترك بعمر المفرد (عمر التطبيق) — يمنع تسريب نطاق يتيم لكل نداء flush.
+     *  SupervisorJob يضمن أن فشل إرسال واحد لا يُلغي بقية الإرسالات. */
+    private val flushScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var lastStats: NetworkStats = NetworkStats()
     @Volatile private var maxPacketLoss: Double = 0.0
     @Volatile private var rttSum: Long = 0
@@ -76,13 +80,12 @@ object CallTelemetry {
     }
 
     /**
-     * يفرّغ الـ queue ويرسلها للـ backend. استدعى دورياً (e.g. كل 5 دقائق)
-     * أو عند Wi-Fi connection.
+     * يفرّغ الـ queue ويرسلها للـ backend. يُستدعى عند endCall
+     * (ويُنصح بربطه دوريًا عبر WorkManager كل 5 دقائق مستقبلاً).
      */
     fun flush(context: android.content.Context) {
         if (queue.isEmpty()) return
-        val scope = CoroutineScope(Dispatchers.IO)
-        scope.launch {
+        flushScope.launch {
             val client = AuthorizedApiClient(TokenStore(context))
             while (queue.isNotEmpty()) {
                 val event = queue.poll() ?: break

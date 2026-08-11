@@ -99,25 +99,35 @@ class AuthController(
     }
 
     /**
-     * تعديل الاسم المعروض.
+     * تعديل الاسم المعروض والصورة والبايو.
      *
-     * يستدعيه التطبيق (`AuthViewModel.updateDisplayName`). كان غائبًا
-     * عن الخادم أيضًا. الاسم المعروض غير فريد — بخلاف اسم المستخدم.
+     * يستدعيه التطبيق (`ProfileViewModel`). الاسم المعروض غير فريد — بخلاف اسم المستخدم.
+     * avatarUrl هو objectKey وسائط مشفّر (لا يخزّن الخادم الصورة، فقط مرجعها).
      */
     @PatchMapping("/profile")
     fun updateProfile(
         @RequestBody request: UpdateProfileRequest,
         authentication: Authentication,
-    ): ResponseEntity<Map<String, String>> {
+    ): ResponseEntity<Map<String, String?>> {
         val trimmed = request.displayName.trim()
         require(trimmed.isNotBlank() && trimmed.length <= 50) { "DISPLAY_NAME_LENGTH_INVALID" }
+        val bio = request.bio?.trim()?.takeIf { it.isNotEmpty() }
+        require(bio == null || bio.length <= 280) { "BIO_TOO_LONG" }
+        val avatarUrl = request.avatarUrl?.trim()?.takeIf { it.isNotEmpty() }
+        require(avatarUrl == null || avatarUrl.length <= 255) { "AVATAR_URL_TOO_LONG" }
 
         val caller = UUID.fromString(authentication.name)
         val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
         user.displayName = trimmed
+        user.bio = bio
+        if (avatarUrl != null) user.avatarUrl = avatarUrl
         user.updatedAt = Instant.now()
         users.save(user)
-        return ResponseEntity.ok(mapOf("displayName" to trimmed))
+        return ResponseEntity.ok(mapOf(
+            "displayName" to trimmed,
+            "avatarUrl" to user.avatarUrl,
+            "bio" to user.bio
+        ))
     }
 
     /**
@@ -142,4 +152,4 @@ class AuthController(
 }
 
 data class UpdateUsernameRequest(val username: String = "")
-data class UpdateProfileRequest(val displayName: String = "")
+data class UpdateProfileRequest(val displayName: String = "", val avatarUrl: String? = null, val bio: String? = null)

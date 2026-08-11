@@ -394,3 +394,55 @@ class StickerPack(
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now()
 )
+
+/**
+ * ملصق فرد داخل حزمة — يُرسل في الدردشة كرسالة وسائط.
+ * media_key يُشير إلى ملف مشفّر في MinIO (نفس آلية المرفقات).
+ */
+@Entity
+@Table(name = "stickers")
+class Sticker(
+    @Id var id: UUID = UUID.randomUUID(),
+
+    @Column(name = "pack_id", nullable = false)
+    var packId: UUID = UUID.randomUUID(),
+
+    @Column(length = 100)
+    var name: String? = null,
+
+    @Column(name = "media_key", nullable = false, length = 200)
+    var mediaKey: String = "",
+
+    @Column(name = "emoji_tags", columnDefinition = "TEXT[]")
+    var emojiTags: Array<String> = emptyArray(),
+
+    @Column(name = "display_order", nullable = false)
+    var displayOrder: Int = 0
+)
+
+/**
+ * تثبيت مستخدم لحزمة ملصقات (يُخزّن أيها مثبّت ومفضّل).
+ */
+@Entity
+@Table(name = "user_sticker_packs")
+@IdClass(UserStickerPackId::class)
+class UserStickerPack(
+    @Id
+    @Column(name = "user_id")
+    var userId: UUID = UUID.randomUUID(),
+
+    @Id
+    @Column(name = "pack_id")
+    var packId: UUID = UUID.randomUUID(),
+
+    @Column(name = "installed_at", nullable = false)
+    var installedAt: Instant = Instant.now(),
+
+    @Column(name = "is_favorite", nullable = false)
+    var isFavorite: Boolean = false
+)
+
+data class UserStickerPackId(
+    val userId: UUID = UUID.randomUUID(),
+    val packId: UUID = UUID.randomUUID()
+) : java.io.Serializable

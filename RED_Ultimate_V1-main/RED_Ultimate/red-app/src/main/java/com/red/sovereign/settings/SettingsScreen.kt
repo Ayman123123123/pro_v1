@@ -197,6 +197,8 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 }
 
 @Composable private fun PrivacySettings(vm: SettingsViewModel) = SettingsList {
+    item { ToggleSetting("قفل التطبيق بالبصمة", "اطلب بصمة/نمط الجهاز لفتح يونس — مفاتيحك محمية بخطوة إضافية", vm.state.appLockEnabled, vm::setAppLockEnabled) }
+    item { ToggleSetting("إخفاء آخر ظهور", "لا يرى الآخرون متى كنت متصلاً آخر مرة", vm.state.hideLastSeen, vm::setHideLastSeen) }
     item { ToggleSetting("إيصالات القراءة", "إرسال READ بعد فتح الرسالة", vm.state.readReceipts, vm::setReadReceipts) }
     item { LockedSetting("مؤشر الكتابة", "سيُفعّل بعد ربط debounce ودورة حياة محرر الرسالة دون تسريب زائد للبيانات الوصفية") }
     item { LockedSetting("معاينات الروابط", "متوقفة حتى اكتمال proxy آمن وحماية SSRF وإخفاء عنوان IP") }

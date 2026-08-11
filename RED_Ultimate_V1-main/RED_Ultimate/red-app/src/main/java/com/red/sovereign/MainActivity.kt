@@ -24,6 +24,7 @@ import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.security.AppLockScreen
 import com.red.sovereign.security.DebugSecurityManager
 import com.red.sovereign.security.CertificatePinner
 import com.red.sovereign.settings.SettingsRuntime
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
     /** المعرّف المستهدف من الإشعار (conversationId + sender) لفتح المحادثة مباشرة. */
     private var deepLinkConversation by mutableStateOf<String?>(null)
     private var deepLinkSender by mutableStateOf<String?>(null)
+
+    /** حالة قفل التطبيق — تُفعّل عند onResume إن كان AppLock مفعّلاً. */
+    private var appLocked by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,7 +88,13 @@ class MainActivity : ComponentActivity() {
                                 stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))
                             }
                         }
-                        if (state is AuthState.Authenticated) RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation) else AuthFlow(authViewModel)
+                        if (state is AuthState.Authenticated) {
+                            if (appLocked && SettingsRuntime.current.appLockEnabled) {
+                                AppLockScreen(onUnlocked = { appLocked = false })
+                            } else {
+                                RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
+                            }
+                        } else AuthFlow(authViewModel)
                     }
                 }
             }
@@ -117,5 +127,13 @@ class MainActivity : ComponentActivity() {
                 enterPictureInPictureMode(params)
             }
         } catch (_: Exception) {}
+    }
+
+    /** قفل التطبيق عند العودة للواجهة إن كان AppLock مفعّلاً ومستخدم مُصادق عليه. */
+    override fun onResume() {
+        super.onResume()
+        if (authViewModel.state is AuthState.Authenticated && SettingsRuntime.current.appLockEnabled) {
+            appLocked = true
+        }
     }
 }
