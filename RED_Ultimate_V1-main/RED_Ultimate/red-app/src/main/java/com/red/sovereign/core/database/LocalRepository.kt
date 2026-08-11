@@ -11,6 +11,7 @@ class LocalRepository(context: Context) {
     suspend fun saveLocalHistory(history: LocalHistoryEntity) = dao.insertLocalHistory(history)
     fun getLocalHistory(convId: String): Flow<List<LocalHistoryEntity>> = dao.getLocalHistory(convId)
     suspend fun updateMessageStatus(id: String, status: String) = dao.updateMessageStatus(id, status)
+    suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
     suspend fun saveIncomingMessage(message: com.red.sovereign.proto.RedProtos.ChatMessage, outgoing: Boolean = false) {
         val entity = MessageEntity(

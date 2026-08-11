@@ -18,6 +18,9 @@ interface RedDao {
     @Query("UPDATE local_history SET status = :status WHERE id = :id")
     suspend fun updateMessageStatus(id: String, status: String)
 
+    @Query("UPDATE local_history SET encryptedPlaintext = :plaintext WHERE id = :id")
+    suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray)
+
     // --- Conversations ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConversation(conversation: ConversationEntity)

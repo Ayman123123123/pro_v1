@@ -205,6 +205,22 @@ class RedConnectionService : Service() {
                     }.onSuccess { plaintext ->
                         if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
+                        } else if (message.type == "RICH_TEXT") {
+                            val rich = com.red.sovereign.core.RichMessage.decode(plaintext)
+                            when (rich?.action) {
+                                // التعديل: تحديث نص الرسالة الأصلية في التخزين (لا إضافة سجل جديد)
+                                "EDIT" -> rich.editOf?.let { editOf ->
+                                    repository.updateLocalHistoryText(editOf, com.red.sovereign.core.RichMessage.encode(rich.copy(replyTo = rich.replyTo)))
+                                    DecryptedMessageBus.publish(DecryptedMessage(editOf, message.conversationId, message.senderId, com.red.sovereign.core.RichMessage.encode(rich), message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                }
+                                // الحذف للجميع: حذف الرسالة الأصلية من التخزين
+                                "DELETE" -> rich.deleteOf?.let { deleteOf ->
+                                    repository.deleteLocalMessage(deleteOf)
+                                    DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                }
+                                else -> storeRichOrPlainMessage(message, plaintext)
+                            }
+                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         } else {
                             repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
@@ -217,8 +233,8 @@ class RedConnectionService : Service() {
                             if (SettingsRuntime.current.notificationEnabled) {
                                 notifyEncryptedMessage(message.senderId, preview)
                             }
+                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }
-                        socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                     }
                 } else if (message.senderId == tokenStore.redId) {
                     repository.saveIncomingMessage(message, outgoing = true)
@@ -256,6 +272,18 @@ class RedConnectionService : Service() {
     /**
      * فك تشفير preview للـ notification (نص عادي فقط، آمن)
      */
+    private suspend fun storeRichOrPlainMessage(message: RedProtos.ChatMessage, plaintext: ByteArray) {
+        repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
+        DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
+        val preview = decodeMessagePreview(plaintext)
+        if (message.type != "GROUP_MESSAGE") {
+            runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
+        }
+        if (SettingsRuntime.current.notificationEnabled) {
+            notifyEncryptedMessage(message.senderId, preview)
+        }
+    }
+
     private fun decodeMessagePreview(plaintext: ByteArray): String? {
         return runCatching {
             val text = String(plaintext, Charsets.UTF_8)

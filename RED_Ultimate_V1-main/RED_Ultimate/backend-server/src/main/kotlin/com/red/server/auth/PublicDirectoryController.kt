@@ -17,7 +17,8 @@ class PublicDirectoryController(private val users: UserAccountRepository) {
         val term = query.trim()
         require(term.length in 3..32) { "Search query must contain 3-32 characters" }
         val caller = UUID.fromString(authentication.name)
-        val matches = if (term.startsWith("RED-", ignoreCase = true)) {
+        val matches = if (term.startsWith("RED-", ignoreCase = true) || term.startsWith("YNS-", ignoreCase = true)) {
+            // دعم كل من المعرفات القديمة (RED-*) والجديدة (YNS-*) حتى يمكن إضافة الأصدقاء بمعرفهم.
             listOfNotNull(users.findByRedId(term.uppercase())).filter { it.status == AccountStatus.APPROVED }
         } else {
             listOfNotNull(users.findByUsernameIgnoreCase(term)).filter { it.status == AccountStatus.APPROVED }
