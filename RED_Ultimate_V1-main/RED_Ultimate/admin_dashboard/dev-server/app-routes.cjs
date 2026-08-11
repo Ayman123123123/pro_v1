@@ -512,7 +512,16 @@ module.exports = function registerAppRoutes(on) {
   on('GET', '/api/identity/authority', () =>
     ok({ publicKey: d.identityAuthority().publicKeyBase64, algorithm: 'SHA256withECDSA', curve: 'prime256v1' }));
 
-  on('GET', '/api/identity/directory/:redId', (p) => {
+  /**
+   * حزم المفاتيح العامة لمستخدم — تتطلب مصادقة.
+   *
+   * كانت مفتوحة، وهي تكشف لكل جهاز معتمد: المفتاح العام والبصمة
+   * وشهادة التخويل. ومع فضاء معرّفات من 89,999 صار الزحف على
+   * الدليل كله ممكنًا عمليًا. يطابق الآن
+   * SecurityConfig: `/api/identity/directory/**` → authenticated().
+   */
+  on('GET', '/api/identity/directory/:redId', (p, _q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
     const user = get('SELECT * FROM users WHERE red_id = ?', p.redId.toUpperCase());
     if (!user) return notFound('RED identity not found');
     const devices = all("SELECT * FROM devices WHERE user_id=? AND status='APPROVED'", user.id);
@@ -539,7 +548,15 @@ module.exports = function registerAppRoutes(on) {
     });
   });
 
-  on('GET', '/api/identity/directory/:redId/:deviceId/prekey', (p) => {
+  /**
+   * استهلاك مفتاح لمرة واحدة — يتطلب مصادقة.
+   *
+   * كل نداء يستهلك مفتاحًا فعليًا. بلا مصادقة يستنزف أي طرف مخزون
+   * أي مستخدم بحلقة بسيطة، فتتدهور الجلسات الجديدة إلى المفتاح
+   * الموقّع وحده.
+   */
+  on('GET', '/api/identity/directory/:redId/:deviceId/prekey', (p, _q, _b, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
     const user = get('SELECT * FROM users WHERE red_id = ?', p.redId.toUpperCase());
     if (!user) return notFound('RED identity not found');
     const dev = get("SELECT * FROM devices WHERE id=? AND user_id=? AND status='APPROVED'", p.deviceId, user.id);
