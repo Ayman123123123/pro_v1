@@ -18,10 +18,10 @@ import java.util.concurrent.atomic.AtomicIntegerArray
  * مشغلو اليمن الصحيحون (Wikipedia + ITU E.164):
  * | البادئة | المشغل                          |
  * |---------|---------------------------------|
- * | 71      | سبأفون (Sabafon)               |
- * | 73      | يو / YOU (كانت MTN Yemen)      |
  * | 77, 78  | يمن موبايل (Yemen Mobile)      |
- * | 70      | واي (Y Telecom)                |
+ * | 73      | سبأفون (Sabafon)               |
+ * | 71      | واي (Y Telecom)                |
+ * | 70      | يو / YOU (كانت MTN Yemen)      |
  * | 10      | يمن 4G (Yemen 4G)              |
  */
 @Service
@@ -34,11 +34,11 @@ class DinstarLoadBalancer(private val hardware: DinstarHardwareService) {
          * Source: Wikipedia (Telephone_numbers_in_Yemen) + ITU E.164
          */
         private val OPERATOR_PREFIXES: Map<String, YemenOperatorInfo> = mapOf(
-            "71" to YemenOperatorInfo("Sabafon", "سبأفون", 30),
-            "73" to YemenOperatorInfo("YOU", "يو", 25),
             "77" to YemenOperatorInfo("YemenMobile", "يمن موبايل", 40),
             "78" to YemenOperatorInfo("YemenMobile", "يمن موبايل", 40),
-            "70" to YemenOperatorInfo("YTelecom", "واي", 5),
+            "73" to YemenOperatorInfo("Sabafon", "سبأفون", 30),
+            "71" to YemenOperatorInfo("YTelecom", "واي", 5),
+            "70" to YemenOperatorInfo("YOU", "يو", 20),
             "10" to YemenOperatorInfo("Yemen4G", "يمن 4G", 5)
         )
 
