@@ -20,7 +20,19 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — fix: فحص عميق آخر — إصلاح ٣ عيوب في الكود الذي أضفته + ٤ فحوصات حارس
+## 2026-08-11 — feat(polls-events): وصل شاشتي الاستطلاعات/الفعاليات كميزة مستخدم (بدل الحذف)
+- استرجاع الملفات الخمسة (EventsScreen/PollsScreen/EventsApi/PollsApi/PollsApiTest) من التاريخ
+- **تمرير دور الحساب (role) عبر المسار الكامل**: TokenStore.role/isAdmin + AuthState.Authenticated(isAdmin)
+  + AuthViewModel يمرّر role من UserResponse (موجود بالفعل في backend و Android)
+- **إخفاء أدوات الإدارة عن المستخدم العادي**: زر الإنشاء + أزرار الإلغاء/الحذف/الإغلاق
+  تظهر فقط لـ isAdmin (nullable callbacks) — بدل عرضها وتعطّلها بـ403
+- **وصل في التنقّل**: SovereignScreen.EVENTS/POLLS + MoreScreen زرّا «الفعاليات» و«الاستطلاعات»
+- **فتح قراءة المحتوى للمستخدم**: SecurityConfig يسمح GET /polls و GET /events للمصادَق
+  (القراءة العامة آمنة — المحتوى منشور للمجتمع)
+- العمليات المستخدم تعمل: تصويت + RSVP + تسجيل حضور + تفاصيل + عرض النشطة/القادمة
+- متوافق مع المبدأ الجديد: «بدل حذف غير المستخدم، أوصله وأكمله وطوره»
+- فاحص التكامل 27/27 أخضر · schema + catalog سليم
+- التوثيق: docs/POLLS_EVENTS_WIRED_AR.md
 - **AppLock عطل تصريف:** LocalFragmentActivity محذوف من Compose الحديث (BOM 2026.06) → cast من LocalContext
 - **AppLock ثغرة أمنية:** onFailure { onUnlocked() } كان يفتح التطبيق عند أي فشل بصمة → القفل تجميلي
   → الفشل الآن يبقي التطبيق مقفلاً + onAuthenticationFailed/Error تعرض رسالة + زر معطّل إن لا بصمة

@@ -232,6 +232,9 @@ import com.red.sovereign.features.media.MediaGalleryDialog
 import com.red.sovereign.features.profile.BackupScreen
 import com.red.sovereign.features.profile.ProfileScreen
 import com.red.sovereign.core.YounesId
+import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.media.EventsScreen
+import com.red.sovereign.media.PollsScreen
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
@@ -241,7 +244,7 @@ private enum class MainSection(val label: String, val icon: ImageVector) {
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -307,6 +310,14 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 displayName = account.username,
                 onBack = { currentScreen = SovereignScreen.DASHBOARD }
             )
+            SovereignScreen.EVENTS -> {
+                val tokens = remember { TokenStore(context) }
+                EventsScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD }, isAdmin = account.isAdmin)
+            }
+            SovereignScreen.POLLS -> {
+                val tokens = remember { TokenStore(context) }
+                PollsScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD }, isAdmin = account.isAdmin)
+            }
             SovereignScreen.GROUP_INFO -> {
                 val infoGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
                 SovereignGroupInfoScreen(
@@ -371,7 +382,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
                     onBackup = { currentScreen = SovereignScreen.BACKUP },
                     onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
-                    onProfile = { currentScreen = SovereignScreen.PROFILE }
+                    onProfile = { currentScreen = SovereignScreen.PROFILE },
+                    onEvents = { currentScreen = SovereignScreen.EVENTS },
+                    onPolls = { currentScreen = SovereignScreen.POLLS }
                 )
             }
         }
@@ -2276,7 +2289,9 @@ private fun MoreScreen(
     onPrivacy: () -> Unit,
     onBackup: () -> Unit,
     onCommunities: () -> Unit = {},
-    onProfile: () -> Unit = {}
+    onProfile: () -> Unit = {},
+    onEvents: () -> Unit = {},
+    onPolls: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -2300,6 +2315,8 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Settings, "الإعدادات العامة", "الهوية والأجهزة والخادم والجلسة", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
         MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
         MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
+        MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
+        MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
     }
 }
 
