@@ -3,8 +3,8 @@
 
 [versions]
 # SDK & Build Versions
-# AGP 9.2.1 is the newest line already SHA-256 pinned in this repository.
-# It supports API 37 and requires Gradle 9.4.1 / Build Tools 36.0.0.
+# AGP 9.3.0 — latest stable July 2026 (Gradle 9.5.0+ / Build Tools 36.0.0 / API 37)
+# Kotlin 2.3.21 — last 2.3 patch, fully compatible with AGP 9.3 + KSP 2.3.11
 buildTools = "36.0.0"
 compileSdk = "37"
 targetSdk = "37"
@@ -12,8 +12,8 @@ minSdk = "26"
 ndk = "28.2.13676358"
 javaVersion = "21"
 kotlinJvmTarget = "21"
-kotlin = "2.3.10"
-android-gradle-plugin = "9.2.1"
+kotlin = "2.3.21"
+android-gradle-plugin = "9.3.0"
 ksp = "2.3.11"
 
 # Other versions

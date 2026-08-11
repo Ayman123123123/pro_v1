@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # YOUNES Media SFU (mediasoup)
-FROM node:22-bookworm
+FROM node:24-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 build-essential pkg-config \

@@ -1,8 +1,8 @@
 plugins {
-    kotlin("jvm") version "2.2.20"
-    kotlin("plugin.spring") version "2.2.20"
-    kotlin("plugin.jpa") version "2.2.20"
-    id("org.springframework.boot") version "3.5.16"
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.jpa") version "2.3.21"
+    id("org.springframework.boot") version "4.0.7"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -51,8 +51,8 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
     // Local S3-compatible object storage
-    implementation("io.minio:minio:8.6.0")
-    implementation("org.jsoup:jsoup:1.18.1") // LinkCard Open Graph
+    implementation("io.minio:minio:8.7.0")
+    implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
 
     // OkHttp for Dinstar API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

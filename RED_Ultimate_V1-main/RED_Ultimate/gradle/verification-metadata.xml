@@ -21,7 +21,7 @@ https://docs.gradle.org/current/userguide/dependency_verification.html
          <trust group="androidx.media3" version="1.11.0" reason="Official stable AndroidX Media3 release; version-scoped bootstrap trust"/>
          <trust group="androidx.room" version="2.8.4" reason="Official stable AndroidX Room release; version-scoped bootstrap trust"/>
          <trust group="androidx.work" version="2.11.2" reason="Official stable AndroidX WorkManager release; version-scoped bootstrap trust"/>
-         <trust group="org.jetbrains.kotlin" version="2.3.10" reason="Kotlin line bundled by AGP 9.2; version-scoped bootstrap trust"/>
+         <trust group="org.jetbrains.kotlin" version="2.3.21" reason="Kotlin 2.3.21 bundled by AGP 9.3 — LTS patch line"/>
          <trust group="org.jetbrains.kotlinx" version="1.11.0" reason="Official kotlinx.serialization stable release; version-scoped bootstrap trust"/>
          <trust group="androidx.room" name="room-compiler" reason="Room annotation-processor — verified via lockfile diff"/>
          <trust group="androidx.room" name="room-compiler-processing" reason="Room annotation-processor — verified via lockfile diff"/>
