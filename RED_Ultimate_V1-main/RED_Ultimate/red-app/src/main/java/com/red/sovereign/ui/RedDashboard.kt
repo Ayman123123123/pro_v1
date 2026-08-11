@@ -718,6 +718,7 @@ private fun ChatHubScreen(
     var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
     var showGroupEmoji by remember { mutableStateOf(false) }
+    var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
     var deleteGroupId by remember { mutableStateOf<String?>(null) }
@@ -1174,13 +1175,13 @@ private fun ChatHubScreen(
                         IconButton({ onManageGroup(openGroup.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                     }
                 }
-                val groupMessages = decrypted.filter { it.conversationId == openGroup.id && it.type == "GROUP_MESSAGE" }
+                val groupMessages = decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (groupMessages.isEmpty()) item { Text("محادثة جماعية مشفرة بـSender Keys. يتغير المفتاح تلقائيًا عند تغير العضوية.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
                 items(groupMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp),
+                            Modifier.widthIn(max = 320.dp).clickable { groupReplyToMessage = message },
                             colors = CardDefaults.cardColors(containerColor = if (message.outgoing) YounesEmerald.copy(alpha = .82f) else MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1194,16 +1195,40 @@ private fun ChatHubScreen(
                                     val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
                                     Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
-                                Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+                                when (message.type) {
+                                    "RICH_TEXT" -> RichTextMessage(message, groupMessages)
+                                    "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
+                                    "VOICE" -> VoiceMessage(message, attachments)
+                                    else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+                                }
                             }
                         }
                     }
                 }
                 }
+                groupReplyToMessage?.let { ref ->
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("رد على ${if (ref.outgoing) "نفسك" else ref.senderRedId.take(12)}", color = YounesEmerald, style = MaterialTheme.typography.labelMedium)
+                                Text(messageDisplayText(ref), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton({ groupReplyToMessage = null }) { Icon(Icons.Default.Close, "إلغاء الرد") }
+                        }
+                    }
+                }
                 Row(verticalAlignment = Alignment.Bottom) {
-                    OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة جماعية مشفرة…") }, maxLines = 4)
+                    OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") }, maxLines = 4)
                     IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
-                    FilledIconButton({ RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim()); groupMessageText = "" }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                    FilledIconButton({
+                        if (groupReplyToMessage != null) {
+                            val rich = RichMessage(text = groupMessageText.trim(), replyTo = groupReplyToMessage?.id)
+                            RedConnectionService.sendGroupRichText(context, openGroup, rich)
+                        } else {
+                            RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim())
+                        }
+                        groupMessageText = ""; groupReplyToMessage = null; showGroupEmoji = false
+                    }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
                 }
                 if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
             }
