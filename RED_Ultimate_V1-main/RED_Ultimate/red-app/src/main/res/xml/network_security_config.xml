@@ -1,20 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RELEASE / PRODUCTION: Strict TLS-only enforcement.
-     No cleartext allowed for any domain, including localhost.
-     Debug LAN cleartext is provided ONLY via src/debug overlay. -->
+<!-- ═══════════════════════════════════════════════════════════════════
+     RELEASE / PRODUCTION — Strict TLS-only Enforcement (Legendary Hardening)
+     • No cleartext for ANY domain, including localhost — Android 9+ default + explicit
+     • Only system CAs trusted — user CAs allowed ONLY via debug-overrides (debuggable builds)
+     • Future: pin RED server cert via <pin-set> below — generate pins via: openssl x509 -in fullchain.pem -pubkey | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
+     • Debug LAN cleartext is provided SOLELY via src/debug overlay — never merged into release
+     ═══════════════════════════════════════════════════════════════════ -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
+        <!-- Optional future pinning for RED sovereign server — uncomment after generating pins:
+        <pin-set expiration="2027-08-11">
+            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
+            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
+        </pin-set>
+        -->
     </base-config>
 
-    <!-- Allow user-installed CAs only in debuggable builds (debug-overrides). 
-         Release builds will still pin to system CAs only. -->
+    <!-- User CAs trusted only when debuggable (debug builds). Release keeps system-only. -->
     <debug-overrides>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
         </trust-anchors>
     </debug-overrides>
+
+    <!-- Example per-domain strict policy for RED server (when RED_TLS_PINS is set via BuildConfig):
+         Add pin-set here for defense-in-depth beyond OkHttp CertificatePinner -->
 </network-security-config>
