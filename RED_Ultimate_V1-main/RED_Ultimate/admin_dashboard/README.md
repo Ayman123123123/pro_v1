@@ -38,6 +38,26 @@ npm install
 RED_API_TARGET=http://127.0.0.1:8080 npm run dev
 ```
 
+### تشغيل كامل بلا خادم حقيقي (تطوير)
+
+لا يتطلب JDK ولا PostgreSQL/Mongo/Redis/MinIO:
+
+```bash
+npm run mock     # نافذة 1 — خادم وهمي على 8080
+npm run dev      # نافذة 2 — اللوحة على 8088
+```
+
+`mock-backend.cjs` يخدم **86 مسارًا** بأشكال مطابقة حرفيًا لعقد
+`AdminV2Controller.kt` (صفحات `{content,totalElements}` مقابل مصفوفات صريحة)،
+ويبث سجلًا حيًا حقيقيًا عبر WebSocket على `/ws/admin/logs` بعد تذكرة
+`POST /api/admin/ws-ticket`. الإجراءات (موافقة/حظر/نشر/إنشاء) تُعدّل الحالة
+في الذاكرة فيظهر أثرها في الواجهة.
+
+أي مسار غير معرّف يُعيد **404 صريحًا** ويُسجَّل في الطرفية — بدل رد نجاح
+عام كان يُخفي النقص ثم ينهار في الواجهة بـ `undefined.filter`.
+
+> للتطوير المحلي فقط: بلا مصادقة حقيقية، وغير مُضمَّن في صورة Docker.
+
 إنتاجيًا عبر Docker Compose، Nginx الرئيسي يمرر:
 
 ```text
@@ -75,6 +95,7 @@ npm run build        # tsc --noEmit ثم حزمة Vite للإنتاج
 - `src/hooks/usePolling.ts` — استطلاع دوري يتوقف عند إخفاء التبويب/انقطاع الشبكة ويمنع تداخل الطلبات.
 - `scripts/check-api-contract.mjs` — فاحص عقد الواجهة والخادم.
 - `scripts/check-frontend-guards.mjs` — حارس Local-first والاستطلاع والأسرار.
+- `mock-backend.cjs` — خادم تطوير وهمي (86 مسارًا + بث WebSocket) مطابق لعقد الخادم.
 - `Dockerfile` + `dashboard.nginx.conf` — بناء وتقديم الإنتاج.
 
 ## الخطوط
