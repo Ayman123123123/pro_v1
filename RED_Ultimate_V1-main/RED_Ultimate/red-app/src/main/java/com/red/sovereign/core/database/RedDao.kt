@@ -37,6 +37,9 @@ interface RedDao {
     @Query("UPDATE conversations SET mutedUntil = :until WHERE id = :id")
     suspend fun setMutedUntil(id: String, until: Long)
 
+    @Query("UPDATE conversations SET lastMessageText = :preview, lastMessageTimestamp = :ts, unreadCount = CASE WHEN :isIncoming = 1 THEN unreadCount + 1 ELSE unreadCount END WHERE id = :id")
+    suspend fun updateConversationLast(id: String, preview: String, ts: Long, isIncoming: Int)
+
     // --- Contacts ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContacts(contacts: List<ContactEntity>)

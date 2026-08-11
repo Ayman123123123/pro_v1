@@ -33,6 +33,26 @@ class LocalRepository(context: Context) {
 
     // --- Conversations ---
     suspend fun saveConversation(conv: ConversationEntity) = dao.insertConversation(conv)
+
+    /**
+     * يُنشئ/يُحدّث صف المحادثة عند إرسال أو استقبال رسالة، بحيث تظهر
+     * المحادثة في قائمة الدردشات مع آخر رسالة والطابع الزمني وعدد غير المقروء.
+     * يحافظ على pinned/archived/muted عند وجود المحادثة مسبقاً.
+     */
+    suspend fun onMessageStored(conversationId: String, peerId: String, preview: String, timestamp: Long, isIncoming: Boolean) {
+        val existing = dao.getConversation(conversationId)
+        if (existing != null) {
+            dao.updateConversationLast(conversationId, preview, timestamp, if (isIncoming) 1 else 0)
+        } else {
+            dao.insertConversation(
+                ConversationEntity(
+                    id = conversationId, peerId = peerId,
+                    lastMessageText = preview, lastMessageTimestamp = timestamp,
+                    unreadCount = if (isIncoming) 1 else 0
+                )
+            )
+        }
+    }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)

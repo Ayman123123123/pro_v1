@@ -142,6 +142,8 @@ class RedConnectionService : Service() {
                         val timestamp = System.currentTimeMillis()
                         repository.saveLocalHistory(LocalHistoryEntity(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
                         DecryptedMessageBus.publish(DecryptedMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
+                        // تحديث/إنشاء صف المحادثة لتظهر في قائمة الدردشات
+                        runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
                     }
                 }
             }
@@ -208,6 +210,10 @@ class RedConnectionService : Service() {
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
                             // Show notification for incoming encrypted message
                             val preview = decodeMessagePreview(plaintext)
+                            // تحديث/إنشاء صف المحادثة لتظهر في قائمة الدردشات (فردية فقط — لا لمجموعة)
+                            if (message.type != "GROUP_MESSAGE") {
+                                runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
+                            }
                             if (SettingsRuntime.current.notificationEnabled) {
                                 notifyEncryptedMessage(message.senderId, preview)
                             }
