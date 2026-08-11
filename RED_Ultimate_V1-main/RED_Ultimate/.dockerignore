@@ -1,0 +1,21 @@
+# Build context = repo root (used by the backend service only; media-sfu,
+# admin-panel, pstn-asterisk and admin_dashboard have their own contexts).
+# Keep the backend context small so builds stay fast and cacheable on Windows.
+.git
+.gitignore
+**/.git
+**/node_modules
+**/.gradle
+**/build
+**/.idea
+.gradle-cache/
+
+# Nothing below is consumed by backend-server/Dockerfile
+red-app/
+admin_dashboard/
+media-sfu/
+pstn-asterisk/
+scripts/
+docs/
+*.md
+*.log

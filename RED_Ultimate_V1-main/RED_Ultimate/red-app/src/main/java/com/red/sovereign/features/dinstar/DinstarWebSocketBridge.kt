@@ -1,6 +1,7 @@
 package com.red.sovereign.features.dinstar
 
 import android.util.Log
+import com.red.sovereign.core.ServerEndpoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import okhttp3.*
@@ -12,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * 📡 YOUNES Dinstar WebSocket Bridge
  */
-class DinstarWebSocketBridge(private val backendUrl: String = "http://192.168.1.50:8080") {
+class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url()) {
     companion object {
         private const val TAG = "RED.DinstarWS"
         private const val WS_PATH = "/ws/dinstar"

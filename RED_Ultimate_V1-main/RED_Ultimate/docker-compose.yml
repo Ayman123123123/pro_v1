@@ -93,6 +93,13 @@ services:
       - "3478:3478/tcp"
       - "3478:3478/udp"
       - "45000-45050:45000-45050/udp"
+    healthcheck:
+      # صورة coturn لا تحوي curl — نفحص منفذ TURN عبر bash /dev/tcp
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
@@ -150,7 +157,10 @@ services:
       test: ["CMD-SHELL", "mongosh --quiet --username red_user --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      # First boot on Windows Docker Desktop (slow virtiofs I/O) needs well over
+      # 50s of mongod init; grace it instead of racing dependents into "unhealthy".
+      start_period: 40s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 7. Redis 7 ━━━━━━━━━━━━
@@ -187,6 +197,16 @@ services:
       retries: 5
     networks: ["red-net"]
 
+  # ━━━━ تهيئة شهادات TLS للتطوير — ذاتية التوقيع، تُولَّد مرة واحدة في حجم red-certs ━━━━
+  # (secrets/ متجاهلة في git؛ تركيب ملفات غير موجودة كان يحوّلها Docker لمجلدات فارغة
+  # فيسقط nginx في حلقة إعادة تشغيل. للإنتاج: اسحب الشهادات الحقيقية إلى حجم red-certs.)
+  certs-init:
+    image: nginx:1.27-alpine
+    container_name: red-certs-init
+    restart: "no"
+    command: ["sh", "-c", "if [ -s /etc/ssl/red/fullchain.pem ]; then echo 'TLS certs already present'; else apk add --no-cache openssl >/dev/null 2>&1 && openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 -subj '/CN=red.local' -addext 'subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1' -keyout /etc/ssl/red/privkey.pem -out /etc/ssl/red/fullchain.pem && echo 'Self-signed dev TLS certs generated'; fi"]
+    volumes: ["red-certs:/etc/ssl/red"]
+
   # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI ━━━━━━━━━━━━
   nginx:
     image: nginx:1.27-alpine
@@ -195,11 +215,11 @@ services:
     ports: ["${RED_HTTP_PORT:-8088}:80", "${RED_HTTPS_PORT:-8443}:443"]
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./secrets/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
-      - ./secrets/privkey.pem:/etc/ssl/private/privkey.pem:ro
+      - red-certs:/etc/ssl/red:ro
     depends_on:
       backend: { condition: service_healthy }
       admin-panel: { condition: service_healthy }
+      certs-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -223,6 +243,7 @@ volumes:
   mongo-data:
   redis-data:
   minio-data:
+  red-certs:
 
 networks:
   red-net:

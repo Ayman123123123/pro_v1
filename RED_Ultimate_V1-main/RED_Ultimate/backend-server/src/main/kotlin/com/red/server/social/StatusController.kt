@@ -92,6 +92,8 @@ class StatusController(
 }
 
 // ━━━━━━━━━━━━ DTOs ━━━━━━━━━━━━
+// ملاحظة: PrivacySettingsRequest / PrivacySettingsResponse / OnlineContact مُعرّفة مرة واحدة
+// في UserStatusService.kt (نفس الحزمة) — لا تُكرر هنا.
 
 data class StatusResponse(
     val userId: String,
@@ -104,35 +106,4 @@ data class UpdateStatusRequest(
     val type: String, // ONLINE, OFFLINE, BUSY, AWAY, DO_NOT_DISTURB, INVISIBLE
     val customText: String? = null,
     val visibleTo: String = "EVERYONE" // EVERYONE, CONTACTS, NOBODY
-)
-
-data class PrivacySettingsRequest(
-    val lastSeen: String? = null,
-    val onlineStatus: String? = null,
-    val profilePhoto: String? = null,
-    val about: String? = null,
-    val status: String? = null,
-    val readReceipts: String? = null,
-    val calls: String? = null,
-    val groups: String? = null,
-    val liveLocation: String? = null
-)
-
-data class PrivacySettingsResponse(
-    val lastSeen: String,
-    val onlineStatus: String,
-    val profilePhoto: String,
-    val about: String,
-    val status: String,
-    val readReceipts: String,
-    val calls: String,
-    val groups: String,
-    val liveLocation: String
-)
-
-data class OnlineContact(
-    val userId: String,
-    val name: String,
-    val status: String,
-    val customText: String?
 )
