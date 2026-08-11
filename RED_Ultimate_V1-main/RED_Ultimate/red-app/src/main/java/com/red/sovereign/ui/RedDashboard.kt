@@ -240,7 +240,7 @@ private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREAT
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
+fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, deepLinkSender: String? = null, deepLinkConversation: String? = null) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
@@ -348,7 +348,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false)
+                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory)
                 else -> MoreScreen(
@@ -706,11 +706,17 @@ private fun ChatHubScreen(
     attachments: AttachmentViewModel,
     voiceMessages: VoiceMessageViewModel,
     showGroups: Boolean,
+    deepLinkSender: String? = null,
+    deepLinkConversation: String? = null,
     onManageGroup: (String) -> Unit = {}
 ) {
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
+    // فتح محادثة من إشعار رسالة
+    LaunchedEffect(deepLinkSender, deepLinkConversation) {
+        if (!showGroups && deepLinkSender != null && deepLinkSender.matches(RED_ID_PATTERN)) target = deepLinkSender
+    }
     var showDirectory by remember { mutableStateOf(false) }
     var showMessageSearch by remember { mutableStateOf(false) }
     var messageSearchQuery by remember { mutableStateOf("") }

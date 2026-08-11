@@ -14,6 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
@@ -33,8 +36,13 @@ class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /** المعرّف المستهدف من الإشعار (conversationId + sender) لفتح المحادثة مباشرة. */
+    private var deepLinkConversation by mutableStateOf<String?>(null)
+    private var deepLinkSender by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleNotificationIntent(intent)
         // Initialize security manager
         DebugSecurityManager.initialize(application)
         
@@ -60,22 +68,41 @@ class MainActivity : ComponentActivity() {
                                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
-                                com.red.sovereign.core.RedConnectionService.start(this@MainActivity)
-                                com.red.sovereign.calls.YounesCallService.listen(this@MainActivity)
-                                com.red.sovereign.calls.YounesConnectionService.register(this@MainActivity)
+                                runCatching { com.red.sovereign.core.RedConnectionService.start(this@MainActivity) }
+                                runCatching { com.red.sovereign.calls.YounesCallService.listen(this@MainActivity) }
+                                runCatching { com.red.sovereign.calls.YounesConnectionService.register(this@MainActivity) }
+                                // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
                                 val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
-                                if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
+                                try {
+                                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
+                                } catch (_: Exception) {
+                                    try { startService(routerIntent) } catch (_: Exception) {}
+                                }
                             } else {
                                 com.red.sovereign.core.RedConnectionService.stop(this@MainActivity)
                                 com.red.sovereign.calls.YounesCallService.stop(this@MainActivity)
                                 stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))
                             }
                         }
-                        if (state is AuthState.Authenticated) RedDashboard(state, authViewModel) else AuthFlow(authViewModel)
+                        if (state is AuthState.Authenticated) RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation) else AuthFlow(authViewModel)
                     }
                 }
             }
         }
+    }
+
+    /** استخراج بيانات المحادثة من إشعار الرسالة. */
+    private fun handleNotificationIntent(notificationIntent: Intent?) {
+        if (notificationIntent == null) return
+        notificationIntent.getStringExtra("conversation_id")?.let { deepLinkConversation = it }
+        notificationIntent.getStringExtra("sender_red_id")?.let { deepLinkSender = it }
+    }
+
+    /** عند فتح التطبيق من إشعار بينما هو مفتوح (launchMode singleTask). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
     }
 
     override fun onUserLeaveHint() {

@@ -46,6 +46,8 @@ class RedConnectionService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var tokenStore: TokenStore
     private lateinit var repository: LocalRepository
+    /** آخر محادثة واردة — تُستخدم في إشعار الرسالة لفتح المحادثة الصحيحة. */
+    @Volatile private var currentConversationId: String? = null
     private lateinit var signal: SignalSessionManager
     private lateinit var groupCrypto: GroupCryptoManager
     private lateinit var keyManager: DeviceKeyManager
@@ -242,6 +244,7 @@ class RedConnectionService : Service() {
                                 runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
                             }
                             if (SettingsRuntime.current.notificationEnabled) {
+                                currentConversationId = message.conversationId
                                 notifyEncryptedMessage(message.senderId, preview)
                             }
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
@@ -310,11 +313,12 @@ class RedConnectionService : Service() {
     private fun notifyEncryptedMessage(sender: String, plaintext: String?) {
         val manager = getSystemService(NotificationManager::class.java)
         val preview = plaintext?.take(120)?.takeIf { SettingsRuntime.current.notificationPreview }
+        val convoId = currentConversationId ?: sender
         manager.notify(sender.hashCode(), NotificationCompat.Builder(this, MESSAGE_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle(getString(com.red.sovereign.R.string.notif_new_message_title))
             .setContentText(preview ?: getString(com.red.sovereign.R.string.notif_new_message_body, sender))
-            .setContentIntent(openAppIntent())
+            .setContentIntent(openAppIntent(sender, convoId))
             .setAutoCancel(true)
             .build())
     }
@@ -331,9 +335,13 @@ class RedConnectionService : Service() {
     private fun notifyConnection(text: String) =
         getSystemService(NotificationManager::class.java).notify(CONNECTION_NOTIFICATION, connectionNotification(text))
 
-    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
-        this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+    private fun openAppIntent(senderRedId: String? = null, conversationId: String? = null): PendingIntent {
+        val i = Intent(this, MainActivity::class.java)
+        if (!senderRedId.isNullOrBlank()) i.putExtra("sender_red_id", senderRedId)
+        if (!conversationId.isNullOrBlank()) i.putExtra("conversation_id", conversationId)
+        i.addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        return PendingIntent.getActivity(this, senderRedId?.hashCode() ?: 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
 
     private fun createChannels() {
         val manager = getSystemService(NotificationManager::class.java)
