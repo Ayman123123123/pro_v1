@@ -22,7 +22,7 @@ admin_dashboard/, media-sfu/, pstn-asterisk/ تبنيها Docker/CI
 | [`shared-proto/`](shared-proto/README.md) | Protobuf الموحد |
 | [`admin_dashboard/`](admin_dashboard/README.md) | لوحة الإدارة القانونية |
 | [`media-sfu/`](media-sfu/README.md) | mediasoup SFU |
-| [`pstn-asterisk/`](pstn-asterisk/README.md) | DINSTAR/Asterisk صوت فقط |
+| [`pstn-asterisk/`](pstn-asterisk/README.md) | DINSTAR/Asterisk صوت فقط — الدليل: [`docs/DINSTAR_UC2000_GUIDE_AR.md`](docs/DINSTAR_UC2000_GUIDE_AR.md) |
 | [`scripts/`](scripts/README.md) | تشغيل محلي ومفاتيح الهوية |
 | [`gradle/`](gradle/README.md) | Wrapper/catalogs/dependency verification |
 | [`build-logic/`](build-logic/README.md) | منطق وأدوات Gradle |

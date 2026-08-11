@@ -5,6 +5,10 @@ import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.security.core.Authentication
+import java.time.Instant
+import java.util.UUID
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -17,6 +21,7 @@ class AuthController(
     private val registration: RegistrationService,
     private val recovery: RecoveryService,
     private val limits: RateLimitService,
+    private val users: com.red.server.auth.repository.UserAccountRepository,
     @Value("\${red.trust-x-forwarded-for:false}") private val trustXForwardedFor: Boolean = false
 ) {
 
@@ -59,6 +64,63 @@ class AuthController(
     }
 
     /**
+     * تعديل اسم المستخدم.
+     *
+     * يستدعيه التطبيق من شاشة الإعدادات (`AuthViewModel.updateUsername`).
+     * كان المسار غائبًا عن الخادم كليًا، فكان الزر يفشل دائمًا.
+     *
+     * الحدود مطابقة لما يفرضه التطبيق قبل الإرسال (3..20)، لأن التحقق
+     * في العميل وحده يُلتفّ عليه بطلب HTTP مباشر.
+     */
+    @PatchMapping("/username")
+    fun updateUsername(
+        @RequestBody request: UpdateUsernameRequest,
+        authentication: Authentication,
+    ): ResponseEntity<Map<String, String>> {
+        val trimmed = request.username.trim()
+        require(trimmed.length in 3..20) { "USERNAME_LENGTH_INVALID" }
+        require(trimmed.matches(USERNAME_PATTERN)) { "USERNAME_CHARSET_INVALID" }
+
+        val caller = UUID.fromString(authentication.name)
+        val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
+
+        // فحص التفرّد قبل الكتابة: قيد قاعدة البيانات يحمي التكامل لكنه
+        // يعيد خطأً غامضًا بدل رسالة يفهمها المستخدم.
+        if (!trimmed.equals(user.username, ignoreCase = true) &&
+            users.existsByUsernameIgnoreCase(trimmed)
+        ) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to "USERNAME_TAKEN"))
+        }
+
+        user.username = trimmed
+        user.updatedAt = Instant.now()
+        users.save(user)
+        return ResponseEntity.ok(mapOf("username" to trimmed))
+    }
+
+    /**
+     * تعديل الاسم المعروض.
+     *
+     * يستدعيه التطبيق (`AuthViewModel.updateDisplayName`). كان غائبًا
+     * عن الخادم أيضًا. الاسم المعروض غير فريد — بخلاف اسم المستخدم.
+     */
+    @PatchMapping("/profile")
+    fun updateProfile(
+        @RequestBody request: UpdateProfileRequest,
+        authentication: Authentication,
+    ): ResponseEntity<Map<String, String>> {
+        val trimmed = request.displayName.trim()
+        require(trimmed.isNotBlank() && trimmed.length <= 50) { "DISPLAY_NAME_LENGTH_INVALID" }
+
+        val caller = UUID.fromString(authentication.name)
+        val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
+        user.displayName = trimmed
+        user.updatedAt = Instant.now()
+        users.save(user)
+        return ResponseEntity.ok(mapOf("displayName" to trimmed))
+    }
+
+    /**
      * Extracts client IP, only trusting X-Forwarded-For when configured.
      * ⚠️  X-Forwarded-For can be spoofed by clients unless behind a trusted reverse proxy.
      * Set red.trust-x-forwarded-for=true only when behind a verified proxy that strips client XFF.
@@ -72,4 +134,12 @@ class AuthController(
         }
         return request.remoteAddr ?: "unknown"
     }
+
+    companion object {
+        /** أحرف وأرقام وشرطة سفلية ونقطة — بلا مسافات ولا رموز. */
+        private val USERNAME_PATTERN = Regex("^[A-Za-z0-9_.]+$")
+    }
 }
+
+data class UpdateUsernameRequest(val username: String = "")
+data class UpdateProfileRequest(val displayName: String = "")

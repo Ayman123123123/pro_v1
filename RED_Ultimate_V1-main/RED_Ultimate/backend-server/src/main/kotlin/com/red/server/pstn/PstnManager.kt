@@ -45,8 +45,20 @@ class PstnManager(
         }
     }
 
-    fun dialGsm(phoneNumber: String): String {
+    /**
+     * إخراج مكالمة عبر Asterisk إلى بوابة DINSTAR.
+     *
+     * @param pjsipEndpoint اسم نظير PJSIP للبوابة المختارة. مع أكثر من
+     *   جهاز في الأسطول لا يكفي سياق واحد ثابت: يُمرَّر النظير كمتغيّر
+     *   قناة (`RED_GW`) ويقرؤه الـ dialplan في `from-red-backend`،
+     *   فيخرج الاتصال من الجهاز الذي اختاره الموزّع فعلًا.
+     */
+    @JvmOverloads
+    fun dialGsm(phoneNumber: String, pjsipEndpoint: String = "dinstar-gateway"): String {
         require(phoneNumber.matches(Regex("^\\+?[0-9]{6,15}$"))) { "Invalid phone number" }
+        // اسم النظير يدخل سلسلة قناة Asterisk، فيجب ألا يحمل فواصل أو
+        // محارف تحكم تسمح بحقن وجهة أخرى.
+        require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
         val correlationId = UUID.randomUUID().toString()
         val action = OriginateAction().apply {
             actionId = correlationId
@@ -54,6 +66,7 @@ class PstnManager(
             application = "Wait"
             data = "1"
             callerId = "RED SOVEREIGN"
+            setVariable("RED_GW", pjsipEndpoint)
             setAsync(true)
         }
 
@@ -65,7 +78,7 @@ class PstnManager(
                 check(response.response?.equals("Success", ignoreCase = true) == true) {
                     response.message ?: "Asterisk rejected originate action"
                 }
-                log.info("PSTN originate sent for {} (actionId={}, attempt={})", phoneNumber, correlationId, attempt + 1)
+                log.info("PSTN originate sent for {} via {} (actionId={}, attempt={})", phoneNumber, pjsipEndpoint, correlationId, attempt + 1)
                 return correlationId
             } catch (e: Exception) {
                 lastException = e

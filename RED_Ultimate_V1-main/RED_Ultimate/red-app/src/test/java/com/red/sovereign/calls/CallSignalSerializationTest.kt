@@ -11,8 +11,8 @@ class CallSignalSerializationTest {
     @Test fun `OFFER signal round-trips`() {
         val original = CallSignal(
             callId = "abc-123",
-            targetUserId = "YNS-AAAA-BBBB",
-            sourceUserId = "YNS-CCCC-DDDD",
+            targetUserId = "73066",
+            sourceUserId = "28261",
             type = "OFFER",
             mode = "VIDEO",
             payload = mapOf("sdp" to "v=0...")
@@ -29,7 +29,7 @@ class CallSignalSerializationTest {
     @Test fun `ICE signal carries sdpMid, sdpMLineIndex, candidate`() {
         val original = CallSignal(
             callId = "x",
-            targetUserId = "YNS-X-X",
+            targetUserId = "99559",
             type = "ICE",
             payload = mapOf(
                 "sdpMid" to "0",
@@ -51,7 +51,7 @@ class LiveStreamSignalSerializationTest {
         val original = LiveStreamSignal(
             type = "JOIN",
             roomId = "stream-1",
-            userId = "YNS-AAAA",
+            userId = "91179",
             payload = mapOf("role" to "broadcaster")
         )
         val encoded = json.encodeToString(LiveStreamSignal.serializer(), original)

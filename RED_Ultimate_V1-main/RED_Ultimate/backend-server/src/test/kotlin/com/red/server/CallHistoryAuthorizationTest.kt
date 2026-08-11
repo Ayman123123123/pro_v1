@@ -21,9 +21,9 @@ class CallHistoryAuthorizationTest {
     private val history = CallHistoryService(mongo)
     private val call = CallHistoryDocument(
         id = "018f5e23-3f80-7a00-8000-000000000001",
-        initiatorId = "YNS-ABCD-EFGH",
-        targetId = "YNS-JKLM-NPQR",
-        targetLabel = "YNS-JKLM-NPQR",
+        initiatorId = "16999",
+        targetId = "58414",
+        targetLabel = "58414",
         type = CallType.VOICE,
         route = CallRoute.RED,
         status = CallStatus.RINGING,
@@ -35,10 +35,10 @@ class CallHistoryAuthorizationTest {
         whenever(mongo.findById(call.id, CallHistoryDocument::class.java)).thenReturn(call)
 
         assertThrows(IllegalArgumentException::class.java) {
-            history.authorizeSignal(call.id, "YNS-STUV-WXYZ", "ANSWER")
+            history.authorizeSignal(call.id, "71852", "ANSWER")
         }
         assertThrows(IllegalArgumentException::class.java) {
-            history.authorizeSignal(call.id, "YNS-STUV-WXYZ", "END")
+            history.authorizeSignal(call.id, "71852", "END")
         }
 
         verify(mongo, never()).save(any<CallHistoryDocument>())
@@ -66,8 +66,8 @@ class CallHistoryAuthorizationTest {
         assertThrows(IllegalArgumentException::class.java) {
             history.start(
                 initiator = call.initiatorId,
-                target = "YNS-STUV-WXYZ",
-                targetLabel = "YNS-STUV-WXYZ",
+                target = "71852",
+                targetLabel = "71852",
                 type = CallType.VOICE,
                 route = CallRoute.RED,
                 requestedId = call.id

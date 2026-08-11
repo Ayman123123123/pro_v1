@@ -11,11 +11,11 @@ class SafetyQrPayloadTest {
     @Test
     fun `parses strict versioned YOUNES safety payload`() {
         val parsed = SafetyQrPayload.parse(
-            "younes-safety-v1|YNS-2345-6789|RED-ABCD-EFGH|94|$fingerprint|$number"
+            "younes-safety-v1|46764|62908|94|$fingerprint|$number"
         )
         requireNotNull(parsed)
-        assertEquals("YNS-2345-6789", parsed.sourceRedId)
-        assertEquals("RED-ABCD-EFGH", parsed.targetRedId)
+        assertEquals("46764", parsed.sourceRedId)
+        assertEquals("62908", parsed.targetRedId)
         assertEquals(94, parsed.targetDeviceId)
         assertEquals(number, parsed.safetyNumber)
     }
@@ -23,8 +23,8 @@ class SafetyQrPayloadTest {
     @Test
     fun `rejects malformed foreign and incomplete payloads`() {
         assertNull(SafetyQrPayload.parse("https://example.invalid"))
-        assertNull(SafetyQrPayload.parse("younes-safety-v1|YNS-2345-6789|RED-ABCD-EFGH|0|$fingerprint|$number"))
-        assertNull(SafetyQrPayload.parse("younes-safety-v2|YNS-2345-6789|RED-ABCD-EFGH|94|$fingerprint|$number"))
-        assertNull(SafetyQrPayload.parse("younes-safety-v1|YNS-2345-6789|RED-ABCD-EFGH|94|short|$number"))
+        assertNull(SafetyQrPayload.parse("younes-safety-v1|46764|62908|0|$fingerprint|$number"))
+        assertNull(SafetyQrPayload.parse("younes-safety-v2|46764|62908|94|$fingerprint|$number"))
+        assertNull(SafetyQrPayload.parse("younes-safety-v1|46764|62908|94|short|$number"))
     }
 }

@@ -1,5 +1,6 @@
 package com.red.server.messaging
 
+import com.red.server.auth.RedIdGenerator
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.database.ConversationSequence
 import com.red.server.database.MessageDocument
@@ -175,7 +176,10 @@ class MessageService(
     private fun rank(status: String) = when (status) { "SENT" -> 1; "DELIVERED" -> 2; "READ" -> 3; else -> 0 }
 
     companion object {
-        private val RED_ID = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
+        // مصدر الحقيقة الوحيد للنمط: RedIdGenerator.PATTERN.
+        // تكرار النمط بصياغة محلية هو ما سمح سابقًا بتباين القبول
+        // بين الوحدات (بادئة مقبولة هنا مرفوضة هناك).
+        private val RED_ID = Regex(RedIdGenerator.PATTERN)
         private val TYPES = setOf("TEXT", "RICH_TEXT", "IMAGE", "VIDEO", "AUDIO", "VOICE", "FILE", "SYSTEM", "GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
         private val GROUP_TYPES = setOf("GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
     }

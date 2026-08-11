@@ -20,7 +20,7 @@ class DeviceCertificateServiceTest {
         Files.write(privateFile, pair.private.encoded)
         Files.write(publicFile, pair.public.encoded)
         val service = DeviceCertificateService(privateFile.toString(), publicFile.toString(), 90)
-        val user = UserAccount(redId = "RED-ABCD-EFGH", username = "ahmed", displayName = "Ahmed")
+        val user = UserAccount(redId = "62908", username = "ahmed", displayName = "Ahmed")
         val device = UserDevice(user = user, identityFingerprint = "f".repeat(64))
 
         val certificate = service.issue(user, device)

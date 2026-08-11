@@ -12,8 +12,8 @@ import org.junit.Test
 class CallLogCipherTest {
     @Test fun `encrypted output is hex and non-empty`() {
         val cipher = TestableCallLogCipher()
-        val encrypted = cipher.encryptPeerId("YNS-AAAA-BBBB")
-        assertNotEquals("YNS-AAAA-BBBB", encrypted)
+        val encrypted = cipher.encryptPeerId("73066")
+        assertNotEquals("73066", encrypted)
         assertTrue(encrypted.isNotEmpty())
         // hex characters only
         assertTrue(encrypted.all { it in '0'..'9' || it in 'a'..'f' })
@@ -27,8 +27,8 @@ class CallLogCipherTest {
 
     @Test fun `different plaintexts produce different ciphertexts (length test)`() {
         val cipher = TestableCallLogCipher()
-        val a = cipher.encryptPeerId("YNS-AAAA-BBBB")
-        val b = cipher.encryptPeerId("YNS-CCCC-DDDD")
+        val a = cipher.encryptPeerId("73066")
+        val b = cipher.encryptPeerId("28261")
         assertNotEquals(a, b)
     }
 

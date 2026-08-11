@@ -48,11 +48,16 @@ class PstnCallService(
         }
 
         return runCatching {
-            val slot = loadBalancer.getOptimalSlotWfq(number)
-            log.info("PSTN dial: user={} number={} slot={}/8", user.redId, number, slot + 1)
-            val actionId = pstn.dialGsm(number)
+            // الاختيار يشمل الأسطول كله ويستبعد المنافذ بلا إشارة صالحة.
+            // `null` تعني عدم توفر أي مسار — نُبلّغ بذلك بدل محاولة اتصال
+            // فاشلة على منفذ ميت.
+            val selection = loadBalancer.selectPort(number)
+                ?: throw IllegalStateException("No DINSTAR port with a usable signal is available")
+            log.info("PSTN dial: user={} number={} gateway={} port={}",
+                user.redId, number, selection.gatewayHost, selection.portIndex)
+            val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
-            PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, slot)
+            PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
         }.getOrElse {
             redis.opsForValue().decrement(key)
             throw IllegalStateException("Asterisk rejected the PSTN call", it)

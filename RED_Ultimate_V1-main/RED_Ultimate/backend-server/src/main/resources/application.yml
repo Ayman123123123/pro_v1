@@ -64,6 +64,7 @@ spring:
 # ══════════════════════════════════════════
 red:
   dinstar:
+    # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع.
     ip: ${DINSTAR_IP:192.168.11.1}
     port: ${DINSTAR_PORT:443}
     scheme: ${DINSTAR_SCHEME:https}
@@ -72,6 +73,16 @@ red:
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3
+    # مهل بالثواني لعملاء OkHttp لكل بوابة
+    connect-timeout-seconds: ${DINSTAR_CONNECT_TIMEOUT:5}
+    read-timeout-seconds: ${DINSTAR_READ_TIMEOUT:10}
+    # مهلة قصيرة أثناء فحص النطاق: عنوان بلا جهاز يجب أن يسقط بسرعة
+    probe-timeout-seconds: ${DINSTAR_PROBE_TIMEOUT:2}
+    discovery:
+      # الفحص معطّل افتراضيًا: لا يُطلق الخادم مسحًا للشبكة بلا قرار صريح.
+      enabled: ${DINSTAR_DISCOVERY_ENABLED:false}
+      # نطاقات الإدارة بصيغة CIDR ‎/24..‎/30 وعلى عناوين خاصة فقط.
+      subnets: ${DINSTAR_DISCOVERY_SUBNETS:}
   security:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
   jwt:

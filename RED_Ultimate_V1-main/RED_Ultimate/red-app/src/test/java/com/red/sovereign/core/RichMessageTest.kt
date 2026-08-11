@@ -6,9 +6,24 @@ import org.junit.Test
 class RichMessageTest {
     @Test
     fun `mentions extracted correctly`() {
-        val text = "مرحبا @YNS-ABCD-EFGH كيف حالك"
-        val mentions = Regex("""@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}""").findAll(text).map { it.value }.toList()
-        assertEquals(listOf("@YNS-ABCD-EFGH"), mentions)
+        // النمط من YounesId لا نسخة محلية — الصيغة الخماسية.
+        val text = "مرحبا @16999 كيف حالك"
+        val mentions = Regex(YounesId.MENTION_PATTERN).findAll(text).map { it.value }.toList()
+        assertEquals(listOf("@16999"), mentions)
+    }
+
+    @Test
+    fun `mention does not swallow a longer number`() {
+        // بلا (?![0-9]) كان @123456 يُلتقط كإشارة إلى 12345 — أي إشعار
+        // يذهب إلى شخص آخر تمامًا.
+        val mentions = Regex(YounesId.MENTION_PATTERN).findAll("راجع @123456 اليوم").toList()
+        assertTrue(mentions.isEmpty())
+    }
+
+    @Test
+    fun `mention rejects the legacy format`() {
+        val mentions = Regex(YounesId.MENTION_PATTERN).findAll("مرحبا @YNS-ABCD-EFGH").toList()
+        assertTrue(mentions.isEmpty())
     }
     @Test
     fun `hashtags extracted correctly`() {
@@ -25,7 +40,7 @@ class RichMessageTest {
     @Test
     fun `RichMessage validation rejects too many mentions`() {
         try {
-            RichMessage(text = "hi", mentions = List(21) { "@YNS-ABCD-EFGH" })
+            RichMessage(text = "hi", mentions = List(21) { "@16999" })
             fail("Should throw")
         } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("mentions"))

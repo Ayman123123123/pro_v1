@@ -16,9 +16,9 @@ class CallUiStateTest {
     }
 
     @Test fun `Incoming carries callId, peer, mode`() {
-        val state = CallUiState.Incoming(callId = "c1", peer = "YNS-AAAA-BBBB", mode = "VIDEO")
+        val state = CallUiState.Incoming(callId = "c1", peer = "73066", mode = "VIDEO")
         assertEquals("c1", state.callId)
-        assertEquals("YNS-AAAA-BBBB", state.peer)
+        assertEquals("73066", state.peer)
         assertEquals("VIDEO", state.mode)
     }
 
@@ -44,7 +44,7 @@ class CallUiStateTest {
     }
 
     @Test fun `Active carries isHeld flag and can transition to held`() {
-        val active = CallUiState.Active("c1", "YNS-AAAA-BBBB", "VOICE", 1000L, isHeld = false)
+        val active = CallUiState.Active("c1", "73066", "VOICE", 1000L, isHeld = false)
         assertEquals(false, active.isHeld)
         val held = active.copy(isHeld = true)
         assertEquals(true, held.isHeld)
@@ -54,13 +54,13 @@ class CallUiStateTest {
     }
 
     @Test fun `ActiveWithIncoming pairs active call with waiting call`() {
-        val active = CallUiState.Active("c1", "YNS-ALICE", "VOICE", 1000L)
-        val waiting = CallUiState.Incoming("c2", "YNS-BOB", "VOICE")
+        val active = CallUiState.Active("c1", "26852", "VOICE", 1000L)
+        val waiting = CallUiState.Incoming("c2", "55602", "VOICE")
         val state = CallUiState.ActiveWithIncoming(active, waiting)
         assertEquals(active, state.active)
         assertEquals(waiting, state.waiting)
-        assertEquals("YNS-ALICE", state.active.peer)
-        assertEquals("YNS-BOB", state.waiting.peer)
+        assertEquals("26852", state.active.peer)
+        assertEquals("55602", state.waiting.peer)
     }
 }
 
