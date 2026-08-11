@@ -1155,12 +1155,24 @@ private fun ChatHubScreen(
                     groups.groups.isEmpty() -> EmptyState(Icons.Default.Groups, "لا توجد مجموعات", "أنشئ مجموعة محلية بأدوار مالك ومسؤول وعضو.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
-                            Card(Modifier.fillMaxWidth().clickable { groupConversationId = group.id }) {
-                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    GroupAvatar(group, groups); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(group.name, fontWeight = FontWeight.Bold); Text("${group.members.size} أعضاء · ${group.description.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                                    IconButton({
-                                        onManageGroup(group.id)
-                                    }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
+                            val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
+                            Card(Modifier.fillMaxWidth().clickable { groupConversationId = group.id }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    GroupAvatar(group, groups)
+                                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(group.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            Surface(shape = RoundedCornerShape(8.dp), color = YounesEmerald.copy(alpha = 0.15f)) { Text(" ${group.members.size} ", fontSize = 11.sp, color = YounesEmerald, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                        }
+                                        Text(
+                                            lastGroupMsg?.let { msg ->
+                                                val t = if (msg.type == "RICH_TEXT") RichMessage.decode(msg.plaintext)?.text.orEmpty() else msg.plaintext.toString(Charsets.UTF_8)
+                                                (if (msg.outgoing) "أنت: " else "@" + msg.senderRedId.take(8) + ": ") + t
+                                            } ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    IconButton({ onManageGroup(group.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                                 }
                             }
                         }
