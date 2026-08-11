@@ -618,6 +618,33 @@ await check('حزم المفاتيح ومخزون prekey لا تُكشف بلا 
   return '401 للمجهول على المسارين · 200 للمصادَق · بلا مفاتيح خاصة';
 });
 
+await check('إرسال SMS يختار بوابة من الأسطول ويرفض العناوين الخارجية', async () => {
+  // كان `postJson` يثبّت البوابة النشطة، فكل SMS يخرج من جهاز واحد
+  // مهما بلغ عدد المسجَّلين — تُهدَر شرائح البقية ويُحتسب الإرسال
+  // كله خارج الشبكة على مشغّل واحد.
+  const fleet = (await api('GET', '/api/admin/dinstar/fleet', undefined, adminToken)).data;
+  const host = fleet[0]?.host;
+  assert(host, 'لا بوابة مسجّلة');
+
+  const payload = (extra) => ({ text: 'فحص', param: [{ number: '777123456', user_id: 1 }], ...extra });
+
+  const viaFleet = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: host }), adminToken);
+  assert(viaFleet.status === 200, `الإرسال عبر بوابة مسجّلة فشل: ${viaFleet.status}`);
+
+  // العنوان يصل من طلب HTTP: بلا فحص يطلب الخادم أي وجهة يختارها المرسِل.
+  for (const evil of ['8.8.8.8', '169.254.169.254']) {
+    const r = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: evil }), adminToken);
+    assert(r.status === 400, `${evil} يجب أن يُرفض (SSRF)، عاد ${r.status}`);
+    assert(r.data.error === 'PRIVATE_ADDRESS_REQUIRED', `رمز غير متوقع: ${r.data.error}`);
+  }
+
+  // عنوان خاص لكنه ليس بوابة مسجّلة
+  const unknown = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: '10.0.0.99' }), adminToken);
+  assert(unknown.status === 404, `بوابة غير مسجّلة يجب أن تعيد 404، عادت ${unknown.status}`);
+
+  return `الإرسال عبر ${host} · رفض العنوان العام وعنوان البيانات الوصفية · 404 لغير المسجّل`;
+});
+
 console.log(`\n${'─'.repeat(60)}`);
 if (fail === 0) {
   console.log(`🎉 نجحت كل الفحوص: ${pass}/${pass} — التطبيق والخادم واللوحة على قاعدة واحدة`);

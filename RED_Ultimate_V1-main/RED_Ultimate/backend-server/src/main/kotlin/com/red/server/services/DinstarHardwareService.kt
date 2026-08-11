@@ -214,11 +214,20 @@ class DinstarHardwareService(
      * @param ports منافذ محددة (اختياري، null = تختار البوابة)
      * @param encoding `GSM7BIT` أو `UCS2` — تُترجَم إلى قيم البوابة
      */
+    /**
+     * @param gatewayHost بوابة الإرسال. عند تركه فارغًا تُستعمل البوابة
+     *   النشطة — سلوك النشر ذي الجهاز الواحد. مع أسطول من عدة بوابات
+     *   كان كل SMS يخرج من جهاز واحد مهما بلغ عددها، فتُهدَر شرائح
+     *   البقية ويُحتسب الإرسال كلّه خارج الشبكة على مشغّل واحد.
+     *   العنوان يُتحقق من كونه خاصًا قبل استعماله: يصل من طلب HTTP،
+     *   وتمريره بلا فحص يجعل الخادم يطلب أي عنوان يختاره المرسِل (SSRF).
+     */
     fun sendSms(
         text: String,
         params: List<Map<String, Any?>>,
         ports: List<Int>? = null,
-        encoding: String = "GSM7BIT"
+        encoding: String = "GSM7BIT",
+        gatewayHost: String? = null
     ): Map<String, Any?> {
         require(text.isNotBlank()) { "SMS text is required" }
         require(params.isNotEmpty()) { "At least one recipient is required" }
@@ -245,7 +254,11 @@ class DinstarHardwareService(
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
 
-        return postJson("/api/send_sms", body)
+        val target = gatewayHost?.trim()?.takeIf { it.isNotEmpty() }
+        require(target == null || isPrivateAddress(target)) {
+            "بوابة SMS يجب أن تكون على عنوان خاص (RFC 1918)"
+        }
+        return postJson("/api/send_sms", body, target ?: activeHost)
     }
 
     /** ترجمة ترميزنا الداخلي إلى القيمة التي تفهمها البوابة. */
@@ -485,9 +498,15 @@ class DinstarHardwareService(
         return execute(Request.Builder().url(builder.build()).get().build())
     }
 
-    private fun postJson(path: String, value: Any): Map<String, Any?> {
+    /**
+     * @param host البوابة المقصودة. الافتراضي [activeHost] توافقًا مع
+     *   النشر ذي الجهاز الواحد، لكن المعامل ضروري مع الأسطول: كانت
+     *   الدالة تثبّت [activeHost] فتذهب كل رسالة إلى بوابة واحدة مهما
+     *   بلغ عدد الأجهزة المسجّلة — نظير `getJson` الذي كان يقبل الخيار.
+     */
+    private fun postJson(path: String, value: Any, host: String = activeHost): Map<String, Any?> {
         val body = mapper.writeValueAsBytes(value).toRequestBody(JSON)
-        return execute(Request.Builder().url(baseUrl(activeHost).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build())
+        return execute(Request.Builder().url(baseUrl(host).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build())
     }
 
     private fun execute(unsigned: Request): Map<String, Any?> {

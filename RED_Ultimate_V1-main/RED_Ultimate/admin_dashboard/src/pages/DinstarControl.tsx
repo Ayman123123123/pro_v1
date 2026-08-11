@@ -105,6 +105,7 @@ export default function DinstarControl() {
   const [ussdTarget, setUssdTarget] = useState<number | null>(null);
   const [ussd, setUssd] = useState('');
   const [smsTo, setSmsTo] = useState('');
+  const [smsGateway, setSmsGateway] = useState<string | undefined>(undefined);
   const [smsText, setSmsText] = useState('');
   const [smsSending, setSmsSending] = useState(false);
   const [smsInbox, setSmsInbox] = useState<any[]>([]);
@@ -222,6 +223,9 @@ export default function DinstarControl() {
     try {
       const body = {
         text: smsText,
+        // بوابة بعينها من الأسطول؛ عند تركها فارغة يستعمل الخادم
+        // البوابة النشطة. بلا هذا الخيار كان كل SMS يخرج من جهاز واحد.
+        ...(smsGateway ? { gatewayHost: smsGateway } : {}),
         // الترميز يُحسم هنا لا في الجهاز: تركه للاستنتاج التلقائي كان
         // يسقط صامتًا إلى unicode ويضاعف عدد المقاطع.
         encoding: smsIsUnicode ? 'unicode' : 'gsm-7bit',
@@ -534,6 +538,19 @@ export default function DinstarControl() {
                 placeholder="أرقام الوجهة مفصولة بفاصلة — 777123456,733445566"
               />
             </Space.Compact>
+            <Select
+              style={{ width: '100%', marginBottom: 8 }}
+              value={smsGateway}
+              onChange={setSmsGateway}
+              allowClear
+              placeholder="البوابة (اتركها فارغة للبوابة النشطة)"
+              options={(fleet || [])
+                .filter((g) => g.enabled)
+                .map((g) => ({
+                  value: g.host,
+                  label: `${g.name} — ${g.host} (${g.model})`,
+                }))}
+            />
             <Input.TextArea
               rows={4} value={smsText} onChange={(e) => setSmsText(e.target.value)}
               placeholder="نص الرسالة"
