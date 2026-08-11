@@ -55,7 +55,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+        manager?.createNotificationChannel(NotificationChannel("red_calls", getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
         signaling = LiveStreamSignalingClient(this, TokenStore(this), this)
     }
 
@@ -198,7 +198,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val title = if (isBroadcaster) "بث مباشر يونس" else "مشاهدة بث يونس"
         val text = if (isBroadcaster) "أنت تبث الآن مباشرة..." else "أنت تشاهد البث المباشر..."
-        val notif = NotificationCompat.Builder(this, "younes_calls")
+        val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle(title)
             .setContentText(text)

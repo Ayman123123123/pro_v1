@@ -445,7 +445,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         ServiceCompat.startForeground(this, NOTIFICATION_ID, value, type)
     }
 
-    private fun createChannel() = getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+    private fun createChannel() = getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
     private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), serviceIntent(ACTION_END)).build()
     private fun incomingNotification(peer: String, callMode: String) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_call_incoming).setContentTitle(if (callMode == "VIDEO") getString(com.red.sovereign.R.string.incoming_video_call) else getString(com.red.sovereign.R.string.incoming_voice_call)).setContentText(peer).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setOngoing(true).setFullScreenIntent(appIntent(), true).addAction(0, getString(com.red.sovereign.R.string.notification_reject), serviceIntent(ACTION_REJECT)).addAction(0, getString(com.red.sovereign.R.string.notification_accept), appIntent()).build()
     private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
@@ -456,7 +456,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        private const val CHANNEL = "younes_calls"; private const val NOTIFICATION_ID = 7401
+        private const val CHANNEL = "red_calls"; private const val NOTIFICATION_ID = 7401
         const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
         const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"

@@ -54,7 +54,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
-        manager?.createNotificationChannel(NotificationChannel("younes_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH))
+        manager?.createNotificationChannel(NotificationChannel("red_calls", getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
         signaling = ConferenceSignalingClient(this, TokenStore(this), this)
     }
 
@@ -227,7 +227,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     private fun promote() {
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val notif = NotificationCompat.Builder(this, "younes_calls")
+        val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("مؤتمر يونس")
             .setContentText("جارٍ الاتصال بالمؤتمر...")
