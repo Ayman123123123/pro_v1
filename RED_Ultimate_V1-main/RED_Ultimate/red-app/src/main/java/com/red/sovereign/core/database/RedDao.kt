@@ -85,4 +85,16 @@ interface RedDao {
 
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deleteMessage(messageId: String)
+
+    @Query("DELETE FROM local_history WHERE conversationId = :convId")
+    suspend fun deleteLocalHistoryByConversation(convId: String)
+
+    @Query("DELETE FROM messages WHERE conversationId = :convId")
+    suspend fun deleteMessagesByConversation(convId: String)
+
+    @Query("DELETE FROM conversations WHERE id = :convId")
+    suspend fun deleteConversationRow(convId: String)
+
+    @Query("SELECT * FROM local_history WHERE encryptedPlaintext LIKE :query ORDER BY createdAt DESC")
+    suspend fun searchAllMessages(query: String): List<LocalHistoryEntity>
 }

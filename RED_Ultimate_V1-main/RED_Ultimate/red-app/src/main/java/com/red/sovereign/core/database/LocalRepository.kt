@@ -74,4 +74,20 @@ class LocalRepository(context: Context) {
         dao.deleteLocalHistory(messageId)
         dao.deleteMessage(messageId)
     }
+
+    /** يحذف رسالة من السجل المحلي (المفكوك) فقط — يُستخدم لحذف رسالة واحدة. */
+    suspend fun deleteLocalMessage(messageId: String) = dao.deleteLocalHistory(messageId)
+
+    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + صف المحادثة. */
+    suspend fun deleteConversation(convId: String) {
+        dao.deleteLocalHistoryByConversation(convId)
+        dao.deleteMessagesByConversation(convId)
+        dao.deleteConversationRow(convId)
+    }
+
+    // --- Global Search ---
+    suspend fun searchAll(query: String): List<LocalHistoryEntity> {
+        if (query.isBlank()) return emptyList()
+        return dao.searchAllMessages("%${query.trim()}%")
+    }
 }
