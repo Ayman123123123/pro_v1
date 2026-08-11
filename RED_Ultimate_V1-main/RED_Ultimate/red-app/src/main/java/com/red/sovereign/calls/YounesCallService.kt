@@ -122,7 +122,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     override fun onConnected() {
-        if (incomingOffer != null || !outgoingPending) return
+        reconnect.stop()
+        if (incomingOffer != null || !outgoingPending) {
+            // عند نجاح إعادة الاتصال بالشبكة والإشارة أثناء مكالمة قائمة، نقوم بإجراء ICE restart
+            // لإعادة استكشاف المسار التلقائي وتمرير الحزم عبر الشبكة الجديدة دون انقطاع الصوت أو الفيديو
+            if (CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming) {
+                engine?.restartIce()
+            }
+            return
+        }
         scope.launch {
             val created = createEngine(mode == "VIDEO")
             if (created is ApiResult.Success) engine?.offer() else fail("تعذر إنشاء محرك WebRTC")

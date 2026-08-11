@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
+import com.red.server.services.NotificationService
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
@@ -16,7 +17,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 @Component
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
-    private val history: CallHistoryService
+    private val history: CallHistoryService,
+    private val notifications: NotificationService
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
 
@@ -39,8 +41,11 @@ class CallWebSocketHandler(
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)
         val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen).orEmpty()
         if (targets.isEmpty()) {
-            if (type == "OFFER") history.missed(callId)
-            session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "UNAVAILABLE", "callId" to callId))))
+            if (type == "OFFER") {
+                // Dispatch High-Priority FCM / Sovereign Push to wake up the callee device for incoming call
+                notifications.sendVoipPushNotification(signal.targetUserId, source, callId, signal.mode)
+            }
+            session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "RINGING_PUSH_SENT", "callId" to callId))))
             return
         }
 

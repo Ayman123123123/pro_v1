@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component
  */
 @Component
 class DinstarEventListener(
-    private val history: CallHistoryService
+    private val history: CallHistoryService,
+    private val loadBalancer: DinstarLoadBalancer
 ) : ManagerEventListener {
     companion object { private val log = LoggerFactory.getLogger(DinstarEventListener::class.java) }
 
@@ -37,8 +38,6 @@ class DinstarEventListener(
 
         when (state) {
             "Up" -> {
-                // Call answered — update history
-                // Note: NewStateEvent doesn't have actionId for correlation
                 log.info("Line {} answered", lineNumber)
             }
             "Ringing" -> {
@@ -54,8 +53,12 @@ class DinstarEventListener(
 
         log.info("DINSTAR line {} hung up — cause: {}", lineNumber, cause)
 
-        // Note: HangupEvent doesn't have actionId for correlation with originate action
-        log.debug("Hangup for line {} with cause {}", lineNumber, cause)
+        // Automatic port release in load balancer when channel hangs up from Asterisk / Dinstar
+        val port = lineNumber.filter { it.isDigit() }.toIntOrNull()
+        if (port != null && port in 0..7) {
+            loadBalancer.releasePort(port)
+            log.info("DINSTAR port {} released in load balancer on Asterisk hangup", port)
+        }
     }
 
     private fun handleBridge(event: BridgeEvent) {

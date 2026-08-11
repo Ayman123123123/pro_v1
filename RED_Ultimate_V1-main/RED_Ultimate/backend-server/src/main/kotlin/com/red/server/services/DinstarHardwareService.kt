@@ -271,18 +271,18 @@ class DinstarHardwareService(
      * Yemen mobile operator prefixes — CORRECTED per Wikipedia + ITU E.164
      * | Prefix | Operator                        |
      * |--------|---------------------------------|
-     * | 71     | سبأفون (Sabafon)               |
-     * | 73     | يو / YOU (formerly MTN Yemen)   |
      * | 77, 78 | يمن موبايل (Yemen Mobile)      |
-     * | 70     | واي (Y Telecom)                |
+     * | 73     | سبأفون (Sabafon)               |
+     * | 71     | واي (Y Telecom)                |
+     * | 70     | يو / YOU (formerly MTN Yemen)   |
      * | 10     | يمن 4G (Yemen 4G)              |
      */
     private val YEMEN_OPERATOR_PREFIXES: Map<String, String> = mapOf(
-        "71" to "Sabafon",
-        "73" to "YOU",
         "77" to "YemenMobile",
         "78" to "YemenMobile",
-        "70" to "YTelecom",
+        "73" to "Sabafon",
+        "71" to "YTelecom",
+        "70" to "YOU",
         "10" to "Yemen4G"
     )
 
