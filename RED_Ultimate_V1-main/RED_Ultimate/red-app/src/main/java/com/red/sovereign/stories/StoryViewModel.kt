@@ -106,7 +106,6 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun open(story: Story) = viewModelScope.launch {
-    fun open(story: Story) = viewModelScope.launch {
         viewed(story)
         viewer = StoryViewerState.Loading(story)
         when {

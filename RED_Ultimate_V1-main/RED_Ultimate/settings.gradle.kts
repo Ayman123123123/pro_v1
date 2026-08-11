@@ -20,10 +20,16 @@ project(":app").projectDir = file("red-app")
 // One protocol shared by Android and the backend.
 include(":shared-proto")
 
-// Root QA tasks consume these tools as a composite build. Artifact-only Android builds may skip
-// the heavy QA composite; the full CI image still builds and tests it through its normal stages.
-val skipBuildLogic = providers.gradleProperty("RED_SKIP_BUILD_LOGIC").orNull?.toBooleanStrictOrNull() ?: false
+// Root QA tasks consume these tools as a composite build. Normal sync/assemble
+// does not need the legacy Signal QA composite, so avoid configuring it unless a
+// QA task explicitly asks for it. RED_SKIP_BUILD_LOGIC remains an override.
+val buildLogicTasks = setOf("buildQa", "qa", "qaRemote", "ci", "ciRemote", "qualityGate", "format")
+val buildLogicRequested = gradle.startParameter.taskNames.any { it.substringAfterLast(':') in buildLogicTasks }
+val skipBuildLogic = providers.gradleProperty("RED_SKIP_BUILD_LOGIC").orNull
+    ?.toBooleanStrictOrNull()
+    ?: !buildLogicRequested
 if (!skipBuildLogic) includeBuild("build-logic")
+if (buildLogicRequested) include(":fast-lint")
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)

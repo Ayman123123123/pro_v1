@@ -1,131 +1,91 @@
 package com.red.sovereign.security
 
 import android.content.Context
-import okhttp3.CertificatePinner
+import okhttp3.Cache
 import okhttp3.OkHttpClient
+import java.io.File
 import java.util.concurrent.TimeUnit
 
-/**
- * Factory for creating OkHttp clients with certificate pinning enabled.
- * Provides a secure HTTP client for all API communication.
- */
+/** Central OkHttp factory: TLS policy, SPKI pins, security headers, and timeouts. */
 object SecureOkHttpClient {
-
+    @Volatile
     private var defaultClient: OkHttpClient? = null
 
-    /**
-     * Build a secure OkHttp client with certificate pinning.
-     */
     fun build(
         context: Context,
         connectTimeout: Long = 15,
         readTimeout: Long = 20,
         writeTimeout: Long = 20,
-        pingInterval: Long = 25,
-        cacheSize: Long = 10 * 1024 * 1024 // 10 MB
-    ): OkHttpClient {
-        val certificatePinner = if (CertificatePinner.isEnabled) {
-            okhttp3.CertificatePinner.Builder().apply {
-                CertificatePinner.allPins().forEach { (host, pinSet) ->
-                    val pins = pinSet.joinToString(",") { it }
-                    add(host, pins)
-                }
-            }.build()
-        } else {
-            null
-        }
+        pingInterval: Long = 25
+    ): OkHttpClient = baseBuilder(context, connectTimeout, readTimeout, writeTimeout)
+        .pingInterval(pingInterval, TimeUnit.SECONDS)
+        .followSslRedirects(false)
+        .followRedirects(false)
+        .retryOnConnectionFailure(true)
+        .build()
 
-        return OkHttpClient.Builder()
-            .connectTimeout(connectTimeout, TimeUnit.SECONDS)
-            .readTimeout(readTimeout, TimeUnit.SECONDS)
-            .writeTimeout(writeTimeout, TimeUnit.SECONDS)
-            .pingInterval(pingInterval, TimeUnit.SECONDS)
-            .certificatePinner(certificatePinner)
-            .addInterceptor(SecurityHeadersInterceptor())
-            .followSslRedirects(false)
-            .followRedirects(false)
+    fun getDefault(context: Context): OkHttpClient {
+        defaultClient?.let { return it }
+        return synchronized(this) {
+            defaultClient ?: build(context.applicationContext)
+                .newBuilder()
+                .cache(Cache(File(context.applicationContext.cacheDir, "http"), DEFAULT_CACHE_BYTES))
+                .build()
+                .also { defaultClient = it }
+        }
+    }
+
+    fun reset() {
+        synchronized(this) {
+            defaultClient?.dispatcher?.cancelAll()
+            defaultClient?.connectionPool?.evictAll()
+            runCatching { defaultClient?.cache?.close() }
+            defaultClient = null
+        }
+    }
+
+    fun buildWithTimeouts(context: Context, connect: Long = 15, read: Long = 20, write: Long = 20): OkHttpClient =
+        build(context, connectTimeout = connect, readTimeout = read, writeTimeout = write)
+
+    fun buildWebSocketClient(context: Context): OkHttpClient =
+        baseBuilder(context, connectTimeout = 15, readTimeout = 0, writeTimeout = 20)
+            .pingInterval(25, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build()
-    }
 
-    /**
-     * Get or create the default secure client for the app.
-     */
-    fun getDefault(context: Context): OkHttpClient {
-        return defaultClient ?: run {
-            defaultClient = build(context)
-            defaultClient!!
-        }
-    }
-
-    /**
-     * Reset the default client (useful for configuration changes).
-     */
-    fun reset() {
-        defaultClient = null
-    }
-
-    /**
-     * Create a client with custom timeouts.
-     */
-    fun buildWithTimeouts(
-        context: Context,
-        connect: Long = 15,
-        read: Long = 20,
-        write: Long = 20
-    ): OkHttpClient {
-        return build(
-            context = context,
-            connectTimeout = connect,
-            readTimeout = read,
-            writeTimeout = write
-        )
-    }
-
-    /**
-     * Create a client for WebSocket connections.
-     */
-    fun buildWebSocketClient(context: Context): OkHttpClient {
-        return OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .pingInterval(25, TimeUnit.SECONDS)
-            .certificatePinner(
-                if (CertificatePinner.isEnabled) {
-                    okhttp3.CertificatePinner.Builder().apply {
-                        CertificatePinner.allPins().forEach { (host, pinSet) ->
-                            add(host, pinSet.joinToString(","))
-                        }
-                    }.build()
-                } else {
-                    null
-                }
-            )
-            .build()
-    }
-
-    /**
-     * Create a client for media downloads (larger timeout, no pinning for CDN).
-     */
-    fun buildMediaClient(context: Context): OkHttpClient {
-        return OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+    fun buildMediaClient(context: Context): OkHttpClient =
+        baseBuilder(context, connectTimeout = 30, readTimeout = 120, writeTimeout = 60)
             .followRedirects(true)
             .followSslRedirects(true)
             .build()
+
+    fun buildUploadClient(context: Context): OkHttpClient =
+        baseBuilder(context, connectTimeout = 30, readTimeout = 120, writeTimeout = 300)
+            .retryOnConnectionFailure(true)
+            .build()
+
+    private fun baseBuilder(
+        context: Context,
+        connectTimeout: Long,
+        readTimeout: Long,
+        writeTimeout: Long
+    ): OkHttpClient.Builder = OkHttpClient.Builder()
+        .connectTimeout(connectTimeout, TimeUnit.SECONDS)
+        .readTimeout(readTimeout, TimeUnit.SECONDS)
+        .writeTimeout(writeTimeout, TimeUnit.SECONDS)
+        .addInterceptor(SecurityHeadersInterceptor())
+        .apply {
+            configuredPinner()?.let(::certificatePinner)
+        }
+
+    private fun configuredPinner(): okhttp3.CertificatePinner? {
+        if (!CertificatePinner.isEnabled) return null
+        val configured = CertificatePinner.allPins()
+        if (configured.isEmpty()) return null
+        return okhttp3.CertificatePinner.Builder().apply {
+            configured.forEach { (host, pins) -> add(host, *pins.toTypedArray()) }
+        }.build()
     }
 
-    /**
-     * Create a client for uploads.
-     */
-    fun buildUploadClient(context: Context): OkHttpClient {
-        return OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(300, TimeUnit.SECONDS)
-            .build()
-    }
+    private const val DEFAULT_CACHE_BYTES = 10L * 1024L * 1024L
 }

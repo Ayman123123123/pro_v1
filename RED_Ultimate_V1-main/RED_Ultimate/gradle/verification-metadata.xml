@@ -16,6 +16,13 @@ https://docs.gradle.org/current/userguide/dependency_verification.html
       <trusted-artifacts>
          <trust file="protoc-3.25.1-windows-x86_64.exe" reason="Windows developer environment protoc artifact"/>
          <trust group="androidx.lifecycle" name="lifecycle-service" version="2.8.1" file="lifecycle-service-2.8.1.module" reason="Google Maven metadata; binary AAR remains SHA-256 pinned"/>
+         <!-- Version-scoped bootstrap trust for the coordinated 2026 Android toolchain upgrade.
+              Replace these entries with generated SHA-256 nodes after the first connected CI build. -->
+         <trust group="androidx.media3" version="1.11.0" reason="Official stable AndroidX Media3 release; version-scoped bootstrap trust"/>
+         <trust group="androidx.room" version="2.8.4" reason="Official stable AndroidX Room release; version-scoped bootstrap trust"/>
+         <trust group="androidx.work" version="2.11.2" reason="Official stable AndroidX WorkManager release; version-scoped bootstrap trust"/>
+         <trust group="org.jetbrains.kotlin" version="2.3.10" reason="Kotlin line bundled by AGP 9.2; version-scoped bootstrap trust"/>
+         <trust group="org.jetbrains.kotlinx" version="1.11.0" reason="Official kotlinx.serialization stable release; version-scoped bootstrap trust"/>
          <trust group="androidx.room" name="room-compiler" reason="Room annotation-processor — verified via lockfile diff"/>
          <trust group="androidx.room" name="room-compiler-processing" reason="Room annotation-processor — verified via lockfile diff"/>
          <trust group="androidx.room" name="room-migration" reason="Room annotation-processor — verified via lockfile diff"/>

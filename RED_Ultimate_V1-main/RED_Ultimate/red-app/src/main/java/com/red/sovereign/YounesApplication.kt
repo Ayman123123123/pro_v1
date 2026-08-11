@@ -15,6 +15,16 @@ class YounesApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // SQLCipher 4.17 requires explicit native initialization before Room
+        // creates SupportOpenHelperFactory. Fail early with a useful cause rather
+        // than crashing later on the first encrypted database access.
+        runCatching { System.loadLibrary("sqlcipher") }
+            .getOrElse { throw IllegalStateException("SQLCipher native library is unavailable for this ABI", it) }
+        // حمّل سياسة SPKI المشفرة قبل بناء أول OkHttp/WebSocket client.
+        com.red.sovereign.security.CertificatePinner.loadPins(this)
+        if (BuildConfig.RED_TLS_PINS.isNotBlank()) {
+            com.red.sovereign.security.CertificatePinner.provisionPins(this, BuildConfig.RED_TLS_PINS)
+        }
         // تهيئة عنوان الخادم (من BuildConfig + اكتشاف الشبكة)
         ServerEndpoint.initialize(this)
         // تهيئة ثيم وحجم الخط

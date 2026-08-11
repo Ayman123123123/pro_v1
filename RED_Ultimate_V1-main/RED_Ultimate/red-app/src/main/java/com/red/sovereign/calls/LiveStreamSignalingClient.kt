@@ -38,7 +38,7 @@ class LiveStreamSignalingClient(
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http: OkHttpClient = SecureOkHttpClient.build(context)
+    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
     fun connect(streamId: String) {

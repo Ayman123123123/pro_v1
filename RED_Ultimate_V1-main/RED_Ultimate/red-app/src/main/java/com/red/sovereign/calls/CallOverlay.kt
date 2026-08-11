@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SpeakerPhone
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam

@@ -12,9 +12,13 @@
 
 يلتقط الأعطال التي ظهرت في التدقيق العميق ويمنع عودتها.
 """
+import hashlib
 import re
 import sys
+import tomllib
+from collections import defaultdict
 from pathlib import Path
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parent.parent
 RED_APP = ROOT / "red-app/src/main/java/com/red/sovereign"
@@ -251,6 +255,173 @@ check(
     bool(_re.search(r'data class PollVote\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
     "PollVote (Mongo) بلا فهرس ⇒ collection scan",
 )
+
+# ─── 20. مصفوفة Android الحديثة — منع خلط الإصدارات وDSL القديمة ───────
+catalog = tomllib.loads((ROOT / "gradle/libs.versions.toml").read_text(encoding="utf-8"))
+versions = catalog["versions"]
+expected_stack = {
+    "buildTools": "36.0.0",
+    "compileSdk": "37",
+    "targetSdk": "37",
+    "minSdk": "26",
+    "javaVersion": "21",
+    "kotlinJvmTarget": "21",
+    "android-gradle-plugin": "9.2.1",
+    "kotlin": "2.3.10",
+    "ksp": "2.3.11",
+    "androidx-room": "2.8.4",
+}
+for key, expected in expected_stack.items():
+    check(
+        f"Android toolchain: {key}={expected}",
+        versions.get(key) == expected,
+        f"القيمة الفعلية {versions.get(key)!r} — لا تخلط مصفوفتين للإصدارات",
+    )
+
+red_build = (ROOT / "red-app/build.gradle.kts").read_text(encoding="utf-8")
+check("AGP 9: built-in Kotlin مفعّل", "android.builtInKotlin=true" in (ROOT / "gradle.properties").read_text(), "لا ترجع إلى opt-out المؤقت")
+check("AGP 9: لا kotlin-android في التطبيق", "jetbrains.kotlin.android" not in red_build and "kotlin-android" not in red_build, "AGP 9 يوفّر Kotlin مدمجاً")
+check("Room: KSP بدل KAPT", "alias(libs.plugins.ksp)" in red_build and "ksp(libs.androidx.room.compiler)" in red_build and "kapt(" not in red_build, "KAPT غير متوافق مع built-in Kotlin")
+direct_api_dependencies = [
+    "androidx.compose.animation",
+    "androidx.compose.foundation",
+    "androidx.compose.ui",
+    "androidx.fragment.ktx",
+    "androidx.lifecycle.viewmodel.ktx",
+    "androidx.media3.common",
+    "androidx.media3.effect",
+    "androidx.media3.transformer",
+    "androidx.sqlite",
+]
+missing_direct_dependencies = [name for name in direct_api_dependencies if f"implementation(libs.{name})" not in red_build]
+check("Gradle: APIs المستوردة معلنة مباشرة", not missing_direct_dependencies, f"لا تعتمد على transitives مخفية: {missing_direct_dependencies}")
+check("Media3 Transformer dependency موجودة", "implementation(libs.androidx.media3.transformer)" in red_build, "MediaCompressor وVideoTrimmer يستوردان Transformer")
+# @Composable is not repeatable. Allow comments/other annotations between the
+# two tokens so a duplicated marker cannot hide behind KDoc as happened in StickerMessage.
+duplicate_composable = []
+repeat_pattern = re.compile(
+    r"@Composable(?:(?:\s+)|(?:/\*.*?\*/)|(?://[^\n]*(?:\n|$))|(?:@(?!Composable)\w+(?:\([^)]*\))?))*@Composable",
+    re.DOTALL,
+)
+for kotlin_file in (ROOT / "red-app/src").rglob("*.kt"):
+    source = kotlin_file.read_text(encoding="utf-8")
+    for match in repeat_pattern.finditer(source):
+        duplicate_composable.append(f"{kotlin_file.relative_to(ROOT)}:{source.count(chr(10), 0, match.start()) + 1}")
+check("Compose: لا @Composable مكررة على التصريح نفسه", not duplicate_composable, f"Composable ليست repeatable: {duplicate_composable}")
+
+missing_icon_imports = []
+for kotlin_file in (ROOT / "red-app/src").rglob("*.kt"):
+    source = kotlin_file.read_text(encoding="utf-8")
+    if "import androidx.compose.material.icons.filled.*" in source:
+        continue
+    used_icons = set(re.findall(r"\bIcons\.Default\.(\w+)", source))
+    imported_icons = set(re.findall(r"import androidx\.compose\.material\.icons\.filled\.(\w+)", source))
+    for icon in sorted(used_icons - imported_icons):
+        missing_icon_imports.append(f"{kotlin_file.relative_to(ROOT)}:{icon}")
+check("Compose: كل Icons.Default مستوردة", not missing_icon_imports, f"imports مفقودة: {missing_icon_imports}")
+
+# Copy/paste merges can duplicate an entire declaration line. This produces a
+# misleading cascade of parser/Compose errors far away from the real location.
+duplicate_declarations = []
+for kotlin_file in (ROOT / "red-app/src").rglob("*.kt"):
+    previous = ""
+    for line_number, line in enumerate(kotlin_file.read_text(encoding="utf-8").splitlines(), 1):
+        normalized = line.strip()
+        if normalized and normalized == previous and re.search(r"\b(fun|class|object|interface)\b", normalized):
+            duplicate_declarations.append(f"{kotlin_file.relative_to(ROOT)}:{line_number}")
+        previous = normalized
+check("Kotlin: لا تصريح كامل مكرر على سطرين", not duplicate_declarations, f"تصريحات مكررة: {duplicate_declarations}")
+
+media_compressor = (RED_APP / "core/utils/MediaCompressor.kt").read_text(encoding="utf-8")
+video_trimmer = (RED_APP / "core/utils/VideoTrimmer.kt").read_text(encoding="utf-8")
+check("Media3 1.11: EditedMediaItem API", "EditedMediaItem.Builder" in media_compressor and "EditedMediaItem.Builder" in video_trimmer, "لا تمرّر MediaItem الخام إلى Transformer الحديث")
+check("Video compression: 720px effect فعلي", "Presentation.createForHeight(720)" in media_compressor, "setVideoMimeType وحده لا يغيّر الدقة")
+check("Kotlin DSL: compilerOptions واحدة", red_build.count("compilerOptions {") == 1 and "kotlinOptions" not in red_build and "KotlinCompile" not in red_build, "لا تخلط kotlinOptions/task overrides مع compilerOptions")
+check("Packaging DSL في موضع Android الصحيح", red_build.count("packaging {") == 1 and red_build.count("META-INF/DEPENDENCIES") == 1, "تكرار packaging أو وضعه داخل kotlin يفسد Kotlin DSL")
+check("SDK values من version catalog", "minSdk = libs.versions.minSdk" in red_build and "targetSdk = libs.versions.targetSdk" in red_build, "لا تكرر minSdk/targetSdk بأرقام مختلفة داخل module")
+
+resource_root = ROOT / "red-app/src/main/res"
+resource_svgs = list(resource_root.rglob("*.svg"))
+check("AAPT: لا SVG خام داخل res", not resource_svgs, f"انقل SVG إلى artwork واستخدم VectorDrawable: {resource_svgs}")
+
+# Validate project R references without mistaking android.R framework icons for
+# local resources. This catches linker errors before AAPT2 is available.
+resource_definitions = defaultdict(set)
+file_resource_types = {"drawable", "mipmap", "layout", "xml", "font", "raw", "anim", "animator", "menu", "navigation", "color"}
+for resource_file in resource_root.rglob("*"):
+    if not resource_file.is_file():
+        continue
+    resource_type = resource_file.parent.name.split("-", 1)[0]
+    if resource_type in file_resource_types:
+        resource_definitions[resource_type].add(resource_file.stem)
+    if resource_type == "values" and resource_file.suffix == ".xml":
+        for child in ElementTree.parse(resource_file).getroot():
+            if name := child.attrib.get("name"):
+                resource_definitions[child.tag.split("}")[-1]].add(name)
+resource_references = []
+for source_file in (ROOT / "red-app/src").rglob("*"):
+    if not source_file.is_file() or source_file.suffix not in {".kt", ".java", ".xml"}:
+        continue
+    source = source_file.read_text(encoding="utf-8")
+    resource_references.extend(
+        (kind, name, source_file.relative_to(ROOT))
+        for kind, name in re.findall(r"(?<!android\.)\bR\.(string|drawable|mipmap|color|style|xml|font|raw)\.([A-Za-z0-9_]+)", source)
+    )
+    resource_references.extend(
+        (kind, name, source_file.relative_to(ROOT))
+        for kind, name in re.findall(r"(?<!android:)@(string|drawable|mipmap|color|style|xml|font|raw)/([A-Za-z0-9_.]+)", source)
+    )
+missing_resources = [f"{kind}/{name} ({path})" for kind, name, path in resource_references if name not in resource_definitions[kind]]
+check("AAPT: كل مراجع موارد المشروع معرّفة", not missing_resources, f"مراجع مفقودة: {missing_resources[:20]}")
+
+manifest = (ROOT / "red-app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+main_activity = (RED_APP / "MainActivity.kt").read_text(encoding="utf-8")
+check("Android 17: ACCESS_LOCAL_NETWORK معلنة", "android.permission.ACCESS_LOCAL_NETWORK" in manifest, "targetSdk 37 يمنع LAN بدونها")
+check("Android 17: ACCESS_LOCAL_NETWORK تُطلب وقت التشغيل", "localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)" in main_activity, "التصريح وحده لا يمنح صلاحية LAN")
+main_network = (ROOT / "red-app/src/main/res/xml/network_security_config.xml").read_text(encoding="utf-8")
+debug_network = (ROOT / "red-app/src/debug/res/xml/network_security_config.xml").read_text(encoding="utf-8")
+check("Release network policy: cleartext مغلق", '<base-config cleartextTrafficPermitted="false">' in main_network, "الإصدار يجب أن يبقى TLS-only")
+check("Debug network policy: LAN cleartext مسموح", '<base-config cleartextTrafficPermitted="true">' in debug_network, "عنوان LAN متغيّر ولا يمكن حصره في domain-config")
+application_source = (RED_APP / "YounesApplication.kt").read_text(encoding="utf-8")
+check("SQLCipher: native library تُحمّل قبل Room", 'System.loadLibrary("sqlcipher")' in application_source, "SQLCipher 4.17 يتطلب تهيئة صريحة قبل SupportOpenHelperFactory")
+
+root_build = (ROOT / "build.gradle.kts").read_text(encoding="utf-8")
+check("Gradle classpath: لا تحميل AGP مكرر", "classpath(libs.gradle)" not in root_build and "buildscript {" not in root_build, "استخدم plugins DSL فقط")
+check("RED_SKIP_BUILD_LOGIC: لا مرجع إلى included build الغائب", "buildLogicIncluded.get()" in root_build, "Docker artifact build يمرّر RED_SKIP_BUILD_LOGIC=true")
+for task_name in ("androidCheck", "backendCheck", "qualityGate"):
+    check(f"Gradle task: {task_name} متاحة", f'tasks.register("{task_name}")' in root_build or f'tasks.register<Exec>("{task_name}")' in root_build, "لا تخفِ بوابات الجودة عند تحسين سرعة assemble")
+
+dashboard_source = (RED_APP / "ui/RedDashboard.kt").read_text(encoding="utf-8")
+stories_screen_source = (RED_APP / "ui/StoriesScreen.kt").read_text(encoding="utf-8")
+communities_source = (RED_APP / "features/communities/CommunitiesScreen.kt").read_text(encoding="utf-8")
+explore_source = (RED_APP / "features/explore/RedExploreScreen.kt").read_text(encoding="utf-8")
+webrtc_source = (RED_APP / "calls/WebRtcEngine.kt").read_text(encoding="utf-8")
+pinner_source = (RED_APP / "security/CertificatePinner.kt").read_text(encoding="utf-8")
+http_source = (RED_APP / "security/SecureOkHttpClient.kt").read_text(encoding="utf-8")
+check("Dashboard: Communities تستلم TokenStore", "CommunitiesScreen(tokens = tokens" in dashboard_source, "كان الاستدعاء لا يطابق التوقيع")
+check("Dashboard: زر الدردشة لا يشير إلى state داخلية", "MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }" in dashboard_source, "showDirectory تخص ChatHubScreen وليست في Dashboard")
+check("Stories: Text وVoice في when المغلقة", all(f"is StoryViewerState.{kind} -> viewer.story" in stories_screen_source for kind in ("Text", "Voice")), "sealed when ناقصة وتمنع التصريف")
+check("Stories: callbacks حقيقية للتفاعل والرد", "onReact: (Story, String) -> Unit" in stories_screen_source and "onReply: (Story, String) -> Unit" in stories_screen_source, "لا تعتمد على ViewModel غير موجود في scope")
+check("VoiceMessage: معلّمة Composable", re.search(r"@Composable\s+private fun VoiceMessage", dashboard_source) is not None, "الدالة تستدعي remember/Text")
+check("Communities: المغادرة مفعلة", "community.isJoined -> OutlinedButton(onClick = onLeave)" in communities_source, "زر منضم المعطل كان يمنع leave API")
+check("Explore: بيانات API وليست fixtures", "/api/livestream/public" in explore_source and "/api/conference/public" in explore_source and "LiveStreamItem(" not in explore_source, "فعّل الاستكشاف عبر backend")
+check("Call quality: RedQualityManager موصول بـ WebRTC", "RedQualityManager.videoProfile(context)" in webrtc_source and "applyEffectiveCameraState" in webrtc_source, "مدير الجودة كان orphan")
+check("TLS pins: SPKI لا whole certificate", "certificate.publicKey.encoded" in pinner_source and "SecureStore" in pinner_source, "OkHttp pins يجب أن تكون sha256/SPKI ومحفوظة مشفراً")
+check("TLS pins: release provisioning موصولة", "RED_TLS_PINS" in red_build and "provisionPins" in application_source, "وفّر current + backup SPKI pins في البناء الموقع")
+check("WebSocket: client بلا read timeout", "readTimeout = 0" in http_source and "buildWebSocketClient" in http_source, "read timeout قصير يسقط المكالمات")
+signaling_sources = [
+    (RED_APP / "calls/CallSignalingClient.kt").read_text(encoding="utf-8"),
+    (RED_APP / "calls/ConferenceSignalingClient.kt").read_text(encoding="utf-8"),
+    (RED_APP / "calls/LiveStreamSignalingClient.kt").read_text(encoding="utf-8"),
+]
+check("WebSocket: كل signaling clients تستخدم factory المخصصة", all("buildWebSocketClient" in source for source in signaling_sources), "لا تستخدم HTTP read timeout للمكالمة")
+check("Feed: مشاركة المنشور مفعلة", 'PostAction(Icons.Default.Share, "مشاركة", true)' in dashboard_source, "زر المشاركة كان معطلاً")
+
+wrapper = (ROOT / "gradle/wrapper/gradle-wrapper.properties").read_text(encoding="utf-8")
+check("Gradle 9.4.1 مطابق لـ AGP 9.2", "gradle-9.4.1-all.zip" in wrapper, "AGP 9.2 يتطلب Gradle 9.4.1")
+check("Gradle distribution مثبتة SHA-256", "distributionSha256Sum=708d2c6ecc97ca9a11838ef64a6c2301151b8dd10387e22dc1a12c30557cab5b" in wrapper, "منع استبدال distribution أثناء التنزيل")
+wrapper_jar_hash = hashlib.sha256((ROOT / "gradle/wrapper/gradle-wrapper.jar").read_bytes()).hexdigest()
+check("Gradle wrapper JAR أصلية 9.4.1", wrapper_jar_hash == "55243ef57851f12b070ad14f7f5bb8302daceeebc5bce5ece5fa6edb23e1145c", f"وجدت {wrapper_jar_hash}")
 
 
 # ─── الخلاصة ──────────────────────────────────────────────────────────

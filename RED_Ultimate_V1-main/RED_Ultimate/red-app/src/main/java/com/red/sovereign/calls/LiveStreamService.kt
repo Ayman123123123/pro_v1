@@ -15,12 +15,16 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.red.sovereign.MainActivity
+import com.red.sovereign.auth.ApiResult
+import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
@@ -77,7 +81,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
     private var recordingManager: CallRecordingManager? = null
     private var streamId = ""
     private var userId = ""
+    private var streamTitle = ""
     private var isBroadcaster = false
+    private var stopping = false
+    private var cleanedUp = false
 
     override fun onCreate() {
         super.onCreate()
@@ -97,10 +104,17 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             ACTION_START -> {
                 streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
+                streamTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "بث مباشر يونس" }
                 isBroadcaster = intent.getBooleanExtra(EXTRA_BROADCASTER, false)
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()
-                signaling.connect(streamId)
+                scope.launch {
+                    if (!isBroadcaster || registerBroadcaster()) {
+                        signaling.connect(streamId)
+                    } else {
+                        onError("LIVE_STREAM_REGISTRATION_FAILED")
+                    }
+                }
             }
             ACTION_STOP -> stopStream()
             ACTION_TOGGLE_MIC -> {
@@ -163,6 +177,19 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             }
         }
         return START_STICKY
+    }
+
+    private suspend fun registerBroadcaster(): Boolean {
+        if (streamId.isBlank() || userId.isBlank()) return false
+        val payload = org.json.JSONObject()
+            .put("streamId", streamId)
+            .put("title", streamTitle)
+            .put("isPrivate", false)
+            .toString()
+        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/create", payload)) {
+            is ApiResult.Success -> true
+            is ApiResult.Error -> false
+        }
     }
 
     override fun onConnected() {
@@ -291,6 +318,26 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
     }
 
     private fun stopStream() {
+        if (stopping) return
+        stopping = true
+        val closingStreamId = streamId
+        val endpoint = if (isBroadcaster) "stop" else "leave"
+        scope.launch {
+            if (closingStreamId.isNotBlank()) {
+                withTimeoutOrNull(3_000) {
+                    runCatching {
+                        AuthorizedApiClient(TokenStore(this@LiveStreamService))
+                            .request("POST", "/api/livestream/$closingStreamId/$endpoint", "{}")
+                    }
+                }
+            }
+            withContext(Dispatchers.Main.immediate) { finishStop() }
+        }
+    }
+
+    private fun finishStop(terminateService: Boolean = true) {
+        if (cleanedUp) return
+        cleanedUp = true
         statsJob?.cancel(); statsJob = null
         if (streamId.isNotBlank()) signaling.leave(streamId, userId)
         signaling.close()
@@ -308,7 +355,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         LiveStreamRuntime.raisedHands = emptyList()
         LiveStreamRuntime.isCoHost = false
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        if (terminateService) stopSelf()
     }
 
     private fun showIncomingLiveStreamNotification(streamId: String, userId: String, broadcasterName: String) {
@@ -368,8 +415,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
     }
 
     override fun onDestroy() {
+        finishStop(terminateService = false)
         scope.cancel()
-        stopStream()
         super.onDestroy()
     }
 
@@ -394,6 +441,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_BROADCASTER = "broadcaster"
         const val EXTRA_BROADCASTER_NAME = "broadcaster_name"
+        const val EXTRA_TITLE = "stream_title"
         const val EXTRA_CHAT_TEXT = "chat_text"
         const val EXTRA_SENDER_NAME = "sender_name"
         const val EXTRA_REACTION_EMOJI = "reaction_emoji"
@@ -442,12 +490,19 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun start(context: Context, streamId: String, userId: String, isBroadcaster: Boolean) {
+        fun start(
+            context: Context,
+            streamId: String,
+            userId: String,
+            isBroadcaster: Boolean,
+            title: String = "بث مباشر يونس"
+        ) {
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_STREAM_ID, streamId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_BROADCASTER, isBroadcaster)
+                putExtra(EXTRA_TITLE, title)
             }
             ContextCompat.startForegroundService(context, intent)
         }

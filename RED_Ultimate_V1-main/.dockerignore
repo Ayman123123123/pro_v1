@@ -1,6 +1,7 @@
 .git
 .github
 **/.gradle
+**/.kotlin
 **/build
 **/dist
 **/node_modules

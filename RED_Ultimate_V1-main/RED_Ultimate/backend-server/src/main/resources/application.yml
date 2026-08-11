@@ -50,19 +50,26 @@ spring:
         order_inserts: true
         order_updates: true
 
-  actuator:
-    endpoints:
-      web:
-        exposure:
-          include: health,info,metrics
-    endpoint:
-      health:
-        show-details: when-authorized
+# Spring Boot Actuator properties belong under `management`, not `spring`.
+# The previous nesting was silently ignored, so the intended exposure policy
+# and health-detail restriction were never applied.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
 
 # ══════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Configuration
 # ══════════════════════════════════════════
 red:
+  # Enable only behind a proxy that discards client-supplied X-Forwarded-For.
+  trust-x-forwarded-for: ${RED_TRUST_X_FORWARDED_FOR:false}
   dinstar:
     # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع.
     ip: ${DINSTAR_IP:192.168.11.1}
@@ -89,6 +96,10 @@ red:
     secret: ${JWT_SECRET:}
     access-expiration-minutes: 15
     refresh-expiration-days: ${REFRESH_EXPIRATION_DAYS:30}
+  identity-authority:
+    private-key-path: ${RED_IDENTITY_PRIVATE_KEY_PATH:}
+    public-key-path: ${RED_IDENTITY_PUBLIC_KEY_PATH:}
+    certificate-valid-days: ${RED_DEVICE_CERTIFICATE_VALID_DAYS:90}
   admin:
     username: ${RED_ADMIN_USERNAME:red_admin}
     password: ${RED_ADMIN_PASSWORD:}

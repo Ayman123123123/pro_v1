@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only overlay: RED_SERVER_URL commonly points at a changing RFC1918 LAN
+     address. Release builds continue to use src/main's strict TLS-only policy. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

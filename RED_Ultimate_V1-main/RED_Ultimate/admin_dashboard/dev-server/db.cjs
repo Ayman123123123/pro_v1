@@ -281,6 +281,23 @@ CREATE TABLE IF NOT EXISTS sticker_packs (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS stickers (
+  id TEXT PRIMARY KEY,
+  pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
+  name TEXT,
+  media_key TEXT NOT NULL,
+  emoji_tags TEXT NOT NULL DEFAULT '[]',
+  display_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS user_sticker_packs (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
+  installed_at TEXT NOT NULL,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, pack_id)
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,
@@ -637,14 +654,26 @@ function seedIfEmpty() {
   ['يونس', 'صنعاء', 'عدن', 'تقنية', 'أمن_المعلومات', 'اليمن', 'برمجة', 'تشفير']
     .forEach((tag, i) => insTag.run(uuid(), tag, 1200 - i * 130, 98 - i * 9, 0, iso(0, i), iso(30 - i)));
 
-  const insPack = db.prepare('INSERT INTO sticker_packs (id,name,description,is_official,is_published,is_free,price_cents,sticker_count,created_at) VALUES (?,?,?,?,?,?,?,?,?)');
-  [
+  const insPack = db.prepare('INSERT INTO sticker_packs (id,name,description,is_official,is_published,is_free,price_cents,sticker_count,cover_url,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const insSticker = db.prepare('INSERT INTO stickers (id,pack_id,name,media_key,emoji_tags,display_order) VALUES (?,?,?,?,?,?)');
+  const seededPacks = [
     ['حزمة يونس الرسمية', 1, 1, 0],
     ['تعابير يمنية', 0, 1, 0],
     ['حزمة رمضان', 0, 0, 500],
-  ].forEach(([name, official, published, price]) =>
-    insPack.run(uuid(), name, 'حزمة ملصقات محلية', official, published, price === 0 ? 1 : 0, price, 24, iso(10))
-  );
+  ].map(([name, official, published, price]) => {
+    const packId = uuid();
+    const count = 4;
+    insPack.run(packId, name, 'حزمة ملصقات محلية', official, published,
+      price === 0 ? 1 : 0, price, count, `stickers/${packId}/cover.webp`, iso(10));
+    ['😀', '❤️', '👍', '🎉'].forEach((emoji, order) =>
+      insSticker.run(uuid(), packId, `${name} ${order + 1}`,
+        `stickers/${packId}/${order + 1}.webp`, JSON.stringify([emoji]), order));
+    return { id: packId, published };
+  });
+  // The seeded admin has one installed pack, making the installed-list contract
+  // executable immediately instead of returning a permanently hard-coded array.
+  db.prepare('INSERT INTO user_sticker_packs (user_id,pack_id,installed_at) VALUES (?,?,?)')
+    .run(admin.id, seededPacks[0].id, nowIso());
 
   const insNotif = db.prepare('INSERT INTO notifications (id,type,title,body,is_read,created_at) VALUES (?,?,?,?,?,?)');
   [
