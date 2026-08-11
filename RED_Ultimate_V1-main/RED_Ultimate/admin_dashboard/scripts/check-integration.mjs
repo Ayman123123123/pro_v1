@@ -18,9 +18,22 @@ const BASE = process.env.RED_API_TARGET || 'http://127.0.0.1:8080';
 let pass = 0;
 let fail = 0;
 
+/**
+ * @param token رمز صريح. عند إغفاله على مسار إداري يُستعمل رمز
+ *   المسؤول تلقائيًا.
+ *
+ * خادم التطوير صار يفرض دور ADMIN على `/api/admin/**` مطابقةً
+ * لـ SecurityConfig. وكثير من الفحوص هنا كانت تستدعي مسارات إدارية
+ * بلا رمز لأن الخادم كان يقبلها — أي أنها كانت تثبّت السلوك الخاطئ.
+ *
+ * الفحوص التي تختبر الرفض تمرّر `null` صراحةً لتتجاوز هذا الافتراض.
+ */
 async function api(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const effective = token === undefined && path.startsWith('/api/admin/')
+    ? adminToken
+    : token;
+  if (effective) headers.Authorization = `Bearer ${effective}`;
   const res = await fetch(BASE + path, {
     method, headers, body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -643,6 +656,53 @@ await check('إرسال SMS يختار بوابة من الأسطول ويرفض
   assert(unknown.status === 404, `بوابة غير مسجّلة يجب أن تعيد 404، عادت ${unknown.status}`);
 
   return `الإرسال عبر ${host} · رفض العنوان العام وعنوان البيانات الوصفية · 404 لغير المسجّل`;
+});
+
+await check('مستخدم عادي يصوّت ويؤكّد حضوره، ولا يبلغ المسارات الإدارية', async () => {
+  // كانت `/api/admin/content/**` كلها `hasRole("ADMIN")`، وفيها
+  // vote/rsvp/checkin — أفعال مشارِك تأخذ هوية المستدعي نفسه.
+  // النتيجة: لا مستخدم عادي يستطيع التصويت أو تأكيد الحضور (403).
+  // وخادم التطوير كان يفتح كل /api/admin بلا فحص دور، فأخفى العطل.
+  const uname = `poll_${Date.now().toString(36)}`;
+  const reg = (await api('POST', '/api/auth/register', {
+    username: uname, displayName: 'ناخب', password: 'Passw0rd#2026',
+    deviceName: 'VoteProbe', platform: 'ANDROID', identityFingerprint: 'vp:01',
+  })).data;
+  await api('POST', '/api/admin/users/action',
+    { userId: reg.user.id, action: 'APPROVED', reason: 'فحص آلي' }, adminToken);
+  const userToken = (await api('POST', '/api/auth/login',
+    { username: uname, password: 'Passw0rd#2026' })).data.accessToken;
+
+  // إداري بحق ⇒ 403 للمستخدم العادي، 200 للمسؤول
+  const denied = await api('GET', '/api/admin/users', undefined, userToken);
+  assert(denied.status === 403, `مسار إداري يجب أن يُرفض بـ403، عاد ${denied.status}`);
+  const allowed = await api('GET', '/api/admin/users', undefined, adminToken);
+  assert(allowed.status === 200, `المسؤول يجب أن يمرّ، عاد ${allowed.status}`);
+
+  // قراءة المحتوى المنشور متاحة للمستخدم
+  const polls = await api('GET', '/api/admin/content/polls/active', undefined, userToken);
+  assert(polls.status === 200, `قراءة الاستطلاعات يجب أن تمرّ، عادت ${polls.status}`);
+  const poll = polls.data[0];
+  assert(poll?.options?.length, 'لا استطلاع نشط للفحص');
+
+  // العقد `optionIds` مصفوفةً — كما في PollsApi و ContentController.
+  // كان خادم التطوير يقرأ `optionId` مفردًا فيرفض كل تصويت حقيقي.
+  const before = poll.options[0].votes;
+  const voted = await api('POST', `/api/admin/content/polls/${poll.id}/vote`,
+    { optionIds: [poll.options[0].id] }, userToken);
+  assert(voted.status === 200, `التصويت فشل: ${voted.status} ${JSON.stringify(voted.data)}`);
+
+  const after = (await api('GET', '/api/admin/content/polls/active', undefined, userToken))
+    .data.find((x) => x.id === poll.id).options[0].votes;
+  assert(after === before + 1, `العدّاد لم يتغيّر: ${before} → ${after}`);
+
+  // التصويت المكرر يفسد نتيجة الاستطلاع لو مرّ
+  const again = await api('POST', `/api/admin/content/polls/${poll.id}/vote`,
+    { optionIds: [poll.options[0].id] }, userToken);
+  assert(again.status === 400 && again.data.error === 'ALREADY_VOTED',
+    `التصويت المكرر يجب أن يُرفض، عاد ${again.status} ${again.data.error}`);
+
+  return `403 للإداري · تصويت ${before}→${after} · ALREADY_VOTED للمكرر`;
 });
 
 console.log(`\n${'─'.repeat(60)}`);

@@ -46,6 +46,15 @@
 # بناء لوحة الإدارة
 npm --prefix admin_dashboard install
 npm --prefix admin_dashboard run build
+
+# فحوص ساكنة: عقد الـ API + حراس الواجهة + تطابق الأدوار + tsc
+npm --prefix admin_dashboard run check
+
+# فحوص حيّة: تتطلب خادم التطوير (npm run dev:server:reset)
+#   check-dev-server      — كل إجراء إداري يغيّر الحالة فعلًا
+#   check-integration     — التطبيق والخادم واللوحة على قاعدة واحدة
+#   check-asterisk-fleet  — نظراء PJSIP يشيرون إلى بواباتهم الصحيحة
+npm --prefix admin_dashboard run check:live
 ```
 
 > إن كانت بيئتك Windows فاستخدم `gradlew.bat` بدل `./gradlew`.
