@@ -42,7 +42,9 @@ class MessageService(
             mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
             mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
             mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            log.warn("Failed to create group/channel indexes: {}", e.message)
+        }
     }
 
     fun processIncoming(message: RedProtos.ChatMessage): MessageDocument {
