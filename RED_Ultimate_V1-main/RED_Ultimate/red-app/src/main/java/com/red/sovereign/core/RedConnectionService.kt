@@ -62,13 +62,13 @@ class RedConnectionService : Service() {
         socket = RedWebSocketClient(this, tokenStore, ::onEnvelope, ::onState)
         scope.launch {
             if (signal.replenishPreKeys() is ApiResult.Error) {
-                notifyConnection("تعذر تحديث مفاتيح الجلسات الآمنة — ستتم المحاولة عند إعادة الاتصال")
+                notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_error))
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(CONNECTION_NOTIFICATION, connectionNotification("جارٍ الاتصال…"))
+        startForeground(CONNECTION_NOTIFICATION, connectionNotification(getString(com.red.sovereign.R.string.status_connecting)))
         if (intent?.action == ACTION_MARK_READ) {
             val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return START_STICKY
             socket.acknowledge(messageId, intent.getLongExtra(EXTRA_SEQUENCE, 0), "READ")
@@ -106,7 +106,7 @@ class RedConnectionService : Service() {
             val group = runCatching { json.decodeFromString<Group>(pending.groupJson) }.getOrNull() ?: continue
             scope.launch {
                 when (val prepared = groupCrypto.prepare(group, pending.text.toByteArray(Charsets.UTF_8))) {
-                    is ApiResult.Error -> notifyConnection("تعذر تشفير المجموعة: ${prepared.message}")
+                    is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
                     is ApiResult.Success -> {
                         prepared.value.distributions.forEach { distribution ->
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
@@ -131,7 +131,7 @@ class RedConnectionService : Service() {
     private fun sendEncryptedPayload(pending: PendingSend) {
         scope.launch {
             when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
-                is ApiResult.Error -> notifyConnection("فشل التشفير: ${encrypted.message}")
+                is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
                 is ApiResult.Success -> {
                     var firstId: String? = null
                     encrypted.value.forEach { envelope ->
@@ -154,19 +154,19 @@ class RedConnectionService : Service() {
                 connected = true
                 attempts = 0
                 reconnectTask?.cancel(false)
-                notifyConnection("متصل بخادم يونس المحلي")
+                notifyConnection(getString(com.red.sovereign.R.string.status_connected_local))
                 scope.launch {
                     when (val stock = signal.replenishPreKeys()) {
                         is ApiResult.Success -> if (stock.value.ecAvailable < stock.value.minimumRecommended || stock.value.kyberAvailable < stock.value.minimumRecommended) {
-                            notifyConnection("مخزون مفاتيح الجلسات منخفض — ستتم إعادة المحاولة")
+                            notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_low))
                         }
-                        is ApiResult.Error -> notifyConnection("تعذر تحديث مفاتيح الجلسات الآمنة — ستتم المحاولة عند إعادة الاتصال")
+                        is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_error))
                     }
                 }
                 drainSends()
                 drainGroupSends()
             }
-            ConnectionState.CONNECTING -> notifyConnection("جارٍ الاتصال بخادم يونس المحلي")
+            ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
             ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
             ConnectionState.UNAUTHORIZED -> { connected = false; refreshAndReconnect() }
         }
@@ -177,7 +177,7 @@ class RedConnectionService : Service() {
         scope.launch {
             when (val result = AuthApi(applicationContext).refresh(refresh)) {
                 is ApiResult.Success -> { tokenStore.updateTokens(result.value); attempts = 0; socket.connect() }
-                is ApiResult.Error -> { notifyConnection("انتهت الجلسة — افتح يونس لتسجيل الدخول"); stopSelf() }
+                is ApiResult.Error -> { notifyConnection(getString(com.red.sovereign.R.string.status_session_expired)); stopSelf() }
             }
         }
     }
@@ -185,7 +185,7 @@ class RedConnectionService : Service() {
     private fun scheduleReconnect() {
         reconnectTask?.cancel(false)
         val delay = minOf(60L, 1L shl minOf(attempts++, 6))
-        notifyConnection("غير متصل — إعادة المحاولة خلال $delay ثانية")
+        notifyConnection(getString(com.red.sovereign.R.string.status_disconnected_retry, delay))
         reconnectTask = scheduler.schedule({ socket.connect() }, delay, TimeUnit.SECONDS)
     }
 
@@ -266,8 +266,8 @@ class RedConnectionService : Service() {
         val preview = plaintext?.take(120)?.takeIf { SettingsRuntime.current.notificationPreview }
         manager.notify(sender.hashCode(), NotificationCompat.Builder(this, MESSAGE_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle("رسالة يونس جديدة")
-            .setContentText(preview ?: "رسالة مشفرة من $sender")
+            .setContentTitle(getString(com.red.sovereign.R.string.notif_new_message_title))
+            .setContentText(preview ?: getString(com.red.sovereign.R.string.notif_new_message_body, sender))
             .setContentIntent(openAppIntent())
             .setAutoCancel(true)
             .build())
@@ -275,7 +275,7 @@ class RedConnectionService : Service() {
 
     private fun connectionNotification(text: String) = NotificationCompat.Builder(this, CONNECTION_CHANNEL)
         .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-        .setContentTitle("يونس — الاتصال السيادي")
+        .setContentTitle(getString(com.red.sovereign.R.string.notif_connection_title))
         .setContentText(text)
         .setContentIntent(openAppIntent())
         .setOngoing(true)
@@ -291,8 +291,8 @@ class RedConnectionService : Service() {
 
     private fun createChannels() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CONNECTION_CHANNEL, "اتصال يونس المحلي", NotificationManager.IMPORTANCE_LOW))
-        manager.createNotificationChannel(NotificationChannel(MESSAGE_CHANNEL, "رسائل يونس", NotificationManager.IMPORTANCE_HIGH))
+        manager.createNotificationChannel(NotificationChannel(CONNECTION_CHANNEL, getString(com.red.sovereign.R.string.channel_connection_name), NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(MESSAGE_CHANNEL, getString(com.red.sovereign.R.string.channel_messages_name), NotificationManager.IMPORTANCE_HIGH))
     }
 
     override fun onDestroy() {
