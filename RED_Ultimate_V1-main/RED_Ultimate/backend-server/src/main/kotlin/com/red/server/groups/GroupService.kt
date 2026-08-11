@@ -33,10 +33,10 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         return mongo.find(Query(Criteria.where("id").`in`(ids)).with(Sort.by(Sort.Direction.DESC, "updatedAt")), GroupDocument::class.java).map(::response)
     }
 
-    /** Get a user's role in a specific group */
+    /** Get a user's role in a specific group (MEMBER for non-members — لا يرمي استثناء) */
     fun roleFor(userId: UUID, groupId: String): GroupRole {
-        val membership = membership(groupId, userId)
-        return if (membership == null) GroupRole.MEMBER else membership.role
+        val m = mongo.findOne(Query(Criteria.where("id").`is`("$groupId:$userId")), GroupMember::class.java)
+        return m?.role ?: GroupRole.MEMBER
     }
 
     fun details(userId: UUID, groupId: String): GroupResponse {

@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 build/
 .gradle/
+.gradle-cache/
 local.properties
 *.iml
 .idea/

@@ -92,6 +92,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** إنهاء مكالمة PSTN جارية — يحرّر منفذ DINSTAR في موازن الحمولة */
+    fun hangupPstn(callId: String) = viewModelScope.launch {
+        when (val result = pstn.hangup(callId)) {
+            is ApiResult.Success -> pstnState = PstnState.Idle
+            is ApiResult.Error -> pstnState = PstnState.Error(localize(result.message))
+        }
+    }
+
     fun clearPstnState() { pstnState = PstnState.Idle }
 
     fun logout() {

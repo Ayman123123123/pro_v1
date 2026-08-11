@@ -33,22 +33,34 @@ export default function Diagnostics() {
 
   const runTests = useCallback(async () => {
     setLoading(true);
-    const checks: Array<{ id: string; path: string; label: string }> = [
+    const checks: Array<{ id: string; path: string; label: string; service?: string }> = [
       { id: 'backend', path: '/health', label: 'خادم الـ Backend وقاعدة البيانات' },
       { id: 'media', path: '/api/master/v1/media/active-calls', label: 'خادم Media SFU والمكالمات النشطة' },
       { id: 'pstn', path: '/api/admin/dinstar/capabilities', label: 'محرك المكالمات الهاتفية PSTN / Asterisk' },
       { id: 'dinstar', path: '/api/admin/dinstar/discover', label: 'بوابة DINSTAR UC2000-VE-8G للأجهزة السيادية' },
-      { id: 'storage', path: '/api/admin/health', label: 'تخزين الوسائط MinIO S3' },
-      { id: 'redis', path: '/api/admin/metrics/realtime', label: 'خادم التخزين المؤقت Redis Cache' },
+      // 🛢️ فحص MinIO الحقيقي عبر قسم services.minio في /health (وليس مسارًا عامًا)
+      { id: 'storage', path: '/health', label: 'تخزين الوسائط MinIO S3', service: 'minio' },
+      // ⚡ فحص Redis الحقيقي عبر قسم services.redis في /health
+      { id: 'redis', path: '/health', label: 'خادم التخزين المؤقت Redis Cache', service: 'redis' },
     ];
 
     const next = await Promise.all(
-      checks.map(async ({ id, path, label }) => {
+      checks.map(async ({ id, path, label, service }) => {
         try {
           const response = await probe(path);
           const body = await response.json().catch(() => ({}));
           if (!response.ok) {
             return { id, system: label, status: 'ERROR' as const, detail: `HTTP ${response.status}` };
+          }
+          // قراءة حالة الخدمة الجزئية من خريطة services عند الطلب
+          if (service) {
+            const svc = body?.services?.[service];
+            if (!svc) {
+              return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات فحص من الخادم' };
+            }
+            return svc.status === 'UP'
+              ? { id, system: label, status: 'READY' as const, detail: svc.bucket ? `الحاوية ${svc.bucket} متاحة` : 'متصل ويستجيب' }
+              : { id, system: label, status: 'ERROR' as const, detail: svc.error || 'الخدمة معطلة' };
           }
           const status: DiagnosticStatus =
             body.status === 'OFFLINE' || body.status === 'DOWN' ? 'ERROR' : 'READY';

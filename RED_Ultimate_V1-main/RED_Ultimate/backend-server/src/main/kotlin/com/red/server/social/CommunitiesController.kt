@@ -1,7 +1,7 @@
 package com.red.server.social
 
-import com.red.server.auth.AuthenticatedUser
-import com.red.server.auth.Self
+// الهوية تُقرأ من Authentication — مرشح JWT يضع principal = معرّف المستخدم (UUID نصّي).
+// (وسما AuthenticatedUser/Self لم يكونا موجودين في المستودع إطلاقاً.)
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -11,8 +11,10 @@ import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
+import java.util.UUID
 
 /**
  * ════════════════════════════════════════════════════════════════════════
@@ -35,8 +37,9 @@ class CommunitiesController(
         @RequestParam(required = false) search: String?,
         @RequestParam(required = false, defaultValue = "0") page: Int,
         @RequestParam(required = false, defaultValue = "30") size: Int,
-        @AuthenticatedUser userId: String?
+        authentication: Authentication?
     ): List<CommunityResponse> {
+        val userId = optionalUserId(authentication)
         val query = Query().with(Sort.by(Sort.Direction.DESC, "createdAt"))
         if (!search.isNullOrBlank()) {
             query.addCriteria(
@@ -48,7 +51,7 @@ class CommunitiesController(
             )
         }
         query.skip((page.coerceAtLeast(0) * size.coerceIn(1, 100)).toLong())
-            .limit(size.coerceIn(1, 100).toLong())
+            .limit(size.coerceIn(1, 100))
 
         val communities = mongo.find(query, CommunityDocument::class.java)
         if (communities.isEmpty()) return emptyList()
@@ -81,7 +84,8 @@ class CommunitiesController(
 
     /** Get one community by id */
     @GetMapping("/{id}")
-    fun get(@PathVariable id: String, @AuthenticatedUser userId: String?): ResponseEntity<CommunityResponse> {
+    fun get(@PathVariable id: String, authentication: Authentication?): ResponseEntity<CommunityResponse> {
+        val userId = optionalUserId(authentication)
         val community = mongo.findById(id, CommunityDocument::class.java)
             ?: return ResponseEntity.notFound().build()
         val memberCount = mongo.count(
@@ -101,9 +105,10 @@ class CommunitiesController(
     @PostMapping
     @PreAuthorize("isAuthenticated()")
     fun create(
-        @Self userId: String,
+        authentication: Authentication,
         @Valid @RequestBody request: CreateCommunityRequest
     ): CommunityResponse {
+        val userId = authentication.name
         require(!mongo.exists(
             Query(Criteria.where("name").`is`(request.name.trim())),
             CommunityDocument::class.java
@@ -146,9 +151,10 @@ class CommunitiesController(
     @PostMapping("/{id}/join")
     @PreAuthorize("isAuthenticated()")
     fun join(
-        @Self userId: String,
+        authentication: Authentication,
         @PathVariable id: String
     ): ResponseEntity<CommunityResponse> {
+        val userId = authentication.name
         val community = mongo.findById(id, CommunityDocument::class.java)
             ?: return ResponseEntity.notFound().build()
 
@@ -190,9 +196,10 @@ class CommunitiesController(
     @PostMapping("/{id}/leave")
     @PreAuthorize("isAuthenticated()")
     fun leave(
-        @Self userId: String,
+        authentication: Authentication,
         @PathVariable id: String
     ): ResponseEntity<Map<String, Any>> {
+        val userId = authentication.name
         val membership = mongo.findOne(
             Query(Criteria.where("communityId").`is`(id).and("userId").`is`(userId)),
             CommunityMember::class.java
@@ -226,10 +233,11 @@ class CommunitiesController(
     @PutMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     fun update(
-        @Self userId: String,
+        authentication: Authentication,
         @PathVariable id: String,
         @Valid @RequestBody request: UpdateCommunityRequest
     ): ResponseEntity<CommunityResponse> {
+        val userId = authentication.name
         val community = mongo.findById(id, CommunityDocument::class.java)
             ?: return ResponseEntity.notFound().build()
         val my = mongo.findOne(
@@ -261,7 +269,8 @@ class CommunitiesController(
     /** Delete community (ADMIN only, soft delete) */
     @DeleteMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
-    fun delete(@Self userId: String, @PathVariable id: String): ResponseEntity<Map<String, String>> {
+    fun delete(authentication: Authentication, @PathVariable id: String): ResponseEntity<Map<String, String>> {
+        val userId = authentication.name
         val my = mongo.findOne(
             Query(Criteria.where("communityId").`is`(id).and("userId").`is`(userId)),
             CommunityMember::class.java
@@ -279,6 +288,10 @@ class CommunitiesController(
         )
         return ResponseEntity.ok(mapOf("status" to "archived"))
     }
+
+    /** المعرف اختياري في نقاط القراءة العامة: يُقبل فقط إن كان UUID صالحاً (مستخدم JWT حقيقي، لا "anonymousUser"). */
+    private fun optionalUserId(authentication: Authentication?): String? =
+        authentication?.name?.let { name -> runCatching { UUID.fromString(name).toString() }.getOrNull() }
 
     private fun currentMemberCount(communityId: String): Long =
         mongo.count(Query(Criteria.where("communityId").`is`(communityId)), CommunityMember::class.java)

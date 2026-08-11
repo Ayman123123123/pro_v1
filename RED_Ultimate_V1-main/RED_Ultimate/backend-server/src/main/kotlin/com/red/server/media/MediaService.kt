@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
+import java.awt.image.BufferedImage
+import java.io.File
 import java.io.OutputStream
 import java.util.UUID
 
@@ -183,7 +185,8 @@ class MediaService(
             io.minio.ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
         )
         for (item in result) {
-            val obj = item.getOrNull() ?: continue
+            // minio Result<T> exposes only get() (throws ErrorResponseException) — no getOrNull.
+            val obj = runCatching { item.get() }.getOrNull() ?: continue
             keys += obj.objectName()
             if (keys.size >= limit) break
         }

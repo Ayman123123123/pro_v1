@@ -1,6 +1,0 @@
-<resources>
-    <style name="Theme.Material3.DynamicColors.Dark" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">#1E88E5</item>
-        <item name="colorSecondary">#F4B400</item>
-    </style>
-</resources>

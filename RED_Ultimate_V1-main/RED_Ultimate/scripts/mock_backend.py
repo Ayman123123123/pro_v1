@@ -57,6 +57,13 @@ class SovereignApiHandler(BaseHTTPRequestHandler):
                     "db": {"status": "UP"},
                     "redis": {"status": "UP"},
                     "sovereignVoip": {"status": "UP", "iceServers": 3}
+                },
+                # يطابق شكل HealthController الحقيقي — تقرأه صفحة التشخيص
+                "services": {
+                    "postgresql": {"status": "UP", "database": "red_sovereign", "error": None},
+                    "mongodb": {"status": "UP", "database": "red_sovereign", "error": None},
+                    "redis": {"status": "UP", "error": None},
+                    "minio": {"status": "UP", "bucket": "red-media", "error": None}
                 }
             }).encode())
             return

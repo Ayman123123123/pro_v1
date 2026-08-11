@@ -16,8 +16,8 @@ class AdminBootstrap(
     private val users: UserAccountRepository,
     private val passwordEncoder: PasswordEncoder,
     private val redIdGenerator: RedIdGenerator,
-    @Value("\${red.bootstrap-admin.username:}") private val username: String,
-    @Value("\${red.bootstrap-admin.password:}") private val password: String
+    @Value("\${red.admin.username:}") private val username: String,
+    @Value("\${red.admin.password:}") private val password: String
 ) : ApplicationRunner {
     private val log = LoggerFactory.getLogger(javaClass)
 
