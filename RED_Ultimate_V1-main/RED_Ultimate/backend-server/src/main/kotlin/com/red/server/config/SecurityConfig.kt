@@ -116,6 +116,9 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.PUT, "/api/social/status", "/api/social/privacy").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/social/privacy", "/api/social/online-contacts").authenticated()
                     .requestMatchers("/api/notifications/**").authenticated()
+                    // Telemetry aggregates are an operations signal, not public user data.
+                    // Keep the upload authenticated, but restrict the aggregated admin view.
+                    .requestMatchers(HttpMethod.GET, "/api/calls/telemetry/stats").hasRole("ADMIN")
                     .requestMatchers("/api/calls/**", "/api/calls/ice-servers", "/api/calls/telemetry").authenticated()
                     .requestMatchers("/api/recordings/**").authenticated()
                     .requestMatchers("/api/stories/**").authenticated()
