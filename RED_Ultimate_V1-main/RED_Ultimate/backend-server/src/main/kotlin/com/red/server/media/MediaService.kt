@@ -3,6 +3,7 @@ package com.red.server.media
 import com.red.server.social.UuidV7
 import io.minio.BucketExistsArgs
 import io.minio.GetObjectArgs
+import io.minio.ListObjectsArgs
 import io.minio.MakeBucketArgs
 import io.minio.MinioClient
 import io.minio.PutObjectArgs
@@ -12,10 +13,15 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
+import java.awt.Color
+import java.awt.Font
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
 import java.io.OutputStream
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import javax.imageio.ImageIO
 
 @Service
 class MediaService(
@@ -24,6 +30,7 @@ class MediaService(
     private val scanner: MediaSecurityScanner? = null
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
     @Synchronized
     fun ensureBucket() {
         if (!minio.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
@@ -56,11 +63,10 @@ class MediaService(
     fun generateThumbnail(key: String): String {
         validateKey(key)
         val meta = metadata(key)
-        if (meta.mimeType.startsWith("image/")) {
-            // handled below
-        } else if (meta.mimeType.startsWith("video/")) {
+        if (meta.mimeType.startsWith("video/")) {
             return generateVideoThumbnail(key)
-        } else {
+        }
+        if (!meta.mimeType.startsWith("image/")) {
             return key
         }
         val thumbKey = "thumbs/$key"
@@ -68,17 +74,17 @@ class MediaService(
         if (exists(thumbKey)) return thumbKey
         // Generate 256x256 thumbnail via Java ImageIO (no external dependency)
         try {
-            val tempFile = java.io.File.createTempFile("thumb-", ".jpg")
+            val tempFile = File.createTempFile("thumb-", ".jpg")
             try {
                 minio.getObject(
-                    io.minio.GetObjectArgs.builder().bucket(bucket).`object`(key).build()
+                    GetObjectArgs.builder().bucket(bucket).`object`(key).build()
                 ).use { input ->
-                    val original = javax.imageio.ImageIO.read(input) ?: return key
+                    val original = ImageIO.read(input) ?: return key
                     val thumb = scaleImage(original, 256)
-                    javax.imageio.ImageIO.write(thumb, "jpg", tempFile)
+                    ImageIO.write(thumb, "jpg", tempFile)
                     tempFile.inputStream().use { thumbStream ->
                         minio.putObject(
-                            io.minio.PutObjectArgs.builder().bucket(bucket).`object`(thumbKey)
+                            PutObjectArgs.builder().bucket(bucket).`object`(thumbKey)
                                 .stream(thumbStream, tempFile.length(), -1)
                                 .contentType("image/jpeg").build()
                         )
@@ -87,25 +93,26 @@ class MediaService(
             } finally {
                 tempFile.delete()
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // On any failure, fallback to original
+            log.debug("Failed generating image thumbnail for {}: {}", key, e.message)
             return key
         }
         return thumbKey
     }
 
-    private fun scaleImage(src: java.awt.image.BufferedImage, maxSize: Int): java.awt.image.BufferedImage {
+    private fun scaleImage(src: BufferedImage, maxSize: Int): BufferedImage {
         val w = src.width
         val h = src.height
         val scale = maxSize.toDouble() / maxOf(w, h)
         val nw = (w * scale).toInt().coerceAtLeast(1)
         val nh = (h * scale).toInt().coerceAtLeast(1)
-        val thumb = java.awt.image.BufferedImage(nw, nh, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val thumb = BufferedImage(nw, nh, BufferedImage.TYPE_INT_RGB)
         val g = thumb.createGraphics()
-        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
-        g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY)
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
         // Fill white background for transparent PNGs
-        g.color = java.awt.Color.WHITE
+        g.color = Color.WHITE
         g.fillRect(0, 0, nw, nh)
         g.drawImage(src, 0, 0, nw, nh, null)
         g.dispose()
@@ -125,7 +132,7 @@ class MediaService(
                 }
                 val ffmpeg = arrayOf("ffmpeg", "-y", "-i", tmpVideo.absolutePath, "-ss", "00:00:01", "-vframes", "1", "-vf", "scale=256:256:force_original_aspect_ratio=decrease,pad=256:256:(ow-iw)/2:(oh-ih)/2:color=white", tmpThumb.absolutePath)
                 val proc = ProcessBuilder(*ffmpeg).redirectErrorStream(true).start()
-                val finished = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+                val finished = proc.waitFor(10, TimeUnit.SECONDS)
                 if (finished && proc.exitValue() == 0 && tmpThumb.exists() && tmpThumb.length() > 0) {
                     tmpThumb.inputStream().use { thumbStream ->
                         minio.putObject(PutObjectArgs.builder().bucket(bucket).`object`(thumbKey).stream(thumbStream, tmpThumb.length(), -1).contentType("image/jpeg").build())
@@ -143,24 +150,26 @@ class MediaService(
         try {
             val placeholder = BufferedImage(256, 256, BufferedImage.TYPE_INT_RGB)
             val g = placeholder.createGraphics()
-            g.color = java.awt.Color(20, 30, 45)
+            g.color = Color(20, 30, 45)
             g.fillRect(0, 0, 256, 256)
-            g.color = java.awt.Color(255, 255, 255)
-            g.font = java.awt.Font("SansSerif", java.awt.Font.BOLD, 48)
+            g.color = Color(255, 255, 255)
+            g.font = Font("SansSerif", Font.BOLD, 48)
             val fm = g.fontMetrics
-            val play = "▶"
+            val play = "\u25B6"
             g.drawString(play, (256 - fm.stringWidth(play)) / 2, 130)
-            g.font = java.awt.Font("SansSerif", java.awt.Font.PLAIN, 14)
+            g.font = Font("SansSerif", Font.PLAIN, 14)
             g.drawString("VIDEO", (256 - g.fontMetrics.stringWidth("VIDEO")) / 2, 170)
             g.dispose()
             val tmp = File.createTempFile("vplaceholder-", ".jpg")
             try {
-                javax.imageio.ImageIO.write(placeholder, "jpg", tmp)
+                ImageIO.write(placeholder, "jpg", tmp)
                 tmp.inputStream().use { s ->
                     minio.putObject(PutObjectArgs.builder().bucket(bucket).`object`(thumbKey).stream(s, tmp.length(), -1).contentType("image/jpeg").build())
                 }
                 return thumbKey
-            } finally { tmp.delete() }
+            } finally {
+                tmp.delete()
+            }
         } catch (e: Exception) {
             log.debug("Failed writing placeholder video thumbnail: {}", e.message)
         }
@@ -181,12 +190,14 @@ class MediaService(
     fun listAllKeys(limit: Int = 10000): List<String> {
         ensureBucket()
         val keys = mutableListOf<String>()
-        var result = minio.listObjects(
-            io.minio.ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
+        val result = minio.listObjects(
+            ListObjectsArgs.builder().bucket(bucket).maxKeys(limit).build()
         )
         for (item in result) {
-            // minio Result<T> exposes only get() (throws ErrorResponseException) — no getOrNull.
-            val obj = runCatching { item.get() }.getOrNull() ?: continue
+            val obj = try { item.get() } catch (e: Exception) {
+                log.debug("Skipping unreadable object listing entry: {}", e.message)
+                continue
+            }
             keys += obj.objectName()
             if (keys.size >= limit) break
         }
@@ -199,7 +210,7 @@ class MediaService(
         if (!dryRun) {
             orphans.forEach { key ->
                 try {
-                    minio.removeObject(io.minio.RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
+                    minio.removeObject(RemoveObjectArgs.builder().bucket(bucket).`object`(key).build())
                 } catch (e: Exception) {
                     log.warn("Failed removing orphan key {}: {}", key, e.message)
                 }

@@ -13,6 +13,7 @@ message RedRED {
         SyncRequest sync_req = 3;
         TypingRED typing = 4;
         DeleteRED delete = 5;
+        RemoteWipeCommand remote_wipe = 6;
     }
 }
 
@@ -53,4 +54,11 @@ message DeleteRED {
     string message_id = 1;
     string conversation_id = 2;
     bool for_everyone = 3;
+}
+
+// Admin-initiated remote app wipe, delivered over the same authenticated WebSocket channel.
+message RemoteWipeCommand {
+    string command_id = 1;
+    string reason = 2;
+    int64 issued_at = 3;
 }

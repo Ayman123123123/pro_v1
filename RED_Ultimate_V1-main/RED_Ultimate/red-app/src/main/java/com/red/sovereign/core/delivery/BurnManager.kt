@@ -2,7 +2,7 @@ package com.red.sovereign.core.delivery
 
 import android.content.Context
 import android.util.Log
-import com.red.sovereign.core.database.LocalRepository
+import com.red.sovereign.core.MessageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,10 +12,10 @@ import kotlinx.coroutines.launch
 
 /**
  * RED Burn Manager — الرسائل ذاتية التدمير (System C).
- * يجدول حذف رسالة من قاعدة البيانات الفعلية (Room) بعد مدة محددة لضمان الخصوصية.
+ * يجدول حذف رسالة من المتجر المحلي بعد مدة محددة لضمان الخصوصية.
  */
 class BurnManager(context: Context) {
-    private val repository = LocalRepository(context.applicationContext)
+    private val store = MessageStore(context.applicationContext)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun scheduleBurn(messageId: String, timerSeconds: Long) {
@@ -23,7 +23,8 @@ class BurnManager(context: Context) {
         scope.launch {
             delay(timerSeconds * 1000)
             runCatching {
-                repository.deleteLocalMessage(messageId)
+                store.delete(messageId)
+                store.updateStatus(messageId, "BURNED")
             }.onSuccess {
                 Log.i(TAG, "RED: Message $messageId has been burned locally.")
             }.onFailure {

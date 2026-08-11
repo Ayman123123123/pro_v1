@@ -171,7 +171,7 @@ class AdminService(
     fun isFeatureEnabled(name: String, userId: UUID? = null): Boolean {
         val flag = featureFlags.findByFlagName(name) ?: return false
         if (!flag.enabled) return false
-        val expiresAt = flag.expiresAt // نسخة محلية — expiresAt قابلة للتعديل فلا smart-cast
+        val expiresAt = flag.expiresAt
         if (expiresAt != null && expiresAt.isBefore(Instant.now())) return false
         if (userId != null && flag.targetUserIds != null) {
             val targets = flag.targetUserIds!!.split(",").map { it.trim() }

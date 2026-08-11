@@ -11,7 +11,6 @@ class LocalRepository(context: Context) {
     suspend fun saveLocalHistory(history: LocalHistoryEntity) = dao.insertLocalHistory(history)
     fun getLocalHistory(convId: String): Flow<List<LocalHistoryEntity>> = dao.getLocalHistory(convId)
     suspend fun updateMessageStatus(id: String, status: String) = dao.updateMessageStatus(id, status)
-    suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
     suspend fun saveIncomingMessage(message: com.red.sovereign.proto.RedProtos.ChatMessage, outgoing: Boolean = false) {
         val entity = MessageEntity(
@@ -34,26 +33,6 @@ class LocalRepository(context: Context) {
 
     // --- Conversations ---
     suspend fun saveConversation(conv: ConversationEntity) = dao.insertConversation(conv)
-
-    /**
-     * يُنشئ/يُحدّث صف المحادثة عند إرسال أو استقبال رسالة، بحيث تظهر
-     * المحادثة في قائمة الدردشات مع آخر رسالة والطابع الزمني وعدد غير المقروء.
-     * يحافظ على pinned/archived/muted عند وجود المحادثة مسبقاً.
-     */
-    suspend fun onMessageStored(conversationId: String, peerId: String, preview: String, timestamp: Long, isIncoming: Boolean) {
-        val existing = dao.getConversation(conversationId)
-        if (existing != null) {
-            dao.updateConversationLast(conversationId, preview, timestamp, if (isIncoming) 1 else 0)
-        } else {
-            dao.insertConversation(
-                ConversationEntity(
-                    id = conversationId, peerId = peerId,
-                    lastMessageText = preview, lastMessageTimestamp = timestamp,
-                    unreadCount = if (isIncoming) 1 else 0
-                )
-            )
-        }
-    }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
@@ -94,21 +73,5 @@ class LocalRepository(context: Context) {
     suspend fun deleteMessage(messageId: String) {
         dao.deleteLocalHistory(messageId)
         dao.deleteMessage(messageId)
-    }
-
-    /** يحذف رسالة من السجل المحلي (المفكوك) فقط — يُستخدم لحذف رسالة واحدة. */
-    suspend fun deleteLocalMessage(messageId: String) = dao.deleteLocalHistory(messageId)
-
-    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + صف المحادثة. */
-    suspend fun deleteConversation(convId: String) {
-        dao.deleteLocalHistoryByConversation(convId)
-        dao.deleteMessagesByConversation(convId)
-        dao.deleteConversationRow(convId)
-    }
-
-    // --- Global Search ---
-    suspend fun searchAll(query: String): List<LocalHistoryEntity> {
-        if (query.isBlank()) return emptyList()
-        return dao.searchAllMessages("%${query.trim()}%")
     }
 }

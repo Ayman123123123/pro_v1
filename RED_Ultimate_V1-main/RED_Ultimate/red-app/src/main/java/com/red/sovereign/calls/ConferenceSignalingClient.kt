@@ -31,34 +31,17 @@ data class ConferenceSignal(
     val payload: Map<String, String> = emptyMap()
 )
 
-/** مصفوفة تصاريح المشارك في الجلسة حسب دوره */
-@Serializable
-data class ParticipantPermissions(
-    val canPublishAudio: Boolean = false,
-    val canPublishVideo: Boolean = false,
-    val canManageStage: Boolean = false,
-    val canMuteOthers: Boolean = false,
-    val canPinMessages: Boolean = false,
-    val canKickUsers: Boolean = false
-)
-
-/** معلومات وصلاحيات مشارك واحد في المؤتمر / المساحة الصوتية */
+/** معلومات مشارك واحد في المؤتمر */
 @Serializable
 data class ConferenceParticipant(
     val userId: String,
     val displayName: String = "",
-    val role: String = "LISTENER", // HOST, CO_HOST, SPEAKER, LISTENER
-    val permissions: ParticipantPermissions = ParticipantPermissions(),
     val hasVideo: Boolean = false,
     val hasAudio: Boolean = false,
     val isHost: Boolean = false,
     val isMuted: Boolean = false,
-    val isSpeaking: Boolean = false,
-    val raisedHand: Boolean = false
-) {
-    fun isHostOrCoHost() = role == "HOST" || role == "CO_HOST" || isHost
-    fun canProduceMedia() = role == "HOST" || role == "CO_HOST" || role == "SPEAKER" || isHost
-}
+    val isSpeaking: Boolean = false
+)
 
 class ConferenceSignalingClient(
     private val context: Context,
@@ -179,86 +162,6 @@ class ConferenceSignalingClient(
             roomId = roomId,
             userId = userId,
             payload = mapOf("sdp" to sdp)
-        )
-    )
-
-    fun raiseHand(roomId: String, userId: String) = send(
-        ConferenceSignal(
-            type = "RAISE_HAND",
-            roomId = roomId,
-            userId = userId
-        )
-    )
-
-    fun approveSpeaker(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "APPROVE_SPEAKER",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun demoteListener(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "DEMOTE_LISTENER",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun grantCoHost(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "GRANT_COHOST",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun revokeCoHost(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "REVOKE_COHOST",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun kickUser(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "KICK_USER",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun muteUser(roomId: String, userId: String, targetUserId: String) = send(
-        ConferenceSignal(
-            type = "MUTE_USER",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
-    fun sendReaction(roomId: String, userId: String, emoji: String = "👏") = send(
-        ConferenceSignal(
-            type = "REACTION",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("emoji" to emoji)
-        )
-    )
-
-    fun pinMessage(roomId: String, userId: String, text: String) = send(
-        ConferenceSignal(
-            type = "PIN_MESSAGE",
-            roomId = roomId,
-            userId = userId,
-            payload = mapOf("text" to text)
         )
     )
 

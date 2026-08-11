@@ -49,14 +49,6 @@ class NotificationService(
         logger.info("notification.push tokenHash={} title={} length={}", deviceToken.hashCode(), title, body.length)
     }
 
-    /**
-     * Dispatch High-Priority FCM / Sovereign VoIP Push Notification to wake up
-     * a backgrounded or killed device when an incoming call offer arrives.
-     */
-    fun sendVoipPushNotification(targetUserId: String, callerId: String, callId: String, mode: String) {
-        logger.info("notification.voip_push targetUser={} caller={} callId={} mode={}", targetUserId, callerId, callId, mode)
-    }
-
     fun sendBulkEmail(recipients: List<String>, subject: String, body: String, isHtml: Boolean = false) {
         recipients.forEach { emitEmail(it, subject, body, isHtml) }
     }

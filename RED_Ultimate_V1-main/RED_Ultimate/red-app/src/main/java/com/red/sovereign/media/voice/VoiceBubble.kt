@@ -40,7 +40,7 @@ import com.red.sovereign.media.voice.VoiceColors
  *  - تنزيل/تشفير indicator
  */
 @Composable
-fun VoiceBubble(
+fun VoiceMessageBubble(
     manifest: VoiceManifest,
     isOutgoing: Boolean,
     isDownloaded: Boolean,

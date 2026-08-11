@@ -9,14 +9,13 @@ import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.UUID
 import javax.crypto.SecretKey
 
 @Service
 class JwtService(
-    @Value("\${red.jwt.secret}") private val configuredSecret: String,
+    @Value("\${red.security.jwt-secret}") private val configuredSecret: String,
     @Value("\${red.security.jwt-expiration-ms:3600000}") private val expirationMs: Long
 ) {
     private val key: SecretKey by lazy {
@@ -63,7 +62,7 @@ class JwtService(
             .claim("sfuCanProduce", canProduce)
         return builder
             .issuedAt(Date.from(now))
-            .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
+            .expiration(Date.from(now.plus(10, java.time.temporal.ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
             .signWith(key)
             .compact()
     }

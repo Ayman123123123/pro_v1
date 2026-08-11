@@ -40,11 +40,7 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
             repository.getGroups().collectLatest { entities ->
                 groups.clear()
                 groups.addAll(entities.map { entity ->
-                    // الحفاظ على عدد الأعضاء عند إعادة التحميل من قاعدة البيانات المحلية
-                    // (قائمة Group.members تأتي من الخادم؛ نحتفظ بالعدد المحفوظ محلياً).
-                    val memberCount = entity.memberCount.coerceAtLeast(0)
-                    val placeholderMembers = if (memberCount > 0) List(memberCount) { GroupMember("", entity.id, "", "", "", "MEMBER", "") } else emptyList()
-                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString(), members = placeholderMembers)
+                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString())
                 })
             }
         }
@@ -65,24 +61,10 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun create(name: String, description: String?, privacy: String = "PRIVATE", memberRedIds: List<String> = emptyList(), done: () -> Unit) = viewModelScope.launch {
+    fun create(name: String, description: String?, done: () -> Unit) = viewModelScope.launch {
         state = GroupState.Saving
-        when (val result = client.request("POST", "/api/groups", json.encodeToString(CreateGroupRequest(name, description, privacy)))) {
-            is ApiResult.Success -> {
-                val groupId = runCatching { json.decodeFromString<Group>(result.value).id }.getOrNull()
-                if (groupId != null) {
-                    // إضافة الأعضاء المختارين بعد إنشاء المجموعة (أدوار أعضاء افتراضية)
-                    memberRedIds.distinct().filter { it.isNotBlank() }.forEach { redId ->
-                        val add = client.request("POST", "/api/groups/$groupId/members", json.encodeToString(AddGroupMemberRequest(redId)))
-                        if (add is ApiResult.Error) {
-                            // لا نُفشل إنشاء المجموعة إذا فشل إضافة عضو واحد، نتابع الباقي.
-                            android.util.Log.w("GroupViewModel", "Failed to add member $redId: ${add.message}")
-                        }
-                    }
-                    load()
-                }
-                decodeAndStore(result.value, prepend = true, done)
-            }
+        when (val result = client.request("POST", "/api/groups", json.encodeToString(CreateGroupRequest(name, description)))) {
+            is ApiResult.Success -> decodeAndStore(result.value, prepend = true, done)
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }
     }

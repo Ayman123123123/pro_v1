@@ -87,13 +87,17 @@ class LiveStreamWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             }
         }
         // Notify other side
-        val target = if (role == Role.BROADCASTER) viewers[streamId] else setOfNotNull(broadcasters[streamId])
+        val target: Collection<WebSocketSession> = if (role == Role.BROADCASTER) {
+            viewers[streamId] ?: emptySet()
+        } else {
+            setOfNotNull(broadcasters[streamId])
+        }
         val leaveMsg = objectMapper.writeValueAsString(mapOf(
             "type" to "PARTICIPANT_LEFT",
             "roomId" to streamId,
             "payload" to mapOf("userId" to userId)
         ))
-        target?.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
+        target.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
     }
 
     companion object {

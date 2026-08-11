@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -35,9 +34,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,17 +53,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.AuthState
-import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.core.ServerEndpoint
-import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 
@@ -77,7 +70,6 @@ private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOT
 fun YounesSettingsSheet(
     account: AuthState.Authenticated,
     viewModel: SettingsViewModel,
-    authViewModel: AuthViewModel,
     logout: () -> Unit,
     dismiss: () -> Unit
 ) {
@@ -97,7 +89,7 @@ fun YounesSettingsSheet(
             HorizontalDivider(Modifier.padding(vertical = 10.dp))
             when (page) {
                 SettingsPage.ROOT -> SettingsRoot(account, viewModel.cacheBytes, onPage = { page = it }, onLogout = { confirmLogout = true })
-                SettingsPage.ACCOUNT -> AccountSettings(account, authViewModel)
+                SettingsPage.ACCOUNT -> AccountSettings(account)
                 SettingsPage.PRIVACY -> PrivacySettings(viewModel)
                 SettingsPage.APPEARANCE -> AppearanceSettings(viewModel)
                 SettingsPage.CHATS -> ChatSettings(viewModel)
@@ -154,46 +146,10 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     }
 }
 
-@Composable private fun AccountSettings(account: AuthState.Authenticated, authViewModel: AuthViewModel) {
-    var username by remember(account.username) { mutableStateOf(account.username) }
-    var displayName by remember { mutableStateOf("") }
-    var savingUsername by remember { mutableStateOf(false) }
-    var savingName by remember { mutableStateOf(false) }
-    var msgUsername by remember { mutableStateOf<String?>(null) }
-    var msgName by remember { mutableStateOf<String?>(null) }
-    SettingsList {
-        item {
-            // رأس البروفايل
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(76.dp).clip(CircleShape).background(Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))), contentAlignment = Alignment.Center) {
-                        Text(account.username.take(1), color = Color(0xFF03120E), fontSize = 30.sp, fontWeight = FontWeight.Black)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("يونس • @${account.username}", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text(account.redId, color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
-        item {
-            Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)
-            msgUsername?.let { Text(it, color = if (it.startsWith("تم")) YounesEmerald else MaterialTheme.colorScheme.error, fontSize = 12.sp) }
-            Button({ savingUsername = true; authViewModel.updateUsername(username) { ok, m -> savingUsername = false; msgUsername = m } }, Modifier.fillMaxWidth(), enabled = username.isNotBlank() && username != account.username && !savingUsername) {
-                if (savingUsername) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("حفظ اسم المستخدم")
-            }
-        }
-        item {
-            Text("الاسم المعروض (البروفايل)", fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(displayName, { displayName = it.take(50) }, Modifier.fillMaxWidth(), singleLine = true, placeholder = { Text(account.username) })
-            msgName?.let { Text(it, color = if (it.startsWith("تم")) YounesEmerald else MaterialTheme.colorScheme.error, fontSize = 12.sp) }
-            Button({ savingName = true; authViewModel.updateDisplayName(displayName) { ok, m -> savingName = false; msgName = m } }, Modifier.fillMaxWidth(), enabled = displayName.isNotBlank() && !savingName) {
-                if (savingName) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("حفظ الاسم المعروض")
-            }
-        }
-        item { InfoCard("كلمة المرور", "تغيير كلمة المرور يتطلب إبطال الجلسات الحالية — يُدار من الخادم بصلاحيات إضافية.", Icons.Default.Lock) }
-    }
+@Composable private fun AccountSettings(account: AuthState.Authenticated) = SettingsList {
+    item { InfoCard("هوية يونس", "@${account.username}\n${account.redId}", Icons.Default.VpnKey) }
+    item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
+    item { InfoCard("تغيير الاسم وكلمة المرور", "يتطلب endpoint موثق وإبطال الجلسات؛ لن يظهر كزر وهمي.", Icons.Default.Lock) }
 }
 
 @Composable private fun PrivacySettings(vm: SettingsViewModel) = SettingsList {

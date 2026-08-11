@@ -29,7 +29,6 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     val results = mutableStateListOf<PublicRedProfile>()
     val contacts = mutableStateListOf<PublicRedProfile>()
-    val blocked = mutableStateListOf<String>()
     val requests = mutableStateListOf<ContactRequest>()
     val onlineIds = mutableStateListOf<String>()
     var state: DirectoryState by mutableStateOf(DirectoryState.Idle); private set
@@ -113,14 +112,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun block(profile: PublicRedProfile) = viewModelScope.launch {
         when (val response = client.request("POST", "/api/contacts/${profile.redId}/block")) {
-            is ApiResult.Success -> { contacts.removeAll { it.redId == profile.redId }; blocked.add(profile.redId); state = DirectoryState.Message("تم حظر @${profile.username}") }
-            is ApiResult.Error -> state = DirectoryState.Error(response.message)
-        }
-    }
-
-    fun unblock(profile: PublicRedProfile) = viewModelScope.launch {
-        when (val response = client.request("POST", "/api/contacts/${profile.redId}/unblock")) {
-            is ApiResult.Success -> { blocked.removeAll { it == profile.redId }; state = DirectoryState.Message("تم فك الحظر عن @${profile.username}") }
+            is ApiResult.Success -> { contacts.removeAll { it.redId == profile.redId }; state = DirectoryState.Message("تم حظر @${profile.username}") }
             is ApiResult.Error -> state = DirectoryState.Error(response.message)
         }
     }

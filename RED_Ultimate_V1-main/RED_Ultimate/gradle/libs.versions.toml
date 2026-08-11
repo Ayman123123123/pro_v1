@@ -4,15 +4,15 @@
 [versions]
 # SDK & Build Versions
 buildTools = "36.0.0"
-compileSdk = "37"
+compileSdk = "35"
 targetSdk = "35"
 minSdk = "23"
 ndk = "28.0.13004108"
 javaVersion = "21"
 kotlinJvmTarget = "21"
-gradle = "9.2.1"
-kotlin = "2.2.20"
-android-gradle-plugin = "9.2.1"
+gradle = "8.10.2"
+kotlin = "2.0.21"
+android-gradle-plugin = "8.1.0"
 
 # Other versions
 androidx-appcompat = "1.7.1"
@@ -23,7 +23,7 @@ androidx-lifecycle = "2.10.0"
 androidx-lifecycle-navigation3 = "2.10.0"
 androidx-media3 = "1.9.1"
 webrtc-sdk = "144.7559.09"
-androidx-navigation = "2.9.8"
+androidx-navigation = "2.8.5"
 androidx-navigation3-core = "1.1.4"
 androidx-core-telecom = "1.1.0-alpha04"
 androidx-window = "1.3.0"
@@ -57,7 +57,7 @@ hilt = { id = "com.google.dagger.hilt.android", version = "2.52" }
 
 [libraries]
 # Android Plugins
-gradle = { module = "com.android.tools.build:gradle", version.ref = "gradle" }
+gradle = { module = "com.android.tools.build:gradle", version.ref = "android-gradle-plugin" }
 android-library = { module = "com.android.library:com.android.library.gradle.plugin", version.ref = "android-gradle-plugin" }
 android-application = { module = "com.android.application:com.android.application.gradle.plugin", version.ref = "android-gradle-plugin" }
 androidx-benchmark-gradle-plugin = "androidx.benchmark:benchmark-gradle-plugin:1.4.1"
@@ -194,7 +194,8 @@ google-ez-vcard = "com.googlecode.ez-vcard:ez-vcard:0.9.11"
 google-jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 google-guava-android = "com.google.guava:guava:33.6.0-android"
 google-flexbox = "com.google.android.flexbox:flexbox:3.0.0"
-com-google-devtools-ksp-gradle-plugin = "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.2.20-1.0.25"
+# com-google-devtools-ksp-gradle-plugin removed to stabilize build
+
 
 # Firebase
 firebase-messaging = "com.google.firebase:firebase-messaging:25.0.1"

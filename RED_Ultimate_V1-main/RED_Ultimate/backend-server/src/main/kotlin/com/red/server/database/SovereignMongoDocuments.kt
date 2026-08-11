@@ -323,3 +323,39 @@ data class NotificationArchiveDocument(
     val createdAt: Instant = Instant.now(),
     val readAt: Instant? = null
 )
+
+// ━━━━━━━━━━━━━━━━ Common Social DTOs ━━━━━━━━━━━━━━━━
+
+data class OnlineContact(
+    val userId: String,
+    val displayName: String,
+    val username: String,
+    val avatarColor: String? = null,
+    val type: String,
+    val customText: String?
+)
+
+data class PrivacySettingsResponse(
+    val lastSeen: String,
+    val onlineStatus: String,
+    val profilePhoto: String,
+    val about: String,
+    val status: String,
+    val readReceipts: String,
+    val calls: String,
+    val groups: String,
+    val liveLocation: String
+)
+
+data class PrivacySettingsRequest(
+    val lastSeen: String? = null,
+    val onlineStatus: String? = null,
+    val profilePhoto: String? = null,
+    val about: String? = null,
+    val status: String? = null,
+    val readReceipts: String? = null,
+    val calls: String? = null,
+    val groups: String? = null,
+    val liveLocation: String? = null
+)
+

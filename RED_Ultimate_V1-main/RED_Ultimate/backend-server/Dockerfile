@@ -7,10 +7,9 @@
 FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
 
-# NOTE: Do NOT try to rewrite /etc/resolv.conf here — BuildKit mounts it read-only,
-# so any such RUN fails instantly ("cannot create /etc/resolv.conf: Read-only file
-# system"). If dependency downloads ever fail on DNS, fix the daemon once instead:
-# Docker Desktop → Settings → Docker Engine → { "dns": ["8.8.8.8", "1.1.1.1"] }.
+# ⚠️ Fix DNS resolution issues inside Docker build (esp. on Windows)
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 # Copy Gradle configurations & properties first for layer caching
 COPY gradle.properties gradle.properties
@@ -20,12 +19,15 @@ COPY backend-server/ backend-server/
 
 WORKDIR /build/backend-server
 
-# Dependencies are cached across builds via a BuildKit cache mount.
-# NOTE: a previous revision used `COPY .gradle-cache /home/gradle/.gradle 2>/dev/null || true`
-# which is invalid — COPY is not a shell command, so BuildKit failed on every build with
-# "/||": not found. It also targeted /home/gradle while the build runs as root.
-RUN --mount=type=cache,target=/root/.gradle \
-    gradle bootJar --no-daemon -x test --stacktrace || \
+# ⚠️ Use local Maven cache (avoids network dependency during build)
+# If ~/.gradle exists in build context, use it
+COPY --chown=gradle:gradle .gradle-cache /home/gradle/.gradle 2>/dev/null || true
+
+# Build the Spring Boot JAR
+# Use --offline first, then fallback to network if needed
+# Also retry on transient network failures
+RUN gradle bootJar --no-daemon -x test --stacktrace || \
+    gradle :backend-server:bootJar --no-daemon -x test || \
     (echo "First build attempt failed, retrying with fresh deps..." && \
      gradle bootJar --no-daemon -x test --refresh-dependencies)
 

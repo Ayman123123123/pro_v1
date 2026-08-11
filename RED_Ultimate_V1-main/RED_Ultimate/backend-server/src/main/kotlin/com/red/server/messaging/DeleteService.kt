@@ -1,7 +1,5 @@
 package com.red.server.messaging
 
-// MessageDocument is a top-level class declared in database/SovereignMongoDocuments.kt
-// (the legacy duplicate database/MessageDocument.kt was removed). Import the class itself.
 import com.red.server.database.MessageDocument
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria

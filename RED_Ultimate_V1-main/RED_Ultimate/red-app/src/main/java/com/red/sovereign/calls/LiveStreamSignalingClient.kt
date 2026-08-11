@@ -109,42 +109,6 @@ class LiveStreamSignalingClient(
         )
     )
 
-    fun sendChatMessage(streamId: String, userId: String, senderName: String, text: String) = send(
-        LiveStreamSignal(
-            type = "CHAT",
-            roomId = streamId,
-            userId = userId,
-            payload = mapOf("senderName" to senderName, "text" to text)
-        )
-    )
-
-    fun sendReaction(streamId: String, userId: String, emoji: String = "❤️") = send(
-        LiveStreamSignal(
-            type = "REACTION",
-            roomId = streamId,
-            userId = userId,
-            payload = mapOf("emoji" to emoji)
-        )
-    )
-
-    fun raiseHand(streamId: String, userId: String, userName: String) = send(
-        LiveStreamSignal(
-            type = "RAISE_HAND",
-            roomId = streamId,
-            userId = userId,
-            payload = mapOf("userName" to userName)
-        )
-    )
-
-    fun approveCoHost(streamId: String, userId: String, targetUserId: String) = send(
-        LiveStreamSignal(
-            type = "APPROVE_COHOST",
-            roomId = streamId,
-            userId = userId,
-            payload = mapOf("targetUserId" to targetUserId)
-        )
-    )
-
     fun close() {
         socket?.close(1000, "livestream ended")
         socket = null

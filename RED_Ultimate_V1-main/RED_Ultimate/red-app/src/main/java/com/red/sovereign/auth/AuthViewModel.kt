@@ -8,7 +8,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
-import kotlinx.serialization.json.Json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,35 +102,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearPstnState() { pstnState = PstnState.Idle }
 
-    /** تحديث اسم المستخدم (username) على الخادم ثم محلياً. */
-    fun updateUsername(newUsername: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
-        val trimmed = newUsername.trim()
-        if (trimmed.length < 3 || trimmed.length > 20) { done(false, "اسم المستخدم يجب أن يكون 3-20 حرفاً"); return@launch }
-        val client = AuthorizedApiClient(TokenStore(getApplication()))
-        when (val result = client.request("PATCH", "/api/auth/username", Json.encodeToString(mapOf("username" to trimmed)))) {
-            is ApiResult.Success -> {
-                val updated = state
-                if (updated is AuthState.Authenticated) {
-                    state = updated.copy(username = trimmed)
-                    TokenStore(getApplication()).apply { if (get("username") != null) { /* تحديث اسم المستخدم المحفوظ */ } }
-                    done(true, "تم تحديث اسم المستخدم")
-                } else done(false, "لا يوجد حساب نشط")
-            }
-            is ApiResult.Error -> done(false, result.message ?: "فشل تحديث الاسم")
-        }
-    }
-
-    /** تحديث الاسم المعروض (display name) على الخادم ثم محلياً. */
-    fun updateDisplayName(newName: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
-        val trimmed = newName.trim()
-        if (trimmed.isBlank() || trimmed.length > 50) { done(false, "الاسم يجب أن يكون 1-50 حرفاً"); return@launch }
-        val client = AuthorizedApiClient(TokenStore(getApplication()))
-        when (val result = client.request("PATCH", "/api/auth/profile", Json.encodeToString(mapOf("displayName" to trimmed)))) {
-            is ApiResult.Success -> { done(true, "تم تحديث الاسم المعروض") }
-            is ApiResult.Error -> done(false, result.message ?: "فشل تحديث الاسم")
-        }
-    }
-
     fun logout() {
         tokens.clearSession()
         pendingCredentials = null
@@ -184,30 +154,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun localize(value: String) = when {
-        value.contains("INVALID_CREDENTIALS", ignoreCase = true) || value.contains("401", ignoreCase = true) ->
-            "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من البيانات والمحاولة مجدداً."
-        value.contains("NETWORK_ERROR", ignoreCase = true) || value.contains("Connection refused", ignoreCase = true) ->
-            "تعذر الاتصال بخادم يونس. يرجى التأكد من الاتصال بالشبكة أو الخادم المحلي والمحاولة مجدداً."
-        value.contains("INVALID_RECOVERY_CODE", ignoreCase = true) ->
-            "معرّف يونس أو رمز الاستعادة غير صحيح. أعد التأكد من الرموز المحفوظة."
-        value.contains("RATE_LIMITED", ignoreCase = true) || value.contains("Too many attempts", ignoreCase = true) ->
-            "محاولات كثيرة متكررة؛ انتظر دقيقة واحدة ثم أعد المحاولة لحماية حسابك."
-        value.contains("RED_SERVER_NOT_FOUND_ON_LAN", ignoreCase = true) ->
-            "لم يُعثر على خادم يونس آمن في الشبكة المحلية. تأكد من اتصال الـ Wi-Fi."
-        value.contains("already registered", ignoreCase = true) || value.contains("Username is taken", ignoreCase = true) ->
-            "اسم المستخدم هذا محجوز بالفعل؛ يرجى اختيار اسم مستخدم آخر."
-        value.contains("12-128 characters", ignoreCase = true) ->
-            "كلمة المرور يجب أن تكون بين 12 و128 حرفاً وتتضمن مزيجاً من الأحرف والأرقام."
-        value.contains("contain the username", ignoreCase = true) ->
-            "كلمة المرور يجب ألا تحتوي على اسم المستخدم بداخلها لحماية حسابك."
-        value.contains("too common", ignoreCase = true) ->
-            "كلمة المرور هذه شائعة وسهلة التخمين؛ يرجى اختيار كلمة مرور أكثر تعقيداً."
-        value.contains("2-100 visible characters", ignoreCase = true) ->
-            "الاسم الظاهر يجب أن يتكون من 2 إلى 100 حرف واضح."
-        value.contains("UNAUTHENTICATED", ignoreCase = true) ->
-            "انتهت الجلسة أو غير مصرح. يرجى تسجيل الدخول مجدداً."
-        else -> value.ifBlank { "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." }
+    private fun localize(value: String) = when (value) {
+        "INVALID_CREDENTIALS" -> "اسم المستخدم أو كلمة المرور غير صحيحة"
+        "NETWORK_ERROR" -> "تعذر الاتصال بخادم يونس المحلي"
+        "INVALID_RECOVERY_CODE" -> "معرّف يونس أو رمز الاستعادة غير صحيح"
+        "RATE_LIMITED" -> "محاولات كثيرة؛ انتظر قليلاً ثم أعد المحاولة"
+        "RED_SERVER_NOT_FOUND_ON_LAN" -> "لم يُعثر على خادم يونس موثوق في الشبكة المحلية"
+        "LAN_DISCOVERY_DISABLED_IN_RELEASE" -> "الاكتشاف التلقائي متاح للنسخة المحلية فقط"
+        "Username is already registered" -> "اسم المستخدم محجوز؛ اختر اسمًا آخر"
+        "Password must contain 12-128 characters" -> "كلمة المرور يجب أن تكون بين 12 و128 محرفًا"
+        "Password must not contain the username" -> "لا تستخدم اسم المستخدم داخل كلمة المرور"
+        "Password is too common" -> "كلمة المرور شائعة جدًا؛ اختر عبارة أطول وفريدة"
+        "Display name must be 2-100 visible characters" -> "الاسم الظاهر يجب أن يكون بين محرفين و100 دون رموز تحكم"
+        else -> value
     }
 }
 

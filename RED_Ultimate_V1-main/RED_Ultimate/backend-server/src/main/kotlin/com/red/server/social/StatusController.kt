@@ -2,6 +2,9 @@ package com.red.server.social
 
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.database.OnlineContact
+import com.red.server.database.PrivacySettingsRequest
+import com.red.server.database.PrivacySettingsResponse
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -92,8 +95,6 @@ class StatusController(
 }
 
 // ━━━━━━━━━━━━ DTOs ━━━━━━━━━━━━
-// ملاحظة: PrivacySettingsRequest / PrivacySettingsResponse / OnlineContact مُعرّفة مرة واحدة
-// في UserStatusService.kt (نفس الحزمة) — لا تُكرر هنا.
 
 data class StatusResponse(
     val userId: String,
@@ -107,3 +108,4 @@ data class UpdateStatusRequest(
     val customText: String? = null,
     val visibleTo: String = "EVERYONE" // EVERYONE, CONTACTS, NOBODY
 )
+

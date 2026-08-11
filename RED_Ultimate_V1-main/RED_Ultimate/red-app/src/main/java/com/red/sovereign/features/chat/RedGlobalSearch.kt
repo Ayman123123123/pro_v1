@@ -24,17 +24,15 @@ fun RedGlobalSearch(
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
-    // 🔍 يبحث في قاعدة بيانات الرسائل الفعلية (Room) التي تُخزَّن فيها الرسائل
-    // المفكوكة محلياً — وليس في red_messages.db المنفصلة غير المحدثة.
-    val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
-    var results by remember { mutableStateOf(emptyList<com.red.sovereign.core.database.LocalHistoryEntity>()) }
+    val messageStore = remember { com.red.sovereign.core.MessageStore(context) }
+    var results by remember { mutableStateOf(emptyList<com.red.sovereign.core.LocalMessage>()) }
     var isSearching by remember { mutableStateOf(false) }
 
     LaunchedEffect(searchQuery) {
         if (searchQuery.trim().length >= 2) {
             isSearching = true
-            // 🔍 بحث محلي فقط على الجهاز — الخادم لا يرى النص
-            results = repository.searchAll(searchQuery.trim())
+            // 🔍 FTS5 مشفر — يبحث في النص بعد فك التشفير فقط على الجهاز
+            results = messageStore.search(searchQuery.trim(), limit = 50)
             isSearching = false
         } else {
             results = emptyList()
@@ -91,14 +89,14 @@ fun RedGlobalSearch(
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(
-                                com.red.sovereign.core.RichMessage.decode(msg.encryptedPlaintext)?.text?.take(80)
-                                    ?: msg.encryptedPlaintext.toString(Charsets.UTF_8).take(80),
+                                com.red.sovereign.core.RichMessage.decode(msg.plaintext)?.text?.take(80)
+                                    ?: msg.plaintext.toString(Charsets.UTF_8).take(80),
                                 maxLines = 2,
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                "${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.createdAt))}",
+                                "${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.timestamp))}",
                                 color = Color.Gray,
                                 style = MaterialTheme.typography.labelSmall
                             )

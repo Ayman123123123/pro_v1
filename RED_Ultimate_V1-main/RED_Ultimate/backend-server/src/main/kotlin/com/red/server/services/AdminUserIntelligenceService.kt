@@ -74,7 +74,7 @@ class AdminUserIntelligenceService(
             redCalls = mongo.count(Query(Criteria().andOperator(Criteria().orOperator(callSender, callReceiver), Criteria.where("route").`is`("RED"))), CallHistoryDocument::class.java),
             pstnCalls = mongo.count(Query(Criteria().andOperator(Criteria().orOperator(callSender, callReceiver), Criteria.where("route").`is`("DINSTAR"))), CallHistoryDocument::class.java),
             passwordResetRequired = user.passwordResetRequired,
-            remoteWipeStatus = user.remoteWipeStatus,
+            remoteWipeStatus = user.remoteWipeStatus ?: "NONE",
             managedDeviceWipeAllowed = user.managedDeviceWipeAllowed,
             securityEvents = events
         )

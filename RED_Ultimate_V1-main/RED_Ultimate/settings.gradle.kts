@@ -17,6 +17,8 @@ rootProject.name = "RED-Ultimate"
 include(":app")
 project(":app").projectDir = file("red-app")
 
+
+
 // One protocol shared by Android and the backend.
 include(":shared-proto")
 

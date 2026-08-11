@@ -64,11 +64,7 @@ class AuthorizedApiClient(
     }
 
     private fun executeResponseWithRefresh(initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
-        val first = runCatching { client.newCall(initial).execute() }.getOrElse {
-            // Trigger smart background IP auto-discovery if connection fails due to IP change
-            ServerEndpoint.autoDiscover(tokens.context)
-            return ApiResult.Error(null, "NETWORK_ERROR")
-        }
+        val first = runCatching { client.newCall(initial).execute() }.getOrElse { return ApiResult.Error(null, "NETWORK_ERROR") }
         if (first.code != 401) return ApiResult.Success(first)
         first.close()
         val refresh = tokens.refreshToken ?: return ApiResult.Error(401, "UNAUTHENTICATED")
@@ -78,10 +74,7 @@ class AuthorizedApiClient(
         }
         tokens.updateTokens(refreshed)
         val second = runCatching { client.newCall(rebuild(refreshed.accessToken)).execute() }
-            .getOrElse {
-                ServerEndpoint.autoDiscover(tokens.context)
-                return ApiResult.Error(null, "NETWORK_ERROR")
-            }
+            .getOrElse { return ApiResult.Error(null, "NETWORK_ERROR") }
         return ApiResult.Success(second)
     }
 
