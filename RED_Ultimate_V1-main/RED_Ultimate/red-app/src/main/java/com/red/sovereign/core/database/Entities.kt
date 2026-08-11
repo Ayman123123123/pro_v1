@@ -100,3 +100,22 @@ data class DraftEntity(
     val text: String,
     val timestamp: Long
 )
+
+/**
+ * تفاعل إيموجي على رسالة — يُخزّن محلياً للعرض السريع بعد فك التشفير.
+ * المفتاح الأساسي مركّب من (الرسالة + المُرسِل) لأن لكل مستخدم تفاعلاً واحداً لكل رسالة
+ * (toggle: إعادة إرسال نفس الإيموجي = إزالة؛ إرسال إيموجي مختلف = استبدال).
+ * E2EE: الإيموجي نفسه لا يصل للخادم (يُرسل ضمن حمولة RICH_TEXT المشفّرة).
+ */
+@Entity(
+    tableName = "message_reactions",
+    primaryKeys = ["messageId", "senderId"],
+    indices = [Index("conversationId"), Index("messageId")]
+)
+data class MessageReactionEntity(
+    val messageId: String,
+    val conversationId: String,
+    val senderId: String,
+    val emoji: String,
+    val timestamp: Long = System.currentTimeMillis()
+)

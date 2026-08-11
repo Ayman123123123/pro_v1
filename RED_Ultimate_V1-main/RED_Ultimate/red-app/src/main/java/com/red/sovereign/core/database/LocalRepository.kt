@@ -96,13 +96,33 @@ class LocalRepository(context: Context) {
         dao.deleteMessage(messageId)
     }
 
+    // --- Reactions (تُخزّن محلياً بعد فك التشفير؛ toggle عند الاستقبال) ---
+    /** يُطبّق تفاعلاً وارداً: إضافة (REACTION) أو إزالة (REACTION_REMOVE). يُعيد الإيموجي المُطبّق أو null. */
+    suspend fun applyReaction(messageId: String, conversationId: String, senderId: String, emoji: String?, remove: Boolean, timestamp: Long): String? {
+        return if (remove) {
+            dao.deleteReaction(messageId, senderId)
+            null
+        } else if (emoji != null) {
+            dao.upsertReaction(MessageReactionEntity(messageId, conversationId, senderId, emoji, timestamp))
+            emoji
+        } else null
+    }
+
+    /** تفاعلات محادثة كاملة (Flow) لعرض الـ chips تحت الرسائل. */
+    fun reactionsForConversation(convId: String): Flow<List<MessageReactionEntity>> = dao.reactionsForConversation(convId)
+
+    suspend fun reactionsForMessage(messageId: String): List<MessageReactionEntity> = dao.reactionsForMessage(messageId)
+
+    suspend fun deleteReactionsByConversation(convId: String) = dao.deleteReactionsByConversation(convId)
+
     /** يحذف رسالة من السجل المحلي (المفكوك) فقط — يُستخدم لحذف رسالة واحدة. */
     suspend fun deleteLocalMessage(messageId: String) = dao.deleteLocalHistory(messageId)
 
-    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + صف المحادثة. */
+    /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + تفاعلاتها + صف المحادثة. */
     suspend fun deleteConversation(convId: String) {
         dao.deleteLocalHistoryByConversation(convId)
         dao.deleteMessagesByConversation(convId)
+        dao.deleteReactionsByConversation(convId)
         dao.deleteConversationRow(convId)
     }
 

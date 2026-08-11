@@ -26,6 +26,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -33,6 +36,23 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+
+/** حدث تفاعل إيموجي وارد (E2EE) — يُبَث للواجهة لتحديث الـ chips تحت الرسالة. */
+data class ReactionEvent(
+    val messageId: String,
+    val conversationId: String,
+    val senderId: String,
+    val emoji: String?,
+    val timestamp: Long,
+    val remove: Boolean
+)
+
+/** ناقل أحداث التفاعلات — يُستمع إليه في الواجهة لتحديث العرض فورياً. */
+object ReactionEventBus {
+    private val _events = MutableSharedFlow<ReactionEvent>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val events = _events.asSharedFlow()
+    fun publish(event: ReactionEvent) { _events.tryEmit(event) }
+}
 
 /** Local-first replacement for cloud push: an explicit foreground WebSocket connection. */
 class RedConnectionService : Service() {
@@ -115,6 +135,12 @@ class RedConnectionService : Service() {
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
                         }
                         val sendType = if (pending.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
+                        // تفاعل الإيموجي الجماعي: يُطبّق محلياً ولا يُحفظ كرسالة
+                        val outgoingRich = if (pending.isRich) com.red.sovereign.core.RichMessage.decode(pending.text.toByteArray(Charsets.UTF_8)) else null
+                        if (outgoingRich?.action == "REACTION" || outgoingRich?.action == "REACTION_REMOVE") {
+                            applyOutgoingReactionLocally(outgoingRich, group.id, tokenStore.redId.orEmpty())
+                            return@launch
+                        }
                         var firstId: String? = null
                         prepared.value.recipients.forEach { recipient ->
                             val envelope = prepared.value.groupCiphertext.copy(receiverDeviceId = recipient.protocolDeviceId)
@@ -143,6 +169,12 @@ class RedConnectionService : Service() {
                         if (firstId == null) firstId = id
                     }
                     firstId?.let {
+                        // تفاعل الإيموجي: يُطبّق محلياً ولا يُحفظ كرسالة
+                        val rich = com.red.sovereign.core.RichMessage.decode(pending.payload)
+                        if (rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE") {
+                            applyOutgoingReactionLocally(rich, pending.conversation, tokenStore.redId.orEmpty())
+                            return@launch
+                        }
                         val timestamp = System.currentTimeMillis()
                         repository.saveLocalHistory(LocalHistoryEntity(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
                         DecryptedMessageBus.publish(DecryptedMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
@@ -150,6 +182,20 @@ class RedConnectionService : Service() {
                         runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
                     }
                 }
+            }
+        }
+    }
+
+    /** يُطبّق تفاعلاً صادراً محلياً (في جدول التفاعلات) ويُبَثه للواجهة دون حفظه كرسالة. */
+    private fun applyOutgoingReactionLocally(rich: com.red.sovereign.core.RichMessage, conversationId: String, myRedId: String) {
+        val targetId = rich.reactionOf ?: return
+        scope.launch {
+            if (rich.action == "REACTION" && rich.emoji != null) {
+                repository.applyReaction(targetId, conversationId, myRedId, rich.emoji, remove = false, System.currentTimeMillis())
+                ReactionEventBus.publish(ReactionEvent(targetId, conversationId, myRedId, rich.emoji, System.currentTimeMillis(), remove = false))
+            } else if (rich.action == "REACTION_REMOVE") {
+                repository.applyReaction(targetId, conversationId, myRedId, null, remove = true, System.currentTimeMillis())
+                ReactionEventBus.publish(ReactionEvent(targetId, conversationId, myRedId, null, System.currentTimeMillis(), remove = true))
             }
         }
     }
@@ -230,6 +276,16 @@ class RedConnectionService : Service() {
                                 "DELETE" -> rich.deleteOf?.let { deleteOf ->
                                     repository.deleteLocalMessage(deleteOf)
                                     DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                }
+                                // تفاعل إيموجي: لا يُحفظ كرسالة، بل يُطبّق على جدول التفاعلات
+                                "REACTION" -> rich.reactionOf?.let { targetId ->
+                                    repository.applyReaction(targetId, message.conversationId, message.senderId, rich.emoji, remove = false, message.timestamp)
+                                    ReactionEventBus.publish(ReactionEvent(targetId, message.conversationId, message.senderId, rich.emoji, message.timestamp, remove = false))
+                                }
+                                // إزالة تفاعل إيموجي
+                                "REACTION_REMOVE" -> rich.reactionOf?.let { targetId ->
+                                    repository.applyReaction(targetId, message.conversationId, message.senderId, null, remove = true, message.timestamp)
+                                    ReactionEventBus.publish(ReactionEvent(targetId, message.conversationId, message.senderId, null, message.timestamp, remove = true))
                                 }
                                 else -> storeRichOrPlainMessage(message, plaintext)
                             }
@@ -417,6 +473,22 @@ class RedConnectionService : Service() {
             Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
                 .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, RichMessage.encode(message).toString(Charsets.UTF_8)).putExtra(EXTRA_GROUP_RICH, true)
         )
+
+        /** إرسال تفاعل إيموجي على رسالة في محادثة فردية (E2EE ضمن حمولة RICH_TEXT). */
+        fun sendReaction(context: Context, targetRedId: String, conversationId: String, messageId: String, emoji: String) =
+            sendRichText(context, targetRedId, conversationId, RichMessage(action = "REACTION", reactionOf = messageId, emoji = emoji))
+
+        /** إزالة تفاعل إيموجي على رسالة في محادثة فردية (E2EE ضمن حمولة RICH_TEXT). */
+        fun removeReaction(context: Context, targetRedId: String, conversationId: String, messageId: String) =
+            sendRichText(context, targetRedId, conversationId, RichMessage(action = "REACTION_REMOVE", reactionOf = messageId))
+
+        /** إرسال تفاعل إيموجي على رسالة في مجموعة (E2EE بـ Sender Keys). */
+        fun sendGroupReaction(context: Context, group: Group, messageId: String, emoji: String) =
+            sendGroupRichText(context, group, RichMessage(action = "REACTION", reactionOf = messageId, emoji = emoji))
+
+        /** إزالة تفاعل إيموجي على رسالة في مجموعة (E2EE بـ Sender Keys). */
+        fun removeGroupReaction(context: Context, group: Group, messageId: String) =
+            sendGroupRichText(context, group, RichMessage(action = "REACTION_REMOVE", reactionOf = messageId))
 
         fun markRead(context: Context, messageId: String, sequence: Long) = context.startForegroundService(
             Intent(context, RedConnectionService::class.java).setAction(ACTION_MARK_READ)

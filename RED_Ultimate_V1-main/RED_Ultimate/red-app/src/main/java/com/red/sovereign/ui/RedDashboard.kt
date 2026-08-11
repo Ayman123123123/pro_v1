@@ -169,7 +169,9 @@ import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.MessageStore
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.ReactionEventBus
 import com.red.sovereign.core.RichMessage
+import com.red.sovereign.core.database.MessageReactionEntity
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.crypto.DecryptedMessageBus
 import com.red.sovereign.crypto.SafetyQrScanner
@@ -764,6 +766,8 @@ private fun ChatHubScreen(
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
     val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
+    // تفاعلات الإيموجي: messageId -> قائمة التفاعلات (للعرض السريع تحت كل رسالة)
+    val reactionsByMessage = remember { androidx.compose.runtime.mutableStateMapOf<String, List<MessageReactionEntity>>() }
     
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -778,6 +782,19 @@ private fun ChatHubScreen(
             if (index != -1) {
                 decrypted[index] = decrypted[index].copy(status = ack.status)
             }
+        }
+    }
+    // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        ReactionEventBus.events.collect { event ->
+            val current = reactionsByMessage[event.messageId].orEmpty()
+            val withoutSender = current.filterNot { it.senderId == event.senderId }
+            val updated = if (event.remove || event.emoji == null) {
+                withoutSender
+            } else {
+                withoutSender + MessageReactionEntity(event.messageId, event.conversationId, event.senderId, event.emoji, event.timestamp)
+            }
+            reactionsByMessage[event.messageId] = updated.sortedBy { it.timestamp }
         }
     }
     androidx.compose.runtime.LaunchedEffect(typingUsers) {
@@ -893,6 +910,16 @@ private fun ChatHubScreen(
                 entities.forEach { stored ->
                     if (decrypted.none { it.id == stored.id }) decrypted.add(DecryptedMessage(stored.id, stored.conversationId, stored.senderId, stored.encryptedPlaintext, stored.createdAt, 0, stored.messageType, stored.outgoing))
                 }
+            }
+        }
+    }
+    // تحميل تفاعلات المحادثة المفتوحة من التخزين المحلي (مشفّر)
+    androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
+        val convId = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
+        if (convId != null) {
+            repository.reactionsForConversation(convId).collect { all ->
+                reactionsByMessage.clear()
+                all.groupBy { it.messageId }.forEach { (msgId, list) -> reactionsByMessage[msgId] = list.sortedBy { it.timestamp } }
             }
         }
     }
@@ -1079,6 +1106,20 @@ private fun ChatHubScreen(
                                     "RICH_TEXT" -> RichTextMessage(item, conversationMessages)
                                     else -> Text(item.plaintext.toString(Charsets.UTF_8), color = if (item.outgoing) Color(0xFF001B14) else Color.White, fontSize = 16.sp)
                                 }
+                                // تفاعلات الإيموجي تحت الرسالة (E2EE)
+                                MessageReactions(
+                                    reactions = reactionsByMessage[item.id].orEmpty(),
+                                    currentRedId = account.redId,
+                                    onToggle = { emoji ->
+                                        val mine = reactionsByMessage[item.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                                        if (mine) RedConnectionService.removeReaction(context, target, conversation, item.id)
+                                        else RedConnectionService.sendReaction(context, target, conversation, item.id, emoji)
+                                        // تحديث محلي فوري لاستجابة الواجهة قبل وصول الحدث عبر الـ bus
+                                        val current = reactionsByMessage[item.id].orEmpty()
+                                        val withoutMine = current.filterNot { it.senderId == account.redId }
+                                        reactionsByMessage[item.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(item.id, conversation, account.redId, emoji, System.currentTimeMillis())
+                                    }
+                                )
                                 if (item.outgoing) {
                                     val ticks = when (item.status) {
                                         "READ" -> "✓✓ (مقروء)"
@@ -1377,6 +1418,19 @@ private fun ChatHubScreen(
                                     "VOICE" -> VoiceMessage(message, attachments)
                                     else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
                                 }
+                                // تفاعلات الإيموجي تحت رسالة المجموعة (E2EE بـ Sender Keys)
+                                MessageReactions(
+                                    reactions = reactionsByMessage[message.id].orEmpty(),
+                                    currentRedId = account.redId,
+                                    onToggle = { emoji ->
+                                        val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                                        if (mine) RedConnectionService.removeGroupReaction(context, openGroup, message.id)
+                                        else RedConnectionService.sendGroupReaction(context, openGroup, message.id, emoji)
+                                        val current = reactionsByMessage[message.id].orEmpty()
+                                        val withoutMine = current.filterNot { it.senderId == account.redId }
+                                        reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, openGroup.id, account.redId, emoji, System.currentTimeMillis())
+                                    }
+                                )
                             }
                         }
                     }
@@ -1473,6 +1527,27 @@ private fun ChatHubScreen(
                         Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
+
+                // تفاعل سريع بالإيموجي — أعلى القائمة (E2EE)
+                ReactionEmojiBar(onPick = { emoji ->
+                    val convId = message.conversationId
+                    val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
+                    if (isGroupMsg) {
+                        val grp = groups.groups.firstOrNull { it.id == convId }
+                        if (grp != null) {
+                            if (mine) RedConnectionService.removeGroupReaction(context, grp, message.id)
+                            else RedConnectionService.sendGroupReaction(context, grp, message.id, emoji)
+                        }
+                    } else {
+                        if (mine) RedConnectionService.removeReaction(context, target, convId, message.id)
+                        else RedConnectionService.sendReaction(context, target, convId, message.id, emoji)
+                    }
+                    // تحديث محلي فوري
+                    val current = reactionsByMessage[message.id].orEmpty()
+                    val withoutMine = current.filterNot { it.senderId == account.redId }
+                    reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, convId, account.redId, emoji, System.currentTimeMillis())
+                    selectedChatMessage = null
+                })
 
                 MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
                     replyToMessage = message; selectedChatMessage = null
@@ -2408,6 +2483,8 @@ private fun resolveRichMessages(source: List<DecryptedMessage>): List<DecryptedM
         when {
             rich?.action == "DELETE" && rich.deleteOf != null -> visible.remove(rich.deleteOf)
             rich?.action == "EDIT" && rich.editOf != null -> visible[rich.editOf]?.let { original -> visible[rich.editOf] = original.copy(plaintext = RichMessage.encode(RichMessage(text = rich.text, replyTo = RichMessage.decode(original.plaintext)?.replyTo))) }
+            // التفاعلات ليست رسائل — تُعرض كـ chips عبر جدول message_reactions، فلا تُدرج هنا
+            rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE" -> Unit
             rich?.expiresAt != null && rich.expiresAt <= System.currentTimeMillis() -> Unit
             else -> visible[message.id] = message
         }
@@ -2947,6 +3024,66 @@ private fun MessageActionRow(icon: ImageVector, title: String, detail: String, o
             Column(Modifier.padding(start = 14.dp)) {
                 Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
                 Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/**
+ * عرض تفاعلات الإيموجي تحت رسالة (chips مع العد). الضغط على إيموجي = toggle
+ * (إزالة إن كان تفاعلك، لا شيء إن لم يكن). E2EE: الإيموجي محلي فقط.
+ */
+@Composable
+private fun MessageReactions(
+    reactions: List<MessageReactionEntity>,
+    currentRedId: String,
+    onToggle: (emoji: String) -> Unit
+) {
+    if (reactions.isEmpty()) return
+    // تجميع حسب الإيموجي مع العد، مرتب تنازلياً حسب العد
+    val grouped = remember(reactions) {
+        reactions.groupBy { it.emoji }
+            .mapValues { it.value.size }
+            .entries.sortedByDescending { it.value }
+            .associate { it.key to it.value }
+    }
+    val myEmoji = remember(reactions, currentRedId) {
+        reactions.firstOrNull { it.senderId == currentRedId }?.emoji
+    }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        items(grouped.entries.toList(), key = { it.key }) { (emoji, count) ->
+            val mine = emoji == myEmoji
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (mine) YounesEmerald.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (mine) YounesEmerald else androidx.compose.ui.graphics.Color.Transparent),
+                modifier = Modifier.clickable { onToggle(emoji) }
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(emoji, fontSize = 14.sp)
+                    Text(count.toString(), fontSize = 11.sp, color = if (mine) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+    }
+}
+
+/** قائمة الإيموجي السريعة للتفاعل — تظهر أعلى قائمة إجراءات الرسالة. */
+@Composable
+private fun ReactionEmojiBar(onPick: (String) -> Unit) {
+    val quick = remember { listOf("👍", "❤️", "😂", "🙏", "🔥", "👏", "😮", "😢", "🎉", "💯") }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        items(quick) { emoji ->
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(40.dp).clickable { onPick(emoji) }
+            ) {
+                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 22.sp) }
             }
         }
     }
