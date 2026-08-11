@@ -122,6 +122,35 @@ jobs:
         working-directory: RED_Ultimate/admin_dashboard
         run: npx tsc --noEmit
 
+      - name: 🔗 API Contract Check
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run check:api
+
+      # يفشل البناء عند أي أصل خارجي (يخالف CSP/Local-first)،
+      # أو setInterval خام بدل usePolling، أو سر مكتوب في الشيفرة.
+      - name: 🛡️ Frontend Guards (local-first / polling / secrets)
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run check:guards
+
+      - name: 🔐 App ↔ SecurityConfig Role Parity
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run check:roles
+
+      # فحص تنفيذي حقيقي: يشغّل خادم التطوير المدعوم بـ SQLite ثم يتحقق
+      # أن كل إجراء يغيّر الحالة فعلًا، وأن التطبيق واللوحة على عقد واحد
+      # (صيغة RED ID، دورة الموافقة، ثوابت الخصوصية). هذه الفئة من الأعطال
+      # لا يكشفها فحص الأنواع ولا فحص العقد الساكن.
+      - name: 🗄️ Runtime Checks (dev-server + integration)
+        working-directory: RED_Ultimate/admin_dashboard
+        run: |
+          npm run dev:server:reset &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/health >/dev/null || { echo "::error::dev-server لم يستجب"; exit 1; }
+          npm run check:live
+
       - name: 🏗️ Build Production Bundle
         working-directory: RED_Ultimate/admin_dashboard
         run: npm run build

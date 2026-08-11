@@ -22,7 +22,7 @@ class ApprovedDeviceSessionGuardTest {
 
     @Test
     fun `only an approved account with its approved device remains authorized`() {
-        val user = UserAccount(id = UUID.randomUUID(), redId = "YNS-ABCD-EFGH", username = "ahmed", displayName = "Ahmed", status = AccountStatus.APPROVED)
+        val user = UserAccount(id = UUID.randomUUID(), redId = "16999", username = "ahmed", displayName = "Ahmed", status = AccountStatus.APPROVED)
         val device = UserDevice(id = UUID.randomUUID(), user = user, status = DeviceStatus.APPROVED)
         whenever(users.findById(user.id)).thenReturn(Optional.of(user))
         whenever(devices.findByIdAndUserId(device.id, user.id)).thenReturn(device)

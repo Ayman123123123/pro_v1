@@ -164,8 +164,8 @@ class VoiceMessageTypeTest {
         // we just need a syntactically valid UUID
         return RedProtos.ChatMessage.newBuilder()
             .setId(uuidV7.toString())
-            .setSenderId("YNS-2345-6789")
-            .setReceiverId("YNS-ABCD-EFGH")
+            .setSenderId("46764")
+            .setReceiverId("16999")
             .setConversationId("test-conversation-12345")
             .setSenderDeviceId(1)
             .setReceiverDeviceId(1)

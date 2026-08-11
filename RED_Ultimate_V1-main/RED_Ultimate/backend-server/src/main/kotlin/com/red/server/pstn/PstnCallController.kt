@@ -31,9 +31,11 @@ class PstnCallController(
      */
     @PostMapping("/calls/{callId}/hangup")
     fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?): ResponseEntity<Map<String, Any>> {
+        // عدد المنافذ يعتمد على طراز البوابة (4 أو 8) وقد تتعدد الأجهزة،
+        // فلم يعد المدى 0..7 صالحًا كحارس.
         val port = body?.get("port") ?: -1
-        if (port in 0..7) {
-            loadBalancer.releasePort(port)
+        if (port >= 0) {
+            loadBalancer.releasePort(gatewayId = null, port = port)
         }
         return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to port))
     }

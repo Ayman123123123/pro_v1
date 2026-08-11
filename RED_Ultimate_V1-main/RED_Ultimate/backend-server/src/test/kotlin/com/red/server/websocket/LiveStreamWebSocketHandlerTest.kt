@@ -35,8 +35,8 @@ class LiveStreamWebSocketHandlerTest {
     }
 
     @Test fun `broadcaster JOIN registers them and notifies viewers`() {
-        val broadcaster = FakeSession("b1", "YNS-AAAA")
-        val viewer = FakeSession("v1", "YNS-BBBB")
+        val broadcaster = FakeSession("b1", "91179")
+        val viewer = FakeSession("v1", "11154")
         handler.afterConnectionEstablished(broadcaster)
         handler.afterConnectionEstablished(viewer)
         handler.handleTextMessage(broadcaster, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
@@ -47,8 +47,8 @@ class LiveStreamWebSocketHandlerTest {
     }
 
     @Test fun `OFFER from broadcaster reaches viewer`() {
-        val broadcaster = FakeSession("b1", "YNS-AAAA")
-        val viewer = FakeSession("v1", "YNS-BBBB")
+        val broadcaster = FakeSession("b1", "91179")
+        val viewer = FakeSession("v1", "11154")
         handler.afterConnectionEstablished(broadcaster)
         handler.afterConnectionEstablished(viewer)
         handler.handleTextMessage(broadcaster, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
@@ -61,8 +61,8 @@ class LiveStreamWebSocketHandlerTest {
     }
 
     @Test fun `ANSWER from viewer reaches broadcaster`() {
-        val broadcaster = FakeSession("b1", "YNS-AAAA")
-        val viewer = FakeSession("v1", "YNS-BBBB")
+        val broadcaster = FakeSession("b1", "91179")
+        val viewer = FakeSession("v1", "11154")
         handler.afterConnectionEstablished(broadcaster)
         handler.afterConnectionEstablished(viewer)
         handler.handleTextMessage(broadcaster, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
@@ -75,8 +75,8 @@ class LiveStreamWebSocketHandlerTest {
     }
 
     @Test fun `broadcaster LEAVE notifies viewer`() {
-        val broadcaster = FakeSession("b1", "YNS-AAAA")
-        val viewer = FakeSession("v1", "YNS-BBBB")
+        val broadcaster = FakeSession("b1", "91179")
+        val viewer = FakeSession("v1", "11154")
         handler.afterConnectionEstablished(broadcaster)
         handler.afterConnectionEstablished(viewer)
         handler.handleTextMessage(broadcaster, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))

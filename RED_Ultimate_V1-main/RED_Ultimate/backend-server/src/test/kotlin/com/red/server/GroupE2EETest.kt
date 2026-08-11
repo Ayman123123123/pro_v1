@@ -11,16 +11,16 @@ class GroupE2EETest {
 
     @Test
     fun `group membership hash changes on member add`() {
-        val membersV1 = listOf("YNS-ABCD-EFGH:1:OWNER", "YNS-IJKL-MNOP:2:MEMBER")
-        val membersV2 = listOf("YNS-ABCD-EFGH:1:OWNER", "YNS-IJKL-MNOP:2:MEMBER", "YNS-QRST-UVWX:3:MEMBER")
+        val membersV1 = listOf("16999:1:OWNER", "96698:2:MEMBER")
+        val membersV2 = listOf("16999:1:OWNER", "96698:2:MEMBER", "84219:3:MEMBER")
         fun hash(members: List<String>) = members.sorted().joinToString("|").hashCode()
         assertNotEquals(hash(membersV1), hash(membersV2), "Membership hash must change on add")
     }
 
     @Test
     fun `group membership hash changes on role change`() {
-        val before = listOf("YNS-ABCD-EFGH:1:OWNER", "YNS-IJKL-MNOP:2:MEMBER")
-        val after = listOf("YNS-ABCD-EFGH:1:OWNER", "YNS-IJKL-MNOP:2:ADMIN")
+        val before = listOf("16999:1:OWNER", "96698:2:MEMBER")
+        val after = listOf("16999:1:OWNER", "96698:2:ADMIN")
         fun hash(members: List<String>) = members.sorted().joinToString("|").hashCode()
         assertNotEquals(hash(before), hash(after))
     }
@@ -51,8 +51,8 @@ class GroupE2EETest {
 
     @Test
     fun `only group members can send group messages`() {
-        val groupMembers = setOf("YNS-ABCD-EFGH", "YNS-IJKL-MNOP")
-        assertTrue("YNS-ABCD-EFGH" in groupMembers)
-        assertFalse("YNS-XXXX-YYYY" in groupMembers)
+        val groupMembers = setOf("16999", "96698")
+        assertTrue("16999" in groupMembers)
+        assertFalse("56271" in groupMembers)
     }
 }

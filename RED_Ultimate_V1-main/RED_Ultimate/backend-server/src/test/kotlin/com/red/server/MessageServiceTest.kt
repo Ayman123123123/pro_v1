@@ -1,5 +1,7 @@
 package com.red.server
 
+import com.red.server.auth.RedIdGenerator
+
 import com.red.server.messaging.MessageService
 import com.red.sovereign.proto.RedProtos
 import com.google.protobuf.ByteString
@@ -22,13 +24,18 @@ class MessageServiceTest {
     }
 
     @Test
-    fun `RED ID validation follows strict pattern`() {
-        val valid = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
-        assertTrue(valid.matches("YNS-ABCD-EFGH"))
-        assertTrue(valid.matches("RED-2345-6789"))
-        assertFalse(valid.matches("YNS-ABCD-EFG")) // too short
-        assertFalse(valid.matches("YNS-ABCD-0000")) // 0 not allowed
-        assertFalse(valid.matches("777123456")) // phone
+    fun `YOUNES ID validation follows the five digit pattern`() {
+        // النمط يأتي من RedIdGenerator لا من نسخة محلية — تكرار النمط
+        // بصياغات مختلفة هو ما سمح سابقًا بقبول صيغة في مكان ورفضها في آخر.
+        val valid = Regex(RedIdGenerator.PATTERN)
+        assertTrue(valid.matches("10000"))
+        assertTrue(valid.matches("46764"))
+        assertTrue(valid.matches("99999"))
+        assertFalse(valid.matches("1234")) // قصير
+        assertFalse(valid.matches("123456")) // طويل
+        assertFalse(valid.matches("09999")) // صفر بادئ
+        assertFalse(valid.matches("YNS-ABCD-EFGH")) // الصيغة القديمة
+        assertFalse(valid.matches("777123456")) // رقم هاتف
     }
 
     @Test

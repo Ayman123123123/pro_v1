@@ -40,7 +40,7 @@ The generated ECDSA P-256/SHA-256 private key is mounted read-only into the back
 }
 ```
 
-HTTP `201` returns a generated ID such as `RED-7K4M-82QX`, the device ID, `PENDING`, and ten one-time recovery codes. No access or refresh token is issued. Recovery codes are shown once; the server stores only Argon2id hashes.
+HTTP `201` returns a generated five-digit YOUNES ID such as `10001`, the device ID, `PENDING`, and ten one-time recovery codes. No access or refresh token is issued. Recovery codes are shown once; the server stores only Argon2id hashes.
 
 ## 2. Login while pending
 
@@ -104,7 +104,7 @@ Revoke the current refresh token with `POST /api/auth/logout`:
 
 ```json
 {
-  "redId": "RED-7K4M-82QX",
+  "redId": "10001",
   "recoveryCode": "ABCD-EFGH-JKLM",
   "newPassword": "a-new-long-password"
 }

@@ -24,6 +24,7 @@ import {
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore } from './api';
 import Login from './pages/Login';
+import ErrorBoundary from './components/ErrorBoundary';
 import './styles.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -220,13 +221,16 @@ export default function App() {
             margin: 16, padding: 24, background: '#07111F',
             border: '1px solid #132B40', borderRadius: 18, overflow: 'auto'
           }}>
-            <Suspense fallback={
-              <div style={{ display: 'grid', placeItems: 'center', minHeight: 320 }}>
-                <Spin size="large" tip="جاري التحميل..." />
-              </div>
-            }>
-              {renderPage()}
-            </Suspense>
+            {/* حد أخطاء لكل صفحة: عطل في قسم واحد لا يُسقط اللوحة كلها */}
+            <ErrorBoundary resetKey={currentPage}>
+              <Suspense fallback={
+                <div style={{ display: 'grid', placeItems: 'center', minHeight: 320 }}>
+                  <Spin size="large" tip="جاري التحميل..." />
+                </div>
+              }>
+                {renderPage()}
+              </Suspense>
+            </ErrorBoundary>
           </Content>
         </Layout>
       </Layout>

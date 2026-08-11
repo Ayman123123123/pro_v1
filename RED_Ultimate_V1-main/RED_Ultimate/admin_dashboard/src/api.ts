@@ -16,7 +16,26 @@ export const authStore = {
   isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY)
 };
 
-async function rotate(): Promise<boolean> {
+/**
+ * وعد التجديد الجاري — حارس التزامن.
+ *
+ * ⚠️ هذا ليس تحسين أداء بل إصلاح عطل يطرد المسؤول من اللوحة.
+ *
+ * الخادم (`RefreshTokenService`) يدوّر رمز التجديد ويكتشف إعادة
+ * استعماله: أي محاولة باستخدام رمز مُدوَّر سابقًا تُفسَّر سرقةً
+ * فتُبطَل **كل جلسات الحساب** ويُرمى `REFRESH_TOKEN_REUSE_DETECTED`.
+ *
+ * واللوحة تُطلق طلبات متوازية كثيرة (صفحة DINSTAR وحدها تطلق أربعة
+ * عبر `Promise.all`). فإن انتهت صلاحية رمز الوصول أثناءها، عاد كل
+ * طلب بـ401 واستدعى `rotate()` بالرمز **نفسه**: أولها ينجح ويُدوّر
+ * الرمز، والبقية تصل برمز صار مُدوَّرًا ⇒ الخادم يظنّها سرقة ويطرد
+ * المسؤول فورًا. العَرَض: «خروج عشوائي عند فتح صفحة».
+ *
+ * الحل: تجديد واحد فقط قيد التنفيذ في أي لحظة، والبقية تنتظر نتيجته.
+ */
+let rotating: Promise<boolean> | null = null;
+
+async function performRotate(): Promise<boolean> {
   const refreshToken = authStore.refresh();
   if (!refreshToken) { authStore.clear(); return false; }
   try {
@@ -35,13 +54,25 @@ async function rotate(): Promise<boolean> {
   }
 }
 
+function rotate(): Promise<boolean> {
+  // الطلبات المتزامنة تتشارك وعدًا واحدًا بدل أن يُدوّر كلٌّ منها الرمز.
+  if (!rotating) {
+    rotating = performRotate().finally(() => { rotating = null; });
+  }
+  return rotating;
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
   const access = authStore.access();
   if (access) headers.set('Authorization', `Bearer ${access}`);
   const response = await fetch(path, { ...init, headers });
-  if (response.status === 401 && retry && await rotate()) return apiFetch(path, init, false);
+  if (response.status === 401 && retry) {
+    const refreshed = await rotate();
+    // إعادة المحاولة برمز الوصول الجديد الذي كتبه التجديد في المخزن.
+    if (refreshed) return apiFetch(path, init, false);
+  }
   return response;
 }
 

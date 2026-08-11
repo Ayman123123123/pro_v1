@@ -28,7 +28,14 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
     let cancelled = false;
     fetch('/health')
       .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then(data => { if (!cancelled) setHealth(data?.status === 'UP' || data?.status === 'healthy' ? 'UP' : 'UP'); })
+      // كان الطرفان 'UP' في الشرطي نفسه، فأي ردّ — حتى ردّ خادم معطوب
+      // يعلن حالته DOWN — كان يُظهر «الخادم متصل». الشارة صارت تعكس
+      // الحالة المُبلَّغة فعلًا لا مجرّد وصول ردّ.
+      .then(data => {
+        if (cancelled) return;
+        const status = String(data?.status ?? '').toUpperCase();
+        setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
+      })
       .catch(() => { if (!cancelled) setHealth('DOWN'); });
     return () => { cancelled = true; };
   }, []);
