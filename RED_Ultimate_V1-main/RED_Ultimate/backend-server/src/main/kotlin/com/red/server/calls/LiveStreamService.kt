@@ -17,6 +17,11 @@ import java.util.concurrent.ConcurrentHashMap
 data class LiveStreamRecord(
     @Id val streamId: String,
     @Indexed val broadcasterId: String,
+    val broadcasterName: String = "",
+    val broadcasterRedId: String = "",
+    val title: String = "",
+    val isPrivate: Boolean = false,
+    val passwordHash: String? = null,
     val startedAt: Instant = Instant.now(),
     var endedAt: Instant? = null
 ) {
@@ -27,40 +32,100 @@ data class LiveStreamRecord(
 class LiveStreamService {
     companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
 
-    // In-memory overlay for fast viewer counts (Mongo is the source of truth for active streams)
+    // In-memory overlay for fast viewer counts
     private val liveViewers = ConcurrentHashMap<String, MutableSet<String>>()
-    private val broadcasters = ConcurrentHashMap<String, String>()
+    private val activeStreamRecords = ConcurrentHashMap<String, LiveStreamRecord>()
 
     fun startStream(streamId: String, broadcasterId: String): LiveStreamRecord {
-        // لا يستبدل البث النشط (نفس الكومنت في الـ test)
-        if (liveViewers.containsKey(streamId)) {
-            log.info("Stream {} already active, keeping original broadcaster {}", streamId, broadcasters[streamId])
-            return LiveStreamRecord(streamId, broadcasters[streamId] ?: broadcasterId)
-        }
-        liveViewers[streamId] = ConcurrentHashMap.newKeySet()
-        broadcasters[streamId] = broadcasterId
-        log.info("Stream {} started by broadcaster {}", streamId, broadcasterId)
-        return LiveStreamRecord(streamId, broadcasterId)
+        return createStream(streamId, broadcasterId, "", "", "بث مباشر", false, null)
     }
+
+    fun createStream(
+        streamId: String,
+        broadcasterId: String,
+        broadcasterName: String,
+        broadcasterRedId: String,
+        title: String,
+        isPrivate: Boolean,
+        password: String?
+    ): LiveStreamRecord {
+        if (liveViewers.containsKey(streamId)) {
+            log.info("Stream {} already active, returning existing record", streamId)
+            return activeStreamRecords[streamId] ?: LiveStreamRecord(streamId, broadcasterId)
+        }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val record = LiveStreamRecord(
+            streamId = streamId,
+            broadcasterId = broadcasterId,
+            broadcasterName = broadcasterName.ifBlank { "مُبث يونس" },
+            broadcasterRedId = broadcasterRedId,
+            title = title.ifBlank { "بث مباشر يونس 🔴" },
+            isPrivate = isPrivate,
+            passwordHash = passHash,
+            startedAt = Instant.now()
+        )
+        liveViewers[streamId] = ConcurrentHashMap.newKeySet()
+        activeStreamRecords[streamId] = record
+        log.info("Stream {} created by broadcaster {} (title={}, private={})", streamId, broadcasterId, title, isPrivate)
+        return record
+    }
+
+    fun verifyPassword(streamId: String, password: String?): Boolean {
+        val record = activeStreamRecords[streamId] ?: return false
+        if (!record.isPrivate || record.passwordHash.isNull_or_empty_hash()) return true
+        if (password.isNull_or_blank()) return false
+        return hashPassword(password) == record.passwordHash
+    }
+
+    fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
+        val cleanQuery = query?.trim()?.lowercase().orEmpty()
+        return activeStreamRecords.values
+            .filter { !it.isPrivate }
+            .filter { record ->
+                if (cleanQuery.isBlank()) true
+                else record.title.lowercase().contains(cleanQuery) ||
+                     record.broadcasterName.lowercase().contains(cleanQuery) ||
+                     record.broadcasterRedId.lowercase().contains(cleanQuery) ||
+                     record.streamId.lowercase().contains(cleanQuery)
+            }
+            .onEach { record -> record.viewerCount = getViewerCount(record.streamId) }
+    }
+
+    fun getStreamRecord(streamId: String): LiveStreamRecord? = activeStreamRecords[streamId]
 
     fun addViewer(streamId: String, viewerId: String): Int {
         val viewers = liveViewers[streamId] ?: return -1
         viewers.add(viewerId)
-        return viewers.size
+        val count = viewers.size
+        activeStreamRecords[streamId]?.viewerCount = count
+        return count
     }
 
     fun removeViewer(streamId: String, viewerId: String) {
         liveViewers[streamId]?.remove(viewerId)
+        val count = getViewerCount(streamId)
+        activeStreamRecords[streamId]?.viewerCount = count
     }
 
     fun getViewerCount(streamId: String): Int = liveViewers[streamId]?.size ?: 0
 
-    fun getActiveStreams(): List<LiveStreamRecord> = liveViewers.keys.map { LiveStreamRecord(it, broadcasters[it] ?: "unknown") }
+    fun getActiveStreams(): List<LiveStreamRecord> {
+        return activeStreamRecords.values.onEach { record -> record.viewerCount = getViewerCount(record.streamId) }.toList()
+    }
 
     fun stopStream(streamId: String): Boolean {
         val removed = liveViewers.remove(streamId) != null
-        broadcasters.remove(streamId)
+        activeStreamRecords.remove(streamId)
         if (removed) log.info("Stream {} ended", streamId)
         return removed
     }
+
+    private fun hashPassword(password: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun String?.isNull_or_empty_hash() = this.isNullOrBlank()
+    private fun String?.isNull_or_blank() = this.isNullOrBlank()
 }

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +44,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -95,6 +99,21 @@ fun YounesCallOverlay() {
                     }
                 }
                 if (mode == "VIDEO") Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) { LocalVideoRenderer(Modifier.size(120.dp, 170.dp)) }
+                else {
+                    // 🎙️ رمز دائري كبير للمكالمة الصوتية (بدل الشاشة الفارغة)
+                    Box(
+                        Modifier.size(120.dp).clip(CircleShape)
+                            .background(Brush.radialGradient(listOf(com.red.sovereign.ui.theme.YounesEmerald.copy(alpha = 0.35f), Color.Transparent))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        androidx.compose.foundation.Image(
+                            painterResource(com.red.sovereign.R.drawable.younes_icon_master),
+                            contentDescription = "يونس",
+                            modifier = Modifier.size(88.dp).clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
                 if (state is CallUiState.Error) {
                     Button({ YounesCallService.action(context, YounesCallService.ACTION_END) }) { Text("إغلاق") }
                 } else if (state is CallUiState.Active && mode == "VOICE" && !state.isHeld) {

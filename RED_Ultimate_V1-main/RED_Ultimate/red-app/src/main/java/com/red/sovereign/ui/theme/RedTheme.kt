@@ -56,36 +56,36 @@ val TajawalFamily = FontFamily(
 // لوحة الألوان السيادية المحسّنة — نظام متناسق كامل
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── الألوان الأساسية ─────────────────────────────────────────────────────────
-val YounesPrimary      = Color(0xFF00C98C)  // أخضر سيادي — زر الإرسال والحضور
-val YounesPrimaryGlow  = Color(0xFF6DFFD3)  // أخضر متوهج — التأثيرات
-val YounesAccent       = Color(0xFFF5C842)  // ذهبي يوناني — الاسم والنجوم
-val YounesAccentSoft   = Color(0xFFFFE27A)  // ذهبي فاتح — تأثيرات ثانوية
-val YounesCobalt       = Color(0xFF38D4F0)  // سماوي — التواريخ والـ ID
-val YounesPurple       = Color(0xFFA78BFA)  // بنفسجي — المساحات والاجتماعات
-val YounesRose         = Color(0xFFF43F5E)  // أحمر وردي — التنبيهات والخطر
+// ─── الألوان الأساسية — أسلوب منظم وأنيق مثل تلجرام وواتساب ───────────────
+val YounesPrimary      = Color(0xFF00A884)  // أخضر زمردي هادئ نقي (WhatsApp / Telegram Clean Accent)
+val YounesPrimaryGlow  = Color(0xFF25D366)  // أخضر فاتح للتنبيهات
+val YounesAccent       = Color(0xFF2AABEE)  // أزرق تلجرام الأنيق للروابط والشارات
+val YounesAccentSoft   = Color(0xFF64B5F6)  // أزرق أفتح للحدود
+val YounesCobalt       = Color(0xFF2AABEE)  // أزرق نقي
+val YounesPurple       = Color(0xFF388E3C)  // أخضر إضافي
+val YounesRose         = Color(0xFFE53935)  // أحمر تحذيري خفيف للإنهاء والبث
 
-// ─── ألوان الخلفية — تدرج داكن عميق ─────────────────────────────────────────
-val YounesVoid         = Color(0xFF030710)  // أسود فضائي — أعمق خلفية
-val YounesMidnight     = Color(0xFF080F1C)  // منتصف الليل — الشاشة الرئيسية
-val YounesDeep         = Color(0xFF0D1829)  // عميق — NavigationBar
-val YounesSurface1     = Color(0xFF101E2E)  // السطح الأول — قوائم الدردشات
-val YounesSurface2     = Color(0xFF162334)  // السطح الثاني — كروت المنشورات
-val YounesSurface3     = Color(0xFF1C2B3F)  // السطح الثالث — BottomSheet والديالوج
-val YounesBorder       = Color(0xFF253548)  // الحدود — فواصل خفية
-val YounesMuted        = Color(0xFF8FA7B8)  // نص ثانوي — التوقيت والوصف
+// ─── ألوان الخلفية — داكنة فائقة التباين والوضوح (Telegram Dark Theme) ──────
+val YounesVoid         = Color(0xFF0E1621)  // داكن تلجرام الرئيسي — مريح وبلا تشويش
+val YounesMidnight     = Color(0xFF0E1621)  // خلفية الشاشة والشات
+val YounesDeep         = Color(0xFF17212B)  // أسطح القوائم وشريط الملاحة
+val YounesSurface1     = Color(0xFF17212B)  // كروت القوائم
+val YounesSurface2     = Color(0xFF202B36)  // أسطح العناصر النشطة
+val YounesSurface3     = Color(0xFF242F3D)  // الحوارات والـ BottomSheet
+val YounesBorder       = Color(0xFF2A394A)  // فواصل حدودية واضحة
+val YounesMuted        = Color(0xFF8E9DAE)  // نص ثانوي عالي التباين وسهل القراءة
 
-// ─── ألوان المحادثة ──────────────────────────────────────────────────────────
-val YounesBubbleOut    = Color(0xFF006B4F)  // فقاعة صادرة — أخضر داكن غني
-val YounesBubbleOutGlow = Color(0xFF007D5C) // فقاعة صادرة — أفتح قليلاً
-val YounesBubbleIn     = Color(0xFF152234)  // فقاعة واردة — أزرق داكن
-val YounesReadTick     = Color(0xFF00C98C)  // ✓✓ مقروء — أخضر
+// ─── ألوان المحادثة والفقاعات ────────────────────────────────────────────────
+val YounesBubbleOut    = Color(0xFF2B5278)  // فقاعة صادرة — أزرق تلجرام داكن مريح
+val YounesBubbleOutGlow = Color(0xFF2B5278)
+val YounesBubbleIn     = Color(0xFF182533)  // فقاعة واردة — داكنة عالية التباين
+val YounesReadTick     = Color(0xFF2AABEE)  // ✓✓ مقروء — أزرق
 
-// ─── عكوس الألوان الديناميكية ────────────────────────────────────────────────
-val YounesOnPrimary    = Color(0xFF003823)  // نص على الأخضر
-val YounesOnAccent     = Color(0xFF2A1F00)  // نص على الذهبي
-val YounesOnSurface    = Color(0xFFE8F2F8)  // نص رئيسي
-val YounesOnSurfaceDim = Color(0xFFA8BBC7)  // نص ثانوي
+// ─── ألوان النصوص والتباين المرتفع (WCAG AAA Standard) ───────────────────────
+val YounesOnPrimary    = Color(0xFFFFFFFF)  // نص أبيض نقي على الأزرار
+val YounesOnAccent     = Color(0xFFFFFFFF)  // نص أبيض
+val YounesOnSurface    = Color(0xFFFFFFFF)  // نص أبيض نقي للمحاذاة والوضوح
+val YounesOnSurfaceDim = Color(0xFF8E9DAE)  // نص ثانوي رمادي هادئ وسهل القراءة
 
 // ─── Migration aliases — للحفاظ على التوافق مع الكود القديم ──────────────────
 val YounesEmerald      = YounesPrimary
