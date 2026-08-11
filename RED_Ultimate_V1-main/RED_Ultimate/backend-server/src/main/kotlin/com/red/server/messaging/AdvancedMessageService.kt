@@ -73,7 +73,9 @@ class AdvancedMessageService(
                     editVersion = existing.editVersion
                 )
             )
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            log.debug("Failed to record message edit history for {}: {}", messageId, e.message)
+        }
 
         val result = mongoTemplate.updateFirst(
             query,
@@ -107,6 +109,8 @@ class AdvancedMessageService(
         // Postgres: نظف التثبيتات المنتهية
         try {
             jdbc?.update("DELETE FROM pinned_messages WHERE expires_at IS NOT NULL AND expires_at < NOW()")
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            log.warn("Failed to cleanup expired pinned messages: {}", e.message)
+        }
     }
 }
