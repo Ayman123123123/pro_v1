@@ -228,6 +228,7 @@ import com.red.sovereign.features.privacy.PrivacySettingsScreen
 import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
+import com.red.sovereign.features.media.MediaGalleryDialog
 import com.red.sovereign.features.profile.BackupScreen
 import com.red.sovereign.features.profile.ProfileScreen
 import com.red.sovereign.core.YounesId
@@ -732,6 +733,7 @@ private fun ChatHubScreen(
     var showMessageSearch by remember { mutableStateOf(false) }
     var messageSearchQuery by remember { mutableStateOf("") }
     var showMediaGallery by remember { mutableStateOf(false) }
+    var showGroupMediaGallery by remember { mutableStateOf(false) }
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
@@ -1357,6 +1359,7 @@ private fun ChatHubScreen(
                             DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
                                 DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
                                 DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
+                                DropdownMenuItem(text = { Text("الوسائط المشتركة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; showGroupMediaGallery = true })
                                 DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
                                 DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
                                 DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
@@ -1781,33 +1784,19 @@ private fun ChatHubScreen(
     }
     if (showMediaGallery && target.isNotBlank()) {
         val convKey = conversationId(account.redId, target)
-        val mediaMsgs = decrypted.filter { it.conversationId == convKey && (it.type == "IMAGE" || it.type == "VIDEO" || it.type == "FILE" || it.type == "AUDIO") }
-        AlertDialog(
-            onDismissRequest = { showMediaGallery = false },
-            title = { Text("الوسائط المشتركة (${mediaMsgs.size})") },
-            text = {
-                if (mediaMsgs.isEmpty()) {
-                    Text("لا توجد وسائط مشتركة بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    LazyColumn(Modifier.height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(mediaMsgs, key = { it.id }) { m ->
-                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
-                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    when (m.type) {
-                                        "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald)
-                                        "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow)
-                                        "AUDIO" -> Icon(Icons.Default.MusicNote, null, tint = AqyalGold)
-                                        else -> Icon(Icons.Default.InsertDriveFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Text(if (m.type == "RICH_TEXT") messageDisplayText(m) else "وسيط مشفر", Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                                    Text(relativeTime(m.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ showMediaGallery = false }) { Text("إغلاق") } }
+        MediaGalleryDialog(
+            title = "الوسائط المشتركة",
+            messages = decrypted.filter { it.conversationId == convKey },
+            attachments = attachments,
+            onDismiss = { showMediaGallery = false }
+        )
+    }
+    if (showGroupMediaGallery && groupConversationId != null) {
+        MediaGalleryDialog(
+            title = "وسائط المجموعة",
+            messages = decrypted.filter { it.conversationId == groupConversationId },
+            attachments = attachments,
+            onDismiss = { showGroupMediaGallery = false }
         )
     }
     if (showMessageSearch) AlertDialog(

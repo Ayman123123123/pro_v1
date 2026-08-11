@@ -85,6 +85,10 @@ interface RedDao {
     @Query("SELECT * FROM local_history WHERE conversationId = :convId AND encryptedPlaintext LIKE :query")
     suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
 
+    /** وسائط محادثة (صور/فيديو/ملفات/صوت) — مرتبة بالأحدث أولاً. أساس معرض الوسائط. */
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND messageType IN ('IMAGE','VIDEO','FILE','AUDIO') ORDER BY createdAt DESC")
+    fun mediaForConversation(convId: String): Flow<List<LocalHistoryEntity>>
+
     // --- Reactions (E2EE: emoji مخزّن محلياً بعد فك التشفير) ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertReaction(reaction: MessageReactionEntity)

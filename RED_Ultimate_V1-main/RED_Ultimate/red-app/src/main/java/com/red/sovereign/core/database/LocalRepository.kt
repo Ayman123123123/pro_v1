@@ -131,4 +131,7 @@ class LocalRepository(context: Context) {
         if (query.isBlank()) return emptyList()
         return dao.searchAllMessages("%${query.trim()}%")
     }
+
+    /** وسائط محادثة (Flow) — لمعرض الوسائط. الصور/الفيديو/الملفات/الصوت. */
+    fun mediaForConversation(convId: String) = dao.mediaForConversation(convId)
 }
