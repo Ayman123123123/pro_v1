@@ -14,6 +14,7 @@ import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.BinaryWebSocketHandler
 import java.util.concurrent.ConcurrentHashMap
+import com.red.server.auth.RedIdGenerator
 
 @Component
 class RedMasterHandler(
@@ -133,7 +134,7 @@ class RedMasterHandler(
         val control = RedProtos.ChatMessage.newBuilder()
             .setId(commandId)
             .setConversationId("red-control")
-            .setSenderId("RED-SYST-EM22") // يطابق صيغة RED ID الرسمية حتى لا يُرفض عند أي تحقق طرفي
+            .setSenderId(RedIdGenerator.SYSTEM_ID) // محجوز للنظام: لا يُخصَّص لمستخدم فيُنتحل به
             .setReceiverId(redId)
             .setPayload(ByteString.copyFrom(payload, Charsets.UTF_8))
             .setTimestamp(System.currentTimeMillis())

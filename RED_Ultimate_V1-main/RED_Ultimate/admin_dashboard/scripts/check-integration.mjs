@@ -111,7 +111,7 @@ await check('الدخول يعيد UserResponse كاملًا بحقل redId', as
   for (const field of ['id', 'redId', 'username', 'displayName', 'status', 'role', 'pstnEnabled', 'pstnDailyLimit', 'devices']) {
     assert(field in u, `الحقل ${field} مفقود — سيفشل فك الترميز في التطبيق`);
   }
-  assert(/^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/.test(u.redId), `صيغة RED ID غير صحيحة: ${u.redId}`);
+  assert(/^[1-9][0-9]{4}$/.test(u.redId), `صيغة معرّف يونس غير صحيحة: ${u.redId}`);
   assert(res.data.accessToken, 'لا يوجد رمز وصول');
   adminToken = res.data.accessToken;
   return `${u.redId} — ${Object.keys(u).length} حقلًا`;
@@ -120,17 +120,17 @@ await check('الدخول يعيد UserResponse كاملًا بحقل redId', as
 await check('كل معرّفات RED تطابق نمط التطبيق (RedIdGenerator)', async () => {
   // النمط نفسه في red-app/ui/RedDashboard.kt و features/contacts/QrScannerSheet.kt.
   // أي معرّف خارجه يجعل أزرار الاتصال والإضافة معطّلة في التطبيق بلا سبب ظاهر.
-  const pattern = /^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$/;
+  const pattern = /^[1-9][0-9]{4}$/;
   const users = (await api('GET', '/api/admin/users?size=100')).data.content;
   const invalid = users.filter((u) => !pattern.test(u.redId));
   assert(invalid.length === 0, `معرّفات مرفوضة من التطبيق: ${invalid.map((u) => u.redId).join(', ')}`);
-  return `${users.length} معرّفًا — كلها بصيغة YNS-XXXX-XXXX`;
+  return `${users.length} معرّفًا — كلها خمسة أرقام`;
 });
 
 await check('‎/api/me يعيد هوية صاحب الرمز نفسه لا حسابًا آخر', async () => {
   const me = await api('GET', '/api/me', undefined, adminToken);
   assert(me.status === 200, `HTTP ${me.status}`);
-  assert(me.data.redId === 'YNS-7K4M-82QX', `أعاد ${me.data.redId}`);
+  assert(me.data.redId === '10001', `أعاد ${me.data.redId}`);
   return `${me.data.redId} ${me.data.displayName}`;
 });
 
@@ -221,12 +221,12 @@ await check('٨ طلب صداقة → قبول → جهة اتصال متباد�
   assert(sent.status === 200, `فشل الإرسال HTTP ${sent.status}`);
   const inbox = (await api('GET', '/api/contacts/requests', undefined, appToken)).data;
   assert(inbox.length === 1, `الوارد ${inbox.length}`);
-  assert(inbox[0].requester.redId === 'YNS-7K4M-82QX', 'المُرسِل غير صحيح');
+  assert(inbox[0].requester.redId === '10001', 'المُرسِل غير صحيح');
   // معرّف الطلب لا معرّف المستخدم — وإلا فشل القبول بـ 404
   const accepted = await api('POST', `/api/contacts/requests/${inbox[0].id}/accept`, undefined, appToken);
   assert(accepted.status === 204, `القبول HTTP ${accepted.status}`);
   const mine = (await api('GET', '/api/contacts', undefined, appToken)).data;
-  assert(mine.some((c) => c.redId === 'YNS-7K4M-82QX'), 'لم تُضف جهة الاتصال');
+  assert(mine.some((c) => c.redId === '10001'), 'لم تُضف جهة الاتصال');
   const theirs = (await api('GET', '/api/contacts', undefined, adminToken)).data;
   assert(theirs.some((c) => c.redId === redId), 'العلاقة ليست متبادلة');
   return 'متبادلة بين الطرفين';
@@ -272,7 +272,7 @@ await check('لا يوجد جدول أو حقل لنص الرسائل الخاص
 });
 
 await check('لا يُعاد أي مفتاح خاص لمستخدم عبر أي مسار', async () => {
-  const probes = ['/api/me', '/api/contacts', `/api/identity/directory/YNS-7K4M-82QX`, '/api/devices'];
+  const probes = ['/api/me', '/api/contacts', `/api/identity/directory/10001`, '/api/devices'];
   for (const p of probes) {
     const body = JSON.stringify((await api('GET', p, undefined, adminToken)).data || {}).toLowerCase();
     assert(!body.includes('privatekey'), `تسريب في ${p}`);
@@ -462,6 +462,81 @@ await check('الرقم التسلسلي هو هوية البوابة لا عن�
   assert(macs.every((m) => /^F8:A0:3D:/i.test(m)),
     'عنوان MAC خارج نطاق Dinstar المسجّل');
   return `${serials.length} رقمًا تسلسليًا فريدًا · ${macs.length} عنوان MAC ضمن نطاق Dinstar`;
+});
+
+await check('معرّف يونس خمسة أرقام في كل مسار يعيده الخادم', async () => {
+  // مصدر الحقيقة: RedIdGenerator.PATTERN و YounesId.PATTERN — أي انحراف
+  // هنا يعني أن التطبيق سيرفض المعرّف ويعطّل أزرار الاتصال والإضافة.
+  const pattern = /^[1-9][0-9]{4}$/;
+  const me = (await api('GET', '/api/me', undefined, adminToken)).data;
+  assert(pattern.test(me.redId), `/api/me أعاد ${me.redId}`);
+
+  const users = (await api('GET', '/api/admin/users?size=100', undefined, adminToken)).data.content;
+  const bad = users.filter((u) => !pattern.test(u.redId));
+  assert(bad.length === 0, `معرّفات مخالفة: ${bad.map((u) => u.redId).join(', ')}`);
+
+  // المعرّف المولّد عند التسجيل يجب أن يلتزم الصيغة نفسها لا صيغة البذرة
+  const uniq = `probe_${Date.now().toString(36)}`;
+  const reg = (await api('POST', '/api/auth/register', {
+    username: uniq, displayName: 'فحص الصيغة', password: 'Passw0rd#2026',
+    deviceName: 'CheckDevice', platform: 'ANDROID', identityFingerprint: 'ff:00:11',
+  })).data;
+  assert(pattern.test(reg.user.redId), `التوليد أعاد ${reg.user.redId}`);
+
+  return `${users.length} مستخدمًا + معرّف مولّد (${reg.user.redId}) — كلها خمسة أرقام`;
+});
+
+await check('البحث في الدليل محكوم بحدّ معدل يمنع حصاد الـ90 ألف معرّف', async () => {
+  // اختصار المعرّف إلى 5 أرقام يجعل الفضاء قابلًا للتعداد بالكامل،
+  // فالحماية انتقلت من طول المعرّف إلى ضبط المعدل. سقوط هذا الفحص
+  // يعني أن الدليل كله صار قابلًا للحصاد من حساب معتمد واحد.
+  let limited = null;
+  for (let i = 0; i < 40; i++) {
+    const r = await api('GET', '/api/directory/search?query=38715', undefined, adminToken);
+    if (r.status === 429) { limited = r; break; }
+  }
+  assert(limited, 'لم يُفعَّل حدّ المعدل بعد 40 طلبًا — الدليل مكشوف');
+  assert(limited.data.error === 'DIRECTORY_RATE_LIMITED', `رمز غير متوقع: ${limited.data.error}`);
+  assert(limited.data.retryAfterSeconds > 0, 'يجب إبلاغ العميل بمدة الانتظار');
+  return `429 DIRECTORY_RATE_LIMITED بعد الحدّ · retryAfter=${limited.data.retryAfterSeconds}s`;
+});
+
+await check('حدود SMS تطابق وثيقة Dinstar الرسمية لا أرقامًا مخترعة', async () => {
+  // 128 مستلمًا و1500 بايت لـ send_sms. الرقم 32 يخصّ query_sms_result
+  // وحده، والخلط بينهما كان يقطع الإرسال الجماعي عند 32 بلا سبب.
+  const okRes = await api('POST', '/api/admin/dinstar/sms/send', {
+    text: 'رسالة اختبار', param: [{ number: '777123456', user_id: 1 }], encoding: 'gsm-7bit',
+  }, adminToken);
+  assert(okRes.status === 200, `الإرسال السليم فشل: ${okRes.status}`);
+  // 202 = قُبلت للتنفيذ لاحقًا وهي نجاح؛ اعتبارها فشلًا كان يسجّل كل
+  // إرسال ناجح كخطأ في السجل.
+  assert(okRes.data.error_code === 202, `يُتوقع 202 لا ${okRes.data.error_code}`);
+
+  const many = await api('POST', '/api/admin/dinstar/sms/send', {
+    text: 'hi', param: Array.from({ length: 129 }, (_, i) => ({ number: `7771${i}`, user_id: i })),
+  }, adminToken);
+  assert(many.status === 400, '129 مستلمًا يجب أن تُرفض');
+
+  // القياس بالبايت لا بالحرف: 800 حرف عربي = 1600 بايت.
+  const long = await api('POST', '/api/admin/dinstar/sms/send', {
+    text: 'م'.repeat(800), param: [{ number: '777123456', user_id: 1 }],
+  }, adminToken);
+  assert(long.status === 400, '1600 بايت يجب أن تُرفض رغم أن الأحرف 800 فقط');
+  assert(/1600/.test(JSON.stringify(long.data)), 'رسالة الخطأ يجب أن تذكر البايتات الفعلية');
+
+  return '202 للقبول · رفض 129 مستلمًا · رفض 1600 بايت';
+});
+
+await check('الرسائل الواردة من GSM تصل إلى اللوحة', async () => {
+  const inbox = (await api('GET', '/api/admin/dinstar/sms/incoming', undefined, adminToken)).data;
+  const rows = inbox.sms || [];
+  assert(rows.length > 0, 'لا رسائل واردة');
+  for (const m of rows) {
+    assert(typeof m.text === 'string' && m.text.length > 0, 'رسالة بلا نص');
+    assert(typeof m.number === 'string', 'رسالة بلا رقم مُرسِل');
+    assert(Number.isInteger(m.port), 'رسالة بلا منفذ مصدر');
+  }
+  return `${rows.length} رسالة واردة بنصّها ومنفذها`;
 });
 
 console.log(`\n${'─'.repeat(60)}`);

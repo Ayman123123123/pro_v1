@@ -20,8 +20,8 @@ class TypingPolicyTest {
     private val users: UserAccountRepository = mock()
     private val jdbc: JdbcTemplate = mock()
     private val messages = MessageService(mongo, redis, users, jdbc)
-    private val sender = UserAccount(redId = "YNS-ABCD-EFGH", username = "ahmed", displayName = "Ahmed")
-    private val receiver = UserAccount(redId = "YNS-JKLM-NPQR", username = "mona", displayName = "Mona")
+    private val sender = UserAccount(redId = "16999", username = "ahmed", displayName = "Ahmed")
+    private val receiver = UserAccount(redId = "58414", username = "mona", displayName = "Mona")
 
     @Test
     fun `typing obeys the same block policy as messages`() {

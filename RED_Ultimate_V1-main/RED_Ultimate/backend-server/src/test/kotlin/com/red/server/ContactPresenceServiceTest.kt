@@ -26,13 +26,13 @@ class ContactPresenceServiceTest {
     fun `presence excludes identities that are not established contacts`() {
         val owner = UUID.randomUUID()
         whenever(jdbc.query<PublicRedProfile>(any(), any<RowMapper<PublicRedProfile>>(), eq(owner)))
-            .thenReturn(listOf(PublicRedProfile("RED-7K4M-82QX", "ahmed", "أحمد")))
+            .thenReturn(listOf(PublicRedProfile("85248", "ahmed", "أحمد")))
         whenever(redis.opsForZSet()).thenReturn(zset)
-        whenever(zset.score("red:presence:index", "RED-7K4M-82QX"))
+        whenever(zset.score("red:presence:index", "85248"))
             .thenReturn(System.currentTimeMillis().toDouble())
 
-        val presence = service.presence(owner, listOf("RED-7K4M-82QX", "RED-9M3N-4QXR"))
+        val presence = service.presence(owner, listOf("85248", "87203"))
 
-        assertEquals(mapOf("RED-7K4M-82QX" to true), presence)
+        assertEquals(mapOf("85248" to true), presence)
     }
 }

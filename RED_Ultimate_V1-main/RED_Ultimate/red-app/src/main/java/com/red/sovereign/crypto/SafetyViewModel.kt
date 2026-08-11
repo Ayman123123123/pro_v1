@@ -1,5 +1,7 @@
 package com.red.sovereign.crypto
 
+import com.red.sovereign.core.YounesId
+
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
@@ -113,7 +115,8 @@ data class SafetyQrPayload(
     val safetyNumber: String
 ) {
     companion object {
-        private val redIdPattern = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
+        // مصدر الحقيقة الوحيد: core/YounesId.kt
+        private val redIdPattern = Regex(YounesId.PATTERN)
         private val fingerprintPattern = Regex("^[0-9a-fA-F]{64}$")
         private val numberPattern = Regex("^[0-9]{60}$")
 

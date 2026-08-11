@@ -1,5 +1,7 @@
 package com.red.sovereign.features.contacts
 
+import com.red.sovereign.core.YounesId
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,7 +42,7 @@ import java.util.concurrent.Executors
  *  QrScannerSheet — ماسح RED ID
  *  - مسح حقيقي عبر CameraX (PreviewView + ImageAnalysis) + فك ZXing حي
  *  - مع إدخال يدوي كبديل، وطلب إذن الكاميرا عند الحاجة
- *  - يتحقق من صيغة RED ID (YNS-XXXX-XXXX)
+ *  - يتحقق من صيغة معرّف يونس (خمسة أرقام)
  * ════════════════════════════════════════════════════════════════════════
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,7 +188,7 @@ fun QrScannerSheet(
                     error = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("YNS-XXXX-XXXX") },
+                placeholder = { Text(YounesId.PLACEHOLDER) },
                 leadingIcon = { Icon(Icons.Default.Tag, null) },
                 singleLine = true,
                 isError = error != null,
@@ -199,7 +201,7 @@ fun QrScannerSheet(
                     if (isValidRedId(normalized)) {
                         onScanned(normalized)
                     } else {
-                        error = "صيغة RED ID غير صحيحة (يجب أن تكون YNS-XXXX-XXXX)"
+                        error = YounesId.ERROR_MESSAGE
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -230,34 +232,14 @@ private fun decodeQrFromImage(image: ImageProxy): String? = runCatching {
 }.getOrNull()
 
 /**
- * صيغة RED ID: YNS-XXXX-XXXX — مطابقة لما يولّده `auth/RedIdGenerator.kt`
- * على الخادم. الأبجدية تستبعد 0 و1 وI وO لمنع اللبس البصري عند القراءة
- * أو الإملاء الصوتي.
+ * التحقق من معرّف يونس وتطبيعه.
  *
- * كان هذا النمط سابقًا `[A-Z0-9]` ويقبل البادئة YNS فقط، بينما
- * `RED_ID_PATTERN` في ui/RedDashboard.kt يستخدم الأبجدية المقيّدة ويقبل
- * البادئتين. النتيجة: معرّف يمر من الماسح ثم تظهر شاشة المحادثة بأزرار
- * اتصال وإرسال معطّلة بلا سبب ظاهر. النمطان الآن متطابقان.
+ * يفوّضان إلى [YounesId] — مصدر الحقيقة الوحيد. كانت النسخة السابقة
+ * تحمل نمطها الخاص لصيغة `YNS-XXXX-XXXX`، وهو ما أنتج تباينًا مع
+ * `RedDashboard`: معرّف يمر من الماسح ثم تظهر شاشة المحادثة بأزرار
+ * معطّلة بلا سبب ظاهر.
  */
-private val RED_ID_REGEX = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
+fun isValidRedId(redId: String): Boolean = YounesId.isValid(redId)
 
-fun isValidRedId(redId: String): Boolean = RED_ID_REGEX.matches(redId)
-
-/**
- * تطبيع ما يكتبه المستخدم إلى صيغة RED ID.
- * يتعامل مع الحالتين: كتابة المعرّف كاملًا بالبادئة، أو كتابة الرموز
- * الثمانية وحدها — وكلتاهما شائعة عند النسخ اليدوي.
- */
-fun normalizeRedIdInput(input: String): String {
-    val cleaned = input.uppercase().filter { it.isLetterOrDigit() }
-    val body = when {
-        cleaned.startsWith("YNS") -> cleaned.removePrefix("YNS")
-        cleaned.startsWith("RED") -> cleaned.removePrefix("RED")
-        else -> cleaned
-    }.take(8)
-    return when {
-        body.isEmpty() -> "YNS-"
-        body.length <= 4 -> "YNS-$body"
-        else -> "YNS-${body.substring(0, 4)}-${body.substring(4)}"
-    }
-}
+/** تطبيع مدخل المستخدم — يقبل اللصق بالبادئات القديمة أيضًا. */
+fun normalizeRedIdInput(input: String): String = YounesId.normalizeInput(input)

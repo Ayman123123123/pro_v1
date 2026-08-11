@@ -744,6 +744,93 @@ on('POST', '/api/admin/dinstar/ports/:port/ussd', (p, _q, b) => {
   return ok({ success: true, port: Number(p.port), code: b?.code, response: 'رصيدك 1,250 ريال' });
 });
 
+// ── DINSTAR SMS ──
+/**
+ * حدود الرسائل من وثيقة Dinstar HTTP API v1.1 الرسمية.
+ * 128 مستلمًا و1500 بايت لكل طلب `send_sms` — لا 32، فتلك حدّ
+ * `query_sms_result` وحده. الخلط بينهما كان يقطع الإرسال الجماعي مبكرًا.
+ */
+const SMS_MAX_RECIPIENTS = 128;
+const SMS_MAX_TEXT_BYTES = 1500;
+
+/**
+ * الترميز على السلك: 'gsm-7bit' أو 'unicode' حرفيًا.
+ * إرسال "GSM7BIT" كان يسقط صامتًا إلى unicode فينكمش المقطع من
+ * 160 حرفًا إلى 70 — أي مضاعفة التكلفة بلا سبب ظاهر.
+ */
+const smsWireEncoding = (enc) =>
+  String(enc || '').toLowerCase().replace(/[^a-z0-9]/g, '').startsWith('ucs2')
+  || String(enc || '').toLowerCase().includes('unicode') ? 'unicode' : 'gsm-7bit';
+
+/** الرسائل الواردة — مخزّنة في الذاكرة لتظهر في اللوحة. */
+const smsOutbox = [];
+let smsTaskSeq = 1000;
+
+const smsInbox = [
+  { index: 1, port: 0, number: '+967771234567', timestamp: new Date(Date.now() - 3.6e6).toISOString(),
+    text: 'رصيدك الحالي 1,250 ريال. شكرًا لاستخدامك خدماتنا.', unread: true },
+  { index: 2, port: 3, number: '+967730009988', timestamp: new Date(Date.now() - 7.2e6).toISOString(),
+    text: 'تم تفعيل الباقة بنجاح.', unread: false },
+  { index: 3, port: 1, number: '+967711112222', timestamp: new Date(Date.now() - 1.8e7).toISOString(),
+    text: 'Welcome to the network.', unread: false },
+];
+
+on('POST', '/api/admin/dinstar/sms/send', (_p, _q, b) => {
+  const text = typeof b?.text === 'string' ? b.text : '';
+  const param = Array.isArray(b?.param) ? b.param : [];
+  if (!text.trim()) return bad('SMS_TEXT_REQUIRED');
+  if (param.length === 0) return bad('SMS_RECIPIENTS_REQUIRED');
+  if (param.length > SMS_MAX_RECIPIENTS) {
+    return bad(`SMS_TOO_MANY_RECIPIENTS: ${param.length} > ${SMS_MAX_RECIPIENTS}`);
+  }
+  // القياس بالبايت لا بالحرف: الحرف العربي بايتان في UTF-8، فـ800 حرف
+  // عربي = 1600 بايت وتتجاوز الحد رغم أن عدد الأحرف يبدو صغيرًا.
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > SMS_MAX_TEXT_BYTES) {
+    return bad(`SMS_TEXT_TOO_LONG: ${bytes} بايت > ${SMS_MAX_TEXT_BYTES}`);
+  }
+
+  const encoding = smsWireEncoding(b?.encoding);
+  const taskId = smsTaskSeq++;
+  const ports = Array.isArray(b?.port) && b.port.length ? b.port : [0];
+  param.forEach((r, i) => smsOutbox.push({
+    taskId, userId: r?.user_id ?? i, number: String(r?.number || ''),
+    port: ports[i % ports.length], status: 'SENT', encoding,
+    sentAt: new Date().toISOString(),
+  }));
+
+  recordAudit({ adminId: adminRow().id, action: 'DINSTAR_SMS_SEND', category: 'SYSTEM',
+    targetId: String(taskId),
+    description: `إرسال SMS إلى ${param.length} مستلمًا (${bytes} بايت، ${encoding})` });
+
+  // 202 = قُبل للتنفيذ لاحقًا — الردّ الطبيعي لـ send_sms لا 200.
+  return { status: 200, data: { error_code: 202, sn: 'dinstar-sn-8g-0001', task_id: taskId } };
+});
+
+on('POST', '/api/admin/dinstar/sms/result', (_p, _q, b) => {
+  const ids = Array.isArray(b?.user_id) ? b.user_id : [];
+  const nums = Array.isArray(b?.number) ? b.number.map(String) : [];
+  const rows = smsOutbox.filter((m) =>
+    (ids.length === 0 && nums.length === 0) || ids.includes(m.userId) || nums.includes(m.number));
+  return ok({ error_code: 200, sn: 'dinstar-sn-8g-0001', result: rows.slice(0, 32) });
+});
+
+on('POST', '/api/admin/dinstar/sms/deliver', () =>
+  ok({ error_code: 200, sn: 'dinstar-sn-8g-0001',
+    result: smsOutbox.slice(-32).map((m) => ({ ...m, deliveryStatus: 'DELIVERED' })) }));
+
+on('GET', '/api/admin/dinstar/sms/incoming', () =>
+  ok({ error_code: 200, sn: 'dinstar-sn-8g-0001', sms: smsInbox }));
+
+on('GET', '/api/admin/dinstar/sms/queue', () =>
+  ok({ error_code: 200, sn: 'dinstar-sn-8g-0001', count: 0 }));
+
+on('POST', '/api/admin/dinstar/sms/stop', (_p, _q, b) => {
+  const taskId = Number(b?.task_id);
+  if (!Number.isFinite(taskId)) return bad('task_id is required');
+  return ok({ error_code: 200, sn: 'dinstar-sn-8g-0001', task_id: taskId });
+});
+
 // ── أسطول DINSTAR: عدة أجهزة ──
 /** عناوين RFC 1918 + الاسترجاع — نطاق الإدارة المسموح للبوابات. */
 /**

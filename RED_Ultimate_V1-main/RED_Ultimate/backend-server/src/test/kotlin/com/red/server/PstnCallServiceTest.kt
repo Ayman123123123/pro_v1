@@ -30,7 +30,7 @@ class PstnCallServiceTest {
         val id = UUID.randomUUID()
         val user = UserAccount(
             id = id,
-            redId = "RED-TEST-PSTN",
+            redId = "90787",
             username = "pstn-test",
             displayName = "PSTN Test",
             status = AccountStatus.APPROVED,

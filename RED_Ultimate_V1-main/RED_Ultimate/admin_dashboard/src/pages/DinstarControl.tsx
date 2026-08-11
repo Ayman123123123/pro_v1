@@ -5,8 +5,9 @@ import {
   Tooltip, Typography, message,
 } from 'antd';
 import {
-  ApiOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, PlusOutlined,
-  RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled, ToolOutlined,
+  ApiOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
+  PlusOutlined, RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
@@ -34,6 +35,14 @@ type FleetPorts = {
   gateways: { gateway: Gateway; ports: Port[]; error?: string | null }[];
   totals: { gateways: number; online: number; ports: number; registered: number; usable: number };
 };
+/**
+ * حدود الرسائل من وثيقة Dinstar HTTP API v1.1 الرسمية — مطابقة لـ
+ * DinstarHardwareService.MAX_SMS_RECIPIENTS / MAX_SMS_TEXT_BYTES.
+ * الرقم 32 الوارد في الوثيقة يخصّ query_sms_result وحده لا الإرسال.
+ */
+const SMS_MAX_RECIPIENTS = 128;
+const SMS_MAX_TEXT_BYTES = 1500;
+
 type ModelInfo = {
   model: string; portCount: number; simSlots: number; supportsVolte: boolean;
   radioCapability: string; codecs: string[];
@@ -95,6 +104,10 @@ export default function DinstarControl() {
   const [loading, setLoading] = useState(false);
   const [ussdTarget, setUssdTarget] = useState<number | null>(null);
   const [ussd, setUssd] = useState('');
+  const [smsTo, setSmsTo] = useState('');
+  const [smsText, setSmsText] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsInbox, setSmsInbox] = useState<any[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [routeResult, setRouteResult] = useState<any>(null);
@@ -174,6 +187,53 @@ export default function DinstarControl() {
       const b = await json(await apiFetch('/api/admin/dinstar/cdr'));
       setCdr(b.cdr || b.query || []);
     } catch (e: any) { message.error(e.message); }
+  };
+
+  /**
+   * أرقام الوجهة — تُفصل بفاصلة أو مسافة أو سطر جديد.
+   * التكرار يُزال: إرسال الرسالة نفسها مرتين لنفس الرقم يُحتسب مرتين
+   * على المشغّل ويصل المستلم مكرّرًا.
+   */
+  const smsRecipients = useMemo(
+    () => Array.from(new Set(
+      smsTo.split(/[\s,،;]+/).map((x) => x.trim()).filter(Boolean),
+    )),
+    [smsTo],
+  );
+
+  /**
+   * القياس بالبايت لا بالحرف — الجهاز يحسب بالبايت.
+   * TextEncoder يعطي طول UTF-8 الفعلي: الحرف العربي بايتان.
+   */
+  const smsBytes = useMemo(() => new TextEncoder().encode(smsText).length, [smsText]);
+
+  /** أي حرف خارج ASCII يفرض unicode فينكمش المقطع من 160 إلى 70 حرفًا. */
+  const smsIsUnicode = useMemo(() => /[^\x00-\x7F]/.test(smsText), [smsText]);
+
+  const loadInbox = useCallback(async () => {
+    try {
+      const b = await json(await apiFetch('/api/admin/dinstar/sms/incoming'));
+      setSmsInbox(b.sms || b.result || []);
+    } catch (e: any) { message.error(e.message); }
+  }, []);
+
+  const sendSms = async () => {
+    setSmsSending(true);
+    try {
+      const body = {
+        text: smsText,
+        // الترميز يُحسم هنا لا في الجهاز: تركه للاستنتاج التلقائي كان
+        // يسقط صامتًا إلى unicode ويضاعف عدد المقاطع.
+        encoding: smsIsUnicode ? 'unicode' : 'gsm-7bit',
+        param: smsRecipients.map((number, i) => ({ number, user_id: i + 1 })),
+      };
+      const b = await json(await apiFetch('/api/admin/dinstar/sms/send', {
+        method: 'POST', body: JSON.stringify(body),
+      }));
+      // 202 = قُبلت للإرسال لاحقًا، وهي نجاح لا فشل.
+      message.success(`أُرسلت إلى ${smsRecipients.length} مستلمًا (مهمة ${b.task_id ?? '—'})`);
+      setSmsText(''); setSmsTo('');
+    } catch (e: any) { message.error(e.message); } finally { setSmsSending(false); }
   };
 
   /**
@@ -449,6 +509,73 @@ export default function DinstarControl() {
             { title: 'الحالة', dataIndex: 'status' },
           ]}
         />
+      </Card>
+
+      {/* ── الرسائل القصيرة ── */}
+      <Card
+        title={<><MessageOutlined /> الرسائل القصيرة (SMS)</>}
+        extra={<Button icon={<ReloadOutlined />} onClick={loadInbox}>تحديث الوارد</Button>}
+      >
+        <Alert
+          type="info" showIcon style={{ marginBottom: 16 }}
+          message="مسار منفصل عن رسائل RED"
+          description={
+            'رسائل RED بين المستخدمين مشفّرة طرفيًا ولا تمرّ من هنا إطلاقًا. '
+            + 'هذه الشاشة تخاطب شبكة GSM عبر شرائح البوابة، ونصّها يمرّ بالمشغّل كأي رسالة عادية. '
+            + 'لا تُستخدم للتسجيل ولا لرموز التحقق.'
+          }
+        />
+        <Row gutter={16}>
+          <Col xs={24} lg={11}>
+            <Divider titlePlacement="end" plain>إرسال</Divider>
+            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+              <Input
+                value={smsTo} onChange={(e) => setSmsTo(e.target.value)}
+                placeholder="أرقام الوجهة مفصولة بفاصلة — 777123456,733445566"
+              />
+            </Space.Compact>
+            <Input.TextArea
+              rows={4} value={smsText} onChange={(e) => setSmsText(e.target.value)}
+              placeholder="نص الرسالة"
+            />
+            <Space style={{ marginTop: 8, width: '100%', justifyContent: 'space-between' }}>
+              <Typography.Text type={smsBytes > SMS_MAX_TEXT_BYTES ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                {smsBytes} / {SMS_MAX_TEXT_BYTES} بايت · {smsRecipients.length} / {SMS_MAX_RECIPIENTS} مستلمًا
+                {' · '}{smsIsUnicode ? 'unicode (70 حرفًا/مقطع)' : 'gsm-7bit (160 حرفًا/مقطع)'}
+              </Typography.Text>
+              <Button
+                type="primary" loading={smsSending} onClick={sendSms}
+                disabled={
+                  smsBytes === 0 || smsBytes > SMS_MAX_TEXT_BYTES
+                  || smsRecipients.length === 0 || smsRecipients.length > SMS_MAX_RECIPIENTS
+                }
+              >
+                إرسال
+              </Button>
+            </Space>
+            <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8 }}>
+              الحدّ من وثيقة Dinstar HTTP API: {SMS_MAX_RECIPIENTS} مستلمًا و{SMS_MAX_TEXT_BYTES} بايت للطلب
+              الواحد. القياس بالبايت لا بالحرف — الحرف العربي بايتان، فـ800 حرف عربي تتجاوز الحد.
+            </Typography.Paragraph>
+          </Col>
+          <Col xs={24} lg={13}>
+            <Divider titlePlacement="end" plain>الوارد</Divider>
+            <Table
+              size="small" dataSource={smsInbox} rowKey={(r: any) => `${r.index}-${r.timestamp}`}
+              locale={{ emptyText: <Empty description="لا توجد رسائل واردة" /> }}
+              pagination={{ pageSize: 5, hideOnSinglePage: true }}
+              columns={[
+                { title: 'المنفذ', dataIndex: 'port', width: 70, render: (v: number) => `SIM ${v + 1}` },
+                { title: 'المرسل', dataIndex: 'number', width: 140 },
+                { title: 'النص', dataIndex: 'text', ellipsis: true },
+                {
+                  title: 'الوقت', dataIndex: 'timestamp', width: 150,
+                  render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—'),
+                },
+              ]}
+            />
+          </Col>
+        </Row>
       </Card>
 
       {/* ── إضافة بوابة ── */}

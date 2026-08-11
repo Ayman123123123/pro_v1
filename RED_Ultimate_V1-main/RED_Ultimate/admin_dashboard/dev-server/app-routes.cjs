@@ -142,22 +142,64 @@ const COMMON_PASSWORDS = new Set([
 ]);
 
 /**
- * توليد معرّف RED — منقول حرفيًا عن `auth/RedIdGenerator.kt`:
- * البادئة `YNS-` ومجموعتان من 4 رموز، من أبجدية تستبعد 0/1/I/O
- * لمنع اللبس البصري. أي صيغة أخرى يرفضها التطبيق:
- * `RED_ID_PATTERN` في red-app/ui/RedDashboard.kt يتطلب هذا الشكل بالضبط،
- * فمعرّف مثل «RED-1014» يجعل كل أزرار الاتصال والإضافة معطّلة في التطبيق.
+ * معرّف يونس — خمسة أرقام. منقول عن `auth/RedIdGenerator.kt`.
+ *
+ * المدى 10001..99999 (89,999 معرّفًا؛ 10000 محجوز للنظام). لا يبدأ بصفر حتى يبقى الطول
+ * خمسة دائمًا ولا يضيع الصفر عند نسخه إلى حقل رقمي.
+ *
+ * التوليد عشوائي تشفيريًا لا تسلسلي: المعرّف التسلسلي يكشف ترتيب
+ * التسجيل وحجم القاعدة.
  */
-const RED_ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+/** محجوز لمُرسِل رسائل النظام — لا يُخصَّص لمستخدم. */
+const YOUNES_ID_SYSTEM = '10000';
+const YOUNES_ID_MIN = 10001;
+const YOUNES_ID_MAX = 99999;
+const YOUNES_ID_SPACE = YOUNES_ID_MAX - YOUNES_ID_MIN + 1;
+const YOUNES_ID_PATTERN = /^[1-9][0-9]{4}$/;
+
 const nextRedId = () => {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const pick = () => Array.from({ length: 4 },
-      () => RED_ID_ALPHABET[crypto.randomInt(RED_ID_ALPHABET.length)]).join('');
-    const redId = `YNS-${pick()}-${pick()}`;
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const redId = String(YOUNES_ID_MIN + crypto.randomInt(YOUNES_ID_SPACE));
     if (!get('SELECT 1 x FROM users WHERE red_id = ?', redId)) return redId;
   }
-  throw new Error('Unable to allocate a unique YOUNES ID');
+  throw new Error(`تعذّر تخصيص معرّف يونس — الفضاء (${YOUNES_ID_SPACE}) شارف على الامتلاء`);
 };
+
+/** تطبيع مدخل البحث: يقبل البادئات القديمة ويُبقي الأرقام. */
+const normalizeYounesId = (raw) => {
+  const digits = String(raw || '').toUpperCase()
+    .replace(/^YNS-?/, '').replace(/^RED-?/, '').replace(/\D/g, '');
+  if (!YOUNES_ID_PATTERN.test(digits)) return null;
+  // معرّف النظام ليس مستخدمًا ولا يُبحث عنه.
+  return digits === YOUNES_ID_SYSTEM ? null : digits;
+};
+
+/**
+ * محدّد معدل البحث في الدليل — نافذة منزلقة لكل مستخدم.
+ *
+ * ضروري لأن معرّف يونس صار خمسة أرقام: 90,000 احتمالًا قابلة للتعداد
+ * الكامل. بلا هذا الحد يستطيع حساب معتمد واحد حصاد كل المستخدمين
+ * (الاسم والصورة وحالة الاتصال) بتجربة كل الأرقام.
+ *
+ * الحد 20 بحثًا في الدقيقة: يكفي الاستخدام البشري الطبيعي بفارق كبير،
+ * ويجعل مسح الفضاء كاملًا يستغرق أكثر من ثلاثة أشهر متواصلة.
+ */
+const DIRECTORY_WINDOW_MS = 60_000;
+const DIRECTORY_MAX_QUERIES = 20;
+const directoryHits = new Map();
+
+function directoryRateLimiter(userId) {
+  const now = Date.now();
+  const hits = (directoryHits.get(userId) || []).filter((t) => now - t < DIRECTORY_WINDOW_MS);
+  if (hits.length >= DIRECTORY_MAX_QUERIES) {
+    const retryAfterSeconds = Math.ceil((DIRECTORY_WINDOW_MS - (now - hits[0])) / 1000);
+    directoryHits.set(userId, hits);
+    return { allowed: false, retryAfterSeconds };
+  }
+  hits.push(now);
+  directoryHits.set(userId, hits);
+  return { allowed: true, remaining: DIRECTORY_MAX_QUERIES - hits.length };
+}
 
 /** رسالة الحظر كما في RegistrationService.blockedResponse. */
 const BLOCKED_MESSAGE = {
@@ -296,12 +338,20 @@ module.exports = function registerAppRoutes(on) {
     if (!me) return unauthorized();
     const term = String(q.get('query') || '').trim();
     if (term.length < 3 || term.length > 32) return bad('Search query must contain 3-32 characters');
-    // البحث بمعرّف RED أو باسم المستخدم — والنتائج المعتمدة فقط.
-    // تُقبل البادئتان: `YNS-` هي ما يولّده RedIdGenerator، و`RED-` مقبولة
-    // أيضًا لأن PublicDirectoryController يفحصها.
-    const upper = term.toUpperCase();
-    const matches = upper.startsWith('YNS-') || upper.startsWith('RED-')
-      ? [get("SELECT * FROM users WHERE red_id = ? AND status='APPROVED'", upper)]
+
+    // ⚠️ حماية التعداد — لازمة بعد اختصار المعرّف إلى خمسة أرقام.
+    // الفضاء 90,000 فقط، فبحثٌ بلا حدّ يعني حصاد الدليل كاملًا في
+    // دقائق. الصيغة الطويلة السابقة كانت تجعل هذا مستحيلًا عمليًا،
+    // والتعويض الآن بضبط المعدل لا بالمعرّف نفسه.
+    const limited = directoryRateLimiter(me.id);
+    if (!limited.allowed) {
+      return { status: 429, data: { error: 'DIRECTORY_RATE_LIMITED', retryAfterSeconds: limited.retryAfterSeconds } };
+    }
+
+    // البحث بمعرّف يونس (خمسة أرقام) أو باسم المستخدم — المعتمدون فقط.
+    const asId = normalizeYounesId(term);
+    const matches = asId
+      ? [get("SELECT * FROM users WHERE red_id = ? AND status='APPROVED'", asId)]
       : all(`SELECT * FROM users WHERE status='APPROVED'
              AND (lower(username) LIKE ? OR display_name LIKE ?) LIMIT 20`,
       `%${term.toLowerCase()}%`, `%${term}%`);
