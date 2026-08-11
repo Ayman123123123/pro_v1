@@ -15,11 +15,11 @@ class CallEventPublisherTest {
     @Test
     fun `callStarted publishes CallStarted event`() {
         val publisher = CallEventPublisher(CollectingPublisher(collected))
-        publisher.callStarted("c1", "YNS-AAA", "YNS-BBB", "VOICE", "RED")
+        publisher.callStarted("c1", "84870", "82937", "VOICE", "RED")
         assertEquals(1, collected.size)
         val event = collected.first() as CallEvent.CallStarted
         assertEquals("c1", event.callId)
-        assertEquals("YNS-AAA", event.initiatorId)
+        assertEquals("84870", event.initiatorId)
         assertEquals("VOICE", event.type)
     }
 

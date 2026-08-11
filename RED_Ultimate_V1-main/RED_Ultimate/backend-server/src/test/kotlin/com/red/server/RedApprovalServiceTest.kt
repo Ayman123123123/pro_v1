@@ -31,7 +31,7 @@ class RedApprovalServiceTest {
 
     @Test
     fun `admin approval signs and approves every pending device`() {
-        val user = UserAccount(redId = "RED-TEST-0001", username = "test.user", displayName = "Test")
+        val user = UserAccount(redId = "43926", username = "test.user", displayName = "Test")
         val device = UserDevice(user = user, identityFingerprint = "fingerprint")
         val adminId = UUID.randomUUID()
         val expiry = Instant.now().plusSeconds(3600)

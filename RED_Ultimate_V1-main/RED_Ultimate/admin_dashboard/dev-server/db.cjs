@@ -47,7 +47,9 @@ const iso = (daysAgo = 0, hoursAgo = 0) =>
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  red_id TEXT NOT NULL UNIQUE,
+  -- معرّف يونس: خمسة أرقام. القيد يطابق V24__Younes_Id_Five_Digits.sql —
+  -- التحقق في الشيفرة وحده يُلتفّ عليه بأي إدخال مباشر.
+  red_id TEXT NOT NULL UNIQUE CHECK (red_id GLOB '[1-9][0-9][0-9][0-9][0-9]'),
   username TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'PENDING',
@@ -470,9 +472,9 @@ function seedIfEmpty() {
     VALUES (?,?,?,?,?,?,?,?,?,?)`);
 
   /**
-   * معرّفات RED بصيغة الخادم الحقيقية: YNS-XXXX-XXXX من أبجدية
-   * RedIdGenerator.kt نفسها (بلا 0/1/I/O لمنع اللبس البصري).
-   * ثابتة عمدًا كي تبقى قابلة للرجوع إليها في التوثيق والفحوص.
+   * معرّفات يونس بصيغة الخادم: خمسة أرقام 10000..99999
+   * (RedIdGenerator.PATTERN). ثابتة عمدًا كي تبقى قابلة للرجوع
+   * إليها في التوثيق والفحوص. المعرّف الأول (المسؤول) 10001.
    */
   const people = [
     ['younes_sovereign', 'يونس السيادي', 'APPROVED', 'ADMIN', 1, 100, 0],
@@ -488,8 +490,8 @@ function seedIfEmpty() {
   ];
 
   const SEED_RED_IDS = [
-    'YNS-7K4M-82QX', 'YNS-QD3T-9WHB', 'YNS-5NRF-KC72', 'YNS-J8PV-34XD', 'YNS-2GHS-QM9L',
-    'YNS-BT6W-PZ48', 'YNS-9XLC-K5RT', 'YNS-M42D-HV7N', 'YNS-P7QB-3JKF', 'YNS-46VZ-TSGW',
+    '10001', '24837', '51092', '38715', '67204',
+    '19558', '83641', '42970', '75326', '90183',
   ];
 
   people.forEach(([username, displayName, status, role, pstn, limit, daysAgo], i) => {

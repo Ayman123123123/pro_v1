@@ -24,7 +24,7 @@ class DeviceEnrollmentServiceTest {
         val bytes = ByteArray(64) { 7 }
         val encoded = Base64.getEncoder().encodeToString(bytes)
         val device = service.enroll(
-            UserAccount(redId = "RED-TEST-0001", username = "test", displayName = "Test"),
+            UserAccount(redId = "43926", username = "test", displayName = "Test"),
             DeviceEnrollmentRequest("Pixel", registrationId = 42, protocolDeviceId = 1, signedPreKeyId = 7, kyberPreKeyId = 8, identityKey = encoded, signedPreKey = encoded,
                 kyberPreKey = encoded, signedPreKeySignature = encoded, kyberPreKeySignature = encoded)
         )
