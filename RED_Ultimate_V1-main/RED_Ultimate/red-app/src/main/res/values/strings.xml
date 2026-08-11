@@ -39,4 +39,8 @@
     <string name="status_encryption_failed">فشل التشفير: %1$s</string>
     <string name="status_session_expired">انتهت الجلسة — افتح يونس لتسجيل الدخول</string>
     <string name="status_group_encryption_failed">تعذر تشفير المجموعة: %1$s</string>
+
+    <!-- قنوات إشعارات إضافية -->
+    <string name="channel_dinstar_name">Dinstar Gateway</string>
+    <string name="channel_system_name">نظام يونس</string>
 </resources>
