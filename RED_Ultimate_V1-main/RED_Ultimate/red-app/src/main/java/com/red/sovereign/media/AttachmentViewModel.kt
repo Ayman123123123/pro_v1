@@ -41,6 +41,20 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** يرسل مرفقاً داخل مجموعة عبر مسار تشفير المجموعة (Sender Keys). */
+    fun sendToGroup(uri: Uri, group: com.red.sovereign.groups.Group) = viewModelScope.launch {
+        if (state is AttachmentState.Working) return@launch
+        state = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
+        when (val result = repository.prepare(uri, group.id)) {
+            is ApiResult.Error -> state = AttachmentState.Error(result.message)
+            is ApiResult.Success -> {
+                val manifestJson = result.value.manifestJson
+                RedConnectionService.sendGroupText(getApplication(), group, manifestJson)
+                state = AttachmentState.Sent(result.value.name)
+            }
+        }
+    }
+
     fun download(manifestJson: String) = viewModelScope.launch {
         if (state is AttachmentState.Working) return@launch
         state = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")

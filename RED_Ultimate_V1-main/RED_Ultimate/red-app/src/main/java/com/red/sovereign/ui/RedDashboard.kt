@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.InsertDriveFile
@@ -94,6 +96,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingActionButton
@@ -724,6 +728,9 @@ private fun ChatHubScreen(
     var groupConversationId by remember { mutableStateOf<String?>(null) }
     var showGroupEmoji by remember { mutableStateOf(false) }
     var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
+    var showGroupAttachmentSheet by remember { mutableStateOf(false) }
+    var showGroupVoicePanel by remember { mutableStateOf(false) }
+    var showGroupMenu by remember { mutableStateOf(false) }
     val groupUnread = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
@@ -804,6 +811,21 @@ private fun ChatHubScreen(
     }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) attachments.exportTo(uri)
+    }
+    // 📎 مرفقات المجموعة — تُرسل عبر مسار تشفير المجموعة (Sender Keys)
+    val groupFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val group = groups.groups.firstOrNull { it.id == groupConversationId }
+        if (uri != null && group != null) attachments.sendToGroup(uri, group)
+    }
+    val groupCameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            val file = File(context.cacheDir, "camera/latest_photo.jpg")
+            val group = groups.groups.firstOrNull { it.id == groupConversationId }
+            if (file.isFile && group != null) {
+                val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                attachments.sendToGroup(providerUri, group)
+            }
+        }
     }
     val cameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
@@ -1201,7 +1223,16 @@ private fun ChatHubScreen(
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
                         IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو جماعي", tint = YounesEmerald) }
-                        IconButton({ onManageGroup(openGroup.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
+                        Box {
+                            IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
+                            DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
+                                DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
+                                DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
+                                DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
+                                DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
+                                DropdownMenuItem(text = { Text("مغادرة المجموعة") }, leadingIcon = { Icon(Icons.Default.Logout, null) }, onClick = { showGroupMenu = false; groups.leave(openGroup) { groupConversationId = null } })
+                            }
+                        }
                     }
                 }
                 val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
@@ -1247,6 +1278,7 @@ private fun ChatHubScreen(
                     }
                 }
                 Row(verticalAlignment = Alignment.Bottom) {
+                    IconButton({ showGroupAttachmentSheet = true }) { Icon(Icons.Default.AttachFile, "إرفاق بالمجموعة") }
                     OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") }, maxLines = 4)
                     IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
                     FilledIconButton({
@@ -1260,6 +1292,17 @@ private fun ChatHubScreen(
                     }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
                 }
                 if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
+                if (showGroupAttachmentSheet) AttachmentSheet(
+                    onCamera = {
+                        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+                        val file = File(dir, "latest_photo.jpg")
+                        val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                        groupCameraPicker.launch(providerUri)
+                    },
+                    onGallery = { groupFilePicker.launch(arrayOf("image/*", "video/*")) },
+                    onDocument = { groupFilePicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
+                    onDismiss = { showGroupAttachmentSheet = false }
+                )
             }
         }
     }
