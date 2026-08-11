@@ -20,7 +20,15 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — fix: إصلاح 12 عطل مؤكّد من التدقيق العميق + حارس عقد
+## 2026-08-11 — chore: حذف شاشتَي الاستطلاعات/الفعاليات الميتتين (1,871 سطر)
+- حذف EventsScreen.kt (784) + PollsScreen.kt (766) + EventsApi.kt (166) + PollsApi.kt (155) + PollsApiTest.kt
+- الشاشتان كانتا ميتتين (صفر نقطة دخول) + مختلطتين إداري/مستخدم (نصفهما يفشل 403 للمستخدم العادي)
+- متوافق مع الميثاق: ميزة مجتمعية (مرحلة E) تسبق ترتيب الـ Alpha (الرسائل + المكالمات + الإدارة)
+- الـ backend (ContentController/Service + V20 migration) ولوحة الإدارة (ContentManagement.tsx) تبقى تدير الميزة
+- استثناءات SecurityConfig للمستخدم تبقى جاهزة لإعادة واجهة نظيفة عند مرحلة E
+- Inline Polls في المجموعات (InlinePollCard → RichMessage.poll) مستقلة ولم تُمسّ — تعمل
+- صفر ارتدادات (تأكد: صفر مرجع خارجي قبل الحذف) · فاحص التكامل 23/23 أخضر
+- التوثيق: docs/AUDIT_FIXES_VERIFIED_AR.md (§ما لم يُنفّذ)
 - **عطل تصريف #1:** 3 دوال مفقودة في YounesCallService (silenceRinger/holdActiveCall/resumeRinger) — PhoneStateReceiver كان يستدعيها بلا تعريف ⇒ لا APK
 - **عطل تصريب #2:** ApiResult.Success arity (4 مواضع بوسيط واحد بدل اثنين)
 - **سباق التوكن:** Mutex مشترك + فحص مزدوج + حذف runBlocking — يمنع الطرد الجماعي للأجهزة عند 401 متوازي
