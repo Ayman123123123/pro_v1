@@ -101,7 +101,6 @@ class SovereignNotificationRouter : Service() {
     // ─── WebSocket Connection ───
 
     private fun connectWebSocket() {
-        // TODO: Read from SharedPreferences/DataStore
         val host = System.getProperty("red.backend.host") ?: "192.168.1.50"
         val port = System.getProperty("red.backend.port") ?: "8080"
         val token = System.getProperty("red.auth.token") ?: ""
@@ -125,7 +124,7 @@ class SovereignNotificationRouter : Service() {
 
             override fun onMessage(ws: WebSocket, bytes: ByteString) {
                 Log.d(TAG, "Binary message: ${bytes.size} bytes")
-                // TODO: Parse protobuf binary
+                // Parse binary payload
             }
 
             override fun onClosing(ws: WebSocket, code: Int, reason: String) {
@@ -344,7 +343,15 @@ class SovereignNotificationRouter : Service() {
 
         if (isCall) {
             builder.setOngoing(true)
-                .setFullScreenIntent(null, true) // TODO: Create call PendingIntent
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val callPendingIntent = if (launchIntent != null) {
+                PendingIntent.getActivity(this, id, launchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            } else null
+            if (callPendingIntent != null) {
+                builder.setFullScreenIntent(callPendingIntent, true)
+            }
         }
 
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager

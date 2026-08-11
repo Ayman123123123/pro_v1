@@ -35,6 +35,7 @@ echo "1) تشغيل كامل عبر Docker Compose (الخيار الموصى ب
 echo "2) تشغيل سريع للتطوير (لوحة الإدارة + الـ API المحلي)"
 echo "3) بناء تطبيق الأندروID (APK) وتثبيته على الهاتف"
 echo "4) فحص الاتصال ببوابة DINSTAR UC2000-VE-8G"
+echo "5) تهيئة وإصلاح شهادات ومفاتيح NGINX SSL (Self-Healing TLS)"
 read -p "أدخل رقم الخيار [1]: " CHOICE
 CHOICE=${CHOICE:-1}
 
@@ -55,6 +56,7 @@ case $CHOICE in
       docker compose up -d --build
       echo -e "${GREEN}✅ تم تشغيل جميع الخدمات بنجاح!${NC}"
       echo -e "🔗 لوحة الإدارة: ${CYAN}http://$LOCAL_IP:8088${NC} أو ${CYAN}http://localhost:8088${NC}"
+      echo -e "🔗 الاتصال الآمن: ${CYAN}https://$LOCAL_IP:8443${NC}"
       echo -e "🔗 واجهة الباكند: ${CYAN}http://$LOCAL_IP:8080/health${NC}"
     else
       echo -e "${RED}⚠️ Docker غير مشغل أو غير مثبت. جاري التحويل للتشغيل المحلي السريع...${NC}"
@@ -94,5 +96,10 @@ case $CHOICE in
   4)
     echo -e "${CYAN}🔍 جاري فحص الاتصال ببوابة DINSTAR على 192.168.11.1:443...${NC}"
     curl -k -s --connect-timeout 3 https://192.168.11.1/ || echo -e "${RED}❌ تعذر الوصول لـ 192.168.11.1. تأكد من ضبط IP كرت الشبكة على 192.168.11.X.${NC}"
+    ;;
+
+  5)
+    echo -e "${CYAN}🔒 جاري فحص وإصلاح شهادات NGINX Proxy و TLS...${NC}"
+    "$ROOT_DIR/scripts/fix-red-proxy-certs.sh"
     ;;
 esac
