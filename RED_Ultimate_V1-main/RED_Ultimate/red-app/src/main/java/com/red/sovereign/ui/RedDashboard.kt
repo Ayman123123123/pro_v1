@@ -712,6 +712,7 @@ private fun ChatHubScreen(
     var showDirectory by remember { mutableStateOf(false) }
     var showMessageSearch by remember { mutableStateOf(false) }
     var messageSearchQuery by remember { mutableStateOf("") }
+    var showMediaGallery by remember { mutableStateOf(false) }
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
@@ -969,6 +970,7 @@ private fun ChatHubScreen(
                         ConferenceService.join(context, room, account.redId, true)
                     }) { Icon(Icons.Default.Groups, "مؤتمر فيديو جماعي") }
                     IconButton({ showMessageSearch = true }) { Icon(Icons.Default.Search, "البحث في المحادثة") }
+                    IconButton({ showMediaGallery = true }) { Icon(Icons.Default.Photo, "الوسائط المشتركة") }
                     IconButton({ safety.open(target) }) { Icon(Icons.Default.Security, "رمز الأمان") }
                     if (activePerson != null) IconButton({ selectedContact = activePerson }) { Icon(Icons.Default.MoreVert, "خيارات المحادثة") }
                 }
@@ -1575,6 +1577,37 @@ private fun ChatHubScreen(
                 ) { Text("إرسال الاستطلاع") }
             },
             dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("إلغاء") } }
+        )
+    }
+    if (showMediaGallery && target.isNotBlank()) {
+        val convKey = conversationId(account.redId, target)
+        val mediaMsgs = decrypted.filter { it.conversationId == convKey && (it.type == "IMAGE" || it.type == "VIDEO" || it.type == "FILE" || it.type == "AUDIO") }
+        AlertDialog(
+            onDismissRequest = { showMediaGallery = false },
+            title = { Text("الوسائط المشتركة (${mediaMsgs.size})") },
+            text = {
+                if (mediaMsgs.isEmpty()) {
+                    Text("لا توجد وسائط مشتركة بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(Modifier.height(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(mediaMsgs, key = { it.id }) { m ->
+                            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    when (m.type) {
+                                        "IMAGE" -> Icon(Icons.Default.Photo, null, tint = YounesEmerald)
+                                        "VIDEO" -> Icon(Icons.Default.Videocam, null, tint = AqyalCyanGlow)
+                                        "AUDIO" -> Icon(Icons.Default.MusicNote, null, tint = AqyalGold)
+                                        else -> Icon(Icons.Default.InsertDriveFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(if (m.type == "RICH_TEXT") messageDisplayText(m) else "وسيط مشفر", Modifier.weight(1f).padding(horizontal = 10.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                    Text(relativeTime(m.timestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ showMediaGallery = false }) { Text("إغلاق") } }
         )
     }
     if (showMessageSearch) AlertDialog(
