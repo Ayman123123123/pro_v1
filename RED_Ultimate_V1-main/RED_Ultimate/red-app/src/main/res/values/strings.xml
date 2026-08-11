@@ -29,6 +29,8 @@
     <string name="channel_connection_name">اتصال يونس المحلي</string>
     <string name="notif_new_message_title">رسالة يونس جديدة</string>
     <string name="notif_new_message_body">رسالة مشفرة من %1$s</string>
+    <string name="notif_group_message_title">رسالة مجموعة جديدة</string>
+    <string name="notif_voice_message_title">رسالة صوتية جديدة</string>
     <string name="notif_connection_title">يونس — الاتصال السيادي</string>
     <string name="status_connecting">جارٍ الاتصال…</string>
     <string name="status_connected_local">متصل بخادم يونس المحلي</string>

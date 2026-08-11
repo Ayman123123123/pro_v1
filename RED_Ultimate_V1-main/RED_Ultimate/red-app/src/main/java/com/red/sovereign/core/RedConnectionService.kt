@@ -245,7 +245,7 @@ class RedConnectionService : Service() {
                             }
                             if (SettingsRuntime.current.notificationEnabled) {
                                 currentConversationId = message.conversationId
-                                notifyEncryptedMessage(message.senderId, preview)
+                                notifyEncryptedMessage(message.senderId, preview, message.type)
                             }
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }
@@ -295,7 +295,7 @@ class RedConnectionService : Service() {
             runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
         }
         if (SettingsRuntime.current.notificationEnabled) {
-            notifyEncryptedMessage(message.senderId, preview)
+            notifyEncryptedMessage(message.senderId, preview, message.type)
         }
     }
 
@@ -310,17 +310,37 @@ class RedConnectionService : Service() {
         }.getOrNull()
     }
 
-    private fun notifyEncryptedMessage(sender: String, plaintext: String?) {
+    /** إشعار رسالة (فردية أو مجموعة) — يدعم التجميع والمعاينة المحسّنة. */
+    private fun notifyEncryptedMessage(sender: String, plaintext: String?, messageType: String = "TEXT") {
         val manager = getSystemService(NotificationManager::class.java)
-        val preview = plaintext?.take(120)?.takeIf { SettingsRuntime.current.notificationPreview }
         val convoId = currentConversationId ?: sender
-        manager.notify(sender.hashCode(), NotificationCompat.Builder(this, MESSAGE_CHANNEL)
+        val isGroup = convoId.length > 32
+        val rawPreview = plaintext?.take(120)
+        val preview = rawPreview?.takeIf { SettingsRuntime.current.notificationPreview }
+        val body = preview ?: getString(com.red.sovereign.R.string.notif_new_message_body, sender)
+
+        val builder = NotificationCompat.Builder(this, MESSAGE_CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_chat)
-            .setContentTitle(getString(com.red.sovereign.R.string.notif_new_message_title))
-            .setContentText(preview ?: getString(com.red.sovereign.R.string.notif_new_message_body, sender))
-            .setContentIntent(openAppIntent(sender, convoId))
             .setAutoCancel(true)
-            .build())
+            .setContentIntent(openAppIntent(sender, convoId))
+
+        if (isGroup) {
+            // تجميع إشعارات المجموعة في إشعار واحد قابل للتوسيع
+            val groupKey = "group_$convoId"
+            val groupSender = sender.take(12)
+            builder
+                .setGroup(groupKey)
+                .setGroupSummary(true)
+                .setContentTitle(getString(com.red.sovereign.R.string.notif_group_message_title))
+                .setContentText("$groupSender: $body")
+                .setStyle(NotificationCompat.BigTextStyle().bigText("$groupSender: $body"))
+        } else {
+            builder
+                .setContentTitle(if (messageType == "VOICE") getString(com.red.sovereign.R.string.notif_voice_message_title) else getString(com.red.sovereign.R.string.notif_new_message_title))
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        }
+        manager.notify(sender.hashCode(), builder.build())
     }
 
     private fun connectionNotification(text: String) = NotificationCompat.Builder(this, CONNECTION_CHANNEL)
