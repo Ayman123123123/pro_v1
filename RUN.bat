@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
 title YOUNES Sovereign RED Ultimate V1
 cls
@@ -31,16 +32,21 @@ if "%CHOICE%"=="" set CHOICE=1
 
 if "%CHOICE%"=="1" (
     echo.
-    echo 🐳 جاري تشغيل الحاويات عبر Docker Compose...
+    echo 🐳 تشغيل آمن: توليد أسرار عشوائية + فحص Compose + انتظار الجاهزية...
     cd /d "%ROOT%"
-    if not exist .env (
-        copy .env.example .env >nul
-        echo ⚠️  تم إنشاء .env من القالب — عدّل الأسرار قبل الإنتاج!
+    where bash >nul 2>&1 || (
+        echo ❌ يلزم Git Bash لتشغيل مسار التهيئة الآمن scripts/local-first-run.sh
+        pause
+        exit /b 1
     )
-    docker compose up -d --build
-    echo.
-    echo ✅ اللوحة: http://localhost:8088
-    echo ✅ الصحة: http://localhost:8080/health
+    for /f %%i in ('powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 ^| Where-Object {$_.IPAddress -notlike '127.*' -and $_.PrefixOrigin -ne 'WellKnown'} ^| Select-Object -First 1 -ExpandProperty IPAddress)"') do set "SERVER_IP=%%i"
+    if "!SERVER_IP!"=="" set "SERVER_IP=127.0.0.1"
+    bash scripts/local-first-run.sh --server-ip "!SERVER_IP!"
+    if errorlevel 1 (
+        echo ❌ فشل التشغيل؛ راجع الخطأ أعلاه.
+        pause
+        exit /b 1
+    )
     pause
     exit /b
 )

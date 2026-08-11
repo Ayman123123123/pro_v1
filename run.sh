@@ -31,10 +31,8 @@ case $OPT in
     cd admin_dashboard && npm install && npm run dev
     ;;
   2)
-    echo "🐳 تشغيل Docker Compose..."
-    [ ! -f .env ] && cp .env.example .env
-    docker compose up -d --build
-    echo "✅ اللوحة تعمل على: http://localhost:8088 (HTTPS: https://localhost:8443)"
+    echo "🐳 تشغيل Docker Compose عبر التهيئة الآمنة وفحوص الجاهزية..."
+    ./scripts/local-first-run.sh "${SERVER_IP:-}"
     ;;
   3)
     echo "🔍 فحص الاتصال ببوابة DINSTAR..."

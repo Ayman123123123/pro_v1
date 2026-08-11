@@ -3,16 +3,18 @@
 
 [versions]
 # SDK & Build Versions
+# AGP 9.2.1 is the newest line already SHA-256 pinned in this repository.
+# It supports API 37 and requires Gradle 9.4.1 / Build Tools 36.0.0.
 buildTools = "36.0.0"
 compileSdk = "37"
-targetSdk = "35"
-minSdk = "23"
-ndk = "28.0.13004108"
+targetSdk = "37"
+minSdk = "26"
+ndk = "28.2.13676358"
 javaVersion = "21"
 kotlinJvmTarget = "21"
-gradle = "9.2.1"
-kotlin = "2.2.20"
+kotlin = "2.3.10"
 android-gradle-plugin = "9.2.1"
+ksp = "2.3.11"
 
 # Other versions
 androidx-appcompat = "1.7.1"
@@ -21,7 +23,7 @@ androidx-camera = "1.6.1"
 androidx-fragment = "1.8.9"
 androidx-lifecycle = "2.10.0"
 androidx-lifecycle-navigation3 = "2.10.0"
-androidx-media3 = "1.9.1"
+androidx-media3 = "1.11.0"
 webrtc-sdk = "144.7559.09"
 androidx-navigation = "2.9.8"
 androidx-navigation3-core = "1.1.4"
@@ -33,16 +35,18 @@ lottie-compose = "6.7.1"
 haze = "1.5.3"
 
 # Other versions
-libsignal-client = "0.86.5"
+# 0.99.1 is SHA-256 pinned and keeps the existing PQXDH/Kyber session API.
+# 0.100.0 makes SPQR mandatory for every session and needs a protocol rollout.
+libsignal-client = "0.99.1"
 mp4parser = "1.9.39"
-androidx-room = "2.6.1"
+androidx-room = "2.8.4"
 accompanist = "0.28.0"
 nanohttpd = "2.3.1"
 navigation-safe-args-gradle-plugin = "2.9.8"
 protobuf-gradle-plugin = "0.10.0"
 ktlint = "14.2.0"
 androidx-paging = "3.3.5"
-androidx-work = "2.10.2"
+androidx-work = "2.11.2"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
@@ -53,17 +57,20 @@ ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
 androidx-navigation-safe-args = { id = "androidx.navigation.safeargs", version.ref = "navigation-safe-args-gradle-plugin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version = "2.52" }
 
 [libraries]
 # Android Plugins
-gradle = { module = "com.android.tools.build:gradle", version.ref = "gradle" }
 android-library = { module = "com.android.library:com.android.library.gradle.plugin", version.ref = "android-gradle-plugin" }
 android-application = { module = "com.android.application:com.android.application.gradle.plugin", version.ref = "android-gradle-plugin" }
 androidx-benchmark-gradle-plugin = "androidx.benchmark:benchmark-gradle-plugin:1.4.1"
 
 # Compose
 androidx-compose-bom = "androidx.compose:compose-bom:2026.06.01"
+androidx-compose-animation = { module = "androidx.compose.animation:animation" }
+androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
+androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-material3-adaptive = { module = "androidx.compose.material3.adaptive:adaptive"}
 androidx-compose-material3-adaptive-layout = { module = "androidx.compose.material3.adaptive:adaptive-layout"}
@@ -103,6 +110,7 @@ accompanist-drawablepainter = "com.google.accompanist:accompanist-drawablepainte
 android-tools-desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
 
 # Kotlin
+kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
 kotlin-stdlib-jdk8 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -110,7 +118,7 @@ kotlinx-coroutines-core = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
 kotlinx-coroutines-core-jvm = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2"
 kotlinx-coroutines-play-services = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2"
 kotlinx-coroutines-rx3 = "org.jetbrains.kotlinx:kotlinx-coroutines-rx3:1.10.2"
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.9.0" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.11.0" }
 ktlint = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint" }
 ktlint-twitter-compose = "com.twitter.compose.rules:ktlint:0.0.26"
 
@@ -132,8 +140,11 @@ androidx-preference = "androidx.preference:preference:1.2.1"
 androidx-gridlayout = "androidx.gridlayout:gridlayout:1.1.0"
 androidx-exifinterface = "androidx.exifinterface:exifinterface:1.4.2"
 androidx-media = "androidx.media:media:1.7.0"
+androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "androidx-media3" }
+androidx-media3-effect = { module = "androidx.media3:media3-effect", version.ref = "androidx-media3" }
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3" }
 androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "androidx-media3" }
+androidx-media3-transformer = { module = "androidx.media3:media3-transformer", version.ref = "androidx-media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3" }
 androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "androidx-navigation" }
 androidx-navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx", version.ref = "androidx-navigation" }
@@ -194,7 +205,6 @@ google-ez-vcard = "com.googlecode.ez-vcard:ez-vcard:0.9.11"
 google-jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 google-guava-android = "com.google.guava:guava:33.6.0-android"
 google-flexbox = "com.google.android.flexbox:flexbox:3.0.0"
-com-google-devtools-ksp-gradle-plugin = "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.2.20-1.0.25"
 
 # Firebase
 firebase-messaging = "com.google.firebase:firebase-messaging:25.0.1"

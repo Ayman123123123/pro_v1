@@ -1,57 +1,59 @@
+# syntax=docker/dockerfile:1.7
 # ══════════════════════════════════════════════════════════════════════
-#  YOUNES Sovereign Backend — Multi-stage Docker Build
-#  Stage 1: Gradle build with JDK 21
-#  Stage 2: Minimal Eclipse Temurin JRE 21 Runtime
+#  YOUNES Sovereign Backend — reproducible multi-stage BuildKit build
+#  Stage 1: Gradle 8.12 + JDK 21 (non-root, persistent dependency cache)
+#  Stage 2: Minimal Eclipse Temurin JRE 21 runtime (non-root)
 # ══════════════════════════════════════════════════════════════════════
 
 FROM gradle:8.12-jdk21 AS builder
+
+USER root
 WORKDIR /build
+RUN chown gradle:gradle /build
 
-# NOTE: Do NOT try to rewrite /etc/resolv.conf here — BuildKit mounts it read-only,
-# so any such RUN fails instantly ("cannot create /etc/resolv.conf: Read-only file
-# system"). If dependency downloads ever fail on DNS, fix the daemon once instead:
-# Docker Desktop → Settings → Docker Engine → { "dns": ["8.8.8.8", "1.1.1.1"] }.
+# Copy build descriptors separately. Source edits then keep the dependency/build
+# configuration layer reusable, while BuildKit keeps downloaded artifacts outside
+# image layers in the cache mount below.
+COPY --chown=gradle:gradle backend-server/settings.gradle.kts backend-server/build.gradle.kts ./backend-server/
+COPY --chown=gradle:gradle shared-proto/build.gradle.kts ./shared-proto/
+COPY --chown=gradle:gradle shared-proto/src/ ./shared-proto/src/
+COPY --chown=gradle:gradle backend-server/src/ ./backend-server/src/
 
-# Copy Gradle configurations & properties first for layer caching
-COPY gradle.properties gradle.properties
-COPY settings.gradle.kts settings.gradle.kts
-COPY shared-proto/ shared-proto/
-COPY backend-server/ backend-server/
-
+USER gradle
 WORKDIR /build/backend-server
 
-# Dependencies are cached across builds via a BuildKit cache mount.
-# NOTE: a previous revision used `COPY .gradle-cache /home/gradle/.gradle 2>/dev/null || true`
-# which is invalid — COPY is not a shell command, so BuildKit failed on every build with
-# "/||": not found. It also targeted /home/gradle while the build runs as root.
-RUN --mount=type=cache,target=/root/.gradle \
-    gradle bootJar --no-daemon -x test --stacktrace || \
-    (echo "First build attempt failed, retrying with fresh deps..." && \
-     gradle bootJar --no-daemon -x test --refresh-dependencies)
+# The official Gradle image runs builds as `gradle` (uid/gid 1000), therefore
+# /home/gradle — not /root — is the correct cache home. `sharing=locked` also
+# prevents concurrent BuildKit jobs from corrupting Gradle's mutable cache.
+RUN --mount=type=cache,target=/home/gradle/.gradle,uid=1000,gid=1000,mode=0755,sharing=locked \
+    gradle bootJar --no-daemon -x test --stacktrace
 
 # ══════════════════════════════════════════════════════════════════════
 #  Stage 2: Runtime
 # ══════════════════════════════════════════════════════════════════════
+FROM eclipse-temurin:21-jre-jammy AS runtime
 
-FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Install curl for healthcheck, tzdata and ffmpeg for video thumbnails
+# curl: container health check; ffmpeg: media thumbnails; tzdata: timestamps.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl tzdata ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 redserver \
+    && useradd --system --uid 10001 --gid redserver --home-dir /app --shell /usr/sbin/nologin redserver \
+    && mkdir -p /app/logs \
+    && chown -R redserver:redserver /app
 
-# Security: create non-root user
-RUN groupadd -r redserver && useradd -r -g redserver -d /app -s /sbin/nologin redserver
-RUN mkdir -p /app/logs && chown -R redserver:redserver /app
+COPY --from=builder --chown=redserver:redserver /build/backend-server/build/libs/red-backend.jar /app/app.jar
 
-# Copy JAR from builder stage
-COPY --from=builder /build/backend-server/build/libs/*.jar app.jar
+# JAVA_TOOL_OPTIONS is consumed directly by the JVM, allowing an exec-form
+# entrypoint (correct signal handling; no shell interpolation/injection).
+ENV JAVA_TOOL_OPTIONS="-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport"
 
 USER redserver
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
 
-ENTRYPOINT ["sh", "-c", "java ${JAVA_OPTS:-Xms256m -Xmx512m} -jar app.jar"]
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

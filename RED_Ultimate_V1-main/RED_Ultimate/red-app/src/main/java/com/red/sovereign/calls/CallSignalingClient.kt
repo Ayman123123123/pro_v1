@@ -26,7 +26,7 @@ data class CallSignal(
 class CallSignalingClient(private val context: Context, private val tokens: TokenStore, private val listener: Listener) {
     interface Listener { fun onSignal(signal: CallSignal); fun onConnected(); fun onDisconnected(); fun onError(message: String) }
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http: OkHttpClient = SecureOkHttpClient.build(context)
+    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
     fun connect() {

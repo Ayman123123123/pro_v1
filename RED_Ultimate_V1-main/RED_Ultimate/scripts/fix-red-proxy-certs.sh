@@ -1,144 +1,55 @@
-#!/bin/sh
-# ═══════════════════════════════════════════════════════════════════════
-# 🔧 سكريبت الإصلاح الشامل والتشخيص الفوري لشهادات ومفاتيح NGINX Proxy
-# يعالج بدقة:
-# 1. missing private key at /etc/ssl/private/privkey.pem (certificate generation incomplete)
-# 2. cannot load certificate "/etc/ssl/certs/fullchain.pem"
-# 3. Docker Directory Mount Trap (المجلدات الفارغة المنشأة بالخطأ بدل الملفات)
-# 4. عدم تطابق المفتاح الخاص مع الشهادة (Modulus Mismatch)
-# 5. غياب الروابط التوافقية بين /etc/ssl/private و /etc/ssl/certs و /etc/ssl/red
-# ═══════════════════════════════════════════════════════════════════════
-
+#!/usr/bin/env sh
+# Revalidate/repair the Compose-managed TLS volume, then restart Nginx safely.
+# The serving container mounts the private key read-only; only certs-init writes it.
 set -eu
 
-echo "═══════════════════════════════════════════════════════════════════════"
-echo " 🚀 NGINX SSL & Private Key Self-Healing Diagnostic & Repair Tool"
-echo "═══════════════════════════════════════════════════════════════════════"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+ENV_FILE="$ROOT/.env"
 
-# فحص توفر Docker
-if ! command -v docker >/dev/null 2>&1; then
-  echo "⚠️ Docker is not installed or not in PATH."
-fi
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || fail 'Docker is required'
+docker compose version >/dev/null 2>&1 || fail 'Docker Compose v2 is required'
+docker info >/dev/null 2>&1 || fail 'Docker daemon is not running'
+[ -f "$ENV_FILE" ] || fail "Missing $ENV_FILE. Run ./scripts/local-first-run.sh first."
 
-echo "🔍 1. Checking container status..."
-if docker ps -a --filter name=red-proxy --format "{{.Names}}" 2>/dev/null | grep -q "red-proxy"; then
-  docker ps -a --filter name=red-proxy --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-else
-  echo "ℹ️ Container 'red-proxy' not currently running."
-fi
-echo ""
+cd "$ROOT"
+printf '%s\n' '═══════════════════════════════════════════════════════════════════════'
+printf '%s\n' ' YOUNES TLS volume validation and repair'
+printf '%s\n' '═══════════════════════════════════════════════════════════════════════'
 
-# الحل 1: في بيئة Docker Compose
-if [ -f "docker-compose.yml" ] || [ -f "../docker-compose.yml" ]; then
-  COMPOSE_DIR="."
-  [ ! -f "docker-compose.yml" ] && COMPOSE_DIR=".."
+docker compose --env-file "$ENV_FILE" config --quiet
 
-  echo "🔧 2. Repairing via Docker Compose in $COMPOSE_DIR..."
-  
-  # إعادة تعيين حجم red-certs لضمان مسح أي مجلدات تالفة
-  if docker volume ls 2>/dev/null | grep -q "red-certs"; then
-    echo "  → Resetting red-certs volume to purge invalid directories..."
-    (cd "$COMPOSE_DIR" && docker compose stop nginx certs-init 2>/dev/null || true)
-    docker volume rm -f red-certs 2>/dev/null || true
-  fi
+# Stop the reader before an atomic replacement. We do not delete the named
+# volume: certs-init validates and preserves a healthy production certificate,
+# and replaces only an invalid/expired/mismatched pair.
+docker compose --env-file "$ENV_FILE" stop nginx >/dev/null 2>&1 || true
+docker compose --env-file "$ENV_FILE" rm -f certs-init >/dev/null 2>&1 || true
+printf '%s\n' '[tls] validating the persistent certificate pair...'
+docker compose --env-file "$ENV_FILE" run --rm certs-init
 
-  echo "  → Executing certs-init to generate valid certificates and symlinks..."
-  (cd "$COMPOSE_DIR" && docker compose run --rm certs-init)
+printf '%s\n' '[nginx] starting proxy and required dependencies...'
+docker compose --env-file "$ENV_FILE" up -d nginx
 
-  echo "  → Starting nginx proxy container..."
-  (cd "$COMPOSE_DIR" && docker compose up -d nginx)
-  sleep 3
+container_id="$(docker compose --env-file "$ENV_FILE" ps -q nginx)"
+[ -n "$container_id" ] || fail 'Nginx container was not created'
 
-  echo "  → Verifying nginx proxy logs..."
-  docker logs red-proxy --tail 25 2>&1 | tail -n 25
-  echo ""
-  echo "✅ Repair completed via Docker Compose!"
-  echo "   HTTP:  http://localhost:8088 (or \$RED_HTTP_PORT)"
-  echo "   HTTPS: https://localhost:8443 (or \$RED_HTTPS_PORT)"
-  exit 0
-fi
-
-# الحل 2: حاوية مستقلة قيد التشغيل (docker run / standalone)
-echo "🔧 3. Repairing Standalone Docker Container..."
-CONTAINER=$(docker ps -a --filter name=red-proxy -q 2>/dev/null | head -n 1)
-
-if [ -n "$CONTAINER" ]; then
-  echo "  → Executing deep certificate repair inside container '$CONTAINER'..."
-  docker exec "$CONTAINER" sh -c '
-    echo "  [1/4] Cleaning invalid directory mounts..."
-    for p in /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem /etc/ssl/certs/fullchain.pem /etc/ssl/certs/privkey.pem /etc/ssl/private/privkey.pem; do
-      if [ -d "$p" ]; then
-        echo "    Purging directory mistakenly created as cert file: $p"
-        rm -rf "$p"
-      fi
-    done
-
-    echo "  [2/4] Ensuring required SSL directories exist..."
-    mkdir -p /etc/ssl/red /etc/ssl/certs /etc/ssl/private /var/www/certbot
-    chmod 755 /etc/ssl/red /etc/ssl/certs /etc/ssl/private /var/www/certbot 2>/dev/null || true
-
-    echo "  [3/4] Generating resilient cryptographic certificate if absent..."
-    if [ ! -s /etc/ssl/red/fullchain.pem ] || [ ! -s /etc/ssl/red/privkey.pem ]; then
-      apk add --no-cache openssl >/dev/null 2>&1 || true
-      openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
-        -subj "/CN=red.local" \
-        -addext "subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1" \
-        -keyout /etc/ssl/red/privkey.pem.tmp \
-        -out /etc/ssl/red/fullchain.pem.tmp
-      mv -f /etc/ssl/red/privkey.pem.tmp /etc/ssl/red/privkey.pem
-      mv -f /etc/ssl/red/fullchain.pem.tmp /etc/ssl/red/fullchain.pem
-      chmod 600 /etc/ssl/red/privkey.pem
-      chmod 644 /etc/ssl/red/fullchain.pem
-      echo "    Generated new TLS certificate and private key"
-    else
-      echo "    Existing valid certificate found"
-    fi
-
-    echo "  [4/4] Establishing universal compatibility symlinks..."
-    ln -sf /etc/ssl/red/fullchain.pem /etc/ssl/certs/fullchain.pem
-    ln -sf /etc/ssl/red/privkey.pem /etc/ssl/certs/privkey.pem
-    ln -sf /etc/ssl/red/privkey.pem /etc/ssl/private/privkey.pem
-    chmod 600 /etc/ssl/private/privkey.pem 2>/dev/null || true
-
-    echo "  → Validating Nginx configuration..."
-    if nginx -t 2>/dev/null; then
-      echo "    Nginx config syntax: OK"
-      nginx -s reload 2>/dev/null || true
-    fi
-  '
-
-  echo "  → Restarting container..."
-  docker restart red-proxy >/dev/null 2>&1 || true
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+  state="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+  case "$state" in
+    healthy)
+      docker compose --env-file "$ENV_FILE" ps nginx
+      printf '%s\n' 'TLS repair and Nginx readiness: PASS'
+      exit 0
+      ;;
+    unhealthy|exited|dead)
+      docker compose --env-file "$ENV_FILE" logs --tail=100 nginx >&2 || true
+      fail "Nginx failed readiness: $state"
+      ;;
+  esac
+  attempt=$((attempt + 1))
   sleep 2
-  docker ps --filter name=red-proxy --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-  echo ""
-  echo "📋 Latest Logs:"
-  docker logs red-proxy --tail 20 2>&1 | tail -n 20
-  echo ""
-  echo "✅ Standalone container repair complete!"
-  exit 0
-fi
+done
 
-# الحل 3: إصلاح محلي بدون دوكر (Host / Local Setup)
-echo "🔧 4. Repairing Local Host SSL directory structure..."
-mkdir -p /etc/ssl/red /etc/ssl/certs /etc/ssl/private /var/www/certbot 2>/dev/null || {
-  echo "⚠️ Root privileges may be required. Try running with sudo."
-}
-
-if command -v openssl >/dev/null 2>&1; then
-  echo "  → Generating local developer certificates..."
-  TARGET_DIR="./secrets/ssl"
-  mkdir -p "$TARGET_DIR"
-  openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 3650 \
-    -subj "/CN=red.local" \
-    -addext "subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1" \
-    -keyout "$TARGET_DIR/privkey.pem" \
-    -out "$TARGET_DIR/fullchain.pem"
-  chmod 600 "$TARGET_DIR/privkey.pem"
-  chmod 644 "$TARGET_DIR/fullchain.pem"
-  echo "  ✅ Certificates generated in $TARGET_DIR"
-fi
-
-echo "═══════════════════════════════════════════════════════════════════════"
-echo " 🌟 Diagnostic & Repair Completed Successfully!"
-echo "═══════════════════════════════════════════════════════════════════════"
+docker compose --env-file "$ENV_FILE" logs --tail=100 nginx >&2 || true
+fail 'Nginx did not become healthy within 60 seconds'
