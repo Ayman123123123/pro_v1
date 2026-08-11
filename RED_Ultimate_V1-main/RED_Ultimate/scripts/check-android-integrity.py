@@ -170,6 +170,16 @@ check(
     "AttachmentViewModel مصمّم لرسالة واحدة — مشاركته بين الخلايا تعرض نفس الصورة للكل",
 )
 
+# ─── 15. launch import في RedDashboard (عطل تصريف) ─────────────────────
+dashboard = (RED_APP / "ui/RedDashboard.kt").read_text(encoding="utf-8")
+uses_scope_launch = "scope.launch {" in dashboard or "scope.launch{" in dashboard
+has_launch_import = "import kotlinx.coroutines.launch" in dashboard
+check(
+    "RedDashboard: import kotlinx.coroutines.launch موجود (يستخدم scope.launch)",
+    (not uses_scope_launch) or (uses_scope_launch and has_launch_import),
+    "scope.launch {} يستدعي extension غير مستورد ⇒ عطل تصريف",
+)
+
 
 # ─── الخلاصة ──────────────────────────────────────────────────────────
 print("════════════════════════════════════════════════")

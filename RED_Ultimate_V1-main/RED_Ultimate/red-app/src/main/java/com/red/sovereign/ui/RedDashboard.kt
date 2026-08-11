@@ -220,6 +220,7 @@ import com.red.sovereign.features.contacts.ContactsScreen
 import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
 import com.red.sovereign.features.devices.DevicesScreen
