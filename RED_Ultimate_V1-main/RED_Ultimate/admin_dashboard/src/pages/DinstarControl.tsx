@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Button, Card, Col, Descriptions, Input, Modal, Progress, Row, Space, Table, Tag, Typography, message } from 'antd';
 import { ApiOutlined, HistoryOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled, ToolOutlined } from '@ant-design/icons';
 import { apiFetch } from '../api';
+import { usePolling } from '../hooks/usePolling';
 
 type Port = { index:number; radioType?:string; status?:string; callState?:string; signal?:number; signalRaw?:number; gprs?:string; numberMasked?:string; imsiMasked?:string; iccidMasked?:string; operator?:string };
 type Discovery = { success:boolean; gatewayIp:string; model:string; status:string; portsDetected?:number; message?:string };
@@ -19,11 +20,12 @@ export default function DinstarControl() {
   const [ports,setPorts]=useState<Port[]>([]); const [discovery,setDiscovery]=useState<Discovery|null>(null); const [capabilities,setCapabilities]=useState<Record<string,unknown>>({});
   const [cdr,setCdr]=useState<any[]>([]); const [loading,setLoading]=useState(false); const [ussdPort,setUssdPort]=useState<number|null>(null); const [ussd,setUssd]=useState('');
   const json=async(r:Response)=>{const b=await r.json().catch(()=>({}));if(!r.ok)throw new Error(b?.error||b?.message||`HTTP ${r.status}`);return b;};
-  const load=async()=>{setLoading(true);try{
+  const load=useCallback(async()=>{setLoading(true);try{
     const [d,c,s]=await Promise.all([apiFetch('/api/admin/dinstar/discover'),apiFetch('/api/admin/dinstar/capabilities'),apiFetch('/api/admin/dinstar/status')]);
     setDiscovery(await json(d));setCapabilities(await json(c));setPorts(await json(s));
-  }catch(e:any){message.error(e.message||'تعذر الاتصال بالبوابة');}finally{setLoading(false);}};
-  useEffect(()=>{load();const t=setInterval(load,15000);return()=>clearInterval(t);},[]);
+  }catch(e:any){message.error(e.message||'تعذر الاتصال بالبوابة');}finally{setLoading(false);}},[]);
+  // استطلاع كل 15 ثانية يتوقف عند إخفاء التبويب — يوفّر استعلامات بوابة DINSTAR الحقيقية
+  usePolling(load,15000);
   const reset=(port:number)=>Modal.confirm({title:`إعادة تشغيل وحدة المنفذ ${port+1}`,content:'يقطع أي مكالمة نشطة على هذا المنفذ فقط. هل تريد المتابعة؟',okType:'danger',onOk:async()=>{try{await json(await apiFetch(`/api/admin/dinstar/ports/${port}/reset`,{method:'POST'}));message.success('تم إرسال reset موثق للوحدة');setTimeout(load,3000);}catch(e:any){message.error(e.message);}}});
   const sendUssd=async()=>{if(ussdPort==null)return;try{await json(await apiFetch(`/api/admin/dinstar/ports/${ussdPort}/ussd`,{method:'POST',body:JSON.stringify({code:ussd})}));message.success('تم إرسال USSD');setUssdPort(null);setUssd('');}catch(e:any){message.error(e.message);}};
   const loadCdr=async()=>{try{const b=await json(await apiFetch('/api/admin/dinstar/cdr'));setCdr(b.cdr||b.query||[]);}catch(e:any){message.error(e.message);}};

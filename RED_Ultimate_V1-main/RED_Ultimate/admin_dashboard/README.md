@@ -50,20 +50,38 @@ RED_API_TARGET=http://127.0.0.1:8080 npm run dev
 ## التحقق
 
 ```bash
-npm run build:check
-npm run check:api
-npm run build
+npm run check        # عقد API + حارس الواجهة + فحص الأنواع (يشغّلها CI أيضًا)
+npm run build        # tsc --noEmit ثم حزمة Vite للإنتاج
 ```
 
-`npm run build` صار صارمًا: TypeScript check + Vite bundle.
+`npm run build` صارم: TypeScript check + Vite bundle.
+`tsconfig.json` يعمل الآن بـ `"strict": true` بصفر أخطاء — أي تراجع يفشل البناء.
+
+### حارس الواجهة
+
+`npm run check:guards` يفشل عند:
+
+1. أي أصل خارجي (خط/سكربت/نمط) — يخالف `default-src 'self'` في `nginx.conf` ومبدأ Local-first.
+2. `setInterval` خام بدل `usePolling`.
+3. أي سر مكتوب داخل الشيفرة.
 
 ## الملفات الأساسية
 
 - `src/App.tsx` — shell الحديث الوحيد.
 - `src/pages/Login.tsx` — دخول حديث مع فحص `/health`.
 - `src/api.ts` — عميل API موحد.
+- `src/components/ErrorBoundary.tsx` — حد أخطاء لكل صفحة؛ عطل في قسم لا يُسقط اللوحة.
+- `src/components/Chart.tsx` — غلاف ECharts بتسجيل انتقائي للوحدات (حزمة المخططات ‎562KB بدل ‎1.14MB).
+- `src/hooks/usePolling.ts` — استطلاع دوري يتوقف عند إخفاء التبويب/انقطاع الشبكة ويمنع تداخل الطلبات.
 - `scripts/check-api-contract.mjs` — فاحص عقد الواجهة والخادم.
+- `scripts/check-frontend-guards.mjs` — حارس Local-first والاستطلاع والأسرار.
 - `Dockerfile` + `dashboard.nginx.conf` — بناء وتقديم الإنتاج.
+
+## الخطوط
+
+الخطوط العربية (Cairo/Tajawal) مُجمّعة محليًا عبر `@fontsource` وتُبنى داخل
+`dist/assets` كملفات woff2. لا يوجد أي اتصال بـ Google Fonts: الاستيراد الخارجي
+السابق كان يُحجب في الإنتاج بسبب CSP فيسقط الخط العربي إلى خط احتياطي.
 
 ## ملاحظات أمان مستقبلية
 

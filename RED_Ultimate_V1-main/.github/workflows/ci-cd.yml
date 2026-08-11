@@ -122,6 +122,16 @@ jobs:
         working-directory: RED_Ultimate/admin_dashboard
         run: npx tsc --noEmit
 
+      - name: 🔗 API Contract Check
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run check:api
+
+      # يفشل البناء عند أي أصل خارجي (يخالف CSP/Local-first)،
+      # أو setInterval خام بدل usePolling، أو سر مكتوب في الشيفرة.
+      - name: 🛡️ Frontend Guards (local-first / polling / secrets)
+        working-directory: RED_Ultimate/admin_dashboard
+        run: npm run check:guards
+
       - name: 🏗️ Build Production Bundle
         working-directory: RED_Ultimate/admin_dashboard
         run: npm run build

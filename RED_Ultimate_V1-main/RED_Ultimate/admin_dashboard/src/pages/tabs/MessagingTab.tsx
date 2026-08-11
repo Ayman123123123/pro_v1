@@ -1,25 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Alert, Card, Row, Col, Statistic, Tag, Descriptions } from 'antd';
 import { MessageOutlined, SendOutlined, ClockCircleOutlined } from '@ant-design/icons';
 
 import { apiFetch } from '../../api';
+import { usePolling } from '../../hooks/usePolling';
 const MessagingTab: React.FC = () => {
     const [messageStats, setMessageStats] = useState<any>(null);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const response = await apiFetch('/api/master/v1/stats/realtime');
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                setMessageStats(await response.json());
-                setError('');
-            } catch (cause: any) { setError(`تعذر قراءة مقاييس الرسائل: ${cause?.message || 'خطأ غير معروف'}`); }
-        };
-        load();
-        const timer = setInterval(load, 5000);
-        return () => clearInterval(timer);
+    const load = useCallback(async () => {
+        try {
+            const response = await apiFetch('/api/master/v1/stats/realtime');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            setMessageStats(await response.json());
+            setError('');
+        } catch (cause: any) { setError(`تعذر قراءة مقاييس الرسائل: ${cause?.message || 'خطأ غير معروف'}`); }
     }, []);
+
+    // استطلاع كل 5 ثوانٍ يتوقف عند إخفاء التبويب
+    usePolling(load, 5000);
 
     return (
         <div>
