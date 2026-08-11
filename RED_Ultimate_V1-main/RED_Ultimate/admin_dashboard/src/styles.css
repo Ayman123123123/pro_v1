@@ -1,5 +1,27 @@
 /* YOUNES Master Dashboard - Professional Design System */
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&family=Tajawal:wght@300;400;500;700;800&display=swap');
+
+/* ─── Local-first fonts ────────────────────────────────────────────────
+ * الخطوط مُجمّعة داخل الحزمة عبر @fontsource ولا تُحمَّل من أي CDN خارجي.
+ * السبب: nginx.conf يفرض `font-src 'self' data:` و`default-src 'self'`،
+ * فاستيراد fonts.googleapis.com كان يُحجب في الإنتاج ويُسقط الخط العربي،
+ * كما يخالف مبدأ Local-first (لا اعتماد على خدمات خارجية).
+ * Vite يحوّل هذه الاستيرادات إلى ملفات woff2 داخل dist/assets.
+ * ──────────────────────────────────────────────────────────────────── */
+@import '@fontsource/cairo/arabic-300.css';
+@import '@fontsource/cairo/arabic-400.css';
+@import '@fontsource/cairo/arabic-600.css';
+@import '@fontsource/cairo/arabic-700.css';
+@import '@fontsource/cairo/arabic-800.css';
+@import '@fontsource/cairo/arabic-900.css';
+@import '@fontsource/cairo/latin-400.css';
+@import '@fontsource/cairo/latin-700.css';
+@import '@fontsource/tajawal/arabic-300.css';
+@import '@fontsource/tajawal/arabic-400.css';
+@import '@fontsource/tajawal/arabic-500.css';
+@import '@fontsource/tajawal/arabic-700.css';
+@import '@fontsource/tajawal/arabic-800.css';
+@import '@fontsource/tajawal/latin-400.css';
+@import '@fontsource/tajawal/latin-700.css';
 
 :root {
   /* Color System - YOUNES Identity */

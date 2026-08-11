@@ -1,5 +1,7 @@
 package com.red.sovereign.features.contacts
 
+import com.red.sovereign.core.YounesId
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,7 +42,7 @@ import java.util.concurrent.Executors
  *  QrScannerSheet — ماسح RED ID
  *  - مسح حقيقي عبر CameraX (PreviewView + ImageAnalysis) + فك ZXing حي
  *  - مع إدخال يدوي كبديل، وطلب إذن الكاميرا عند الحاجة
- *  - يتحقق من صيغة RED ID (YNS-XXXX-XXXX)
+ *  - يتحقق من صيغة معرّف يونس (خمسة أرقام)
  * ════════════════════════════════════════════════════════════════════════
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,7 +188,7 @@ fun QrScannerSheet(
                     error = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("YNS-XXXX-XXXX") },
+                placeholder = { Text(YounesId.PLACEHOLDER) },
                 leadingIcon = { Icon(Icons.Default.Tag, null) },
                 singleLine = true,
                 isError = error != null,
@@ -199,7 +201,7 @@ fun QrScannerSheet(
                     if (isValidRedId(normalized)) {
                         onScanned(normalized)
                     } else {
-                        error = "صيغة RED ID غير صحيحة (يجب أن تكون YNS-XXXX-XXXX)"
+                        error = YounesId.ERROR_MESSAGE
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -230,20 +232,14 @@ private fun decodeQrFromImage(image: ImageProxy): String? = runCatching {
 }.getOrNull()
 
 /**
- * RED ID format: YNS-XXXX-XXXX (uppercase alphanumeric)
- * Example: YNS-9F2A-BC11
+ * التحقق من معرّف يونس وتطبيعه.
+ *
+ * يفوّضان إلى [YounesId] — مصدر الحقيقة الوحيد. كانت النسخة السابقة
+ * تحمل نمطها الخاص للمعرّف، وهو ما أنتج تباينًا مع
+ * `RedDashboard`: معرّف يمر من الماسح ثم تظهر شاشة المحادثة بأزرار
+ * معطّلة بلا سبب ظاهر.
  */
-private val RED_ID_REGEX = Regex("^YNS-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+fun isValidRedId(redId: String): Boolean = YounesId.isValid(redId)
 
-fun isValidRedId(redId: String): Boolean = RED_ID_REGEX.matches(redId)
-
-/** Normalize any input to RED ID form (auto-uppercase + dash insertion) */
-fun normalizeRedIdInput(input: String): String {
-    val cleaned = input.uppercase().filter { it.isLetterOrDigit() }
-    return when {
-        cleaned.length <= 3 -> "YNS-$cleaned"
-        cleaned.length <= 7 -> "YNS-${cleaned.substring(3)}"
-        cleaned.length <= 11 -> "YNS-${cleaned.substring(3, 7)}-${cleaned.substring(7)}"
-        else -> "YNS-${cleaned.substring(3, 7)}-${cleaned.substring(7, 11)}"
-    }
-}
+/** تطبيع مدخل المستخدم — يقبل اللصق بالبادئات القديمة أيضًا. */
+fun normalizeRedIdInput(input: String): String = YounesId.normalizeInput(input)

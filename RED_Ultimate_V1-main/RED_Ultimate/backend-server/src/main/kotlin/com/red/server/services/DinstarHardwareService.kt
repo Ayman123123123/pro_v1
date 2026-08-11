@@ -28,9 +28,8 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
-import kotlin.math.roundToInt
 
-/** Verified UC2000-VE-8G adapter. Only documented HTTP API operations are exposed. */
+/** محوّل UC2000-VE (‑4/8G و‑4/8T). لا يكشف إلا عمليات HTTP API الموثقة. */
 @Service
 class DinstarHardwareService(
     @Value("\${red.dinstar.ip}") private val configuredIp: String,
@@ -39,11 +38,24 @@ class DinstarHardwareService(
     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
     private val mapper: ObjectMapper,
-    private val jdbc: JdbcTemplate
+    private val jdbc: JdbcTemplate,
+    private val connections: DinstarConnectionFactory
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarHardwareService::class.java)
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * رموز القبول. 202 = «قُبل وسيُنفَّذ لاحقًا» ترجعه العمليات
+         * غير المتزامنة (`send_sms`، `send_ussd`).
+         */
+        private val ACCEPTED_CODES = setOf(200, 202)
+
+        /** الحد الموثق للمستلمين في طلب `send_sms` الواحد. */
+        const val MAX_SMS_RECIPIENTS = 128
+
+        /** الحد الموثق لحجم نص الرسالة. */
+        const val MAX_SMS_TEXT_BYTES = 1500
     }
 
     /**
@@ -90,23 +102,43 @@ class DinstarHardwareService(
     }
 
     @Volatile private var activeHost = configuredIp
+
+    /**
+     * الطراز المكتشَف فعليًا. كان الملف يثبّت "UC2000-VE-8G" في كل
+     * مكان، فالمتغيّرات الرباعية (‑4G/‑4T) تُسجَّل بطراز خاطئ ويُستعلَم
+     * عن ثمانية منافذ على جهاز يملك أربعة. يُحدَّث عند أول اكتشاف
+     * ناجح من عدد المنافذ التي ردّت فعلًا.
+     */
+    @Volatile private var detectedModel: DinstarModelProfile = DinstarModelProfile.UC2000_VE_8G
+
+    /** مدى المنافذ الصالح للطراز المكتشَف — لا 0..7 مثبّتة. */
+    private val portRange: IntRange get() = detectedModel.portRange
+
+    private fun requireValidPort(port: Int) =
+        require(port in portRange) {
+            "منفذ خارج المدى: ${detectedModel.modelId} يدعم ${portRange.first}-${portRange.last}"
+        }
     private val gatewayId: UUID get() = UUID.nameUUIDFromBytes("DINSTAR:$activeHost:$configuredPort".toByteArray())
 
     fun discoverGateway(): Map<String, Any> {
         val candidates = linkedSetOf(configuredIp, "192.168.11.1")
         for (host in candidates) {
             if (!isPrivateAddress(host)) continue
-            val result = runCatching { queryPortInfo(host) }.getOrNull() ?: continue
+            val result = runCatching { discoverPorts(host) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: continue
             activeHost = host
+            // الطراز يُستنتج من قدرات المنافذ التي ردّت: وجود راديو LTE
+            // يعني ‑T، وعدد المنافذ يفصل الرباعي عن الثماني.
+            detectedModel = inferModel(result)
             registerGateway(result.size)
             return mapOf(
-                "success" to true, "gatewayIp" to host, "model" to "UC2000-VE-8G",
+                "success" to true, "gatewayIp" to host, "model" to detectedModel.modelId,
                 "status" to "ONLINE", "portsDetected" to result.size,
                 "capabilities" to documentedCapabilities()
             )
         }
         return mapOf(
-            "success" to false, "gatewayIp" to configuredIp, "model" to "UC2000-VE-8G",
+            // بلا رد لا يُعرف الطراز — ادعاؤه تخمين
+            "success" to false, "gatewayIp" to configuredIp, "model" to null,
             "status" to "OFFLINE", "message" to "No authenticated UC2000 get_port_info response"
         )
     }
@@ -117,29 +149,42 @@ class DinstarHardwareService(
         return info.mapNotNull(::normalizePort).also(::persistPorts)
     }
 
+    /**
+     * حالة منافذ بوابة بعينها من الأسطول.
+     *
+     * الإصدار بلا وسيط يخاطب العنوان المضبوط في الإعدادات فقط، وهو ما
+     * كان يمنع تشغيل أكثر من جهاز. هنا يُبنى الاتصال من سجل البوابة،
+     * ويُقرأ عدد المنافذ من طرازها بدل افتراض ثمانية.
+     */
+    fun getHardwareStatus(gateway: DinstarFleetService.Gateway): List<Map<String, Any?>> {
+        val client = connections.clientFor(gateway.host, gateway.apiPort, gateway.scheme)
+        val info = client.getPortInfo(gateway.portCount)
+        return info.mapNotNull(::normalizePort).also { persistPorts(it, gateway.id) }
+    }
+
     fun resetPort(port: Int): Map<String, Any> {
-        require(port in 0..7) { "UC2000-VE-8G port must be 0-7" }
+        requireValidPort(port)
         // set_port_info uses GET with query parameters per the official Dinstar API documentation
         val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
-        require(apiSuccess(response)) { "DINSTAR rejected module reset" }
+        require(apiSuccess(response)) { "تعذّرت إعادة تشغيل الوحدة: ${apiErrorMessage(response)}" }
         return mapOf("status" to "SUCCEEDED", "port" to port)
     }
 
     fun sendUssd(port: Int, text: String): Map<String, Any?> {
-        require(port in 0..7)
+        requireValidPort(port)
         require(text.matches(Regex("^[*#0-9]{2,30}$"))) { "Invalid USSD code" }
         val response = postJson("/api/send_ussd", mapOf("port" to listOf(port), "command" to "send", "text" to text))
-        require(apiSuccess(response)) { "DINSTAR rejected USSD request" }
+        require(apiSuccess(response)) { "تعذّر إرسال USSD: ${apiErrorMessage(response)}" }
         return response
     }
 
     fun queryUssd(port: Int): Map<String, Any?> {
-        require(port in 0..7)
+        requireValidPort(port)
         return getJson("/api/query_ussd_reply", mapOf("port" to port.toString()))
     }
 
     /** CDR must be POSTed with a JSON body per the official Dinstar API documentation. */
-    fun queryCdr(): Map<String, Any?> = postJson("/api/get_cdr", mapOf("port" to (0..7).toList(), "maximum" to 100))
+    fun queryCdr(): Map<String, Any?> = postJson("/api/get_cdr", mapOf("port" to portRange.toList(), "maximum" to 100))
 
     fun updateSipSettings(newSipIp: String): Nothing = unsupported(
         "Firmware-independent SIP configuration API is not documented for UC2000-VE; configure the SIP trunk in the gateway UI and Asterisk"
@@ -161,33 +206,64 @@ class DinstarHardwareService(
 
     /**
      * إرسال SMS — POST /api/send_sms
-     * 
-     * @param text محتوى الرسالة (حتى 60 بايت لـ GSM7BIT)
+     *
+     * المصدر: «Dinstar GSM Gateway HTTP API» §2 (الإصدار 1.1، 2019-10-16).
+     *
+     * @param text محتوى الرسالة. الحد 1500 بايت لكامل الطلب.
      * @param params قائمة المستلمين: [{number: "777123456", user_id: 1}]
-     * @param ports منافذ محددة (اختياري، null = جميع المنافذ)
-     * @param encoding GSM7BIT أو UCS2
+     * @param ports منافذ محددة (اختياري، null = تختار البوابة)
+     * @param encoding `GSM7BIT` أو `UCS2` — تُترجَم إلى قيم البوابة
+     */
+    /**
+     * @param gatewayHost بوابة الإرسال. عند تركه فارغًا تُستعمل البوابة
+     *   النشطة — سلوك النشر ذي الجهاز الواحد. مع أسطول من عدة بوابات
+     *   كان كل SMS يخرج من جهاز واحد مهما بلغ عددها، فتُهدَر شرائح
+     *   البقية ويُحتسب الإرسال كلّه خارج الشبكة على مشغّل واحد.
+     *   العنوان يُتحقق من كونه خاصًا قبل استعماله: يصل من طلب HTTP،
+     *   وتمريره بلا فحص يجعل الخادم يطلب أي عنوان يختاره المرسِل (SSRF).
      */
     fun sendSms(
         text: String,
         params: List<Map<String, Any?>>,
         ports: List<Int>? = null,
-        encoding: String = "GSM7BIT"
+        encoding: String = "GSM7BIT",
+        gatewayHost: String? = null
     ): Map<String, Any?> {
         require(text.isNotBlank()) { "SMS text is required" }
         require(params.isNotEmpty()) { "At least one recipient is required" }
-        require(params.size <= 32) { "Maximum 32 recipients per request" }
+        // الحد الموثق 128 مستلمًا لا 32؛ الرقم 32 يخص query_sms_result
+        // فقط. الحد الأضيق كان يرفض دفعات مشروعة قبل أن تصل للبوابة.
+        require(params.size <= MAX_SMS_RECIPIENTS) {
+            "الحد الأقصى $MAX_SMS_RECIPIENTS مستلمًا في الطلب الواحد"
+        }
+        // الحد 1500 بايت لنص الطلب، والعربية بـ UTF-8 حتى 3 بايت للحرف
+        require(text.toByteArray(Charsets.UTF_8).size <= MAX_SMS_TEXT_BYTES) {
+            "نص الرسالة يتجاوز $MAX_SMS_TEXT_BYTES بايت"
+        }
         require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
-        
+
         val body = mutableMapOf<String, Any>(
             "text" to text,
             "param" to params,
-            "encoding" to encoding,
+            // البوابة تتوقع 'gsm-7bit' أو 'unicode'. إرسال "GSM7BIT"
+            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode':
+            // رسالة ASCII تُرسَل UCS2 فتهبط سعتها من 160 حرفًا إلى 70
+            // وتتضاعف أجزاؤها وتكلفتها.
+            "encoding" to wireEncoding(encoding),
             "request_status_report" to true
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
-        
-        return postJson("/api/send_sms", body)
+
+        val target = gatewayHost?.trim()?.takeIf { it.isNotEmpty() }
+        require(target == null || isPrivateAddress(target)) {
+            "بوابة SMS يجب أن تكون على عنوان خاص (RFC 1918)"
+        }
+        return postJson("/api/send_sms", body, target ?: activeHost)
     }
+
+    /** ترجمة ترميزنا الداخلي إلى القيمة التي تفهمها البوابة. */
+    private fun wireEncoding(encoding: String): String =
+        if (encoding == "GSM7BIT") "gsm-7bit" else "unicode"
 
     /** جلب نتائج إرسال SMS — POST /api/query_sms_result */
     fun querySmsResult(userIds: List<Int> = emptyList(), numbers: List<String> = emptyList()): Map<String, Any?> {
@@ -228,7 +304,7 @@ class DinstarHardwareService(
 
     /** Call Forward — GET /api/set_port_info?action=CallForward */
     fun setCallForward(port: Int, param: String, number: String): Map<String, Any?> {
-        require(port in 0..7) { "Port must be 0-7" }
+        requireValidPort(port)
         require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) { "Invalid CallForward param" }
         return getJson("/api/set_port_info", mapOf(
             "port" to port.toString(), "action" to "CallForward",
@@ -238,7 +314,7 @@ class DinstarHardwareService(
 
     /** Power on/off port — GET /api/set_port_info?action=power&param=on/off */
     fun setPortPower(port: Int, on: Boolean): Map<String, Any?> {
-        require(port in 0..7) { "Port must be 0-7" }
+        requireValidPort(port)
         return getJson("/api/set_port_info", mapOf(
             "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
         ))
@@ -256,15 +332,63 @@ class DinstarHardwareService(
         )
     }
 
-    private fun queryPortInfo(host: String): List<Map<String, Any?>> {
+    private fun queryPortInfo(host: String): List<Map<String, Any?>> =
+        queryPortInfo(host, portRange)
+
+    private fun queryPortInfo(host: String, ports: IntRange): List<Map<String, Any?>> {
         val response = getJson(
             "/api/get_port_info",
-            mapOf("port" to (0..7).joinToString(","), "info_type" to "type,imei,imsi,iccid,number,reg,slot,callstate,signal,gprs"),
+            mapOf("port" to ports.joinToString(","), "info_type" to "type,imei,imsi,iccid,number,reg,slot,callstate,signal,gprs"),
             host
         )
-        require(apiSuccess(response)) { "DINSTAR get_port_info failed" }
+        require(apiSuccess(response)) { "تعذّر استعلام المنافذ: ${apiErrorMessage(response)}" }
         @Suppress("UNCHECKED_CAST")
         return response["info"] as? List<Map<String, Any?>> ?: emptyList()
+    }
+
+    /**
+     * استعلام المنافذ أثناء الاكتشاف، حين لا يكون الطراز معروفًا بعد.
+     *
+     * يُجرَّب المدى الأوسع (ثمانية منافذ) أولًا. بعض الإصدارات ترفض
+     * الطلب كاملًا إذا تضمّن منفذًا غير موجود بدل تجاهله، فلو أخفق
+     * يُعاد المحاولة بالمدى الرباعي. بغير هذا التراجع يظهر جهاز رباعي
+     * سليم على أنه غير متصل.
+     */
+    private fun discoverPorts(host: String): List<Map<String, Any?>> {
+        val widest = DinstarModelProfile.UC2000_VE_8G.portRange
+        runCatching { queryPortInfo(host, widest) }
+            .onSuccess { if (it.isNotEmpty()) return it }
+        log.debug("تعذّر استعلام {} منفذًا على {}؛ إعادة المحاولة بالمدى الرباعي", widest.count(), host)
+        return queryPortInfo(host, DinstarModelProfile.UC2000_VE_4G.portRange)
+    }
+
+    /**
+     * استنتاج الطراز من المنافذ التي ردّت فعلًا.
+     *
+     * لا تُفصح `get_port_info` عن اسم الطراز، لكنها تكشف حقيقتين
+     * كافيتين للتمييز بين الطرازات الأربعة:
+     *
+     * 1. **عدد المنافذ** — يفصل الرباعي (‑4G/‑4T) عن الثماني (‑8G/‑8T).
+     * 2. **نوع الراديو** لكل منفذ — وجود LTE أو WCDMA يعني المتغيّر ‑T؛
+     *    الطراز ‑G وحدات GSM بحتة.
+     *
+     * لا تُستنتج النطاقات الترددية: في الطراز ‑T تعتمد على متغيّر
+     * الراديو المركّب (Type A/E/V/J/AU) ولا تظهر في هذه الاستجابة.
+     */
+    private fun inferModel(ports: List<Map<String, Any?>>): DinstarModelProfile {
+        val hasLteRadio = ports.any { port ->
+            val type = port["type"]?.toString()?.uppercase().orEmpty()
+            "LTE" in type || "WCDMA" in type || "VOLTE" in type
+        }
+        // أربعة منافذ أو أقل ⇒ المتغيّر الرباعي. الردّ الفارغ يبقى على
+        // الافتراضي بدل ترجيح طراز بلا دليل.
+        val isQuad = ports.isNotEmpty() && ports.size <= 4
+        return when {
+            isQuad && hasLteRadio -> DinstarModelProfile.UC2000_VE_4T
+            isQuad -> DinstarModelProfile.UC2000_VE_4G
+            hasLteRadio -> DinstarModelProfile.UC2000_VE_8T
+            else -> DinstarModelProfile.UC2000_VE_8G
+        }
     }
 
     /**
@@ -319,23 +443,26 @@ class DinstarHardwareService(
 
     private fun normalizePort(raw: Map<String, Any?>): Map<String, Any?>? {
         val index = (raw["port"] as? Number)?.toInt() ?: return null
-        val signalRaw = (raw["signal"] as? Number)?.toInt()?.coerceIn(0, 31) ?: 0
         val simNumber = raw["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
         val apiOperator = raw["operator"]?.toString()
         val resolvedOperator = resolveOperatorName(apiOperator, simNumber)
+
+        // تفسير الإشارة حسب 3GPP TS 27.007 §8.5 بدل القسمة الساذجة على 31.
+        // كانت `coerceIn(0,31)` تحوّل القراءة 99 — ومعناها «لا توجد شبكة» —
+        // إلى 31 أي 100%، فتظهر شريحة ميتة بإشارة كاملة ويختارها الموزّع.
+        val signal = DinstarSignal.interpret(raw["signal"])
+
         return mapOf(
             "index" to index,
             "radioType" to raw["type"].toString(),
             "status" to raw["reg"].toString(),
             "callState" to raw["callstate"].toString(),
-            "signalRaw" to signalRaw,
-            "signal" to (signalRaw / 31.0 * 100).roundToInt(),
             "gprs" to raw["gprs"].toString(),
             "numberMasked" to mask(simNumber),
             "imsiMasked" to mask(raw["imsi"]?.toString()),
             "iccidMasked" to mask(raw["iccid"]?.toString()),
             "operator" to resolvedOperator
-        )
+        ) + signal.toMap()
     }
 
     private fun registerGateway(portCount: Int) {
@@ -345,19 +472,22 @@ class DinstarHardwareService(
                VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT (host,api_port) DO UPDATE SET model=EXCLUDED.model,scheme=EXCLUDED.scheme,
                capabilities_json=EXCLUDED.capabilities_json,last_seen_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP""",
-            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", "UC2000-VE-8G", activeHost, configuredScheme, configuredPort, capabilities
+            gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", detectedModel.modelId, activeHost, configuredScheme, configuredPort, capabilities
         )
     }
 
-    private fun persistPorts(ports: List<Map<String, Any?>>) {
+    private fun persistPorts(ports: List<Map<String, Any?>>, targetGatewayId: UUID = gatewayId) {
         ports.forEach { port ->
             jdbc.update(
-                """INSERT INTO gateway_port_snapshots(gateway_id,port_index,radio_type,registration_state,call_state,signal_raw,signal_percent,gprs_state,sim_number_masked,imsi_masked,iccid_masked)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (gateway_id,port_index) DO UPDATE SET
+                """INSERT INTO gateway_port_snapshots(gateway_id,port_index,radio_type,registration_state,call_state,signal_raw,signal_dbm,signal_percent,signal_usable,operator_name,gprs_state,sim_number_masked,imsi_masked,iccid_masked)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (gateway_id,port_index) DO UPDATE SET
                    radio_type=EXCLUDED.radio_type,registration_state=EXCLUDED.registration_state,call_state=EXCLUDED.call_state,
-                   signal_raw=EXCLUDED.signal_raw,signal_percent=EXCLUDED.signal_percent,gprs_state=EXCLUDED.gprs_state,
+                   signal_raw=EXCLUDED.signal_raw,signal_dbm=EXCLUDED.signal_dbm,signal_percent=EXCLUDED.signal_percent,
+                   signal_usable=EXCLUDED.signal_usable,operator_name=EXCLUDED.operator_name,gprs_state=EXCLUDED.gprs_state,
                    sim_number_masked=EXCLUDED.sim_number_masked,imsi_masked=EXCLUDED.imsi_masked,iccid_masked=EXCLUDED.iccid_masked,observed_at=CURRENT_TIMESTAMP""",
-                gatewayId, port["index"], port["radioType"], port["status"], port["callState"], port["signalRaw"], port["signal"], port["gprs"], port["numberMasked"], port["imsiMasked"], port["iccidMasked"]
+                targetGatewayId, port["index"], port["radioType"], port["status"], port["callState"],
+                port["signalRaw"], port["signalDbm"], port["signal"], port["signalUsable"] ?: false,
+                port["operator"], port["gprs"], port["numberMasked"], port["imsiMasked"], port["iccidMasked"]
             )
         }
     }
@@ -368,9 +498,15 @@ class DinstarHardwareService(
         return execute(Request.Builder().url(builder.build()).get().build())
     }
 
-    private fun postJson(path: String, value: Any): Map<String, Any?> {
+    /**
+     * @param host البوابة المقصودة. الافتراضي [activeHost] توافقًا مع
+     *   النشر ذي الجهاز الواحد، لكن المعامل ضروري مع الأسطول: كانت
+     *   الدالة تثبّت [activeHost] فتذهب كل رسالة إلى بوابة واحدة مهما
+     *   بلغ عدد الأجهزة المسجّلة — نظير `getJson` الذي كان يقبل الخيار.
+     */
+    private fun postJson(path: String, value: Any, host: String = activeHost): Map<String, Any?> {
         val body = mapper.writeValueAsBytes(value).toRequestBody(JSON)
-        return execute(Request.Builder().url(baseUrl(activeHost).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build())
+        return execute(Request.Builder().url(baseUrl(host).newBuilder().addPathSegments(path.removePrefix("/")).build()).post(body).build())
     }
 
     private fun execute(unsigned: Request): Map<String, Any?> {
@@ -400,7 +536,39 @@ class DinstarHardwareService(
         require(configuredScheme in setOf("http", "https") && isPrivateAddress(host)) { "DINSTAR must use HTTP(S) on a private management address" }
     }.toHttpUrl()
 
-    private fun apiSuccess(response: Map<String, Any?>) = (response["error_code"] as? Number)?.toInt() == 200
+    /**
+     * هل قبلت البوابة الطلب؟
+     *
+     * التوثيق الرسمي («Dinstar GSM Gateway HTTP API» §2.3 و§7.3) يميّز:
+     * - **200** طُلب ونُفِّذ.
+     * - **202** قُبل وسيُنفَّذ لاحقًا — ترجعه `send_sms` و`send_ussd`
+     *   لأنهما غير متزامنين بطبيعتهما (الرسالة تدخل طابورًا).
+     *
+     * كان الشرط `== 200` يرفض 202، فكل أمر USSD ناجح يُرمى
+     * `IllegalArgumentException` ويُسجَّل فشلًا رغم تنفيذه فعلًا على
+     * الشبكة. المسؤول يرى «فشل» ثم يعيد المحاولة فيُرسَل الأمر مرتين.
+     *
+     * أما 400 و413 و500 و550 فأخطاء حقيقية تُرفض.
+     */
+    private fun apiSuccess(response: Map<String, Any?>): Boolean =
+        (response["error_code"] as? Number)?.toInt() in ACCEPTED_CODES
+
+    /** رسالة الخطأ الموثقة المقابلة للرمز — أوضح من رقم مجرّد. */
+    private fun apiErrorMessage(response: Map<String, Any?>): String {
+        val code = (response["error_code"] as? Number)?.toInt()
+        val meaning = when (code) {
+            400 -> "صيغة الطلب غير صالحة"
+            404 -> "المهمة غير موجودة"
+            413 -> "عدد المستلمين أو حجم النص يتجاوز الحد"
+            486 -> "المنفذ مشغول حاليًا"
+            500 -> "خطأ داخلي في البوابة"
+            503 -> "المنفذ غير مسجّل على الشبكة"
+            550 -> "لا يوجد منفذ متاح للإرسال"
+            null -> "استجابة بلا error_code"
+            else -> "رمز غير موثق"
+        }
+        return "البوابة ردّت $code — $meaning"
+    }
     private fun isPrivateAddress(host: String) = runCatching { InetAddress.getByName(host).isSiteLocalAddress }.getOrDefault(false)
     private fun mask(value: String?): String? = value?.takeIf { it.isNotBlank() && it != "null" }?.let { "••••${it.takeLast(4)}" }
     private fun unsupported(message: String): Nothing = throw ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, message)

@@ -23,7 +23,7 @@ class ContactBlockMediaGrantTest {
     @Test
     fun `blocking an identity revokes media grants in both directions`() {
         val owner = UUID.randomUUID()
-        val target = UserAccount(id = UUID.randomUUID(), redId = "YNS-JKLM-NPQR", username = "mona", displayName = "Mona", status = AccountStatus.APPROVED)
+        val target = UserAccount(id = UUID.randomUUID(), redId = "58414", username = "mona", displayName = "Mona", status = AccountStatus.APPROVED)
         whenever(users.findByRedId(target.redId)).thenReturn(target)
 
         contacts.block(owner, target.redId)

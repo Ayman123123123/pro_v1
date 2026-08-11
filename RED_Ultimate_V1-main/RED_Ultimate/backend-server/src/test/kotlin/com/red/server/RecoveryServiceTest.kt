@@ -24,7 +24,7 @@ class RecoveryServiceTest {
     private val service = RecoveryService(users, codes, passwords, refresh)
 
     @Test fun `valid recovery code is consumed and all sessions are revoked`() {
-        val user = UserAccount(redId = "RED-ABCD-EFGH", username = "ahmed", displayName = "Ahmed", passwordHash = "old")
+        val user = UserAccount(redId = "62908", username = "ahmed", displayName = "Ahmed", passwordHash = "old")
         val code = RecoveryCode(user = user, codeHash = "hash")
         `when`(users.findByRedId(user.redId)).thenReturn(user)
         `when`(codes.findAllByUserIdAndUsedAtIsNull(user.id)).thenReturn(listOf(code))

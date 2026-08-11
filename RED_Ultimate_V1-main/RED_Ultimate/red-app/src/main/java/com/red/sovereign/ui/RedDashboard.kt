@@ -214,6 +214,7 @@ import com.red.sovereign.features.chat.CreateGroupScreen
 import com.red.sovereign.features.chat.RedGlobalSearch
 import com.red.sovereign.features.chat.SovereignGroupInfoScreen
 import com.red.sovereign.features.profile.BackupScreen
+import com.red.sovereign.core.YounesId
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
@@ -357,12 +358,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
             title = { Text("مكالمة جديدة عبر يونس") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: YNS-ABCD-EFGH أو RED-2345-6789", color = Color.Gray, fontSize = 12.sp)
+                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: ${YounesId.PLACEHOLDER}", color = Color.Gray, fontSize = 12.sp)
                     OutlinedTextField(
                         value = dialerRedId,
-                        onValueChange = { dialerRedId = it.uppercase().take(14) },
+                        onValueChange = { dialerRedId = YounesId.normalizeInput(it) },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("YNS-XXXX-XXXX") },
+                        placeholder = { Text(YounesId.PLACEHOLDER) },
                         singleLine = true
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -371,7 +372,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
                     }
                     val valid = dialerRedId.matches(RED_ID_PATTERN)
                     if (dialerRedId.isNotBlank() && !valid) {
-                        Text("معرّف يونس غير صالح — يجب أن يكون بصيغة YNS-XXXX-XXXX", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(YounesId.ERROR_MESSAGE, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
                 }
             },
@@ -1292,7 +1293,7 @@ private fun ChatHubScreen(
                     }
                     if (canManage) {
                         OutlinedButton({ groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) }, Modifier.fillMaxWidth()) { Text("تغيير صورة المجموعة") }
-                        OutlinedTextField(memberRedId, { memberRedId = it.uppercase() }, Modifier.fillMaxWidth(), label = { Text("إضافة عضو بواسطة معرّف يونس") }, singleLine = true)
+                        OutlinedTextField(memberRedId, { memberRedId = YounesId.normalizeInput(it) }, Modifier.fillMaxWidth(), label = { Text("إضافة عضو بواسطة معرّف يونس") }, placeholder = { Text(YounesId.PLACEHOLDER) }, singleLine = true)
                         Button({ groups.addMember(selectedGroup, memberRedId) { memberRedId = "" } }, Modifier.fillMaxWidth(), enabled = memberRedId.matches(RED_ID_PATTERN) && groups.state != GroupState.Saving) { Text("إضافة عضو") }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton({ groups.createInvite(selectedGroup) }, Modifier.weight(1f)) { Text("رابط دعوة") }
@@ -2276,9 +2277,12 @@ private fun AttachmentSheet(
     }
 }
 
-private val RED_ID_PATTERN = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
-// نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @username)
-private val RED_ID_PARTIAL = Regex("@(?:YNS|RED)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}")
+// مصدر الحقيقة الوحيد: core/YounesId.kt. النمط كان مكرّرًا هنا وفي
+// QrScannerSheet وSafetyViewModel بصياغات متباينة، فكان معرّف يقبله
+// أحدها وترفضه الشاشة التالية.
+private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
+// نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @12345)
+private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // الهاشتاجات العربية/اللاتينية
 private val HASHTAG_PARTIAL = Regex("#[\w\u0600-\u06FF]{2,30}")
 // اسم المستخدم للـ @ autocomplete

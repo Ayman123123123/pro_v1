@@ -41,7 +41,7 @@ class ConferenceWebSocketHandlerTest {
     }
 
     @Test fun `JOIN adds session to room and sends ROOM_STATE`() {
-        val session = FakeSession("s1", "YNS-AAAA-BBBB")
+        val session = FakeSession("s1", "73066")
         handler.afterConnectionEstablished(session)
         handler.handleTextMessage(session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         val messages = session.sent.map { objectMapper.readTree(it) }
@@ -49,8 +49,8 @@ class ConferenceWebSocketHandlerTest {
     }
 
     @Test fun `JOIN broadcasts PARTICIPANT_JOINED to existing peers`() {
-        val alice = FakeSession("s1", "YNS-AAAA-BBBB")
-        val bob = FakeSession("s2", "YNS-CCCC-DDDD")
+        val alice = FakeSession("s1", "73066")
+        val bob = FakeSession("s2", "28261")
         handler.afterConnectionEstablished(alice)
         handler.afterConnectionEstablished(bob)
         handler.handleTextMessage(alice, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
@@ -61,8 +61,8 @@ class ConferenceWebSocketHandlerTest {
     }
 
     @Test fun `OFFER relayed to other peers but not back to sender`() {
-        val alice = FakeSession("s1", "YNS-AAAA-BBBB")
-        val bob = FakeSession("s2", "YNS-CCCC-DDDD")
+        val alice = FakeSession("s1", "73066")
+        val bob = FakeSession("s2", "28261")
         handler.afterConnectionEstablished(alice)
         handler.afterConnectionEstablished(bob)
         handler.handleTextMessage(alice, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
@@ -77,7 +77,7 @@ class ConferenceWebSocketHandlerTest {
     }
 
     @Test fun `invalid roomId rejected`() {
-        val session = FakeSession("s1", "YNS-AAAA-BBBB")
+        val session = FakeSession("s1", "73066")
         handler.afterConnectionEstablished(session)
         try {
             handler.handleTextMessage(session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
@@ -88,8 +88,8 @@ class ConferenceWebSocketHandlerTest {
     }
 
     @Test fun `LEAVE notifies other peers`() {
-        val alice = FakeSession("s1", "YNS-AAAA-BBBB")
-        val bob = FakeSession("s2", "YNS-CCCC-DDDD")
+        val alice = FakeSession("s1", "73066")
+        val bob = FakeSession("s2", "28261")
         handler.afterConnectionEstablished(alice)
         handler.afterConnectionEstablished(bob)
         handler.handleTextMessage(alice, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))

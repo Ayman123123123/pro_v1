@@ -57,9 +57,52 @@ class SecurityConfig(
                 auth
                     // Public endpoints
                     .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/api/identity/authority", "/api/identity/directory").permitAll()
+                    // سلطة التوقيع وحدها عامة: مفتاح عام يجب أن يصل إلى
+                    // العميل قبل أن يملك جلسة، وهو غير حساس بطبيعته.
+                    .requestMatchers(HttpMethod.GET, "/api/identity/authority").permitAll()
+
+                    // ⚠️ `/api/identity/directory` **ليست عامة**.
+                    //
+                    // كانت `permitAll()`، والمسار بلا شرطة مائلة نهائية لا
+                    // يطابق `/api/identity/directory/{redId}`، غير أن ترك
+                    // القاعدة هنا يوحي بأن الدليل عام ويغري بتوسيعها إلى
+                    // `/**`. والمسار يكشف حزم المفاتيح العامة كاملةً
+                    // (identityKey، البصمة، شهادة التخويل) لكل جهاز معتمد.
+                    //
+                    // الأخطر مسار `…/{deviceId}/prekey`: كل نداء **يستهلك**
+                    // مفتاحًا لمرة واحدة استهلاكًا ذرّيًا. بلا مصادقة يستطيع
+                    // أي طرف استنزاف مخزون مفاتيح أي مستخدم بحلقة بسيطة،
+                    // فتتدهور جلسات Signal الجديدة إلى المفتاح الموقّع
+                    // وحده — تعطيل خدمة يمسّ سرّية التشفير المستقبلية.
+                    //
+                    // ومع اختصار معرّف يونس إلى خمسة أرقام صار فضاء
+                    // المعرّفات (89,999) قابلًا للتعداد الكامل، فما كان
+                    // صعبًا عمليًا صار زحفًا مباشرًا على الدليل كله.
+                    .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()
+                    // ── مشاركة المستخدم في المحتوى ──
+                    //
+                    // ⚠️ هذه المسارات تقع تحت `/api/admin/content` بحكم
+                    // `@RequestMapping` في `ContentController`، لكنها
+                    // **أفعال مشارِك لا أفعال مسؤول**: كلٌّ منها يأخذ
+                    // `authentication.name` — أي هوية المستدعي نفسه —
+                    // ويسجّل صوته أو حضوره به.
+                    //
+                    // بقاؤها تحت قاعدة `/api/admin/**` كان يعني أن **لا
+                    // مستخدم عادي يستطيع التصويت في استطلاع ولا تأكيد
+                    // حضور فعالية**: 403 دائمًا. والتطبيق يستدعيها فعلًا
+                    // (`EventsApi.rsvp/checkin`, `PollsApi.vote`).
+                    //
+                    // تسبق قاعدة ADMIN لأن الأسبقية للأول المطابق.
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/polls/*/vote").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/events/*/rsvp").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/events/*/checkin").authenticated()
+                    // قراءة المحتوى المنشور متاحة لكل مصادَق؛ الإنشاء
+                    // والتعديل والحذف تبقى إدارية عبر القاعدة التالية.
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/polls/active").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/events/live", "/api/admin/content/events/upcoming").authenticated()
+
                     // Admin endpoints
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
                     // Social features

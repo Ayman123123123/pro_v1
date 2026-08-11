@@ -50,12 +50,16 @@ class DinstarSmsController(
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
         val encoding = body["encoding"]?.toString() ?: "GSM7BIT"
-        
+        // اختياري: بوابة بعينها من الأسطول. الخدمة تتحقق من أنه عنوان خاص.
+        val gatewayHost = body["gatewayHost"]?.toString()
+
         audit.record(actor, "DINSTAR_SMS_SEND", text.length.toString(), mapOf(
-            "recipientCount" to params.size, "encoding" to encoding, "ports" to (portList?.toString() ?: "all")
+            "recipientCount" to params.size, "encoding" to encoding,
+            "ports" to (portList?.toString() ?: "all"),
+            "gateway" to (gatewayHost ?: "active")
         ))
-        
-        return hardware.sendSms(text, params, portList, encoding)
+
+        return hardware.sendSms(text, params, portList, encoding, gatewayHost)
     }
 
     /** جلب نتائج إرسال SMS */

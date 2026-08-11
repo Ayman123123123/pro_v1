@@ -25,7 +25,7 @@ class CallHistoryMappingTest {
     @Test fun `all fields mapped correctly (no positional swap)`() {
         val entity = CallLogEntity(
             id = "call-1",
-            peerId = "YNS-AB23-CD45",
+            peerId = "33563",
             peerLabel = "علي",
             type = "VIDEO",
             direction = "INCOMING",
@@ -37,7 +37,7 @@ class CallHistoryMappingTest {
             endedAt = 1_700_000_050_000L
         )
         val item = toItem(entity)
-        assertEquals("YNS-AB23-CD45", item.peerId)
+        assertEquals("33563", item.peerId)
         assertEquals("علي", item.peerLabel)
         assertEquals("VIDEO", item.type)
         assertEquals("INCOMING", item.direction)
@@ -50,7 +50,7 @@ class CallHistoryMappingTest {
 
     @Test fun `default route is RED when unspecified`() {
         val entity = CallLogEntity(
-            id = "call-2", peerId = "YNS-1111-2222", type = "VOICE",
+            id = "call-2", peerId = "27453", type = "VOICE",
             direction = "OUTGOING", status = "MISSED", timestamp = 1000L
         )
         val item = toItem(entity)
@@ -63,9 +63,9 @@ class CallHistoryMappingTest {
         // The bug was: firstOrNull preserved only one item, others dropped silently.
         // This test ensures the round-trip preserves the critical fields.
         val entities = listOf(
-            CallLogEntity("a", "YNS-AAAA-BBBB", type = "VOICE", direction = "OUTGOING", status = "MISSED", timestamp = 1L, durationMs = 0L),
-            CallLogEntity("b", "YNS-CCCC-DDDD", type = "VIDEO", direction = "INCOMING", status = "COMPLETED", timestamp = 2L, durationMs = 60_000L),
-            CallLogEntity("c", "YNS-EEEE-FFFF", type = "VOICE", direction = "OUTGOING", status = "REJECTED", timestamp = 3L, durationMs = 0L)
+            CallLogEntity("a", "73066", type = "VOICE", direction = "OUTGOING", status = "MISSED", timestamp = 1L, durationMs = 0L),
+            CallLogEntity("b", "28261", type = "VIDEO", direction = "INCOMING", status = "COMPLETED", timestamp = 2L, durationMs = 60_000L),
+            CallLogEntity("c", "70668", type = "VOICE", direction = "OUTGOING", status = "REJECTED", timestamp = 3L, durationMs = 0L)
         )
         val items = entities.map(::toItem)
         assertEquals(3, items.size) // fix was: firstOrNull kept only 1

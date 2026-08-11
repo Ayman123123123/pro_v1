@@ -15,7 +15,7 @@ class CallRecordingApiTest {
     @Test fun `RegisterRecordingRequest carries all required fields`() {
         val req = RegisterRecordingRequest(
             callId = "call-1",
-            peerId = "YNS-AB23-CD45",
+            peerId = "33563",
             sha256 = "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
             sizeBytes = 1024L,
             durationMs = 45_000L

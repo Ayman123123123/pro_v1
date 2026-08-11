@@ -13,7 +13,7 @@ class SfuTicketJwtTest {
 
     @Test
     fun `SFU ticket is device and room scoped rather than an interchangeable API token`() {
-        val user = UserAccount(redId = "YNS-ABCD-EFGH", username = "ahmed", displayName = "Ahmed")
+        val user = UserAccount(redId = "16999", username = "ahmed", displayName = "Ahmed")
         val deviceId = UUID.randomUUID()
         val roomId = "018f5e23-3f80-7a00-8000-000000000001"
 

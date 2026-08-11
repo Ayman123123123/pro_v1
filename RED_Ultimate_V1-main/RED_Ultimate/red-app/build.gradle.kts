@@ -5,7 +5,10 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.1.50")
+// المنفذ إلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما
+// الخادم يستمع على 8088 (بوابة Nginx) — فيفشل كل طلب بـ NETWORK_ERROR بلا
+// سبب ظاهر. البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.1.50:8088")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
 

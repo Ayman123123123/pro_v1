@@ -37,7 +37,7 @@ class RegistrationServiceTest {
     @Test
     fun `new account and its first device remain pending and receive no token`() {
         whenever(users.existsByUsernameIgnoreCase("ahmed.red")).thenReturn(false)
-        whenever(redIds.next()).thenReturn("RED-7K4M-82QX")
+        whenever(redIds.next()).thenReturn("85248")
         whenever(encoder.encode("a-strong-password")).thenReturn("argon2-hash")
         whenever(users.saveAndFlush(any<UserAccount>())).thenAnswer { it.arguments[0] }
         whenever(enrollment.enroll(any<UserAccount>(), any<DeviceEnrollmentRequest>()))
@@ -49,7 +49,7 @@ class RegistrationServiceTest {
         )
 
         assertEquals(AccountStatus.PENDING, result.status)
-        assertEquals("RED-7K4M-82QX", result.user.redId)
+        assertEquals("85248", result.user.redId)
         assertEquals("ahmed.red", result.user.username)
         assertNull(result.accessToken)
         assertNull(result.refreshToken)
