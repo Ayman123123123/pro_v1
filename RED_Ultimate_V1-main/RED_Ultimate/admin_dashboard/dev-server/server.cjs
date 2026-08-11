@@ -553,14 +553,63 @@ on('POST', '/api/reports', (_p, _q, b) => {
   return ok(reportDto(get('SELECT * FROM reports WHERE id = ?', id)));
 });
 
-on('GET', '/api/admin/moderation/reports', (_p, q) => {
-  const status = q.get('status');
-  return ok(all('SELECT * FROM reports ORDER BY created_at DESC')
-    .filter((r) => !status || r.status === status || (status === 'OPEN' && r.status === 'PENDING'))
-    .map(reportDto));
+/**
+ * عقد الإشراف — مطابق لـ `AdminReportResponse` في ModerationController.
+ *
+ * ⚠️ هذا العقد يختلف عمدًا عن `reportDto` المستخدَم في صفحة البلاغات:
+ * المتحكّم الحقيقي يربط جدول المستخدمين ويعيد **معرّف يونس**
+ * (`reporterRedId`) و`details`، بينما `reportDto` يعيد
+ * `reporterUsername` و`description`. كان خادم التطوير يعيد الشكل
+ * الثاني على مسار الإشراف، فصفحة «الثقة والسلامة» تعرض أعمدة فارغة
+ * تمامًا — البيانات موجودة لكن بأسماء حقول لا تقرؤها الواجهة.
+ */
+const moderationDto = (r) => ({
+  id: r.id,
+  reporterRedId: r.reporter_red_id || null,
+  reportedRedId: r.reported_red_id || null,
+  category: r.category,
+  details: r.description,
+  status: r.status,
+  createdAt: r.created_at,
 });
-on('PATCH', '/api/admin/moderation/reports/:id', (p, q) =>
-  resolveReport(p.id, q.get('status') || 'RESOLVED', 'تم عبر الإشراف السريع'));
+
+/**
+ * `OPEN` في الواجهة تقابل `PENDING` في القاعدة — البلاغ الذي لم
+ * يُبتّ فيه بعد. المتحكّم الحقيقي يقبل الأربع الحالات.
+ */
+const MODERATION_STATUSES = new Set(['OPEN', 'REVIEWING', 'RESOLVED', 'DISMISSED']);
+const toStoredStatus = (s) => (s === 'OPEN' ? 'PENDING' : s);
+
+on('GET', '/api/admin/moderation/reports', (_p, q) => {
+  const requested = String(q.get('status') || 'OPEN').toUpperCase();
+  if (!MODERATION_STATUSES.has(requested)) return bad(`INVALID_STATUS: ${requested}`);
+  const wanted = toStoredStatus(requested);
+  // الربط يجلب معرّف يونس كما يفعل ModerationController تمامًا.
+  return ok(all(`SELECT r.*, reporter.red_id AS reporter_red_id, reported.red_id AS reported_red_id
+                 FROM reports r
+                 LEFT JOIN users reporter ON reporter.id = r.reporter_id
+                 LEFT JOIN users reported ON reported.id = r.reported_user_id
+                 WHERE r.status = ?
+                 ORDER BY r.created_at DESC`, wanted).map(moderationDto));
+});
+
+on('PATCH', '/api/admin/moderation/reports/:id', (p, q) => {
+  const requested = String(q.get('status') || 'RESOLVED').toUpperCase();
+  // لا يجوز إعادة بلاغ إلى OPEN عبر هذا المسار — يطابق `STATUSES - "OPEN"`.
+  if (requested === 'OPEN' || !MODERATION_STATUSES.has(requested)) {
+    return bad(`INVALID_STATUS: ${requested}`);
+  }
+  const existing = get('SELECT id FROM reports WHERE id = ?', p.id);
+  if (!existing) return notFound('REPORT_NOT_FOUND');
+  resolveReport(p.id, requested, 'تم عبر الإشراف السريع');
+  const row = get(`SELECT r.*, reporter.red_id AS reporter_red_id, reported.red_id AS reported_red_id
+                   FROM reports r
+                   LEFT JOIN users reporter ON reporter.id = r.reporter_id
+                   LEFT JOIN users reported ON reported.id = r.reported_user_id
+                   WHERE r.id = ?`, p.id);
+  // المتحكّم الحقيقي يعيد البلاغ بعد التحديث لا ردًّا فارغًا.
+  return ok(moderationDto(row));
+});
 
 // ── الإعلانات ──
 on('GET', '/api/admin/announcements', (_p, q) => {

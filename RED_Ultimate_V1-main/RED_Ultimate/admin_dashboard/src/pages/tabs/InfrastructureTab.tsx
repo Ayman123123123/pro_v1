@@ -5,7 +5,19 @@ import LogStreamerTab from './LogStreamerTab';
 
 export default function InfrastructureTab() {
   const [health, setHealth] = useState<any>(null);
-  useEffect(() => { apiFetch('/health').then(async r => setHealth({ ok: r.ok, body: await r.json().catch(() => ({})) })); }, []);
+  // الحارس `alive` يمنع setState بعد تفكيك المكوّن: التنقل السريع بين
+  // الصفحات كان يترك الطلب معلّقًا ثم يكتب في مكوّن مُزال (تحذير React
+  // وتسريب مرجع). والطلب نفسه لا يُلغى تلقائيًا.
+  useEffect(() => {
+    let alive = true;
+    apiFetch('/health')
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (alive) setHealth({ ok: r.ok, body });
+      })
+      .catch(() => { if (alive) setHealth({ ok: false, body: { error: 'تعذّر الوصول إلى الخادم' } }); });
+    return () => { alive = false; };
+  }, []);
   return <>
     <Card title="البنية المحلية" style={{marginBottom:16}} extra={<Tag color={health?.ok ? 'green':'red'}>{health?.ok ? 'HEALTHY':'CHECKING / DOWN'}</Tag>}>
       <Descriptions bordered column={1}>
