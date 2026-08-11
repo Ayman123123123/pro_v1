@@ -32,7 +32,13 @@ class YounesApplication : Application() {
             },
             NotificationChannel("red_calls", getString(R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH).apply {
                 description = getString(R.string.channel_calls_desc)
-                setSound(null, null)
+            },
+            // قناة المكالمات الواردة — أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
+            NotificationChannel("red_calls_incoming", getString(R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+                description = getString(R.string.channel_calls_incoming_desc)
+                enableVibration(true)
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             },
             NotificationChannel("red_service", getString(R.string.channel_service_name), NotificationManager.IMPORTANCE_LOW).apply {
                 description = getString(R.string.channel_service_desc)

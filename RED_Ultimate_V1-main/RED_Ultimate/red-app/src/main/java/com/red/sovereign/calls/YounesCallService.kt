@@ -445,15 +445,27 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         ServiceCompat.startForeground(this, NOTIFICATION_ID, value, type)
     }
 
-    private fun createChannel() = getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
+    private fun createChannel() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
+        // قناة المكالمات الواردة — أولوية قصوى مع رنين
+        manager.createNotificationChannel(NotificationChannel("red_calls_incoming", getString(com.red.sovereign.R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+            enableVibration(true)
+            setBypassDnd(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        })
+    }
     private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), serviceIntent(ACTION_END)).build()
     private fun incomingNotification(peer: String, callMode: String) =
-        NotificationCompat.Builder(this, CHANNEL)
+        NotificationCompat.Builder(this, "red_calls_incoming")
             .setSmallIcon(if (callMode == "VIDEO") android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
             .setContentTitle(if (callMode == "VIDEO") getString(com.red.sovereign.R.string.incoming_video_call) else getString(com.red.sovereign.R.string.incoming_voice_call))
             .setContentText(peer)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setColor(0xFF00C98C.toInt())
+            .setOnlyAlertOnce(false)
             .setOngoing(true)
             .setFullScreenIntent(appIntent(), true)
             // رد فعلًا (يقبل المكالمة) — لا يفتح التطبيق فقط

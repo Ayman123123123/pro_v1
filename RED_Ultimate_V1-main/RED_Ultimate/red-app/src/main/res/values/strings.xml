@@ -13,7 +13,9 @@
     <string name="channel_messages_name">رسائل يونس</string>
     <string name="channel_messages_desc">إشعارات الرسائل المشفرة</string>
     <string name="channel_calls_name">مكالمات يونس</string>
-    <string name="channel_calls_desc">إشعارات المكالمات الواردة</string>
+    <string name="channel_calls_desc">إشعارات المكالمات</string>
+    <string name="channel_calls_incoming_name">مكالمة واردة</string>
+    <string name="channel_calls_incoming_desc">مكالمات واردة برنين وأولوية قصوى</string>
     <string name="channel_service_name">خدمة يونس</string>
     <string name="channel_service_desc">الاتصال الدائم المشفر</string>
 

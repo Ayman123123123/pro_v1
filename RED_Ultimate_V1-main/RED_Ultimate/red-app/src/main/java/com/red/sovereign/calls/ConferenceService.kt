@@ -227,16 +227,21 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     private fun promote() {
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val isVideo = ConferenceRuntime.isVideoEnabled
         val notif = NotificationCompat.Builder(this, "red_calls")
-            .setSmallIcon(android.R.drawable.sym_action_call)
-            .setContentTitle("مؤتمر يونس")
-            .setContentText("جارٍ الاتصال بالمؤتمر...")
+            .setSmallIcon(if (isVideo) android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
+            .setContentTitle(if (isVideo) "مؤتمر فيديو يونس" else "مؤتمر يونس")
+            .setContentText("${ConferenceRuntime.participants.size} مشارك • جارٍ الاتصال بالمؤتمر...")
             .setContentIntent(intent)
-            .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(0xFF00C98C.toInt())
             .setOngoing(true)
+            .setSilent(true)
+            .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        if (ConferenceRuntime.isVideoEnabled) {
+        if (isVideo) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
         ServiceCompat.startForeground(this, 7402, notif, type)

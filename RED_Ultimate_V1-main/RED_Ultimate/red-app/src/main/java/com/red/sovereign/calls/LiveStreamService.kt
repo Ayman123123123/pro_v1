@@ -199,12 +199,16 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         val title = if (isBroadcaster) "بث مباشر يونس" else "مشاهدة بث يونس"
         val text = if (isBroadcaster) "أنت تبث الآن مباشرة..." else "أنت تشاهد البث المباشر..."
         val notif = NotificationCompat.Builder(this, "red_calls")
-            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(intent)
-            .addAction(0, "إيقاف", PendingIntent.getService(this, 1, Intent(this, LiveStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(if (isBroadcaster) 0xFFE53935.toInt() else 0xFF00C98C.toInt())
             .setOngoing(true)
+            .setSilent(true)
+            .addAction(0, "إيقاف", PendingIntent.getService(this, 1, Intent(this, LiveStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
         if (isBroadcaster) {
