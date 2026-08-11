@@ -69,11 +69,17 @@ Android يونس
 ## ما تعرضه لوحة يونس
 
 - اكتشاف موثق عبر `get_port_info`، لا مجرد ping.
-- 8 ports: radio type، registration، call state، signal 0–31/percent، GPRS، أرقام/IMSI/ICCID masked.
+- المنافذ (8 في ‑8G/‑8T و4 في المتغيّرات الرباعية): radio type، registration،
+  call state، **الإشارة بالـ dBm** مع علامة صلاحية، GPRS، أرقام/IMSI/ICCID masked.
+  الإشارة تُفسَّر حسب 3GPP TS 27.007 §8.5: القراءة **99 تعني «غير قابلة للكشف»**
+  فتُعرض «لا يوجد قياس» ولا تُحوَّل إلى نسبة. تفصيل العطل السابق وإصلاحه في
+  [`DINSTAR_UC2000_GUIDE_AR.md`](DINSTAR_UC2000_GUIDE_AR.md).
 - module reset لمنفذ بعد تأكيد.
 - USSD مع عدم تسجيل النص الحساس في audit.
 - CDR عند دعم endpoint في firmware.
 - capability matrix توضح العمليات الموثقة والمعطلة.
+- **عدة أجهزة معًا**: سجل أسطول، تعرّف تلقائي بفحص نطاق الإدارة،
+  توجيه يختار الجهاز والمنفذ ويستبعد الشرائح بلا إشارة صالحة.
 - inventory/snapshots/operations في PostgreSQL V12، دون تخزين password.
 
 ## ما يزال يحتاج اختبار الجهاز

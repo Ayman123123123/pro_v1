@@ -115,14 +115,23 @@ selectOptimalPort(targetNumber?):
 | radioType | Text | GSM/UMTS/LTE |
 | registrationState | Text | REGISTERED/UNREGISTERED |
 | callState | Text | IDLE/RINGING/ACTIVE |
-| signalPercent | Int | 0-100% |
-| signalRaw | Int | 0-31 (from Dinstar API) |
+| signalPercent | Int? | 0-100% — **قد تكون null** حين يتعذّر القياس |
+| signalDbm | Int? | القوة الفعلية بالـ dBm (‎-113..‎-51) أو null |
+| signalRaw | Int? | القراءة الخام: 0-31، و**99 تعني «غير قابلة للكشف»** |
+| signalUsable | Boolean | هل الإشارة كافية لحمل مكالمة (‎≥ -100 dBm) |
 | gprsState | Text | ATTACH/DETACH |
 | operatorName | Text | اسم المشغل |
 | numberMasked | Text? | ••••1234 |
 | simType | Text | YemenOperator enum |
-| isHealthy | Boolean | مسجل + IDLE + إشارة≥20% |
+| isHealthy | Boolean | مسجل + IDLE + `signalUsable` |
 | observedAt | Long | آخر ملاحظة |
+
+> **تفسير الإشارة:** الحقل الخام يتبع 3GPP TS 27.007 §8.5 (`AT+CSQ`).
+> القيمة **99 تعني «غير معروفة أو غير قابلة للكشف»** لا إشارة كاملة.
+> كانت الشيفرة تقصرها على 31 فتُنتج 100% لشريحة بلا شبكة، ويختارها
+> موزّع الأحمال أولًا. لذلك صارت الحقول تقبل `null` صراحةً و`isHealthy`
+> يعتمد `signalUsable` بدل نسبة مئوية مشتقة من قراءة مغلوطة.
+> التفصيل في [`DINSTAR_UC2000_GUIDE_AR.md`](DINSTAR_UC2000_GUIDE_AR.md).
 
 ### DinstarDao — 8 functions
 

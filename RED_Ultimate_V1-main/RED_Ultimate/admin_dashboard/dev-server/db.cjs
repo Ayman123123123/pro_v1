@@ -118,6 +118,42 @@ CREATE TABLE IF NOT EXISTS announcements (
   published_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS telecom_gateways (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  vendor TEXT NOT NULL DEFAULT 'DINSTAR',
+  model TEXT NOT NULL,
+  host TEXT NOT NULL,
+  scheme TEXT NOT NULL DEFAULT 'https',
+  api_port INTEGER NOT NULL DEFAULT 443,
+  port_count INTEGER NOT NULL DEFAULT 8,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  health_state TEXT NOT NULL DEFAULT 'UNKNOWN',
+  routing_priority INTEGER NOT NULL DEFAULT 100,
+  pjsip_endpoint TEXT,
+  site_label TEXT,
+  serial_number TEXT,
+  firmware_version TEXT,
+  discovery_method TEXT NOT NULL DEFAULT 'MANUAL',
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  last_seen_at TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(host, api_port)
+);
+
+CREATE TABLE IF NOT EXISTS gateway_route_decisions (
+  id TEXT PRIMARY KEY,
+  gateway_id TEXT,
+  port_index INTEGER,
+  destination_prefix TEXT,
+  matched_operator TEXT,
+  score REAL,
+  reason TEXT,
+  outcome TEXT NOT NULL DEFAULT 'SELECTED',
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feature_flags (
   id TEXT PRIMARY KEY,
   flag_name TEXT NOT NULL UNIQUE,
@@ -683,6 +719,23 @@ function seedIfEmpty() {
         answered ? new Date(Date.parse(started) + 180000).toISOString() : null);
     });
   }
+
+  // ── أسطول بوابات DINSTAR ──
+  // جهازان لإثبات أن اللوحة والتوجيه يتعاملان مع أكثر من بوابة:
+  // ‎-8G يعمل بـ GSM و‎-8T بـ LTE/VoLTE، وثالث معطّل لاختبار الاستبعاد.
+  const insGw = db.prepare(`INSERT INTO telecom_gateways
+    (id,name,vendor,model,host,scheme,api_port,port_count,enabled,health_state,
+     routing_priority,pjsip_endpoint,site_label,serial_number,firmware_version,
+     discovery_method,last_seen_at,created_at)
+    VALUES (?,?,'DINSTAR',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  [
+    ['UC2000-VE-8G', '192.168.11.1', 8, 1, 'ONLINE', 0, 'dinstar-gw-1', 'صنعاء — المقر', 'DS8G2401001', 'v2.10.3.7', 'CONFIG_SEED'],
+    ['UC2000-VE-8T', '192.168.11.2', 8, 1, 'ONLINE', 10, 'dinstar-gw-2', 'صنعاء — المقر', 'DS8T2401044', 'v2.11.0.2', 'SUBNET_SCAN'],
+    ['UC2000-VE-4G', '192.168.11.3', 4, 0, 'OFFLINE', 50, 'dinstar-gw-3', 'عدن — الفرع', 'DS4G2312017', 'v2.9.8.1', 'MANUAL'],
+  ].forEach(([model, host, ports, enabled, health, priority, pjsip, site, sn, fw, method]) => {
+    insGw.run(uuid(), `DINSTAR ${model} @ ${host}`, model, host, 'https', 443, ports,
+      enabled, health, priority, pjsip, site, sn, fw, method, nowIso(), nowIso());
+  });
 
   return true;
 }

@@ -288,6 +288,143 @@ await check('سلطة التوقيع تكشف المفتاح العام فقط',
   return res.curve;
 });
 
+console.log('\n── بوابات DINSTAR: الأسطول وتفسير الإشارة ──');
+
+await check('تفسير الإشارة يطابق 3GPP TS 27.007 في الخادم والواجهة', async () => {
+  const { readFileSync } = await import('node:fs');
+  const root = new URL('../', import.meta.url).pathname;
+
+  // القراءة 99 تعني «غير قابلة للكشف». أي شيفرة تقصرها على 31 تُنتج
+  // إشارة 100% لشريحة ميتة، وهو ما كان يجعل الموزّع يختارها أولًا.
+  const kotlin = readFileSync(`${root}../backend-server/src/main/kotlin/com/red/server/services/DinstarSignal.kt`, 'utf8');
+  assert(kotlin.includes('UNKNOWN_BASIC = 99'), 'الخادم لا يعرّف القراءة 99 كانعدام إشارة');
+  assert(kotlin.includes('2 * raw - 113'), 'معادلة dBm المعيارية غائبة عن الخادم');
+
+  // نفحص الشيفرة التنفيذية فقط: التعليق الذي يشرح الخلل يذكر الصيغة
+  // القديمة عمدًا، ومطابقته تجعل الفحص يفشل على توثيقه هو.
+  const hardware = readFileSync(`${root}../backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt`, 'utf8');
+  const executable = hardware.split('\n')
+    .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+    .join('\n');
+  assert(!/coerceIn\(0,\s*31\)/.test(executable), 'ما زال الخادم يقصر قراءة الإشارة على 31 — الخلل الأصلي');
+  assert(hardware.includes('DinstarSignal.interpret'), 'الخادم لا يستدعي المفسّر المعياري');
+
+  const dev = readFileSync(`${root}dev-server/server.cjs`, 'utf8');
+  assert(dev.includes('interpretSignal'), 'خادم التطوير لا يفسّر الإشارة كالخادم الحقيقي');
+  assert(/raw === 99/.test(dev), 'خادم التطوير لا يعامل 99 كانعدام إشارة');
+  return 'الخادم وخادم التطوير على المعادلة نفسها';
+});
+
+await check('الأسطول يضم عدة أجهزة بطرازات وأعداد منافذ مختلفة', async () => {
+  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
+  assert(Array.isArray(fleet) && fleet.length >= 2, `عدد البوابات ${fleet.length} — يُتوقع جهازان على الأقل`);
+  const models = new Set(fleet.map((g) => g.model));
+  assert(models.has('UC2000-VE-8G') && models.has('UC2000-VE-8T'),
+    `الطرازان المعتمدان غير مسجّلين: ${[...models].join(', ')}`);
+  // عدد المنافذ يجب أن يتبع الطراز لا أن يكون 8 دائمًا
+  for (const g of fleet) {
+    const expected = g.model.includes('-4') ? 4 : 8;
+    assert(g.portCount === expected, `${g.model} يبلّغ ${g.portCount} منفذًا بدل ${expected}`);
+  }
+  return `${fleet.length} أجهزة — ${[...models].join('، ')}`;
+});
+
+await check('شريحة مسجّلة بلا إشارة قابلة للقياس لا تُحسب جاهزة', async () => {
+  const d = (await api('GET', '/api/admin/dinstar/fleet/ports')).data;
+  const flat = d.gateways.flatMap((g) => g.ports);
+
+  const dead = flat.filter((p) => p.status === 'REGISTERED' && p.signalRaw === 99);
+  assert(dead.length > 0, 'لا توجد حالة اختبار للقراءة 99');
+  for (const p of dead) {
+    // هذا بالضبط ما كان مكسورًا: 99 ⇒ 31 ⇒ 100%
+    assert(p.signal === null, `القراءة 99 أنتجت نسبة ${p.signal} بدل null`);
+    assert(p.signalUsable === false, 'شريحة بلا قياس صُنّفت جاهزة');
+    assert(p.signalLabel === 'NO_SIGNAL', `تصنيف غير متوقع: ${p.signalLabel}`);
+  }
+  assert(d.totals.usable < d.totals.registered,
+    'المجاميع لا تفرّق بين المسجّل والجاهز');
+  return `${d.totals.registered} مسجّلة منها ${d.totals.usable} جاهزة — ${dead.length} مستبعدة بالقراءة 99`;
+});
+
+await check('التوجيه يستبعد المنافذ الميتة ويفضّل نفس المشغل', async () => {
+  // 77 = يمن موبايل. يجب أن يقع الاختيار على شريحة يمن موبايل إن توفرت.
+  const res = (await api('POST', '/api/admin/dinstar/fleet/routing/select', { number: '771234567' })).data;
+  assert(res.selected, 'لم يُختر أي منفذ');
+  assert(res.targetOperator === 'YemenMobile', `تصنيف المشغل خاطئ: ${res.targetOperator}`);
+  assert(res.selected.onNet === true, 'لم يفضّل التوجيه شريحة المشغل نفسه رغم توفرها');
+  assert(res.selected.signalDbm <= -1, 'قوة الإشارة يجب أن تكون بالسالب (dBm)');
+
+  const noSignal = res.rejected.filter((r) => r.why === 'REJECTED_NO_SIGNAL');
+  assert(noSignal.length > 0, 'لم يُستبعد أي منفذ لانعدام الإشارة');
+  assert(noSignal.some((r) => r.signalRaw === 99), 'المنفذ ذو القراءة 99 لم يُستبعد');
+  return `اختير ${res.selected.gatewayHost}#${res.selected.portIndex} (${res.selected.signalDbm} dBm، نفس الشبكة) واستُبعد ${res.rejected.length}`;
+});
+
+await check('البوابة المعطّلة تخرج من التوجيه ومن استعلام المنافذ', async () => {
+  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
+  const disabled = fleet.filter((g) => !g.enabled);
+  assert(disabled.length > 0, 'لا توجد بوابة معطّلة للاختبار');
+  const ports = (await api('GET', '/api/admin/dinstar/fleet/ports')).data;
+  const hosts = ports.gateways.map((g) => g.gateway.host);
+  for (const g of disabled) {
+    assert(!hosts.includes(g.host), `البوابة المعطّلة ${g.host} ما زالت تُستعلم`);
+  }
+  return `${disabled.length} معطّلة — مستبعدة من ${ports.totals.gateways} مفعّلة`;
+});
+
+await check('تسجيل بوابة يرفض العنوان العام والطراز غير المدعوم', async () => {
+  // الفحص والاتصال مقصوران على شبكة إدارة خاصة — لا يجوز أن يقبل
+  // الخادم توجيه مكالمات عبر عنوان على الإنترنت العام.
+  // عناوين عامة متعددة حتى لا يعتمد الفحص على عنوان بعينه
+  for (const host of ['8.8.8.8', '1.1.1.1', '203.0.113.7']) {
+    const res = await api('POST', '/api/admin/dinstar/fleet', { host, model: 'UC2000-VE-8G' });
+    assert(res.status === 400 && res.data.error === 'PRIVATE_ADDRESS_REQUIRED',
+      `العنوان العام ${host} أعاد ${res.status} ${res.data.error || ''}`);
+  }
+
+  // عنوان خاص فريد حتى لا يصطدم الفحص ببوابة سجّلها تشغيل سابق
+  const freeHost = `192.168.11.${160 + Math.floor(Math.random() * 40)}`;
+  const badModel = await api('POST', '/api/admin/dinstar/fleet', { host: freeHost, model: 'DWG2000-16G' });
+  assert(badModel.status === 400 && badModel.data.error === 'UNSUPPORTED_MODEL',
+    `طراز غير مدعوم أعاد ${badModel.status} ${badModel.data.error || ''}`);
+  return 'العنوان العام والطراز المجهول مرفوضان';
+});
+
+await check('دورة حياة بوابة: تسجيل ← تعطيل ← حذف', async () => {
+  const host = `192.168.11.${100 + Math.floor(Math.random() * 50)}`;
+  const created = await api('POST', '/api/admin/dinstar/fleet',
+    { host, model: 'UC2000-VE-4T', pjsipEndpoint: 'dinstar-test', siteLabel: 'فحص آلي' });
+  assert(created.status === 201, `التسجيل أعاد ${created.status}`);
+  const id = created.data.id;
+
+  const listed = (await api('GET', '/api/admin/dinstar/fleet')).data.find((g) => g.id === id);
+  assert(listed, 'البوابة الجديدة لا تظهر في القائمة');
+  assert(listed.portCount === 4, `الطراز الرباعي سُجّل بـ ${listed.portCount} منافذ`);
+
+  const dup = await api('POST', '/api/admin/dinstar/fleet', { host, model: 'UC2000-VE-4T' });
+  assert(dup.status === 400, 'قُبل تسجيل مكرر لنفس العنوان');
+
+  const off = await api('POST', `/api/admin/dinstar/fleet/${id}/enabled`, { enabled: false });
+  assert(off.status === 200 && off.data.enabled === false, 'التعطيل لم ينجح');
+
+  const del = await api('DELETE', `/api/admin/dinstar/fleet/${id}`);
+  assert(del.status === 200, `الحذف أعاد ${del.status}`);
+  const gone = (await api('GET', '/api/admin/dinstar/fleet')).data.find((g) => g.id === id);
+  assert(!gone, 'البوابة ما زالت موجودة بعد الحذف');
+  return 'تسجيل ورفض تكرار وتعطيل وحذف — كلها فعلية';
+});
+
+await check('قرارات التوجيه تُسجَّل بلا كشف رقم الوجهة كاملًا', async () => {
+  await api('POST', '/api/admin/dinstar/fleet/routing/select', { number: '967771234567' });
+  const decisions = (await api('GET', '/api/admin/dinstar/fleet/routing/decisions')).data;
+  assert(decisions.length > 0, 'لم يُسجَّل أي قرار توجيه');
+  const body = JSON.stringify(decisions);
+  // البادئة تكفي للتحليل؛ الرقم الكامل في سجل يقرأه المسؤول تتبّع لا مبرر له
+  assert(!body.includes('771234567'), 'رقم الوجهة الكامل مكشوف في سجل التوجيه');
+  assert(decisions[0].destinationPrefix?.length <= 2, 'البادئة المخزّنة أطول من رقمين');
+  return `${decisions.length} قرارًا — البادئة فقط`;
+});
+
 console.log(`\n${'─'.repeat(60)}`);
 if (fail === 0) {
   console.log(`🎉 نجحت كل الفحوص: ${pass}/${pass} — التطبيق والخادم واللوحة على قاعدة واحدة`);
