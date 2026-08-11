@@ -81,6 +81,28 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
                     .requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()
                     .requestMatchers("/ws/**").permitAll()
+                    // ── مشاركة المستخدم في المحتوى ──
+                    //
+                    // ⚠️ هذه المسارات تقع تحت `/api/admin/content` بحكم
+                    // `@RequestMapping` في `ContentController`، لكنها
+                    // **أفعال مشارِك لا أفعال مسؤول**: كلٌّ منها يأخذ
+                    // `authentication.name` — أي هوية المستدعي نفسه —
+                    // ويسجّل صوته أو حضوره به.
+                    //
+                    // بقاؤها تحت قاعدة `/api/admin/**` كان يعني أن **لا
+                    // مستخدم عادي يستطيع التصويت في استطلاع ولا تأكيد
+                    // حضور فعالية**: 403 دائمًا. والتطبيق يستدعيها فعلًا
+                    // (`EventsApi.rsvp/checkin`, `PollsApi.vote`).
+                    //
+                    // تسبق قاعدة ADMIN لأن الأسبقية للأول المطابق.
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/polls/*/vote").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/events/*/rsvp").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/admin/content/events/*/checkin").authenticated()
+                    // قراءة المحتوى المنشور متاحة لكل مصادَق؛ الإنشاء
+                    // والتعديل والحذف تبقى إدارية عبر القاعدة التالية.
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/polls/active").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/content/events/live", "/api/admin/content/events/upcoming").authenticated()
+
                     // Admin endpoints
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**").hasRole("ADMIN")
                     // Social features

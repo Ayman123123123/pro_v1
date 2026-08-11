@@ -230,6 +230,19 @@ CREATE TABLE IF NOT EXISTS polls (
   closes_at TEXT
 );
 
+-- أصوات الاستطلاعات: سجلّ لكل صوت لا عدّاد فقط.
+-- العدّاد داخل polls.options وحده لا يمنع التصويت المكرر، فكان
+-- المستخدم الواحد يرفع أي خيار بلا حدّ وتفقد النتيجة معناها.
+-- القيد الفريد يجعل المنع من صميم المخطّط لا من فحص في الشيفرة.
+CREATE TABLE IF NOT EXISTS poll_votes (
+  id TEXT PRIMARY KEY,
+  poll_id TEXT NOT NULL REFERENCES polls(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  option_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (poll_id, user_id, option_id)
+);
+
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

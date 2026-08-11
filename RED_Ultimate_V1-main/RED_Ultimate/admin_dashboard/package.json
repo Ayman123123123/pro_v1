@@ -13,14 +13,15 @@
     "build:check": "tsc --noEmit",
     "build:fast": "vite build",
     "build:strict": "tsc --noEmit && vite build",
-    "check": "npm run check:api && npm run check:guards && npm run build:check",
+    "check": "npm run check:api && npm run check:guards && npm run check:roles && npm run build:check",
     "check:api": "node scripts/check-api-contract.mjs",
     "check:guards": "node scripts/check-frontend-guards.mjs",
     "check:server": "node scripts/check-dev-server.mjs",
     "check:integration": "node scripts/check-integration.mjs",
     "check:live": "node scripts/check-dev-server.mjs && node scripts/check-integration.mjs && node scripts/check-asterisk-fleet.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8088",
-    "check:asterisk": "node scripts/check-asterisk-fleet.mjs"
+    "check:asterisk": "node scripts/check-asterisk-fleet.mjs",
+    "check:roles": "node scripts/check-app-roles.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",

@@ -621,12 +621,37 @@ module.exports = function registerAppRoutes(on) {
     if (!poll) return notFound('POLL_NOT_FOUND');
     if (poll.status !== 'ACTIVE') return bad('POLL_CLOSED');
     const options = JSON.parse(poll.options);
-    const option = options.find((o) => o.id === b?.optionId);
-    if (!option) return bad('INVALID_OPTION');
-    option.votes += 1;
-    run('UPDATE polls SET options=?, total_votes=? WHERE id=?',
-      JSON.stringify(options), poll.total_votes + 1, p.pollId);
-    return ok({ id: poll.id, question: poll.question, options, totalVotes: poll.total_votes + 1, status: poll.status });
+
+    // العقد `optionIds` مصفوفةً — كما في `PollsApi.VoteRequest` وفي
+    // `ContentController.votePoll`. كان هذا المعالج يقرأ `optionId`
+    // مفردًا، فكل تصويت من التطبيق يُرفض بـ INVALID_OPTION مهما كان
+    // الخيار صحيحًا. نقبل المفرد أيضًا توافقًا مع أي مستدعٍ قديم.
+    const requested = Array.isArray(b?.optionIds)
+      ? b.optionIds
+      : (b?.optionId ? [b.optionId] : []);
+    if (requested.length === 0) return bad('OPTION_IDS_REQUIRED');
+
+    // الاستطلاع أحادي الخيار لا يقبل أكثر من صوت واحد.
+    if (poll.poll_type === 'SINGLE_CHOICE' && requested.length > 1) {
+      return bad('SINGLE_CHOICE_POLL_ACCEPTS_ONE_OPTION');
+    }
+
+    const chosen = requested.map((id) => options.find((o) => o.id === id));
+    if (chosen.some((o) => !o)) return bad('INVALID_OPTION');
+
+    // منع التصويت المكرر: بلا هذا يستطيع مستخدم واحد رفع أي خيار
+    // بلا حدّ، فتفقد نتيجة الاستطلاع أي معنى.
+    const already = get('SELECT 1 x FROM poll_votes WHERE poll_id = ? AND user_id = ?', p.pollId, me.id);
+    if (already) return bad('ALREADY_VOTED');
+    for (const o of chosen) {
+      run('INSERT INTO poll_votes (id,poll_id,user_id,option_id,created_at) VALUES (?,?,?,?,?)',
+        uuid(), p.pollId, me.id, o.id, nowIso());
+      o.votes += 1;
+    }
+
+    const total = poll.total_votes + chosen.length;
+    run('UPDATE polls SET options=?, total_votes=? WHERE id=?', JSON.stringify(options), total, p.pollId);
+    return ok({ id: poll.id, question: poll.question, options, totalVotes: total, status: poll.status });
   });
 
   on('POST', '/api/admin/content/events/:eventId/rsvp', (p, _q, _b, ctx) => {

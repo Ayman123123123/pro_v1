@@ -1163,6 +1163,38 @@ on('PUT', '/api/social/status', () => ok({ success: true }));
 on('GET', '/api/social/status/:userId', (p) => ok({ userId: p.userId, type: 'ONLINE', customText: null }));
 
 // مسارات التطبيق تُسجَّل الآن — بعد كل مسارات اللوحة أعلاه.
+/**
+ * أفعال المشارِك تحت `/api/admin/content` — ليست إدارية.
+ *
+ * `ContentController` يعلن `@RequestMapping("/api/admin/content")`،
+ * فوقعت أفعال المستخدم تحت مظلة المسؤول. كلٌّ منها يأخذ هوية
+ * المستدعي نفسه ويسجّل صوته أو حضوره بها. تُستثنى صراحةً هنا كما في
+ * SecurityConfig، والأسبقية للاستثناء كما يفعل Spring.
+ */
+const PARTICIPANT_ROUTES = [
+  { method: 'POST', rx: /^\/api\/admin\/content\/polls\/[^/]+\/vote$/ },
+  { method: 'POST', rx: /^\/api\/admin\/content\/events\/[^/]+\/rsvp$/ },
+  { method: 'POST', rx: /^\/api\/admin\/content\/events\/[^/]+\/checkin$/ },
+  { method: 'GET', rx: /^\/api\/admin\/content\/polls\/active$/ },
+  { method: 'GET', rx: /^\/api\/admin\/content\/events\/(live|upcoming)$/ },
+];
+
+/**
+ * يعيد ردًّا عند المنع، أو `null` عند السماح.
+ * يطابق ترتيب SecurityConfig: الاستثناء أولًا ثم قاعدة ADMIN.
+ */
+function adminGuard(method, pathname, headers) {
+  const isAdminPath = /^\/api\/(admin|master\/admin|master\/v1)\//.test(pathname);
+  if (!isAdminPath) return null;
+  if (PARTICIPANT_ROUTES.some((r) => r.method === method && r.rx.test(pathname))) return null;
+
+  // نعيد استعمال `currentUser` من app-routes بدل تكرار منطق الجلسات.
+  const user = appRoutes.currentUser({ headers });
+  if (!user) return { status: 401, data: { error: 'UNAUTHORIZED' } };
+  if (user.role !== 'ADMIN') return { status: 403, data: { error: 'FORBIDDEN', required: 'ADMIN' } };
+  return null;
+}
+
 appRoutes(on);
 
 // ───────────────────────────── الخادم ─────────────────────────────
@@ -1184,6 +1216,20 @@ const server = http.createServer((req, res) => {
         if (route.method !== req.method) continue;
         const params = match(route.pattern, parsed.pathname);
         if (!params) continue;
+
+        // ── فرض دور ADMIN مطابقًا لـ SecurityConfig ──
+        //
+        // كان خادم التطوير يفتح كل `/api/admin/**` لأي مستخدم مصادَق،
+        // بينما يفرض الخادم الحقيقي `hasRole("ADMIN")`. الفارق يعني أن
+        // مسارًا يعمل في التطوير ويعيد 403 في الإنتاج — وهو ما أخفى
+        // أن التصويت في الاستطلاعات وتأكيد حضور الفعاليات كانا
+        // مستحيلين على كل مستخدم عادي.
+        const guard = adminGuard(req.method, parsed.pathname, req.headers);
+        if (guard) {
+          res.writeHead(guard.status, { 'Content-Type': 'application/json; charset=utf-8' });
+          return res.end(JSON.stringify(guard.data));
+        }
+
         const result = route.handler(params, parsed.searchParams, body, {
           ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'], headers: req.headers,
         });

@@ -15,10 +15,22 @@ const BASE = process.env.RED_API_TARGET || 'http://127.0.0.1:8080';
 let pass = 0;
 let fail = 0;
 
+/**
+ * رمز المسؤول — يُملأ مرة واحدة قبل الفحوص.
+ *
+ * كان هذا السكربت يستدعي مسارات `/api/admin/**` **بلا أي ترويسة
+ * تفويض**، وكان يمرّ لأن خادم التطوير لم يكن يفرض دور ADMIN إطلاقًا
+ * بخلاف `SecurityConfig`. أي أن الفحوص كانت تثبّت السلوك الخاطئ.
+ * بعد إضافة حارس الدور صار التفويض لازمًا هنا كما في الإنتاج.
+ */
+let adminToken = null;
+
 async function api(method, path, body) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();
@@ -94,6 +106,23 @@ try {
 }
 
 console.log(`\n🔍 فحص خادم التطوير على ${BASE}\n`);
+
+// ── تفويض المسؤول قبل أي فحص ──
+// خادم التطوير صار يفرض دور ADMIN على `/api/admin/**` مطابقةً
+// لـ SecurityConfig، فبلا رمز تعود كل هذه الفحوص بـ401.
+{
+  const res = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'younes_sovereign', password: 'dev' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!data.accessToken) {
+    console.error('❌ تعذّر تسجيل دخول المسؤول — هل خادم التطوير يعمل؟');
+    process.exit(1);
+  }
+  adminToken = data.accessToken;
+}
 
 // ═══ 1. الموافقات: العطل المُبلَّغ عنه ═══
 console.log('── التسجيل ثم الموافقة (الدورة الكاملة) ──');
