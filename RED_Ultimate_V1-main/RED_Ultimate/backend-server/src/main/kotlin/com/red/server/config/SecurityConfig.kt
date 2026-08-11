@@ -121,6 +121,9 @@ class SecurityConfig(
                     .requestMatchers("/api/stories/**").authenticated()
                     .requestMatchers("/api/feed/**", "/api/posts/**", "/api/social/**").authenticated()
                     .requestMatchers("/api/groups/**").authenticated()
+                    // V26: ميزات جديدة — قنوات، تثبيت، اختفاء مرن
+                    .requestMatchers("/api/channels/**").authenticated()
+                    .requestMatchers("/api/messages/pins/**").authenticated()
                     .requestMatchers("/api/messages/**", "/api/contacts/**", "/api/devices/**").authenticated()
                     .requestMatchers("/api/pstn/**", "/api/dinstar/**").authenticated()
                     .requestMatchers("/api/admin/dinstar/sms/**").hasRole("ADMIN")
