@@ -69,13 +69,21 @@ class ContentService(
 
     @Transactional
     fun vote(pollId: UUID, userId: UUID, optionIds: List<UUID>) {
-        val poll = polls.findById(pollId).orElse(null) ?: return
-        if (poll.status != "ACTIVE") return
-        if (poll.endsAt != null && poll.endsAt!!.isBefore(Instant.now())) return
+        require(optionIds.isNotEmpty()) { "NO_OPTIONS" }
+        val poll = polls.findById(pollId).orElse(null)
+            ?: throw NoSuchElementException("POLL_NOT_FOUND")
+        if (poll.status != "ACTIVE") throw IllegalStateException("POLL_NOT_ACTIVE")
+        if (poll.endsAt != null && poll.endsAt!!.isBefore(Instant.now()))
+            throw IllegalStateException("POLL_ENDED")
 
-        // Check if user already voted
+        // تحقق أن كل خيار ينتمي لهذا الاستطلاع — يمنع التصويت بخيار من استطلاع آخر
+        val validOptionIds = pollOptions.findByPollId(pollId).map { it.id }.toSet()
+        val invalid = optionIds.filter { it !in validOptionIds }
+        require(invalid.isEmpty()) { "INVALID_OPTION" }
+
+        // Check if user already voted — رفض صريح بدل العودة الصامتة
         val existing = pollVotes.countByPollIdAndUserId(pollId, userId)
-        if (existing > 0) return
+        if (existing > 0) throw IllegalStateException("ALREADY_VOTED")
 
         optionIds.forEach { optionId ->
             pollVotes.save(PollVote(pollId = pollId, optionId = optionId, userId = userId))
@@ -100,7 +108,9 @@ class ContentService(
     @Transactional
     fun deletePoll(pollId: UUID): Boolean {
         return if (polls.existsById(pollId)) {
-            pollOptions.findByPollId(pollId).forEach { pollOptions.delete(it) }
+            // حذف مجمّع (بديل N+1) + حذف الأصوات لمنع اليتم
+            pollOptions.deleteAllByPollId(pollId)
+            pollVotes.deleteAllByPollId(pollId)
             polls.deleteById(pollId); true
         } else false
     }
@@ -127,6 +137,9 @@ class ContentService(
 
     fun getUpcomingEvents(): List<Event> = events.findUpcoming(Instant.now())
     fun getLiveEvents(): List<Event> = events.findLive()
+
+    /** تفاصيل فعالية واحدة — يُستدعى من تطبيق المستخدم لعرض صفحة الفعالية قبل RSVP. */
+    fun getEvent(eventId: UUID): Event? = events.findById(eventId).orElse(null)
 
     @Transactional
     fun createEvent(

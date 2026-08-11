@@ -150,7 +150,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun unblock(profile: PublicRedProfile) = viewModelScope.launch {
-        when (val response = client.request("POST", "/api/contacts/${profile.redId}/unblock")) {
+        when (val response = client.request("DELETE", "/api/contacts/${profile.redId}/block")) {
             is ApiResult.Success -> { blocked.removeAll { it == profile.redId }; state = DirectoryState.Message("تم فك الحظر عن @${profile.username}") }
             is ApiResult.Error -> state = DirectoryState.Error(response.message)
         }

@@ -20,7 +20,21 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — feat: حزمة الميزات الأربع (A1 + A3 + B1 + B6)
+## 2026-08-11 — fix: إصلاح 12 عطل مؤكّد من التدقيق العميق + حارس عقد
+- **عطل تصريف #1:** 3 دوال مفقودة في YounesCallService (silenceRinger/holdActiveCall/resumeRinger) — PhoneStateReceiver كان يستدعيها بلا تعريف ⇒ لا APK
+- **عطل تصريب #2:** ApiResult.Success arity (4 مواضع بوسيط واحد بدل اثنين)
+- **سباق التوكن:** Mutex مشترك + فحص مزدوج + حذف runBlocking — يمنع الطرد الجماعي للأجهزة عند 401 متوازي
+- **unblock 404:** وحّد التطبيق لـ DELETE /block (كان POST /unblock)
+- **events GET 405:** أضفت @GetMapping("/events/{eventId}") + getEvent() + استثناء SecurityConfig
+- **votePoll كاذب:** أخطاء صريحة (404/409/400) + تحقّق optionId ينتمي للاستطلاع + تحويل آمن
+- **قناة red_calls:** وحّدت أهمية الراوتر لـ IMPORTANCE_HIGH (كان MAX = تعارض غير حتمي)
+- **CallTelemetry.flush:** نطاق مشترك بـ SupervisorJob (كان نطاق يتيم لكل نداء)
+- **ProGuard:** قواعد كاملة (11 قسم) — كان 3 أسطر تحطّم الإصدار
+- **13 تحويل غير آمن:** as String → as? String ?: 400 (ContentController + AdminV2Controller)
+- **N+1 حذف استطلاع:** deleteAllByPollId (حذف مجمّع) + حذف الأصوات لمنع اليتم
+- **حارس عقد:** scripts/check-android-integrity.py (23 فحص) + check-all.sh + CI build-red.yml
+- **تصحيحان للتقرير:** StoriesScreen وSettingsScreen ليستا ميتتين (StoryFullscreen/YounesSettingsSheet مستخدمتان)
+- التوثيق: docs/AUDIT_FIXES_VERIFIED_AR.md
 - **A1 البروفايل**: V25 migration (avatar_url + bio) + UserAccount + updateProfile + PublicRedProfile(avatarUrl)
   + ProfileViewModel + ProfileScreen (صورة مشفّرة + بايو + QR) + MoreScreen
 - **A3 قفل البصمة**: androidx.biometric + AppLockScreen (BiometricPrompt) + appLockEnabled
