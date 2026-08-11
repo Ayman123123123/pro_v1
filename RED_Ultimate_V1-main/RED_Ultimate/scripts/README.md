@@ -8,7 +8,7 @@
 
 ## المحتوى
 
-`local-first-run.ps1`، `local-first-run.sh`، `generate-local-identity-authority.sh`.
+`local-first-run.ps1`، `local-first-run.sh`، `generate-local-identity-authority.sh`، `backup-platform.sh`، `restore-platform.sh`.
 
 ## العلاقة بباقي المشروع
 
@@ -19,3 +19,11 @@
 ## التحقق
 
 لا تُعلن ميزة هذا المجلد مكتملة إلا إذا دخلت بوابة البناء المناسبة واختبار runtime/جهازها. أسرار `.env` و`secrets/` ومفاتيح Android الخاصة لا تُحفظ في Git.
+
+
+## النسخ والاستعادة
+
+- `backup-platform.sh` ينشئ حزمة مشفرة بـ GPG تشمل PostgreSQL وMongoDB وRedis وMinIO ومفاتيح الهوية.
+- `restore-platform.sh` يتحقق افتراضياً فقط؛ التطبيق المدمر يتطلب acknowledgement صريحاً.
+- الدليل التشغيلي الكامل: [`../docs/BACKUP_RESTORE_RUNBOOK_AR.md`](../docs/BACKUP_RESTORE_RUNBOOK_AR.md).
+- لا تمنح Backend Docker socket ولا تشغّل هذا المسار من لوحة الإدارة.
