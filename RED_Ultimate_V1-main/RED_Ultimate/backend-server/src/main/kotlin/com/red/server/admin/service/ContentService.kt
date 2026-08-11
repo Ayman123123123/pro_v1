@@ -362,6 +362,7 @@ class ContentService(
         stickers.findByPackIdOrderByDisplayOrder(packId)
 
     /** يثبّت مستخدم حزمة ملصقات (تظهر في منتقاه). */
+    @Transactional
     fun installStickerPack(userId: UUID, packId: UUID): UserStickerPack {
         require(stickerPacks.existsById(packId)) { "STICKER_PACK_NOT_FOUND" }
         // إن كان مثبّتاً مسبقاً نُرجعه دون تكرار
@@ -371,6 +372,7 @@ class ContentService(
     }
 
     /** يُلغي تثبيت حزمة. */
+    @Transactional
     fun uninstallStickerPack(userId: UUID, packId: UUID): Boolean {
         val existing = userStickerPacks.findByIdUserIdAndIdPackId(userId, packId) ?: return false
         userStickerPacks.delete(existing)

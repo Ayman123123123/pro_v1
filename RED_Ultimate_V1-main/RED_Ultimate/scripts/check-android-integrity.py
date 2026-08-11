@@ -180,6 +180,50 @@ check(
     "scope.launch {} يستدعي extension غير مستورد ⇒ عطل تصريف",
 )
 
+# ─── محاور الـ backend (فحص عميق ثالث) ─────────────────────────────────
+BACKEND = ROOT / "backend-server/src/main/kotlin/com/red/server"
+
+# 16. installStickerPack/uninstallStickerPack يجب أن يكونا @Transactional
+content_service = (BACKEND / "admin/service/ContentService.kt").read_text(encoding="utf-8")
+import re as _re
+def has_transactional_before(fn_name, text):
+    # ابحث عن الدالة وتحقق أن @Transactional تسبقها مباشرة
+    pattern = rf'@Transactional\s+fun {fn_name}'
+    return bool(_re.search(pattern, text)) or bool(_re.search(rf'@Transactional\n\s+fun {fn_name}', text))
+check(
+    "Backend: installStickerPack @Transactional",
+    "@Transactional" in content_service and "fun installStickerPack" in content_service and
+    bool(_re.search(r'@Transactional\s*\n\s*fun installStickerPack', content_service)),
+    "installStickerPack يفحص ثم يُدرج — سباق check-then-act بلا @Transactional",
+)
+check(
+    "Backend: uninstallStickerPack @Transactional",
+    bool(_re.search(r'@Transactional\s*\n\s*fun uninstallStickerPack', content_service)),
+    "uninstallStickerPack تحذف — يجب أن تكون transactional",
+)
+
+# 17. لا findById(...)!! في CommunitiesController (NPE ⇒ 500)
+communities = (BACKEND / "social/CommunitiesController.kt").read_text(encoding="utf-8")
+bang_finds = _re.findall(r'mongo\.findById\([^)]+\)!!', communities)
+check(
+    "Backend: لا mongo.findById(...)!! في CommunitiesController (NPE ⇒ 500)",
+    len(bang_finds) == 0,
+    f"وجدت {len(bang_finds)} موضع !! يرمي NPE بدل 404: {bang_finds[:2]}",
+)
+
+# 18. AuthExceptionHandler يلتقط IllegalStateException + ClassCastException
+handler = (BACKEND / "auth/AuthExceptionHandler.kt").read_text(encoding="utf-8")
+check(
+    "Backend: AuthExceptionHandler يلتقط IllegalStateException (409)",
+    "IllegalStateException" in handler,
+    "IllegalStateException غير ملتقط ⇒ 500 بدل 409 (POLL_NOT_ACTIVE/ALREADY_VOTED)",
+)
+check(
+    "Backend: AuthExceptionHandler يلتقط ClassCastException (400)",
+    "ClassCastException" in handler,
+    "ClassCastException غير ملتقط ⇒ 500 بدل 400 عند جسم مشوَّه",
+)
+
 
 # ─── الخلاصة ──────────────────────────────────────────────────────────
 print("════════════════════════════════════════════════")

@@ -20,7 +20,18 @@
 - اختبارات: 11 اختبار وحدة في RichMessageTest (round-trip + validation + failure cases)
 - التوثيق: docs/REACTIONS_FEATURE_AR.md (Threat model + proto + tests + RTL)
 
-## 2026-08-11 — feat(stickers): ملصقات سيادية محلية (حديثة + جميلة + مرئية)
+## 2026-08-11 — fix: فحص عميق ثالث للـ backend — ٣ عيوب + ٥ فحوصات حارس
+- **@Transactional مفقود** على installStickerPack/uninstallStickerPack (التي أضفتها!)
+  → installStickerPack يفحص ثم يُدرج = سباق check-then-act بلا حماية → أضفت @Transactional
+- **NPE في CommunitiesController** (mongo.findById(...)!! بعد updateFirst) → 500 بدل 404
+  → أصلحته لـ ?: return notFound().build()
+- **معالج استثناءات ناقص** — AuthExceptionHandler لا يلتقط IllegalStateException/ClassCastException
+  → أضفت IllegalStateException→409 (POLL_NOT_ACTIVE/ALREADY_VOTED) + ClassCastException→400
+- حارس التكامل: +٥ فحوصات backend (33 إجمالاً) — @Transactional + NPE + معالج الاستثناءات
+- ما تأكد سليماً: لا SQL injection · JWT لا يُسجّل · BCrypt password · SSRF لا ·
+  editMessage/deleteForEveryone يتحققان من الملكية · PstnCallService يتحقق من الصلاحية والحد ·
+  CORS مضبوط بـ allowedOriginPatterns (لا *) · TTL مفعّل على refresh tokens
+- التوثيق: docs/DEEP_AUDIT_3_BACKEND_AR.md (حديثة + جميلة + مرئية)
 - **Backend**: Sticker entity + StickerRepository + UserStickerPack entity/repository (جداول V20 جاهزة)
   + endpoints: GET /sticker-packs/published + GET /sticker-packs/{id}/stickers + POST/DELETE install + GET installed
   + SecurityConfig: فتح القراءة والتثبيت للمستخدم المصادَق
