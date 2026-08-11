@@ -230,20 +230,34 @@ private fun decodeQrFromImage(image: ImageProxy): String? = runCatching {
 }.getOrNull()
 
 /**
- * RED ID format: YNS-XXXX-XXXX (uppercase alphanumeric)
- * Example: YNS-9F2A-BC11
+ * صيغة RED ID: YNS-XXXX-XXXX — مطابقة لما يولّده `auth/RedIdGenerator.kt`
+ * على الخادم. الأبجدية تستبعد 0 و1 وI وO لمنع اللبس البصري عند القراءة
+ * أو الإملاء الصوتي.
+ *
+ * كان هذا النمط سابقًا `[A-Z0-9]` ويقبل البادئة YNS فقط، بينما
+ * `RED_ID_PATTERN` في ui/RedDashboard.kt يستخدم الأبجدية المقيّدة ويقبل
+ * البادئتين. النتيجة: معرّف يمر من الماسح ثم تظهر شاشة المحادثة بأزرار
+ * اتصال وإرسال معطّلة بلا سبب ظاهر. النمطان الآن متطابقان.
  */
-private val RED_ID_REGEX = Regex("^YNS-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+private val RED_ID_REGEX = Regex("^(RED|YNS)-[23456789A-HJ-NP-Z]{4}-[23456789A-HJ-NP-Z]{4}$")
 
 fun isValidRedId(redId: String): Boolean = RED_ID_REGEX.matches(redId)
 
-/** Normalize any input to RED ID form (auto-uppercase + dash insertion) */
+/**
+ * تطبيع ما يكتبه المستخدم إلى صيغة RED ID.
+ * يتعامل مع الحالتين: كتابة المعرّف كاملًا بالبادئة، أو كتابة الرموز
+ * الثمانية وحدها — وكلتاهما شائعة عند النسخ اليدوي.
+ */
 fun normalizeRedIdInput(input: String): String {
     val cleaned = input.uppercase().filter { it.isLetterOrDigit() }
+    val body = when {
+        cleaned.startsWith("YNS") -> cleaned.removePrefix("YNS")
+        cleaned.startsWith("RED") -> cleaned.removePrefix("RED")
+        else -> cleaned
+    }.take(8)
     return when {
-        cleaned.length <= 3 -> "YNS-$cleaned"
-        cleaned.length <= 7 -> "YNS-${cleaned.substring(3)}"
-        cleaned.length <= 11 -> "YNS-${cleaned.substring(3, 7)}-${cleaned.substring(7)}"
-        else -> "YNS-${cleaned.substring(3, 7)}-${cleaned.substring(7, 11)}"
+        body.isEmpty() -> "YNS-"
+        body.length <= 4 -> "YNS-$body"
+        else -> "YNS-${body.substring(0, 4)}-${body.substring(4)}"
     }
 }

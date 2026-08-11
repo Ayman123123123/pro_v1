@@ -35,8 +35,8 @@ import com.red.sovereign.ui.theme.YounesEmerald
 @Composable
 fun ShareRedIdSheet(
     onDismiss: () -> Unit,
-    redId: String = "YNS-XXXX-XXXX", // placeholder, will be replaced
-    displayName: String = "مستخدم يونس"
+    redId: String,
+    displayName: String
 ) {
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }

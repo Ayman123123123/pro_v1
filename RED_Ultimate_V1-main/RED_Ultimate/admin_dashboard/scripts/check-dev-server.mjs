@@ -61,8 +61,10 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
     }
   }
 
-  const server = readFileSync(`${root}dev-server/server.cjs`, 'utf8');
-  const routes = [...server.matchAll(/^on\('(\w+)',\s*'([^']+)'/gm)].map((m) => m[2]);
+  // المعالجات موزّعة على ملفين: مسارات اللوحة ومسارات التطبيق.
+  const server = ['dev-server/server.cjs', 'dev-server/app-routes.cjs']
+    .map((f) => readFileSync(root + f, 'utf8')).join('\n');
+  const routes = [...server.matchAll(/^\s*on\('(\w+)',\s*'([^']+)'/gm)].map((m) => m[2]);
   const seg = (r) => r.split('/').filter(Boolean).map((s) => (s.startsWith(':') ? 'X' : s));
 
   const missing = [...called].sort().filter((p) => {
