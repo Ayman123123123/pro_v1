@@ -2,6 +2,7 @@ package com.red.server.media
 
 import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
+import java.nio.charset.StandardCharsets
 
 /**
  * 🛡️ فحص أمني للوسائط — يمنع الملفات الخبيثة قبل التخزين
@@ -108,13 +109,10 @@ class MediaSecurityScanner {
             return true
         }
         // fallback: box type في أي مكان (بعض الـ fragmented MP4)
-        val ftyp = "ftyp".toByteArray(Charsets.US_ASCII)
-        for (i in 4..11) {
-            if (i + 3 < header.size && 
-                header[i] == ftyp[0] && header[i+1] == ftyp[1] && 
-                header[i+2] == ftyp[2] && header[i+3] == ftyp[3]) return true
+        val ftypBytes = "ftyp".toByteArray(StandardCharsets.US_ASCII)
+        return (4..11).any { i ->
+            i + ftypBytes.size <= header.size && header.sliceArray(i until i + ftypBytes.size).contentEquals(ftypBytes)
         }
-        return false
     }
 
     /**

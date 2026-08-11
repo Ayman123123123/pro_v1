@@ -156,8 +156,8 @@ class ContentService(
     fun rsvp(eventId: UUID, userId: UUID, status: String = "GOING"): EventAttendee? {
         val event = events.findById(eventId).orElse(null) ?: return null
         if (event.status != "SCHEDULED" && event.status != "LIVE") return null
-        val deadline = event.rsvpDeadline
-        if (deadline != null && deadline.isBefore(Instant.now())) return null
+        val rsvpDeadline = event.rsvpDeadline
+        if (rsvpDeadline != null && rsvpDeadline.isBefore(Instant.now())) return null
         if (event.maxAttendees != null && event.currentAttendees >= event.maxAttendees!! &&
             status == "GOING") return null
 

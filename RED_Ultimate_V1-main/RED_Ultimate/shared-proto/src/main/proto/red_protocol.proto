@@ -14,6 +14,7 @@ message RedRED {
         TypingRED typing = 4;
         DeleteRED delete = 5;
         RemoteWipeCommand remote_wipe = 6;
+        RemoteWipeAck remote_wipe_ack = 7;
     }
 }
 
@@ -56,9 +57,14 @@ message DeleteRED {
     bool for_everyone = 3;
 }
 
-// Admin-initiated remote app wipe, delivered over the same authenticated WebSocket channel.
+// Server-issued command for the authenticated device to erase YOUNES application data.
+// This is an application wipe, never an unmanaged Android factory reset.
 message RemoteWipeCommand {
     string command_id = 1;
     string reason = 2;
     int64 issued_at = 3;
+}
+
+message RemoteWipeAck {
+    string command_id = 1;
 }

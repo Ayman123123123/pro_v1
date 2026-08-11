@@ -15,13 +15,16 @@ import org.springframework.stereotype.Service
 import org.springframework.web.multipart.MultipartFile
 import java.awt.Color
 import java.awt.Font
+import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.File
 import java.io.OutputStream
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
+import javax.imageio.ImageIO
+import java.util.UUID
+import kotlin.jvm.JvmStatic
 
 @Service
 class MediaService(

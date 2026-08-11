@@ -97,7 +97,7 @@ class LiveStreamWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             "roomId" to streamId,
             "payload" to mapOf("userId" to userId)
         ))
-        target.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
+        target?.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
     }
 
     companion object {

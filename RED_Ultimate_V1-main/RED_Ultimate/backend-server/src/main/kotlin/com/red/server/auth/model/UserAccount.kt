@@ -75,7 +75,25 @@ class UserAccount(
     var pstnEnabled: Boolean = false,
 
     @Column(name = "pstn_daily_limit", nullable = false)
-    var pstnDailyLimit: Int = 0
+    var pstnDailyLimit: Int = 0,
+
+    @Column(name = "password_reset_required", nullable = false)
+    var passwordResetRequired: Boolean = false,
+
+    @Column(name = "password_reset_issued_at")
+    var passwordResetIssuedAt: Instant? = null,
+
+    @Column(name = "remote_wipe_status", length = 20)
+    var remoteWipeStatus: String? = null,
+
+    @Column(name = "remote_wipe_requested_at")
+    var remoteWipeRequestedAt: Instant? = null,
+
+    @Column(name = "remote_wipe_completed_at")
+    var remoteWipeCompletedAt: Instant? = null,
+
+    @Column(name = "managed_device_wipe_allowed", nullable = false)
+    var managedDeviceWipeAllowed: Boolean = false
 )
 
 enum class AccountStatus {
