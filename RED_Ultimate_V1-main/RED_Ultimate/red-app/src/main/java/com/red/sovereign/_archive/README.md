@@ -30,3 +30,9 @@
 - **لا تحذف** الملفات من هذا المجلد إلا بعد 6 أشهر من الأرشفة.
 - إذا احتجت استعادة ملف، انقله إلى مكانه الأصلي وأزل هذا الـ README.
 - ملفات الأرشيف التي قد تسبب تكرار فئات يجب أن تبقى بامتداد غير `.kt` حتى لا تدخل build.
+
+### `AuthFlow.legacy.kt.archived`
+- **المسار الأصلي:** `com.red.sovereign.ui.AuthFlow` (`AuthFlow.kt`)
+- **التاريخ:** 2026-08-11
+- **السبب:** تدفق قديم محظور `PHONE_INPUT`/`OTP_VERIFICATION` مع `CountryCode +967` — يخالف مبدأ السيادة (بدون هاتف/SIM/OTP). الفاحص `check-sovereign-boundaries.sh` يفشل بوجوده. البديل السيادي هو `ui/AuthScreens.kt` (username+password+RED ID) المستخدم في `MainActivity`.
+- **البديل النشط:** `com.red.sovereign.ui.AuthFlow` في `AuthScreens.kt` + `auth/AuthViewModel` (register/login/recovery)
