@@ -223,6 +223,34 @@ check(
     "ClassCastException" in handler,
     "ClassCastException غير ملتقط ⇒ 500 بدل 400 عند جسم مشوَّه",
 )
+check(
+    "Backend: AuthExceptionHandler يلتقط NumberFormatException (400)",
+    "NumberFormatException" in handler,
+    "NumberFormatException غير ملتقط ⇒ 500 بدل 400 عند رقم مشوَّه",
+)
+check(
+    "Backend: AuthExceptionHandler يلتقط NullPointerException (400)",
+    "NullPointerException" in handler,
+    "NullPointerException غير ملتقط ⇒ 500 بدل 400 + تسريب stack trace",
+)
+
+# 19. Mongo indexes للنماذج الاجتماعية (تحسين وقائي ضد collection scans)
+mongo_docs = (BACKEND / "database/SovereignMongoDocuments.kt").read_text(encoding="utf-8")
+check(
+    "Backend: StoryReaction.storyId و userId مُفهرسان (@Indexed)",
+    bool(_re.search(r'data class StoryReaction\(.*?@Indexed val storyId', mongo_docs, _re.DOTALL)),
+    "StoryReaction بلا فهرس على storyId/userId ⇒ collection scan عند الاستعلام المستقبلي",
+)
+check(
+    "Backend: PostReaction.postId و userId مُفهرسان (@Indexed)",
+    bool(_re.search(r'data class PostReaction\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
+    "PostReaction بلا فهرس على postId/userId ⇒ collection scan",
+)
+check(
+    "Backend: PollVote (Mongo) مُفهرس على postId/userId/optionId",
+    bool(_re.search(r'data class PollVote\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
+    "PollVote (Mongo) بلا فهرس ⇒ collection scan",
+)
 
 
 # ─── الخلاصة ──────────────────────────────────────────────────────────

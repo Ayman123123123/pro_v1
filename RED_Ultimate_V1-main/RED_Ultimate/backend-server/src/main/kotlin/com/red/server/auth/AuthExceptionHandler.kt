@@ -44,4 +44,14 @@ class AuthExceptionHandler {
     @ExceptionHandler(ClassCastException::class)
     fun badCast(error: ClassCastException): ResponseEntity<Map<String, String>> =
         ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST_BODY"))
+
+    /** NumberFormatException — رقم مشوَّه (مثل toInt() على نص) → 400 بدل 500 */
+    @ExceptionHandler(NumberFormatException::class)
+    fun badNumber(error: NumberFormatException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_NUMBER_FORMAT"))
+
+    /** NullPointerException — مرجع null غير متوقع → 400 بدل 500 (لا تسريب stack trace) */
+    @ExceptionHandler(NullPointerException::class)
+    fun badNull(error: NullPointerException): ResponseEntity<Map<String, String>> =
+        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST"))
 }
