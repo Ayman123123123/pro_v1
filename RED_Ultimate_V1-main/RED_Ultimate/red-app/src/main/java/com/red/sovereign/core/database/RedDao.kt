@@ -12,7 +12,8 @@ interface RedDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLocalHistory(history: LocalHistoryEntity)
 
-    @Query("SELECT * FROM local_history WHERE conversationId = :convId ORDER BY createdAt ASC")
+    // مرتبة بثبات: حسب الوقت ثم المعرف لمنع قفزات عند وصول رسائل متأخرة (out-of-order)
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId ORDER BY createdAt ASC, id ASC")
     fun getLocalHistory(convId: String): Flow<List<LocalHistoryEntity>>
 
     @Query("UPDATE local_history SET status = :status WHERE id = :id")
