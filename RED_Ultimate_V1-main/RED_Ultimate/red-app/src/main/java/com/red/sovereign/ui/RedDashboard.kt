@@ -230,8 +230,7 @@ private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREAT
 fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
-    var selectedGroupName by remember { mutableStateOf("") }
-    var selectedGroupMemberCount by remember { mutableStateOf(0) }
+    var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
@@ -337,7 +336,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel) {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false)
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true)
+                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory)
                 else -> MoreScreen(
                     account,
@@ -693,7 +692,8 @@ private fun ChatHubScreen(
     safety: SafetyViewModel,
     attachments: AttachmentViewModel,
     voiceMessages: VoiceMessageViewModel,
-    showGroups: Boolean
+    showGroups: Boolean,
+    onManageGroup: (String) -> Unit = {}
 ) {
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
@@ -715,7 +715,7 @@ private fun ChatHubScreen(
     var create by remember { mutableStateOf(false) }
     var showJoinGroup by remember { mutableStateOf(false) }
     var joinToken by remember { mutableStateOf("") }
-    var selectedGroupId by remember { mutableStateOf<String?>(null) }
+    var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
     var groupMessageText by remember { mutableStateOf("") }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
@@ -790,7 +790,7 @@ private fun ChatHubScreen(
         if (uri != null && target.isNotBlank()) attachments.send(uri, target, conversationId(account.redId, target))
     }
     val groupAvatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val group = groups.groups.firstOrNull { it.id == selectedGroupId }
+        val group = groups.groups.firstOrNull { it.id == groupConversationId }
         if (uri != null && group != null) groups.updateAvatar(group, uri)
     }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -1157,9 +1157,7 @@ private fun ChatHubScreen(
                                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                                     GroupAvatar(group, groups); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(group.name, fontWeight = FontWeight.Bold); Text("${group.members.size} أعضاء · ${group.description.orEmpty()}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                     IconButton({
-                                        selectedGroupName = group.name
-                                        selectedGroupMemberCount = group.members.size
-                                        currentScreen = SovereignScreen.GROUP_INFO
+                                        onManageGroup(group.id)
                                     }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                                 }
                             }
@@ -1171,7 +1169,7 @@ private fun ChatHubScreen(
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ selectedGroupId = openGroup.id }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
+                        IconButton({ onManageGroup(openGroup.id) }) { Icon(Icons.Default.MoreVert, "إدارة المجموعة") }
                     }
                 }
                 val groupMessages = decrypted.filter { it.conversationId == openGroup.id && it.type == "GROUP_MESSAGE" }
@@ -1286,12 +1284,12 @@ private fun ChatHubScreen(
             confirmButton = { TextButton({ selectedContact = null; reportDetails = "" }) { Text("إغلاق") } }
         )
     }
-    val selectedGroup = groups.groups.firstOrNull { it.id == selectedGroupId }
+    val selectedGroup = groups.groups.firstOrNull { it.id == manageGroupId }
     if (selectedGroup != null) {
         val myRole = selectedGroup.members.firstOrNull { it.redId == account.redId }?.role
         val canManage = myRole == "OWNER" || myRole == "ADMIN"
         AlertDialog(
-            onDismissRequest = { selectedGroupId = null },
+            onDismissRequest = { manageGroupId = null },
             title = { Text(selectedGroup.name) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1322,10 +1320,10 @@ private fun ChatHubScreen(
                     }
                 }
             },
-            confirmButton = { TextButton({ selectedGroupId = null }) { Text("إغلاق") } },
+            confirmButton = { TextButton({ manageGroupId = null }) { Text("إغلاق") } },
             dismissButton = {
                 if (myRole == "OWNER") TextButton({ deleteGroupId = selectedGroup.id }) { Text("حذف المجموعة", color = MaterialTheme.colorScheme.error) }
-                else TextButton({ groups.leave(selectedGroup) { selectedGroupId = null; groupConversationId = null } }) { Text("مغادرة", color = MaterialTheme.colorScheme.error) }
+                else TextButton({ groups.leave(selectedGroup) { manageGroupId = null; groupConversationId = null } }) { Text("مغادرة", color = MaterialTheme.colorScheme.error) }
             }
         )
     }
@@ -1339,7 +1337,7 @@ private fun ChatHubScreen(
                 OutlinedButton({ groups.updateRole(selectedGroup, managedMember, if (managedMember.role == "ADMIN") "MEMBER" else "ADMIN"); selectedGroupMember = null }, Modifier.fillMaxWidth()) {
                     Text(if (managedMember.role == "ADMIN") "إرجاعه إلى عضو" else "ترقيته إلى مسؤول")
                 }
-                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; selectedGroupId = null } }, Modifier.fillMaxWidth()) { Text("نقل ملكية المجموعة إليه") }
+                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; manageGroupId = null } }, Modifier.fillMaxWidth()) { Text("نقل ملكية المجموعة إليه") }
             }
             Button({ groups.removeMember(selectedGroup, managedMember); selectedGroupMember = null }, Modifier.fillMaxWidth()) { Text("إزالة من المجموعة") }
             Text("تغيير العضوية يجب أن يدور Sender Key عندما تكتمل محادثة المجموعات المشفرة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
@@ -1351,7 +1349,7 @@ private fun ChatHubScreen(
             onDismissRequest = { deleteGroupId = null },
             title = { Text("حذف ${deleting.name} نهائيًا؟") },
             text = { Text("سيُحذف سجل المجموعة وعضويتها من الخادم. لا يمكن التراجع عن العملية.") },
-            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; selectedGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
+            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; manageGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
             dismissButton = { TextButton({ deleteGroupId = null }) { Text("إلغاء") } }
         )
     }
