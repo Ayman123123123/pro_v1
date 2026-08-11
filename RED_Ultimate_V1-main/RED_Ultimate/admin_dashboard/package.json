@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 8088",
     "start": "vite --host 0.0.0.0 --port 8088",
+    "mock": "node mock-backend.cjs",
     "build": "tsc --noEmit && vite build",
     "build:check": "tsc --noEmit",
-    "check:api": "node scripts/check-api-contract.mjs",
-    "check": "npm run check:api && npm run check:guards && npm run build:check",
-    "preview": "vite preview --host 0.0.0.0 --port 8088",
     "build:fast": "vite build",
     "build:strict": "tsc --noEmit && vite build",
-    "check:guards": "node scripts/check-frontend-guards.mjs"
+    "check": "npm run check:api && npm run check:guards && npm run build:check",
+    "check:api": "node scripts/check-api-contract.mjs",
+    "check:guards": "node scripts/check-frontend-guards.mjs",
+    "preview": "vite preview --host 0.0.0.0 --port 8088"
   },
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
