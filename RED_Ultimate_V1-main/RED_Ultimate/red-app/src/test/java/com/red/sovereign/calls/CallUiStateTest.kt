@@ -53,6 +53,13 @@ class CallUiStateTest {
         assertEquals(false, resumed.isHeld)
     }
 
+    @Test fun `same callId stays Active and is not a second incoming`() {
+        val active = CallUiState.Active("same-call", "73066", "VOICE", 1L)
+        val restartLooksLikeOffer = CallUiState.Incoming("same-call", "73066", "VOICE")
+        assertEquals(active.callId, restartLooksLikeOffer.callId)
+        assertTrue(active is CallUiState.Active)
+    }
+
     @Test fun `ActiveWithIncoming pairs active call with waiting call`() {
         val active = CallUiState.Active("c1", "26852", "VOICE", 1000L)
         val waiting = CallUiState.Incoming("c2", "55602", "VOICE")
