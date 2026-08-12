@@ -14,14 +14,14 @@ import javax.crypto.spec.SecretKeySpec
 class IceServerControllerTest {
     private val secret = "abcdefghijklmnopqrstuvwxyz123456" // 32+ chars
 
-    private fun makeController(tlsPort: Int = 5349, altPort: Int = 443): IceServerController =
+    private fun makeController(tlsPort: Int = 5349, altPort: Int = 443, ttlSeconds: Long = 3600): IceServerController =
         IceServerController(
             host = "turn.example.com",
             port = 3478,
             tlsPort = tlsPort,
             altPort = altPort,
             secret = secret,
-            ttlSeconds = 3600
+            ttlSeconds = ttlSeconds
         )
 
     private fun auth(userId: String): Authentication =

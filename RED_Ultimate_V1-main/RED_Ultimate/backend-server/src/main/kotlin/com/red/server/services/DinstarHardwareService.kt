@@ -137,8 +137,8 @@ class DinstarHardwareService(
             )
         }
         return mapOf(
-            // بلا رد لا يُعرف الطراز — ادعاؤه تخمين
-            "success" to false, "gatewayIp" to configuredIp, "model" to null,
+            // بلا رد لا يُعرف الطراز — لا نضع null داخل Map<String, Any>
+            "success" to false, "gatewayIp" to configuredIp, "model" to "UNKNOWN",
             "status" to "OFFLINE", "message" to "No authenticated UC2000 get_port_info response"
         )
     }

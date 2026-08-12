@@ -110,19 +110,53 @@ console.log(`\n🔍 فحص خادم التطوير على ${BASE}\n`);
 // ── تفويض المسؤول قبل أي فحص ──
 // خادم التطوير صار يفرض دور ADMIN على `/api/admin/**` مطابقةً
 // لـ SecurityConfig، فبلا رمز تعود كل هذه الفحوص بـ401.
+const ADMIN_USERNAME = process.env.RED_DEV_ADMIN_USERNAME || 'younes_sovereign';
+const ADMIN_PASSWORD = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
+
 {
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'younes_sovereign', password: 'dev' }),
-  });
-  const data = await res.json().catch(() => ({}));
+  let data = {};
+  for (const username of [ADMIN_USERNAME, 'younes_sovereign', 'red_admin']) {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: ADMIN_PASSWORD }),
+    });
+    data = await res.json().catch(() => ({}));
+    if (data.accessToken && data.user?.role === 'ADMIN') break;
+  }
   if (!data.accessToken) {
-    console.error('❌ تعذّر تسجيل دخول المسؤول — هل خادم التطوير يعمل؟');
+    console.error('❌ تعذّر تسجيل دخول المسؤول — هل خادم التطوير يعمل؟ استخدم SovereignAdmin1');
     process.exit(1);
   }
   adminToken = data.accessToken;
 }
+
+await check('الصحة تعرض YOUNES وFlyway وخدمات القاعدة', async () => {
+  const h = await api('GET', '/health');
+  assert(h.status === 200, `HTTP ${h.status}`);
+  assert(h.data.brand === 'YOUNES', `brand=${h.data.brand}`);
+  assert(h.data.status === 'UP' || h.data.status === 'DEGRADED', `status=${h.data.status}`);
+  assert(h.data.services?.redis?.status === 'UP', 'redis ليس UP');
+  assert(h.data.services?.minio?.status === 'UP', 'minio ليس UP');
+  assert(h.data.flyway?.appliedCount >= 1, `flyway.appliedCount=${h.data.flyway?.appliedCount}`);
+  return `V${h.data.flyway.latestVersion} · ${h.data.flyway.appliedCount} ترحيل`;
+});
+
+await check('سلطة الهوية ECDSA_P256_SHA256 v1', async () => {
+  const r = await api('GET', '/api/identity/authority');
+  assert(r.status === 200, `HTTP ${r.status}`);
+  assert(r.data.algorithm === 'ECDSA_P256_SHA256' || r.data.algorithm === 'SHA256withECDSA', r.data.algorithm);
+  assert(r.data.publicKey, 'لا يوجد publicKey');
+  return `${r.data.algorithm} · ${r.data.version || 'v1'}`;
+});
+
+await check('جرد العمليات يعيد أقسام المستخدمين والإشراف', async () => {
+  const r = await api('GET', '/api/admin/operations/overview');
+  assert(r.status === 200, `HTTP ${r.status} ${JSON.stringify(r.data)}`);
+  assert(r.data.users && typeof r.data.users.total === 'number', 'users.total مفقود');
+  assert(r.data.moderation && typeof r.data.moderation.openReports === 'number', 'moderation مفقود');
+  return `${r.data.users.total} مستخدم · ${r.data.moderation.openReports} بلاغ`;
+});
 
 // ═══ 1. الموافقات: العطل المُبلَّغ عنه ═══
 console.log('── التسجيل ثم الموافقة (الدورة الكاملة) ──');
@@ -366,7 +400,7 @@ await check('المسح عن بُعد يلغي كل أجهزة المستخدم'
 
 await check('الدخول يفتح جلسة إدارية حقيقية', async () => {
   const before = (await api('GET', '/api/admin/sessions')).data.length;
-  const login = await api('POST', '/api/auth/login', { username: 'younes_sovereign', password: 'dev' });
+  const login = await api('POST', '/api/auth/login', { username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
   assert(login.data.user.role === 'ADMIN', 'الدور ليس ADMIN');
   const after = (await api('GET', '/api/admin/sessions')).data;
   assert(after.length === before + 1, `الجلسات ${before} ← ${after.length}`);
@@ -374,7 +408,7 @@ await check('الدخول يفتح جلسة إدارية حقيقية', async ()
 });
 
 await check('إنهاء الجلسة يزيلها من القائمة', async () => {
-  await api('POST', '/api/auth/login', { username: 'younes_sovereign', password: 'dev' });
+  await api('POST', '/api/auth/login', { username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
   const sessions = (await api('GET', '/api/admin/sessions')).data;
   assert(sessions.length > 0, 'لا توجد جلسات');
   const target = sessions[0];

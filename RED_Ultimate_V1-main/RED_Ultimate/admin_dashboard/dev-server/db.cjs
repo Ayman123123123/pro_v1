@@ -410,6 +410,14 @@ CREATE TABLE IF NOT EXISTS call_history (
   ended_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS access_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_access_sessions_user ON access_sessions(user_id, expires_at);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
@@ -791,6 +799,77 @@ function seedIfEmpty() {
 
 const seeded = seedIfEmpty();
 
+// ── كلمات مرور المسؤولين (scrypt) — كانت غائبة فأي كلمة 12–128 حرفاً كانت تُقبل
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(String(password), salt, 32);
+  return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored) return false;
+  const parts = String(stored).split('$');
+  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
+  try {
+    const salt = Buffer.from(parts[1], 'hex');
+    const expected = Buffer.from(parts[2], 'hex');
+    const actual = crypto.scryptSync(String(password), salt, expected.length);
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
+function ensurePasswordColumn() {
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((r) => r.name);
+  if (!cols.includes('password_hash')) {
+    db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+  }
+  const DEFAULT_ADMIN_PASSWORD = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
+  const admins = db.prepare("SELECT id, password_hash FROM users WHERE role='ADMIN'").all();
+  const setHash = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+  for (const admin of admins) {
+    if (!admin.password_hash) setHash.run(hashPassword(DEFAULT_ADMIN_PASSWORD), admin.id);
+  }
+}
+
+ensurePasswordColumn();
+
+/** Login placeholder is red_admin — seed historically only created younes_sovereign. */
+function ensureConsoleAdmin() {
+  const existing = db.prepare("SELECT id FROM users WHERE lower(username)='red_admin'").get();
+  if (existing) return;
+  const id = uuid();
+  const ts = nowIso();
+  const password = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
+  db.prepare(
+    `INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at,approved_at,last_seen,password_hash)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(id, '10002', 'red_admin', 'مسؤول يونس', 'APPROVED', 'ADMIN', 1, 100, ts, ts, ts, ts, hashPassword(password));
+  const deviceId = uuid();
+  const fingerprint = crypto.createHash('sha256').update('red_admin').digest('hex')
+    .slice(0, 60).replace(/(.{5})/g, '$1 ').trim();
+  const issued = issueDeviceCertificate({ id, red_id: '10002' }, { id: deviceId, identity_fingerprint: fingerprint });
+  db.prepare(
+    `INSERT INTO devices (id,user_id,device_name,platform,identity_fingerprint,status,authorization_certificate,certificate_expires_at,created_at,approved_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(deviceId, id, 'Admin Console', 'WEB', fingerprint, 'APPROVED', issued.compact, issued.expiresAt, ts, ts);
+}
+ensureConsoleAdmin();
+
+function ensureNotificationCatalog() {
+  const { c } = db.prepare('SELECT COUNT(*) AS c FROM notifications').get();
+  if (c >= 6) return;
+  const insert = db.prepare('INSERT INTO notifications (id,type,title,body,is_read,created_at) VALUES (?,?,?,?,?,?)');
+  [
+    ['NEW_MESSAGE', 'رسالة جديدة', 'وصلت رسالة مشفّرة إلى مركز العمليات'],
+    ['INCOMING_CALL', 'مكالمة واردة', 'مكالمة RED من حساب معتمد'],
+    ['SECURITY_ALERT', 'تنبيه أمني', 'محاولة دخول فاشلة متكررة على حساب إداري'],
+    ['GROUP_INVITE', 'دعوة مجموعة', 'طلب انضمام جديد بانتظار المراجعة'],
+  ].forEach(([type, title, body], i) => insert.run(uuid(), type, title, body, 0, iso(0, i)));
+}
+ensureNotificationCatalog();
+
 // ───────────────────────── أدوات استعلام مختصرة ─────────────────────────
 /**
  * `node:sqlite` يرفض `undefined` بخطأ غامض («cannot be bound to SQLite parameter»).
@@ -817,4 +896,5 @@ module.exports = {
   all, get, run,
   recordAudit,
   identityAuthority, issueDeviceCertificate, verifyDeviceCertificate,
+  hashPassword, verifyPassword,
 };

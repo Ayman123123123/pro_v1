@@ -29,6 +29,7 @@ class SfuTicketController(
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
         val groupRole = groups.roleFor(accountId, groupId)
+            ?: throw NoSuchElementException("Group membership not found")
         val canProduce = groupRole in setOf(GroupRole.OWNER, GroupRole.ADMIN, GroupRole.MEMBER)
         val ticket = jwt.issueSfuTicket(user, deviceId, groupId, groupRole.name, canProduce)
         return ResponseEntity.ok()

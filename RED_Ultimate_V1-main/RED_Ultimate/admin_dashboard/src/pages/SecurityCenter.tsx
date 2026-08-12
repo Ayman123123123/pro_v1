@@ -15,7 +15,7 @@ export default function SecurityCenter() {
   const [operational, setOperational] = useState<any>(null);
 
   const loadAudit = async () => {
-    try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(r.content || r || []); } catch { /* ignore */ }
+    try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(Array.isArray(r?.content) ? r.content : (Array.isArray(r) ? r : [])); } catch { /* ignore */ }
   };
   const loadPstn = async () => {
     try {
@@ -90,7 +90,7 @@ export default function SecurityCenter() {
                       <Table dataSource={events} rowKey="id" size="small" pagination={{pageSize:6}} locale={{emptyText:'لا توجد أحداث'}} columns={[
                         {title:'الإجراء', dataIndex:'action', render:(v:string)=><Tag color={v?.includes('KILL')?'red':'blue'}>{v}</Tag>},
                         {title:'الهدف', dataIndex:'targetId', render:(v:string)=>v||'—'},
-                        {title:'المدير', dataIndex:'actorId', render:(v:string)=>v||'SYSTEM'},
+                        {title:'المدير', dataIndex:'adminUsername', render:(v:string)=>v||'SYSTEM'},
                         {title:'الوقت', dataIndex:'createdAt', render:(v:string)=>v?new Date(v).toLocaleString('ar'):'—'},
                       ]} />
                     </Card>

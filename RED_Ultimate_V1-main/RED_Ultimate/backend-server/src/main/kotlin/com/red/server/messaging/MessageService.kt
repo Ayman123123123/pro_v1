@@ -7,6 +7,7 @@ import com.red.server.database.MessageDocument
 import com.red.server.groups.GroupMember
 import com.red.sovereign.proto.RedProtos
 import jakarta.annotation.PostConstruct
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.FindAndModifyOptions
@@ -142,6 +143,10 @@ class MessageService(
         MessageDocument::class.java
     )
 
+    /** Same block policy as messages — used by typing indicators and other pairwise signals. */
+    fun requireDirectAllowed(senderRedId: String, receiverRedId: String) =
+        enforceNotBlocked(senderRedId, receiverRedId)
+
     private fun enforceNotBlocked(senderRedId: String, receiverRedId: String) {
         // V26: ملاحظة لنفسي — لا حظر للذات
         if (senderRedId == receiverRedId) return
@@ -202,6 +207,7 @@ class MessageService(
     private fun rank(status: String) = when (status) { "SENT" -> 1; "DELIVERED" -> 2; "READ" -> 3; else -> 0 }
 
     companion object {
+        private val log = LoggerFactory.getLogger(MessageService::class.java)
         // مصدر الحقيقة الوحيد للنمط: RedIdGenerator.PATTERN.
         // تكرار النمط بصياغة محلية هو ما سمح سابقًا بتباين القبول
         // بين الوحدات (بادئة مقبولة هنا مرفوضة هناك).

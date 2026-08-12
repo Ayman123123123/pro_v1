@@ -4,6 +4,7 @@ import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.calls.CallHistoryService
+import com.red.server.pstn.DinstarLoadBalancer
 import com.red.server.pstn.PstnCallService
 import com.red.server.pstn.PstnManager
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -23,6 +24,7 @@ class PstnCallServiceTest {
     private val redis = mock<StringRedisTemplate>()
     private val values = mock<ValueOperations<String, String>>()
     private val pstn = mock<PstnManager>()
+    private val loadBalancer = mock<DinstarLoadBalancer>()
     private val history = mock<CallHistoryService>()
 
     @Test
@@ -41,10 +43,11 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(3)
 
-        val service = PstnCallService(users, redis, pstn, history)
+        val service = PstnCallService(users, redis, pstn, loadBalancer, history)
         assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
-        verify(pstn, never()).dialGsm(any())
+        verify(loadBalancer, never()).selectPort(any())
+        verify(pstn, never()).dialGsm(any(), any())
     }
 }
