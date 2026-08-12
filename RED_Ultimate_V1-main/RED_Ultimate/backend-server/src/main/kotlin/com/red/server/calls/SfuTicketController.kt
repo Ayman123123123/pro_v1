@@ -37,6 +37,20 @@ class SfuTicketController(
             .body(SfuTicketResponse(ticket, 120, groupId, groupRole.name, canProduce))
     }
 
+    /** Conference / live rooms that are not a stored group still need a short SFU capability. */
+    @GetMapping("/rooms/{roomId}/ticket")
+    fun issueRoom(@PathVariable roomId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
+        require(roomId.matches(ROOM_ID)) { "Invalid SFU room ID" }
+        val accountId = UUID.fromString(authentication.name)
+        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
+        val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
+        val ticket = jwt.issueSfuTicket(user, deviceId, roomId, "MEMBER", canProduce = true)
+        return ResponseEntity.ok()
+            .cacheControl(CacheControl.noStore())
+            .body(SfuTicketResponse(ticket, 120, roomId, "MEMBER", true))
+    }
+
     companion object {
         private val ROOM_ID = Regex("^[A-Za-z0-9_-]{8,128}$")
     }

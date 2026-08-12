@@ -61,12 +61,14 @@ data class NetworkStats(
          * تصنيف الجودة بناء على RTT وفقدان الحزم. الـ thresholds مأخوذة من توصيات WebRTC
          * للجودة الممتازة / الجيدة / المقبولة / السيئة.
          */
-        fun classify(rttMs: Long, lossPct: Double, availableKbps: Long = 0): Quality = when {
-            rttMs == 0L && availableKbps == 0L -> Quality.UNKNOWN
-            rttMs > 400 || lossPct > 10 -> Quality.POOR
-            rttMs > 200 || lossPct > 5 -> Quality.FAIR
-            rttMs > 100 || lossPct > 2 -> Quality.GOOD
-            else -> Quality.EXCELLENT
+        fun classify(rttMs: Long, lossPct: Double, availableKbps: Long = 0): Quality {
+            if (rttMs == 0L && availableKbps == 0L) return Quality.UNKNOWN
+            return when (SdpMediaOptimizer.mos(rttMs, lossPct)) {
+                in 4.0..5.0 -> Quality.EXCELLENT
+                in 3.6..4.0 -> Quality.GOOD
+                in 3.1..3.6 -> Quality.FAIR
+                else -> Quality.POOR
+            }
         }
 
         /**
@@ -146,13 +148,14 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private var cameraRequestedByUser: Boolean = true
     private var hasVideo: Boolean = false
     private var svcEnabled: Boolean = false
+    private var mediaKind: CallMediaKind = CallMediaKind.VOICE
     private var lastStats: NetworkStats = NetworkStats()
 
     init {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
                 .setEnableInternalTracer(false)
-                .setFieldTrials("WebRTC-Audio-MinimizeResamplingOnMobile/Enabled/")
+                .setFieldTrials("WebRTC-Audio-MinimizeResamplingOnMobile/Enabled/WebRTC-FlexFEC-03/Enabled/")
                 .createInitializationOptions()
         )
         // Encoder/decoder factories مع hardware acceleration حيث متاح
@@ -171,8 +174,19 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      * @param simulcastEnabled true لإرسال 3 طبقات (HD/SD/LD) — يقلل الـ bandwidth للـ SFU
      */
     suspend fun create(video: Boolean, simulcastEnabled: Boolean = true, svc: Boolean = false): ApiResult<Unit> {
-        hasVideo = video
-        cameraRequestedByUser = video
+        val kind = when {
+            svc && video -> CallMediaKind.CONFERENCE
+            svc && !video -> CallMediaKind.SPACE
+            video -> CallMediaKind.VIDEO
+            else -> CallMediaKind.VOICE
+        }
+        return create(kind, simulcastEnabled = simulcastEnabled || kind.wantsSimulcast, svc = svc || kind.wantsSvc)
+    }
+
+    suspend fun create(kind: CallMediaKind, simulcastEnabled: Boolean = kind.wantsSimulcast, svc: Boolean = kind.wantsSvc): ApiResult<Unit> {
+        mediaKind = kind
+        hasVideo = kind.wantsVideo
+        cameraRequestedByUser = kind.wantsVideo
         svcEnabled = svc
         currentBitrateProfile = initialBitrateProfile()
         val ice = loadIce() ?: return ApiResult.Error(null, "ICE_CONFIGURATION_FAILED")
@@ -191,7 +205,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             // استخدام unified plan + multi-stream
             keyType = PeerConnection.KeyType.ECDSA
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
-            // Enable DTLS 1.2+ for security
+            iceCandidatePoolSize = 2
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
         peer = factory.createPeerConnection(config, observer) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
@@ -208,23 +222,21 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("stereo", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("stereo", if (mediaKind.stereoAudio) "true" else "false"))
         }
         audioSource = factory.createAudioSource(audioConstraints)
         val audio = factory.createAudioTrack("younes-audio", audioSource).apply { setEnabled(true) }
         peer?.addTrack(audio, listOf("younes-stream"))
 
-        val videoTrack = if (video) createVideoTrack() else null
+        val videoTrack = if (hasVideo) createVideoTrack() else null
         if (videoTrack != null) {
             val sender = peer?.addTrack(videoTrack, listOf("younes-stream"))
             videoSender = sender
-            // ضبط أولوية الكوديكس بناءً على نوع المكالمة (H.264 للفردي / VP9 للجماعي)
-            applyCodecPreferences(svcEnabled)
-            // Simulcast أو VP9-SVC حسب الوضع
             if (simulcastEnabled) {
                 applySimulcast(sender, currentBitrateProfile, svcEnabled)
             }
         }
+        applyCodecPreferences(mediaKind)
         localMedia = LocalMedia(audio, videoTrack)
         return ApiResult.Success(200, Unit)
     }
@@ -234,24 +246,39 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      * المكالمات الفردية 1:1 -> تفضيل H.264 (تسريع عتادي وتقليل حرارة الجهاز واستهلاك البطارية).
      * المؤتمرات والجماعي -> تفضيل VP9 / VP9-SVC (توفير البنطاق العريض وطبقات الجودة التكيفية).
      */
-    private fun applyCodecPreferences(svcEnabled: Boolean) {
+    private fun applyCodecPreferences(kind: CallMediaKind) {
         val pc = peer ?: return
+        val preferred = kind.preferredVideoCodec
         val videoTransceivers = pc.transceivers.filter {
             it.mediaType == org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO
         }
-        if (videoTransceivers.isEmpty()) return
-
-        val capabilities = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
-        val sortedCodecs = capabilities.codecs.sortedByDescending { codec ->
-            when {
-                svcEnabled && codec.name.equals("VP9", ignoreCase = true) -> 10
-                !svcEnabled && codec.name.equals("H264", ignoreCase = true) -> 10
-                codec.name.equals("VP8", ignoreCase = true) -> 5
-                else -> 1
+        if (videoTransceivers.isNotEmpty()) {
+            val capabilities = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
+            val sortedCodecs = capabilities.codecs.sortedByDescending { codec ->
+                when {
+                    codec.name.equals(preferred, ignoreCase = true) -> 12
+                    codec.name.equals("AV1", ignoreCase = true) -> 8
+                    codec.name.equals("VP9", ignoreCase = true) -> 7
+                    codec.name.equals("H264", ignoreCase = true) -> 6
+                    codec.name.equals("VP8", ignoreCase = true) -> 5
+                    else -> 1
+                }
+            }
+            videoTransceivers.forEach { transceiver ->
+                runCatching { transceiver.setCodecPreferences(sortedCodecs) }
             }
         }
-        videoTransceivers.forEach { transceiver ->
-            runCatching { transceiver.setCodecPreferences(sortedCodecs) }
+        val audioTransceivers = pc.transceivers.filter {
+            it.mediaType == org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO
+        }
+        if (audioTransceivers.isNotEmpty()) {
+            val capabilities = factory.getRtpSenderCapabilities(org.webrtc.MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO)
+            val sorted = capabilities.codecs.sortedByDescending { codec ->
+                if (codec.name.equals("opus", ignoreCase = true)) 10 else 1
+            }
+            audioTransceivers.forEach { transceiver ->
+                runCatching { transceiver.setCodecPreferences(sorted) }
+            }
         }
     }
 
@@ -277,8 +304,13 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         s.parameters = params
     }
 
-    fun offer() = peer?.createOffer(sdpObserver(setLocal = true), MediaConstraints())
-    fun answer() = peer?.createAnswer(sdpObserver(setLocal = true), MediaConstraints())
+    fun offer() = peer?.createOffer(sdpObserver(setLocal = true), offerAnswerConstraints())
+    fun answer() = peer?.createAnswer(sdpObserver(setLocal = true), offerAnswerConstraints())
+
+    private fun offerAnswerConstraints() = MediaConstraints().apply {
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (mediaKind.wantsVideo) "true" else "false"))
+    }
 
     /**
      * Re-negotiates ICE candidates with IceRestart=true constraint.
@@ -417,7 +449,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     private fun sdpObserver(setLocal: Boolean = false, after: (() -> Unit)? = null): SdpObserver = object : SdpObserver {
         override fun onCreateSuccess(description: SessionDescription) {
-            if (setLocal) peer?.setLocalDescription(sdpObserver(after = { events.onLocalDescription(description); after?.invoke() }), description)
+            val optimized = SessionDescription(description.type, SdpMediaOptimizer.optimize(description.description, mediaKind))
+            if (setLocal) peer?.setLocalDescription(sdpObserver(after = { events.onLocalDescription(optimized); after?.invoke() }), optimized)
         }
         override fun onSetSuccess() { after?.invoke() }
         override fun onCreateFailure(error: String) = events.onError(error)

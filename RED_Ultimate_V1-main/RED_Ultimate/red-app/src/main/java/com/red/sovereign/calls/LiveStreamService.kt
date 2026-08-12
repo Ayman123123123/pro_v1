@@ -205,7 +205,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
             // Live streaming needs HD + simulcast for adaptive quality to viewers
-            engine?.create(isBroadcaster, simulcastEnabled = isBroadcaster, svc = isBroadcaster)
+            if (isBroadcaster) engine?.create(CallMediaKind.LIVE) else engine?.create(CallMediaKind.VIDEO, simulcastEnabled = false, svc = false)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
             }

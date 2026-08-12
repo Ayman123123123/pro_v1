@@ -62,6 +62,11 @@ class BitrateProfileTest {
         }
     }
 
+    @Test fun `MOS driven classify stays excellent on a clean path`() {
+        assertEquals(NetworkStats.Quality.EXCELLENT, NetworkStats.classify(40, 0.2, 2_000))
+        assertEquals(NetworkStats.Quality.POOR, NetworkStats.classify(600, 15.0, 100))
+    }
+
     @Test fun `all profiles have valid scaleDown resolution`() {
         NetworkStats.BitrateProfile.values().forEach { profile ->
             if (profile != NetworkStats.BitrateProfile.AUDIO_ONLY) {
