@@ -4,6 +4,7 @@ import com.red.server.auth.ContactService
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.social.UserStatusService
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock

@@ -2,6 +2,7 @@ package com.red.server.auth
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.social.UserStatusService
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
@@ -25,7 +26,8 @@ data class PresenceInfo(val online: Boolean, val lastSeen: Long?)
 class ContactService(
     private val jdbc: JdbcTemplate,
     private val users: UserAccountRepository,
-    private val redis: RedisTemplate<String, String>
+    private val redis: RedisTemplate<String, String>,
+    private val presence: UserStatusService
 ) {
     fun contacts(ownerId: UUID): List<PublicRedProfile> = jdbc.query(
         """SELECT u.red_id,u.username,u.full_name,u.avatar_url FROM red_contacts c JOIN users u ON u.id=c.contact_id
@@ -110,6 +112,12 @@ class ContactService(
             require(!blockedEitherDirection(row.first, row.second)) { "Contact is blocked" }
             jdbc.update("INSERT INTO red_contacts(owner_id,contact_id) VALUES (?,?) ON CONFLICT DO NOTHING", row.first, row.second)
             jdbc.update("INSERT INTO red_contacts(owner_id,contact_id) VALUES (?,?) ON CONFLICT DO NOTHING", row.second, row.first)
+            val requester = users.findById(row.first).orElse(null)
+            val recipient = users.findById(row.second).orElse(null)
+            if (requester != null && recipient != null) {
+                presence.addContact(requester.redId, recipient.redId)
+                presence.addContact(recipient.redId, requester.redId)
+            }
         }
     }
 
@@ -117,6 +125,10 @@ class ContactService(
     fun remove(ownerId: UUID, redId: String) {
         val target = users.findByRedId(redId.uppercase()) ?: throw NoSuchElementException("RED identity not found")
         jdbc.update("DELETE FROM red_contacts WHERE (owner_id=? AND contact_id=?) OR (owner_id=? AND contact_id=?)", ownerId, target.id, target.id, ownerId)
+        users.findById(ownerId).orElse(null)?.let { owner ->
+            presence.removeContact(owner.redId, target.redId)
+            presence.removeContact(target.redId, owner.redId)
+        }
     }
 
     @Transactional
@@ -126,6 +138,11 @@ class ContactService(
         jdbc.update("INSERT INTO user_blocks(blocker_id,blocked_id) VALUES (?,?) ON CONFLICT DO NOTHING", ownerId, target.id)
         jdbc.update("DELETE FROM red_contacts WHERE (owner_id=? AND contact_id=?) OR (owner_id=? AND contact_id=?)", ownerId, target.id, target.id, ownerId)
         jdbc.update("UPDATE contact_requests SET status='REJECTED',resolved_at=CURRENT_TIMESTAMP WHERE status='PENDING' AND ((requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?))", ownerId, target.id, target.id, ownerId)
+        jdbc.update("DELETE FROM media_grants WHERE (owner_id=? AND grantee_id=?) OR (owner_id=? AND grantee_id=?)", ownerId, target.id, target.id, ownerId)
+        users.findById(ownerId).orElse(null)?.let { owner ->
+            presence.removeContact(owner.redId, target.redId)
+            presence.removeContact(target.redId, owner.redId)
+        }
     }
 
     fun unblock(ownerId: UUID, redId: String) {

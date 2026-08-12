@@ -132,9 +132,16 @@ function PollsTab() {
   const submitCreate = async () => {
     try {
       const values = await createForm.validateFields();
+      const options = (Array.isArray(values.options) ? values.options : [])
+        .map((item: unknown) => String(item ?? '').trim())
+        .filter(Boolean);
+      if (options.length < 2) {
+        message.error('أضف خيارين على الأقل');
+        return;
+      }
       await createPoll({
         question: values.question,
-        options: values.options,
+        options,
         pollType: values.pollType,
         isAnonymous: values.isAnonymous,
         allowAddOptions: values.allowAddOptions,

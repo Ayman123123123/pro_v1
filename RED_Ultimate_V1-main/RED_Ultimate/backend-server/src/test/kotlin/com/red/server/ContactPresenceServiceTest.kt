@@ -3,6 +3,7 @@ package com.red.server
 import com.red.server.auth.ContactService
 import com.red.server.auth.PublicRedProfile
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.social.UserStatusService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -20,7 +21,8 @@ class ContactPresenceServiceTest {
     private val users = mock<UserAccountRepository>()
     private val redis = mock<RedisTemplate<String, String>>()
     private val zset = mock<ZSetOperations<String, String>>()
-    private val service = ContactService(jdbc, users, redis)
+    private val presence = mock<UserStatusService>()
+    private val service = ContactService(jdbc, users, redis, presence)
 
     @Test
     fun `presence excludes identities that are not established contacts`() {
