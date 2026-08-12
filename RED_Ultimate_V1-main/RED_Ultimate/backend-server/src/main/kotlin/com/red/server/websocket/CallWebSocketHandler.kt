@@ -10,10 +10,11 @@ import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** Authenticated WebRTC signaling router with multi-device ringing. */
+/** Authenticated WebRTC signaling router with multi-device ringing and offline offer mailbox. */
 @Component
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
@@ -21,6 +22,7 @@ class CallWebSocketHandler(
     private val notifications: NotificationService
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
+    private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
@@ -33,18 +35,19 @@ class CallWebSocketHandler(
                 CallType.valueOf(signal.mode.uppercase()), CallRoute.RED, signal.callId).id
             "ANSWER" -> requireCallId(signal).also { history.answer(it, source) }
             "END" -> requireCallId(signal).also { history.end(it, source) }
-            "ICE", "HOLD", "RESUME" -> requireCallId(signal)
+            "ICE", "HOLD", "RESUME", "RENEGOTIATE" -> requireCallId(signal)
             "REJECT" -> requireCallId(signal).also { history.end(it, source) }
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
 
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)
-        val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen).orEmpty()
+        val targets = liveSessions(signal.targetUserId)
         if (targets.isEmpty()) {
+            enqueue(signal.targetUserId, outbound)
             if (type == "OFFER") {
-                // Dispatch High-Priority FCM / Sovereign Push to wake up the callee device for incoming call
                 notifications.sendVoipPushNotification(signal.targetUserId, source, callId, signal.mode)
             }
+            if (type in TERMINAL_TYPES) dropPending(callId)
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "RINGING_PUSH_SENT", "callId" to callId))))
             return
         }
@@ -54,7 +57,8 @@ class CallWebSocketHandler(
         session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
 
         // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
-        if (type in setOf("ANSWER", "REJECT", "END")) {
+        if (type in TERMINAL_TYPES) {
+            dropPending(callId)
             val cancelType = if (type == "ANSWER") "CANCELLED" else type
             val cancel = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
             targets.filter { it.id != session.id }.forEach { target -> runCatching { target.sendMessage(TextMessage(cancel)) } }
@@ -66,6 +70,7 @@ class CallWebSocketHandler(
         val list = sessions.computeIfAbsent(redId) { CopyOnWriteArrayList() }
         list.removeIf { !it.isOpen }
         list.add(session)
+        flushPending(redId, session)
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
@@ -80,9 +85,49 @@ class CallWebSocketHandler(
         }
     }
 
+    private fun liveSessions(redId: String) = sessions[redId]?.filter(WebSocketSession::isOpen).orEmpty()
+
+    private fun enqueue(target: String, signal: OutgoingCallSignal) {
+        val list = pending.computeIfAbsent(target) { CopyOnWriteArrayList() }
+        list.removeIf { it.expiresAt.isBefore(Instant.now()) }
+        list.add(
+            PendingCallSignal(
+                json = objectMapper.writeValueAsString(signal),
+                expiresAt = Instant.now().plusSeconds(PENDING_TTL_SECONDS),
+                callId = signal.callId,
+                type = signal.type
+            )
+        )
+    }
+
+    private fun flushPending(redId: String, session: WebSocketSession) {
+        val list = pending.remove(redId) ?: return
+        val now = Instant.now()
+        list.filter { it.expiresAt.isAfter(now) }.forEach { item ->
+            runCatching { session.sendMessage(TextMessage(item.json)) }
+        }
+    }
+
+    private fun dropPending(callId: String) {
+        pending.values.forEach { list -> list.removeIf { it.callId == callId } }
+        pending.entries.removeIf { it.value.isEmpty() }
+    }
+
     private fun requireCallId(signal: IncomingCallSignal) =
         requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+
+    companion object {
+        private const val PENDING_TTL_SECONDS = 60L
+        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+    }
 }
+
+private data class PendingCallSignal(
+    val json: String,
+    val expiresAt: Instant,
+    val callId: String,
+    val type: String
+)
 
 data class IncomingCallSignal(
     val callId: String? = null,

@@ -160,10 +160,12 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     override fun onConnected() {
         scope.launch {
-            engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
-            ConferenceRuntime.eglContext = engine?.eglContext
-            engine?.create(ConferenceRuntime.isVideoEnabled, simulcastEnabled = true, svc = true)
-            ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
+            if (engine == null) {
+                engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
+                ConferenceRuntime.eglContext = engine?.eglContext
+                engine?.create(ConferenceRuntime.isVideoEnabled, simulcastEnabled = true, svc = true)
+                ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
+            }
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled)
         }
     }
@@ -276,7 +278,14 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         ConferenceRuntime.remoteVideos.remove(userId)
     }
 
-    override fun onDisconnected() { leave() }
+    override fun onDisconnected() {
+        if (ConferenceRuntime.state is ConferenceUiState.Active) {
+            ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
+            runCatching { signaling.connect(roomId) }
+        } else {
+            leave()
+        }
+    }
     override fun onError(message: String) {
         ConferenceRuntime.state = ConferenceUiState.Error(message)
         // Auto-dismiss after 3s like YounesCallService

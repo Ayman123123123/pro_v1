@@ -16,6 +16,7 @@ import android.hardware.SensorManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -75,7 +76,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         reconnect = CallReconnectManager(
             scope = scope,
             onReconnect = {
-                runCatching { signaling.connect() }
+                runCatching { signaling.reconnect() }
             },
             onFailure = { fail("انقطع اتصال الإشارة") }
         )
@@ -129,7 +130,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     override fun onConnected() {
-        reconnect.stop()
+        reconnect?.stop()
         if (incomingOffer != null || !outgoingPending) {
             // عند نجاح إعادة الاتصال بالشبكة والإشارة أثناء مكالمة قائمة، نقوم بإجراء ICE restart
             // لإعادة استكشاف المسار التلقائي وتمرير الحزم عبر الشبكة الجديدة دون انقطاع الصوت أو الفيديو
@@ -178,11 +179,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             "HOLD" -> { engine?.setMicrophoneEnabled(false); engine?.setCameraEnabled(false) }
             "RESUME" -> { engine?.setMicrophoneEnabled(true); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
             "CANCELLED" -> {
-                // Another device answered — stop ringing on this device
+                // Another device on this account answered — stop ringing, keep listening.
                 incomingOffer = null
-                CallRuntime.state = CallUiState.Idle
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                stopRingtone()
+                if (CallRuntime.state is CallUiState.Incoming) {
+                    CallRuntime.state = CallUiState.Idle
+                    updateNotification("جاهز لاستقبال مكالمات يونس")
+                }
             }
             "END", "REJECT" -> endCall(sendSignal = false)
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
@@ -217,10 +220,16 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     override fun onLocalDescription(description: SessionDescription) {
-        val type = if (description.type == SessionDescription.Type.OFFER) "OFFER" else "ANSWER"
+        val type = when {
+            description.type == SessionDescription.Type.ANSWER -> "ANSWER"
+            isActiveCall() -> "RENEGOTIATE"
+            else -> "OFFER"
+        }
         signaling.send(CallSignal(callId, target, type = type, mode = mode, payload = mapOf("sdp" to description.description)))
         if (type == "OFFER") outgoingPending = false
-        CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
+        if (!isActiveCall()) {
+            CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
+        }
     }
 
     override fun onIceCandidate(candidate: IceCandidate) = signaling.send(CallSignal(callId, target, type = "ICE", mode = mode, payload = mapOf("sdpMid" to candidate.sdpMid.orEmpty(), "sdpMLineIndex" to candidate.sdpMLineIndex.toString(), "candidate" to candidate.sdp)))
@@ -255,7 +264,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun onStatsReceived(stats: NetworkStats) {
         CallTelemetry.onNetworkStats(stats)
     }
-    override fun onError(message: String) = fail(message)
+    override fun onError(message: String) {
+        if (isActiveCall()) {
+            updateNotification("انقطع اتصال الإشارة — جارٍ إعادة الاتصال…")
+            reconnect?.start()
+            return
+        }
+        if (CallRuntime.state is CallUiState.Incoming) return
+        fail(message)
+    }
     override fun onDisconnected() {
         // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً
         if (CallRuntime.state !is CallUiState.Idle) {
@@ -392,7 +409,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun prepareAudio() {
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
-        audioFocus = AudioFocusRequest.Builder(AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { }.build().also(audio::requestAudioFocus)
+        audioFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { }.build().also(audio::requestAudioFocus)
         setSpeaker(mode == "VIDEO")
     }
 

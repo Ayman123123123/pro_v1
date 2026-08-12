@@ -140,7 +140,7 @@ class ConferenceSignalingClient(
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     socket = null
-                    listener.onError(t.message ?: "CONFERENCE_SIGNALING_FAILED")
+                    listener.onDisconnected()
                 }
             }
         )

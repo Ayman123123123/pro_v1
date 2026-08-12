@@ -59,6 +59,14 @@ class CallHistoryMappingTest {
         assertEquals(null, item.endedAt)
     }
 
+    @Test fun `parseCallTimestamp accepts ISO instant and epoch millis`() {
+        assertEquals(1_700_000_000_000L, parseCallTimestamp("1700000000000"))
+        assertEquals(1_700_000_000_000L, parseCallTimestamp("1700000000"))
+        assertEquals(1_704_067_200_000L, parseCallTimestamp("2024-01-01T00:00:00Z"))
+        assertEquals(null, parseCallTimestamp("not-a-date"))
+        assertEquals(null, parseCallTimestamp(null))
+    }
+
     @Test fun `durationMs from entity is preserved when mapping back to history fields`() {
         // The bug was: firstOrNull preserved only one item, others dropped silently.
         // This test ensures the round-trip preserves the critical fields.
