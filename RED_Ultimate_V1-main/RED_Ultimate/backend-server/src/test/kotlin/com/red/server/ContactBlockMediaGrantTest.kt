@@ -19,7 +19,8 @@ class ContactBlockMediaGrantTest {
     private val jdbc: JdbcTemplate = mock()
     private val users: UserAccountRepository = mock()
     private val redis: RedisTemplate<String, String> = mock()
-    private val contacts = ContactService(jdbc, users, redis)
+    private val presence: UserStatusService = mock()
+    private val contacts = ContactService(jdbc, users, redis, presence)
 
     @Test
     fun `blocking an identity revokes media grants in both directions`() {
