@@ -73,10 +73,15 @@ class HealthController(
         val minioOk = minioResult.getOrDefault(false)
 
         val flywayResult = runCatching {
-            jdbcTemplate.queryForObject(
+            val latest = jdbcTemplate.queryForObject(
                 "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1",
                 String::class.java
             )
+            val applied = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
+                Int::class.java
+            ) ?: 0
+            latest to applied
         }
 
         val allOk = mongoOk && redisOk && postgresOk && minioOk
@@ -131,7 +136,11 @@ class HealthController(
                 "port" to dinstarPort,
                 "scheme" to dinstarScheme
             ),
-            "flyway" to mapOf("latestVersion" to flywayResult.getOrNull()),
+            "flyway" to mapOf(
+                "latestVersion" to flywayResult.getOrNull()?.first,
+                "appliedCount" to (flywayResult.getOrNull()?.second ?: 0),
+                "error" to if (flywayResult.isSuccess) null else "FLYWAY_HISTORY_UNAVAILABLE"
+            ),
             "system" to mapOf(
                 "javaVersion" to System.getProperty("java.version"),
                 "availableProcessors" to Runtime.getRuntime().availableProcessors(),

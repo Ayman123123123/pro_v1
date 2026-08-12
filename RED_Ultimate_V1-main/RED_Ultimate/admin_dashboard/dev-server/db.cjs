@@ -835,6 +835,28 @@ function ensurePasswordColumn() {
 
 ensurePasswordColumn();
 
+/** Login placeholder is red_admin — seed historically only created younes_sovereign. */
+function ensureConsoleAdmin() {
+  const existing = db.prepare("SELECT id FROM users WHERE lower(username)='red_admin'").get();
+  if (existing) return;
+  const id = uuid();
+  const ts = nowIso();
+  const password = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
+  db.prepare(
+    `INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at,approved_at,last_seen,password_hash)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(id, '10002', 'red_admin', 'مسؤول يونس', 'APPROVED', 'ADMIN', 1, 100, ts, ts, ts, ts, hashPassword(password));
+  const deviceId = uuid();
+  const fingerprint = crypto.createHash('sha256').update('red_admin').digest('hex')
+    .slice(0, 60).replace(/(.{5})/g, '$1 ').trim();
+  const issued = issueDeviceCertificate({ id, red_id: '10002' }, { id: deviceId, identity_fingerprint: fingerprint });
+  db.prepare(
+    `INSERT INTO devices (id,user_id,device_name,platform,identity_fingerprint,status,authorization_certificate,certificate_expires_at,created_at,approved_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(deviceId, id, 'Admin Console', 'WEB', fingerprint, 'APPROVED', issued.compact, issued.expiresAt, ts, ts);
+}
+ensureConsoleAdmin();
+
 function ensureNotificationCatalog() {
   const { c } = db.prepare('SELECT COUNT(*) AS c FROM notifications').get();
   if (c >= 6) return;

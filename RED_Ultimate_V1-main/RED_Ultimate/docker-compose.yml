@@ -86,6 +86,9 @@ services:
       # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
       - RED_TRUST_X_FORWARDED_FOR=true
       - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      # Local compose is HTTP on 8088. Secure cookies would be dropped by the browser.
+      # Set RED_ADMIN_COOKIE_SECURE=true only behind real TLS.
+      - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-false}
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
     volumes:
       - identity-secrets:/run/secrets:ro
@@ -104,8 +107,9 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 8
+      # Flyway + JPA validate + first JDBC on Windows Docker regularly exceed 60s.
+      start_period: 180s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 2. VoIP/Conference SFU ━━━━━━━━━━━━
