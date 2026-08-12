@@ -1332,7 +1332,7 @@ function adminGuard(method, pathname, headers) {
 
   // نعيد استعمال `currentUser` من app-routes بدل تكرار منطق الجلسات.
   const user = appRoutes.currentUser({ headers });
-  if (!user) return { status: 401, data: { error: 'UNAUTHORIZED' } };
+  if (!user) return { status: 401, data: { error: 'AUTHENTICATION_REQUIRED' } };
   if (user.role !== 'ADMIN') return { status: 403, data: { error: 'FORBIDDEN', required: 'ADMIN' } };
   return null;
 }
@@ -1377,7 +1377,12 @@ const server = http.createServer((req, res) => {
         const result = route.handler(params, parsed.searchParams, body, {
           ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'], headers: req.headers,
         });
-        res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8' });
+        const extra = result.headers || {};
+        if (extra['Set-Cookie']) {
+          res.setHeader('Set-Cookie', extra['Set-Cookie']);
+          delete extra['Set-Cookie'];
+        }
+        res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8', ...extra });
         return res.end(JSON.stringify(result.data));
       }
       console.warn(`[dev-server] مسار غير معرّف: ${req.method} ${parsed.pathname}`);

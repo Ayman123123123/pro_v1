@@ -368,15 +368,45 @@ module.exports = function registerAppRoutes(on) {
   on('POST', '/api/auth/register', (_p, _q, b) => registerAccount(b));
   on('POST', '/api/auth/login', (_p, _q, b) => loginAccount(b));
 
-  on('POST', '/api/auth/refresh', (_p, _q, b) => {
+  on('POST', '/api/auth/refresh', (_p, _q, b, ctx) => {
     // الذاكرة أولاً ثم SQLite — وإلا إعادة تشغيل الخادم تُسقط اللوحة بـ401
     // رغم أن رمز التجديد ما زال صالحًا على القرص.
-    const userId = lookupRefreshUserId(b?.refreshToken);
+    const cookies = Object.fromEntries(
+      String(ctx?.headers?.cookie || '').split(';').map((p) => {
+        const i = p.indexOf('=');
+        return i > 0 ? [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())] : ['', ''];
+      }).filter(([k]) => k),
+    );
+    const cookieToken = cookies.red_admin_refresh;
+    const usingCookie = !!cookieToken;
+    if (usingCookie) {
+      const csrfCookie = cookies.red_admin_csrf;
+      const csrfHeader = ctx?.headers?.['x-red-csrf'];
+      if (!csrfCookie || csrfCookie !== csrfHeader) {
+        return { status: 401, data: { error: 'CSRF_VALIDATION_FAILED' } };
+      }
+    }
+    const presented = cookieToken || b?.refreshToken;
+    const userId = lookupRefreshUserId(presented);
     if (!userId) return unauthorized();
-    revokeRefresh(b.refreshToken); // تدوير: الرمز القديم يُبطل فورًا في الذاكرة والقرص
+    revokeRefresh(presented); // تدوير: الرمز القديم يُبطل فورًا في الذاكرة والقرص
     const user = get('SELECT * FROM users WHERE id = ?', userId);
     if (!user || user.status !== 'APPROVED') return unauthorized();
-    return ok(issueTokens(userId));
+    const tokens = issueTokens(userId);
+    if (usingCookie) {
+      const csrf = crypto.randomBytes(32).toString('base64url');
+      return {
+        status: 200,
+        data: { ...tokens, refreshToken: '' },
+        headers: {
+          'Set-Cookie': [
+            `red_admin_refresh=${encodeURIComponent(tokens.refreshToken)}; Path=/api/auth; Max-Age=${30 * 24 * 3600}; HttpOnly; SameSite=Strict`,
+            `red_admin_csrf=${csrf}; Path=/; Max-Age=${30 * 24 * 3600}; SameSite=Strict`,
+          ],
+        },
+      };
+    }
+    return ok(tokens);
   });
 
   on('POST', '/api/auth/logout', (_p, _q, b, ctx) => {

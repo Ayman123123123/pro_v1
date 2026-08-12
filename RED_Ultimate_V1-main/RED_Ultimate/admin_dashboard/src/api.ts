@@ -26,7 +26,9 @@ export const authStore = {
     localStorage.removeItem(REFRESH_KEY);
     window.dispatchEvent(new Event('younes:auth-expired'));
   },
-  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY) || !!csrfToken()
+  // Cookie-only (CSRF) is not a session. Production web login stores the access
+  // JWT here; the HttpOnly refresh cookie is used only during rotate().
+  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY)
 };
 
 export function asArray<T = any>(data: unknown): T[] {
@@ -85,20 +87,24 @@ let rotating: Promise<boolean> | null = null;
 
 async function performRotate(): Promise<boolean> {
   const refreshToken = authStore.refresh();
-  // New admin sessions keep this secret in an HttpOnly cookie; old native/dev sessions may still carry it locally.
-  if (!refreshToken && !csrfToken()) { authStore.clear(); return false; }
+  const csrf = csrfToken();
+  // Browser admin sessions keep the refresh secret in an HttpOnly cookie
+  // (not readable here). Always attempt the cookie POST; CSRF is sent when
+  // the readable cookie is present. Local refresh is the native/dev fallback.
+  if (!refreshToken && !csrf && !authStore.access()) {
+    authStore.clear();
+    return false;
+  }
   try {
-    const csrf = csrfToken();
     const response = await fetch('/api/auth/refresh', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
-      // Legacy token is accepted for native/older sessions; browser admin sessions use HttpOnly cookie.
       body: JSON.stringify({ refreshToken: refreshToken || '' })
     });
     if (!response.ok) { authStore.clear(); return false; }
     const data = await response.json();
     if (!data.accessToken) { authStore.clear(); return false; }
-    authStore.set(data.accessToken, data.refreshToken || undefined);
+    authStore.set(data.accessToken, data.refreshToken || undefined, authStore.user() || undefined);
     return true;
   } catch {
     // Keep the refresh token during a temporary network outage; it may still be valid.
@@ -123,9 +129,17 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   if (response.status === 401 && retry) {
     const refreshed = await rotate();
     if (refreshed) return apiFetch(path, init, false);
-    if (authStore.access()) authStore.clear();
+    authStore.clear();
   }
   return response;
+}
+
+function authErrorMessage(data: any, status: number): string {
+  const code = String(data?.error || data?.message || '');
+  if (status === 401 || /AUTHENTICATION_REQUIRED|UNAUTHORIZED|UNAUTHENTICATED|JWT|TOKEN/i.test(code)) {
+    return 'انتهت الجلسة — أعد تسجيل الدخول';
+  }
+  return code || `HTTP ${status}`;
 }
 
 // ━━━━━━━━━━━━━━━━ 🔐 Auth ━━━━━━━━━━━━━━━━
@@ -253,7 +267,7 @@ export async function getUsers(params: {
   if (params.sortDir) searchParams.set('sortDir', params.sortDir);
   const res = await apiFetch(`/api/admin/users?${searchParams}`);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
   return asPage<UserRecord>(data);
 }
 
@@ -791,7 +805,7 @@ export async function deleteStickerPack(packId: string) {
 export async function getPendingApprovals(): Promise<any[]> {
   const res = await apiFetch('/api/admin/users/pending');
   const data = await res.json().catch(() => []);
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
   return asArray(data);
 }
 
