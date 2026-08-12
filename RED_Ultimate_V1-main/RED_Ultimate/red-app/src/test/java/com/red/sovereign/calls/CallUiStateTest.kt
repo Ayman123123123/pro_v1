@@ -72,6 +72,13 @@ class CallUiStateTest {
 }
 
 class ConferenceUiStateTest {
+    @Test fun `Incoming invite is not a ringing 1-1 call`() {
+        val state = ConferenceUiState.Incoming(roomId = "room-1", inviter = "73066", video = false, userId = "28261")
+        assertEquals("room-1", state.roomId)
+        assertEquals(false, state.video)
+        assertEquals("28261", state.userId)
+    }
+
     @Test fun `Connecting has roomId`() {
         val state = ConferenceUiState.Connecting(roomId = "red-room-123")
         assertEquals("red-room-123", state.roomId)

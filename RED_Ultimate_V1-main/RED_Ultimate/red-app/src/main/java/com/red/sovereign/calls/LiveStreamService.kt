@@ -32,6 +32,8 @@ import org.webrtc.VideoTrack
 
 sealed interface LiveStreamUiState {
     data object Idle : LiveStreamUiState
+    /** إشعار "بدأ البث" — مشاهدة اختيارية، ليست رنة هاتف */
+    data class Incoming(val streamId: String, val broadcasterName: String, val userId: String) : LiveStreamUiState
     data class Connecting(val streamId: String, val isBroadcaster: Boolean) : LiveStreamUiState
     data class Active(val streamId: String, val isBroadcaster: Boolean, val startedAt: Long) : LiveStreamUiState
     data class Error(val message: String) : LiveStreamUiState
@@ -99,6 +101,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                 streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 val broadcasterName = intent.getStringExtra(EXTRA_BROADCASTER_NAME).orEmpty()
+                LiveStreamRuntime.state = LiveStreamUiState.Incoming(streamId, broadcasterName, userId)
                 showIncomingLiveStreamNotification(streamId, userId, broadcasterName)
             }
             ACTION_START -> {

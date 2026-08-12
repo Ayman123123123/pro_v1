@@ -94,7 +94,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); signaling.connect()
             }
-            ACTION_ACCEPT -> acceptIncoming()
+            ACTION_ACCEPT -> acceptIncoming(
+                cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
+                micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
+            )
             ACTION_REJECT -> rejectIncoming()
             ACTION_END -> endCall(sendSignal = true)
             ACTION_MIC -> engine?.setMicrophoneEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
@@ -147,7 +150,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     override fun onSignal(signal: CallSignal) {
         when (signal.type) {
-            "OFFER" -> {
+            "OFFER", "RENEGOTIATE" -> {
+                if (isRenegotiation(signal)) {
+                    applyRemoteOffer(signal)
+                    return
+                }
                 val newIncoming = CallUiState.Incoming(
                     callId = signal.callId.orEmpty(),
                     peer = signal.sourceUserId.orEmpty(),
@@ -192,13 +199,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         }
     }
 
-    private fun acceptIncoming() {
+    private fun acceptIncoming(cameraOn: Boolean = true, micOn: Boolean = true) {
         stopRingtone()
         val offer = incomingOffer ?: return
         promote(notification("جارٍ قبول المكالمة…", true), media = true)
         prepareAudio(); signaling.connect()
         scope.launch {
             if (createEngine(offer.mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
+            engine?.setMicrophoneEnabled(micOn)
+            if (offer.mode == "VIDEO" && !cameraOn) engine?.setCameraEnabled(false)
             val sdp = offer.payload["sdp"] ?: return@launch fail("عرض المكالمة غير صالح")
             engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
             CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
@@ -282,6 +291,24 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
+
+    private fun isActiveCall(): Boolean =
+        CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming
+
+    private fun isRenegotiation(signal: CallSignal): Boolean {
+        if (signal.type == "RENEGOTIATE") return engine != null
+        val incomingId = signal.callId.orEmpty()
+        return incomingId.isNotBlank() && incomingId == callId && (isActiveCall() || CallRuntime.state is CallUiState.Connecting)
+    }
+
+    private fun applyRemoteOffer(signal: CallSignal) {
+        val sdp = signal.payload["sdp"] ?: return
+        engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) {
+            remoteDescriptionSet = true
+            flushIce()
+            engine?.answer()
+        }
+    }
 
     /**
      * Holds the active call — keeps the peer connection alive but disables the local tracks
@@ -538,10 +565,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
         // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
-        const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"
+        const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
         fun listen(context: Context) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
         fun start(context: Context, target: String, video: Boolean) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
+        fun accept(context: Context, cameraOn: Boolean = true, micOn: Boolean = true) = ContextCompat.startForegroundService(
+            context,
+            Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT).putExtra(EXTRA_CAMERA, cameraOn).putExtra(EXTRA_ENABLED, micOn)
+        )
         fun action(context: Context, action: String, enabled: Boolean = true) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
         // PSTN interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.

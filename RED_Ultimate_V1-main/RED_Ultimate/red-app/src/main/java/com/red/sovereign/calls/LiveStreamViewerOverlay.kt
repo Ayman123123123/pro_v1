@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,6 +54,11 @@ fun YounesLiveStreamOverlay() {
     val remoteVideo = LiveStreamRuntime.remoteVideo
     var chatText by remember { mutableStateOf("") }
     var showRaisedHandsSheet by remember { mutableStateOf(false) }
+
+    if (state is LiveStreamUiState.Incoming) {
+        LiveIncomingCard(state)
+        return
+    }
 
     Dialog(
         onDismissRequest = {},
@@ -453,6 +459,50 @@ fun YounesLiveStreamOverlay() {
                 TextButton(onClick = { showRaisedHandsSheet = false }) { Text("إغلاق") }
             }
         )
+    }
+}
+
+@Composable
+private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
+    val egl = LiveStreamRuntime.eglContext ?: return
+    var renderer: SurfaceViewRenderer? by remember { mutableStateOf(null) }
+    AndroidView(
+        factory = { context ->
+            SurfaceViewRenderer(context).apply {
+                init(egl, null)
+                setMirror(mirror)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                renderer = this
+                track?.addSink(this)
+            }
+        },
+        update = { view ->
+            track?.addSink(view)
+        },
+        modifier = modifier
+    )
+    DisposableEffect(track, renderer) {
+        onDispose {
+            renderer?.let {
+                track?.removeSink(it)
+                it.release()
+            }
+        }
+    }
+}
+35), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text("مباشر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text("${state.broadcasterName.ifBlank { "مستخدم يونس" }} بدأ بثاً", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("شاهد عندما تريد — بدون رنين", color = Color.Gray, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(onClick = { LiveStreamService.stop(context) }) { Text("تجاهل", color = Color.White) }
+                    Button(onClick = { LiveStreamService.start(context, state.streamId, state.userId, false) }) {
+                        Text("مشاهدة")
+                    }
+                }
+            }
+        }
     }
 }
 
