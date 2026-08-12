@@ -88,10 +88,14 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 roomId = intent.getStringExtra(EXTRA_ROOM_ID).orEmpty()
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
+                val invitees = intent.getStringArrayExtra(EXTRA_INVITEES)?.toList().orEmpty()
                 ConferenceRuntime.isVideoEnabled = hasVideo
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 promote()
-                signaling.connect(roomId)
+                scope.launch {
+                    registerRoom(!hasVideo, invitees)
+                    signaling.connect(roomId)
+                }
             }
             ACTION_LEAVE -> leave()
             ACTION_TOGGLE_MIC -> {
@@ -333,6 +337,25 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
+    private suspend fun registerRoom(isSpace: Boolean, invitees: List<String>) {
+        if (roomId.isBlank()) return
+        val api = AuthorizedApiClient(TokenStore(this))
+        val create = org.json.JSONObject()
+            .put("roomId", roomId)
+            .put("title", if (isSpace) "مساحة صوتية" else "مؤتمر فيديو")
+            .put("isSpace", isSpace)
+            .put("isPrivate", true)
+            .toString()
+        api.request("POST", "/api/conference/create", create)
+        api.request("POST", "/api/conference/$roomId/join", "{}")
+        val others = invitees.filter { it.isNotBlank() && it != userId }
+        if (others.isNotEmpty()) {
+            val ids = org.json.JSONArray()
+            others.forEach { ids.put(it) }
+            api.request("POST", "/api/conference/$roomId/invite", org.json.JSONObject().put("memberIds", ids).toString())
+        }
+    }
+
     private var statsJob: kotlinx.coroutines.Job? = null
     private fun startStatsPolling() {
         statsJob?.cancel()
@@ -479,6 +502,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         const val EXTRA_TARGET_USER_ID = "target_user_id"
         const val EXTRA_EMOJI = "emoji"
         const val EXTRA_PIN_TEXT = "pin_text"
+        const val EXTRA_INVITEES = "invitees"
 
         fun grantCoHost(context: Context, targetUserId: String) {
             val intent = Intent(context, ConferenceService::class.java).apply {
@@ -544,12 +568,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun join(context: Context, roomId: String, userId: String, video: Boolean) {
+        fun join(context: Context, roomId: String, userId: String, video: Boolean, inviteRedIds: List<String> = emptyList()) {
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_JOIN
                 putExtra(EXTRA_ROOM_ID, roomId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_VIDEO, video)
+                if (inviteRedIds.isNotEmpty()) putExtra(EXTRA_INVITEES, inviteRedIds.toTypedArray())
             }
             ContextCompat.startForegroundService(context, intent)
         }

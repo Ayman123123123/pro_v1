@@ -112,11 +112,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()
                 scope.launch {
-                    if (!isBroadcaster || registerBroadcaster()) {
-                        signaling.connect(streamId)
-                    } else {
-                        onError("LIVE_STREAM_REGISTRATION_FAILED")
-                    }
+                    val ready = if (isBroadcaster) registerBroadcaster() else joinAsViewer()
+                    if (ready) signaling.connect(streamId) else onError("LIVE_STREAM_REGISTRATION_FAILED")
                 }
             }
             ACTION_STOP -> stopStream()
@@ -190,6 +187,14 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             .put("isPrivate", false)
             .toString()
         return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/create", payload)) {
+            is ApiResult.Success -> true
+            is ApiResult.Error -> false
+        }
+    }
+
+    private suspend fun joinAsViewer(): Boolean {
+        if (streamId.isBlank()) return false
+        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/$streamId/join", "{}")) {
             is ApiResult.Success -> true
             is ApiResult.Error -> false
         }
