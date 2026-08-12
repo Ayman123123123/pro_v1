@@ -6,22 +6,63 @@ function csrfToken(): string | undefined {
   return document.cookie.split('; ').find((item) => item.startsWith(`${CSRF_COOKIE}=`))?.split('=').slice(1).join('=');
 }
 
+const USER_KEY = 'red_admin_user';
+
 export const authStore = {
   access: () => sessionStorage.getItem(ACCESS_KEY),
   refresh: () => localStorage.getItem(REFRESH_KEY),
-  set(access: string, refresh?: string) {
+  user(): { id?: string; username?: string; displayName?: string; redId?: string; role?: string } | null {
+    try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
+  },
+  set(access: string, refresh?: string, user?: unknown) {
     sessionStorage.setItem(ACCESS_KEY, access);
-    // Browser-admin sessions intentionally have no JS-readable refresh token.
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
     else localStorage.removeItem(REFRESH_KEY);
+    if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clear() {
     sessionStorage.removeItem(ACCESS_KEY);
+    sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(REFRESH_KEY);
     window.dispatchEvent(new Event('younes:auth-expired'));
   },
   isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY) || !!csrfToken()
 };
+
+export function asArray<T = any>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.content)) return obj.content as T[];
+    if (Array.isArray(obj.notifications)) return obj.notifications as T[];
+    if (Array.isArray(obj.items)) return obj.items as T[];
+  }
+  return [];
+}
+
+export function asPage<T = any>(data: unknown): PageResponse<T> {
+  const content = asArray<T>(data);
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>;
+    return {
+      content,
+      page: Number(obj.page ?? 0),
+      size: Number(obj.size ?? content.length),
+      totalElements: Number(obj.totalElements ?? content.length),
+      totalPages: Number(obj.totalPages ?? 1),
+    };
+  }
+  return { content, page: 0, size: content.length, totalElements: content.length, totalPages: 1 };
+}
+
+async function readJson(res: Response) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = (data && typeof data === 'object') ? (data as any) : {};
+    throw new Error(err.error || err.message || `HTTP ${res.status}`);
+  }
+  return data;
+}
 
 /**
  * وعد التجديد الجاري — حارس التزامن.
@@ -95,7 +136,7 @@ export async function adminLogin(username: string, password: string) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.user?.role !== 'ADMIN') throw new Error(data.error || 'بيانات المسؤول غير صحيحة');
-  authStore.set(data.accessToken, data.refreshToken || undefined);
+  authStore.set(data.accessToken, data.refreshToken || undefined, data.user);
   return data;
 }
 
@@ -117,7 +158,13 @@ export async function getNotifications(page = 0, size = 50, type?: string) {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (type) params.set('type', type);
   const res = await apiFetch(`/api/notifications?${params}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  const notifications = asArray(data);
+  return {
+    notifications,
+    unreadCount: Number(data?.unreadCount ?? 0),
+    page: Number(data?.page ?? page),
+  };
 }
 
 export async function markNotificationRead(id: string) {
@@ -205,7 +252,9 @@ export async function getUsers(params: {
   if (params.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params.sortDir) searchParams.set('sortDir', params.sortDir);
   const res = await apiFetch(`/api/admin/users?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asPage<UserRecord>(data);
 }
 
 export async function getUserDetail(userId: string) {
@@ -257,7 +306,11 @@ export async function deleteUser(userId: string, hard = false) {
 // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
 export async function getDashboardSummary() {
   const res = await apiFetch('/api/admin/dashboard/summary');
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || typeof data !== 'object' || Array.isArray(data) || !('analytics' in data)) {
+    return null;
+  }
+  return data;
 }
 
 export interface DashboardSummary {
@@ -299,17 +352,22 @@ export interface RealtimeMetrics {
 
 export async function getSystemAnalytics(startDate: string, endDate: string) {
   const res = await apiFetch(`/api/admin/analytics?start=${startDate}&end=${endDate}`);
-  return res.json();
+  const data = await res.json().catch(() => []);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  return [];
 }
 
 export async function getSystemHealth() {
   const res = await apiFetch('/api/admin/health');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return Array.isArray(data) ? data : [];
 }
 
 export async function getRealtimeMetrics() {
   const res = await apiFetch('/api/admin/metrics/realtime');
-  return res.json();
+  const data = await res.json().catch(() => null);
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
 }
 
 // ━━━━━━━━━━━━━━━━ 📝 Reports & Moderation ━━━━━━━━━━━━━━━━
@@ -325,7 +383,9 @@ export async function getReports(params: {
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/reports?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asPage(data);
 }
 
 export async function resolveReport(reportId: string, resolution: string, notes?: string) {
@@ -368,7 +428,9 @@ export async function getAuditLog(params: {
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/audit?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asPage(data);
 }
 
 export async function getSecurityAlerts(params: { page?: number; size?: number; severity?: string } = {}) {
@@ -377,7 +439,8 @@ export async function getSecurityAlerts(params: { page?: number; size?: number; 
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/security/alerts?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getAdminSessions() {
@@ -398,7 +461,8 @@ export async function getAnnouncements(params: { published?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params.published !== undefined) searchParams.set('published', String(params.published));
   const res = await apiFetch(`/api/admin/announcements?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return asArray(data);
 }
 
 export async function createAnnouncement(data: {
@@ -431,7 +495,8 @@ export async function deleteAnnouncement(id: string) {
 // ━━━━━━━━━━━━━━━━ 💾 Backups ━━━━━━━━━━━━━━━━
 export async function getBackups() {
   const res = await apiFetch('/api/admin/backups');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function createBackup(type: 'FULL' | 'INCREMENTAL' | 'CONFIG_ONLY' | 'USER_DATA', notes?: string) {
@@ -458,7 +523,8 @@ export async function deleteBackup(backupId: string) {
 // ━━━━━━━━━━━━━━━━ 🚩 Feature Flags ━━━━━━━━━━━━━━━━
 export async function getFeatureFlags() {
   const res = await apiFetch('/api/admin/feature-flags');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return asArray(data);
 }
 
 export async function updateFeatureFlag(name: string, data: {
@@ -562,7 +628,8 @@ export async function getPolls(params: { page?: number; size?: number; status?: 
   if (params.size !== undefined) searchParams.set('size', String(params.size));
   if (params.status) searchParams.set('status', params.status);
   const res = await apiFetch(`/api/admin/content/polls?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getActivePolls() {
@@ -606,7 +673,8 @@ export async function getEvents(params: { page?: number; size?: number; status?:
   if (params.size !== undefined) searchParams.set('size', String(params.size));
   if (params.status) searchParams.set('status', params.status);
   const res = await apiFetch(`/api/admin/content/events?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getUpcomingEvents() {
@@ -652,12 +720,12 @@ export async function deleteEvent(eventId: string) {
 
 export async function getTrendingHashtags(limit = 50) {
   const res = await apiFetch(`/api/admin/content/hashtags/trending?limit=${limit}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function getPopularHashtags(limit = 50) {
   const res = await apiFetch(`/api/admin/content/hashtags/popular?limit=${limit}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function searchHashtags(query: string, page = 0, size = 20) {
@@ -680,7 +748,7 @@ export async function unblockHashtag(hashtagId: string) {
 
 export async function getStickerPacks(official = false) {
   const res = await apiFetch(`/api/admin/content/sticker-packs?official=${official}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function createStickerPack(data: {
@@ -711,7 +779,9 @@ export async function deleteStickerPack(packId: string) {
 // ━━━━━━━━━━━━━━━━ 🏛️ Authority & User Intelligence (دمج القديم بالجديد — بيانات حقيقية) ━━━━━━━━━━━━━━━━
 export async function getPendingApprovals(): Promise<any[]> {
   const res = await apiFetch('/api/admin/users/pending');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asArray(data);
 }
 
 export async function approveRejectUser(userId: string, action: 'APPROVED' | 'REJECTED', reason?: string) {

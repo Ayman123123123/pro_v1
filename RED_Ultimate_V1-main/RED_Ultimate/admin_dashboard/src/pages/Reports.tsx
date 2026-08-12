@@ -160,27 +160,34 @@ export default function Reports() {
       title: 'المُبلَّغ عنه',
       dataIndex: 'targetUserId',
       key: 'targetUserId',
-      render: (id: string) => id ? (
-        <Text code style={{ fontSize: 11 }}>{id.slice(0, 8)}...</Text>
-      ) : <Text type="secondary">—</Text>,
+      render: (_id: string, r: any) => {
+        const id = r.targetUserId || r.reportedUserId;
+        return id ? (
+          <Text code style={{ fontSize: 11 }}>{String(id).slice(0, 8)}...</Text>
+        ) : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: 'المحتوى',
       dataIndex: 'targetContentType',
       key: 'targetContentType',
-      render: (type: string) => type ? (
-        <Tag>{type}</Tag>
-      ) : <Text type="secondary">—</Text>,
+      render: (_type: string, r: any) => {
+        const type = r.targetContentType || r.contentType;
+        return type ? <Tag>{type}</Tag> : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: 'السبب',
       dataIndex: 'reason',
       key: 'reason',
-      render: (reason: string) => (
-        <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: reason }}>
-          {reason || '—'}
-        </Text>
-      ),
+      render: (_reason: string, r: any) => {
+        const reason = r.reason || r.description;
+        return (
+          <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: reason }}>
+            {reason || '—'}
+          </Text>
+        );
+      },
     },
     {
       title: 'الحالة',

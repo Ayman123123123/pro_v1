@@ -15,7 +15,7 @@ export default function SecurityCenter() {
   const [operational, setOperational] = useState<any>(null);
 
   const loadAudit = async () => {
-    try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(r.content || r || []); } catch { /* ignore */ }
+    try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(Array.isArray(r?.content) ? r.content : (Array.isArray(r) ? r : [])); } catch { /* ignore */ }
   };
   const loadPstn = async () => {
     try {

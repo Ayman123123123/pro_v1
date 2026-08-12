@@ -26,18 +26,19 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/health')
-      .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
-      // كان الطرفان 'UP' في الشرطي نفسه، فأي ردّ — حتى ردّ خادم معطوب
-      // يعلن حالته DOWN — كان يُظهر «الخادم متصل». الشارة صارت تعكس
-      // الحالة المُبلَّغة فعلًا لا مجرّد وصول ردّ.
-      .then(data => {
-        if (cancelled) return;
-        const status = String(data?.status ?? '').toUpperCase();
-        setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
-      })
-      .catch(() => { if (!cancelled) setHealth('DOWN'); });
-    return () => { cancelled = true; };
+    const probe = () => {
+      fetch('/health')
+        .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then(data => {
+          if (cancelled) return;
+          const status = String(data?.status ?? '').toUpperCase();
+          setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
+        })
+        .catch(() => { if (!cancelled) setHealth('DOWN'); });
+    };
+    probe();
+    const timer = window.setInterval(probe, 4000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   const healthMeta = useMemo(() => {
@@ -131,7 +132,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 20, borderRadius: 10 }} />}
             {health === 'DOWN' && <Alert type="warning" showIcon message="تعذر الوصول إلى /health" description="يمكنك محاولة الدخول إذا كان البروكسي أو الخادم يبدأان الآن." style={{ marginBottom: 20, borderRadius: 10 }} />}
             <Form layout="vertical" onFinish={submit} size="large">
-              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]}>
+              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]} initialValue="red_admin">
                 <Input prefix={<UserOutlined style={{color:'#64748B'}} />} placeholder="اسم المستخدم — red_admin" autoComplete="username"
                   style={{ background: '#1E293B', borderColor: '#334155', color: '#fff', height: 48, borderRadius: 10 }} />
               </Form.Item>
@@ -151,6 +152,9 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             </Space>
           </Card>
 
+          <Typography.Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center', lineHeight: 1.7 }}>
+            التطوير المحلي: <b>red_admin</b> أو <b>younes_sovereign</b> · كلمة المرور <b>SovereignAdmin1</b>
+          </Typography.Text>
           <Typography.Text style={{ color: '#334155', fontSize: 11, textAlign: 'center', lineHeight: 1.7 }}>
             نسيت كلمة المرور؟ استخدم حساب مسؤول آخر لإصدار كلمة مؤقتة من مركز المستخدمين. لا يوجد استرداد ذاتي للمسؤول السيادي.
           </Typography.Text>

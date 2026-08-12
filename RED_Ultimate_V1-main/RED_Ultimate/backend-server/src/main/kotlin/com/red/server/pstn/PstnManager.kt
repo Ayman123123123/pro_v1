@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy
 import org.asteriskjava.manager.DefaultManagerConnection
 import org.asteriskjava.manager.action.OriginateAction
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -15,7 +16,8 @@ class PstnManager(
     @Value("\${ASTERISK_AMI_HOST:red-pstn-gateway}") private val amiHost: String,
     @Value("\${ASTERISK_AMI_USER:red_admin}") private val amiUser: String,
     @Value("\${ASTERISK_AMI_PASSWORD:}") private val amiPassword: String,
-    @Value("\${red.pstn.max-retries:3}") private val maxRetries: Int
+    @Value("\${red.pstn.max-retries:3}") private val maxRetries: Int,
+    private val dinstarEvents: ObjectProvider<DinstarEventListener>
 ) {
     companion object { private val log = LoggerFactory.getLogger(PstnManager::class.java) }
 
@@ -39,6 +41,10 @@ class PstnManager(
             log.info("Connecting to Asterisk AMI at {}...", amiHost)
             val conn = DefaultManagerConnection(amiHost, amiUser, amiPassword)
             conn.login()
+            dinstarEvents.ifAvailable { listener ->
+                conn.addEventListener(listener)
+                log.info("Registered DinstarEventListener on AMI connection")
+            }
             connection = conn
             log.info("AMI connection established")
             conn

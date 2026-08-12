@@ -113,7 +113,7 @@ function PollsTab() {
     setLoading(true);
     try {
       const result = await getPolls({ page: 0, size: 50 });
-      setPolls(result.content ?? []);
+      setPolls(Array.isArray(result?.content) ? result.content : []);
     } catch (e: any) {
       message.error('تعذر التحميل: ' + (e.message ?? ''));
     } finally {
@@ -352,7 +352,7 @@ function EventsTab() {
     setLoading(true);
     try {
       const result = await getEvents({ page: 0, size: 50 });
-      setEvents(result.content ?? []);
+      setEvents(Array.isArray(result?.content) ? result.content : []);
     } catch (e: any) {
       message.error('تعذر التحميل: ' + (e.message ?? ''));
     } finally {
@@ -576,8 +576,8 @@ function HashtagsTab() {
     setLoading(true);
     try {
       const [t, p] = await Promise.all([getTrendingHashtags(100), getPopularHashtags(100)]);
-      setTrending(t);
-      setPopular(p);
+      setTrending(Array.isArray(t) ? t : []);
+      setPopular(Array.isArray(p) ? p : []);
     } catch (e: any) {
       message.error('تعذر التحميل: ' + (e.message ?? ''));
     } finally {
@@ -614,9 +614,9 @@ function HashtagsTab() {
       title: 'الهاشتاج',
       dataIndex: 'tagName',
       key: 'tagName',
-      render: (n: string, r: Hashtag) => (
+      render: (_n: string, r: Hashtag) => (
         <Space>
-          <Text strong style={{ fontSize: 14 }}>#{n}</Text>
+          <Text strong style={{ fontSize: 14 }}>#{(r as any).tagName || (r as any).tag || ''}</Text>
           {r.isTrending && <Tag color="orange" icon={<FireOutlined />}>ترند</Tag>}
           {r.isBlocked && <Tag color="red">محظور</Tag>}
         </Space>
@@ -649,7 +649,7 @@ function HashtagsTab() {
       title: 'Score',
       dataIndex: 'trendingScore',
       key: 'trendingScore',
-      render: (s: number) => <Text code>{s.toFixed(2)}</Text>,
+      render: (s: number, r: Hashtag) => <Text code>{Number((r as any).trendingScore ?? (r as any).trendScore ?? s ?? 0).toFixed(2)}</Text>,
     },
     {
       title: 'إجراءات',
@@ -698,7 +698,7 @@ function StickersTab() {
     setLoading(true);
     try {
       const result = await getStickerPacks(false);
-      setPacks(result);
+      setPacks(Array.isArray(result) ? result : []);
     } catch (e: any) {
       message.error('تعذر التحميل: ' + (e.message ?? ''));
     } finally {

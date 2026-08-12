@@ -103,10 +103,10 @@ export default function FeatureFlags() {
       title: 'الحالة',
       dataIndex: 'enabled',
       key: 'enabled',
-      render: (enabled: boolean) => (
+      render: (enabled: boolean, flag: any) => (
         <Switch
           checked={enabled}
-          onChange={() => {}}
+          onChange={() => handleToggle(flag)}
           checkedChildren="مفعل"
           unCheckedChildren="معطل"
         />

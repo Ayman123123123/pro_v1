@@ -72,13 +72,14 @@ export default function UserManagement() {
         sortBy: 'createdAt',
         sortDir: 'desc',
       });
-      setUsers(result.content);
-      setTotal(result.totalElements);
+      const rows = Array.isArray(result?.content) ? result.content : [];
+      setUsers(rows);
+      setTotal(Number(result?.totalElements ?? rows.length));
       setStats({
-        total: result.totalElements,
-        pending: result.content.filter(u => u.status === 'PENDING').length,
-        approved: result.content.filter(u => u.status === 'APPROVED').length,
-        banned: result.content.filter(u => u.status === 'BANNED').length,
+        total: Number(result?.totalElements ?? rows.length),
+        pending: rows.filter(u => u.status === 'PENDING').length,
+        approved: rows.filter(u => u.status === 'APPROVED').length,
+        banned: rows.filter(u => u.status === 'BANNED').length,
       });
     } catch (e: any) {
       message.error('تعذر تحميل المستخدمين: ' + (e.message ?? ''));
@@ -357,7 +358,7 @@ export default function UserManagement() {
 
       {/* 🔴 مدموج من UserIntelligenceTab — Drawer كامل ببيانات حقيقية */}
       <Drawer title="ملف المستخدم التشغيلي — المعلومات السيادية" width={720} open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        {!overview ? <div style={{display:'grid',placeItems:'center',height:300}}><Spin tip="جاري تحميل الملف التشغيلي..." /></div> : <Space direction="vertical" size={18} style={{ width: '100%' }}>
+        {!overview?.user ? <div style={{display:'grid',placeItems:'center',height:300}}><Spin tip="جاري تحميل الملف التشغيلي..." /></div> : <Space direction="vertical" size={18} style={{ width: '100%' }}>
           <Alert type={overview.online ? 'success' : 'info'} showIcon message={overview.online ? 'المستخدم متصل حالياً' : 'المستخدم غير متصل حالياً'} />
           <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small">
             <Descriptions.Item label="RED ID">{overview.user.redId}</Descriptions.Item>

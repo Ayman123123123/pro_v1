@@ -240,8 +240,9 @@ function registerAccount(b) {
   const id = uuid();
   const ts = nowIso();
   const redId = nextRedId();
-  run(`INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at)
-       VALUES (?,?,?,?,'PENDING','USER',0,0,?,?)`, id, redId, username, displayName, ts, ts);
+  const passwordHash = d.hashPassword(password);
+  run(`INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at,password_hash)
+       VALUES (?,?,?,?,'PENDING','USER',0,0,?,?,?)`, id, redId, username, displayName, ts, ts, passwordHash);
 
   const dev = b?.device || {};
   // البصمة تُشتق من المفتاح العام فقط — لا يصل الخادم أي مفتاح خاص
@@ -281,8 +282,12 @@ function registerAccount(b) {
  */
 function loginAccount(b) {
   const username = String(b?.username || '').trim().toLowerCase();
+  const password = String(b?.password || '');
   const user = get('SELECT * FROM users WHERE lower(username) = ?', username);
   if (!user) return { status: 401, data: { error: 'INVALID_CREDENTIALS' } };
+  if (password.length < 12 || password.length > 128 || !d.verifyPassword(password, user.password_hash)) {
+    return { status: 401, data: { error: 'INVALID_CREDENTIALS' } };
+  }
 
   if (user.status !== 'APPROVED') {
     return ok({

@@ -58,9 +58,13 @@ export default function Diagnostics() {
             if (!svc) {
               return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات فحص من الخادم' };
             }
-            return svc.status === 'UP'
-              ? { id, system: label, status: 'READY' as const, detail: svc.bucket ? `الحاوية ${svc.bucket} متاحة` : 'متصل ويستجيب' }
-              : { id, system: label, status: 'ERROR' as const, detail: svc.error || 'الخدمة معطلة' };
+            if (svc.status === 'UP') {
+              return { id, system: label, status: 'READY' as const, detail: svc.bucket ? `الحاوية ${svc.bucket} متاحة` : (svc.detail || 'متصل ويستجيب') };
+            }
+            if (svc.status === 'DEGRADED') {
+              return { id, system: label, status: 'ERROR' as const, detail: svc.detail || svc.error || 'الخدمة متدهورة' };
+            }
+            return { id, system: label, status: 'ERROR' as const, detail: svc.error || svc.detail || 'الخدمة معطلة' };
           }
           const status: DiagnosticStatus =
             body.status === 'OFFLINE' || body.status === 'DOWN' ? 'ERROR' : 'READY';
