@@ -413,27 +413,24 @@ export async function getReports(params: {
 }
 
 export async function resolveReport(reportId: string, resolution: string, notes?: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/resolve`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/resolve`, {
     method: 'POST',
     body: JSON.stringify({ resolution, notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function dismissReport(reportId: string, notes?: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/dismiss`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/dismiss`, {
     method: 'POST',
     body: JSON.stringify({ notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function assignReport(reportId: string, adminId: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/assign`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/assign`, {
     method: 'POST',
     body: JSON.stringify({ adminId })
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🔒 Security & Audit ━━━━━━━━━━━━━━━━
@@ -499,21 +496,18 @@ export async function createAnnouncement(data: {
   showFrom?: string;
   showUntil?: string;
 }) {
-  const res = await apiFetch('/api/admin/announcements', {
+  return writeJson(await apiFetch('/api/admin/announcements', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function publishAnnouncement(id: string) {
-  const res = await apiFetch(`/api/admin/announcements/${id}/publish`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/announcements/${id}/publish`, { method: 'POST' }));
 }
 
 export async function deleteAnnouncement(id: string) {
-  const res = await apiFetch(`/api/admin/announcements/${id}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/announcements/${id}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 💾 Backups ━━━━━━━━━━━━━━━━
@@ -524,24 +518,21 @@ export async function getBackups() {
 }
 
 export async function createBackup(type: 'FULL' | 'INCREMENTAL' | 'CONFIG_ONLY' | 'USER_DATA', notes?: string) {
-  const res = await apiFetch('/api/admin/backups', {
+  return writeJson(await apiFetch('/api/admin/backups', {
     method: 'POST',
     body: JSON.stringify({ type, notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function restoreBackup(backupId: string, confirmCode: string) {
-  const res = await apiFetch(`/api/admin/backups/${backupId}/restore`, {
+  return writeJson(await apiFetch(`/api/admin/backups/${backupId}/restore`, {
     method: 'POST',
     body: JSON.stringify({ confirmCode })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteBackup(backupId: string) {
-  const res = await apiFetch(`/api/admin/backups/${backupId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/backups/${backupId}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🚩 Feature Flags ━━━━━━━━━━━━━━━━
@@ -558,11 +549,10 @@ export async function updateFeatureFlag(name: string, data: {
   config?: Record<string, any>;
   description?: string;
 }) {
-  const res = await apiFetch(`/api/admin/feature-flags/${name}`, {
+  return writeJson(await apiFetch(`/api/admin/feature-flags/${name}`, {
     method: 'PUT',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 📡 Streaming (Server-Sent Events) ━━━━━━━━━━━━━━━━
@@ -674,21 +664,18 @@ export async function createPoll(data: {
   allowAddOptions?: boolean;
   endsAt?: string;
 }) {
-  const res = await apiFetch('/api/admin/content/polls', {
+  return writeJson(await apiFetch('/api/admin/content/polls', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function closePoll(pollId: string) {
-  const res = await apiFetch(`/api/admin/content/polls/${pollId}/close`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/polls/${pollId}/close`, { method: 'POST' }));
 }
 
 export async function deletePoll(pollId: string) {
-  const res = await apiFetch(`/api/admin/content/polls/${pollId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/polls/${pollId}`, { method: 'DELETE' }));
 }
 
 export async function getEvents(params: { page?: number; size?: number; status?: string } = {}) {
@@ -722,24 +709,21 @@ export async function createEvent(data: {
   maxAttendees?: number;
   rsvpEnabled?: boolean;
 }) {
-  const res = await apiFetch('/api/admin/content/events', {
+  return writeJson(await apiFetch('/api/admin/content/events', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function cancelEvent(eventId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/content/events/${eventId}/cancel`, {
+  return writeJson(await apiFetch(`/api/admin/content/events/${eventId}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteEvent(eventId: string) {
-  const res = await apiFetch(`/api/admin/content/events/${eventId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/events/${eventId}`, { method: 'DELETE' }));
 }
 
 export async function getTrendingHashtags(limit = 50) {
@@ -758,16 +742,14 @@ export async function searchHashtags(query: string, page = 0, size = 20) {
 }
 
 export async function blockHashtag(hashtagId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/block`, {
+  return writeJson(await apiFetch(`/api/admin/content/hashtags/${hashtagId}/block`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function unblockHashtag(hashtagId: string) {
-  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/unblock`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/hashtags/${hashtagId}/unblock`, { method: 'POST' }));
 }
 
 export async function getStickerPacks(official = false) {
@@ -783,21 +765,18 @@ export async function createStickerPack(data: {
   isFree?: boolean;
   priceCents?: number;
 }) {
-  const res = await apiFetch('/api/admin/content/sticker-packs', {
+  return writeJson(await apiFetch('/api/admin/content/sticker-packs', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function publishStickerPack(packId: string) {
-  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}/publish`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/sticker-packs/${packId}/publish`, { method: 'POST' }));
 }
 
 export async function deleteStickerPack(packId: string) {
-  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🏛️ Authority & User Intelligence (دمج القديم بالجديد — بيانات حقيقية) ━━━━━━━━━━━━━━━━
@@ -809,11 +788,10 @@ export async function getPendingApprovals(): Promise<any[]> {
 }
 
 export async function approveRejectUser(userId: string, action: 'APPROVED' | 'REJECTED', reason?: string) {
-  const res = await apiFetch('/api/admin/users/action', {
+  return writeJson(await apiFetch('/api/admin/users/action', {
     method: 'POST',
     body: JSON.stringify({ userId, action, reason: reason || null }),
-  });
-  return res.json();
+  }));
 }
 
 export interface UserOverview {

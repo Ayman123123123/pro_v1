@@ -9,7 +9,6 @@ import {
   PlusOutlined, ReloadOutlined, CheckOutlined, CloseOutlined, DeleteOutlined,
   RiseOutlined, FireOutlined, StopOutlined, CheckCircleOutlined
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import {
   getPolls, createPoll, closePoll, deletePoll,
   getEvents, createEvent, cancelEvent, deleteEvent,

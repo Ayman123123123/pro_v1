@@ -135,7 +135,11 @@ export default function FeatureFlags() {
       title: 'تاريخ الإنشاء',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (d: string) => <Text style={{ fontSize: 12 }}>{new Date(d).toLocaleDateString('ar-EG')}</Text>,
+      render: (d: string, flag: any) => {
+        const value = d || flag.updatedAt;
+        const date = value ? new Date(value) : null;
+        return <Text style={{ fontSize: 12 }}>{date && Number.isFinite(date.getTime()) ? date.toLocaleDateString('ar') : '—'}</Text>;
+      },
     },
     {
       title: 'إجراءات',
