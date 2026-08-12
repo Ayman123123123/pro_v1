@@ -1,119 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
-      <stop offset="0%" stop-color="#1E3A5F" stop-opacity="1"/>
-      <stop offset="60%" stop-color="#0A1628" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#050A16" stop-opacity="1"/>
+    <radialGradient id="bg" cx="50%" cy="40%" r="72%">
+      <stop offset="0%" stop-color="#0B1E33"/>
+      <stop offset="100%" stop-color="#000C1C"/>
     </radialGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="40%">
-      <stop offset="0%" stop-color="#E8B84A" stop-opacity="0.20"/>
-      <stop offset="70%" stop-color="#E8B84A" stop-opacity="0.05"/>
-      <stop offset="100%" stop-color="#E8B84A" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="bubble" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#0A1628"/>
-      <stop offset="100%" stop-color="#050A16"/>
-    </linearGradient>
-    <linearGradient id="yletter" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFE27A"/>
-      <stop offset="50%" stop-color="#E8B84A"/>
-      <stop offset="100%" stop-color="#C4A040"/>
-    </linearGradient>
-    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFE27A"/>
-      <stop offset="50%" stop-color="#E8B84A"/>
-      <stop offset="100%" stop-color="#C4A040"/>
+    <linearGradient id="gold" x1="220" y1="140" x2="820" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE27A"/>
+      <stop offset="0.48" stop-color="#E8B84A"/>
+      <stop offset="1" stop-color="#9A6F1C"/>
     </linearGradient>
   </defs>
-
-  <!-- Background -->
-  <rect width="48" height="48" fill="url(#bg)"/>
-
-  <!-- Center glow -->
-  <rect width="48" height="48" fill="url(#glow)"/>
-
-  <!-- Network mesh pattern (subtle) -->
-  <g stroke="#35CBE0" stroke-opacity="0.10" stroke-width="0.5">
-    <line x1="0" y1="8.16" x2="48" y2="8.16"/>
-    <line x1="0" y1="15.84" x2="48" y2="15.84"/>
-    <line x1="0" y1="24.0" x2="48" y2="24.0"/>
-    <line x1="0" y1="32.160000000000004" x2="48" y2="32.160000000000004"/>
-    <line x1="0" y1="39.839999999999996" x2="48" y2="39.839999999999996"/>
-    <line x1="8.16" y1="0" x2="8.16" y2="48"/>
-    <line x1="15.84" y1="0" x2="15.84" y2="48"/>
-    <line x1="24.0" y1="0" x2="24.0" y2="48"/>
-    <line x1="32.160000000000004" y1="0" x2="32.160000000000004" y2="48"/>
-    <line x1="39.839999999999996" y1="0" x2="39.839999999999996" y2="48"/>
-  </g>
-
-  <!-- Diagonal accent lines -->
-  <g stroke="#E8B84A" stroke-opacity="0.08" stroke-width="0.4">
-    <line x1="-4.800000000000001" y1="14.399999999999999" x2="14.399999999999999" y2="-4.800000000000001"/>
-    <line x1="-4.800000000000001" y1="28.799999999999997" x2="28.799999999999997" y2="-4.800000000000001"/>
-    <line x1="33.599999999999994" y1="52.800000000000004" x2="52.800000000000004" y2="33.599999999999994"/>
-    <line x1="19.200000000000003" y1="52.800000000000004" x2="52.800000000000004" y2="19.200000000000003"/>
-  </g>
-
-  <!-- Outer gold ring -->
-  <circle cx="24" cy="24" r="20" fill="none" stroke="url(#ring)" stroke-width="0.8639999999999999" stroke-opacity="0.85"/>
-  <circle cx="24" cy="24" r="18" fill="none" stroke="#FFE27A" stroke-width="0.24" stroke-opacity="0.4"/>
-
-  <!-- Chat bubble (background) -->
-  <path d="M 13.5,15.2
-           C 13.5,11.899999999999999 17.7,11.899999999999999 19.8,13.0
-           C 22.95,11.899999999999999 25.05,11.899999999999999 28.2,13.0
-           C 30.3,11.899999999999999 34.5,11.899999999999999 34.5,15.2
-           C 34.5,19.6 34.5,26.2 32.4,28.4
-           L 31.35,33.9
-           L 26.1,28.4
-           C 13.5,28.4 13.5,22.9 13.5,15.2 Z"
-        fill="url(#bubble)" stroke="url(#ring)" stroke-width="0.5760000000000001"/>
-
-  <!-- Y letter (main) -->
-  <path d="M 18,14
-           L 21,14
-           L 24,19
-           L 26,14
-           L 29,14
-           L 25,26
-           L 25,31
-           L 22,31
-           L 22,26
-           Z"
-        fill="url(#yletter)"/>
-
-  <!-- Y letter highlight (left half) -->
-  <path d="M 18,14
-           L 21,14
-           L 24,19
-           L 22,23.8
-           L 22,26
-           Z"
-        fill="#FFE27A" fill-opacity="0.35"/>
-
-  <!-- Center emerald dot -->
-  <circle cx="24" cy="24.96" r="0.8639999999999999" fill="#00C98C"/>
-
-  <!-- Sparkle 1 (top-right, gold) -->
-  <g transform="translate(37,14)">
-    <path d="M 0,-1.2000000000000002 L 0.28800000000000003,-0.384 L 1.2000000000000002,0 L 0.28800000000000003,0.384 L 0,1.2000000000000002 L -0.28800000000000003,0.384 L -1.2000000000000002,0 L -0.28800000000000003,-0.384 Z" fill="#FFE27A"/>
-  </g>
-
-  <!-- Sparkle 2 (top-right small, gold) -->
-  <g transform="translate(40,20)">
-    <path d="M 0,-0.72 L 0.192,-0.24 L 0.72,0 L 0.192,0.24 L 0,0.72 L -0.192,0.24 L -0.72,0 L -0.192,-0.24 Z" fill="#FFE27A" fill-opacity="0.8"/>
-  </g>
-
-  <!-- Sparkle 3 (bottom-left, emerald) -->
-  <g transform="translate(10,34)">
-    <path d="M 0,-0.96 L 0.24,-0.28800000000000003 L 0.96,0 L 0.24,0.28800000000000003 L 0,0.96 L -0.24,0.28800000000000003 L -0.96,0 L -0.24,-0.28800000000000003 Z" fill="#00E6A0"/>
-  </g>
-
-  <!-- Small accent dots -->
-  <circle cx="40.8" cy="26.400000000000002" r="0.5760000000000001" fill="#35CBE0" fill-opacity="0.6"/>
-  <circle cx="7.199999999999999" cy="21.6" r="0.48" fill="#00E6A0" fill-opacity="0.6"/>
-  <circle cx="9.600000000000001" cy="9.600000000000001" r="0.384" fill="#FFE27A" fill-opacity="0.7"/>
-  <circle cx="38.400000000000006" cy="37.44" r="0.384" fill="#E8B84A" fill-opacity="0.7"/>
-
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <path fill="url(#gold)" fill-rule="evenodd" d="M512 168C354 168 228 296 228 454C228 564 290 660 378 710L308 844L482 770C492 773 502 774 512 774C670 774 796 648 796 490C796 332 670 168 512 168ZM512 268C614 268 696 350 696 452C696 554 614 636 512 636C410 636 328 554 328 452C328 350 410 268 512 268Z"/>
+  <path fill="url(#gold)" d="M356 304H442L512 428L582 304H668L548 504V668H476V504Z"/>
 </svg>

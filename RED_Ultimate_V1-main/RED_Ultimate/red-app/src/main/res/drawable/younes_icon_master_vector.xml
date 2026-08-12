@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- White Q/Y silhouette — safe as a notification small icon and as a tintable brand mark. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#071A2E" android:pathData="M54,4 C81.6,4 104,26.4 104,54 C104,81.6 81.6,104 54,104 C26.4,104 4,81.6 4,54 C4,26.4 26.4,4 54,4 Z" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#E8B84A" android:strokeWidth="4" android:pathData="M54,7 C80,7 101,28 101,54 C101,80 80,101 54,101 C28,101 7,80 7,54 C7,28 28,7 54,7 Z" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFE27A" android:strokeAlpha="0.35" android:strokeWidth="1" android:pathData="M54,14 C76.1,14 94,31.9 94,54 C94,76.1 76.1,94 54,94 C31.9,94 14,76.1 14,54 C14,31.9 31.9,14 54,14 Z" />
-    <path android:fillColor="#0A1628" android:strokeColor="#E8B84A" android:strokeWidth="3" android:strokeLineJoin="round" android:pathData="M22,39 C29,26 42,18 56,18 C76,18 92,33 92,52 C92,66 84,78 72,84 L76,96 L61,88 C56,89 52,90 47,90 C29,90 15,76 15,58 C15,51 17,44 22,39 Z" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#35CBE0" android:strokeAlpha="0.26" android:strokeWidth="1" android:pathData="M28,44 L42,34 L58,39 L74,29 M28,64 L44,72 L61,66 L79,75 M36,25 L50,44 L43,62 L55,83 M70,22 L62,45 L73,61 L67,86" />
-    <path android:fillColor="#E8B84A" android:pathData="M31,33 L43,33 L54,50 L65,33 L77,33 L60,59 L60,77 L48,77 L48,59 Z" />
-    <path android:fillColor="#FFE27A" android:fillAlpha="0.62" android:pathData="M36,36 L43,36 L54,52 L65,36 L72,36 L57,59 L57,73 L51,73 L51,59 Z" />
-    <path android:fillColor="#00C98C" android:pathData="M54,58 C58,58 61,61 61,65 C61,69 58,72 54,72 C50,72 47,69 47,65 C47,61 50,58 54,58 Z" />
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M12,2.2C7.4,2.2 3.7,5.9 3.7,10.5C3.7,13.7 5.4,16.5 8,17.95L6.1,21.8L11,19.55C11.3,19.62 11.65,19.66 12,19.66C16.6,19.66 20.3,15.96 20.3,11.36C20.3,6.76 16.6,2.2 12,2.2Z M12,5.1C15.2,5.1 17.8,7.7 17.8,10.9C17.8,14.1 15.2,16.7 12,16.7C8.8,16.7 6.2,14.1 6.2,10.9C6.2,7.7 8.8,5.1 12,5.1Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7.7,6.2L10.05,6.2L12,9.85L13.95,6.2L16.3,6.2L12.95,11.95L12.95,16.7L11.05,16.7L11.05,11.95Z"/>
 </vector>

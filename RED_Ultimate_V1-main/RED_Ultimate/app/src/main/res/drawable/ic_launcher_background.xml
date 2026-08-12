@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -5,8 +6,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
   <group>
-    <path
-        android:pathData="M108 0H0v108h108V0Z">
+    <path android:pathData="M108 0H0v108h108V0Z">
       <aapt:attr name="android:fillColor">
         <gradient
             android:type="linear"
@@ -14,12 +14,8 @@
             android:startY="0"
             android:endX="54"
             android:endY="108">
-          <item
-              android:color="#FF3B45FD"
-              android:offset="0"/>
-          <item
-              android:color="#FF1F2AFD"
-              android:offset="1"/>
+          <item android:color="#FF0B1E33" android:offset="0"/>
+          <item android:color="#FF000C1C" android:offset="1"/>
         </gradient>
       </aapt:attr>
     </path>
