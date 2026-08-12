@@ -271,7 +271,10 @@ function match(pattern, pathname) {
 
 // ── الصحة والمصادقة ──
 on('GET', '/health', () => ok({
+  brand: 'YOUNES',
+  displayName: 'يونس',
   status: 'UP',
+  version: '1.0.0-YOUNES',
   service: 'red-dev-server',
   db: 'sqlite',
   timestamp: nowIso(),
@@ -283,6 +286,14 @@ on('GET', '/health', () => ok({
     mediasfu: { status: 'DEGRADED', detail: 'development double' },
     asterisk: { status: 'UP', detail: 'simulated AMI' },
   },
+}));
+on('GET', '/health/live', () => ok({
+  brand: 'YOUNES',
+  displayName: 'يونس',
+  status: 'UP',
+  version: '1.0.0-YOUNES',
+  probe: 'live',
+  timestamp: nowIso(),
 }));
 on('GET', '/sfu-health', () => ok({ status: 'UP', workers: 4, rooms: 2, peers: 5 }));
 /**
@@ -1392,8 +1403,37 @@ function wsFrame(text) {
   return Buffer.concat([header, payload]);
 }
 
+function acceptWebSocket(req, socket) {
+  const accept = crypto.createHash('sha1')
+    .update((req.headers['sec-websocket-key'] || '') + GUID).digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
+}
+
 server.on('upgrade', (req, socket) => {
   const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+  // تطبيق الهاتف يتصل بـ /ws/master فور الدخول. رفضه بـ 401 كان يُبقي
+  // الإشعار على «جارٍ الاتصال» ثم يدور تجديد الجلسة بلا نهاية.
+  if (parsed.pathname === '/ws/master') {
+    const header = req.headers.authorization || '';
+    const bearer = header.startsWith('Bearer ') ? header.slice(7) : parsed.searchParams.get('access');
+    const user = bearer ? appRoutes.currentUser({ headers: { authorization: `Bearer ${bearer}` } }) : null;
+    if (!user || user.status !== 'APPROVED') {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      return socket.destroy();
+    }
+    acceptWebSocket(req, socket);
+    const ping = setInterval(() => {
+      if (socket.destroyed) return clearInterval(ping);
+      try { socket.write(wsFrame(`${nowIso()}  INFO  [dev-server] master socket alive for ${user.red_id}`)); }
+      catch { clearInterval(ping); }
+    }, 25000);
+    socket.on('close', () => clearInterval(ping));
+    socket.on('error', () => clearInterval(ping));
+    return;
+  }
+
   if (parsed.pathname !== WS_PATH || !parsed.searchParams.get('ticket')) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     return socket.destroy();

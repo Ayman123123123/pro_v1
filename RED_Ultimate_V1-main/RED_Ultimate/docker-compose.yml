@@ -106,7 +106,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 8
       # Flyway + JPA validate + first JDBC on Windows Docker regularly exceed 60s.
       start_period: 180s

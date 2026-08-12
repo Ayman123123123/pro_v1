@@ -13,13 +13,19 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
- * YOUNES readiness endpoint.
+ * YOUNES health endpoints.
  *
- * This is deliberately stricter than a liveness probe: an HTTP 200 means every
- * mandatory data service is usable. Docker/Nginx therefore cannot report a
- * healthy platform while the response body quietly says DOWN.
+ * `/health/live` is an instant process probe used by the Android app and
+ * Docker liveness. `/health` is readiness: PostgreSQL is the gate for HTTP 200
+ * because auth and admin APIs cannot run without it. Mongo/Redis/MinIO are
+ * reported in parallel with a short timeout so a hanging MinIO call cannot
+ * stall the phone on «جاري الاتصال بالسيرفر».
  */
 @RestController
 class HealthController(
@@ -35,26 +41,34 @@ class HealthController(
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(HealthController::class.java)
+        private val probePool = Executors.newFixedThreadPool(4) { task ->
+            Thread(task, "younes-health").apply { isDaemon = true }
+        }
+        private const val PROBE_TIMEOUT_MS = 800L
     }
+
+    @GetMapping("/health/live")
+    fun live(): ResponseEntity<Map<String, Any>> = ResponseEntity.ok(
+        mapOf(
+            "brand" to "YOUNES",
+            "displayName" to "يونس",
+            "status" to "UP",
+            "version" to "1.0.0-YOUNES",
+            "probe" to "live",
+            "timestamp" to Instant.now().toString()
+        )
+    )
 
     @GetMapping("/health")
     fun health(): ResponseEntity<Map<String, Any>> {
         val startMs = System.currentTimeMillis()
 
-        val postgresResult = runCatching {
-            jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1
-        }
-        val postgresOk = postgresResult.getOrDefault(false)
-
-        // MongoDatabase.name is a local accessor and does not contact MongoDB.
-        // A real ping is required for this endpoint to be a readiness signal.
-        val mongoResult = runCatching {
+        val postgresFuture = asyncProbe { jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1 }
+        val mongoFuture = asyncProbe {
             val reply = mongoTemplate.executeCommand(Document("ping", 1))
             (reply["ok"] as? Number)?.toDouble() == 1.0
         }
-        val mongoOk = mongoResult.getOrDefault(false)
-
-        val redisResult = runCatching {
+        val redisFuture = asyncProbe {
             val connection = requireNotNull(redisTemplate.connectionFactory?.connection) {
                 "Redis connection factory is unavailable"
             }
@@ -65,12 +79,14 @@ class HealthController(
                 connection.close()
             }
         }
-        val redisOk = redisResult.getOrDefault(false)
-
-        val minioResult = runCatching {
+        val minioFuture = asyncProbe {
             minioClient.bucketExists(BucketExistsArgs.builder().bucket(minioBucket).build())
         }
-        val minioOk = minioResult.getOrDefault(false)
+
+        val postgresOk = awaitProbe(postgresFuture, "postgresql")
+        val mongoOk = awaitProbe(mongoFuture, "mongodb")
+        val redisOk = awaitProbe(redisFuture, "redis")
+        val minioOk = awaitProbe(minioFuture, "minio")
 
         val flywayResult = runCatching {
             val latest = jdbcTemplate.queryForObject(
@@ -85,6 +101,12 @@ class HealthController(
         }
 
         val allOk = mongoOk && redisOk && postgresOk && minioOk
+        val apiReady = postgresOk
+        val statusLabel = when {
+            allOk -> "UP"
+            apiReady -> "DEGRADED"
+            else -> "DOWN"
+        }
         val totalMs = System.currentTimeMillis() - startMs
 
         if (!allOk) {
@@ -94,19 +116,13 @@ class HealthController(
                 if (!postgresOk) add("postgresql")
                 if (!minioOk) add("minio")
             }
-            log.warn("Readiness DOWN — unavailable services: {} ({}ms)", down.joinToString(), totalMs)
-            postgresResult.exceptionOrNull()?.let { log.debug("PostgreSQL readiness failure", it) }
-            mongoResult.exceptionOrNull()?.let { log.debug("MongoDB readiness failure", it) }
-            redisResult.exceptionOrNull()?.let { log.debug("Redis readiness failure", it) }
-            minioResult.exceptionOrNull()?.let { log.debug("MinIO readiness failure", it) }
+            log.warn("Readiness {} — unavailable services: {} ({}ms)", statusLabel, down.joinToString(), totalMs)
         }
 
-        // Public readiness output contains stable error codes, not exception text
-        // that could disclose hosts, credentials, drivers, or internal topology.
         val payload: Map<String, Any> = mapOf(
             "brand" to "YOUNES",
             "displayName" to "يونس",
-            "status" to if (allOk) "UP" else "DOWN",
+            "status" to statusLabel,
             "version" to "1.0.0-YOUNES",
             "timestamp" to Instant.now().toString(),
             "responseTimeMs" to totalMs,
@@ -148,7 +164,21 @@ class HealthController(
             )
         )
 
-        val status = if (allOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
+        val status = if (apiReady) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
         return ResponseEntity.status(status).body(payload)
+    }
+
+    private fun asyncProbe(block: () -> Boolean): CompletableFuture<Boolean> =
+        CompletableFuture.supplyAsync({ runCatching(block).getOrDefault(false) }, probePool)
+
+    private fun awaitProbe(future: CompletableFuture<Boolean>, name: String): Boolean = try {
+        future.get(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    } catch (timeout: TimeoutException) {
+        log.warn("Readiness probe timed out: {} ({}ms)", name, PROBE_TIMEOUT_MS)
+        future.cancel(true)
+        false
+    } catch (error: Exception) {
+        log.debug("Readiness probe failed: {}", name, error)
+        false
     }
 }

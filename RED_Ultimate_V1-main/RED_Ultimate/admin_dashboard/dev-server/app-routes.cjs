@@ -592,7 +592,12 @@ module.exports = function registerAppRoutes(on) {
 
   // ═══ الهوية والمفاتيح العامة ═══
   on('GET', '/api/identity/authority', () =>
-    ok({ publicKey: d.identityAuthority().publicKeyBase64, algorithm: 'SHA256withECDSA', curve: 'prime256v1' }));
+    ok({
+      publicKey: d.identityAuthority().publicKeyBase64,
+      algorithm: 'ECDSA_P256_SHA256',
+      version: 'v1',
+      curve: 'prime256v1',
+    }));
 
   /**
    * حزم المفاتيح العامة لمستخدم — تتطلب مصادقة.

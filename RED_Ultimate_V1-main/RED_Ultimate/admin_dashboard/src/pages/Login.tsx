@@ -27,14 +27,17 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   useEffect(() => {
     let cancelled = false;
     const probe = () => {
-      fetch('/health')
+      const ctrl = new AbortController();
+      const kill = window.setTimeout(() => ctrl.abort(), 2500);
+      fetch('/health', { signal: ctrl.signal })
         .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
         .then(data => {
           if (cancelled) return;
           const status = String(data?.status ?? '').toUpperCase();
-          setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
+          setHealth(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED' ? 'UP' : 'DOWN');
         })
-        .catch(() => { if (!cancelled) setHealth('DOWN'); });
+        .catch(() => { if (!cancelled) setHealth('DOWN'); })
+        .finally(() => window.clearTimeout(kill));
     };
     probe();
     const timer = window.setInterval(probe, 4000);
@@ -44,7 +47,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const healthMeta = useMemo(() => {
     if (health === 'UP') return { color: 'success' as const, text: 'الخادم متصل' };
     if (health === 'DOWN') return { color: 'error' as const, text: 'الخادم غير متصل' };
-    return { color: 'processing' as const, text: 'فحص الاتصال' };
+    return { color: 'processing' as const, text: 'جاري الاتصال بالسيرفر' };
   }, [health]);
 
   const submit = async (values: { username: string; password: string }) => {

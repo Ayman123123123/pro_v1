@@ -130,12 +130,12 @@ export default function App() {
       try {
         const [pending, health] = await Promise.all([
           getPendingApprovals().catch(() => []),
-          fetch('/health').then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
+          fetch('/health', { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
         ]);
         if (cancelled) return;
         setPendingCount(Array.isArray(pending) ? pending.length : 0);
         const status = String(health?.status || '').toUpperCase();
-        setApiUp(status === 'UP' || status === 'HEALTHY');
+        setApiUp(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED');
       } catch {
         if (!cancelled) setApiUp(false);
       }
