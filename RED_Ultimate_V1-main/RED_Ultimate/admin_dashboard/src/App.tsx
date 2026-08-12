@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, Tag, theme } from 'antd';
 import {
   DashboardOutlined,
@@ -26,6 +26,7 @@ import {
 import { adminLogin, adminLogout, authStore, getPendingApprovals } from './api';
 import Login from './pages/Login';
 import ErrorBoundary from './components/ErrorBoundary';
+import { usePolling } from './hooks/usePolling';
 import './styles.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -123,27 +124,22 @@ export default function App() {
     return () => window.removeEventListener('younes:auth-expired', onExpired);
   }, []);
 
-  useEffect(() => {
+  const refreshShell = useCallback(async () => {
     if (!authenticated) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const [pending, health] = await Promise.all([
-          getPendingApprovals().catch(() => []),
-          fetch('/health', { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
-        ]);
-        if (cancelled) return;
-        setPendingCount(Array.isArray(pending) ? pending.length : 0);
-        const status = String(health?.status || '').toUpperCase();
-        setApiUp(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED');
-      } catch {
-        if (!cancelled) setApiUp(false);
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(refresh, 20000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    try {
+      const [pending, health] = await Promise.all([
+        getPendingApprovals().catch(() => []),
+        fetch('/health', { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
+      ]);
+      setPendingCount(Array.isArray(pending) ? pending.length : 0);
+      const status = String(health?.status || '').toUpperCase();
+      setApiUp(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED');
+    } catch {
+      setApiUp(false);
+    }
   }, [authenticated]);
+
+  usePolling(refreshShell, authenticated ? 20000 : null);
 
   const login = async (username: string, password: string) => {
     setLoginLoading(true);

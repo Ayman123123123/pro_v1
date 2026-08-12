@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography, Space, Tag, Badge, Divider } from 'antd';
 import {
   ApiOutlined,
@@ -9,6 +9,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { adminLogin } from '../api';
+import { usePolling } from '../hooks/usePolling';
 
 interface LoginProps {
   onLogin?: (username: string, password: string) => Promise<void>;
@@ -24,25 +25,21 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [health, setHealth] = useState<HealthState>('CHECKING');
   const loading = isLoading ?? internalLoading;
 
-  useEffect(() => {
-    let cancelled = false;
-    const probe = () => {
-      const ctrl = new AbortController();
-      const kill = window.setTimeout(() => ctrl.abort(), 2500);
-      fetch('/health', { signal: ctrl.signal })
-        .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
-        .then(data => {
-          if (cancelled) return;
-          const status = String(data?.status ?? '').toUpperCase();
-          setHealth(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED' ? 'UP' : 'DOWN');
-        })
-        .catch(() => { if (!cancelled) setHealth('DOWN'); })
-        .finally(() => window.clearTimeout(kill));
-    };
-    probe();
-    const timer = window.setInterval(probe, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+  const probe = useCallback(async () => {
+    const ctrl = new AbortController();
+    const kill = window.setTimeout(() => ctrl.abort(), 2500);
+    try {
+      const r = await fetch('/health', { signal: ctrl.signal });
+      const data = r.ok ? await r.json().catch(() => ({})) : null;
+      const status = String(data?.status ?? '').toUpperCase();
+      setHealth(data && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') ? 'UP' : 'DOWN');
+    } catch {
+      setHealth('DOWN');
+    } finally {
+      window.clearTimeout(kill);
+    }
   }, []);
+  usePolling(probe, 4000);
 
   const healthMeta = useMemo(() => {
     if (health === 'UP') return { color: 'success' as const, text: 'الخادم متصل' };

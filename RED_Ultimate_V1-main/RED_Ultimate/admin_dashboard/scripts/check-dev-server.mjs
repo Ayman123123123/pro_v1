@@ -110,15 +110,22 @@ console.log(`\n🔍 فحص خادم التطوير على ${BASE}\n`);
 // ── تفويض المسؤول قبل أي فحص ──
 // خادم التطوير صار يفرض دور ADMIN على `/api/admin/**` مطابقةً
 // لـ SecurityConfig، فبلا رمز تعود كل هذه الفحوص بـ401.
+const ADMIN_USERNAME = process.env.RED_DEV_ADMIN_USERNAME || 'younes_sovereign';
+const ADMIN_PASSWORD = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
+
 {
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'younes_sovereign', password: 'dev' }),
-  });
-  const data = await res.json().catch(() => ({}));
+  let data = {};
+  for (const username of [ADMIN_USERNAME, 'younes_sovereign', 'red_admin']) {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: ADMIN_PASSWORD }),
+    });
+    data = await res.json().catch(() => ({}));
+    if (data.accessToken && data.user?.role === 'ADMIN') break;
+  }
   if (!data.accessToken) {
-    console.error('❌ تعذّر تسجيل دخول المسؤول — هل خادم التطوير يعمل؟');
+    console.error('❌ تعذّر تسجيل دخول المسؤول — هل خادم التطوير يعمل؟ استخدم SovereignAdmin1');
     process.exit(1);
   }
   adminToken = data.accessToken;
@@ -366,7 +373,7 @@ await check('المسح عن بُعد يلغي كل أجهزة المستخدم'
 
 await check('الدخول يفتح جلسة إدارية حقيقية', async () => {
   const before = (await api('GET', '/api/admin/sessions')).data.length;
-  const login = await api('POST', '/api/auth/login', { username: 'younes_sovereign', password: 'dev' });
+  const login = await api('POST', '/api/auth/login', { username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
   assert(login.data.user.role === 'ADMIN', 'الدور ليس ADMIN');
   const after = (await api('GET', '/api/admin/sessions')).data;
   assert(after.length === before + 1, `الجلسات ${before} ← ${after.length}`);
@@ -374,7 +381,7 @@ await check('الدخول يفتح جلسة إدارية حقيقية', async ()
 });
 
 await check('إنهاء الجلسة يزيلها من القائمة', async () => {
-  await api('POST', '/api/auth/login', { username: 'younes_sovereign', password: 'dev' });
+  await api('POST', '/api/auth/login', { username: ADMIN_USERNAME, password: ADMIN_PASSWORD });
   const sessions = (await api('GET', '/api/admin/sessions')).data;
   assert(sessions.length > 0, 'لا توجد جلسات');
   const target = sessions[0];

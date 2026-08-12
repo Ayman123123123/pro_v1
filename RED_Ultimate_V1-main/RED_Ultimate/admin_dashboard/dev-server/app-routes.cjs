@@ -369,9 +369,11 @@ module.exports = function registerAppRoutes(on) {
   on('POST', '/api/auth/login', (_p, _q, b) => loginAccount(b));
 
   on('POST', '/api/auth/refresh', (_p, _q, b) => {
-    const userId = refreshes.get(b?.refreshToken);
+    // الذاكرة أولاً ثم SQLite — وإلا إعادة تشغيل الخادم تُسقط اللوحة بـ401
+    // رغم أن رمز التجديد ما زال صالحًا على القرص.
+    const userId = lookupRefreshUserId(b?.refreshToken);
     if (!userId) return unauthorized();
-    refreshes.delete(b.refreshToken); // تدوير: الرمز القديم يُبطل فورًا
+    revokeRefresh(b.refreshToken); // تدوير: الرمز القديم يُبطل فورًا في الذاكرة والقرص
     const user = get('SELECT * FROM users WHERE id = ?', userId);
     if (!user || user.status !== 'APPROVED') return unauthorized();
     return ok(issueTokens(userId));
@@ -379,8 +381,12 @@ module.exports = function registerAppRoutes(on) {
 
   on('POST', '/api/auth/logout', (_p, _q, b, ctx) => {
     const header = ctx?.headers?.authorization || '';
-    if (header.startsWith('Bearer ')) sessions.delete(header.slice(7));
-    if (b?.refreshToken) refreshes.delete(b.refreshToken);
+    if (header.startsWith('Bearer ')) {
+      const token = header.slice(7);
+      sessions.delete(token);
+      run('DELETE FROM access_sessions WHERE token_hash = ?', hashToken(token));
+    }
+    if (b?.refreshToken) revokeRefresh(b.refreshToken);
     return noContent();
   });
 
@@ -1080,7 +1086,7 @@ module.exports = function registerAppRoutes(on) {
     if (title.length < 3 || title.length > 120) return bad('ROOM_TITLE_INVALID');
     const roomId = String(body?.roomId || '').trim() || `room_${uuid().replaceAll('-', '').slice(0, 12)}`;
     const room = {
-      roomId, title, hostName: me.display_name, hostRedId: me.red_id,
+      roomId, title, hostId: me.id, hostName: me.display_name, hostRedId: me.red_id,
       isSpace: body?.isSpace !== false, isPrivate: !!body?.isPrivate, participantCount: 0,
       inviteLink: `younes://${body?.isSpace !== false ? 'space' : 'conference'}/${roomId}`,
     };
@@ -1095,6 +1101,26 @@ module.exports = function registerAppRoutes(on) {
     room.participantCount += 1;
     return ok({ authorized: true, roomId: room.roomId, title: room.title,
       isSpace: room.isSpace, hostName: room.hostName });
+  });
+
+  // التطبيق يستدعي leave ثم close عند إنهاء المساحة (ConferenceService).
+  on('POST', '/api/conference/:roomId/leave', (p, _q, _body, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    room.participantCount = Math.max(0, room.participantCount - 1);
+    return ok({ roomId: room.roomId, participantCount: room.participantCount });
+  });
+  on('POST', '/api/conference/:roomId/close', (p, _q, _body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    if (room.hostId !== me.id && room.hostRedId !== me.red_id) {
+      return { status: 403, data: { error: 'ONLY_HOST_CAN_CLOSE' } };
+    }
+    conferenceRooms.delete(p.roomId);
+    return ok({ roomId: p.roomId, closed: true });
   });
 
   // ═══ المكالمات ═══

@@ -257,11 +257,11 @@ export default function Dashboard() {
 
       {/* System Health */}
       <Card title={<><CloudServerOutlined /> صحة النظام (آخر 5 دقائق)</>}>
-        {health.length === 0 ? (
+        {healthRows.length === 0 ? (
           <Alert type="info" message="لا توجد بيانات صحة حديثة" />
         ) : (
           <Row gutter={[16, 16]}>
-            {health.map((h, idx) => {
+            {healthRows.map((h, idx) => {
               const status = h.status as string;
               const color = status === 'HEALTHY' ? 'green' : status === 'DEGRADED' ? 'orange' : 'red';
               const icon = status === 'HEALTHY' ? <CheckCircleOutlined /> :

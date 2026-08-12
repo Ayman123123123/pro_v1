@@ -3,8 +3,11 @@
   Diagnose RED Docker stack on Windows. Does NOT pipe V1.sql into Postgres.
 
 .DESCRIPTION
-  Flyway inside red-backend owns V1..V28. Hand-applying SQL files breaks
+  Flyway inside red-backend owns V1..V29. Hand-applying SQL files breaks
   flyway_schema_history and is the usual cause of an empty "flyway" grep.
+  If docker build hangs on apt/ffmpeg, Ctrl+C, git pull, then rebuild:
+    docker compose build --no-cache backend
+    docker compose up -d backend
 
   Usage (from RED_Ultimate):
     powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-stack.ps1
