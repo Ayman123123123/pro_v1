@@ -170,7 +170,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             if (engine == null) {
                 engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
                 ConferenceRuntime.eglContext = engine?.eglContext
-                engine?.create(ConferenceRuntime.isVideoEnabled, simulcastEnabled = true, svc = true)
+                engine?.create(if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE)
                 ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
             }
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled)
@@ -433,13 +433,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             .setContentText("دعوة للانضمام للمؤتمر من: ${inviter.ifBlank { "مجموعة يونس" }}")
             .setContentIntent(mainIntent)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setFullScreenIntent(mainIntent, true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setColor(0xFF00C98C.toInt())
-            .setOngoing(true)
-            .setSound(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
+            .setOngoing(false)
+            .setSilent(false)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .addAction(0, "انضمام", acceptPending)
-            .addAction(0, "رفض", rejectPending)
+            .addAction(0, "لاحقاً", rejectPending)
             .build()
 
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
