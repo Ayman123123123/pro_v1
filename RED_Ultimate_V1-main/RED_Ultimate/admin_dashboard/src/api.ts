@@ -271,50 +271,49 @@ export async function getUsers(params: {
   return asPage<UserRecord>(data);
 }
 
+async function writeJson(res: Response) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
+  return data;
+}
+
 export async function getUserDetail(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}`);
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}`));
 }
 
 export async function approveUser(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/approve`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/approve`, { method: 'POST' }));
 }
 
 export async function rejectUser(userId: string, reason?: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/reject`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/reject`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function banUser(userId: string, reason: string, durationDays?: number) {
-  const res = await apiFetch(`/api/admin/users/${userId}/ban`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/ban`, {
     method: 'POST',
     body: JSON.stringify({ reason, durationDays })
-  });
-  return res.json();
+  }));
 }
 
 export async function unbanUser(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/unban`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/unban`, { method: 'POST' }));
 }
 
 export async function promoteUser(userId: string, role: 'USER' | 'ADMIN') {
-  const res = await apiFetch(`/api/admin/users/${userId}/role`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteUser(userId: string, hard = false) {
-  const res = await apiFetch(`/api/admin/users/${userId}${hard ? '?hard=true' : ''}`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}${hard ? '?hard=true' : ''}`, {
     method: 'DELETE'
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
