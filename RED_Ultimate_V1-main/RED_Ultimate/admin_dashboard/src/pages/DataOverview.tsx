@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Card, Col, Descriptions, Empty, Row, Spin, Statistic, Table, Tag, Typography } from 'antd';
 import { DatabaseOutlined, ReloadOutlined } from '@ant-design/icons';
-import { apiFetch } from '../api';
+import { getOperationsOverview } from '../api';
 import { usePolling } from '../hooks/usePolling';
 
 type Section = Record<string, number>;
@@ -37,9 +37,7 @@ export default function DataOverview() {
   const load = useCallback(async () => {
     setError('');
     try {
-      const response = await apiFetch('/api/admin/operations/overview');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      setData(await response.json());
+      setData(await getOperationsOverview());
     } catch (e: any) {
       setError(e?.message || 'تعذر تحميل جرد بيانات المنصة');
     } finally { setLoading(false); }
@@ -58,9 +56,10 @@ export default function DataOverview() {
       عرض تشغيلي شامل للبيانات المتاحة للإدارة. الأرقام مجمعة فقط ولا تعرض نصوص الرسائل المشفرة أو الأسرار أو مفاتيح الهوية.
     </Typography.Paragraph>
     <Alert type="info" showIcon style={{ marginBottom: 16 }} message="الخصوصية محفوظة" description="هذا القسم يعرض أعداداً وحالة تشغيلية فقط؛ لا يُستخدم لتصفح محتوى المستخدمين الخاص." />
-    {error && <Alert type="error" showIcon closable message="فشل التحميل" description={error} style={{ marginBottom: 16 }} />}
+    {error && <Alert type="error" showIcon closable message="فشل التحميل" description={error} style={{ marginBottom: 16 }}
+      action={<Button size="small" onClick={() => void load()}>إعادة المحاولة</Button>} />}
     <Card extra={<Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>تحديث</Button>}
-      title={data?.generatedAt ? `آخر تحديث: ${new Date(data.generatedAt).toLocaleString('ar')}` : 'جاري تحميل الجرد'}>
+      title={data?.generatedAt ? `آخر تحديث: ${new Date(data.generatedAt).toLocaleString('ar')}` : (error ? 'تعذر تحميل الجرد' : 'جاري تحميل الجرد')}>
       <Spin spinning={loading && !data}>
         {!data ? <Empty description="لا توجد بيانات بعد" /> : <>
           <Row gutter={[16, 16]}>

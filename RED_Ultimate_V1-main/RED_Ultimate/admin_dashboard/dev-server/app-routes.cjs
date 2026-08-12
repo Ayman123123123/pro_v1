@@ -33,20 +33,75 @@ const { uuid, nowIso, iso, all, get, run, recordAudit } = d;
 const sessions = new Map();   // accessToken  → userId
 const refreshes = new Map();  // refreshToken → userId
 
-function issueTokens(userId) {
+const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+function persistAccess(accessToken, userId, ttlSeconds = 900) {
+  sessions.set(accessToken, userId);
+  run(
+    `INSERT OR REPLACE INTO access_sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)`,
+    hashToken(accessToken), userId, nowIso(), new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+  );
+}
+
+function persistRefresh(refreshToken, userId, deviceId = null) {
+  refreshes.set(refreshToken, userId);
+  run(
+    `INSERT INTO refresh_sessions (id,user_id,device_id,token_hash,created_at,expires_at)
+     VALUES (?,?,?,?,?,?)`,
+    uuid(), userId, deviceId, hashToken(refreshToken), nowIso(),
+    new Date(Date.now() + 30 * 86400000).toISOString(),
+  );
+}
+
+function lookupAccessUserId(token) {
+  const cached = sessions.get(token);
+  if (cached) return cached;
+  const row = get(
+    'SELECT user_id FROM access_sessions WHERE token_hash = ? AND expires_at > ?',
+    hashToken(token), nowIso(),
+  );
+  if (!row) return null;
+  sessions.set(token, row.user_id);
+  return row.user_id;
+}
+
+function lookupRefreshUserId(refreshToken) {
+  if (!refreshToken) return null;
+  const cached = refreshes.get(refreshToken);
+  if (cached) return cached;
+  const row = get(
+    `SELECT user_id FROM refresh_sessions
+     WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
+    hashToken(refreshToken), nowIso(),
+  );
+  if (!row) return null;
+  refreshes.set(refreshToken, row.user_id);
+  return row.user_id;
+}
+
+function revokeRefresh(refreshToken) {
+  if (!refreshToken) return;
+  refreshes.delete(refreshToken);
+  run(
+    'UPDATE refresh_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL',
+    nowIso(), hashToken(refreshToken),
+  );
+}
+
+function issueTokens(userId, deviceId = null) {
   const accessToken = `red.${crypto.randomBytes(24).toString('base64url')}`;
   const refreshToken = `rfr.${crypto.randomBytes(24).toString('base64url')}`;
-  sessions.set(accessToken, userId);
-  refreshes.set(refreshToken, userId);
+  persistAccess(accessToken, userId);
+  persistRefresh(refreshToken, userId, deviceId);
   return { accessToken, refreshToken, tokenType: 'Bearer', expiresInSeconds: 900 };
 }
 
-/** يستخرج المستخدم من ترويسة Authorization. */
+/** يستخرج المستخدم من ترويسة Authorization — الذاكرة أولاً ثم SQLite بعد إعادة التشغيل. */
 function currentUser(ctx) {
   const header = ctx?.headers?.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
-  const userId = sessions.get(token);
+  const userId = lookupAccessUserId(token);
   return userId ? get('SELECT * FROM users WHERE id = ?', userId) : null;
 }
 
@@ -298,13 +353,8 @@ function loginAccount(b) {
   }
 
   const device = get("SELECT * FROM devices WHERE user_id=? AND status='APPROVED' ORDER BY created_at LIMIT 1", user.id);
-  const tokens = issueTokens(user.id);
+  const tokens = issueTokens(user.id, device?.id || null);
   run('UPDATE users SET last_seen=? WHERE id=?', nowIso(), user.id);
-  run(`INSERT INTO refresh_sessions (id,user_id,device_id,token_hash,created_at,expires_at)
-       VALUES (?,?,?,?,?,?)`,
-    uuid(), user.id, device?.id || null,
-    crypto.createHash('sha256').update(tokens.refreshToken).digest('hex'),
-    nowIso(), new Date(Date.now() + 30 * 86400000).toISOString());
   recordAudit({ adminId: user.id, adminUsername: user.username, action: 'USER_LOGIN',
     category: 'SECURITY', targetId: user.id, description: `${user.red_id} من التطبيق` });
 

@@ -122,8 +122,8 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   const response = await fetch(path, { ...init, headers, credentials: init.credentials || 'same-origin' });
   if (response.status === 401 && retry) {
     const refreshed = await rotate();
-    // إعادة المحاولة برمز الوصول الجديد الذي كتبه التجديد في المخزن.
     if (refreshed) return apiFetch(path, init, false);
+    if (authStore.access()) authStore.clear();
   }
   return response;
 }
@@ -304,6 +304,17 @@ export async function deleteUser(userId: string, hard = false) {
 }
 
 // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
+export async function getOperationsOverview() {
+  const res = await apiFetch('/api/admin/operations/overview');
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) throw new Error('انتهت الجلسة — أعد تسجيل الدخول');
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  if (!data || typeof data !== 'object' || !data.users) {
+    throw new Error('رد الجرد غير مكتمل من الخادم');
+  }
+  return data;
+}
+
 export async function getDashboardSummary() {
   const res = await apiFetch('/api/admin/dashboard/summary');
   const data = await res.json().catch(() => null);
