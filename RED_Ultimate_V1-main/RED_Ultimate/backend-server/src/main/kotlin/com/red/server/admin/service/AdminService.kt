@@ -289,7 +289,6 @@ class AdminService(
     fun getRecentBackups(): List<BackupHistory> = backups.findTop20ByOrderByStartedAtDesc()
 
     /**
-/**
      * Docker-host backup is intentionally not executed by the web process.
      * Giving Backend the Docker socket would make one application RCE equal to
      * root on the host. Operators must use scripts/backup-platform.sh instead.
@@ -321,5 +320,5 @@ class AdminService(
 /**
  * PageImpl helper
  */
-private class PageImpl<T>(content: List<T>, pageable: Pageable, total: Long) :
+private class PageImpl<T : Any>(content: List<T>, pageable: Pageable, total: Long) :
     org.springframework.data.domain.PageImpl<T>(content, pageable, total)

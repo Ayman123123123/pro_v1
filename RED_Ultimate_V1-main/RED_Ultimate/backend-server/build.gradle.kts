@@ -52,7 +52,7 @@ dependencies {
     implementation("org.bouncycastle:bcprov-jdk18on:1.79")
 
     // Local S3-compatible object storage
-    implementation("io.minio:minio:8.7.0")
+    implementation("io.minio:minio:8.6.0")
     implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
 
     // OkHttp for Dinstar API

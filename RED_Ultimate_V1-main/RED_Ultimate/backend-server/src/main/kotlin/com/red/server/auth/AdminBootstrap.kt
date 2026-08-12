@@ -33,7 +33,7 @@ class AdminBootstrap(
             UserAccount(
                 redId = redIdGenerator.next(),
                 username = username.trim().lowercase(),
-                passwordHash = passwordEncoder.encode(password),
+                passwordHash = requireNotNull(passwordEncoder.encode(password)) { "PasswordEncoder returned null" },
                 displayName = "YOUNES Administrator",
                 status = AccountStatus.APPROVED,
                 role = AccountRole.ADMIN
