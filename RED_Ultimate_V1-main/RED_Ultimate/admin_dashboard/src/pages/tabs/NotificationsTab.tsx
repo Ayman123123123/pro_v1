@@ -70,13 +70,21 @@ export default function NotificationsTab() {
   useEffect(() => { void load(); }, [filter]);
 
   const handleMarkRead = async (id: string) => {
-    await markNotificationRead(id);
-    void load();
+    try {
+      await markNotificationRead(id);
+      void load();
+    } catch (e: any) {
+      setError(e?.message || 'تعذر تعليم الإشعار كمقروء');
+    }
   };
 
   const handleMarkAllRead = async () => {
-    await markAllNotificationsRead();
-    void load();
+    try {
+      await markAllNotificationsRead();
+      void load();
+    } catch (e: any) {
+      setError(e?.message || 'تعذر تعليم كل الإشعارات');
+    }
   };
 
   return (

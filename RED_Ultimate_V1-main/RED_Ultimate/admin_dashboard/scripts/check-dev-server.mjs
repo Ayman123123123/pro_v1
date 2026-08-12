@@ -131,6 +131,33 @@ const ADMIN_PASSWORD = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
   adminToken = data.accessToken;
 }
 
+await check('الصحة تعرض YOUNES وFlyway وخدمات القاعدة', async () => {
+  const h = await api('GET', '/health');
+  assert(h.status === 200, `HTTP ${h.status}`);
+  assert(h.data.brand === 'YOUNES', `brand=${h.data.brand}`);
+  assert(h.data.status === 'UP' || h.data.status === 'DEGRADED', `status=${h.data.status}`);
+  assert(h.data.services?.redis?.status === 'UP', 'redis ليس UP');
+  assert(h.data.services?.minio?.status === 'UP', 'minio ليس UP');
+  assert(h.data.flyway?.appliedCount >= 1, `flyway.appliedCount=${h.data.flyway?.appliedCount}`);
+  return `V${h.data.flyway.latestVersion} · ${h.data.flyway.appliedCount} ترحيل`;
+});
+
+await check('سلطة الهوية ECDSA_P256_SHA256 v1', async () => {
+  const r = await api('GET', '/api/identity/authority');
+  assert(r.status === 200, `HTTP ${r.status}`);
+  assert(r.data.algorithm === 'ECDSA_P256_SHA256' || r.data.algorithm === 'SHA256withECDSA', r.data.algorithm);
+  assert(r.data.publicKey, 'لا يوجد publicKey');
+  return `${r.data.algorithm} · ${r.data.version || 'v1'}`;
+});
+
+await check('جرد العمليات يعيد أقسام المستخدمين والإشراف', async () => {
+  const r = await api('GET', '/api/admin/operations/overview');
+  assert(r.status === 200, `HTTP ${r.status} ${JSON.stringify(r.data)}`);
+  assert(r.data.users && typeof r.data.users.total === 'number', 'users.total مفقود');
+  assert(r.data.moderation && typeof r.data.moderation.openReports === 'number', 'moderation مفقود');
+  return `${r.data.users.total} مستخدم · ${r.data.moderation.openReports} بلاغ`;
+});
+
 // ═══ 1. الموافقات: العطل المُبلَّغ عنه ═══
 console.log('── التسجيل ثم الموافقة (الدورة الكاملة) ──');
 

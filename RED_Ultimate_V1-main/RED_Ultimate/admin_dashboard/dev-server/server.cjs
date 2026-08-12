@@ -279,13 +279,15 @@ on('GET', '/health', () => ok({
   db: 'sqlite',
   timestamp: nowIso(),
   services: {
-    postgresql: { status: 'UP', detail: 'SQLite stand-in for local admin' },
+    postgresql: { status: 'UP', detail: 'SQLite stand-in for local admin', database: 'red_sovereign' },
     mongodb: { status: 'UP', detail: 'SQLite stand-in for local admin' },
     redis: { status: 'UP', detail: 'in-process cache' },
     minio: { status: 'UP', bucket: 'red-media', detail: 'local stand-in' },
     mediasfu: { status: 'DEGRADED', detail: 'development double' },
     asterisk: { status: 'UP', detail: 'simulated AMI' },
   },
+  flyway: { latestVersion: '29', appliedCount: 29, error: null },
+  system: { javaVersion: 'dev-server', availableProcessors: 1, maxMemoryMb: 0 },
 }));
 on('GET', '/health/live', () => ok({
   brand: 'YOUNES',

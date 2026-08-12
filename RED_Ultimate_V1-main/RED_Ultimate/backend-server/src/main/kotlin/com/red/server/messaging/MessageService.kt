@@ -143,6 +143,10 @@ class MessageService(
         MessageDocument::class.java
     )
 
+    /** Same block policy as messages — used by typing indicators and other pairwise signals. */
+    fun requireDirectAllowed(senderRedId: String, receiverRedId: String) =
+        enforceNotBlocked(senderRedId, receiverRedId)
+
     private fun enforceNotBlocked(senderRedId: String, receiverRedId: String) {
         // V26: ملاحظة لنفسي — لا حظر للذات
         if (senderRedId == receiverRedId) return

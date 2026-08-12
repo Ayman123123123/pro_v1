@@ -42,7 +42,7 @@ class GroupE2EETest {
     }
 
     @Test
-    fun `group message validation requires conversationId 8..128`() {
+    fun `group message validation requires conversationId 8 to 128`() {
         assertTrue("abc12345".length in 8..128)
         assertFalse("short".length in 8..128)
         assertTrue("a".repeat(128).length in 8..128)

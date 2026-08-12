@@ -97,8 +97,8 @@ class VoiceMessageTypeTest {
         """.trimIndent().replace(Regex("\\s+"), "")
 
         assertTrue(
-            "Typical voice manifest should be small, got ${typicalManifest.length} bytes",
-            typicalManifest.length < 2048
+            typicalManifest.length < 2048,
+            "Typical voice manifest should be small, got ${typicalManifest.length} bytes"
         )
     }
 
@@ -118,14 +118,14 @@ class VoiceMessageTypeTest {
     fun `VOICE message uses 1-1 ciphertext type`() {
         val message = buildMessage(type = "VOICE", ciphertextType = 2)
         val exception = runCatching { validateCiphertext(message) }.exceptionOrNull()
-        assertNull("VOICE should accept ciphertext type 2 (Signal)", exception)
+        assertNull(exception, "VOICE should accept ciphertext type 2 (Signal)")
     }
 
     @Test
     fun `VOICE message accepts ciphertext type 3`() {
         val message = buildMessage(type = "VOICE", ciphertextType = 3)
         val exception = runCatching { validateCiphertext(message) }.exceptionOrNull()
-        assertNull("VOICE should accept ciphertext type 3 (PreKey)", exception)
+        assertNull(exception, "VOICE should accept ciphertext type 3 (PreKey)")
     }
 
     @Test
@@ -148,7 +148,7 @@ class VoiceMessageTypeTest {
     fun `unknown message type is rejected`() {
         val message = buildMessage(type = "SOME_FAKE_TYPE")
         val exception = runCatching { validateType(message) }.exceptionOrNull()
-        assertNotNull("Unknown type should be rejected", exception)
+        assertNotNull(exception, "Unknown type should be rejected")
         assertTrue(exception?.message?.contains("Unsupported message type") == true)
     }
 

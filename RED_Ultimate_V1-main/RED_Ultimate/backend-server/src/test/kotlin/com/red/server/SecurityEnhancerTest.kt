@@ -48,7 +48,7 @@ class SecurityEnhancerTest {
             val result = securityEnhancer.preHandle(request, response, object {})
             if (it >= 100) {
                 assertFalse(result)
-                assertEquals(429, response.statusCode)
+                assertEquals(429, response.status)
             }
         }
     }

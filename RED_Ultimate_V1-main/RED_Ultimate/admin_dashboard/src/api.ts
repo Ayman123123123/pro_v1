@@ -811,8 +811,7 @@ export interface UserOverview {
 }
 
 export async function getUserOverview(userId: string): Promise<UserOverview> {
-  const res = await apiFetch(`/api/admin/users/${userId}/overview`);
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/overview`));
 }
 
 export async function createTemporaryPassword(userId: string, temporaryPassword: string) {
@@ -829,21 +828,18 @@ export async function requestRemoteWipe(userId: string) {
 }
 
 export async function requestSecurityWipe(userId: string) {
-  const res = await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(userId)}`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(userId)}`, { method: 'POST' }));
 }
 
 export async function activateKillSwitch(reason: string) {
-  const res = await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' }));
 }
 
 export async function updatePstnAccess(userId: string, enabled: boolean, dailyLimit: number) {
-  const res = await apiFetch('/api/admin/users/pstn', {
+  return writeJson(await apiFetch('/api/admin/users/pstn', {
     method: 'PUT',
     body: JSON.stringify({ userId, enabled, dailyLimit }),
-  });
-  return res.json();
+  }));
 }
 
 export async function getPstnUsers(): Promise<any> {

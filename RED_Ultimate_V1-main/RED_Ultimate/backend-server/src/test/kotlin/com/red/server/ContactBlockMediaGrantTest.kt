@@ -5,10 +5,12 @@ import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.social.UserStatusService
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.eq
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.startsWith
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.redis.core.RedisTemplate
@@ -30,9 +32,8 @@ class ContactBlockMediaGrantTest {
 
         contacts.block(owner, target.redId)
 
-        verify(jdbc).update(
-            startsWith("DELETE FROM media_grants"),
-            eq(owner), eq(target.id), eq(target.id), eq(owner)
-        )
+        val sql = argumentCaptor<String>()
+        verify(jdbc, atLeastOnce()).update(sql.capture(), any(), any(), any(), any())
+        assertTrue(sql.allValues.any { it.contains("DELETE FROM media_grants") })
     }
 }

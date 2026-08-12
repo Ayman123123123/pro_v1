@@ -1,118 +1,150 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message } from 'antd';
-import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
+import { activateKillSwitch, getAuditLog, getOperationsOverview, requestSecurityWipe } from '../../api';
+import { usePolling } from '../../hooks/usePolling';
 
-import { apiFetch } from '../../api';
 const SecurityTab: React.FC = () => {
-    const [killSwitchModal, setKillSwitchModal] = useState(false);
-    const [wipeModal, setWipeModal] = useState(false);
-    const [targetUserId, setTargetUserId] = useState('');
-    const [reason, setReason] = useState('');
-    const [securityEvents, setSecurityEvents] = useState<any[]>([]);
-    const loadAudit = async () => { const response = await apiFetch('/api/admin/audit'); if (response.ok) setSecurityEvents(await response.json()); };
-    useEffect(() => { loadAudit(); }, []);
+  const [killSwitchModal, setKillSwitchModal] = useState(false);
+  const [wipeModal, setWipeModal] = useState(false);
+  const [targetUserId, setTargetUserId] = useState('');
+  const [reason, setReason] = useState('');
+  const [securityEvents, setSecurityEvents] = useState<any[]>([]);
+  const [operational, setOperational] = useState<any>(null);
+  const [error, setError] = useState('');
 
-    const handleKillSwitch = async () => {
-        if (!reason) { message.error('Reason required'); return; }
-        const response = await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
-        if (!response.ok) return message.error('Kill switch failed');
-        message.success('Kill switch activated'); setKillSwitchModal(false); await loadAudit();
-    };
+  const load = useCallback(async () => {
+    try {
+      const [audit, overview] = await Promise.all([
+        getAuditLog({ page: 0, size: 20 }),
+        getOperationsOverview().catch(() => null),
+      ]);
+      setSecurityEvents(Array.isArray(audit?.content) ? audit.content : []);
+      setOperational(overview);
+      setError('');
+    } catch (e: any) {
+      setError(e?.message || 'تعذر تحميل أحداث الأمان');
+      setSecurityEvents([]);
+    }
+  }, []);
 
-    const handleWipe = async () => {
-        if (!targetUserId) { message.error('User ID required'); return; }
-        const response = await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(targetUserId)}`, { method: 'POST' });
-        if (!response.ok) return message.error('Wipe failed');
-        message.success('Wipe signal sent'); setWipeModal(false); await loadAudit();
-    };
+  usePolling(load, 15000);
 
-    return (
-        <div>
-            <Alert
-                message="Security Operations Center"
-                description="Manage device security, remote wipe, and emergency kill switch."
-                type="info"
-                showIcon
-                style={{ marginBottom: 16 }}
+  const handleKillSwitch = async () => {
+    if (!reason.trim()) { message.error('أدخل سبب تفعيل Kill Switch'); return; }
+    try {
+      await activateKillSwitch(reason);
+      message.success('تم تفعيل Kill Switch');
+      setKillSwitchModal(false);
+      setReason('');
+      await load();
+    } catch (e: any) {
+      message.error(e?.message || 'فشل Kill Switch');
+    }
+  };
+
+  const handleWipe = async () => {
+    if (!targetUserId.trim()) { message.error('أدخل معرّف المستخدم'); return; }
+    try {
+      await requestSecurityWipe(targetUserId.trim());
+      message.success('أُرسل أمر المسح');
+      setWipeModal(false);
+      setTargetUserId('');
+      await load();
+    } catch (e: any) {
+      message.error(e?.message || 'فشل المسح');
+    }
+  };
+
+  return (
+    <div>
+      <Alert
+        message="مركز عمليات الأمان"
+        description="إدارة المسح عن بُعد وKill Switch. كل إجراء يُسجَّل في التدقيق."
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+      />
+
+      {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic title="تنبيهات 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0}
+              prefix={<SafetyOutlined />} valueStyle={{ color: '#52c41a' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic title="أجهزة ملغاة" value={operational?.devices?.revoked ?? 0}
+              prefix={<LockOutlined />} valueStyle={{ color: '#ff4d4f' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic title="جلسات تجديد نشطة" value={operational?.devices?.activeRefreshSessions ?? 0}
+              prefix={<SafetyOutlined />} valueStyle={{ color: '#1890ff' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic title="بلاغات مفتوحة" value={operational?.moderation?.openReports ?? 0}
+              prefix={<WarningOutlined />} valueStyle={{ color: '#faad14' }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} md={12}>
+          <Card title="إجراءات الطوارئ">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Button danger block icon={<WarningOutlined />} size="large"
+                onClick={() => setKillSwitchModal(true)}>
+                Kill Switch — مسح كل الأجهزة
+              </Button>
+              <Button type="primary" danger block icon={<DeleteOutlined />}
+                onClick={() => setWipeModal(true)}>
+                مسح عن بُعد — حساب واحد
+              </Button>
+            </Space>
+          </Card>
+        </Col>
+        <Col xs={24} md={12}>
+          <Card title="أحداث الأمان الأخيرة" extra={<Button size="small" onClick={load}>تحديث</Button>}>
+            <Table
+              dataSource={securityEvents}
+              rowKey="id"
+              columns={[
+                { title: 'الإجراء', dataIndex: 'action', render: (v: string) => <Tag color={String(v || '').includes('KILL') ? 'red' : 'blue'}>{v}</Tag> },
+                { title: 'الهدف', dataIndex: 'targetId', render: (v: string) => v || '—' },
+                { title: 'المدير', dataIndex: 'adminUsername', render: (v: string) => v || 'SYSTEM' },
+                { title: 'الوقت', dataIndex: 'createdAt', render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—') },
+              ]}
+              locale={{ emptyText: 'لا توجد أحداث تدقيق مسجلة' }}
+              pagination={{ pageSize: 8 }}
+              size="small"
             />
+          </Card>
+        </Col>
+      </Row>
 
-            <Row gutter={[16, 16]}>
-                <Col span={6}>
-                    <Card>
-                        <Statistic title="Threat Level" value="UNKNOWN" prefix={<SafetyOutlined />}
-                            valueStyle={{ color: '#52c41a' }} />
-                    </Card>
-                </Col>
-                <Col span={6}>
-                    <Card>
-                        <Statistic title="Blocked Devices" value="—" prefix={<LockOutlined />}
-                            valueStyle={{ color: '#ff4d4f' }} />
-                    </Card>
-                </Col>
-                <Col span={6}>
-                    <Card>
-                        <Statistic title="Active Sessions" value="—" prefix={<SafetyOutlined />}
-                            valueStyle={{ color: '#1890ff' }} />
-                    </Card>
-                </Col>
-                <Col span={6}>
-                    <Card>
-                        <Statistic title="Security Score" value="N/A"
-                            prefix={<SafetyOutlined />} valueStyle={{ color: '#52c41a' }} />
-                    </Card>
-                </Col>
-            </Row>
+      <Modal title="تأكيد Kill Switch" open={killSwitchModal}
+        onOk={handleKillSwitch} onCancel={() => setKillSwitchModal(false)}
+        okButtonProps={{ danger: true }} okText="تأكيد المسح الشامل">
+        <Alert message="سيتم مسح كل الأجهزة فوراً!" type="error" showIcon />
+        <Input.TextArea style={{ marginTop: 16 }} placeholder="سبب تفعيل Kill Switch..."
+          value={reason} onChange={e => setReason(e.target.value)} rows={3} />
+      </Modal>
 
-            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-                <Col span={12}>
-                    <Card title="⚡ Emergency Actions">
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                            <Button danger block icon={<WarningOutlined />} size="large"
-                                onClick={() => setKillSwitchModal(true)}>
-                                🔴 KILL SWITCH — Wipe All Devices
-                            </Button>
-                            <Button type="primary" danger block icon={<DeleteOutlined />}
-                                onClick={() => setWipeModal(true)}>
-                                Remote Wipe — Single Device
-                            </Button>
-                        </Space>
-                    </Card>
-                </Col>
-                <Col span={12}>
-                    <Card title="Recent Security Events">
-                        <Table
-                            dataSource={securityEvents}
-                            rowKey="id"
-                            columns={[
-                                { title: 'Action', dataIndex: 'action', render: (v: string) => <Tag color={v.includes('KILL') ? 'red' : 'blue'}>{v}</Tag> },
-                                { title: 'Target', dataIndex: 'targetId', render: (v: string) => v || '—' },
-                                { title: 'Administrator', dataIndex: 'actorId', render: (v: string) => v || 'SYSTEM' },
-                                { title: 'Time', dataIndex: 'createdAt', render: (v: string) => new Date(v).toLocaleString('ar') },
-                            ]}
-                            locale={{emptyText:'لا توجد أحداث تدقيق مسجلة'}}
-                            pagination={{pageSize:8}}
-                            size="small"
-                        />
-                    </Card>
-                </Col>
-            </Row>
-
-            <Modal title="⚠️ KILL SWITCH Confirmation" open={killSwitchModal}
-                onOk={handleKillSwitch} onCancel={() => setKillSwitchModal(false)}
-                okButtonProps={{ danger: true }}>
-                <Alert message="This will WIPE ALL DEVICES immediately!" type="error" showIcon />
-                <Input.TextArea style={{ marginTop: 16 }} placeholder="Reason for kill switch..."
-                    value={reason} onChange={e => setReason(e.target.value)} rows={3} />
-            </Modal>
-
-            <Modal title="Remote Wipe — Single Device" open={wipeModal}
-                onOk={handleWipe} onCancel={() => setWipeModal(false)}
-                okButtonProps={{ danger: true }}>
-                <Input placeholder="Target User ID" value={targetUserId}
-                    onChange={e => setTargetUserId(e.target.value)} />
-            </Modal>
-        </div>
-    );
+      <Modal title="مسح عن بُعد — حساب واحد" open={wipeModal}
+        onOk={handleWipe} onCancel={() => setWipeModal(false)}
+        okButtonProps={{ danger: true }}>
+        <Input placeholder="معرّف المستخدم (UUID أو RED ID)" value={targetUserId}
+          onChange={e => setTargetUserId(e.target.value)} />
+      </Modal>
+    </div>
+  );
 };
 
 export default SecurityTab;

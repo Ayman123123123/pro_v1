@@ -31,10 +31,10 @@ class CallWebSocketHandler(
         val callId = when (type) {
             "OFFER" -> history.start(source, signal.targetUserId, signal.targetUserId,
                 CallType.valueOf(signal.mode.uppercase()), CallRoute.RED, signal.callId).id
-            "ANSWER" -> requireCallId(signal).also(history::answer)
-            "END" -> requireCallId(signal).also { history.end(it) }
+            "ANSWER" -> requireCallId(signal).also { history.answer(it, source) }
+            "END" -> requireCallId(signal).also { history.end(it, source) }
             "ICE", "HOLD", "RESUME" -> requireCallId(signal)
-            "REJECT" -> requireCallId(signal).also { history.end(it) }
+            "REJECT" -> requireCallId(signal).also { history.end(it, source) }
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
 

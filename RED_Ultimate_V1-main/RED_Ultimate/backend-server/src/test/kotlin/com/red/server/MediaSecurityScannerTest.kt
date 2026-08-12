@@ -212,7 +212,7 @@ class MediaSecurityScannerTest {
     fun `rejects control characters in filename`() {
         val header = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0, 16, 0x4A, 0x46)
         val content = header + ByteArray(100) { 1 }
-        val file = MockMultipartFile("file", "bad\x00name.jpg", "image/jpeg", content)
+        val file = MockMultipartFile("file", "bad\u0000name.jpg", "image/jpeg", content)
         val result = scanner.scan(file)
         assertFalse(result.allowed)
         assertTrue(result.reason.contains("control") || result.reason.contains("Invalid"))
