@@ -37,10 +37,24 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
             override fun onOpen(webSocket: WebSocket, response: Response) = listener.onConnected()
             override fun onMessage(webSocket: WebSocket, text: String) { runCatching { json.decodeFromString<CallSignal>(text) }.onSuccess(listener::onSignal).onFailure { listener.onError("INVALID_CALL_SIGNAL") } }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { socket = null; listener.onDisconnected() }
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { socket = null; listener.onError(t.message ?: "CALL_SIGNALING_FAILED") }
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                socket = null
+                // Network drops must reconnect the active call, not treat the socket error as a fatal UI failure.
+                listener.onDisconnected()
+            }
         })
     }
 
-    fun send(signal: CallSignal) { check(socket?.send(json.encodeToString(signal)) == true) { "Call signaling is not connected" } }
+    fun reconnect() {
+        runCatching { socket?.cancel() }
+        socket = null
+        connect()
+    }
+
+    fun send(signal: CallSignal) {
+        if (socket?.send(json.encodeToString(signal)) != true) {
+            listener.onError("CALL_SIGNALING_DISCONNECTED")
+        }
+    }
     fun close() { socket?.close(1000, "call service stopped"); socket = null }
 }

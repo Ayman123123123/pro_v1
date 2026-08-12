@@ -40,10 +40,20 @@ class CallHistoryService(
             require(it.initiatorId == actorId || it.targetId == actorId) { "Only call participants can end" }
         }
         val now = Instant.now()
-        it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED
         it.endedAt = now
-        val durationMs = if (it.answeredAt != null) Duration.between(it.answeredAt, now).toMillis() else 0L
-        publisher.callEnded(callId, durationMs, if (failed) "FAILED" else "NORMAL")
+        if (failed) {
+            it.status = CallStatus.FAILED
+            publisher.callEnded(callId, 0L, "FAILED")
+            return@update
+        }
+        if (it.answeredAt == null || it.status == CallStatus.RINGING) {
+            it.status = CallStatus.MISSED
+            publisher.callMissed(callId)
+            return@update
+        }
+        val durationMs = Duration.between(it.answeredAt, now).toMillis()
+        it.status = CallStatus.ENDED
+        publisher.callEnded(callId, durationMs, "NORMAL")
     }
 
     fun missed(callId: String): CallHistoryDocument = update(callId) {
