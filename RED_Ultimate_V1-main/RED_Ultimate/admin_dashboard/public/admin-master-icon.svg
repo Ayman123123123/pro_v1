@@ -2,15 +2,17 @@
   <defs>
     <radialGradient id="bg" cx="50%" cy="40%" r="72%">
       <stop offset="0%" stop-color="#0B1E33"/>
-      <stop offset="100%" stop-color="#000C1C"/>
+      <stop offset="100%" stop-color="#05080F"/>
     </radialGradient>
-    <linearGradient id="gold" x1="110" y1="70" x2="410" y2="450" gradientUnits="userSpaceOnUse">
+    <linearGradient id="gold" x1="100" y1="55" x2="415" y2="460" gradientUnits="userSpaceOnUse">
       <stop stop-color="#FFE27A"/>
       <stop offset="0.48" stop-color="#E8B84A"/>
       <stop offset="1" stop-color="#9A6F1C"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="96" fill="url(#bg)"/>
-  <path fill="url(#gold)" fill-rule="evenodd" d="M256 84C177 84 114 148 114 227C114 282 145 330 189 355L154 422L241 385C246 386 251 387 256 387C335 387 398 324 398 245C398 166 335 84 256 84ZM256 134C307 134 348 175 348 226C348 277 307 318 256 318C205 318 164 277 164 226C164 175 205 134 256 134Z"/>
-  <path fill="url(#gold)" d="M178 152H221L256 214L291 152H334L274 252V334H238V252Z"/>
+  <circle cx="256" cy="242" r="198" fill="none" stroke="url(#gold)" stroke-width="14"/>
+  <path fill="url(#gold)" fill-rule="evenodd" d="M256 78C184 78 126 137 126 210C126 261 154 306 196 329L164 390L245 356C249 357 252 358 256 358C328 358 386 299 386 226C386 153 328 78 256 78ZM256 123C304 123 343 162 343 210C343 258 304 297 256 297C208 297 169 258 169 210C169 162 208 123 256 123Z"/>
+  <path fill="url(#gold)" d="M180 140H224L256 200L288 140H332L270 248V328H242V248Z"/>
+  <text x="256" y="468" text-anchor="middle" fill="url(#gold)" font-family="Times New Roman, Cinzel, Georgia, serif" font-size="42" font-weight="600" letter-spacing="8">YOUNES</text>
 </svg>
