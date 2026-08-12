@@ -393,6 +393,52 @@ fun YounesConferenceOverlay() {
 }
 
 @Composable
+private fun ConferenceInviteSheet(state: ConferenceUiState.Incoming) {
+    val context = LocalContext.current
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xFF071018))
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(24.dp)
+        ) {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (state.video) "دعوة مؤتمر فيديو" else "دعوة مساحة صوتية",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "من ${state.inviter.ifBlank { "مجموعة يونس" }}",
+                        color = Color.White.copy(0.7f),
+                        fontSize = 15.sp
+                    )
+                    Text("انضم عندما تريد — لا رنين على كل الأعضاء", color = Color.Gray, fontSize = 13.sp)
+                }
+                PulseAvatar(letter = state.inviter, pulsing = false)
+                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    EndCallButton("لاحقاً") { ConferenceService.leave(context) }
+                    AcceptCallButton("انضمام") {
+                        ConferenceService.join(context, state.roomId, state.userId, state.video)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun QualityIndicator(stats: NetworkStats) {
     val color = when (stats.quality) {
         NetworkStats.Quality.EXCELLENT -> Color(0xFF2DDBA4)

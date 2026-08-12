@@ -31,6 +31,8 @@ import org.webrtc.VideoTrack
 
 sealed interface ConferenceUiState {
     data object Idle : ConferenceUiState
+    /** دعوة انضمام هادئة — ليست رنة هاتف مثل المكالمة الفردية */
+    data class Incoming(val roomId: String, val inviter: String, val video: Boolean, val userId: String = "") : ConferenceUiState
     data class Connecting(val roomId: String) : ConferenceUiState
     data class Active(val roomId: String, val startedAt: Long) : ConferenceUiState
     data class Error(val message: String) : ConferenceUiState
@@ -79,6 +81,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 val inviter = intent.getStringExtra(EXTRA_INVITER).orEmpty()
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
                 ConferenceRuntime.isVideoEnabled = hasVideo
+                ConferenceRuntime.state = ConferenceUiState.Incoming(roomId, inviter, hasVideo, userId)
                 showIncomingInvitationNotification(roomId, userId, inviter, hasVideo)
             }
             ACTION_JOIN -> {

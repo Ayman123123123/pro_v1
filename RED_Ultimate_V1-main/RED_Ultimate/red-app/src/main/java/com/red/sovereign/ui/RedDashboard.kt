@@ -94,6 +94,7 @@ import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
@@ -1435,13 +1436,15 @@ private fun ChatHubScreen(
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو جماعي", tint = YounesEmerald) }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Headset, "مساحة صوتية", tint = YounesEmerald) }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو", tint = YounesEmerald) }
                         Box {
                             IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
                             DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
                                 DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
                                 DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
                                 DropdownMenuItem(text = { Text("الوسائط المشتركة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; showGroupMediaGallery = true })
+                                DropdownMenuItem(text = { Text("مساحة صوتية") }, leadingIcon = { Icon(Icons.Default.Headset, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) })
                                 DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
                                 DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
                                 DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
