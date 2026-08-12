@@ -12,7 +12,9 @@ import java.util.UUID
 class LiveStreamController(
     private val liveStreamService: LiveStreamService,
     private val users: UserAccountRepository,
-    private val notifications: NotificationService
+    private val notifications: NotificationService,
+    private val history: CallHistoryService,
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler
 ) {
 
     @PostMapping("/create")
@@ -118,13 +120,17 @@ class LiveStreamController(
     ): ResponseEntity<Map<String, Any>> {
         val record = liveStreamService.getStreamRecord(streamId)
             ?: throw NoSuchElementException("Live stream not found or ended")
-        val inviter = authentication.name
-        request.friendIds.forEach { friendId ->
-            notifications.sendVoipPushNotification(
-                targetUserId = friendId,
-                callerId = inviter,
-                callId = streamId,
-                mode = "LIVESTREAM"
+        val accountId = UUID.fromString(authentication.name)
+        val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        request.friendIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { friendId ->
+            notifications.sendVoipPushNotification(friendId, inviter.redId, streamId, "LIVESTREAM")
+            callSignaling.deliverInvite(
+                targetRedId = friendId,
+                type = "LIVE_INVITE",
+                roomId = streamId,
+                sourceRedId = inviter.redId,
+                mode = "LIVE",
+                payload = mapOf("title" to record.title, "inviter" to inviter.displayName)
             )
         }
         return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.friendIds.size, "streamId" to streamId))

@@ -91,4 +91,12 @@ class CallWebSocketHandlerTest {
         assertTrue(bob.sent.any { it.contains("RENEGOTIATE") })
         assertEquals(1, bob.sent.count { it.contains("RENEGOTIATE") })
     }
+
+    @Test
+    fun `conference invite is delivered without opening a 1-1 call`() {
+        val bob = Probe("b", "22222")
+        handler.afterConnectionEstablished(bob.session)
+        handler.deliverInvite("22222", "CONFERENCE_INVITE", "room-9", "11111", "SPACE", mapOf("video" to "false"))
+        assertTrue(bob.sent.any { it.contains("CONFERENCE_INVITE") && it.contains("room-9") })
+    }
 }

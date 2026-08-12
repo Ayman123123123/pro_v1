@@ -37,6 +37,7 @@ class CallWebSocketHandler(
             "END" -> requireCallId(signal).also { history.end(it, source) }
             "ICE", "HOLD", "RESUME", "RENEGOTIATE" -> requireCallId(signal)
             "REJECT" -> requireCallId(signal).also { history.end(it, source) }
+            "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
 
@@ -111,6 +112,18 @@ class CallWebSocketHandler(
     private fun dropPending(callId: String) {
         pending.values.forEach { list -> list.removeIf { it.callId == callId } }
         pending.entries.removeIf { it.value.isEmpty() }
+    }
+
+    /** Deliver a conference/live invite to a RED ID: live socket if present, else 60s mailbox. */
+    fun deliverInvite(targetRedId: String, type: String, roomId: String, sourceRedId: String, mode: String, payload: Map<String, Any?> = emptyMap()) {
+        val outbound = OutgoingCallSignal(roomId, sourceRedId, targetRedId, type.uppercase(), mode.uppercase(), payload)
+        val targets = liveSessions(targetRedId)
+        if (targets.isEmpty()) {
+            enqueue(targetRedId, outbound)
+            return
+        }
+        val json = objectMapper.writeValueAsString(outbound)
+        targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
     }
 
     private fun requireCallId(signal: IncomingCallSignal) =

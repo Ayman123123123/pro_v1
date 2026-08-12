@@ -196,6 +196,26 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             "END", "REJECT" -> endCall(sendSignal = false)
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
+            "CONFERENCE_INVITE" -> {
+                val myId = TokenStore(this).redId.orEmpty()
+                val video = signal.mode != "SPACE"
+                ConferenceService.invite(
+                    this,
+                    signal.callId.orEmpty(),
+                    myId,
+                    signal.payload["inviter"] ?: signal.sourceUserId.orEmpty(),
+                    video
+                )
+            }
+            "LIVE_INVITE" -> {
+                val myId = TokenStore(this).redId.orEmpty()
+                LiveStreamService.invite(
+                    this,
+                    signal.callId.orEmpty(),
+                    myId,
+                    signal.payload["inviter"] ?: signal.sourceUserId.orEmpty()
+                )
+            }
         }
     }
 
