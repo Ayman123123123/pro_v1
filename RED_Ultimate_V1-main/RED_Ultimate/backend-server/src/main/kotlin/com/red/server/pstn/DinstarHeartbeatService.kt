@@ -23,8 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 class DinstarHeartbeatService(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService,
-    private val loadBalancer: DinstarLoadBalancer,
-    private val pstnManager: PstnManager
+    private val loadBalancer: DinstarLoadBalancer
 ) {
     companion object { private val log = LoggerFactory.getLogger(DinstarHeartbeatService::class.java) }
 
@@ -72,8 +71,6 @@ class DinstarHeartbeatService(
             } catch (e: Exception) {
                 log.warn("DINSTAR heartbeat failed for gateway {}: {}", gw.host, e.message)
                 fleet.markFailure(gw.id, e.message ?: "heartbeat failed")
-                // حاول إعادة الاتصال AMI إذا فشل
-                try { pstnManager.dialGsm("000000", gw.pjsipEndpoint ?: "dinstar-gateway") } catch (_: Exception) {}
             }
         }
     }

@@ -16,19 +16,29 @@ class CallHistoryService(
 ) {
     fun start(initiator: String, target: String, targetLabel: String, type: CallType, route: CallRoute, requestedId: String? = null): CallHistoryDocument {
         val id = requestedId?.takeIf { it.isNotBlank() } ?: UuidV7.next()
-        mongo.findById(id, CallHistoryDocument::class.java)?.let { return it }
+        mongo.findById(id, CallHistoryDocument::class.java)?.let { existing ->
+            require(existing.initiatorId == initiator && existing.targetId == target) {
+                "Call id reuse cannot redirect an existing call"
+            }
+            return existing
+        }
         val doc = mongo.save(CallHistoryDocument(id, initiator, target, targetLabel, type, route, CallStatus.RINGING))
         publisher.callStarted(id, initiator, target, type.name, route.name)
         return doc
     }
 
-    fun answer(callId: String) = update(callId) {
+    fun answer(callId: String, actorId: String? = null): CallHistoryDocument = update(callId) {
+        if (actorId != null) require(it.targetId == actorId) { "Only the called account can answer" }
+        require(it.status == CallStatus.RINGING) { "Call is not ringing" }
         it.status = CallStatus.ACTIVE
         it.answeredAt = Instant.now()
         publisher.callAnswered(callId)
     }
 
-    fun end(callId: String, failed: Boolean = false) = update(callId) {
+    fun end(callId: String, actorId: String? = null, failed: Boolean = false): CallHistoryDocument = update(callId) {
+        if (actorId != null) {
+            require(it.initiatorId == actorId || it.targetId == actorId) { "Only call participants can end" }
+        }
         val now = Instant.now()
         it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED
         it.endedAt = now
@@ -36,7 +46,7 @@ class CallHistoryService(
         publisher.callEnded(callId, durationMs, if (failed) "FAILED" else "NORMAL")
     }
 
-    fun missed(callId: String) = update(callId) {
+    fun missed(callId: String): CallHistoryDocument = update(callId) {
         it.status = CallStatus.MISSED
         it.endedAt = Instant.now()
         publisher.callMissed(callId)
@@ -53,7 +63,10 @@ class CallHistoryService(
         }
     }
 
-    private fun update(id: String, action: (CallHistoryDocument) -> Unit) {
-        mongo.findById(id, CallHistoryDocument::class.java)?.let { action(it); mongo.save(it) }
+    private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {
+        val doc = mongo.findById(id, CallHistoryDocument::class.java)
+            ?: throw NoSuchElementException("Call not found")
+        action(doc)
+        return mongo.save(doc)
     }
 }

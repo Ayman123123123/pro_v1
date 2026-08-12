@@ -8,13 +8,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val api = AuthApi(application)
+    // مهلة قصيرة على LAN: 15 ثانية كانت تُبقي شاشة «جارٍ الاتصال» بلا داعٍ.
+    private val api = AuthApi(
+        application,
+        SecureOkHttpClient.build(application, connectTimeout = 4, readTimeout = 6, writeTimeout = 4),
+    )
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
     private val pstn = PstnApi(tokens)
@@ -38,7 +44,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun discoverServer() = viewModelScope.launch {
         serverState = ServerState.Discovering
-        serverState = when (val result = discovery.discover()) {
+        serverState = when (val result = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)) {
             is ApiResult.Success -> ServerState.Ready(result.value)
             is ApiResult.Error -> ServerState.Error(localize(result.message), ServerEndpoint.url())
         }
@@ -140,13 +146,35 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun restore() = viewModelScope.launch {
         val refresh = tokens.refreshToken
-        if (refresh == null) { state = AuthState.Welcome; return@launch }
-        when (val result = withServerDiscoveryRetry { api.refresh(refresh) }) {
+        if (refresh == null) {
+            state = AuthState.Welcome
+            discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            return@launch
+        }
+        val result = withTimeoutOrNull(RESTORE_TIMEOUT_MS) { api.refresh(refresh) }
+        when (result) {
             is ApiResult.Success -> {
                 tokens.updateTokens(result.value)
                 state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
             }
-            is ApiResult.Error -> { tokens.clearSession(); state = AuthState.Welcome }
+            is ApiResult.Error -> {
+                if (result.code == 401 || result.code == 403) tokens.clearSession()
+                state = AuthState.Welcome
+                if (result.code == null) discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            }
+            null -> {
+                state = AuthState.Welcome
+                discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            }
+        }
+    }
+
+    private fun discoverInBackground(mode: LocalServerDiscovery.Mode) = viewModelScope.launch {
+        if (serverState is ServerState.Discovering) return@launch
+        serverState = ServerState.Discovering
+        serverState = when (val result = discovery.discover(mode)) {
+            is ApiResult.Success -> ServerState.Ready(result.value)
+            is ApiResult.Error -> ServerState.Error(localize(result.message), ServerEndpoint.url())
         }
     }
 
@@ -172,7 +200,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val first = request()
         if (first !is ApiResult.Error || first.code != null) return first
         serverState = ServerState.Discovering
-        return when (val discovered = discovery.discover()) {
+        return when (val discovered = discovery.discover(LocalServerDiscovery.Mode.FAST)) {
             is ApiResult.Success -> {
                 serverState = ServerState.Ready(discovered.value)
                 request()
@@ -193,7 +221,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "معرّف يونس أو رمز الاستعادة غير صحيح. أعد التأكد من الرموز المحفوظة."
         value.contains("RATE_LIMITED", ignoreCase = true) || value.contains("Too many attempts", ignoreCase = true) ->
             "محاولات كثيرة متكررة؛ انتظر دقيقة واحدة ثم أعد المحاولة لحماية حسابك."
-        value.contains("RED_SERVER_NOT_FOUND_ON_LAN", ignoreCase = true) ->
+        value.contains("RED_SERVER_NOT_FOUND_ON_LAN", ignoreCase = true) ||
+            value.contains("YOUNES_SERVER_NOT_FOUND", ignoreCase = true) ->
             "لم يُعثر على خادم يونس آمن في الشبكة المحلية. تأكد من اتصال الـ Wi-Fi."
         value.contains("already registered", ignoreCase = true) || value.contains("Username is taken", ignoreCase = true) ->
             "اسم المستخدم هذا محجوز بالفعل؛ يرجى اختيار اسم مستخدم آخر."
@@ -208,6 +237,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         value.contains("UNAUTHENTICATED", ignoreCase = true) ->
             "انتهت الجلسة أو غير مصرح. يرجى تسجيل الدخول مجدداً."
         else -> value.ifBlank { "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." }
+    }
+
+    private companion object {
+        const val RESTORE_TIMEOUT_MS = 3_500L
     }
 }
 

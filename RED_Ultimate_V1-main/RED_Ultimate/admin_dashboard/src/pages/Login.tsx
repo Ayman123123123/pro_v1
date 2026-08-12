@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography, Space, Tag, Badge, Divider } from 'antd';
 import {
   ApiOutlined,
@@ -9,6 +9,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { adminLogin } from '../api';
+import { usePolling } from '../hooks/usePolling';
 
 interface LoginProps {
   onLogin?: (username: string, password: string) => Promise<void>;
@@ -24,26 +25,26 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [health, setHealth] = useState<HealthState>('CHECKING');
   const loading = isLoading ?? internalLoading;
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/health')
-      .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
-      // كان الطرفان 'UP' في الشرطي نفسه، فأي ردّ — حتى ردّ خادم معطوب
-      // يعلن حالته DOWN — كان يُظهر «الخادم متصل». الشارة صارت تعكس
-      // الحالة المُبلَّغة فعلًا لا مجرّد وصول ردّ.
-      .then(data => {
-        if (cancelled) return;
-        const status = String(data?.status ?? '').toUpperCase();
-        setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
-      })
-      .catch(() => { if (!cancelled) setHealth('DOWN'); });
-    return () => { cancelled = true; };
+  const probe = useCallback(async () => {
+    const ctrl = new AbortController();
+    const kill = window.setTimeout(() => ctrl.abort(), 2500);
+    try {
+      const r = await fetch('/health', { signal: ctrl.signal });
+      const data = r.ok ? await r.json().catch(() => ({})) : null;
+      const status = String(data?.status ?? '').toUpperCase();
+      setHealth(data && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') ? 'UP' : 'DOWN');
+    } catch {
+      setHealth('DOWN');
+    } finally {
+      window.clearTimeout(kill);
+    }
   }, []);
+  usePolling(probe, 4000);
 
   const healthMeta = useMemo(() => {
     if (health === 'UP') return { color: 'success' as const, text: 'الخادم متصل' };
     if (health === 'DOWN') return { color: 'error' as const, text: 'الخادم غير متصل' };
-    return { color: 'processing' as const, text: 'فحص الاتصال' };
+    return { color: 'processing' as const, text: 'جاري الاتصال بالسيرفر' };
   }, [health]);
 
   const submit = async (values: { username: string; password: string }) => {
@@ -131,7 +132,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 20, borderRadius: 10 }} />}
             {health === 'DOWN' && <Alert type="warning" showIcon message="تعذر الوصول إلى /health" description="يمكنك محاولة الدخول إذا كان البروكسي أو الخادم يبدأان الآن." style={{ marginBottom: 20, borderRadius: 10 }} />}
             <Form layout="vertical" onFinish={submit} size="large">
-              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]}>
+              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]} initialValue="red_admin">
                 <Input prefix={<UserOutlined style={{color:'#64748B'}} />} placeholder="اسم المستخدم — red_admin" autoComplete="username"
                   style={{ background: '#1E293B', borderColor: '#334155', color: '#fff', height: 48, borderRadius: 10 }} />
               </Form.Item>
@@ -151,6 +152,9 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             </Space>
           </Card>
 
+          <Typography.Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center', lineHeight: 1.7 }}>
+            التطوير المحلي: <b>red_admin</b> أو <b>younes_sovereign</b> · كلمة المرور <b>SovereignAdmin1</b>
+          </Typography.Text>
           <Typography.Text style={{ color: '#334155', fontSize: 11, textAlign: 'center', lineHeight: 1.7 }}>
             نسيت كلمة المرور؟ استخدم حساب مسؤول آخر لإصدار كلمة مؤقتة من مركز المستخدمين. لا يوجد استرداد ذاتي للمسؤول السيادي.
           </Typography.Text>

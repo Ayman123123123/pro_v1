@@ -29,11 +29,11 @@ class TypingPolicyTest {
         whenever(users.findByRedId(receiver.redId)).thenReturn(receiver)
         whenever(jdbc.queryForObject(any<String>(), eq(Int::class.java), any(), any(), any(), any())).thenReturn(0)
 
-        assertDoesNotThrow { messages.requireTypingAllowed(sender.redId, receiver.redId, "conversation-001") }
+        assertDoesNotThrow { messages.requireDirectAllowed(sender.redId, receiver.redId) }
 
         whenever(jdbc.queryForObject(any<String>(), eq(Int::class.java), any(), any(), any(), any())).thenReturn(1)
         assertThrows(IllegalArgumentException::class.java) {
-            messages.requireTypingAllowed(sender.redId, receiver.redId, "conversation-001")
+            messages.requireDirectAllowed(sender.redId, receiver.redId)
         }
     }
 }

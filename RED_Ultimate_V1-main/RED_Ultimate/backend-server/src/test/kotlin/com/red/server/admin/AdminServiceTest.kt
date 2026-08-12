@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.*
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 /**
@@ -212,6 +213,7 @@ class AdminServiceTest {
 
     @Test
     fun `createAnnouncement saves new announcement`() {
+        whenever(announcements.save(any<SystemAnnouncement>())).thenAnswer { it.arguments[0] as SystemAnnouncement }
         val adminId = UUID.randomUUID()
         val saved = service.createAnnouncement(
             title = "Test", body = "Test body", type = "INFO",

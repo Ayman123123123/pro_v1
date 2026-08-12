@@ -104,7 +104,7 @@ export default function AuditLog() {
     }
   };
 
-  useEffect(() => { load(); loadAlerts(); }, [categoryFilter, page]);
+  useEffect(() => { void load(); void loadAlerts(); }, [categoryFilter, adminFilter, page]);
 
   const columns = [
     {
@@ -286,7 +286,7 @@ export default function AuditLog() {
           <Search
             placeholder="بحث بـ Admin ID"
             allowClear
-            onSearch={(v) => { setAdminFilter(v); load(); }}
+            onSearch={(v) => { setAdminFilter(v); setPage(0); }}
             style={{ width: 300 }}
             prefix={<SearchOutlined />}
           />

@@ -56,9 +56,9 @@ export default function Dashboard() {
         getSystemHealth(),
         getRealtimeMetrics(),
       ]);
-      setSummary(sum);
-      setHealth(healthData);
-      setRealtime(rt);
+      setSummary(sum && typeof sum === 'object' && !Array.isArray(sum) && 'analytics' in sum ? sum : null);
+      setHealth(Array.isArray(healthData) ? healthData : []);
+      setRealtime(rt && typeof rt === 'object' && !Array.isArray(rt) ? rt : null);
 
       // Last 7 days
       const end = new Date();
@@ -68,7 +68,7 @@ export default function Dashboard() {
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10)
       );
-      setAnalytics(ana);
+      setAnalytics(Array.isArray(ana) ? ana : []);
       setError(null);
     } catch (e: any) {
       setError(e.message ?? 'تعذر تحميل لوحة الإدارة');
@@ -92,6 +92,9 @@ export default function Dashboard() {
     return <Alert type="error" message="خطأ في التحميل" description={error} showIcon />;
   }
 
+  const rows = Array.isArray(analytics) ? analytics : [];
+  const healthRows = Array.isArray(health) ? health : [];
+
   const formatBytes = (bytes: number): string => {
     if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
     if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(2)} MB`;
@@ -103,13 +106,13 @@ export default function Dashboard() {
     title: { text: 'المستخدمون النشطون', textStyle: { color: '#00E6A0' } },
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: analytics.map(a => a.statDate.slice(5)) },
+    xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
     yAxis: { type: 'value' },
     series: [
       {
         name: 'إجمالي',
         type: 'line',
-        data: analytics.map(a => a.totalUsers),
+        data: rows.map(a => a.totalUsers),
         smooth: true,
         itemStyle: { color: '#00E6A0' },
         areaStyle: { color: 'rgba(0,230,160,0.2)' },
@@ -117,7 +120,7 @@ export default function Dashboard() {
       {
         name: 'جدد',
         type: 'line',
-        data: analytics.map(a => a.newUsers),
+        data: rows.map(a => a.newUsers),
         smooth: true,
         itemStyle: { color: '#35CBE0' },
       },
@@ -129,12 +132,12 @@ export default function Dashboard() {
     tooltip: { trigger: 'axis' },
     legend: { data: ['رسائل', 'مكالمات', 'رسائل صوتية'], textStyle: { color: '#fff' } },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', data: analytics.map(a => a.statDate.slice(5)) },
+    xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
     yAxis: { type: 'value' },
     series: [
-      { name: 'رسائل', type: 'bar', data: analytics.map(a => a.messagesSent), itemStyle: { color: '#00E6A0' } },
-      { name: 'مكالمات', type: 'bar', data: analytics.map(a => a.callsTotal), itemStyle: { color: '#E8B84A' } },
-      { name: 'رسائل صوتية', type: 'line', data: analytics.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#35CBE0' } },
+      { name: 'رسائل', type: 'bar', data: rows.map(a => a.messagesSent), itemStyle: { color: '#00E6A0' } },
+      { name: 'مكالمات', type: 'bar', data: rows.map(a => a.callsTotal), itemStyle: { color: '#E8B84A' } },
+      { name: 'رسائل صوتية', type: 'line', data: rows.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#35CBE0' } },
     ],
   };
 
@@ -229,8 +232,15 @@ export default function Dashboard() {
         </Row>
       )}
 
+      {!summary && (
+        <Alert type="info" showIcon message="لا توجد ملخصات بعد" description="ستظهر البطاقات فور وصول /api/admin/dashboard/summary." />
+      )}
+
       {/* Charts */}
-      {analytics.length > 0 && (
+      {rows.length === 0 && (
+        <Alert type="info" showIcon message="لا توجد سلسلة تحليلات لآخر 7 أيام" description="الصفحة تعمل، لكن /api/admin/analytics لم يُرجع صفوفاً بعد." />
+      )}
+      {rows.length > 0 && (
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={12}>
             <Card title={<><TeamOutlined /> المستخدمون</>}>
@@ -247,11 +257,11 @@ export default function Dashboard() {
 
       {/* System Health */}
       <Card title={<><CloudServerOutlined /> صحة النظام (آخر 5 دقائق)</>}>
-        {health.length === 0 ? (
+        {healthRows.length === 0 ? (
           <Alert type="info" message="لا توجد بيانات صحة حديثة" />
         ) : (
           <Row gutter={[16, 16]}>
-            {health.map((h, idx) => {
+            {healthRows.map((h, idx) => {
               const status = h.status as string;
               const color = status === 'HEALTHY' ? 'green' : status === 'DEGRADED' ? 'orange' : 'red';
               const icon = status === 'HEALTHY' ? <CheckCircleOutlined /> :
@@ -281,13 +291,13 @@ export default function Dashboard() {
       </Card>
 
       {/* Storage */}
-      {analytics.length > 0 && (
+      {rows.length > 0 && (
         <Card title={<><DatabaseOutlined /> التخزين والـ DINSTAR</>}>
           <Row gutter={[16, 16]}>
             <Col xs={24} md={12}>
               <Statistic
                 title="التخزين المستخدم"
-                value={formatBytes(analytics[analytics.length - 1]?.storageUsedBytes ?? 0)}
+                value={formatBytes(rows[rows.length - 1]?.storageUsedBytes ?? 0)}
                 prefix={<DatabaseOutlined style={{ color: '#35CBE0' }} />}
                 valueStyle={{ color: '#35CBE0' }}
               />
@@ -295,7 +305,7 @@ export default function Dashboard() {
             <Col xs={24} md={12}>
               <Statistic
                 title="رصيد DINSTAR المتبقي"
-                value={analytics[analytics.length - 1]?.dinstarBalanceRemaining ?? 0}
+                value={rows[rows.length - 1]?.dinstarBalanceRemaining ?? 0}
                 prefix={<DollarOutlined style={{ color: '#E8B84A' }} />}
                 valueStyle={{ color: '#E8B84A' }}
                 suffix="ريال"
@@ -306,10 +316,10 @@ export default function Dashboard() {
       )}
 
       {/* Recent Activity */}
-      {analytics.length > 0 && (
+      {rows.length > 0 && (
         <Card title="آخر النشاط اليومي">
           <List
-            dataSource={analytics.slice(-5).reverse()}
+            dataSource={rows.slice(-5).reverse()}
             renderItem={(item) => (
               <List.Item>
                 <Space>

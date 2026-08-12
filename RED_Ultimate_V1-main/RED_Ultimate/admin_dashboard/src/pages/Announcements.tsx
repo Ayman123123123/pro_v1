@@ -7,7 +7,6 @@ import {
   NotificationOutlined, PlusOutlined, ReloadOutlined, SendOutlined,
   DeleteOutlined, CheckCircleOutlined, ClockCircleOutlined, EditOutlined
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
 import {
   getAnnouncements, createAnnouncement, publishAnnouncement, deleteAnnouncement
 } from '../api';

@@ -107,7 +107,9 @@ fun AuthFlow(viewModel: AuthViewModel) {
 private fun LoadingScreen() = Centered {
     CircularProgressIndicator(color = CleanAccentGreen, modifier = Modifier.size(42.dp))
     Spacer(Modifier.height(16.dp))
-    Text("جارٍ الاتصال بخادم يونس الآمن…", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Text("جارٍ الاتصال بالسيرفر…", color = TextWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(6.dp))
+    Text("ثوانٍ معدودة — لن يبقى التطبيق معلّقًا إذا كان الخادم بعيدًا", color = TextSilver, fontSize = 12.sp, textAlign = TextAlign.Center)
 }
 
 @Composable

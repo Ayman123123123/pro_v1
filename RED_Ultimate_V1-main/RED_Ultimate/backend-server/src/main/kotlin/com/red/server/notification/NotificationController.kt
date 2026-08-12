@@ -1,12 +1,10 @@
 package com.red.server.notification
 
-import com.red.server.auth.model.UserAccount
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
-import org.springframework.security.core.annotation.AuthenticationPrincipal
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
-import java.util.UUID
 
 /**
  * 🔔 YOUNES Sovereign Notification Controller
@@ -24,12 +22,12 @@ class NotificationController(
      */
     @GetMapping
     fun getMyNotifications(
-        @AuthenticationPrincipal user: UserAccount,
+        authentication: Authentication,
         @RequestParam(defaultValue = "0") page: Int,
         @RequestParam(defaultValue = "50") size: Int,
         @RequestParam(required = false) type: String?
     ): ResponseEntity<NotificationPage> {
-        val userId = user.id.toString()
+        val userId = authentication.name
         val notifications = notificationService.getNotifications(userId, page, size, type)
         val unreadCount = notificationService.getUnreadCount(userId)
         return ResponseEntity.ok(NotificationPage(notifications, unreadCount, page))
@@ -41,9 +39,9 @@ class NotificationController(
     @PutMapping("/{id}/read")
     fun markAsRead(
         @PathVariable id: String,
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<Void> {
-        notificationService.markAsRead(user.id.toString(), id)
+        notificationService.markAsRead(authentication.name, id)
         return ResponseEntity.ok().build()
     }
 
@@ -52,9 +50,9 @@ class NotificationController(
      */
     @PutMapping("/read-all")
     fun markAllAsRead(
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<Void> {
-        notificationService.markAllAsRead(user.id.toString())
+        notificationService.markAllAsRead(authentication.name)
         return ResponseEntity.ok().build()
     }
 
@@ -64,9 +62,9 @@ class NotificationController(
     @DeleteMapping("/{id}")
     fun deleteNotification(
         @PathVariable id: String,
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<Void> {
-        notificationService.delete(user.id.toString(), id)
+        notificationService.delete(authentication.name, id)
         return ResponseEntity.ok().build()
     }
 
@@ -75,9 +73,9 @@ class NotificationController(
      */
     @GetMapping("/unread-count")
     fun getUnreadCount(
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<UnreadCountResponse> {
-        val count = notificationService.getUnreadCount(user.id.toString())
+        val count = notificationService.getUnreadCount(authentication.name)
         return ResponseEntity.ok(UnreadCountResponse(count))
     }
 
@@ -86,9 +84,9 @@ class NotificationController(
      */
     @GetMapping("/preferences")
     fun getPreferences(
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<NotificationPreferences> {
-        return ResponseEntity.ok(notificationService.getPreferences(user.id.toString()))
+        return ResponseEntity.ok(notificationService.getPreferences(authentication.name))
     }
 
     /**
@@ -97,9 +95,9 @@ class NotificationController(
     @PutMapping("/preferences")
     fun updatePreferences(
         @RequestBody request: NotificationPreferences,
-        @AuthenticationPrincipal user: UserAccount
+        authentication: Authentication
     ): ResponseEntity<NotificationPreferences> {
-        return ResponseEntity.ok(notificationService.updatePreferences(user.id.toString(), request))
+        return ResponseEntity.ok(notificationService.updatePreferences(authentication.name, request))
     }
 }
 

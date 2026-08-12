@@ -106,7 +106,7 @@ await check('كل مسار يستدعيه red-app مغطى في خادم الت�
   return `${called.size} مسارًا يستدعيه التطبيق — كلها مغطاة`;
 });
 
-const PASSWORD = 'RedSovereign#2026';
+const PASSWORD = process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1';
 const username = `qa_link_${Date.now().toString(36)}`;
 let redId = null;
 let userId = null;
@@ -302,7 +302,7 @@ await check('لا يُعاد أي مفتاح خاص لمستخدم عبر أي �
 
 await check('سلطة التوقيع تكشف المفتاح العام فقط', async () => {
   const res = (await api('GET', '/api/identity/authority')).data;
-  assert(res.publicKey && res.algorithm === 'SHA256withECDSA', 'عقد غير متوقع');
+  assert(res.publicKey && (res.algorithm === 'ECDSA_P256_SHA256' || res.algorithm === 'SHA256withECDSA'), 'عقد غير متوقع');
   assert(!JSON.stringify(res).toLowerCase().includes('private'), 'تسريب المفتاح الخاص للسلطة');
   return res.curve;
 });

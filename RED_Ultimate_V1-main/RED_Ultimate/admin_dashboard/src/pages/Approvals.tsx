@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Tag, Space, message, Modal, Input, Typography, Card, Descriptions } from 'antd';
+import { Table, Button, Tag, Space, message, Modal, Input, Typography, Card, Descriptions, Alert } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { CheckOutlined, CloseOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons';
 import { getPendingApprovals, approveRejectUser } from '../api';
@@ -33,14 +33,18 @@ export default function Approvals() {
   const [loading, setLoading] = useState(false);
   const [rejecting, setRejecting] = useState<PendingUser | null>(null);
   const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await getPendingApprovals();
       setPendingUsers(Array.isArray(data) ? data : []);
-    } catch {
-      message.error('تعذر تحميل طلبات الموافقة — تأكد من /api/admin/users/pending');
+    } catch (e: any) {
+      setPendingUsers([]);
+      setError(e?.message || 'تعذر تحميل طلبات الموافقة');
+      message.error(e?.message || 'تعذر تحميل طلبات الموافقة');
     } finally {
       setLoading(false);
     }

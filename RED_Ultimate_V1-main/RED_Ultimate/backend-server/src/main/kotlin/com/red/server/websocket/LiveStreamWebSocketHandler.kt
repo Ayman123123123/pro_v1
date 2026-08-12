@@ -30,6 +30,8 @@ class LiveStreamWebSocketHandler(
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
+        val accountId = session.attributes["accountId"] as? String
+        val redId = session.attributes["redId"] as? String ?: userId
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "streamId is required" }
         require(signal.roomId.matches(STREAM_ID)) { "Invalid streamId" }
@@ -50,7 +52,12 @@ class LiveStreamWebSocketHandler(
                         runCatching { session.close() }
                         return
                     }
-                    if (record.broadcasterId != userId) {
+                    val isOwner = record.broadcasterId == accountId
+                        || record.broadcasterId == userId
+                        || record.broadcasterId == redId
+                        || record.broadcasterRedId == redId
+                        || record.broadcasterRedId == userId
+                    if (!isOwner) {
                         val err = objectMapper.writeValueAsString(mapOf(
                             "type" to "ERROR",
                             "roomId" to signal.roomId,

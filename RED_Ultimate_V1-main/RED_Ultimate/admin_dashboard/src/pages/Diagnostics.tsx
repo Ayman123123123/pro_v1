@@ -17,6 +17,9 @@ const initialResults: DiagnosticResult[] = [
   { id: 'dinstar', system: 'بوابة DINSTAR UC2000-VE-8G للأجهزة السيادية', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
   { id: 'storage', system: 'تخزين الوسائط MinIO S3', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
   { id: 'redis', system: 'خادم التخزين المؤقت Redis Cache', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
+  { id: 'postgres', system: 'PostgreSQL / قاعدة الحسابات', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
+  { id: 'flyway', system: 'ترحيلات Flyway (V1–V29)', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
+  { id: 'identity', system: 'سلطة الهوية ECDSA', status: 'UNKNOWN', detail: 'لم يُفحص بعد' },
 ];
 
 async function probe(path: string): Promise<Response> {
@@ -42,6 +45,9 @@ export default function Diagnostics() {
       { id: 'storage', path: '/health', label: 'تخزين الوسائط MinIO S3', service: 'minio' },
       // ⚡ فحص Redis الحقيقي عبر قسم services.redis في /health
       { id: 'redis', path: '/health', label: 'خادم التخزين المؤقت Redis Cache', service: 'redis' },
+      { id: 'postgres', path: '/health', label: 'PostgreSQL / قاعدة الحسابات', service: 'postgresql' },
+      { id: 'flyway', path: '/health', label: 'ترحيلات Flyway (V1–V29)', service: 'flyway' },
+      { id: 'identity', path: '/api/identity/authority', label: 'سلطة الهوية ECDSA' },
     ];
 
     const next = await Promise.all(
@@ -53,14 +59,40 @@ export default function Diagnostics() {
             return { id, system: label, status: 'ERROR' as const, detail: `HTTP ${response.status}` };
           }
           // قراءة حالة الخدمة الجزئية من خريطة services عند الطلب
+          if (service === 'flyway') {
+            const fw = body?.flyway;
+            if (!fw) {
+              return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات Flyway من الخادم' };
+            }
+            if (fw.error) {
+              return { id, system: label, status: 'ERROR' as const, detail: fw.error };
+            }
+            return {
+              id, system: label, status: 'READY' as const,
+              detail: `V${fw.latestVersion || '—'} · ${fw.appliedCount ?? 0} ترحيل مطبّق`,
+            };
+          }
           if (service) {
             const svc = body?.services?.[service];
             if (!svc) {
               return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات فحص من الخادم' };
             }
-            return svc.status === 'UP'
-              ? { id, system: label, status: 'READY' as const, detail: svc.bucket ? `الحاوية ${svc.bucket} متاحة` : 'متصل ويستجيب' }
-              : { id, system: label, status: 'ERROR' as const, detail: svc.error || 'الخدمة معطلة' };
+            if (svc.status === 'UP') {
+              return { id, system: label, status: 'READY' as const, detail: svc.bucket ? `الحاوية ${svc.bucket} متاحة` : (svc.detail || 'متصل ويستجيب') };
+            }
+            if (svc.status === 'DEGRADED') {
+              return { id, system: label, status: 'ERROR' as const, detail: svc.detail || svc.error || 'الخدمة متدهورة' };
+            }
+            return { id, system: label, status: 'ERROR' as const, detail: svc.error || svc.detail || 'الخدمة معطلة' };
+          }
+          if (id === 'identity') {
+            const algo = String(body.algorithm || '');
+            const ok = algo === 'ECDSA_P256_SHA256' || algo === 'SHA256withECDSA';
+            return {
+              id, system: label,
+              status: ok ? 'READY' as const : 'ERROR' as const,
+              detail: ok ? `${algo} · ${body.version || 'v1'} · ${body.curve || ''}` : (algo || 'خوارزمية غير متوقعة'),
+            };
           }
           const status: DiagnosticStatus =
             body.status === 'OFFLINE' || body.status === 'DOWN' ? 'ERROR' : 'READY';

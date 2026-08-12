@@ -74,8 +74,8 @@ class LiveStreamService {
 
     fun verifyPassword(streamId: String, password: String?): Boolean {
         val record = activeStreamRecords[streamId] ?: return false
-        if (!record.isPrivate || record.passwordHash.isNull_or_empty_hash()) return true
-        if (password.isNull_or_blank()) return false
+        if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
+        if (password.isNullOrBlank()) return false
         return hashPassword(password) == record.passwordHash
     }
 
@@ -128,6 +128,4 @@ class LiveStreamService {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private fun String?.isNull_or_empty_hash() = this.isNullOrBlank()
-    private fun String?.isNull_or_blank() = this.isNullOrBlank()
 }

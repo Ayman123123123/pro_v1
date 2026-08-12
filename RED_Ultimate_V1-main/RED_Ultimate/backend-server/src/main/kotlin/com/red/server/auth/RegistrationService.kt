@@ -48,7 +48,7 @@ class RegistrationService(
                 UserAccount(
                     redId = redIdGenerator.next(),
                     username = username,
-                    passwordHash = passwordEncoder.encode(request.password),
+                    passwordHash = requireNotNull(passwordEncoder.encode(request.password)) { "PasswordEncoder returned null" },
                     displayName = displayName,
                     status = AccountStatus.PENDING
                 )
