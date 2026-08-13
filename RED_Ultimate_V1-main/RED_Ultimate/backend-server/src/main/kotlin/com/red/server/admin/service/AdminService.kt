@@ -86,12 +86,10 @@ class AdminService(
     @Transactional
     fun calculateCurrentAnalytics(): Map<String, Any> {
         val totalUsers = users.count()
-        val pendingUsers = users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.PENDING).size
-        val bannedUsers = users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.BANNED).size
-        val approvedUsers = users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.APPROVED).size
-        val newUsers24h = users.findAll().count {
-            it.createdAt.isAfter(Instant.now().minusSeconds(86400))
-        }
+        val pendingUsers = users.countByStatus(AccountStatus.PENDING)
+        val bannedUsers = users.countByStatus(AccountStatus.BANNED)
+        val approvedUsers = users.countByStatus(AccountStatus.APPROVED)
+        val newUsers24h = users.countCreatedAfter(Instant.now().minusSeconds(86400))
 
         return mapOf(
             "totalUsers" to totalUsers,

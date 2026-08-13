@@ -275,7 +275,7 @@ class AdminV2Controller(
         @RequestParam(required = false) category: String? = null,
         @RequestParam(required = false) severity: String? = null
     ): ResponseEntity<*> {
-        val pageable = PageRequest.of(page, size)
+        val pageable = PageRequest.of(page, size, org.springframework.data.jpa.domain.JpaSort.unsafe(Sort.Direction.DESC, "created_at"))
         val result = when {
             adminId != null -> service.getAuditByAdmin(UUID.fromString(adminId), pageable)
             action != null -> service.getAuditByAction(action, pageable)
