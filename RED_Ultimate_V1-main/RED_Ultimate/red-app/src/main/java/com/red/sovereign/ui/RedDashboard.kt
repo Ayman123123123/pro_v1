@@ -1997,21 +1997,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         "DINSTAR" -> call.route == "DINSTAR"; else -> true
     } }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        Text("مركز المكالمات والبث المباشر 📞", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("سجل موحد للاتصالات والمؤتمرات والبث الحية والمساحات الصوتية والهاتف اليمني.", color = Color.LightGray)
-        
-        // Dedicated Quick Action Buttons
-        LazyRow(
-            Modifier.fillMaxWidth().padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item { RoundCallAction(Icons.Default.Call, "مكالمة جديدة", Color(0xFF00C98C), true) { showNewCallDialog = true } }
-            item { RoundCallAction(Icons.Default.Groups, "مؤتمر جماعي", AqyalCyanGlow, true) { showJoinDialog = true } }
-            item { RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true } }
-            item { RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true } }
-            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true, onExplore) }
-            item { RoundCallAction(Icons.Default.PhoneInTalk, "هاتف يمني", Color(0xFFE31E24), true) { showDinstarDialog = true } }
-        }
+        Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("الفردي يرن. المؤتمر والمساحة والبث أزرار مستقلة هنا — ليست أزرار الدردشة.", color = Color.LightGray, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        CallsHubLaunchers(
+            onPrivateCall = { showNewCallDialog = true },
+            onConference = { showJoinDialog = true },
+            onLive = { showLiveDialog = true },
+            onSpace = { showSpaceDialog = true },
+            onExplore = onExplore,
+            onPstn = { showDinstarDialog = true }
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
         }
@@ -3259,6 +3257,17 @@ private fun conversationId(first: String, second: String): String {
     "الأشياء" to listOf("📱", "💻", "⌚", "📷", "🎥", "🎙️", "🔒", "🔑", "💡", "📌", "📎", "📁", "📄", "📚", "🎁", "🏆", "✅", "⚠️"),
     "الطبيعة" to listOf("🌙", "☀️", "⭐", "🔥", "🌈", "🌹", "🌿", "🌳", "🌊", "⛰️", "🐪", "🦅", "🐝", "🦋"),
     "الطعام" to listOf("☕", "🍵", "🥤", "🍞", "🥐", "🍚", "🍗", "🥗", "🍎", "🍉", "🍇", "🍯", "🎂"),
+    "السفر" to listOf("🚗", "🚕", "🚌", "✈️", "🚁", "🚢", "🗺️", "🏠", "🏢", "🏥", "🏫", "🕌", "⛺"),
+    "الرموز" to listOf("✅", "❌", "⚠️", "❗", "❓", "💯", "➕", "➖", "♻️", "🔴", "🟢", "🟡", "🔵", "🇾🇪")
+)
+private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
+
+private fun conversationId(first: String, second: String): String {
+    if (first.isBlank() || second.isBlank()) return "pending-conversation"
+    val canonical = listOf(first, second).sorted().joinToString("|")
+    return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+}
+", "🍵", "🥤", "🍞", "🥐", "🍚", "🍗", "🥗", "🍎", "🍉", "🍇", "🍯", "🎂"),
     "السفر" to listOf("🚗", "🚕", "🚌", "✈️", "🚁", "🚢", "🗺️", "🏠", "🏢", "🏥", "🏫", "🕌", "⛺"),
     "الرموز" to listOf("✅", "❌", "⚠️", "❗", "❓", "💯", "➕", "➖", "♻️", "🔴", "🟢", "🟡", "🔵", "🇾🇪")
 )
