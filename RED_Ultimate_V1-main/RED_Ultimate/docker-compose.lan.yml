@@ -1,0 +1,20 @@
+# Optional LAN overlay — use when the DINSTAR box lives on the host LAN:
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d
+#
+# Docker Desktop (Windows/macOS) cannot reach 192.168.x.x on the physical
+# LAN from a Linux VM unless host.docker.internal / host networking is used.
+# Linux hosts: extra_hosts is enough when the gateway is on a routed LAN.
+name: red-sovereign
+
+services:
+  backend:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
+    environment:
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-true}
+
+  pstn-gateway:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
