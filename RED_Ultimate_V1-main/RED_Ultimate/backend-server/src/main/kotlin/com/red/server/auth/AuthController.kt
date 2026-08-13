@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.http.ResponseCookie
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.security.core.Authentication
+import jakarta.validation.Valid
 import java.time.Instant
 import java.util.UUID
 import org.springframework.web.bind.annotation.PostMapping
@@ -30,13 +31,13 @@ class AuthController(
 ) {
 
     @PostMapping("/register")
-    fun register(@RequestBody request: RegisterRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
+    fun register(@Valid @RequestBody request: RegisterRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
         limits.check("register", clientIp(servlet), 5, Duration.ofHours(1))
         return ResponseEntity.status(HttpStatus.CREATED).body(registration.register(request))
     }
 
     @PostMapping("/login")
-    fun login(@RequestBody request: LoginRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<AuthResponse> {
+    fun login(@Valid @RequestBody request: LoginRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<AuthResponse> {
         val rateIdentity = "${clientIp(servlet)}:${request.username}"
         limits.check("login", rateIdentity, 10, Duration.ofMinutes(15))
         val response = registration.login(request)

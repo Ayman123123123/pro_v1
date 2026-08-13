@@ -368,6 +368,7 @@ export interface UserRecord {
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
   role: 'USER' | 'ADMIN';
   pstnEnabled: boolean;
+  pstnDailyLimit?: number;
   createdAt: string;
   approvedAt?: string;
   lastSeen?: number;

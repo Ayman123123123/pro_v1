@@ -268,9 +268,18 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
     var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
+    // 🔗 فتح محادثة خاصة من قائمة أعضاء المجموعة أو جهات الاتصال (يتغذى على deepLinkSender في ChatHubScreen)
+    var pendingChatTarget by remember { mutableStateOf<String?>(null) }
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
         if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
+    }
+    // 🧹 مسح pendingChatTarget بعد فتح المحادثة حتى لا يُعاد فتحها عند التبديل بين التبويبات
+    androidx.compose.runtime.LaunchedEffect(pendingChatTarget, section) {
+        if (pendingChatTarget != null && section == MainSection.CHATS) {
+            kotlinx.coroutines.delay(600)
+            pendingChatTarget = null
+        }
     }
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
@@ -321,8 +330,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             SovereignScreen.CREATE_GROUP -> CreateGroupScreen(
                 onBack = { currentScreen = SovereignScreen.DASHBOARD },
                 friends = directory.contacts,
-                onCreate = { name, privacy, memberRedIds ->
-                    groups.create(name, null, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
+                onCreate = { name, description, privacy, memberRedIds ->
+                    groups.create(name, description, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
                 }
             )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -346,7 +355,13 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     group = infoGroup,
                     groups = groups,
                     friends = directory.contacts,
-                    onBack = { currentScreen = SovereignScreen.DASHBOARD }
+                    ownRedId = account.redId,
+                    onBack = { currentScreen = SovereignScreen.DASHBOARD },
+                    onMessage = { redId ->
+                        pendingChatTarget = redId
+                        section = MainSection.CHATS
+                        currentScreen = SovereignScreen.DASHBOARD
+                    }
                 )
             }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -395,7 +410,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
+                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation)
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
@@ -881,10 +896,11 @@ private fun ChatHubScreen(
     
     androidx.compose.runtime.LaunchedEffect(messageText) {
         if (target.matches(RED_ID_PATTERN)) {
+            val typingConversation = conversationId(account.redId, target)
             val intent = Intent(context, com.red.sovereign.core.RedConnectionService::class.java).apply {
                 action = com.red.sovereign.core.RedConnectionService.ACTION_SEND_TYPING
                 putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_TARGET, target)
-                putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, conversation)
+                putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, typingConversation)
                 putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_IS_TYPING, messageText.isNotEmpty())
             }
             context.startService(intent)
@@ -893,7 +909,7 @@ private fun ChatHubScreen(
                 val stopIntent = Intent(context, com.red.sovereign.core.RedConnectionService::class.java).apply {
                     action = com.red.sovereign.core.RedConnectionService.ACTION_SEND_TYPING
                     putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_TARGET, target)
-                    putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, conversation)
+                    putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, typingConversation)
                     putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_IS_TYPING, false)
                 }
                 context.startService(stopIntent)
@@ -1179,8 +1195,7 @@ private fun ChatHubScreen(
                                 bottomEnd = if (item.outgoing) 5.dp else 20.dp
                             )
                         ) {
-                            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                Text(if (item.outgoing) "أنت" else (activePerson?.displayName ?: item.senderRedId), color = if (item.outgoing) Color(0xB8002018) else AqyalCyanGlow, fontSize = 10.sp)
+                            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 when (item.type) {
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
@@ -1202,13 +1217,17 @@ private fun ChatHubScreen(
                                         reactionsByMessage[item.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(item.id, conversation, account.redId, emoji, System.currentTimeMillis())
                                     }
                                 )
-                                if (item.outgoing) {
-                                    val ticks = when (item.status) {
-                                        "READ" -> "✓✓ (مقروء)"
-                                        "DELIVERED" -> "✓✓"
-                                        else -> "✓"
+                                // 🕐 الوقت + علامات القراءة داخل الفقاعة (نمط واتساب)
+                                Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(formatClockTime(item.timestamp), fontSize = 10.sp, color = if (item.outgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (item.outgoing) {
+                                        val ticks = when (item.status) {
+                                            "READ" -> "✓✓"
+                                            "DELIVERED" -> "✓✓"
+                                            else -> "✓"
+                                        }
+                                        Text(ticks, color = if (item.status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
-                                    Text(ticks, color = if (item.status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else Color(0x99001B14), fontSize = 10.sp, modifier = Modifier.align(Alignment.End))
                                 }
                             }
                         }
@@ -1561,6 +1580,18 @@ private fun ChatHubScreen(
                                         reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, openGroup.id, account.redId, emoji, System.currentTimeMillis())
                                     }
                                 )
+                                // 🕐 الوقت داخل الفقاعة (نمط واتساب)
+                                Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(formatClockTime(message.timestamp), fontSize = 10.sp, color = if (message.outgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (message.outgoing) {
+                                        val ticks = when (message.status) {
+                                            "READ" -> "✓✓"
+                                            "DELIVERED" -> "✓✓"
+                                            else -> "✓"
+                                        }
+                                        Text(ticks, color = if (message.status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -3098,6 +3129,10 @@ private fun relativeTime(timestamp: Long): String {
         else -> java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(timestamp))
     }
 }
+
+/** وقت الساعة داخل الفقاعة (مثل واتساب: 4:20 م / 11:05 ص). */
+private fun formatClockTime(timestamp: Long): String =
+    java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(timestamp))
 
 @Composable
 private fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
