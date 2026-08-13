@@ -49,6 +49,10 @@ const MessagingCenter = lazy(() => import('./pages/MessagingCenter'));
 const InfrastructureCenter = lazy(() => import('./pages/InfrastructureCenter'));
 const ModerationCenter = lazy(() => import('./pages/ModerationCenter'));
 const DataOverview = lazy(() => import('./pages/DataOverview'));
+const SimInventory = lazy(() => import('./pages/SimInventory'));
+const CdrAnalysis = lazy(() => import('./pages/CdrAnalysis'));
+const SmsTemplates = lazy(() => import('./pages/SmsTemplates'));
+const PortControl = lazy(() => import('./pages/PortControl'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -70,6 +74,10 @@ type PageKey =
   | 'media'
   | 'infrastructure'
   | 'dinstar'
+  | 'dinstar-sim'
+  | 'dinstar-cdr'
+  | 'dinstar-sms-templates'
+  | 'dinstar-port-control'
   | 'monitor'
   | 'diagnostics'
   | 'data-overview';
@@ -96,6 +104,10 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'infrastructure', icon: <CloudServerOutlined />, label: 'البنية التحتية', group: 'system' },
   // Sovereign — DINSTAR + مراقبة + تشخيص
   { key: 'dinstar', icon: <MobileOutlined />, label: 'بوابات DINSTAR', group: 'sovereign' },
+  { key: 'dinstar-sim', icon: <SafetyCertificateOutlined />, label: 'جرد شرائح SIM', group: 'sovereign' },
+  { key: 'dinstar-cdr', icon: <BarChartOutlined />, label: 'تحليل المكالمات CDR', group: 'sovereign' },
+  { key: 'dinstar-sms-templates', icon: <MessageOutlined />, label: 'قوالب SMS', group: 'sovereign' },
+  { key: 'dinstar-port-control', icon: <SettingOutlined />, label: 'التحكم بالمنافذ', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
 ];
@@ -209,6 +221,10 @@ export default function App() {
       case 'media': return <MediaCenter />;
       case 'infrastructure': return <InfrastructureCenter />;
       case 'dinstar': return <DinstarControl />;
+      case 'dinstar-sim': return <SimInventory />;
+      case 'dinstar-cdr': return <CdrAnalysis />;
+      case 'dinstar-sms-templates': return <SmsTemplates />;
+      case 'dinstar-port-control': return <PortControl />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;
     }

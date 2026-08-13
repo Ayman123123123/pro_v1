@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Compose owns every screen. This file only supplies the Activity window theme.
-  Do not invent android: attributes that are not in the platform (colorHighlight,
-  colorHint, buttonStyleHighlight, textInputStyle) — AAPT2 will fail linking.
+  يونس ماستر — نظام الأنماط الكامل
+  
+  يحتوي على:
+  1. Theme.Younes — ثيم النشاط الرئيسي
+  2. TextAppearance.Younes — أنماط النصوص
+  3. Widget.Younes — أنماط الودجات (أزرار، حقول، إلخ)
+  
+  ملاحظة: الخطوط تُحدَّد عبر Compose (Google Fonts: Cairo/Tajawal)
+  في XML نستخدم sans-serif (يدعم العربية افتراضياً على Android)
 -->
 <resources>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         1. الثيم الرئيسي — Theme.Younes
+    ═══════════════════════════════════════════════════════════════ -->
     <style name="Theme.Younes" parent="Theme.Material3.Dark.NoActionBar">
         <item name="android:statusBarColor">@color/yns_status_bar</item>
         <item name="android:navigationBarColor">@color/yns_navigation_bar</item>
@@ -16,9 +26,175 @@
         <item name="colorPrimary">@color/yns_primary</item>
         <item name="colorOnPrimary">@color/yns_on_primary</item>
         <item name="colorSecondary">@color/yns_secondary</item>
+        <item name="colorOnSecondary">@color/yns_on_secondary</item>
         <item name="android:textColorPrimary">@color/yns_text_primary</item>
         <item name="android:textColorSecondary">@color/yns_text_secondary</item>
         <item name="android:windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
     </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         2. أنماط النصوص — TextAppearance.Younes
+    ═══════════════════════════════════════════════════════════════ -->
+    
+    <!-- الأنماط الأساسية -->
+    <style name="TextAppearance.Younes" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.Arabic" parent="TextAppearance.Younes">
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <!-- العناوين -->
+    <style name="TextAppearance.Younes.HeadlineLarge" parent="TextAppearance.Material3.HeadlineLarge">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">32sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.HeadlineMedium" parent="TextAppearance.Material3.HeadlineMedium">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.HeadlineSmall" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.TitleMedium" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.TitleSmall" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <!-- النصوص العادية -->
+    <style name="TextAppearance.Younes.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.BodyMedium" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.BodySmall" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textColor">@color/yns_text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <!-- التسميات -->
+    <style name="TextAppearance.Younes.LabelLarge" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.LabelMedium" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textColor">@color/yns_text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="TextAppearance.Younes.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textColor">@color/yns_text_tertiary</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <!-- ═══════════════════════════════════════════════════════════════
+         3. أنماط الودجات — Widget.Younes
+    ═══════════════════════════════════════════════════════════════ -->
+    
+    <!-- النمط الأساسي -->
+    <style name="Widget.Younes" parent="Widget.Material3.Button" />
+    
+    <!-- الأزرار -->
+    <style name="Widget.Younes.Button" parent="Widget.Material3.Button">
+        <item name="android:textColor">@color/yns_on_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textColor">@color/yns_primary</item>
+        <item name="strokeColor">@color/yns_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <style name="Widget.Younes.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">@color/yns_primary</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    
+    <!-- حقول الإدخال -->
+    <style name="Widget.Younes.TextInputLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/yns_primary</item>
+        <item name="hintTextColor">@color/yns_primary</item>
+        <item name="android:textColorHint">@color/yns_text_secondary</item>
+    </style>
+    
+    <style name="Widget.Younes.TextInputEditText" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:textColor">@color/yns_text_primary</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    
+    <!-- البطاقات -->
+    <style name="Widget.Younes.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">@color/yns_surface</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">2dp</item>
+    </style>
+    
+    <style name="Widget.Younes.Card.Elevated" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/yns_surface_elevated</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="cardElevation">4dp</item>
+    </style>
+    
+    <!-- شريط التطبيق -->
+    <style name="Widget.Younes.AppBar" parent="Widget.Material3.AppBarLayout">
+        <item name="android:background">@color/yns_background</item>
+    </style>
+    
+    <!-- شريط التنقل السفلي -->
+    <style name="Widget.Younes.BottomNavigation" parent="Widget.Material3.BottomNavigationView">
+        <item name="android:background">@color/yns_background_variant</item>
+        <item name="itemIconTint">@color/yns_primary</item>
+        <item name="itemTextColor">@color/yns_primary</item>
+    </style>
+    
+    <!-- المفاتيح (Switches) -->
+    <style name="Widget.Younes.Switch" parent="Widget.Material3.CompoundButton.Switch" />
+    
+    <!-- شريط التقدم -->
+    <style name="Widget.Younes.LinearProgress" parent="Widget.Material3.LinearProgressIndicator">
+        <item name="trackColor">@color/yns_surface_light</item>
+        <item name="indicatorColor">@color/yns_primary</item>
+    </style>
+    
+    <style name="Widget.Younes.CircularProgress" parent="Widget.Material3.CircularProgressIndicator">
+        <item name="indicatorColor">@color/yns_primary</item>
+    </style>
+
 </resources>

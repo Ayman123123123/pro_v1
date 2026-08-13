@@ -23,7 +23,8 @@ class DinstarHeartbeatService(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService,
     private val loadBalancer: DinstarLoadBalancer,
-    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean
+    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
+    private val wsBroadcaster: org.springframework.beans.factory.ObjectProvider<com.red.server.websocket.DinstarWebSocketHandler>
 ) {
     companion object { private val log = LoggerFactory.getLogger(DinstarHeartbeatService::class.java) }
 
@@ -69,6 +70,8 @@ class DinstarHeartbeatService(
                 val recovered = lastReachable.put(gw.host, true) == false
                 if (recovered) log.info("DINSTAR gateway {} is reachable again", gw.host)
                 else log.debug("DINSTAR heartbeat ok: gateway={} ports={}", gw.host, ports.size)
+                // بثّ التحديثات لكل عملاء WebSocket المتصلين
+                wsBroadcaster.ifAvailable { it.broadcastPortStatus() }
             } catch (e: Exception) {
                 fleet.markFailure(gw.id, e.message ?: "heartbeat failed")
                 val firstFailure = lastReachable.put(gw.host, false) != false
