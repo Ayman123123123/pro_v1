@@ -170,7 +170,9 @@ import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.CallRuntime
 import com.red.sovereign.calls.CallUiState
 import com.red.sovereign.calls.UnifiedCallOverlays
+import com.red.sovereign.calls.ConferenceRuntime
 import com.red.sovereign.calls.ConferenceService
+import com.red.sovereign.calls.ConferenceUiState
 import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
@@ -1080,16 +1082,14 @@ private fun ChatHubScreen(
                         Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
                         Text(activePerson?.let { val ls = directory.lastSeenLabel(it.redId); ls ?: "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton({ pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }) { Icon(Icons.Default.Call, "مكالمة صوتية عبر يونس") }
-                    IconButton({ pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) }) { Icon(Icons.Default.Videocam, "مكالمة فيديو عبر يونس") }
-                    IconButton({
-                        val room = conversationId(account.redId, target)
-                        ConferenceService.join(context, room, account.redId, true, inviteRedIds = listOf(target))
-                    }) { Icon(Icons.Default.Groups, "مؤتمر فيديو جماعي") }
-                    IconButton({ showMessageSearch = true }) { Icon(Icons.Default.Search, "البحث في المحادثة") }
-                    IconButton({ showMediaGallery = true }) { Icon(Icons.Default.Photo, "الوسائط المشتركة") }
-                    IconButton({ safety.open(target) }) { Icon(Icons.Default.Security, "رمز الأمان") }
-                    if (activePerson != null) IconButton({ selectedContact = activePerson }) { Icon(Icons.Default.MoreVert, "خيارات المحادثة") }
+                    PrivateChatCallActions(
+                        onVideoCall = { pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                        onVoiceCall = { pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                        onSearch = { showMessageSearch = true },
+                        onMedia = { showMediaGallery = true },
+                        onSafety = { safety.open(target) },
+                        onProfile = activePerson?.let { person -> { selectedContact = person } }
+                    )
                 }
             }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
@@ -1432,26 +1432,50 @@ private fun ChatHubScreen(
                     }
                 }
             } else {
+                val liveRoomId = when (val live = ConferenceRuntime.state) {
+                    is ConferenceUiState.Active -> live.roomId
+                    is ConferenceUiState.Connecting -> live.roomId
+                    is ConferenceUiState.Incoming -> live.roomId
+                    else -> ""
+                }
+                val groupSessionLive = liveRoomId == openGroup.id
+                val groupSessionVideo = ConferenceRuntime.isVideoEnabled && groupSessionLive
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
-                        GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false, inviteRedIds = openGroup.members.map { it.redId }) }) { Icon(Icons.Default.Headset, "مساحة صوتية", tint = YounesEmerald) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true, inviteRedIds = openGroup.members.map { it.redId }) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو", tint = YounesEmerald) }
-                        Box {
-                            IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
-                            DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
-                                DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
-                                DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
-                                DropdownMenuItem(text = { Text("الوسائط المشتركة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; showGroupMediaGallery = true })
-                                DropdownMenuItem(text = { Text("مساحة صوتية") }, leadingIcon = { Icon(Icons.Default.Headset, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false, inviteRedIds = openGroup.members.map { it.redId }) })
-                                DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true, inviteRedIds = openGroup.members.map { it.redId }) })
-                                DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
-                                DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
-                                DropdownMenuItem(text = { Text("مغادرة المجموعة") }, leadingIcon = { Icon(Icons.Default.Logout, null) }, onClick = { showGroupMenu = false; groups.leave(openGroup) { groupConversationId = null } })
+                        GroupAvatar(openGroup, groups)
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            Text(openGroup.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (groupSessionLive) (if (groupSessionVideo) "مؤتمر فيديو جارٍ" else "مساحة صوتية جارية") else "${openGroup.members.size} أعضاء · مشفّرة",
+                                color = if (groupSessionLive) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        GroupChatCallActions(
+                            spaceLive = groupSessionLive && !groupSessionVideo,
+                            meetingLive = groupSessionLive && groupSessionVideo,
+                            onSpace = { pendingGroupVideo = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                            onMeeting = { pendingGroupVideo = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                            onInfo = { onManageGroup(openGroup.id) },
+                            onSearch = { showMessageSearch = true },
+                            onMedia = { showGroupMediaGallery = true },
+                            onAvatar = { groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) },
+                            onPoll = { groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true },
+                            onLeave = { groups.leave(openGroup) { groupConversationId = null } }
+                        )
+                    }
+                }
+                if (groupSessionLive) {
+                    GroupLiveSessionBanner(
+                        isVideo = groupSessionVideo,
+                        inSession = ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting,
+                        onJoinOrReturn = {
+                            if (ConferenceRuntime.state is ConferenceUiState.Incoming) {
+                                ConferenceService.join(context, openGroup.id, account.redId, groupSessionVideo, asHost = false)
                             }
                         }
-                    }
+                    )
                 }
                 val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
                 androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
@@ -3216,6 +3240,21 @@ private val HASHTAG_AUTOCOMPLETE = Regex("#([\w\u0600-\u06FF]{1,20})$")
 private val EMOJI_CATEGORIES = listOf(
     "سريعة" to listOf("😀", "😂", "😍", "👍", "❤️", "🔥", "👏", "🙏", "🎉", "😢", "😮", "✅"),
     "الوجوه" to listOf("😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),
+    "الإشارات" to listOf("👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "👏", "🙌", "🫶", "🤝", "🙏", "💪", "👀", "❤️", "💚", "💛", "💙"),
+    "الأشياء" to listOf("📱", "💻", "⌚", "📷", "🎥", "🎙️", "🔒", "🔑", "💡", "📌", "📎", "📁", "📄", "📚", "🎁", "🏆", "✅", "⚠️"),
+    "الطبيعة" to listOf("🌙", "☀️", "⭐", "🔥", "🌈", "🌹", "🌿", "🌳", "🌊", "⛰️", "🐪", "🦅", "🐝", "🦋"),
+    "الطعام" to listOf("☕", "🍵", "🥤", "🍞", "🥐", "🍚", "🍗", "🥗", "🍎", "🍉", "🍇", "🍯", "🎂"),
+    "السفر" to listOf("🚗", "🚕", "🚌", "✈️", "🚁", "🚢", "🗺️", "🏠", "🏢", "🏥", "🏫", "🕌", "⛺"),
+    "الرموز" to listOf("✅", "❌", "⚠️", "❗", "❓", "💯", "➕", "➖", "♻️", "🔴", "🟢", "🟡", "🔵", "🇾🇪")
+)
+private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
+
+private fun conversationId(first: String, second: String): String {
+    if (first.isBlank() || second.isBlank()) return "pending-conversation"
+    val canonical = listOf(first, second).sorted().joinToString("|")
+    return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+}
+", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),
     "الإشارات" to listOf("👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "👏", "🙌", "🫶", "🤝", "🙏", "💪", "👀", "❤️", "💚", "💛", "💙"),
     "الأشياء" to listOf("📱", "💻", "⌚", "📷", "🎥", "🎙️", "🔒", "🔑", "💡", "📌", "📎", "📁", "📄", "📚", "🎁", "🏆", "✅", "⚠️"),
     "الطبيعة" to listOf("🌙", "☀️", "⭐", "🔥", "🌈", "🌹", "🌿", "🌳", "🌊", "⛰️", "🐪", "🦅", "🐝", "🦋"),
