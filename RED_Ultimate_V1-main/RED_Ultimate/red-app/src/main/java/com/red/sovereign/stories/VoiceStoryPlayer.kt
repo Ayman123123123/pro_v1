@@ -46,6 +46,7 @@ fun VoiceStoryPlayer(
     var isPlaying by remember { mutableStateOf(false) }
     var currentMs by remember { mutableStateOf(0L) }
     var totalMs by remember { mutableStateOf(durationMs) }
+    val coroutineScope = rememberCoroutineScope()
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -59,7 +60,6 @@ fun VoiceStoryPlayer(
         player.addListener(listener)
 
         // Progress polling
-        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
         val job = coroutineScope.launch {
             while (isActive) {
                 currentMs = player.currentPosition.coerceAtLeast(0L)
