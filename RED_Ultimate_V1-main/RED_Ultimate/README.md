@@ -42,6 +42,15 @@ admin_dashboard/, media-sfu/, pstn-asterisk/ تبنيها Docker/CI
 | [`reproducible-builds/`](reproducible-builds/README.md) | أدوات مقارنة APK تحتاج مواءمة |
 | [`infrastructure/`](infrastructure/README.md) | أدوات مساعدة؛ Compose هو المرجع |
 
+## التشغيل الحقيقي (المسار الوحيد)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
+```
+
+ثم http://127.0.0.1:8088/ — الدخول من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`).
+لا يوجد خادم Node/SQLite ولا كلمة مرور تجريبية.
+
 ## ملفات التشغيل الأساسية
 
 - `docker-compose.yml`: الخدمات المحلية والـ volumes والشبكة.
