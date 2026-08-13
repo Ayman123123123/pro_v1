@@ -23,7 +23,7 @@ import {
   CloudServerOutlined,
   DatabaseOutlined,
 } from '@ant-design/icons';
-import { adminLogin, adminLogout, authStore, getPendingApprovals } from './api';
+import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals } from './api';
 import Login from './pages/Login';
 import ErrorBoundary from './components/ErrorBoundary';
 import { usePolling } from './hooks/usePolling';
@@ -140,6 +140,24 @@ export default function App() {
   }, [authenticated]);
 
   usePolling(refreshShell, authenticated ? 20000 : null);
+
+  /**
+   * 🛡️ تحقق فوري من صحة الجلسة عند فتح اللوحة.
+   *
+   * جلسة قديمة عالقة (مثلًا بعد إعادة تشغيل الخادم أو إعادة بناء قاعدة
+   * البيانات) تُبقي `authStore` ممتلئًا برمز وصول لم يعد صالحًا، فتعرض
+   * الصفحات أخطاء «انتهت الجلسة» بدل توجيه المسؤول للدخول من جديد.
+   * نداء خفيف هنا يتحقق من الصلاحية فورًا؛ إن فشل التجديد يمسح `apiFetch`
+   * الجلسة ويُطلق حدث `younes:auth-expired` فيعود المسؤول لشاشة الدخول.
+   */
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    void apiFetch('/api/admin/operations/overview').then((res) => {
+      if (!cancelled && !res.ok) authStore.clear();
+    });
+    return () => { cancelled = true; };
+  }, [authenticated]);
 
   const login = async (username: string, password: string) => {
     setLoginLoading(true);

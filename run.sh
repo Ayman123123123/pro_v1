@@ -26,9 +26,11 @@ OPT=${OPT:-1}
 
 case $OPT in
   1)
-    echo "⚡ تشغيل خادم الـ API واللوحة..."
-    python3 scripts/mock_backend.py &
-    cd admin_dashboard && npm install && npm run dev
+    echo "⚡ تشغيل خادم الـ API (SQLite حقيقية) واللوحة..."
+    cd admin_dashboard
+    npm install
+    node dev-server/server.cjs &
+    RED_API_TARGET="http://127.0.0.1:8080" npm run dev
     ;;
   2)
     echo "🐳 تشغيل Docker Compose عبر التهيئة الآمنة وفحوص الجاهزية..."
