@@ -13,7 +13,10 @@
 
 المصادر: [Maven Central 0.86.5](https://central.sonatype.com/artifact/org.signal/libsignal-android/0.86.5)، [قائمة الإصدارات](https://mvnrepository.com/artifact/org.signal/libsignal-android).
 
-## ربط الموارد (AAPT2)
+## ربط الموارد (AAPT2) — ليس تعارض AppCompat الأوفلاين
+
+الخطأ `android:attr/colorHighlight` / `textInputStyle` **ليس** لأن `--offline` جلب AppCompat قديماً.
+هذه الصفات **غير موجودة أصلاً** في ثيم المنصة (`android:Theme.Material`). وضعها ببادئة `android:` يجعل AAPT2 يفشل أونلاين وأوفلاين.
 
 `styles.xml` كان يضع صفات **غير موجودة** في ثيم المنصة:
 
