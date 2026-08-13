@@ -38,3 +38,8 @@ class DeviceController(
         return ResponseEntity.noContent().build()
     }
 }
+
+data class PushTokenRequest(
+    val token: String = "",
+    val platform: String = "ANDROID"
+)

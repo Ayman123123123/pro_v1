@@ -153,12 +153,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private var lastStats: NetworkStats = NetworkStats()
 
     init {
-        PeerConnectionFactory.initialize(
-            PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
-                .setEnableInternalTracer(false)
-                .setFieldTrials("WebRTC-Audio-MinimizeResamplingOnMobile/Enabled/WebRTC-FlexFEC-03/Enabled/WebRTC-Bwe-ProbingConfiguration/Enabled/WebRTC-Audio-NetEqAutoReset/Enabled/")
-                .createInitializationOptions()
-        )
+        WebRtcBootstrap.ensure(context)
         // Encoder/decoder factories مع hardware acceleration حيث متاح
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDevice)

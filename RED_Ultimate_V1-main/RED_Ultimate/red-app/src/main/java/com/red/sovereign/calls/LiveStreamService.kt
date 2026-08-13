@@ -76,10 +76,11 @@ object LiveStreamRuntime {
     var isCoHost by mutableStateOf(false)
 }
 
-class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingClient.Listener {
+class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, LiveStreamSignalingClient.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: LiveStreamSignalingClient
     private var engine: WebRtcEngine? = null
+    private var mesh: MeshRtcSession? = null
     private var recordingManager: CallRecordingManager? = null
     private var streamId = ""
     private var userId = ""
@@ -121,21 +122,24 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             ACTION_STOP -> stopStream()
             ACTION_TOGGLE_MIC -> {
                 LiveStreamRuntime.isMuted = !LiveStreamRuntime.isMuted
-                engine?.setMicrophoneEnabled(!LiveStreamRuntime.isMuted)
+                val micOn = !LiveStreamRuntime.isMuted
+                engine?.setMicrophoneEnabled(micOn)
+                mesh?.setMicrophoneEnabled(micOn)
             }
             ACTION_TOGGLE_VIDEO -> {
-                // للبث المباشر، التبديل يعني إيقاف/استئناف إرسال الفيديو (الكاميرا المحلية)
                 val isVideoOn = LiveStreamRuntime.localVideo?.enabled() == true
                 engine?.setCameraEnabled(!isVideoOn)
+                mesh?.setCameraEnabled(!isVideoOn)
             }
-            ACTION_SWITCH_CAMERA -> engine?.switchCamera()
+            ACTION_SWITCH_CAMERA -> {
+                engine?.switchCamera()
+                mesh?.switchCamera()
+            }
             ACTION_TOGGLE_AUDIO_ONLY -> {
                 LiveStreamRuntime.isAudioOnly = !LiveStreamRuntime.isAudioOnly
-                if (LiveStreamRuntime.isAudioOnly) {
-                    engine?.setCameraEnabled(false)
-                } else {
-                    engine?.setCameraEnabled(true)
-                }
+                val cameraOn = !LiveStreamRuntime.isAudioOnly
+                engine?.setCameraEnabled(cameraOn)
+                mesh?.setCameraEnabled(cameraOn)
             }
             ACTION_START_RECORDING -> {
                 if (recordingManager == null && streamId.isNotBlank()) {
@@ -221,37 +225,51 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         when (signal.type) {
             "OFFER" -> {
                 signal.payload["sdp"]?.let {
-                    engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, it)) {
-                        engine?.answer()
+                    if (isBroadcaster) {
+                        mesh?.handleOffer(signal.userId.ifBlank { signal.payload["userId"].orEmpty() }, it)
+                    } else {
+                        engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, it)) {
+                            engine?.answer()
+                        }
                     }
                 }
             }
             "ANSWER" -> {
                 signal.payload["sdp"]?.let {
-                    engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it))
+                    if (isBroadcaster) {
+                        mesh?.handleAnswer(signal.userId.ifBlank { signal.payload["userId"].orEmpty() }, it)
+                    } else {
+                        engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it))
+                    }
                 }
             }
             "ICE" -> {
-                engine?.addIce(
-                    IceCandidate(
-                        signal.payload["sdpMid"],
-                        signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0,
-                        signal.payload["candidate"].orEmpty()
-                    )
+                val from = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                val candidate = IceCandidate(
+                    signal.payload["sdpMid"],
+                    signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0,
+                    signal.payload["candidate"].orEmpty()
                 )
+                if (isBroadcaster) mesh?.handleIce(from, candidate) else engine?.addIce(candidate)
             }
             "STREAM_ENDED" -> {
                 stopStream()
                 return
             }
             "VIEWER_JOINED" -> {
-                if (isBroadcaster) {
+                val viewerId = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                if (isBroadcaster && viewerId.isNotBlank()) {
                     LiveStreamRuntime.viewerCount += 1
-                    engine?.offer()
+                    mesh?.attachPeer(viewerId)
+                    mesh?.offerTo(viewerId)
                 }
             }
-            "VIEWER_LEFT" -> {
-                if (isBroadcaster) LiveStreamRuntime.viewerCount = (LiveStreamRuntime.viewerCount - 1).coerceAtLeast(0)
+            "VIEWER_LEFT", "PARTICIPANT_LEFT" -> {
+                val leftId = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                if (isBroadcaster) {
+                    if (leftId.isNotBlank()) mesh?.detachPeer(leftId)
+                    LiveStreamRuntime.viewerCount = (LiveStreamRuntime.viewerCount - 1).coerceAtLeast(0)
+                }
             }
             "CHAT" -> {
                 val senderId = signal.userId
@@ -322,8 +340,20 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         }
     }
 
+    override fun onLocalDescription(peerId: String, description: SessionDescription) {
+        if (description.type == SessionDescription.Type.ANSWER) {
+            signaling.sendAnswer(streamId, userId, description.description, peerId)
+        } else {
+            signaling.sendOffer(streamId, userId, description.description, peerId)
+        }
+    }
+
     override fun onIceCandidate(candidate: IceCandidate) {
         signaling.sendIce(streamId, userId, candidate.sdpMid ?: "", candidate.sdpMLineIndex, candidate.sdp ?: "")
+    }
+
+    override fun onIceCandidate(peerId: String, candidate: IceCandidate) {
+        signaling.sendIce(streamId, userId, candidate.sdpMid ?: "", candidate.sdpMLineIndex, candidate.sdp ?: "", peerId)
     }
 
     override fun onRemoteVideo(track: VideoTrack) {
@@ -332,9 +362,21 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         }
     }
 
+    override fun onRemoteVideo(peerId: String, track: VideoTrack) {
+        if (!isBroadcaster) LiveStreamRuntime.remoteVideo = track
+        else LiveStreamRuntime.coHostVideo = track
+    }
+
     override fun onNetworkStats(stats: NetworkStats) { LiveStreamRuntime.networkStats = stats }
 
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
+        if (state == PeerConnection.PeerConnectionState.CONNECTED) {
+            LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, isBroadcaster, System.currentTimeMillis())
+            startStatsPolling()
+        }
+    }
+
+    override fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, isBroadcaster, System.currentTimeMillis())
             startStatsPolling()
@@ -347,6 +389,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         statsJob = scope.launch {
             while (true) {
                 engine?.pollStats()
+                mesh?.pollStats()
                 kotlinx.coroutines.delay(2000)
             }
         }
@@ -378,6 +421,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         signaling.close()
         engine?.release()
         engine = null
+        mesh?.release()
+        mesh = null
         LiveStreamRuntime.state = LiveStreamUiState.Idle
         LiveStreamRuntime.localVideo = null
         LiveStreamRuntime.remoteVideo = null

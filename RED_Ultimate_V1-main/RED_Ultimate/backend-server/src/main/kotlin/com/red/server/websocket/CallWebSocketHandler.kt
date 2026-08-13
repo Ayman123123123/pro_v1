@@ -120,6 +120,7 @@ class CallWebSocketHandler(
         val targets = liveSessions(targetRedId)
         if (targets.isEmpty()) {
             enqueue(targetRedId, outbound)
+            notifications.sendVoipPushNotification(targetRedId, sourceRedId, roomId, mode)
             return
         }
         val json = objectMapper.writeValueAsString(outbound)

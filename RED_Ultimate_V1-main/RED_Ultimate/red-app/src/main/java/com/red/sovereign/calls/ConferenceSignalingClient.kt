@@ -179,21 +179,41 @@ class ConferenceSignalingClient(
         ConferenceSignal(type = "LEAVE", roomId = roomId, userId = userId)
     )
 
-    fun sendIce(roomId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String) = send(
+    fun sendIce(roomId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String, targetUserId: String = "") = send(
         ConferenceSignal(
             type = "ICE",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("sdpMid" to sdpMid, "sdpMLineIndex" to sdpMLineIndex.toString(), "candidate" to candidate)
+            payload = buildMap {
+                put("sdpMid", sdpMid)
+                put("sdpMLineIndex", sdpMLineIndex.toString())
+                put("candidate", candidate)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 
-    fun sendOffer(roomId: String, userId: String, sdp: String) = send(
+    fun sendOffer(roomId: String, userId: String, sdp: String, targetUserId: String = "") = send(
         ConferenceSignal(
             type = "OFFER",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("sdp" to sdp)
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
+        )
+    )
+
+    fun sendAnswer(roomId: String, userId: String, sdp: String, targetUserId: String = "") = send(
+        ConferenceSignal(
+            type = "ANSWER",
+            roomId = roomId,
+            userId = userId,
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 

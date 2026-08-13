@@ -61,10 +61,10 @@ object ConferenceRuntime {
     var reactions: List<SpaceReaction> by mutableStateOf(emptyList())
 }
 
-class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingClient.Listener {
+class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: ConferenceSignalingClient
-    private var engine: WebRtcEngine? = null
+    private var mesh: MeshRtcSession? = null
     private var roomId = ""
     private var userId = ""
     private var startedAsHost = false
@@ -113,11 +113,11 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             ACTION_TOGGLE_MIC -> {
                 if (!ConferenceRuntime.isSpeaker) return START_STICKY
                 ConferenceRuntime.isMuted = !ConferenceRuntime.isMuted
-                engine?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
+                mesh?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
             }
             ACTION_TOGGLE_VIDEO -> {
                 ConferenceRuntime.isVideoEnabled = !ConferenceRuntime.isVideoEnabled
-                engine?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                mesh?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
             }
             ACTION_RAISE_HAND -> signaling.raiseHand(roomId, userId)
             ACTION_APPROVE_SPEAKER -> {
@@ -156,23 +156,8 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 if (target.isNotBlank()) signaling.muteUser(roomId, userId, target)
             }
             ACTION_SET_QUALITY -> {
-                // Override adaptive bitrate — set by user manually
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
-                engine?.let { eng ->
-                    val profile = when (quality) {
-                        "LOW" -> NetworkStats.BitrateProfile.LOW
-                        "HD" -> NetworkStats.BitrateProfile.HD
-                        "AUDIO" -> NetworkStats.BitrateProfile.AUDIO_ONLY
-                        else -> NetworkStats.BitrateProfile.STANDARD
-                    }
-                    eng.applyAdaptiveBitrate(ConferenceRuntime.networkStats.copy(quality = ConferenceRuntime.networkStats.quality))
-                    // force re-apply chosen profile
-                    if (profile == NetworkStats.BitrateProfile.AUDIO_ONLY) {
-                        eng.setCameraEnabled(false)
-                    } else {
-                        eng.setCameraEnabled(true)
-                    }
-                }
+                if (quality == "AUDIO") mesh?.setCameraEnabled(false) else mesh?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
             }
         }
         return START_STICKY
@@ -180,13 +165,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     override fun onConnected() {
         scope.launch {
-            if (engine == null) {
+            if (mesh == null) {
                 val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
-                engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
+                mesh = MeshRtcSession(this@ConferenceService, userId, this@ConferenceService)
                 ConferenceRuntime.mediaPath = "MESH"
-                ConferenceRuntime.eglContext = engine?.eglContext
-                engine?.create(kind)
-                ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
+                ConferenceRuntime.eglContext = mesh?.eglContext
+                mesh?.start(kind)
+                ConferenceRuntime.localVideo = mesh?.localVideo
                 applyListenerMute()
                 markConferenceReady()
             }
@@ -204,25 +189,23 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     private fun applyListenerMute() {
         if (ConferenceRuntime.isSpeaker) return
         ConferenceRuntime.isMuted = true
-        engine?.setMicrophoneEnabled(false)
+        mesh?.setMicrophoneEnabled(false)
     }
 
     override fun onSignal(signal: ConferenceSignal) {
         when (signal.type) {
             "OFFER" -> {
-                signal.payload["sdp"]?.let {
-                    engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, it)) {
-                        engine?.answer()
-                    }
-                }
+                val from = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                signal.payload["sdp"]?.let { mesh?.handleOffer(from, it) }
             }
             "ANSWER" -> {
-                signal.payload["sdp"]?.let {
-                    engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it))
-                }
+                val from = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                signal.payload["sdp"]?.let { mesh?.handleAnswer(from, it) }
             }
             "ICE" -> {
-                engine?.addIce(
+                val from = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                mesh?.handleIce(
+                    from,
                     IceCandidate(
                         signal.payload["sdpMid"],
                         signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0,
@@ -252,7 +235,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                     ConferenceRuntime.isSpeaker = true
                     ConferenceRuntime.selfRole = "SPEAKER"
                     ConferenceRuntime.isMuted = false
-                    engine?.setMicrophoneEnabled(true)
+                    mesh?.setMicrophoneEnabled(true)
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "SPEAKER", raisedHand = false) else p
@@ -265,7 +248,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                     ConferenceRuntime.isSpeaker = false
                     ConferenceRuntime.selfRole = "LISTENER"
                     ConferenceRuntime.isMuted = true
-                    engine?.setMicrophoneEnabled(false)
+                    mesh?.setMicrophoneEnabled(false)
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "LISTENER", raisedHand = false) else p
@@ -293,13 +276,14 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 } else {
                     ConferenceRuntime.participants = ConferenceRuntime.participants.filter { it.userId != target }
                     ConferenceRuntime.remoteVideos.remove(target)
+                    mesh?.detachPeer(target)
                 }
             }
             "MUTE_USER" -> {
                 val target = signal.payload["targetUserId"].orEmpty()
                 if (target == userId) {
                     ConferenceRuntime.isMuted = true
-                    engine?.setMicrophoneEnabled(false)
+                    mesh?.setMicrophoneEnabled(false)
                 }
             }
             "REACTION" -> {
@@ -317,8 +301,11 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         ConferenceRuntime.participants = participants
         val role = selfRole.ifBlank { if (startedAsHost) "HOST" else "LISTENER" }
         applySelfRole(role)
-        // المنضم الجديد يعرض SDP على الموجودين؛ المضيف وحده ينتظر العرض.
-        if (participants.isNotEmpty() && !startedAsHost) engine?.offer()
+        val remotes = participants.map { it.userId }.filter { it.isNotBlank() && it != userId }
+        remotes.forEach { mesh?.attachPeer(it) }
+        if (!startedAsHost) remotes.forEach { peer ->
+            if (MeshNegotiation.shouldOfferTo(peer, userId, isNewcomer = true)) mesh?.offerTo(peer)
+        }
     }
 
     override fun onSelfRole(role: String) {
@@ -338,11 +325,15 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         list.removeAll { it.userId == participant.userId }
         list.add(participant)
         ConferenceRuntime.participants = list
+        if (participant.userId.isNotBlank() && participant.userId != userId) {
+            mesh?.attachPeer(participant.userId)
+        }
     }
 
-    override fun onParticipantLeft(userId: String) {
-        ConferenceRuntime.participants = ConferenceRuntime.participants.filter { it.userId != userId }
-        ConferenceRuntime.remoteVideos.remove(userId)
+    override fun onParticipantLeft(leftUserId: String) {
+        ConferenceRuntime.participants = ConferenceRuntime.participants.filter { it.userId != leftUserId }
+        ConferenceRuntime.remoteVideos.remove(leftUserId)
+        mesh?.detachPeer(leftUserId)
     }
 
     override fun onDisconnected() {
@@ -374,31 +365,28 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
-    override fun onLocalDescription(description: SessionDescription) {
+    override fun onLocalDescription(peerId: String, description: SessionDescription) {
         if (description.type == SessionDescription.Type.ANSWER) {
-            signaling.send(ConferenceSignal(type = "ANSWER", roomId = roomId, userId = userId, payload = mapOf("sdp" to description.description)))
+            signaling.sendAnswer(roomId, userId, description.description, peerId)
         } else {
-            signaling.sendOffer(roomId, userId, description.description)
+            signaling.sendOffer(roomId, userId, description.description, peerId)
         }
     }
 
-    override fun onIceCandidate(candidate: IceCandidate) {
-        signaling.sendIce(roomId, userId, candidate.sdpMid ?: "", candidate.sdpMLineIndex, candidate.sdp ?: "")
+    override fun onIceCandidate(peerId: String, candidate: IceCandidate) {
+        signaling.sendIce(roomId, userId, candidate.sdpMid ?: "", candidate.sdpMLineIndex, candidate.sdp ?: "", peerId)
     }
 
-    override fun onRemoteVideo(track: VideoTrack) {
-        val owner = ConferenceRuntime.participants.firstOrNull { it.hasVideo && it.userId != userId && !ConferenceRuntime.remoteVideos.containsKey(it.userId) }
-        if (owner != null) {
-            ConferenceRuntime.remoteVideos[owner.userId] = track
-        }
+    override fun onRemoteVideo(peerId: String, track: VideoTrack) {
+        if (peerId.isNotBlank()) ConferenceRuntime.remoteVideos[peerId] = track
     }
 
     override fun onNetworkStats(stats: NetworkStats) { ConferenceRuntime.networkStats = stats }
 
-    override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
+    override fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState) {
         when (state) {
             PeerConnection.PeerConnectionState.CONNECTED -> markConferenceReady()
-            PeerConnection.PeerConnectionState.FAILED -> if (!leaving) engine?.restartIce()
+            PeerConnection.PeerConnectionState.FAILED -> if (!leaving) mesh?.restartIce()
             else -> Unit
         }
     }
@@ -430,7 +418,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         statsJob?.cancel()
         statsJob = scope.launch {
             while (true) {
-                engine?.pollStats()
+                mesh?.pollStats()
                 kotlinx.coroutines.delay(2000)
             }
         }
@@ -447,7 +435,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             runCatching { signaling.leave(closingRoomId, closingUserId) }
         }
         runCatching { signaling.close() }
-        engine?.release(); engine = null
+        mesh?.release(); mesh = null
         ConferenceRuntime.mediaPath = "MESH"
         ConferenceRuntime.selfRole = "LISTENER"
         ConferenceRuntime.state = ConferenceUiState.Idle

@@ -18,7 +18,9 @@ class NotificationService(
     private val emailProperties: EmailProperties,
     @Autowired(required = false)
     @Qualifier("inAppNotificationService")
-    private val inApp: com.red.server.notification.NotificationService? = null
+    private val inApp: com.red.server.notification.NotificationService? = null,
+    @Autowired(required = false)
+    private val pushTokens: com.red.server.notification.DevicePushTokenService? = null
 ) {
     private val logger = LoggerFactory.getLogger(NotificationService::class.java)
 
@@ -98,20 +100,26 @@ class NotificationService(
      */
     private fun dispatchOptionalFcm(targetUserId: String, title: String, body: String, callId: String, mode: String) {
         val key = System.getenv("YOUNES_FCM_SERVER_KEY")?.takeIf { it.isNotBlank() } ?: return
-        val token = System.getenv("YOUNES_FCM_DEVICE_$targetUserId")?.takeIf { it.isNotBlank() } ?: return
-        runCatching {
-            val payload = """{"to":"$token","priority":"high","content_available":true,"data":{"type":"VOIP","callId":"$callId","mode":"$mode","title":"$title","body":"$body"}}"""
-            val conn = java.net.URI("https://fcm.googleapis.com/fcm/send").toURL().openConnection() as java.net.HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.setRequestProperty("Authorization", "key=$key")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 2500
-            conn.readTimeout = 2500
-            conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-            logger.info("notification.voip_fcm target={} http={}", targetUserId, conn.responseCode)
-            conn.disconnect()
-        }.onFailure { logger.warn("notification.voip_fcm_failed target={} err={}", targetUserId, it.message) }
+        val tokens = buildList {
+            addAll(pushTokens?.tokensFor(targetUserId).orEmpty())
+            System.getenv("YOUNES_FCM_DEVICE_$targetUserId")?.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
+        if (tokens.isEmpty()) return
+        tokens.forEach { token ->
+            runCatching {
+                val payload = """{"to":"$token","priority":"high","content_available":true,"data":{"type":"VOIP","callId":"$callId","mode":"$mode","title":"$title","body":"$body"}}"""
+                val conn = java.net.URI("https://fcm.googleapis.com/fcm/send").toURL().openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.setRequestProperty("Authorization", "key=$key")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.connectTimeout = 2500
+                conn.readTimeout = 2500
+                conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                logger.info("notification.voip_fcm target={} http={}", targetUserId, conn.responseCode)
+                conn.disconnect()
+            }.onFailure { logger.warn("notification.voip_fcm_failed target={} err={}", targetUserId, it.message) }
+        }
     }
 
     fun sendBulkEmail(recipients: List<String>, subject: String, body: String, isHtml: Boolean = false) {

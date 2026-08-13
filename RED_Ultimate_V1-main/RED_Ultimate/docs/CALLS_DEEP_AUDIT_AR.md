@@ -57,14 +57,13 @@
 ## فجوات ما زالت قائمة (لم تُغلق بالكامل)
 
 ### إشعارات
-- `sendVoipPushNotification` يكتب إشعاراً داخل التطبيق، ويُرسل FCM فقط إذا ضُبط `YOUNES_FCM_SERVER_KEY`.
-- `SovereignNotificationRouter` ينشئ القنوات ولا يوجّه أحداث مكالمة.
-- بدون جلسة `/ws/calls` مفتوحة، الاعتماد على الصندوق المؤقت 60 ثانية + الـ push الوهمي.
+- `sendVoipPushNotification` يكتب إشعاراً داخل التطبيق، ويُرسل FCM إن وُجد `YOUNES_FCM_SERVER_KEY`.
+- توكن الجهاز يُسجَّل عبر `POST /api/devices/push-token` في Mongo (`device_push_tokens`) بدل الاعتماد على متغير بيئة لكل مستخدم.
+- دعوة المؤتمر/البث غير المتصلة تُحفظ 60 ثانية وتُرسل معها دفعة VoIP.
 
 ### قواعد البيانات
 - السجل الحي في **MongoDB** (`call_history` وثيقة).
-- لوحة الإدارة وإحصاءات SQL تقرأ جدول **Postgres** `call_history` (أعمدة مختلفة: `caller_id` UUID، `VOIP_AUDIO`…).
-- لا توجد كتابة مزدوجة؛ أرقام المكالمات في الأدمن قد تظهر صفراً رغم وجود مكالمات حقيقية.
+- `AdminCallHistorySync` يكتب الحدث نفسه إلى Postgres `call_history` (VOIP_AUDIO / CONFERENCE / LIVE_BROADCAST / AUDIO_SPACE) حتى تظهر أرقام الأدمن.
 
 ### PSTN
 - المسار موجود (تخويل يومي، توجيه مشغّل يمني، AMI).
@@ -73,6 +72,7 @@
 ### SFU
 - السيرفر يقبل join/createTransport/produce/consume و`pauseProducer` لكتم المذيع.
 - أندرويد يجرّب `SfuMediaClient` (تذكرة + `/sfu`) ثم يعود للـ mesh إن تعذّر SFU.
+- المسار الحي للمجموعة: `MeshRtcSession` — كاميرا/ميكروفون مشتركان + PeerConnection لكل طرف، مع تفاوض glare (الطرف الأصغر معرّفاً يتراجع).
 - المساحة: المضيف متحدث، المدعو مستمع ويرفع يده. المؤتمر: الجميع مشاركون بلا رنة هاتف.
 
 ### واجهات
