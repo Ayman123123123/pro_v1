@@ -80,6 +80,35 @@ class RedApprovalService(
     fun banUser(userId: String): UserAccountResponse =
         processAction(UUID.fromString(userId), AccountStatus.BANNED)
 
+    /**
+     * رفع الحظر لا يعيد شهادات الأجهزة الملغاة. الحساب يعود إلى PENDING
+     * حتى يسجّل المستخدم جهازاً جديداً ويُعتمد من الإدارة.
+     */
+    @Transactional
+    fun restoreBannedToPending(userId: UUID, adminId: UUID?, reason: String? = null): UserAccountResponse {
+        val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
+        require(user.status == AccountStatus.BANNED || user.status == AccountStatus.REJECTED || user.status == AccountStatus.SUSPENDED) {
+            "ACCOUNT_NOT_BLOCKED"
+        }
+        require(user.role.name != "ADMIN") { "Administrator accounts cannot be restored through this endpoint" }
+        refreshTokens.revokeAll(user.id)
+        devices.findAllByUserIdOrderByCreatedAtAsc(user.id)
+            .filter { it.status != DeviceStatus.REVOKED }
+            .forEach {
+                it.status = DeviceStatus.REVOKED
+                it.revokedAt = Instant.now()
+                devices.save(it)
+            }
+        user.status = AccountStatus.PENDING
+        user.updatedAt = Instant.now()
+        user.approvedAt = null
+        user.approvedBy = null
+        user.rejectionReason = reason?.trim()?.takeIf { it.isNotEmpty() } ?: "UNBAN_REQUIRES_DEVICE_REENROLLMENT"
+        users.save(user)
+        audit.record(adminId, "ACCOUNT_RESTORED_PENDING", user.id.toString(), mapOf("redId" to user.redId))
+        return user.toResponse(devices.findAllByUserIdOrderByCreatedAtAsc(user.id))
+    }
+
     @Transactional(readOnly = true)
     fun isAllowed(userId: String): Boolean =
         runCatching { users.findById(UUID.fromString(userId)).orElse(null)?.status == AccountStatus.APPROVED }
