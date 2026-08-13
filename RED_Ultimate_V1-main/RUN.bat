@@ -53,11 +53,10 @@ if "%CHOICE%"=="1" (
 
 if "%CHOICE%"=="2" (
     echo.
-    echo ⚡ جاري تشغيل بيئة التطوير السريعة...
-    cd /d "%ROOT%"
-    start "RED Mock API" /min python scripts\mock_backend.py
-    cd admin_dashboard
+    echo ⚡ جاري تشغيل بيئة التطوير السريعة ^(خادم SQLite حقيقي^)...
+    cd /d "%ROOT%\admin_dashboard"
     call npm install
+    start "RED Dev API (SQLite)" /min node dev-server\server.cjs
     set "RED_API_TARGET=http://127.0.0.1:8080"
     call npm run dev -- --port 8088
     pause

@@ -48,6 +48,14 @@ function normalize(p) {
     .replace(/\/+/g, '/');
 }
 
+/**
+ * مسارات تُخدَم خارج الـ Kotlin backend ولا يجب أن تُطابَق مع مخططات Spring:
+ * - `/sfu-health`: يخدمه nginx بتحويله إلى `media-sfu/health` (حاوية SFU مستقلة)،
+ *   ويُنفَّذ في خادم التطوير `dev-server` لكن لا نظير له في `backend-server`.
+ * أضف هنا أي نقطة بنية تحتية يقدّمها SFU أو الـ proxy بدل الـ backend.
+ */
+const INFRA_ENDPOINTS = new Set(['/sfu-health']);
+
 function findBackendRoute(verb, path) {
   const direct = routes.get(`${verb} ${path}`);
   if (direct) return direct;
@@ -115,6 +123,10 @@ function collect(file) {
 let bad = 0;
 console.log(`فاحص عقد API — ${calls.length} استدعاء واجهة مقابل ${routes.size} مسار خادم\n`);
 for (const call of calls.sort((a, b) => a.raw.localeCompare(b.raw))) {
+  if (INFRA_ENDPOINTS.has(call.normalized)) {
+    console.log(`  ℹ️ ${call.method.padEnd(6)} ${call.raw}  (${call.file})  — بنية تحتية خارج الـ backend (SFU/nginx)`);
+    continue;
+  }
   const hit = findBackendRoute(call.method, call.normalized);
   if (hit) {
     console.log(`  ✅ ${call.method.padEnd(6)} ${call.raw}  (${call.file})`);
