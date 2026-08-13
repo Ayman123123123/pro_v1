@@ -6,6 +6,7 @@ import com.red.server.admin.service.AdminService
 import com.red.server.auth.RedApprovalService
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
+import com.red.server.auth.repository.AdminUserSort
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.searchForAdmin
 import org.springframework.data.domain.PageRequest
@@ -118,9 +119,9 @@ class AdminV2Controller(
     ): ResponseEntity<Map<String, Any>> {
         require(page >= 0) { "PAGE_MUST_NOT_BE_NEGATIVE" }
         val safeSize = size.coerceIn(1, 100)
-        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status") } ?: "createdAt"
+        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status", "role") } ?: "createdAt"
         val direction = runCatching { Sort.Direction.fromString(sortDir ?: "desc") }.getOrDefault(Sort.Direction.DESC)
-        val pageable = PageRequest.of(page, safeSize, direction, safeSort)
+        val pageable = AdminUserSort.pageable(page, safeSize, safeSort, direction)
         val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.let {
             runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
         }
