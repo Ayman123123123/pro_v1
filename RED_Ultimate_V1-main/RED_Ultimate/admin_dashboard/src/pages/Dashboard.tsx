@@ -154,6 +154,19 @@ export default function Dashboard() {
         </Text>
       </div>
 
+      {(summary as any)?.partial && (
+        <Alert
+          type="warning"
+          showIcon
+          message="اللوحة تعمل ببيانات جزئية"
+          description={
+            Object.entries(((summary as any).errors || {}) as Record<string, string>)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join(' · ') || 'تعذر جزء من الاستعلامات. أعد تشغيل الخادم بعد التحديث إن استمر الصفر.'
+          }
+        />
+      )}
+
       {/* Critical Alerts */}
       {summary && (summary.recentCriticalAlerts > 0 || summary.degradedComponents > 0) && (
         <Alert

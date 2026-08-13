@@ -18,13 +18,22 @@ class TokenStore(val context: Context) {
 
     fun rememberDevice(value: String) = store.put("device_id", value)
     fun saveFcmToken(value: String) = store.put("fcm_token", value)
+    fun saveUsername(value: String) = store.put("username", value)
+    fun rememberPendingLogin(username: String, password: String) {
+        store.put("pending_username", username)
+        store.put("pending_password", password)
+    }
+    fun pendingUsername(): String? = store.get("pending_username")
+    fun pendingPassword(): String? = store.get("pending_password")
+    fun clearPendingLogin() = store.remove("pending_username", "pending_password")
     fun save(response: AuthResponse) {
         store.put("access", response.accessToken); store.put("refresh", response.refreshToken)
         response.deviceId?.let(::rememberDevice)
         store.put("red_id", response.user.redId); store.put("username", response.user.username)
         store.put("pstn_enabled", response.user.pstnEnabled.toString())
         store.put("role", response.user.role)
+        clearPendingLogin()
     }
     fun updateTokens(response: RefreshResponse) { store.put("access", response.accessToken); store.put("refresh", response.refreshToken) }
-    fun clearSession() = store.remove("access", "refresh", "red_id", "username", "role")
+    fun clearSession() = store.remove("access", "refresh", "red_id", "username", "role", "pstn_enabled", "pending_username", "pending_password")
 }
