@@ -1240,6 +1240,124 @@ on('POST', '/api/admin/dinstar/fleet/routing/select', (_p, _q, b) => {
   return ok({ selected: best, targetOperator: wanted, rejected });
 });
 
+// ── DINSTAR — جرد شرائح SIM ──
+on('GET', '/api/admin/dinstar/sim-inventory', () => {
+  const gateways = all('SELECT * FROM telecom_gateways ORDER BY routing_priority');
+  const rows = [];
+  gateways.forEach((g, gi) => {
+    for (let p = 0; p < g.port_count; p++) {
+      const port = dinstarSlots(gi).find(s => s.index === p) || {};
+      rows.push({
+        gatewayId: g.id, gatewayName: g.name, gatewayModel: g.model, gatewayHost: g.host,
+        portIndex: p,
+        radioType: port.radioType || 'GSM',
+        registrationState: port.status || 'UNREGISTERED',
+        callState: port.callState || 'IDLE',
+        signalPercent: port.signal ?? null,
+        operatorLabel: null,
+        simLabel: null,
+        verificationState: 'UNKNOWN',
+        verificationMethod: null,
+        msisdnMasked: null,
+        verifiedAt: null,
+      });
+    }
+  });
+  return ok(rows);
+});
+
+on('PUT', '/api/admin/dinstar/sim-inventory/:gatewayId/:portIndex', (p) => {
+  return ok({ success: true, gatewayId: p.gatewayId, portIndex: parseInt(p.portIndex), verificationState: 'VERIFIED' });
+});
+
+// ── DINSTAR — تحليل CDR ──
+on('GET', '/api/admin/dinstar/cdr/analysis', () => {
+  const decisions = all('SELECT * FROM gateway_route_decisions ORDER BY created_at DESC LIMIT 200');
+  return ok(decisions.map(d => ({
+    id: d.id, gatewayHost: d.gateway_id ? (get('SELECT host FROM telecom_gateways WHERE id=?', d.gateway_id)?.host || '—') : '—',
+    portIndex: d.port_index, direction: 'OUTBOUND',
+    number: d.destination_prefix || '—',
+    startTime: d.created_at, duration: Math.floor(Math.random() * 180) + 10,
+    status: d.outcome === 'SELECTED' ? 'COMPLETED' : 'FAILED',
+    operator: d.matched_operator || '—',
+  })));
+});
+
+on('GET', '/api/admin/dinstar/cdr/summary', () => {
+  const total = (get('SELECT COUNT(*) c FROM gateway_route_decisions')?.c) || 0;
+  const selected = (get('SELECT COUNT(*) c FROM gateway_route_decisions WHERE outcome=\'SELECTED\'')?.c) || 0;
+  return ok({ total, selected, rejectedNoSignal: 0, rejectedBusy: 0, rejectedOffline: 0, selectionRate: total > 0 ? Math.round(selected / total * 100) : 0 });
+});
+
+// ── DINSTAR — قوالب SMS ──
+const smsTemplates = [
+  { id: 'tmpl-001', name: 'رسالة ترحيب', text: 'مرحبًا {{name}}، أهلاً بك في يونس. رمزك: {{code}}', encoding: 'unicode', category: 'verification', variables: ['name', 'code'], usageCount: 42, createdAt: '2026-08-10T10:00:00Z' },
+  { id: 'tmpl-002', name: 'رمز التحقق', text: 'Your verification code: {{code}}. Do not share.', encoding: 'gsm-7bit', category: 'verification', variables: ['code'], usageCount: 128, createdAt: '2026-08-09T08:00:00Z' },
+  { id: 'tmpl-003', name: 'إشعار تحديث', text: 'يونس: تم تحديث التطبيق إلى النسخة الجديدة. حمّل من الرابط: {{link}}', encoding: 'unicode', category: 'notification', variables: ['link'], usageCount: 15, createdAt: '2026-08-08T14:00:00Z' },
+];
+
+on('GET', '/api/admin/dinstar/sms/templates', () => ok(smsTemplates));
+on('POST', '/api/admin/dinstar/sms/templates', (_p, _q, b) => {
+  const id = 'tmpl-' + uuid().slice(0, 8);
+  const text = b.text || '';
+  const vars = [...new Set((text.match(/\{\{(\w+)\}\}/g) || []).map(m => m.replace(/\{\{|\}\}/g, '')))];
+  smsTemplates.push({ id, name: b.name, text, encoding: b.encoding || 'gsm-7bit', category: b.category || 'custom', variables: vars, usageCount: 0, createdAt: nowIso() });
+  return { status: 201, data: { id, name: b.name, created: true } };
+});
+on('PUT', '/api/admin/dinstar/sms/templates/:id', (p, _q, b) => {
+  const t = smsTemplates.find(t => t.id === p.id);
+  if (t) { Object.assign(t, { name: b.name, text: b.text, encoding: b.encoding, category: b.category }); }
+  return ok({ id: p.id, updated: true });
+});
+on('DELETE', '/api/admin/dinstar/sms/templates/:id', (p) => {
+  const idx = smsTemplates.findIndex(t => t.id === p.id);
+  if (idx >= 0) smsTemplates.splice(idx, 1);
+  return ok({ id: p.id, deleted: true });
+});
+
+const scheduledSms = [];
+on('POST', '/api/admin/dinstar/sms/schedule', (_p, _q, b) => {
+  const id = 'sched-' + uuid().slice(0, 8);
+  const tmpl = smsTemplates.find(t => t.id === b.templateId);
+  scheduledSms.push({ id, templateId: b.templateId, templateName: tmpl?.name || '—', recipients: b.recipients, scheduledAt: b.scheduledAt, status: 'PENDING', gatewayHost: b.gatewayHost });
+  return ok({ id, scheduled: true, scheduledAt: b.scheduledAt });
+});
+on('GET', '/api/admin/dinstar/sms/scheduled', () => ok(scheduledSms));
+
+// ── DINSTAR — التحكم بالمنافذ ──
+on('GET', '/api/admin/dinstar/port-control', () => {
+  const gateways = all('SELECT * FROM telecom_gateways ORDER BY routing_priority');
+  const ports = [];
+  gateways.forEach((g, gi) => {
+    for (let p = 0; p < g.port_count; p++) {
+      const slot = dinstarSlots(gi).find(s => s.index === p) || {};
+      ports.push({
+        gatewayId: g.id, gatewayHost: g.host, gatewayName: g.name,
+        portIndex: p,
+        radioType: slot.radioType || 'GSM',
+        registrationState: slot.status || 'UNREGISTERED',
+        callState: slot.callState || 'IDLE',
+        signalPercent: slot.signal ?? null,
+        signalDbm: slot.signalDbm ?? null,
+        signalUsable: slot.signalUsable || false,
+        operator: slot.operator || '—',
+        powerState: true,
+        callForwardState: 'NONE',
+        callForwardNumber: null,
+      });
+    }
+  });
+  return ok({ ports, total: ports.length });
+});
+
+on('POST', '/api/admin/dinstar/ports/:port/callforward', (p, _q, b) => {
+  return ok({ status: 'SET', port: parseInt(p.port), param: b.param, number: b.number || '' });
+});
+
+on('POST', '/api/admin/dinstar/ports/:port/power', (p, _q, b) => {
+  return ok({ status: b.on ? 'POWERED_ON' : 'POWERED_OFF', port: parseInt(p.port) });
+});
+
 // ── master/v1 ──
 on('GET', '/api/master/v1/stats/realtime', () => {
   const a = currentAnalytics();

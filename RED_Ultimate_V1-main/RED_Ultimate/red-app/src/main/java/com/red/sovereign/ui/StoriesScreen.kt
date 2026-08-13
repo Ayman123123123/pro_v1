@@ -45,7 +45,7 @@ fun StoryFullscreen(
         is StoryViewerState.Voice -> viewer.story
         is StoryViewerState.Unsupported -> viewer.story
         is StoryViewerState.Error -> viewer.story
-        StoryViewerState.Closed -> error("unreachable")
+        else -> error("unreachable")
     }
 
     var progress by remember { mutableFloatStateOf(0f) }

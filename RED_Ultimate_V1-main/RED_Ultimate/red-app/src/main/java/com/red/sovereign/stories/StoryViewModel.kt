@@ -61,7 +61,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
                 .onSuccess { list ->
                     state = StoryState.Idle
                     repository.saveStories(list.map { 
-                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, it.timestamp, it.timestamp + 86400000)
+                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, it.createdAt.toLongOrNull() ?: 0L, it.expiresAt.toLongOrNull() ?: 0L)
                     })
                 }
                 .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
@@ -110,7 +110,6 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         viewer = StoryViewerState.Loading(story)
         when {
             story.isText() -> {
-                // TEXT stories — no download needed, show directly
                 viewer = StoryViewerState.Text(story)
             }
             story.isVoice() -> when (val result = media.downloadToPrivateCache(story.mediaUrl, "ogg")) {
