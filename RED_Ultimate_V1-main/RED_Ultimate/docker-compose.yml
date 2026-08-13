@@ -38,6 +38,9 @@ services:
       - no-new-privileges:true
 
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
+  # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
+  # Never publish 8080 to the host — that port is reserved for the optional
+  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
@@ -66,7 +69,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
-      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-true}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}

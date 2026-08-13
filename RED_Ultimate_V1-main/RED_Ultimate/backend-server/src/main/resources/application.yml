@@ -80,7 +80,7 @@ red:
   trust-x-forwarded-for: ${RED_TRUST_X_FORWARDED_FOR:false}
   dinstar:
     # false = no hardware / Docker cannot see the LAN box. IP calls stay on.
-    enabled: ${DINSTAR_ENABLED:true}
+    enabled: ${DINSTAR_ENABLED:false}
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
     # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع.
     ip: ${DINSTAR_IP:192.168.11.1}
