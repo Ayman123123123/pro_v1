@@ -17,8 +17,8 @@ fi
 echo "=============================================================="
 echo "  🏛️  RED Ultimate V1 — تشغيل المنصة على جهازك"
 echo "=============================================================="
-echo "1) تشغيل سريع للتطوير (اللوحة + API)"
-echo "2) تشغيل كامل عبر Docker Compose"
+echo "1) تشغيل المنصة الحقيقية عبر Docker Compose"
+echo "2) لوحة Vite مقابل Compose على 8088 (بدون SQLite)"
 echo "3) فحص اتصال DINSTAR (192.168.11.1)"
 echo "4) فحص وإصلاح شهادات NGINX SSL و HTTPS"
 read -p "اختر رقم الخيار [1]: " OPT
@@ -26,15 +26,14 @@ OPT=${OPT:-1}
 
 case $OPT in
   1)
-    echo "⚡ تشغيل خادم الـ API (SQLite حقيقية) واللوحة..."
-    cd admin_dashboard
-    npm install
-    node dev-server/server.cjs &
-    RED_API_TARGET="http://127.0.0.1:8080" npm run dev
+    echo "🐳 تشغيل Docker Compose — Kotlin + PostgreSQL + Mongo + Redis + MinIO"
+    ./scripts/local-first-run.sh ${SERVER_IP:+--server-ip "$SERVER_IP"}
     ;;
   2)
-    echo "🐳 تشغيل Docker Compose عبر التهيئة الآمنة وفحوص الجاهزية..."
-    ./scripts/local-first-run.sh "${SERVER_IP:-}"
+    echo "🌐 لوحة Vite تتحدث إلى http://127.0.0.1:8088 — لا خادم Node/SQLite"
+    cd admin_dashboard
+    npm install
+    RED_API_TARGET="http://127.0.0.1:8088" npm run dev
     ;;
   3)
     echo "🔍 فحص الاتصال ببوابة DINSTAR..."
