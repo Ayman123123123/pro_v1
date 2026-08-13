@@ -49,7 +49,7 @@ enum class GroupPrivacy(val label: String, val icon: ImageVector, val desc: Stri
 fun CreateGroupScreen(
     onBack: () -> Unit = {},
     friends: List<PublicRedProfile> = emptyList(),
-    onCreate: (name: String, privacy: String, memberRedIds: List<String>) -> Unit = { _, _, _ -> }
+    onCreate: (name: String, description: String?, privacy: String, memberRedIds: List<String>) -> Unit = { _, _, _, _ -> }
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -156,7 +156,7 @@ fun CreateGroupScreen(
         }
         Spacer(Modifier.height(12.dp))
         Button(
-            onClick = { onCreate(name.trim(), privacy.name, selectedMembers.keys.toList()) },
+            onClick = { onCreate(name.trim(), description.trim().takeIf(String::isNotEmpty), privacy.name, selectedMembers.keys.toList()) },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan),
             shape = RoundedCornerShape(14.dp),
@@ -180,7 +180,9 @@ fun SovereignGroupInfoScreen(
     group: Group?,
     groups: GroupViewModel,
     friends: List<PublicRedProfile> = emptyList(),
-    onBack: () -> Unit = {}
+    ownRedId: String = "",
+    onBack: () -> Unit = {},
+    onMessage: (String) -> Unit = {}
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var showAddMembers by remember { mutableStateOf(false) }
@@ -246,13 +248,19 @@ fun SovereignGroupInfoScreen(
                 LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(group?.members ?: emptyList(), key = { it.redId }) { member ->
                         val role = roleOf(member)
-                        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = SovereignColors.SurfaceNavy) {
+                        val isSelf = member.redId == ownRedId
+                        Surface(
+                            onClick = { if (!isSelf) onMessage(member.redId) },
+                            shape = RoundedCornerShape(14.dp),
+                            color = SovereignColors.SurfaceNavy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Surface(Modifier.size(42.dp), shape = CircleShape, color = SovereignColors.Navy) {
                                     Box(contentAlignment = Alignment.Center) { Text(member.username.take(1), color = Color.White, fontWeight = FontWeight.Bold) }
                                 }
                                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                    Text(member.username, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                    Text(if (isSelf) "${member.username} (أنت)" else member.username, color = Color.White, fontWeight = FontWeight.SemiBold)
                                     Text(member.redId, color = SovereignColors.Cyan, fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                                 }
                                 Surface(shape = RoundedCornerShape(8.dp), color = role.color.copy(alpha = 0.18f)) {
@@ -260,6 +268,15 @@ fun SovereignGroupInfoScreen(
                                         Icon(role.icon, null, tint = role.color, modifier = Modifier.size(14.dp))
                                         Text(" ${role.label}", fontSize = 11.sp, color = role.color, fontWeight = FontWeight.SemiBold)
                                     }
+                                }
+                                if (!isSelf) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(
+                                        Icons.Rounded.ChatBubble,
+                                        contentDescription = "مراسلة ${member.username}",
+                                        tint = SovereignColors.Cyan,
+                                        modifier = Modifier.size(20.dp).clickable { onMessage(member.redId) }
+                                    )
                                 }
                             }
                         }

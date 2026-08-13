@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Table, Button, Space, Input, Select, Tag, Modal, Form, message,
-  Card, Avatar, Tooltip, Statistic, Row, Col, Typography, Drawer, Empty, Descriptions, Alert, Spin
+  Card, Avatar, Tooltip, Statistic, Row, Col, Typography, Drawer, Empty, Descriptions, Alert, Spin, InputNumber
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   UserOutlined, SearchOutlined, CheckOutlined, CloseOutlined, StopOutlined,
   CheckCircleOutlined, CrownOutlined, ReloadOutlined,
   UserAddOutlined, TeamOutlined, KeyOutlined, UserDeleteOutlined, SafetyOutlined,
-  EyeOutlined, LockOutlined
+  EyeOutlined, LockOutlined, PhoneOutlined
 } from '@ant-design/icons';
 import {
   getUsers, approveUser, rejectUser, banUser, unbanUser,
   getUserOverview, createTemporaryPassword, requestRemoteWipe,
-  getOperationsOverview, authStore,
+  getOperationsOverview, authStore, updatePstnAccess,
   type UserRecord,
 } from '../api';
 
@@ -58,6 +58,9 @@ export default function UserManagement() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [temporaryFor, setTemporaryFor] = useState<UserRecord | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [pstnModalOpen, setPstnModalOpen] = useState(false);
+  const [pstnFor, setPstnFor] = useState<UserRecord | null>(null);
+  const [pstnLimit, setPstnLimit] = useState(10);
   const me = authStore.user();
 
   const refreshStats = useCallback(async () => {
@@ -158,6 +161,29 @@ export default function UserManagement() {
     }
   };
 
+  const openPstn = (user: UserRecord) => {
+    setPstnFor(user);
+    setPstnLimit(user.pstnDailyLimit && user.pstnDailyLimit > 0 ? user.pstnDailyLimit : 10);
+    setPstnModalOpen(true);
+  };
+
+  const submitPstn = async (enabled: boolean) => {
+    if (!pstnFor) return;
+    const limit = enabled ? pstnLimit : 0;
+    if (enabled && (limit < 0 || limit > 1000)) return message.error('حد الاستخدام اليومي يجب أن يكون بين 0 و1000');
+    try {
+      await updatePstnAccess(pstnFor.id, enabled, limit);
+      message.success(enabled
+        ? `فُعّلت مكالمات PSTN لـ ${pstnFor.username} (حد ${limit}/يوم)`
+        : `عُطّلت مكالمات PSTN لـ ${pstnFor.username}`);
+      setPstnModalOpen(false);
+      await afterChange();
+      if (overview?.user?.id === pstnFor.id) await openOverview(pstnFor);
+    } catch (e: any) {
+      message.error(e.message || 'فشل تحديث إذن PSTN');
+    }
+  };
+
   const openOverview = async (user: UserRecord) => {
     setDrawerOpen(true);
     setOverview(null);
@@ -233,7 +259,13 @@ export default function UserManagement() {
     {
       title: 'PSTN',
       dataIndex: 'pstnEnabled',
-      render: (enabled: boolean) => enabled ? <Tag color="cyan">مفعل</Tag> : <Tag>معطل</Tag>,
+      render: (enabled: boolean, user) => enabled ? (
+        <Tag color="cyan" style={{ cursor: 'pointer' }} onClick={() => openPstn(user)}>
+          مفعل ({user.pstnDailyLimit}/يوم)
+        </Tag>
+      ) : (
+        <Tag color="default" style={{ cursor: 'pointer' }} onClick={() => openPstn(user)}>معطل</Tag>
+      ),
     },
     {
       title: 'تاريخ التسجيل',
@@ -264,6 +296,15 @@ export default function UserManagement() {
           </Tooltip>
           <Tooltip title="مسح التطبيق عن بُعد">
             <Button size="small" danger icon={<UserDeleteOutlined />} disabled={isSelf(user)} onClick={() => requestWipe(user)} />
+          </Tooltip>
+          <Tooltip title={user.pstnEnabled ? 'تعطيل مكالمات PSTN' : 'تفعيل مكالمات PSTN (الهاتف اليمني عبر DINSTAR)'}>
+            <Button
+              size="small"
+              icon={<PhoneOutlined />}
+              type={user.pstnEnabled ? 'primary' : 'default'}
+              disabled={isAdmin(user) || user.status !== 'APPROVED'}
+              onClick={() => openPstn(user)}
+            />
           </Tooltip>
           {user.status !== 'BANNED' && !isAdmin(user) && !isSelf(user) && (
             <Tooltip title="حظر">
@@ -410,6 +451,29 @@ export default function UserManagement() {
           </Space>
         )}
       </Drawer>
+
+      <Modal
+        title={`إذن مكالمات PSTN — ${pstnFor?.displayName || pstnFor?.username || ''}`}
+        open={pstnModalOpen}
+        onCancel={() => setPstnModalOpen(false)}
+        footer={[
+          <Button key="disable" danger disabled={!pstnFor?.pstnEnabled} onClick={() => void submitPstn(false)}>تعطيل PSTN</Button>,
+          <Button key="cancel" onClick={() => setPstnModalOpen(false)}>إلغاء</Button>,
+          <Button key="enable" type="primary" disabled={pstnFor?.pstnEnabled} onClick={() => void submitPstn(true)}>تفعيل PSTN</Button>,
+        ]}
+      >
+        <Alert type="info" showIcon message="تتحكم هذه الميزة بإمكانية إجراء مكالمات صوتية عبر بوابات DINSTAR GSM إلى أرقام الهاتف اليمنية." style={{ marginBottom: 16 }} />
+        {pstnFor?.pstnEnabled ? (
+          <Paragraph>الميزة <Text strong>مفعّلة حاليًا</Text> بحد يومي {pstnFor.pstnDailyLimit ?? 0} مكالمة. اضغط «تعطيل» لإيقافها.</Paragraph>
+        ) : (
+          <Form layout="vertical">
+            <Form.Item label="الحد اليومي المسموح (عدد المكالمات)">
+              <InputNumber min={0} max={1000} value={pstnLimit} onChange={(value) => setPstnLimit(Number(value ?? 0))} style={{ width: '100%' }} />
+            </Form.Item>
+            <Paragraph type="secondary">سيحصل المستخدم على إذن الاتصال الهاتفي فور التفعيل، ويُستهلك الرصيد من شرائح DINSTAR.</Paragraph>
+          </Form>
+        )}
+      </Modal>
 
       <Modal title={`كلمة مرور مؤقتة — ${temporaryFor?.displayName || temporaryFor?.username || ''}`} open={temporaryFor !== null} onCancel={() => setTemporaryFor(null)} onOk={() => void setPassword()} okText="تعيين وإلغاء الجلسات">
         <Alert type="warning" showIcon message="سلّم الكلمة عبر قناة موثوقة. تُلغى الجلسات السابقة فور التعيين." />
