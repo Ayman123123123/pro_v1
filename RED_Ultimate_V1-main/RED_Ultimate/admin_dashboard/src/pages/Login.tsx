@@ -152,9 +152,11 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             </Space>
           </Card>
 
-          <Typography.Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center', lineHeight: 1.7 }}>
-            التطوير المحلي: <b>red_admin</b> أو <b>younes_sovereign</b> · كلمة المرور <b>SovereignAdmin1</b>
-          </Typography.Text>
+          {import.meta.env.DEV && (
+            <Typography.Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center', lineHeight: 1.7 }}>
+              التطوير المحلي: <b>red_admin</b> أو <b>younes_sovereign</b> · كلمة المرور <b>SovereignAdmin1</b>
+            </Typography.Text>
+          )}
           <Typography.Text style={{ color: '#334155', fontSize: 11, textAlign: 'center', lineHeight: 1.7 }}>
             نسيت كلمة المرور؟ استخدم حساب مسؤول آخر لإصدار كلمة مؤقتة من مركز المستخدمين. لا يوجد استرداد ذاتي للمسؤول السيادي.
           </Typography.Text>

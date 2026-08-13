@@ -46,14 +46,14 @@ case $CHOICE in
     ;;
 
   2)
-    echo -e "${GREEN}⚡ جاري تشغيل بيئة التطوير السريعة...${NC}"
-    python3 "$ROOT_DIR/scripts/mock_backend.py" &
-    PID_BACKEND=$!
+    echo -e "${GREEN}⚡ جاري تشغيل بيئة التطوير السريعة (خادم SQLite حقيقي)...${NC}"
     cd "$ROOT_DIR/admin_dashboard"
     npm install
-    npm run dev &
+    node dev-server/server.cjs &
+    PID_BACKEND=$!
+    RED_API_TARGET="http://127.0.0.1:8080" npm run dev &
     PID_FRONTEND=$!
-    echo -e "${GREEN}✅ اللوحة تعمل الآن على: http://localhost:5173${NC}"
+    echo -e "${GREEN}✅ اللوحة تعمل الآن على: http://localhost:8088${NC}"
     echo -e "${YELLOW}اضغط Ctrl+C للإيقاف${NC}"
     wait $PID_FRONTEND $PID_BACKEND
     ;;

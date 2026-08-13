@@ -37,10 +37,11 @@ if "%CHOICE%"=="1" (
 
 if "%CHOICE%"=="2" (
     echo.
-    echo ⚡ جاري تشغيل بيئة التطوير السريعة...
+    echo ⚡ جاري تشغيل بيئة التطوير السريعة ^(خادم SQLite حقيقي^)...
     cd /d "%ROOT_DIR%\admin_dashboard"
-    start /b python "%ROOT_DIR%\scripts\mock_backend.py"
     call npm install
+    start /b node dev-server\server.cjs
+    set "RED_API_TARGET=http://127.0.0.1:8080"
     call npm run dev
     pause
     exit /b
