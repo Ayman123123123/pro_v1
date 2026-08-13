@@ -3,6 +3,7 @@ package com.red.server.admin.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
+import com.red.server.auth.repository.SqlLike
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -227,7 +228,7 @@ class ContentService(
         hashtags.findPopular().take(limit)
 
     fun searchHashtags(query: String, pageable: Pageable): Page<Hashtag> =
-        hashtags.searchByTagName(query.lowercase(), pageable)
+        hashtags.searchByTagName(SqlLike.contains(query), pageable)
 
     @Transactional
     fun blockHashtag(hashtagId: UUID, reason: String, adminId: UUID) {

@@ -91,13 +91,21 @@ adb install -r local-artifacts/red-app-debug.apk
 
 ## الفحص وحل الأعطال
 
+بعد انهيار Docker Desktop أو اشتغال `npm run dev:server` على 8080 بجانب Compose:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
+```
+
+المتصفح واللوحة يتحدثان إلى **http://127.0.0.1:8088** فقط. المنفذ 8080 داخل الحاوية وليس على ويندوز.
+
 ```bash
 docker compose ps
 docker compose logs --tail=200 backend
 docker compose logs --tail=200 media-sfu
 docker compose logs --tail=200 pstn-gateway
-curl -f http://localhost/health
-curl -f http://localhost/sfu-health
+curl -f http://localhost:8088/health
+curl -f http://localhost:8088/sfu-health
 ```
 
 إيقاف الخدمات مع الاحتفاظ بالبيانات:

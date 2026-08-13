@@ -33,10 +33,25 @@ project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
 
 ## التشغيل
 
+### المصدر الإنتاجي: Docker على 8088
+
+لوحة الإنتاج داخل Compose تُفتح من **http://127.0.0.1:8088/** عبر Nginx.
+لا تشغّل `npm run dev:server` في الوقت نفسه: خادم Node+SQLite يحتل المنفذ
+8080 على ويندوز فيصطدم تشخيصيًا مع الباك اند الحقيقي (Kotlin+Postgres)
+الذي يسمع على 8080 *داخل* شبكة Docker فقط.
+
+بعد انهيار Docker Desktop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\scripts\compose-recover.ps1 -RebuildBackend
+```
+
 ```bash
 npm install
 RED_API_TARGET=http://127.0.0.1:8080 npm run dev
 ```
+
+`RED_API_TARGET=8080` مخصّص فقط لخادم التطوير Node أدناه. مع Docker استخدم 8088.
 
 ### تشغيل كامل بقاعدة بيانات حقيقية (تطوير)
 

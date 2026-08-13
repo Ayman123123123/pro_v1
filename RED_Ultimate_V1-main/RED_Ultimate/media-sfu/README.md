@@ -8,7 +8,7 @@ SFU محلي للمكالمات الجماعية والبث والمساحات. 
 
 ## المحتوى
 
-`server.js` الخادم، `package-lock.json` تثبيت حتمي، `Dockerfile` runtime.
+`server.js` الخادم، `package-lock.json` تثبيت حتمي، `Dockerfile` متعدد المراحل، `install-worker.sh` يحمّل العامل الجاهز أو يبنيه محلياً بدون io_uring إذا حجب جدار النار GitHub.
 
 ## العلاقة بباقي المشروع
 
