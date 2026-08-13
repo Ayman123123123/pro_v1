@@ -35,6 +35,12 @@ export default defineConfig({
     port: 8088,
     strictPort: false,
     allowedHosts: true,
-    cors: true
+    cors: true,
+    proxy: {
+      '/api': { target: apiTarget, changeOrigin: true, timeout: 30000 },
+      '/health': { target: apiTarget, changeOrigin: true, timeout: 4000 },
+      '/sfu-health': { target: apiTarget, changeOrigin: true, timeout: 4000 },
+      '/ws': { target: wsTarget, ws: true, changeOrigin: true, timeout: 10000 }
+    }
   }
 });

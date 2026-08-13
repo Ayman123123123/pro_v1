@@ -25,6 +25,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildB
 
 حساب المسؤول يُقرأ من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`). لا تعتمد كلمة مرور مكتوبة في محادثة سابقة بعد مسح القاعدة.
 
+`SovereignAdmin1` يخص خادم Node+SQLite التجريبي فقط. إن ظهرت في اللوحة «الخادم غير متصل» و«بيانات المسؤول غير صحيحة» معًا فالخادم متوقف أو استُخدمت كلمة المرور الوهمية. شغّل:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
+```
+
+ثم ادخل بـ `RED_ADMIN_PASSWORD` من `.env` على **http://127.0.0.1:8088/**.
+
 ## Mongo على `localhost:27017` بدل `db-mongo`
 
 داخل Docker، `localhost` هو الحاوية نفسها. Mongo اسمه `db-mongo` على شبكة `red-net` فقط.
