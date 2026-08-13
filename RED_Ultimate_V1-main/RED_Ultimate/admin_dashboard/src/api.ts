@@ -136,8 +136,13 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
 
 export function authErrorMessage(data: any, status: number): string {
   const code = String(data?.error || data?.message || '');
+<<<<<<< HEAD
   if (/createdAt|createdat|does not exist/i.test(code)) {
     return 'عطل في ترتيب قاعدة البيانات (created_at). أعد تشغيل الخادم بعد التحديث.';
+=======
+  if (/createdAt|createdat|does not exist|DATABASE_COLUMN_CREATED_AT|DATABASE_ERROR/i.test(code)) {
+    return 'عطل في قاعدة البيانات. أعد تشغيل الخادم بعد سحب آخر تحديث (created_at).';
+>>>>>>> cc7a92f (Harden session storage, receivers, FileProvider, and admin errors)
   }
   if (/ACCOUNT_RESTORED_PENDING|UNBAN_REQUIRES/i.test(code)) {
     return 'رُفع الحظر. الحساب في الانتظار حتى يسجّل المستخدم جهازاً جديداً وتوافق عليه.';

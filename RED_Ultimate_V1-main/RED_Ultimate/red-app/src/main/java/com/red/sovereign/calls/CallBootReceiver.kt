@@ -33,8 +33,7 @@ class CallBootReceiver : BroadcastReceiver() {
         private val SUPPORTED_ACTIONS = setOf(
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.QUICKBOOT_POWERON",
-            "android.intent.action.MY_PACKAGE_REPLACED",
-            "android.intent.action.PACKAGE_REPLACED"
+            Intent.ACTION_MY_PACKAGE_REPLACED,
         )
     }
 }
