@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography, Space, Tag, Badge, Divider } from 'antd';
 import {
   ApiOutlined,
@@ -24,17 +24,28 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [internalLoading, setInternalLoading] = useState(false);
   const [health, setHealth] = useState<HealthState>('CHECKING');
   const loading = isLoading ?? internalLoading;
+  // عداد الفشل المتتالي: لا نعلن «غير متصل» من أول فشل عابر — فوسيط المعاينة
+  // أو بدء تشغيل الخادم قد يبطئ الطلب الأول فقط.
+  const failsRef = useRef(0);
 
   const probe = useCallback(async () => {
     const ctrl = new AbortController();
-    const kill = window.setTimeout(() => ctrl.abort(), 2500);
+    const kill = window.setTimeout(() => ctrl.abort(), 8000);
     try {
       const r = await fetch('/health', { signal: ctrl.signal });
       const data = r.ok ? await r.json().catch(() => ({})) : null;
       const status = String(data?.status ?? '').toUpperCase();
-      setHealth(data && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') ? 'UP' : 'DOWN');
+      const ok = !!data && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED');
+      if (ok) {
+        failsRef.current = 0;
+        setHealth('UP');
+      } else {
+        failsRef.current += 1;
+        if (failsRef.current >= 2) setHealth('DOWN');
+      }
     } catch {
-      setHealth('DOWN');
+      failsRef.current += 1;
+      if (failsRef.current >= 2) setHealth('DOWN');
     } finally {
       window.clearTimeout(kill);
     }
@@ -130,7 +141,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
 
           <Card style={{ width: '100%', borderColor: '#1E293B', background: '#0F172A', borderRadius: 18, boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }} styles={{ body: { padding: 28 } }}>
             {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 20, borderRadius: 10 }} />}
-            {health === 'DOWN' && <Alert type="warning" showIcon message="تعذر الوصول إلى /health" description="يمكنك محاولة الدخول إذا كان البروكسي أو الخادم يبدأان الآن." style={{ marginBottom: 20, borderRadius: 10 }} />}
+            {health === 'DOWN' && <Alert type="warning" showIcon message="تعذر الوصول إلى /health" description="يمكنك محاولة الدخول إذا كان البروكسي أو الخادم يبدأان الآن." style={{ marginBottom: 20, borderRadius: 10 }} action={<Button size="small" onClick={() => { setHealth('CHECKING'); void probe(); }}>إعادة الفحص</Button>} />}
             <Form layout="vertical" onFinish={submit} size="large">
               <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]} initialValue="red_admin">
                 <Input prefix={<UserOutlined style={{color:'#64748B'}} />} placeholder="اسم المستخدم — red_admin" autoComplete="username"

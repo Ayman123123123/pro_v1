@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, Tag, theme } from 'antd';
 import {
   DashboardOutlined,
@@ -117,6 +117,9 @@ export default function App() {
   const [pendingCount, setPendingCount] = useState(0);
   const [apiUp, setApiUp] = useState(true);
   const adminUser = authStore.user();
+  // عداد فشل متتالٍ لفحص صحة الخادم: لا نقلب «متصل» إلى «غير متصل» من طلة
+  // عابرة واحدة — فوسيط المعاينة أو انقطاع شبكة مؤقت قد يفشل دورة واحدة فقط.
+  const healthFailsRef = useRef(0);
 
   useEffect(() => {
     const onExpired = () => setAuthenticated(false);
@@ -129,13 +132,20 @@ export default function App() {
     try {
       const [pending, health] = await Promise.all([
         getPendingApprovals().catch(() => []),
-        fetch('/health', { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
+        fetch('/health', { signal: AbortSignal.timeout(6000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
       ]);
       setPendingCount(Array.isArray(pending) ? pending.length : 0);
       const status = String(health?.status || '').toUpperCase();
-      setApiUp(status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED');
+      if (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') {
+        healthFailsRef.current = 0;
+        setApiUp(true);
+      } else {
+        healthFailsRef.current += 1;
+        if (healthFailsRef.current >= 2) setApiUp(false);
+      }
     } catch {
-      setApiUp(false);
+      healthFailsRef.current += 1;
+      if (healthFailsRef.current >= 2) setApiUp(false);
     }
   }, [authenticated]);
 
