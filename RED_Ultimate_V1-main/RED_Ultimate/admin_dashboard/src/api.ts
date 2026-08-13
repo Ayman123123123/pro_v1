@@ -136,6 +136,9 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
 
 export function authErrorMessage(data: any, status: number): string {
   const code = String(data?.error || data?.message || '');
+  if (status >= 500) {
+    return code || `عطل مؤقت في الخادم (HTTP ${status})`;
+  }
   if (status === 401 || /AUTHENTICATION_REQUIRED|UNAUTHORIZED|UNAUTHENTICATED|JWT|TOKEN/i.test(code)) {
     return 'انتهت الجلسة — أعد تسجيل الدخول';
   }
