@@ -99,4 +99,10 @@ class CallWebSocketHandlerTest {
         handler.deliverInvite("22222", "CONFERENCE_INVITE", "room-9", "11111", "SPACE", mapOf("video" to "false"))
         assertTrue(bob.sent.any { it.contains("CONFERENCE_INVITE") && it.contains("room-9") })
     }
+
+    @Test
+    fun `offline conference invite still wakes the device with a voip push`() {
+        handler.deliverInvite("33333", "CONFERENCE_INVITE", "room-8", "11111", "SPACE", mapOf("video" to "false"))
+        verify(notifications).sendVoipPushNotification("33333", "11111", "room-8", "SPACE")
+    }
 }

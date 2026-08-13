@@ -68,6 +68,19 @@ class LiveStreamWebSocketHandlerTest {
         assertTrue(vMessages.any { it["type"].asText() == "OFFER" }) { "Viewer should receive OFFER" }
     }
 
+    @Test fun `targeted OFFER from broadcaster reaches only that viewer`() {
+        val broadcaster = Probe("b1", "91179")
+        val first = Probe("v1", "11154")
+        val second = Probe("v2", "22261")
+        handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
+        handler.handleTextMessage(first.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
+        handler.handleTextMessage(second.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
+        first.sent.clear(); second.sent.clear()
+        handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"OFFER","roomId":"stream-12345678","payload":{"sdp":"v=0...","targetUserId":"11154"}}"""))
+        assertTrue(first.sent.any { it.contains("OFFER") }) { "First viewer is the target" }
+        assertTrue(second.sent.none { it.contains("OFFER") }) { "Second viewer must keep their own peer connection" }
+    }
+
     @Test fun `ANSWER from viewer reaches broadcaster`() {
         val broadcaster = Probe("b1", "91179")
         val viewer = Probe("v1", "11154")

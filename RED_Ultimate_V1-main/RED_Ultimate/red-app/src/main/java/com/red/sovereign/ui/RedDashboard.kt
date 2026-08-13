@@ -397,9 +397,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory) {
+                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
-                }
+                }, onPstn = { showDinstar = true })
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
@@ -1987,7 +1987,7 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit) {
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: () -> Unit = {}) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
@@ -2015,7 +2015,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onLive = { showLiveDialog = true },
             onSpace = { showSpaceDialog = true },
             onExplore = onExplore,
-            onPstn = { showDinstarDialog = true }
+            onPstn = onPstn
         )
         Spacer(Modifier.height(16.dp))
         Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -2050,7 +2050,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showJoinDialog = false
-                        ConferenceService.join(context, roomInput.trim(), ownUserId, true)
+                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
                         roomInput = ""
                     },
                     enabled = roomInput.trim().isNotBlank()
@@ -2181,7 +2181,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         // معرف تلقائي فريد إن لم يُدخل المستخدم واحدًا
                         val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
                         // video=false → مسار صوتي صرف — هذا هو الفرق بين المساحة والمؤتمر المرئي
-                        ConferenceService.join(context, spaceId, ownUserId, false)
+                        ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
                         roomInput = ""
                         isSpaceHost = false
                     }
@@ -2233,17 +2233,11 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showDinstarDialog = false
-                        val intent = Intent(context, YounesCallService::class.java).apply {
-                            action = YounesCallService.ACTION_START
-                            putExtra(YounesCallService.EXTRA_TARGET, dinstarNumberInput.trim())
-                            putExtra(YounesCallService.EXTRA_MODE, "VOICE")
-                        }
-                        ContextCompat.startForegroundService(context, intent)
                         dinstarNumberInput = ""
-                    },
-                    enabled = dinstarNumberInput.trim().length >= 6
+                        onPstn()
+                    }
                 ) {
-                    Text("اتصال خطي عبر GSM")
+                    Text("فتح الهاتف اليمني")
                 }
             },
             dismissButton = {
