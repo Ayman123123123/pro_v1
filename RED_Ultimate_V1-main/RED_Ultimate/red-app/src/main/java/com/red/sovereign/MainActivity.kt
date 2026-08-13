@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,7 +33,7 @@ import com.red.sovereign.ui.RedDashboard
 import com.red.sovereign.ui.theme.YounesTheme
 import com.red.sovereign.ui.theme.SovereignBackground
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val localNetworkPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -147,11 +147,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** قفل التطبيق عند العودة للواجهة إن كان AppLock مفعّلاً ومستخدم مُصادق عليه. */
+    private var lastBackgroundAt = 0L
+
+    override fun onPause() {
+        super.onPause()
+        lastBackgroundAt = System.currentTimeMillis()
+    }
+
+    /** قفل بعد مغادرة حقيقية (≥15 ث) حتى لا يعيد حوار البصمة قفل التطبيق فوراً. */
     override fun onResume() {
         super.onResume()
         if (authViewModel.state is AuthState.Authenticated && SettingsRuntime.current.appLockEnabled) {
-            appLocked = true
+            val awayMs = System.currentTimeMillis() - lastBackgroundAt
+            if (lastBackgroundAt == 0L || awayMs >= 15_000L) {
+                appLocked = true
+            }
         }
     }
 }

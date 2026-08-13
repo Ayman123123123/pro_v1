@@ -54,15 +54,14 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
     // فحص توفر البصمة
     val biometricManager = BiometricManager.from(context)
     val canAuthenticate = biometricManager.canAuthenticate(
-        BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
     )
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
         .setTitle("قفل يونس")
         .setSubtitle("استخدم بصمتك أو نمط جهازك لفتح التطبيق")
-        .setNegativeButtonText("خروج")
         .setAllowedAuthenticators(
-            BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )
         .build()
 

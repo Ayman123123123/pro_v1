@@ -13,12 +13,23 @@ import java.util.UUID
  * 🛡️ Admin Audit Log Repository
  */
 interface AdminAuditLogRepository : JpaRepository<AdminAuditLog, UUID> {
-    fun findByAdminIdOrderByCreatedAtDesc(adminId: UUID, pageable: Pageable): Page<AdminAuditLog>
-    fun findByActionOrderByCreatedAtDesc(action: String, pageable: Pageable): Page<AdminAuditLog>
-    fun findByCategoryOrderByCreatedAtDesc(category: String, pageable: Pageable): Page<AdminAuditLog>
-    fun findBySeverityOrderByCreatedAtDesc(severity: String, pageable: Pageable): Page<AdminAuditLog>
-    fun findByCreatedAtBetweenOrderByCreatedAtDesc(start: Instant, end: Instant, pageable: Pageable): Page<AdminAuditLog>
-    fun findByTargetTypeAndTargetIdOrderByCreatedAtDesc(targetType: String, targetId: String): List<AdminAuditLog>
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.adminId = :adminId ORDER BY a.createdAt DESC")
+    fun findByAdminIdOrderByCreatedAtDesc(@Param("adminId") adminId: UUID, pageable: Pageable): Page<AdminAuditLog>
+
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.action = :action ORDER BY a.createdAt DESC")
+    fun findByActionOrderByCreatedAtDesc(@Param("action") action: String, pageable: Pageable): Page<AdminAuditLog>
+
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.category = :category ORDER BY a.createdAt DESC")
+    fun findByCategoryOrderByCreatedAtDesc(@Param("category") category: String, pageable: Pageable): Page<AdminAuditLog>
+
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.severity = :severity ORDER BY a.createdAt DESC")
+    fun findBySeverityOrderByCreatedAtDesc(@Param("severity") severity: String, pageable: Pageable): Page<AdminAuditLog>
+
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.createdAt BETWEEN :start AND :end ORDER BY a.createdAt DESC")
+    fun findByCreatedAtBetweenOrderByCreatedAtDesc(@Param("start") start: Instant, @Param("end") end: Instant, pageable: Pageable): Page<AdminAuditLog>
+
+    @Query("SELECT a FROM AdminAuditLog a WHERE a.targetType = :targetType AND a.targetId = :targetId ORDER BY a.createdAt DESC")
+    fun findByTargetTypeAndTargetIdOrderByCreatedAtDesc(@Param("targetType") targetType: String, @Param("targetId") targetId: String): List<AdminAuditLog>
 
     @Query("SELECT a FROM AdminAuditLog a WHERE a.severity = 'CRITICAL' AND a.createdAt > :since ORDER BY a.createdAt DESC")
     fun findRecentCritical(@Param("since") since: Instant): List<AdminAuditLog>
@@ -73,11 +84,20 @@ interface FeatureFlagRepository : JpaRepository<FeatureFlag, UUID> {
  * 🚨 User Report Repository
  */
 interface UserReportRepository : JpaRepository<UserReport, UUID> {
-    fun findByStatusOrderByCreatedAtDesc(status: String, pageable: Pageable): Page<UserReport>
-    fun findByAssignedAdminIdAndStatusOrderByCreatedAtDesc(assignedAdminId: UUID, status: String, pageable: Pageable): Page<UserReport>
-    fun findByCategoryOrderByCreatedAtDesc(category: String, pageable: Pageable): Page<UserReport>
-    fun findByReporterIdOrderByCreatedAtDesc(reporterId: UUID, pageable: Pageable): Page<UserReport>
-    fun findByTargetUserIdOrderByCreatedAtDesc(targetUserId: UUID, pageable: Pageable): Page<UserReport>
+    @Query("SELECT r FROM UserReport r WHERE r.status = :status ORDER BY r.createdAt DESC")
+    fun findByStatusOrderByCreatedAtDesc(@Param("status") status: String, pageable: Pageable): Page<UserReport>
+
+    @Query("SELECT r FROM UserReport r WHERE r.assignedAdminId = :assignedAdminId AND r.status = :status ORDER BY r.createdAt DESC")
+    fun findByAssignedAdminIdAndStatusOrderByCreatedAtDesc(@Param("assignedAdminId") assignedAdminId: UUID, @Param("status") status: String, pageable: Pageable): Page<UserReport>
+
+    @Query("SELECT r FROM UserReport r WHERE r.category = :category ORDER BY r.createdAt DESC")
+    fun findByCategoryOrderByCreatedAtDesc(@Param("category") category: String, pageable: Pageable): Page<UserReport>
+
+    @Query("SELECT r FROM UserReport r WHERE r.reporterId = :reporterId ORDER BY r.createdAt DESC")
+    fun findByReporterIdOrderByCreatedAtDesc(@Param("reporterId") reporterId: UUID, pageable: Pageable): Page<UserReport>
+
+    @Query("SELECT r FROM UserReport r WHERE r.targetUserId = :targetUserId ORDER BY r.createdAt DESC")
+    fun findByTargetUserIdOrderByCreatedAtDesc(@Param("targetUserId") targetUserId: UUID, pageable: Pageable): Page<UserReport>
 
     @Query("SELECT COUNT(r) FROM UserReport r WHERE r.status = 'PENDING'")
     fun countPending(): Long
