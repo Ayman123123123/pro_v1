@@ -54,6 +54,8 @@ object ConferenceRuntime {
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
     var isSpeaker by mutableStateOf(true)
+    var selfRole by mutableStateOf("LISTENER")
+    var mediaPath by mutableStateOf("MESH")
     var pinnedMessage by mutableStateOf("")
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
     var reactions: List<SpaceReaction> by mutableStateOf(emptyList())
@@ -63,8 +65,10 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: ConferenceSignalingClient
     private var engine: WebRtcEngine? = null
+    private var sfu: SfuMediaClient? = null
     private var roomId = ""
     private var userId = ""
+    private var startedAsHost = false
 
     override fun onCreate() {
         super.onCreate()
@@ -81,6 +85,10 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 val inviter = intent.getStringExtra(EXTRA_INVITER).orEmpty()
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
                 ConferenceRuntime.isVideoEnabled = hasVideo
+                // مساحة صوتية: المدعو مستمع. مؤتمر فيديو: الجميع مشاركون.
+                ConferenceRuntime.isSpeaker = hasVideo
+                ConferenceRuntime.selfRole = if (hasVideo) "SPEAKER" else "LISTENER"
+                ConferenceRuntime.isMuted = !hasVideo
                 ConferenceRuntime.state = ConferenceUiState.Incoming(roomId, inviter, hasVideo, userId)
                 showIncomingInvitationNotification(roomId, userId, inviter, hasVideo)
             }
@@ -89,7 +97,12 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
                 val invitees = intent.getStringArrayExtra(EXTRA_INVITEES)?.toList().orEmpty()
+                val asHost = intent.getBooleanExtra(EXTRA_HOST, invitees.isNotEmpty())
                 ConferenceRuntime.isVideoEnabled = hasVideo
+                startedAsHost = asHost
+                ConferenceRuntime.isSpeaker = asHost || hasVideo
+                ConferenceRuntime.selfRole = if (asHost) "HOST" else if (hasVideo) "SPEAKER" else "LISTENER"
+                ConferenceRuntime.isMuted = !ConferenceRuntime.isSpeaker
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 promote()
                 scope.launch {
@@ -99,12 +112,15 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             }
             ACTION_LEAVE -> leave()
             ACTION_TOGGLE_MIC -> {
+                if (!ConferenceRuntime.isSpeaker) return START_STICKY
                 ConferenceRuntime.isMuted = !ConferenceRuntime.isMuted
                 engine?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
+                sfu?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
             }
             ACTION_TOGGLE_VIDEO -> {
                 ConferenceRuntime.isVideoEnabled = !ConferenceRuntime.isVideoEnabled
                 engine?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                sfu?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
             }
             ACTION_RAISE_HAND -> signaling.raiseHand(roomId, userId)
             ACTION_APPROVE_SPEAKER -> {
@@ -167,14 +183,33 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
 
     override fun onConnected() {
         scope.launch {
-            if (engine == null) {
-                engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
-                ConferenceRuntime.eglContext = engine?.eglContext
-                engine?.create(if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE)
-                ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
+            if (engine == null && sfu == null) {
+                val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
+                val sfuClient = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), sfuEvents)
+                if (sfuClient.attach(roomId)) {
+                    sfu = sfuClient
+                    ConferenceRuntime.mediaPath = "SFU"
+                    ConferenceRuntime.eglContext = sfuClient.eglContext
+                    if (ConferenceRuntime.isSpeaker) sfuClient.publish(kind)
+                    ConferenceRuntime.localVideo = sfuClient.localVideo
+                } else {
+                    engine = WebRtcEngine(this@ConferenceService, this@ConferenceService)
+                    ConferenceRuntime.mediaPath = "MESH"
+                    ConferenceRuntime.eglContext = engine?.eglContext
+                    engine?.create(kind)
+                    ConferenceRuntime.localVideo = engine?.localMedia?.videoTrack
+                }
+                applyListenerMute()
             }
-            signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled)
+            signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, ConferenceRuntime.isSpeaker)
         }
+    }
+
+    private fun applyListenerMute() {
+        if (ConferenceRuntime.isSpeaker) return
+        ConferenceRuntime.isMuted = true
+        engine?.setMicrophoneEnabled(false)
+        sfu?.setMicrophoneEnabled(false)
     }
 
     override fun onSignal(signal: ConferenceSignal) {
@@ -206,11 +241,24 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 }
                 ConferenceRuntime.participants = participantList
             }
+            "HOST_CHANGED" -> {
+                val next = signal.payload["userId"].orEmpty()
+                if (next == userId) {
+                    ConferenceRuntime.selfRole = "HOST"
+                    ConferenceRuntime.isSpeaker = true
+                }
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                    if (p.userId == next) p.copy(role = "HOST", isHost = true) else p
+                }
+            }
             "APPROVE_SPEAKER" -> {
                 val target = signal.payload["targetUserId"].orEmpty()
                 if (target == userId) {
                     ConferenceRuntime.isSpeaker = true
+                    ConferenceRuntime.selfRole = "SPEAKER"
+                    ConferenceRuntime.isMuted = false
                     engine?.setMicrophoneEnabled(true)
+                    sfu?.setMicrophoneEnabled(true)
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "SPEAKER", raisedHand = false) else p
@@ -221,7 +269,10 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 val target = signal.payload["targetUserId"].orEmpty()
                 if (target == userId) {
                     ConferenceRuntime.isSpeaker = false
+                    ConferenceRuntime.selfRole = "LISTENER"
+                    ConferenceRuntime.isMuted = true
                     engine?.setMicrophoneEnabled(false)
+                    sfu?.setMicrophoneEnabled(false)
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "LISTENER", raisedHand = false) else p
@@ -256,6 +307,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 if (target == userId) {
                     ConferenceRuntime.isMuted = true
                     engine?.setMicrophoneEnabled(false)
+                    sfu?.setMicrophoneEnabled(false)
                 }
             }
             "REACTION" -> {
@@ -269,8 +321,18 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         }
     }
 
-    override fun onRoomState(participants: List<ConferenceParticipant>) {
+    override fun onRoomState(participants: List<ConferenceParticipant>, selfRole: String) {
         ConferenceRuntime.participants = participants
+        if (selfRole.isNotBlank()) applySelfRole(selfRole)
+    }
+
+    override fun onSelfRole(role: String) = applySelfRole(role)
+
+    private fun applySelfRole(role: String) {
+        ConferenceRuntime.selfRole = role
+        val speaker = role in setOf("HOST", "CO_HOST", "SPEAKER")
+        ConferenceRuntime.isSpeaker = speaker
+        if (!speaker) applyListenerMute()
     }
 
     override fun onParticipantJoined(participant: ConferenceParticipant) {
@@ -362,6 +424,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         statsJob = scope.launch {
             while (true) {
                 engine?.pollStats()
+                sfu?.pollStats()
                 kotlinx.coroutines.delay(2000)
             }
         }
@@ -397,6 +460,10 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
                 signaling.close()
                 engine?.release()
                 engine = null
+                sfu?.release()
+                sfu = null
+                ConferenceRuntime.mediaPath = "MESH"
+                ConferenceRuntime.selfRole = "LISTENER"
                 ConferenceRuntime.state = ConferenceUiState.Idle
                 ConferenceRuntime.participants = emptyList()
                 ConferenceRuntime.remoteVideos.clear()
@@ -475,6 +542,27 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         super.onDestroy()
     }
 
+    private val sfuEvents = object : SfuMediaClient.Events {
+        override fun onRemoteVideo(peerId: String, track: VideoTrack) {
+            val owner = peerId.ifBlank {
+                ConferenceRuntime.participants.firstOrNull { it.hasVideo && it.userId != userId && !ConferenceRuntime.remoteVideos.containsKey(it.userId) }?.userId
+            }
+            if (!owner.isNullOrBlank()) ConferenceRuntime.remoteVideos[owner] = track
+        }
+        override fun onPeerLeft(peerId: String) {
+            ConferenceRuntime.participants = ConferenceRuntime.participants.filter { it.userId != peerId }
+            ConferenceRuntime.remoteVideos.remove(peerId)
+        }
+        override fun onError(message: String) {
+            if (ConferenceRuntime.mediaPath == "SFU") {
+                ConferenceRuntime.mediaPath = "MESH"
+            }
+        }
+        override fun onNetworkStats(stats: NetworkStats) {
+            ConferenceRuntime.networkStats = stats
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
@@ -503,6 +591,7 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
         const val EXTRA_EMOJI = "emoji"
         const val EXTRA_PIN_TEXT = "pin_text"
         const val EXTRA_INVITEES = "invitees"
+        const val EXTRA_HOST = "as_host"
 
         fun grantCoHost(context: Context, targetUserId: String) {
             val intent = Intent(context, ConferenceService::class.java).apply {
@@ -568,12 +657,13 @@ class ConferenceService : Service(), WebRtcEngine.Events, ConferenceSignalingCli
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun join(context: Context, roomId: String, userId: String, video: Boolean, inviteRedIds: List<String> = emptyList()) {
+        fun join(context: Context, roomId: String, userId: String, video: Boolean, inviteRedIds: List<String> = emptyList(), asHost: Boolean = inviteRedIds.isNotEmpty()) {
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_JOIN
                 putExtra(EXTRA_ROOM_ID, roomId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_VIDEO, video)
+                putExtra(EXTRA_HOST, asHost)
                 if (inviteRedIds.isNotEmpty()) putExtra(EXTRA_INVITEES, inviteRedIds.toTypedArray())
             }
             ContextCompat.startForegroundService(context, intent)

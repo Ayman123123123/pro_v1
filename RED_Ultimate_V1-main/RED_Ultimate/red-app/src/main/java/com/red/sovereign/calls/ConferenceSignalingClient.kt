@@ -70,7 +70,8 @@ class ConferenceSignalingClient(
         fun onDisconnected()
         fun onSignal(signal: ConferenceSignal)
         fun onError(message: String)
-        fun onRoomState(participants: List<ConferenceParticipant>)
+        fun onRoomState(participants: List<ConferenceParticipant>, selfRole: String = "LISTENER")
+        fun onSelfRole(role: String) {}
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
     }
@@ -105,14 +106,19 @@ class ConferenceSignalingClient(
                                 val participants = signal.payload.entries
                                     .filter { it.key.startsWith("user_") }
                                     .map { entry ->
+                                        val role = signal.payload["${entry.value}_role"]
+                                            ?: if (signal.payload["host"] == entry.value) "HOST" else "LISTENER"
                                         ConferenceParticipant(
                                             userId = entry.value,
+                                            role = role,
                                             hasAudio = signal.payload["${entry.value}_audio"] == "true",
                                             hasVideo = signal.payload["${entry.value}_video"] == "true",
-                                            isHost = signal.payload["host"] == entry.value
+                                            isHost = signal.payload["host"] == entry.value || role == "HOST"
                                         )
                                     }
-                                listener.onRoomState(participants)
+                                val selfRole = signal.payload["self_role"] ?: "LISTENER"
+                                listener.onRoomState(participants, selfRole)
+                                listener.onSelfRole(selfRole)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
@@ -151,12 +157,15 @@ class ConferenceSignalingClient(
             ?: listener.onError("CONFERENCE_NOT_CONNECTED")
     }
 
-    fun join(roomId: String, userId: String, hasVideo: Boolean) = send(
+    fun join(roomId: String, userId: String, hasVideo: Boolean, speaker: Boolean = hasVideo) = send(
         ConferenceSignal(
             type = "JOIN",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("hasVideo" to hasVideo.toString(), "hasAudio" to "true")
+            payload = mapOf(
+                "hasVideo" to hasVideo.toString(),
+                "hasAudio" to speaker.toString()
+            )
         )
     )
 

@@ -89,6 +89,12 @@ class ConferenceUiStateTest {
         val state = ConferenceUiState.Active(roomId = "red-room-1", startedAt = now)
         assertEquals(now, state.startedAt)
     }
+
+    @Test fun `space invitee is a listener not a ringing callee`() {
+        val state = ConferenceUiState.Incoming(roomId = "space-9", inviter = "73066", video = false, userId = "28261")
+        assertEquals(false, state.video)
+        assertTrue(state !is ConferenceUiState.Connecting)
+    }
 }
 
 class LiveStreamUiStateTest {

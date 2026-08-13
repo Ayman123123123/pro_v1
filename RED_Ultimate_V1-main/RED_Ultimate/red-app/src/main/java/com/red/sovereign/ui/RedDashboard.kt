@@ -1084,7 +1084,7 @@ private fun ChatHubScreen(
                     IconButton({ pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) }) { Icon(Icons.Default.Videocam, "مكالمة فيديو عبر يونس") }
                     IconButton({
                         val room = conversationId(account.redId, target)
-                        ConferenceService.join(context, room, account.redId, true)
+                        ConferenceService.join(context, room, account.redId, true, inviteRedIds = listOf(target))
                     }) { Icon(Icons.Default.Groups, "مؤتمر فيديو جماعي") }
                     IconButton({ showMessageSearch = true }) { Icon(Icons.Default.Search, "البحث في المحادثة") }
                     IconButton({ showMediaGallery = true }) { Icon(Icons.Default.Photo, "الوسائط المشتركة") }
@@ -1436,8 +1436,8 @@ private fun ChatHubScreen(
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Headset, "مساحة صوتية", tint = YounesEmerald) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو", tint = YounesEmerald) }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false, inviteRedIds = openGroup.members.map { it.redId }) }) { Icon(Icons.Default.Headset, "مساحة صوتية", tint = YounesEmerald) }
+                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true, inviteRedIds = openGroup.members.map { it.redId }) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو", tint = YounesEmerald) }
                         Box {
                             IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
                             DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {

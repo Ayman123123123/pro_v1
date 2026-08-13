@@ -36,3 +36,7 @@
 
 - تذكرة SFU للغرف: `GET /api/sfu/groups/rooms/{roomId}/ticket`
 - mediasoup يقبل Opus FEC/DTX وVP9 بالإضافة إلى VP8/H.264
+- عميل أندرويد `SfuMediaClient` ينضم وينشر عبر `/sfu`؛ إن تعذّر SFU يبقى المسار الشبكي (mesh) للمؤتمرات الصغيرة
+- كتم المذيع على SFU = `pauseProducer` / `resumeProducer` دون هدم النقل
+- المكالمة الفردية: نغمة رنين صادرة (TONE_SUP_RINGTONE) ومهلة 45 ثانية ثم فائتة
+- المساحة: المضيف متحدث، المدعو مستمع ويرفع يده — لا رنين جماعي ولا زر كاميرا
