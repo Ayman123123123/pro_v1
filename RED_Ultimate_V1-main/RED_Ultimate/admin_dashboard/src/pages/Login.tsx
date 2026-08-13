@@ -132,7 +132,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
                 type="info"
                 showIcon
                 message="الخادم يبدأ الآن"
-                description="يمكنك المحاولة بعد ثوانٍ. كلمة المرور من .env وليست SovereignAdmin1."
+                description="يمكنك المحاولة بعد ثوانٍ. كلمة المرور من RED_ADMIN_PASSWORD في ملف .env."
                 style={{ marginBottom: 20, borderRadius: 10 }}
               />
             )}
@@ -161,7 +161,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             Docker: اسم المستخدم من <b>RED_ADMIN_USERNAME</b> وكلمة المرور من <b>RED_ADMIN_PASSWORD</b> في ملف <b>RED_Ultimate/.env</b>
           </Typography.Text>
           <Typography.Text style={{ color: '#334155', fontSize: 11, textAlign: 'center', lineHeight: 1.7 }}>
-            SovereignAdmin1 يخص خادم Node التجريبي فقط. لا يوجد استرداد ذاتي للمسؤول السيادي.
+            لا يوجد استرداد ذاتي للمسؤول السيادي. كلمة المرور ليست في الواجهة.
           </Typography.Text>
         </Space>
       </div>

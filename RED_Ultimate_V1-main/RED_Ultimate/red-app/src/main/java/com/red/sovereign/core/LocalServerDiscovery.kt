@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit
  * لا ملي ثانية، ثم يُمسح النطاق /24 كاملًا (254 عنوانًا) دفعتين دفعتين مع `awaitAll`.
  * النتيجة: شاشة «جارٍ الاتصال بالسيرفر» لعشرات الثواني أو دقائق.
  *
- * المسار السريع يجرب العناوين المعروفة والمنفذين 8080/8088 خلال أقل من ثانيتين
- * ويعود فور أول نجاح.
+ * المسار السريع يجرب العناوين المعروفة ومنفذ الإنتاج 8088 خلال أقل من ثانيتين
+ * ويعود فور أول نجاح. لا يُقبل خادم Node على 8080.
  */
 class LocalServerDiscovery(private val context: Context) {
     enum class Mode { FAST, THOROUGH }
@@ -114,9 +114,7 @@ class LocalServerDiscovery(private val context: Context) {
         val seeds = listOf(
             ServerEndpoint.url(),
             BuildConfig.RED_SERVER_URL,
-            "http://10.0.2.2:8080",
             "http://10.0.2.2:8088",
-            "http://192.168.1.50:8080",
             "http://192.168.1.50:8088",
         )
         seeds.forEach { seed ->

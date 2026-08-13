@@ -239,7 +239,7 @@ export function loginFailureMessage(status: number | undefined, body: Record<str
   }
   const code = String(body?.error || body?.message || '');
   if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
-    return 'كلمة المرور ليست SovereignAdmin1. استخدم RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
+    return 'بيانات الدخول مرفوضة. استخدم RED_ADMIN_USERNAME و RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
   }
   if (status === 403 || status === 423) {
     return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
