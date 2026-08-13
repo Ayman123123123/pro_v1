@@ -25,6 +25,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildB
 
 حساب المسؤول يُقرأ من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`). لا تعتمد كلمة مرور مكتوبة في محادثة سابقة بعد مسح القاعدة.
 
+## Mongo على `localhost:27017` بدل `db-mongo`
+
+داخل Docker، `localhost` هو الحاوية نفسها. Mongo اسمه `db-mongo` على شبكة `red-net` فقط.
+
+- الباك اند في Compose يجب أن يطبع عند الإقلاع: `INFRA binding: runtime=DOCKER mongodb.host=db-mongo`
+- `/health` يعرض `bindings.mongodbHost`. إن ظهر `localhost` فأنت تشغّل JVM على ويندوز أو نسخت URI خاطئ.
+- لا تشغّل `bootRun` بجانب Compose إلا عبر `docker-compose.host-debug.yml` و`SPRING_PROFILES_ACTIVE=host`.
+
+## DINSTAR جاهز على `192.168.11.1` — لا تغيّر الـ IP إلى Wi-Fi
+
+الجهاز بلا Wi-Fi. كرت Realtek ↔ `192.168.11.1` هو مسار الإدارة الصحيح. فكّ الكابل = انقطاع مهما كان العنوان.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
+```
+
+في واجهة الجهاز (`enFrame.htm` → SIP Server) ضع **عنوان ويندوز على 192.168.11.x** والمنفذ 5060. Asterisk يتعرّف على البوابة بالعنوان (`type=identify`).
+
 ---
 
 # 🔧 Docker Build DNS Issues

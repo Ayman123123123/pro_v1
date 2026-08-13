@@ -1,0 +1,17 @@
+# Optional: publish data stores on the Windows/Linux loopback so a host JVM
+# can attach. Production Compose does NOT publish 27017/5432/6379.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.host-debug.yml up -d
+#   SPRING_PROFILES_ACTIVE=host YOUNES_RUNTIME=host ...
+name: red-sovereign
+
+services:
+  db-postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  db-mongo:
+    ports:
+      - "127.0.0.1:27017:27017"
+  cache-redis:
+    ports:
+      - "127.0.0.1:6379:6379"

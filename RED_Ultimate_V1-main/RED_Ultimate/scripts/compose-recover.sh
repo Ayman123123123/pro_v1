@@ -39,14 +39,19 @@ free_port() {
 free_port 8080
 
 cd "$ROOT"
-docker compose --env-file "$ENV_FILE" config --quiet
+COMPOSE=(--env-file "$ENV_FILE" -f docker-compose.yml)
+if grep -q '^DINSTAR_ENABLED=true' "$ENV_FILE"; then
+  COMPOSE+=(-f docker-compose.lan.yml)
+  echo "DINSTAR_ENABLED=true — attaching docker-compose.lan.yml"
+fi
+docker compose "${COMPOSE[@]}" config --quiet
 
 if [ "$REBUILD" = "--rebuild" ] || [ "$REBUILD" = "-RebuildBackend" ]; then
   echo "Rebuilding backend image..."
-  docker compose --env-file "$ENV_FILE" build backend
+  docker compose "${COMPOSE[@]}" build backend
 fi
 
-docker compose --env-file "$ENV_FILE" up -d
+docker compose "${COMPOSE[@]}" up -d
 
 echo -n "Waiting for http://127.0.0.1:8088/health"
 for _ in $(seq 1 60); do
