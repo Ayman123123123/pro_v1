@@ -41,6 +41,12 @@ class LiveStreamSignalingClient(
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
+    fun reconnect(streamId: String) {
+        runCatching { socket?.cancel() }
+        socket = null
+        connect(streamId)
+    }
+
     fun connect(streamId: String) {
         if (socket != null) return
         val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")
@@ -64,7 +70,8 @@ class LiveStreamSignalingClient(
                     socket = null; listener.onDisconnected()
                 }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    socket = null; listener.onError(t.message ?: "LIVESTREAM_SIGNALING_FAILED")
+                    socket = null
+                    listener.onDisconnected()
                 }
             }
         )

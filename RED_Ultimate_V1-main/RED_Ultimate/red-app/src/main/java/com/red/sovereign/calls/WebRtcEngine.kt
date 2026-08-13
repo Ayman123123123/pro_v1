@@ -290,19 +290,25 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private fun applySimulcast(sender: RtpSender?, profile: NetworkStats.BitrateProfile, svcEnabled: Boolean = false) {
         val s = sender ?: return
         val params = s.parameters
-        val encodings = params.encodings.toMutableList()
-        encodings.clear()
-        if (svcEnabled) {
-            // VP9-SVC: طبقات مكانية (L2) + زمنية (T3) — أوفر للبنطاق في المؤتمرات/البث
-            encodings.add(RtpParameters.Encoding("h", profile.videoMaxBitrateKbps * 1000L, 0L, profile.videoFramerate, 3, 1.0, true, "L2T3"))
+        val encodings = if (svcEnabled) {
+            listOf(videoEncoding("h", profile.videoMaxBitrateKbps * 1000, profile.videoFramerate, 1.0, 3))
         } else {
-            // Simulcast: 3 طبقات جودة مستقلة (المكالمات الفردية)
-            encodings.add(RtpParameters.Encoding("h", profile.videoMaxBitrateKbps * 1000L, 0L, profile.videoFramerate, 2, 1.0, true, "L1T2"))
-            encodings.add(RtpParameters.Encoding("m", (profile.videoMaxBitrateKbps * 1000L / 3), 0L, profile.videoFramerate / 2, 2, 2.0, true, "L1T2"))
-            encodings.add(RtpParameters.Encoding("l", 100_000L, 0L, 15, 1, 4.0, true, "L1T1"))
+            listOf(
+                videoEncoding("h", profile.videoMaxBitrateKbps * 1000, profile.videoFramerate, 1.0, 2),
+                videoEncoding("m", (profile.videoMaxBitrateKbps * 1000) / 3, (profile.videoFramerate / 2).coerceAtLeast(8), 2.0, 2),
+                videoEncoding("l", 100_000, 15, 4.0, 1)
+            )
         }
         params.encodings = encodings
-        s.parameters = params
+        runCatching { s.parameters = params }
+    }
+
+    private fun videoEncoding(rid: String, maxBps: Int, fps: Int, scale: Double, temporalLayers: Int): RtpParameters.Encoding {
+        return RtpParameters.Encoding(rid, true, scale).apply {
+            maxBitrateBps = maxBps
+            maxFramerate = fps
+            numTemporalLayers = temporalLayers
+        }
     }
 
     fun offer() = peer?.createOffer(sdpObserver(setLocal = true), offerAnswerConstraints())
