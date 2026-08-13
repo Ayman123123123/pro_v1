@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography, Space, Tag, Badge, Divider } from 'antd';
 import {
   ApiOutlined,
@@ -22,9 +22,19 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [internalLoading, setInternalLoading] = useState(false);
   const [probe, setProbe] = useState<BackendProbe>({ state: 'CHECKING', hint: 'جاري الاتصال بالسيرفر' });
   const loading = isLoading ?? internalLoading;
+  // عداد الفشل المتتالي: لا نعلن «غير متصل» من أول فشل عابر — فوسيط المعاينة
+  // أو بدء تشغيل الخادم قد يبطئ الطلب الأول فقط.
+  const failsRef = useRef(0);
 
   const refreshProbe = useCallback(async () => {
-    setProbe(await probeBackend());
+    const next = await probeBackend();
+    if (next.state === 'READY' || next.state === 'LIVE') {
+      failsRef.current = 0;
+      setProbe(next);
+      return;
+    }
+    failsRef.current += 1;
+    if (failsRef.current >= 2) setProbe(next);
   }, []);
   usePolling(refreshProbe, 4000);
 
@@ -125,6 +135,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
                 message="الخادم غير متصل"
                 description={probe.hint}
                 style={{ marginBottom: 20, borderRadius: 10 }}
+                action={<Button size="small" onClick={() => { failsRef.current = 0; setProbe({ state: 'CHECKING', hint: 'جاري الاتصال بالسيرفر' }); void refreshProbe(); }}>إعادة الفحص</Button>}
               />
             )}
             {!error && probe.state === 'LIVE' && (
