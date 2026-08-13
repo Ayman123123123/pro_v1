@@ -66,6 +66,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-true}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
@@ -91,6 +92,8 @@ services:
       # Set RED_ADMIN_COOKIE_SECURE=true only behind real TLS.
       - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-false}
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - identity-secrets:/run/secrets:ro
       - backup-data:/backups
@@ -130,6 +133,7 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
+      - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
     security_opt:
