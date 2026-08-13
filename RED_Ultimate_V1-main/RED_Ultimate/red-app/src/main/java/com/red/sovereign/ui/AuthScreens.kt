@@ -89,7 +89,7 @@ private val ErrorRed = Color(0xFFE53935)
 fun AuthFlow(viewModel: AuthViewModel) {
     when (val state = viewModel.state) {
         AuthState.Loading, AuthState.Submitting -> LoadingScreen()
-        AuthState.Welcome -> WelcomeScreen(viewModel.serverState, viewModel::discoverServer, viewModel::showRegister, viewModel::showLogin)
+        AuthState.Welcome -> WelcomeScreen(viewModel.serverState, viewModel::discoverServer, viewModel::showRegister, viewModel::showLogin, viewModel::setServerUrl)
         AuthState.Register -> RegisterTabScreen(viewModel::register, viewModel::showLogin, viewModel::showWelcome)
         AuthState.Login -> LoginTabScreen(viewModel::login, viewModel::showRegister, viewModel::showRecovery, viewModel::showWelcome)
         AuthState.Recovery -> RecoveryScreen(viewModel::recover, viewModel::showLogin)
@@ -113,7 +113,14 @@ private fun LoadingScreen() = Centered {
 }
 
 @Composable
-private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: () -> Unit, login: () -> Unit) = Centered {
+private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: () -> Unit, login: () -> Unit, setServerUrl: (String) -> String?) = Column(
+    Modifier.fillMaxSize().background(TelegramDarkBg).padding(horizontal = 24.dp, vertical = 18.dp).widthIn(max = 520.dp).verticalScroll(rememberScrollState()),
+    Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
+    Alignment.CenterHorizontally
+) {
+    var showManualInput by remember { mutableStateOf(false) }
+    var serverInput by remember { mutableStateOf("") }
+    var serverInputError by remember { mutableStateOf<String?>(null) }
     BrandMark(120)
     Spacer(Modifier.height(18.dp))
     Text("يونس", style = MaterialTheme.typography.headlineLarge, color = TextWhite, fontWeight = FontWeight.Black)
@@ -139,6 +146,35 @@ private fun WelcomeScreen(server: ServerState, discover: () -> Unit, register: (
             TextButton(discover, enabled = server !is ServerState.Discovering) {
                 Icon(Icons.Default.Wifi, null, tint = CleanAccentBlue, modifier = Modifier.size(18.dp))
                 Text(" إعادة اكتشاف الخادم الآمن", color = CleanAccentBlue, fontSize = 12.sp)
+            }
+
+            // ── إدخال عنوان الخادم يدويًا — يعالج حالات الخادم على شبكة أخرى أو عبر نفق ──
+            if (!showManualInput) {
+                TextButton({ showManualInput = true; serverInputError = null }) {
+                    Text("تحديد عنوان الخادم يدويًا", color = TextSilver, fontSize = 12.sp)
+                }
+            } else {
+                OutlinedTextField(
+                    value = serverInput,
+                    onValueChange = { serverInput = it; serverInputError = null },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("http://192.168.1.10:8088", color = TextMuted) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextWhite, unfocusedTextColor = TextWhite,
+                        focusedBorderColor = CleanAccentBlue, unfocusedBorderColor = TelegramBorder,
+                        cursorColor = CleanAccentBlue
+                    )
+                )
+                serverInputError?.let { Text(it, color = ErrorRed, fontSize = 11.sp, textAlign = TextAlign.Center) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton({
+                        val error = setServerUrl(serverInput)
+                        serverInputError = error
+                        if (error == null) showManualInput = false
+                    }) { Text("حفظ والاتصال", color = CleanAccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                    TextButton({ showManualInput = false; serverInputError = null }) { Text("إلغاء", color = TextSilver, fontSize = 12.sp) }
+                }
             }
         }
     }

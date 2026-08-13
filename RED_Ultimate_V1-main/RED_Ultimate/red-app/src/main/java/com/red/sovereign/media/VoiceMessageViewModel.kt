@@ -117,7 +117,9 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 start()
             }
         }.getOrElse {
-            file.delete(); pendingTarget = null; state = VoiceMessageState.Error(it.message ?: "VOICE_RECORDER_START_FAILED"); return
+            file.delete(); pendingTarget = null
+            state = VoiceMessageState.Error("VOICE_RECORDER_START_FAILED: ${it.message.orEmpty()}")
+            return
         }
         recordingFile = file
         recorder = instance

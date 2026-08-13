@@ -362,11 +362,34 @@ private fun ErrorPanel(message: String) {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = "تعذر التسجيل: $message",
+            text = localizeVoiceError(message),
             color = VoiceColors.CancelRed,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+/**
+ * تحويل رسائل خطأ التسجيل الصوتي إلى نص عربي واضح.
+ *
+ * كانت الواجهة تعرض رسائل خام بالإنجليزية (مثل MICROPHONE_PERMISSION_REQUIRED
+ * أو رسالة استثناء MediaRecorder) فتبدو «خطأ» بلا تفسير للمستخدم.
+ */
+private fun localizeVoiceError(message: String): String {
+    val m = message.uppercase()
+    return when {
+        m.contains("MICROPHONE_PERMISSION_REQUIRED") || m.contains("PERMISSION") ->
+            "تحتاج إلى منح إذن الميكروفون. فعّل إذن الميكروفون من إعدادات التطبيق ثم أعد المحاولة."
+        m.contains("VOICE_RECORDER_START_FAILED") || m.contains("prepare") || m.contains("start failed") || m.contains("MEDIARECORDER") ->
+            "تعذر بدء التسجيل — قد يكون الميكروفون قيد الاستخدام من تطبيق آخر. أغلق أي مكالمة/تسجيل آخر ثم أعد المحاولة."
+        m.contains("VOICE_TOO_SHORT") ->
+            "التسجيل قصير جدًا — اضغط مطوّلاً وسجّل ثانية واحدة على الأقل."
+        m.contains("VOICE_ENCRYPTION_FAILED") || m.contains("ENCRYPT") ->
+            "تعذر تشفير الرسالة الصوتية. أعد المحاولة."
+        m.contains("UPLOAD") || m.contains("NETWORK") ->
+            "تعذر رفع الرسالة الصوتية — تأكد من اتصالك بالخادم ثم أعد المحاولة."
+        else -> "تعذر التسجيل. تأكد من إذن الميكروفون ومن اتصالك بالخادم ثم أعد المحاولة."
     }
 }
 

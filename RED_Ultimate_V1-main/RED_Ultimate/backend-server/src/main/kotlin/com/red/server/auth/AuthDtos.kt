@@ -5,33 +5,61 @@ import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.DeviceStatus
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.model.UserDevice
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
 import java.time.Instant
 import java.util.UUID
 
 data class DeviceEnrollmentRequest(
+    @field:NotBlank(message = "deviceName must be 1-100 characters")
     val deviceName: String,
+
     val platform: String = "ANDROID",
+
     val registrationId: Int,
     val protocolDeviceId: Int,
     val signedPreKeyId: Int,
     val kyberPreKeyId: Int,
+
+    @field:NotBlank(message = "identityKey must be valid Base64")
     val identityKey: String,
+
+    @field:NotBlank(message = "signedPreKey must be valid Base64")
     val signedPreKey: String,
+
+    @field:NotBlank(message = "kyberPreKey must be valid Base64")
     val kyberPreKey: String,
+
+    @field:NotBlank(message = "signedPreKeySignature must be valid Base64")
     val signedPreKeySignature: String,
+
+    @field:NotBlank(message = "kyberPreKeySignature must be valid Base64")
     val kyberPreKeySignature: String
 )
 
 data class RegisterRequest(
+    @field:NotBlank(message = "Username must be 3-32 characters and contain only letters, numbers, dot or underscore")
     val username: String,
+
+    @field:NotBlank(message = "Password must contain 12-128 characters")
     val password: String,
+
+    @field:NotBlank(message = "Display name must be 2-100 visible characters")
     val displayName: String,
+
+    @field:NotNull(message = "Device enrollment is required")
+    @field:Valid
     val device: DeviceEnrollmentRequest
 )
 
 data class LoginRequest(
+    @field:NotBlank(message = "INVALID_CREDENTIALS")
     val username: String,
+
+    @field:NotBlank(message = "INVALID_CREDENTIALS")
     val password: String,
+
     val deviceId: UUID? = null
 )
 
