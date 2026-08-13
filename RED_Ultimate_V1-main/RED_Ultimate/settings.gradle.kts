@@ -78,7 +78,7 @@ dependencyResolutionManagement {
             url = uri("https://maven-central.storage-download.googleapis.com/maven2")
         }
         // ── Sovereign Signal Artifact: Legendary Resolution Chain ──
-        // libsignal-android 0.99.1 is Sovereign PQXDH-patched. Resolution order is critical:
+        // libsignal-android 0.86.5 is the latest published Central artifact. Resolution order:
         // 1) local-maven (if populated by CI via LFS or manual Sovereign build) — fastest, offline-capable
         // 2) Google Maven Central mirror (storage-download) — reliable DNS + SHA-256 pinned
         // 3) repo1.maven.org — fallback — strict SHA-256 still rejects tampered bytes

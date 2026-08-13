@@ -99,6 +99,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material.material)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.compose.animation)
     implementation(libs.androidx.compose.foundation)
