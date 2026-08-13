@@ -34,7 +34,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     var state: AuthState by mutableStateOf(AuthState.Loading)
         private set
-    private var pendingCredentials: Pair<String, String>? = null
 
     init {
         ServerEndpoint.initialize(application)
@@ -62,7 +61,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (val result = withServerDiscoveryRetry { api.register(RegisterRequest(username.trim(), password, displayName.trim(), enrollment)) }) {
             is ApiResult.Success -> {
                 result.value.deviceId?.let(tokens::rememberDevice)
-                pendingCredentials = username.trim() to password
+                tokens.rememberPendingLogin(username.trim(), password)
                 state = AuthState.Pending(result.value.user.redId, result.value.user.username, result.value.recoveryCodes.orEmpty())
             }
             is ApiResult.Error -> state = AuthState.Error(localize(result.message))
@@ -78,9 +77,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun checkApproval() {
-        val credentials = pendingCredentials
-        if (credentials == null) state = AuthState.Login
-        else login(credentials.first, credentials.second)
+        val username = tokens.pendingUsername()
+        val password = tokens.pendingPassword()
+        if (username.isNullOrBlank() || password.isNullOrBlank()) state = AuthState.Login
+        else login(username, password)
     }
 
     fun recover(redId: String, code: String, newPassword: String) = viewModelScope.launch {
@@ -119,7 +119,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val updated = state
                 if (updated is AuthState.Authenticated) {
                     state = updated.copy(username = trimmed)
-                    TokenStore(getApplication()).apply { if (get("username") != null) { /* تحديث اسم المستخدم المحفوظ */ } }
+                    tokens.saveUsername(trimmed)
                     done(true, "تم تحديث اسم المستخدم")
                 } else done(false, "لا يوجد حساب نشط")
             }
@@ -140,7 +140,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         tokens.clearSession()
-        pendingCredentials = null
         state = AuthState.Welcome
     }
 

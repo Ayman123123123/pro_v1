@@ -6,6 +6,7 @@ import com.red.server.admin.service.AdminService
 import com.red.server.auth.RedApprovalService
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
+import com.red.server.auth.repository.AdminUserSort
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.searchForAdmin
 import org.springframework.data.domain.PageRequest
@@ -38,34 +39,35 @@ class AdminV2Controller(
     // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
     @GetMapping("/dashboard/summary")
     fun getDashboardSummary(authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        return ResponseEntity.ok(runCatching {
-            val analytics = service.calculateCurrentAnalytics()
-            val pendingReports = service.countPendingReports()
-            val recentCritical = service.getRecentCritical()
-            val degradedHealth = service.getDegradedComponents()
-            val activeBackups = service.getRecentBackups().filter { it.status == "IN_PROGRESS" }.size
+        val analytics = runCatching { service.calculateCurrentAnalytics() }
+        val pendingReports = runCatching { service.countPendingReports() }
+        val recentCritical = runCatching { service.getRecentCritical() }
+        val degradedHealth = runCatching { service.getDegradedComponents() }
+        val activeBackups = runCatching { service.getRecentBackups().count { it.status == "IN_PROGRESS" } }
+        val failures = listOf(
+            "analytics" to analytics.exceptionOrNull(),
+            "pendingReports" to pendingReports.exceptionOrNull(),
+            "recentCritical" to recentCritical.exceptionOrNull(),
+            "health" to degradedHealth.exceptionOrNull(),
+            "backups" to activeBackups.exceptionOrNull(),
+        ).mapNotNull { (name, error) -> error?.let { name to (it.message ?: it.javaClass.simpleName) } }
+        return ResponseEntity.ok(
             mapOf(
-                "analytics" to analytics,
-                "pendingReports" to pendingReports,
-                "recentCriticalAlerts" to recentCritical.size,
-                "degradedComponents" to degradedHealth.size,
-                "activeBackups" to activeBackups,
-                "generatedAt" to Instant.now()
-            )
-        }.getOrElse {
-            mapOf(
-                "analytics" to mapOf(
-                    "totalUsers" to 0, "approvedUsers" to 0, "pendingUsers" to 0,
-                    "bannedUsers" to 0, "newUsers24h" to 0, "approvalRate" to 0.0
+                "analytics" to analytics.getOrDefault(
+                    mapOf(
+                        "totalUsers" to 0L, "approvedUsers" to 0L, "pendingUsers" to 0L,
+                        "bannedUsers" to 0L, "newUsers24h" to 0L, "approvalRate" to 0.0
+                    )
                 ),
-                "pendingReports" to 0,
-                "recentCriticalAlerts" to 0,
-                "degradedComponents" to 0,
-                "activeBackups" to 0,
+                "pendingReports" to pendingReports.getOrDefault(0L),
+                "recentCriticalAlerts" to (recentCritical.getOrNull()?.size ?: 0),
+                "degradedComponents" to (degradedHealth.getOrNull()?.size ?: 0),
+                "activeBackups" to activeBackups.getOrDefault(0),
                 "generatedAt" to Instant.now(),
-                "partial" to true
+                "partial" to failures.isNotEmpty(),
+                "errors" to failures.toMap()
             )
-        })
+        )
     }
 
     @GetMapping("/analytics")
@@ -118,9 +120,9 @@ class AdminV2Controller(
     ): ResponseEntity<Map<String, Any>> {
         require(page >= 0) { "PAGE_MUST_NOT_BE_NEGATIVE" }
         val safeSize = size.coerceIn(1, 100)
-        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status") } ?: "createdAt"
+        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status", "role") } ?: "createdAt"
         val direction = runCatching { Sort.Direction.fromString(sortDir ?: "desc") }.getOrDefault(Sort.Direction.DESC)
-        val pageable = PageRequest.of(page, safeSize, direction, safeSort)
+        val pageable = AdminUserSort.pageable(page, safeSize, safeSort, direction)
         val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.let {
             runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
         }
@@ -216,9 +218,23 @@ class AdminV2Controller(
 
     @PostMapping("/users/{userId}/unban")
     fun unbanUser(@PathVariable userId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        // الحظر يلغي شهادات الأجهزة عمداً؛ إعادة الفتح لا يجوز أن تعيد جهازاً
-        // مرفوضاً إلى الحياة. يلزم enrolment جديد ثم approval صريح.
-        throw IllegalStateException("UNBAN_REQUIRES_DEVICE_REENROLLMENT")
+        val adminId = UUID.fromString(authentication.name)
+        val targetId = UUID.fromString(userId)
+        require(targetId != adminId) { "SELF_ACCOUNT_ACTION_FORBIDDEN" }
+        val updated = approval.restoreBannedToPending(targetId, adminId)
+        service.recordAudit(
+            adminId, authentication.name, "ACCOUNT_UNBAN_TO_PENDING", "USER", "USER", userId,
+            "Ban lifted; account is PENDING until a new device is enrolled and approved",
+            severity = "WARNING"
+        )
+        return ResponseEntity.ok(
+            mapOf(
+                "success" to true,
+                "status" to updated.status.name,
+                "message" to "ACCOUNT_RESTORED_PENDING_REENROLL_REQUIRED",
+                "user" to mapOf("id" to updated.id, "status" to updated.status.name)
+            )
+        )
     }
 
     @PutMapping("/users/{userId}/role")
@@ -274,7 +290,7 @@ class AdminV2Controller(
         @RequestParam(required = false) category: String? = null,
         @RequestParam(required = false) severity: String? = null
     ): ResponseEntity<*> {
-        val pageable = PageRequest.of(page, size)
+        val pageable = PageRequest.of(page, size, org.springframework.data.jpa.domain.JpaSort.unsafe(Sort.Direction.DESC, "created_at"))
         val result = when {
             adminId != null -> service.getAuditByAdmin(UUID.fromString(adminId), pageable)
             action != null -> service.getAuditByAction(action, pageable)

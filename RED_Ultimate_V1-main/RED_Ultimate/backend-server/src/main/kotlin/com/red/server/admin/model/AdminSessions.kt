@@ -69,10 +69,10 @@ class FeatureFlag(
     @Column(name = "rollout_percentage", nullable = false)
     var rolloutPercentage: Int = 0,
 
-    @Column(name = "target_user_ids", columnDefinition = "UUID[]")
+    @Column(name = "target_user_ids", columnDefinition = "TEXT")
     var targetUserIds: String? = null,
 
-    @Column(name = "target_groups", columnDefinition = "TEXT[]")
+    @Column(name = "target_groups", columnDefinition = "TEXT")
     var targetGroups: String? = null,
 
     @Column(columnDefinition = "JSONB")
@@ -162,7 +162,7 @@ class SystemAnnouncement(
     @Column(name = "target_audience", nullable = false, length = 20)
     var targetAudience: String = "ALL",
 
-    @Column(name = "target_user_ids", columnDefinition = "UUID[]")
+    @Column(name = "target_user_ids", columnDefinition = "TEXT")
     var targetUserIds: String? = null,
 
     @Column(nullable = false)

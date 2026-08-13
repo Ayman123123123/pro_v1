@@ -81,16 +81,17 @@ class AdminServiceTest {
     @Test
     fun `calculateCurrentAnalytics returns correct counts`() {
         whenever(users.count()).thenReturn(100L)
-        whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.PENDING)).thenReturn(listOf(mock(), mock()))
-        whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.BANNED)).thenReturn(listOf(mock()))
-        whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.APPROVED)).thenReturn(List(95) { mock() })
-        whenever(users.findAll()).thenReturn(List(100) { createMockUser(it) })
+        whenever(users.countByStatus(AccountStatus.PENDING)).thenReturn(2L)
+        whenever(users.countByStatus(AccountStatus.BANNED)).thenReturn(1L)
+        whenever(users.countByStatus(AccountStatus.APPROVED)).thenReturn(95L)
+        whenever(users.countCreatedAfter(any())).thenReturn(7L)
 
         val result = service.calculateCurrentAnalytics()
         assertEquals(100L, result["totalUsers"])
         assertEquals(95L, result["approvedUsers"])
         assertEquals(2L, result["pendingUsers"])
         assertEquals(1L, result["bannedUsers"])
+        assertEquals(7L, result["newUsers24h"])
     }
 
     private fun createMockUser(idx: Int): UserAccount {

@@ -136,6 +136,18 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
 
 export function authErrorMessage(data: any, status: number): string {
   const code = String(data?.error || data?.message || '');
+  if (/createdAt|createdat|does not exist|DATABASE_COLUMN_CREATED_AT|DATABASE_ERROR/i.test(code)) {
+    return 'عطل في قاعدة البيانات. أعد تشغيل الخادم بعد سحب آخر تحديث (created_at).';
+  }
+  if (/ACCOUNT_RESTORED_PENDING|UNBAN_REQUIRES/i.test(code)) {
+    return 'رُفع الحظر. الحساب في الانتظار حتى يسجّل المستخدم جهازاً جديداً وتوافق عليه.';
+  }
+  if (/ADMIN_PROMOTION|SUPER_ADMIN|ADMIN_ROLE/i.test(code)) {
+    return 'تغيير دور المسؤول غير متاح من هذه الشاشة.';
+  }
+  if (/BACKUP_OPERATOR|RESTORE_OPERATOR/i.test(code)) {
+    return 'النسخ الاحتياطي يُنفَّذ من سكربت المضيف وليس من اللوحة.';
+  }
   if (status >= 500) {
     return code || `عطل مؤقت في الخادم (HTTP ${status})`;
   }
@@ -677,10 +689,8 @@ export async function updateFeatureFlag(name: string, data: {
 
 // ━━━━━━━━━━━━━━━━ 📡 Streaming (Server-Sent Events) ━━━━━━━━━━━━━━━━
 export function subscribeToEvents(onEvent: (event: any) => void): EventSource {
-  const access = authStore.access();
-  // EventSource doesn't support custom headers, use a query param workaround
-  const url = `/api/admin/events/stream${access ? `?access=${encodeURIComponent(access)}` : ''}`;
-  const es = new EventSource(url);
+  // Do not put the JWT in the query string (Nginx/proxy logs). Cookie session is enough.
+  const es = new EventSource('/api/admin/events/stream', { withCredentials: true } as EventSourceInit);
   es.onmessage = (e) => {
     try {
       onEvent(JSON.parse(e.data));

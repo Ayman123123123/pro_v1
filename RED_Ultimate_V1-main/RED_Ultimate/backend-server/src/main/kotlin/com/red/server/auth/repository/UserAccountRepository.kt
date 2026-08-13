@@ -7,6 +7,9 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import org.springframework.data.jpa.repository.Query
+import org.springframework.data.repository.query.Param
+import java.time.Instant
 import java.util.UUID
 
 interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecificationExecutor<UserAccount> {
@@ -14,7 +17,16 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
     fun findByRedId(redId: String): UserAccount?
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByRedId(redId: String): Boolean
-    fun findAllByStatusOrderByCreatedAtAsc(status: AccountStatus): List<UserAccount>
+    fun countByStatus(status: AccountStatus): Long
+
+    @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.createdAt > :since")
+    fun countCreatedAfter(@Param("since") since: Instant): Long
+
+    /** JPQL path `createdAt` maps to `created_at`; derived Sort.by(\"createdAt\") does not. */
+    @Query("SELECT u FROM UserAccount u WHERE u.status = :status ORDER BY u.createdAt ASC")
+    fun findAllByStatusOrderByCreatedAtAsc(@Param("status") status: AccountStatus): List<UserAccount>
+
+    @Query("SELECT u FROM UserAccount u ORDER BY u.createdAt DESC")
     fun findAllByOrderByCreatedAtDesc(): List<UserAccount>
 }
 
