@@ -134,7 +134,7 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   return response;
 }
 
-function authErrorMessage(data: any, status: number): string {
+export function authErrorMessage(data: any, status: number): string {
   const code = String(data?.error || data?.message || '');
   if (status === 401 || /AUTHENTICATION_REQUIRED|UNAUTHORIZED|UNAUTHENTICATED|JWT|TOKEN/i.test(code)) {
     return 'انتهت الجلسة — أعد تسجيل الدخول';
@@ -438,8 +438,7 @@ export async function deleteUser(userId: string, hard = false) {
 export async function getOperationsOverview() {
   const res = await apiFetch('/api/admin/operations/overview');
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) throw new Error('انتهت الجلسة — أعد تسجيل الدخول');
-  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
   if (!data || typeof data !== 'object' || !data.users) {
     throw new Error('رد الجرد غير مكتمل من الخادم');
   }
