@@ -38,21 +38,34 @@ class AdminV2Controller(
     // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
     @GetMapping("/dashboard/summary")
     fun getDashboardSummary(authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        val adminId = UUID.fromString(authentication.name)
-        val analytics = service.calculateCurrentAnalytics()
-        val pendingReports = service.countPendingReports()
-        val recentCritical = service.getRecentCritical()
-        val degradedHealth = service.getDegradedComponents()
-        val activeBackups = service.getRecentBackups().filter { it.status == "IN_PROGRESS" }.size
-
-        return ResponseEntity.ok(mapOf(
-            "analytics" to analytics,
-            "pendingReports" to pendingReports,
-            "recentCriticalAlerts" to recentCritical.size,
-            "degradedComponents" to degradedHealth.size,
-            "activeBackups" to activeBackups,
-            "generatedAt" to Instant.now()
-        ))
+        return ResponseEntity.ok(runCatching {
+            val analytics = service.calculateCurrentAnalytics()
+            val pendingReports = service.countPendingReports()
+            val recentCritical = service.getRecentCritical()
+            val degradedHealth = service.getDegradedComponents()
+            val activeBackups = service.getRecentBackups().filter { it.status == "IN_PROGRESS" }.size
+            mapOf(
+                "analytics" to analytics,
+                "pendingReports" to pendingReports,
+                "recentCriticalAlerts" to recentCritical.size,
+                "degradedComponents" to degradedHealth.size,
+                "activeBackups" to activeBackups,
+                "generatedAt" to Instant.now()
+            )
+        }.getOrElse {
+            mapOf(
+                "analytics" to mapOf(
+                    "totalUsers" to 0, "approvedUsers" to 0, "pendingUsers" to 0,
+                    "bannedUsers" to 0, "newUsers24h" to 0, "approvalRate" to 0.0
+                ),
+                "pendingReports" to 0,
+                "recentCriticalAlerts" to 0,
+                "degradedComponents" to 0,
+                "activeBackups" to 0,
+                "generatedAt" to Instant.now(),
+                "partial" to true
+            )
+        })
     }
 
     @GetMapping("/analytics")
@@ -60,24 +73,35 @@ class AdminV2Controller(
         @RequestParam start: String,
         @RequestParam end: String
     ): ResponseEntity<List<SystemAnalytics>> {
-        val startDate = java.time.LocalDate.parse(start)
-        val endDate = java.time.LocalDate.parse(end)
-        return ResponseEntity.ok(service.getAnalytics(startDate, endDate))
+        val startDate = runCatching { java.time.LocalDate.parse(start) }.getOrNull()
+            ?: return ResponseEntity.ok(emptyList())
+        val endDate = runCatching { java.time.LocalDate.parse(end) }.getOrNull()
+            ?: return ResponseEntity.ok(emptyList())
+        return ResponseEntity.ok(runCatching { service.getAnalytics(startDate, endDate) }.getOrDefault(emptyList()))
     }
 
     @GetMapping("/health")
     fun getHealth(): ResponseEntity<List<SystemHealth>> =
-        ResponseEntity.ok(service.getRecentHealth())
+        ResponseEntity.ok(runCatching { service.getRecentHealth() }.getOrDefault(emptyList()))
 
     @GetMapping("/metrics/realtime")
     fun getRealtimeMetrics(): ResponseEntity<Map<String, Any>> {
-        val analytics = service.calculateCurrentAnalytics()
-        val health = service.getRecentHealth()
-        return ResponseEntity.ok(mapOf(
-            "users" to analytics,
-            "health" to health.associateBy { it.component },
-            "timestamp" to Instant.now()
-        ))
+        return ResponseEntity.ok(runCatching {
+            val analytics = service.calculateCurrentAnalytics()
+            val health = service.getRecentHealth()
+            mapOf(
+                "users" to analytics,
+                "health" to health.associateBy { it.component },
+                "timestamp" to Instant.now()
+            )
+        }.getOrElse {
+            mapOf(
+                "users" to emptyMap<String, Any>(),
+                "health" to emptyMap<String, Any>(),
+                "timestamp" to Instant.now(),
+                "partial" to true
+            )
+        })
     }
 
     // ━━━━━━━━━━━━━━━━ 👥 Users Management ━━━━━━━━━━━━━━━━

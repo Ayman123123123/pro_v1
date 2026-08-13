@@ -163,7 +163,8 @@ export default function App() {
     if (!authenticated) return;
     let cancelled = false;
     void apiFetch('/api/admin/operations/overview').then((res) => {
-      if (!cancelled && !res.ok) authStore.clear();
+      // 500/503 تعني عطل خادم لا جلسة منتهية — لا تُخرج المسؤول.
+      if (!cancelled && res.status === 401) authStore.clear();
     });
     return () => { cancelled = true; };
   }, [authenticated]);
