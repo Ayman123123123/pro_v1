@@ -18,6 +18,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.media.ToneGenerator
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -64,6 +65,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var audioFocus: AudioFocusRequest? = null
     private var recordingManager: CallRecordingManager? = null
     private var recordingConsentShown: Boolean = false
+    private var ringTimeoutJob: kotlinx.coroutines.Job? = null
+    private var ringback: ToneGenerator? = null
+    private var ringStartedAt: Long = 0L
 
     override fun onCreate() {
         super.onCreate(); createChannel()
@@ -92,7 +96,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 // ضبط الحالة فوراً ليظهر الـ overlay والتبويب الصحيح بلا تأخير
                 CallRuntime.state = CallUiState.Connecting(callId, target, mode)
                 scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
-                promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); signaling.connect()
+                promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); startRingback(); armRingTimeout(outgoing = true); signaling.connect()
             }
             ACTION_ACCEPT -> acceptIncoming(
                 cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
@@ -175,6 +179,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 mode = newIncoming.mode
                 CallRuntime.state = newIncoming
                 startRingtone()
+                armRingTimeout(outgoing = false)
                 scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(incomingNotification(target, mode), media = false)
             }
@@ -188,6 +193,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             "CANCELLED" -> {
                 // Another device on this account answered — stop ringing, keep listening.
                 incomingOffer = null
+                clearRingTimeout()
                 stopRingtone()
                 if (CallRuntime.state is CallUiState.Incoming) {
                     CallRuntime.state = CallUiState.Idle
@@ -220,6 +226,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun acceptIncoming(cameraOn: Boolean = true, micOn: Boolean = true) {
+        clearRingTimeout()
         stopRingtone()
         val offer = incomingOffer ?: return
         promote(notification("جارٍ قبول المكالمة…", true), media = true)
@@ -235,6 +242,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun rejectIncoming() {
+        clearRingTimeout()
         stopRingtone()
         incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
         incomingOffer = null
@@ -243,7 +251,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private suspend fun createEngine(video: Boolean): ApiResult<Unit> {
         engine?.release(); engine = WebRtcEngine(this, this); CallRuntime.eglContext = engine?.eglContext
-        val result = engine!!.create(video)
+        val kind = if (video) CallMediaKind.VIDEO else CallMediaKind.VOICE
+        val result = engine!!.create(kind)
         if (result is ApiResult.Success) CallRuntime.localVideo = engine?.localMedia?.videoTrack
         return result
     }
@@ -267,6 +276,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         when (state) {
             PeerConnection.PeerConnectionState.CONNECTED -> {
+                clearRingTimeout()
+                stopRingback()
+                stopRingtone()
                 CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis())
                 updateNotification("مكالمة يونس نشطة")
                 startStatsPolling()
@@ -483,8 +495,45 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
+    private fun armRingTimeout(outgoing: Boolean) {
+        clearRingTimeout()
+        ringStartedAt = System.currentTimeMillis()
+        ringTimeoutJob = scope.launch {
+            kotlinx.coroutines.delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
+            if (!CallRingPolicy.isOneToOneRingState(CallRuntime.state)) return@launch
+            if (!CallRingPolicy.shouldExpireUnanswered(System.currentTimeMillis() - ringStartedAt, true)) return@launch
+            if (outgoing) {
+                if (target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
+                fail(CallRingPolicy.unansweredMessage(true))
+            } else {
+                rejectIncoming()
+            }
+        }
+    }
+
+    private fun clearRingTimeout() {
+        ringTimeoutJob?.cancel()
+        ringTimeoutJob = null
+    }
+
+    private fun startRingback() {
+        stopRingback()
+        runCatching {
+            ringback = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70).also {
+                it.startTone(ToneGenerator.TONE_SUP_RINGTONE, CallRingPolicy.UNANSWERED_TIMEOUT_MS.toInt())
+            }
+        }
+    }
+
+    private fun stopRingback() {
+        runCatching { ringback?.stopTone(); ringback?.release() }
+        ringback = null
+    }
+
     private fun endCall(sendSignal: Boolean) {
         statsJob?.cancel(); statsJob = null
+        clearRingTimeout()
+        stopRingback()
         val durationMs = CallRuntime.state.let { (it as? CallUiState.Active)?.let { active -> System.currentTimeMillis() - active.startedAt } ?: 0L }
         CallTelemetry.onCallEnded(callId.orEmpty(), mode, "RED", durationMs)
         CallTelemetry.flush(this)

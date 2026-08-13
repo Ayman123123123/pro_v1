@@ -58,4 +58,12 @@ class SdpMediaOptimizerTest {
         assertEquals(true, CallMediaKind.CONFERENCE.wantsSvc)
         assertEquals(true, CallMediaKind.LIVE.stereoAudio)
     }
+
+    @Test fun `video SDP advertises NACK PLI REMB and TWCC`() {
+        val sdp = SdpMediaOptimizer.optimize(sample, CallMediaKind.VIDEO)
+        assertTrue(sdp.contains("nack pli"))
+        assertTrue(sdp.contains("goog-remb"))
+        assertTrue(sdp.contains("transport-cc"))
+        assertTrue(sdp.contains("ccm fir"))
+    }
 }

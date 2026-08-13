@@ -142,6 +142,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private var textureHelper: SurfaceTextureHelper? = null
     private var videoSender: RtpSender? = null
     var localMedia: LocalMedia? = null; private set
+    var lastLocalSdp: String? = null; private set
 
     // الإعدادات الحالية
     private var currentBitrateProfile: NetworkStats.BitrateProfile = NetworkStats.BitrateProfile.STANDARD
@@ -155,7 +156,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
                 .setEnableInternalTracer(false)
-                .setFieldTrials("WebRTC-Audio-MinimizeResamplingOnMobile/Enabled/WebRTC-FlexFEC-03/Enabled/")
+                .setFieldTrials("WebRTC-Audio-MinimizeResamplingOnMobile/Enabled/WebRTC-FlexFEC-03/Enabled/WebRTC-Bwe-ProbingConfiguration/Enabled/WebRTC-Audio-NetEqAutoReset/Enabled/")
                 .createInitializationOptions()
         )
         // Encoder/decoder factories مع hardware acceleration حيث متاح
@@ -450,6 +451,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private fun sdpObserver(setLocal: Boolean = false, after: (() -> Unit)? = null): SdpObserver = object : SdpObserver {
         override fun onCreateSuccess(description: SessionDescription) {
             val optimized = SessionDescription(description.type, SdpMediaOptimizer.optimize(description.description, mediaKind))
+            lastLocalSdp = optimized.description
             if (setLocal) peer?.setLocalDescription(sdpObserver(after = { events.onLocalDescription(optimized); after?.invoke() }), optimized)
         }
         override fun onSetSuccess() { after?.invoke() }

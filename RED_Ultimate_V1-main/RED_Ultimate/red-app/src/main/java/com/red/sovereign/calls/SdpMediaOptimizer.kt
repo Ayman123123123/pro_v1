@@ -35,8 +35,28 @@ object SdpMediaOptimizer {
         out = applyOpusFmtp(out, kind.opusBitrateBps, kind.stereoAudio)
         if (kind.wantsVideo) {
             out = preferVideoCodec(out, kind.preferredVideoCodec)
+            out = applyVideoFeedback(out)
         }
         return out
+    }
+
+    /**
+     * RFC 4585 / 5104 / 8834: NACK+PLI recover lost video, FIR requests a keyframe,
+     * goog-remb and transport-cc drive congestion control (GCC / TWCC).
+     */
+    fun applyVideoFeedback(sdp: String): String {
+        if (sdp.contains("a=rtcp-fb:")) return sdp
+        val videoMap = Regex("a=rtpmap:(\\d+) (VP9|VP8|H264|AV1)/", RegexOption.IGNORE_CASE).find(sdp)
+            ?: return sdp
+        val pt = videoMap.groupValues[1]
+        val extras = listOf(
+            "a=rtcp-fb:$pt nack",
+            "a=rtcp-fb:$pt nack pli",
+            "a=rtcp-fb:$pt ccm fir",
+            "a=rtcp-fb:$pt goog-remb",
+            "a=rtcp-fb:$pt transport-cc"
+        ).joinToString("\r\n")
+        return sdp.replace(videoMap.value, videoMap.value + "\r\n" + extras)
     }
 
     fun preferAudioCodec(sdp: String, codec: String): String = preferCodecOnMedia(sdp, "audio", codec)

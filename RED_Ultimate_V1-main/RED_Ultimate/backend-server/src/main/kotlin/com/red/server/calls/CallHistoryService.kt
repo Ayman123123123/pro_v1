@@ -62,6 +62,19 @@ class CallHistoryService(
         publisher.callMissed(callId)
     }
 
+    /** WhatsApp/Telegram: unanswered RINGING older than 45s becomes MISSED. */
+    fun expireStaleRinging(olderThan: Duration = Duration.ofSeconds(45)): Int {
+        val cutoff = Instant.now().minus(olderThan)
+        val query = Query(
+            Criteria.where("status").`is`(CallStatus.RINGING).and("startedAt").lt(cutoff)
+        ).limit(200)
+        val stale = mongo.find(query, CallHistoryDocument::class.java)
+        stale.forEach { doc ->
+            runCatching { missed(doc.id) }
+        }
+        return stale.size
+    }
+
     fun history(redId: String, limit: Int): List<CallHistoryItem> {
         val query = Query(Criteria().orOperator(Criteria.where("initiatorId").`is`(redId), Criteria.where("targetId").`is`(redId)))
             .with(Sort.by(Sort.Direction.DESC, "startedAt")).limit(limit.coerceIn(1, 100))

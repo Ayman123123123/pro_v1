@@ -2,6 +2,8 @@ package com.red.server.services
 
 import com.red.server.auth.UserAccountResponse
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Service
 
 /**
@@ -13,7 +15,10 @@ import org.springframework.stereotype.Service
  */
 @Service
 class NotificationService(
-    private val emailProperties: EmailProperties
+    private val emailProperties: EmailProperties,
+    @Autowired(required = false)
+    @Qualifier("inAppNotificationService")
+    private val inApp: com.red.server.notification.NotificationService? = null
 ) {
     private val logger = LoggerFactory.getLogger(NotificationService::class.java)
 
@@ -55,6 +60,58 @@ class NotificationService(
      */
     fun sendVoipPushNotification(targetUserId: String, callerId: String, callId: String, mode: String) {
         logger.info("notification.voip_push targetUser={} caller={} callId={} mode={}", targetUserId, callerId, callId, mode)
+        val kind = mode.uppercase()
+        val title = when (kind) {
+            "VIDEO" -> "مكالمة فيديو واردة"
+            "SPACE" -> "مساحة صوتية"
+            "CONFERENCE", "GROUP" -> "دعوة مؤتمر"
+            "LIVE" -> "بدأ بث مباشر"
+            else -> "مكالمة صوتية واردة"
+        }
+        val body = when (kind) {
+            "SPACE", "CONFERENCE", "GROUP" -> "$callerId يدعوك للانضمام"
+            "LIVE" -> "$callerId بدأ بثاً مباشراً"
+            else -> "$callerId يتصل بك"
+        }
+        val type = when (kind) {
+            "LIVE" -> "LIVE"
+            "SPACE", "CONFERENCE", "GROUP" -> "GROUPS"
+            else -> "CALL"
+        }
+        runCatching {
+            inApp?.createNotification(
+                userId = targetUserId,
+                type = type,
+                title = title,
+                body = body,
+                senderId = callerId,
+                senderName = callerId,
+                threadId = callId
+            )
+        }
+        dispatchOptionalFcm(targetUserId, title, body, callId, kind)
+    }
+
+    /**
+     * Optional high-priority FCM data message when YOUNES_FCM_SERVER_KEY is configured.
+     * Local / sovereign deployments skip this and rely on /ws/calls + the 60s mailbox.
+     */
+    private fun dispatchOptionalFcm(targetUserId: String, title: String, body: String, callId: String, mode: String) {
+        val key = System.getenv("YOUNES_FCM_SERVER_KEY")?.takeIf { it.isNotBlank() } ?: return
+        val token = System.getenv("YOUNES_FCM_DEVICE_$targetUserId")?.takeIf { it.isNotBlank() } ?: return
+        runCatching {
+            val payload = """{"to":"$token","priority":"high","content_available":true,"data":{"type":"VOIP","callId":"$callId","mode":"$mode","title":"$title","body":"$body"}}"""
+            val conn = java.net.URI("https://fcm.googleapis.com/fcm/send").toURL().openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.setRequestProperty("Authorization", "key=$key")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 2500
+            conn.readTimeout = 2500
+            conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            logger.info("notification.voip_fcm target={} http={}", targetUserId, conn.responseCode)
+            conn.disconnect()
+        }.onFailure { logger.warn("notification.voip_fcm_failed target={} err={}", targetUserId, it.message) }
     }
 
     fun sendBulkEmail(recipients: List<String>, subject: String, body: String, isHtml: Boolean = false) {

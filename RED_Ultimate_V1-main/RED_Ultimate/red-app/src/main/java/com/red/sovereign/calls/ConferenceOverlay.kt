@@ -43,6 +43,10 @@ import org.webrtc.VideoTrack
 fun YounesConferenceOverlay() {
     val state = ConferenceRuntime.state
     if (state is ConferenceUiState.Idle) return
+    if (state is ConferenceUiState.Incoming) {
+        ConferenceInviteSheet(state)
+        return
+    }
 
     val context = LocalContext.current
     val participants = ConferenceRuntime.participants
@@ -336,13 +340,15 @@ fun YounesConferenceOverlay() {
                         }
                     }
 
-                    IconButton(
-                        onClick = { ConferenceService.action(context, ConferenceService.ACTION_TOGGLE_VIDEO) },
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(if (!ConferenceRuntime.isVideoEnabled) Color.White.copy(alpha = 0.2f) else Color(0xFF00C98C), CircleShape)
-                    ) {
-                        Icon(if (!ConferenceRuntime.isVideoEnabled) Icons.Default.VideocamOff else Icons.Default.Videocam, contentDescription = "الكاميرا", tint = Color.White)
+                    if (isVideoMode) {
+                        IconButton(
+                            onClick = { ConferenceService.action(context, ConferenceService.ACTION_TOGGLE_VIDEO) },
+                            modifier = Modifier
+                                .size(52.dp)
+                                .background(if (!ConferenceRuntime.isVideoEnabled) Color.White.copy(alpha = 0.2f) else Color(0xFF00C98C), CircleShape)
+                        ) {
+                            Icon(if (!ConferenceRuntime.isVideoEnabled) Icons.Default.VideocamOff else Icons.Default.Videocam, contentDescription = "الكاميرا", tint = Color.White)
+                        }
                     }
 
                     IconButton(
@@ -430,7 +436,7 @@ private fun ConferenceInviteSheet(state: ConferenceUiState.Incoming) {
                 Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
                     EndCallButton("لاحقاً") { ConferenceService.leave(context) }
                     AcceptCallButton("انضمام") {
-                        ConferenceService.join(context, state.roomId, state.userId, state.video)
+                        ConferenceService.join(context, state.roomId, state.userId, state.video, asHost = false)
                     }
                 }
             }

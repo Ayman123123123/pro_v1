@@ -57,7 +57,7 @@
 ## فجوات ما زالت قائمة (لم تُغلق بالكامل)
 
 ### إشعارات
-- `NotificationService.sendVoipPushNotification` **يسجّل فقط** ولا يرسل FCM/APNs حقيقياً.
+- `sendVoipPushNotification` يكتب إشعاراً داخل التطبيق، ويُرسل FCM فقط إذا ضُبط `YOUNES_FCM_SERVER_KEY`.
 - `SovereignNotificationRouter` ينشئ القنوات ولا يوجّه أحداث مكالمة.
 - بدون جلسة `/ws/calls` مفتوحة، الاعتماد على الصندوق المؤقت 60 ثانية + الـ push الوهمي.
 
@@ -71,8 +71,9 @@
 - لا يمر عبر `YounesCallService` WebRTC؛ شاشة DINSTAR كانت تضع الرقم في `EXTRA_TARGET` كأنه RED ID.
 
 ### SFU
-- السيرفر 199 سطراً ويعمل بعد تذكرة JWT.
-- تطبيق أندرويد للمؤتمرات الصغيرة ما زال mesh (كل جهاز يرسل للجميع). فوق 4 مشاركين يثقل الجهاز.
+- السيرفر يقبل join/createTransport/produce/consume و`pauseProducer` لكتم المذيع.
+- أندرويد يجرّب `SfuMediaClient` (تذكرة + `/sfu`) ثم يعود للـ mesh إن تعذّر SFU.
+- المساحة: المضيف متحدث، المدعو مستمع ويرفع يده. المؤتمر: الجميع مشاركون بلا رنة هاتف.
 
 ### واجهات
 - `CallsScreen.kt` هيكل فارغ؛ الشاشة الحية ما زالت داخل `RedDashboard.kt`.
