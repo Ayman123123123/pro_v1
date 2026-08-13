@@ -23,11 +23,11 @@ class AdminDataOverviewController(
     private val redis: StringRedisTemplate
 ) {
     @GetMapping("/overview")
-    fun overview(): Map<String, Any> {
+    fun overview(): Map<String, Any> = runCatching {
         val cutoff = System.currentTimeMillis() - PRESENCE_WINDOW_MS
-        redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble())
+        runCatching { redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble()) }
 
-        return mapOf(
+        mapOf(
             "generatedAt" to Instant.now().toString(),
             "users" to mapOf(
                 "total" to sqlCount("users"),
@@ -71,6 +71,17 @@ class AdminDataOverviewController(
                 "backups" to sqlCount("backup_history"),
                 "notifications" to sqlCount("user_notifications")
             )
+        )
+    }.getOrElse {
+        mapOf(
+            "generatedAt" to Instant.now().toString(),
+            "users" to emptyMap<String, Any>(),
+            "devices" to emptyMap<String, Any>(),
+            "moderation" to emptyMap<String, Any>(),
+            "content" to emptyMap<String, Any>(),
+            "communications" to emptyMap<String, Any>(),
+            "storage" to emptyMap<String, Any>(),
+            "partial" to true
         )
     }
 
