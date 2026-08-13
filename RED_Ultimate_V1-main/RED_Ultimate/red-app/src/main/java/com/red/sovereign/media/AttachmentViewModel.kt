@@ -49,7 +49,13 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
             is ApiResult.Error -> state = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
                 val manifestJson = result.value.manifestJson
-                RedConnectionService.sendGroupText(getApplication(), group, manifestJson)
+                val type = when {
+                    result.value.mimeType.startsWith("image/") -> "IMAGE"
+                    result.value.mimeType.startsWith("video/") -> "VIDEO"
+                    result.value.mimeType.startsWith("audio/") -> "AUDIO"
+                    else -> "FILE"
+                }
+                RedConnectionService.sendGroupPayload(getApplication(), group, type, manifestJson)
                 state = AttachmentState.Sent(result.value.name)
             }
         }

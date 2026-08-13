@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
+import androidx.compose.runtime.remember
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,12 +54,37 @@ fun PrivacySettingsScreen(
     onSettingChange: (String, PrivacyLevel) -> Unit = { _, _ -> },
     onBack: () -> Unit = {}
 ) {
+    val settingsVm: com.red.sovereign.settings.SettingsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val liveSettings = remember(settingsVm.state, settings) {
+        settings.copy(
+            lastSeen = visibilityOf(settingsVm.state.lastSeenVisibility, settings.lastSeen),
+            profilePhoto = visibilityOf(settingsVm.state.profilePhotoVisibility, settings.profilePhoto),
+            about = visibilityOf(settingsVm.state.aboutVisibility, settings.about),
+            readReceipts = if (settingsVm.state.readReceipts) PrivacyLevel.EVERYONE else PrivacyLevel.NOBODY,
+            calls = visibilityOf(settingsVm.state.whoCanCall, settings.calls),
+            groups = visibilityOf(settingsVm.state.whoCanAddToGroups, settings.groups),
+            onlineStatus = if (settingsVm.state.hideLastSeen) PrivacyLevel.NOBODY else PrivacyLevel.EVERYONE
+        )
+    }
+    val persist: (String, PrivacyLevel) -> Unit = { key, level ->
+        when (key) {
+            "lastSeen" -> settingsVm.setLastSeenVisibility(level.name)
+            "onlineStatus" -> settingsVm.setHideLastSeen(level == PrivacyLevel.NOBODY)
+            "profilePhoto" -> settingsVm.setProfilePhotoVisibility(level.name)
+            "readReceipts" -> settingsVm.setReadReceipts(level != PrivacyLevel.NOBODY)
+            "calls" -> settingsVm.setWhoCanCall(level.name)
+            "groups" -> settingsVm.setWhoCanAddToGroups(level.name)
+            "about" -> settingsVm.setAboutVisibility(level.name)
+        }
+        onSettingChange(key, level)
+    }
     val privacyItems = listOf(
-        StatusPrivacyItem("lastSeen", settings.lastSeen, Icons.Rounded.Schedule, "آخر ظهور"),
-        StatusPrivacyItem("onlineStatus", settings.onlineStatus, Icons.Rounded.Circle, "الحالة المتصلة"),
-        StatusPrivacyItem("profilePhoto", settings.profilePhoto, Icons.Rounded.Face, "صورة الملف الشخصي"),
-        StatusPrivacyItem("readReceipts", settings.readReceipts, Icons.Rounded.DoneAll, "إيصالات القراءة"),
-        StatusPrivacyItem("calls", settings.calls, Icons.Rounded.Call, "المكالمات الواردة")
+        StatusPrivacyItem("lastSeen", liveSettings.lastSeen, Icons.Rounded.Schedule, "آخر ظهور"),
+        StatusPrivacyItem("onlineStatus", liveSettings.onlineStatus, Icons.Rounded.Circle, "الحالة المتصلة"),
+        StatusPrivacyItem("profilePhoto", liveSettings.profilePhoto, Icons.Rounded.Face, "صورة الملف الشخصي"),
+        StatusPrivacyItem("readReceipts", liveSettings.readReceipts, Icons.Rounded.DoneAll, "إيصالات القراءة"),
+        StatusPrivacyItem("calls", liveSettings.calls, Icons.Rounded.Call, "المكالمات الواردة"),
+        StatusPrivacyItem("groups", liveSettings.groups, Icons.Rounded.Groups, "من يضيفني للمجموعات")
     )
 
     var expandedItem by remember { mutableStateOf<String?>(null) }
@@ -79,11 +105,14 @@ fun PrivacySettingsScreen(
         Spacer(Modifier.height(16.dp))
         LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(privacyItems) { item ->
-                PrivacySettingCard(item, isExpanded = expandedItem == item.setting, onExpand = { expandedItem = if (expandedItem == item.setting) null else item.setting }, onSelect = { onSettingChange(item.setting, it) })
+                PrivacySettingCard(item, isExpanded = expandedItem == item.setting, onExpand = { expandedItem = if (expandedItem == item.setting) null else item.setting }, onSelect = { persist(item.setting, it) })
             }
         }
     }
 }
+
+private fun visibilityOf(stored: String, fallback: PrivacyLevel): PrivacyLevel =
+    PrivacyLevel.entries.firstOrNull { it.name == stored } ?: fallback
 
 @Composable
 private fun PrivacySettingCard(item: StatusPrivacyItem, isExpanded: Boolean, onExpand: () -> Unit, onSelect: (PrivacyLevel) -> Unit) {

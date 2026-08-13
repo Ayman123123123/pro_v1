@@ -179,6 +179,9 @@ import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
+import com.red.sovereign.core.ConversationActions
+import com.red.sovereign.core.InboxFilter
+import com.red.sovereign.core.InboxQuery
 import com.red.sovereign.core.MessageStore
 import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.core.RedQualityManager
@@ -411,7 +414,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation)
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
+                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
                 }, onPstn = { showDinstar = true })
@@ -786,6 +789,7 @@ private fun PostCard(
     else Avatar(group.name.take(1))
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ChatHubScreen(
     account: AuthState.Authenticated,
@@ -797,7 +801,8 @@ private fun ChatHubScreen(
     showGroups: Boolean,
     deepLinkSender: String? = null,
     deepLinkConversation: String? = null,
-    onManageGroup: (String) -> Unit = {}
+    onManageGroup: (String) -> Unit = {},
+    onCreateGroup: () -> Unit = {}
 ) {
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
@@ -828,7 +833,7 @@ private fun ChatHubScreen(
     var joinToken by remember { mutableStateOf("") }
     var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
-    var showGroupEmoji by remember { mutableStateOf(false) }
+    var showGro(false) }
     var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var showGroupAttachmentSheet by remember { mutableStateOf(false) }
     var showGroupVoicePanel by remember { mutableStateOf(false) }
@@ -854,7 +859,15 @@ private fun ChatHubScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
     val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
-    val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
+    val conversations by repository.getAllConversations().collectAsState(initial = emptyList())
+    val conversationActions = remember { ConversationActions(context) }
+    val organization = conversationActions.organization
+    val orgRevision = organization.revision
+    var inboxFilter by remember { mutableStateOf(InboxFilter.ALL) }
+    var inboxFolderId by remember { mutableStateOf<String?>(null) }
+    var inboxSearch by remember { mutableStateOf("") }
+    var actionConversation by remember { mutableStateOf<ConversationActionState?>(null) }
+    var chatUnlocked by remember { mutableStateOf(false) }
     // تفاعلات الإيموجي: messageId -> قائمة التفاعلات (للعرض السريع تحت كل رسالة)
     val reactionsByMessage = remember { androidx.compose.runtime.mutableStateMapOf<String, List<MessageReactionEntity>>() }
     
@@ -971,8 +984,12 @@ private fun ChatHubScreen(
         if (!granted) safety.cameraPermissionDenied()
     }
     val microphonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && target.matches(RED_ID_PATTERN)) voiceMessages.start(target, conversationId(account.redId, target))
-        else if (!granted) voiceMessages.permissionDenied()
+        val open = groups.groups.firstOrNull { it.id == groupConversationId }
+        when {
+            !granted -> voiceMessages.permissionDenied()
+            open != null -> voiceMessages.startForGroup(open)
+            target.matches(RED_ID_PATTERN) -> voiceMessages.start(target, conversationId(account.redId, target))
+        }
     }
     val callPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -1021,6 +1038,14 @@ private fun ChatHubScreen(
                 all.groupBy { it.messageId }.forEach { (msgId, list) -> reactionsByMessage[msgId] = list.sortedBy { it.timestamp } }
             }
         }
+    }
+    androidx.compose.runtime.LaunchedEffect(target, groupConversationId, orgRevision, decrypted.size) {
+        val convId = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) } ?: return@LaunchedEffect
+        val ms = organization.disappearingMs(convId)
+        if (ms > 0) disappearingDurationMs = ms
+        val pinnedIds = organization.pinnedMessageIds(convId)
+        groupPinnedMessages.keys.filter { it !in pinnedIds }.forEach(groupPinnedMessages::remove)
+        decrypted.filter { it.id in pinnedIds }.forEach { groupPinnedMessages[it.id] = it }
     }
     Column(Modifier.fillMaxSize()) {
         if (tab == 0) Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1137,12 +1162,70 @@ private fun ChatHubScreen(
             ) {
                 if (target.isBlank()) {
                     val groupIds = groups.groups.map(Group::id).toSet()
-                    items(conversations.filter { it.id !in groupIds }, key = { it.id }) { conv ->
-                        val unread = chatUnread[conv.id] ?: 0
-                        Card(Modifier.fillMaxWidth().clickable { chatUnread.remove(conv.id); target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                            val contact = directory.contacts.firstOrNull { it.redId == conv.peerId }
-                            val displayName = contact?.displayName ?: conv.peerId
-                            val isOnline = directory.isOnline(conv.peerId)
+                    val privateChats = conversations.filter { it.id !in groupIds }
+                    val folderIds = inboxFolderId?.let { id -> organization.folders().firstOrNull { it.id == id }?.chatIds?.toSet() }
+                    val visible = InboxQuery.filter(
+                        items = privateChats,
+                        filter = inboxFilter,
+                        folderChatIds = folderIds,
+                        archived = { it.archived },
+                        pinned = { it.pinned },
+                        favorite = { organization.isFavorite(it.id) },
+                        unread = { (chatUnread[it.id] ?: it.unreadCount) > 0 || organization.isMarkedUnread(it.id) },
+                        idOf = { it.id }
+                    ).filter { conv ->
+                        inboxSearch.isBlank() || run {
+                            val name = directory.contacts.firstOrNull { it.redId == conv.peerId }?.displayName.orEmpty()
+                            name.contains(inboxSearch, true) || conv.peerId.contains(inboxSearch, true) || conv.lastMessageText.orEmpty().contains(inboxSearch, true)
+                        }
+                    }
+                    item {
+                        InboxSearchField(inboxSearch) { inboxSearch = it }
+                    }
+                    item {
+                        InboxFilterBar(
+                            selected = inboxFilter,
+                            customFolders = organization.folders(),
+                            selectedFolderId = inboxFolderId,
+                            unreadCount = privateChats.count { !it.archived && ((chatUnread[it.id] ?: it.unreadCount) > 0 || organization.isMarkedUnread(it.id)) },
+                            archivedCount = privateChats.count { it.archived },
+                            onFilter = { inboxFilter = it },
+                            onFolder = { inboxFolderId = it }
+                        )
+                    }
+                    if (inboxFilter == InboxFilter.ALL && inboxSearch.isBlank()) {
+                        item { SavedMessagesRow { target = account.redId; chatUnlocked = true } }
+                        item { ArchiveEntryRow(privateChats.count { it.archived }) { inboxFilter = InboxFilter.ARCHIVED } }
+                    }
+                    items(visible, key = { it.id }) { conv ->
+                        val unread = chatUnread[conv.id] ?: conv.unreadCount
+                        val contact = directory.contacts.firstOrNull { it.redId == conv.peerId }
+                        val displayName = if (conv.peerId == account.redId) "رسائلي" else (localMessages.conversationCustomName(conv.id) ?: contact?.displayName ?: conv.peerId)
+                        val isOnline = directory.isOnline(conv.peerId)
+                        val typing = typingUsers.containsKey(conv.peerId)
+                        Card(
+                            Modifier.fillMaxWidth().combinedClickable(
+                                onClick = {
+                                    chatUnread.remove(conv.id)
+                                    scope.launch { conversationActions.markRead(conv.id) }
+                                    chatUnlocked = !organization.isLocked(conv.id)
+                                    target = conv.peerId
+                                },
+                                onLongClick = {
+                                    actionConversation = ConversationActionState(
+                                        id = conv.id,
+                                        title = displayName,
+                                        pinned = conv.pinned,
+                                        archived = conv.archived,
+                                        muted = conv.mutedUntil > System.currentTimeMillis(),
+                                        favorite = organization.isFavorite(conv.id),
+                                        locked = organization.isLocked(conv.id),
+                                        unread = unread > 0 || organization.isMarkedUnread(conv.id)
+                                    )
+                                }
+                            ),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(contentAlignment = Alignment.BottomEnd) {
                                     Avatar(displayName.take(1))
@@ -1151,18 +1234,28 @@ private fun ChatHubScreen(
                                     }
                                 }
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                    Text(displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(conv.lastMessageText ?: "لا توجد رسائل", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                        if (organization.isLocked(conv.id)) Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp).padding(start = 4.dp))
+                                    }
+                                    Text(
+                                        if (typing) "يكتب…" else (conv.lastMessageText ?: "لا توجد رسائل"),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (typing) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     if (conv.lastMessageTimestamp > 0) Text(relativeTime(conv.lastMessageTimestamp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (unread > 0) {
+                                    if (unread > 0 || organization.isMarkedUnread(conv.id)) {
                                         Spacer(Modifier.height(4.dp))
-                                        Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" $unread ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
+                                        Surface(shape = RoundedCornerShape(10.dp), color = YounesEmerald) { Text(" ${if (unread > 0) unread else 1} ", fontSize = 11.sp, color = Color(0xFF002118), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) }
                                     } else {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (conv.pinned) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(16.dp)) }
-                                            if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(2.dp)); Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp)) }
+                                            if (conv.pinned) { Spacer(Modifier.width(2.dp)); Icon(Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(16.dp)) }
+                                            if (organization.isFavorite(conv.id)) { Spacer(Modifier.width(2.dp)); Icon(Icons.Default.FavoriteBorder, "مفضلة", tint = YounesEmerald, modifier = Modifier.size(16.dp)) }
+                                            if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(2.dp)); Icon(Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp)) }
                                         }
                                     }
                                 }
@@ -1170,7 +1263,9 @@ private fun ChatHubScreen(
                         }
                     }
                 }
-                if (target.isNotBlank() && conversationMessages.isEmpty()) item {
+                if (target.isNotBlank() && organization.isLocked(conversation) && !chatUnlocked) {
+                    item { LockedChatGate(activePerson?.displayName ?: target) { chatUnlocked = true } }
+                } else if (target.isNotBlank() && conversationMessages.isEmpty()) item {
                     Text("ابدأ المحادثة برسالة. التشفير يُنشأ على الجهاز ولا يرى الخادم النص.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
                 }
                 itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
@@ -1389,7 +1484,28 @@ private fun ChatHubScreen(
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(messageText, { messageText = it }, Modifier.weight(1f), placeholder = { Text("رسالة مشفرة… @ # ⏳") }, maxLines = 4)
+                        OutlinedTextField(
+                            messageText,
+                            { messageText = it },
+                            Modifier.weight(1f),
+                            placeholder = { Text("رسالة مشفرة… @ # ⏳") },
+                            maxLines = if (SettingsRuntime.current.enterToSend) 1 else 4,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = if (SettingsRuntime.current.enterToSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = {
+                                if (SettingsRuntime.current.enterToSend && messageText.isNotBlank() && target.matches(RED_ID_PATTERN)) {
+                                    val rich = RichMessage(
+                                        action = if (editingMessageId != null) "EDIT" else "MESSAGE",
+                                        text = messageText.trim(), replyTo = replyToMessage?.id, editOf = editingMessageId,
+                                        expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it },
+                                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                                        hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                                        disappearingMs = disappearingDurationMs
+                                    )
+                                    RedConnectionService.sendRichText(context, target, conversation, rich)
+                                    messageText = ""; showEmoji = false; replyToMessage = null; editingMessageId = null
+                                }
+                            })
+                        )
                         if (disappearingDurationMs != null) {
                             val label = when (disappearingDurationMs) {
                                 3600000L -> "1س"
@@ -1421,7 +1537,7 @@ private fun ChatHubScreen(
             val openGroup = groups.groups.firstOrNull { it.id == groupConversationId }
             if (openGroup == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button({ currentScreen = SovereignScreen.CREATE_GROUP }, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Text(" إنشاء") }
+                    Button(onCreateGroup, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Text(" إنشاء") }
                     OutlinedButton({ showJoinGroup = true }, Modifier.weight(1f)) { Text("انضمام بدعوة") }
                 }
                 when {
@@ -1432,7 +1548,21 @@ private fun ChatHubScreen(
                         items(groups.groups, key = { it.id }) { group ->
                             val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
                             val unread = groupUnread[group.id] ?: 0
-                            Card(Modifier.fillMaxWidth().clickable { groupUnread.remove(group.id); groupConversationId = group.id }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                            Card(Modifier.fillMaxWidth().combinedClickable(
+                                onClick = { groupUnread.remove(group.id); groupConversationId = group.id },
+                                onLongClick = {
+                                    actionConversation = ConversationActionState(
+                                        id = group.id,
+                                        title = group.name,
+                                        pinned = false,
+                                        archived = false,
+                                        muted = MessageStore(context).conversationPreference(group.id).third > System.currentTimeMillis(),
+                                        favorite = organization.isFavorite(group.id),
+                                        locked = organization.isLocked(group.id),
+                                        unread = (groupUnread[group.id] ?: 0) > 0
+                                    )
+                                }
+                            ), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     GroupAvatar(group, groups)
                                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -1610,17 +1740,43 @@ private fun ChatHubScreen(
                 }
                 Row(verticalAlignment = Alignment.Bottom) {
                     IconButton({ showGroupAttachmentSheet = true }) { Icon(Icons.Default.AttachFile, "إرفاق بالمجموعة") }
+                    IconButton({ showStickers = !showStickers; showGroupEmoji = false }) { Icon(Icons.Default.Add, "ملصقات المجموعة") }
+                    IconButton({
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            voiceMessages.startForGroup(openGroup)
+                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }) { Icon(Icons.Default.Mic, "صوت للمجموعة") }
                     OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") }, maxLines = 4)
                     IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
                     FilledIconButton({
-                        if (groupReplyToMessage != null) {
-                            val rich = RichMessage(text = groupMessageText.trim(), replyTo = groupReplyToMessage?.id)
-                            RedConnectionService.sendGroupRichText(context, openGroup, rich)
-                        } else {
-                            RedConnectionService.sendGroupText(context, openGroup, groupMessageText.trim())
-                        }
+                        val expire = (disappearingDurationMs ?: organization.disappearingMs(openGroup.id)).takeIf { it > 0 }
+                        val rich = RichMessage(
+                            text = groupMessageText.trim(),
+                            replyTo = groupReplyToMessage?.id,
+                            expiresAt = expire?.let { System.currentTimeMillis() + it },
+                            disappearingMs = expire
+                        )
+                        RedConnectionService.sendGroupRichText(context, openGroup, rich)
                         groupMessageText = ""; groupReplyToMessage = null; showGroupEmoji = false
                     }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                }
+                if (showStickers && groupConversationId != null) {
+                    val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
+                    com.red.sovereign.media.StickerPicker(
+                        tokens = stickerTokens,
+                        onPickSticker = { sticker ->
+                            scope.launch {
+                                val mediaApi = com.red.sovereign.media.MediaApi(context, com.red.sovereign.auth.AuthorizedApiClient(stickerTokens))
+                                openGroup.members.forEach { member -> mediaApi.grant(sticker.mediaKey, member.redId) }
+                                val payload = kotlinx.serialization.json.Json.encodeToString(
+                                    com.red.sovereign.media.StickerMessagePayload.serializer(),
+                                    com.red.sovereign.media.StickerMessagePayload(sticker.mediaKey, sticker.emojiTags.firstOrNull() ?: "🎨", sticker.name)
+                                )
+                                RedConnectionService.sendGroupPayload(context, openGroup, "STICKER", payload)
+                                showStickers = false
+                            }
+                        }
+                    )
                 }
                 if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
                 if (showGroupAttachmentSheet) AttachmentSheet(
@@ -1740,9 +1896,16 @@ private fun ChatHubScreen(
                 MessageActionRow(if (groupPinnedMessages.containsKey(message.id)) Icons.Default.Star else Icons.Default.StarBorder, if (groupPinnedMessages.containsKey(message.id)) "إلغاء التثبيت" else "تثبيت", "تثبيت هذه الرسالة أعلى المحادثة") {
                     if (groupPinnedMessages.containsKey(message.id)) groupPinnedMessages.remove(message.id)
                     else groupPinnedMessages[message.id] = message
+                    organization.setPinnedMessages(message.conversationId, groupPinnedMessages.keys.toList())
                     selectedChatMessage = null
                 }
-                MessageActionRow(Icons.Default.NotificationsOff, "كتم", "أوقف الإشعارات مؤقتاً") { selectedChatMessage = null }
+                MessageActionRow(if (organization.isStarred(message.id)) Icons.Default.Star else Icons.Default.StarBorder, if (organization.isStarred(message.id)) "إزالة التمييز" else "تمييز بنجمة", "احفظ الرسالة في قائمة المميّزة") {
+                    organization.toggleStarred(message.id); selectedChatMessage = null
+                }
+                MessageActionRow(Icons.Default.NotificationsOff, "كتم المحادثة", "أوقف إشعارات هذه المحادثة 8 ساعات") {
+                    scope.launch { conversationActions.mute(message.conversationId, ConversationActions.MUTE_8H) }
+                    selectedChatMessage = null
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { (label, ms) ->
                         OutlinedButton({ disappearingDurationMs = ms; selectedChatMessage = null }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
@@ -2008,6 +2171,37 @@ private fun ChatHubScreen(
         } },
         confirmButton = { Button({ groups.create(name, groupDescription.trim().takeIf(String::isNotEmpty)) { create = false; name = ""; groupDescription = "" } }, enabled = name.trim().length in 2..100 && groups.state != GroupState.Saving) { Text("إنشاء المجموعة") } },
         dismissButton = { OutlinedButton({ create = false; name = ""; groupDescription = "" }) { Text("إلغاء") } })
+    actionConversation?.let { action ->
+        ConversationActionSheet(
+            state = action,
+            onDismiss = { actionConversation = null },
+            onPin = { scope.launch { conversationActions.pin(action.id, !action.pinned) }; actionConversation = null },
+            onArchive = {
+                scope.launch { conversationActions.archive(action.id, !action.archived) }
+                if (!action.archived && target.isNotBlank() && conversationId(account.redId, target) == action.id) target = ""
+                actionConversation = null
+            },
+            onMute = { until ->
+                scope.launch {
+                    conversationActions.mute(action.id, System.currentTimeMillis() + until)
+                    if (SettingsRuntime.current.autoArchiveMuted && until >= ConversationActions.MUTE_FOREVER / 2) conversationActions.archive(action.id, true)
+                }
+                actionConversation = null
+            },
+            onUnmute = { scope.launch { conversationActions.unmute(action.id) }; actionConversation = null },
+            onFavorite = { conversationActions.toggleFavorite(action.id); actionConversation = null },
+            onLock = { conversationActions.setLocked(action.id, !action.locked); actionConversation = null },
+            onUnread = {
+                scope.launch { if (action.unread) conversationActions.markRead(action.id) else conversationActions.markUnread(action.id) }
+                actionConversation = null
+            },
+            onDelete = {
+                scope.launch { conversationActions.delete(action.id) }
+                if (target.isNotBlank() && conversationId(account.redId, target) == action.id) target = ""
+                actionConversation = null
+            }
+        )
+    }
     if (showJoinGroup) AlertDialog(
         onDismissRequest = { showJoinGroup = false; joinToken = "" },
         title = { Text("الانضمام إلى مجموعة") },
@@ -3293,5 +3487,8 @@ private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
 private fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
     val canonical = listOf(first, second).sorted().joinToString("|")
+    return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+}
+tring("|")
     return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 }

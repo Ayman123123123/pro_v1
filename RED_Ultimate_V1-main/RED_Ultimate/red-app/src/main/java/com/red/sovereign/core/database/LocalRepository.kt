@@ -55,10 +55,14 @@ class LocalRepository(context: Context) {
         }
     }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
+    fun getArchivedConversations(): Flow<List<ConversationEntity>> = dao.getArchivedConversations()
+    fun getAllConversations(): Flow<List<ConversationEntity>> = dao.getAllConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
     suspend fun setMutedUntil(id: String, until: Long) = dao.setMutedUntil(id, until)
+    suspend fun clearUnread(id: String) = dao.clearUnread(id)
+    suspend fun setUnreadCount(id: String, count: Int) = dao.setUnreadCount(id, count.coerceAtLeast(0))
 
     // --- Contacts ---
     suspend fun saveContacts(contacts: List<ContactEntity>) = dao.insertContacts(contacts)

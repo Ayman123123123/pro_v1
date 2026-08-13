@@ -105,7 +105,8 @@ class RedConnectionService : Service() {
             val encodedGroup = intent.getStringExtra(EXTRA_GROUP) ?: return START_STICKY
             val text = intent.getStringExtra(EXTRA_TEXT)?.takeIf(String::isNotBlank) ?: return START_STICKY
             val isRich = intent.getBooleanExtra(EXTRA_GROUP_RICH, false)
-            pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich))
+            val groupType = intent.getStringExtra(EXTRA_GROUP_TYPE)
+            pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich, groupType))
             if (connected) drainGroupSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_TYPING) {
             val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
@@ -134,7 +135,7 @@ class RedConnectionService : Service() {
                         prepared.value.distributions.forEach { distribution ->
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
                         }
-                        val sendType = if (pending.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
+                        val sendType = pending.type?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: if (pending.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
                         // تفاعل الإيموجي الجماعي: يُطبّق محلياً ولا يُحفظ كرسالة
                         val outgoingRich = if (pending.isRich) com.red.sovereign.core.RichMessage.decode(pending.text.toByteArray(Charsets.UTF_8)) else null
                         if (outgoingRich?.action == "REACTION" || outgoingRich?.action == "REACTION_REMOVE") {
@@ -299,9 +300,9 @@ class RedConnectionService : Service() {
                             if (message.type != "GROUP_MESSAGE") {
                                 runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
                             }
-                            if (SettingsRuntime.current.notificationEnabled) {
+                            if (shouldNotify(message.conversationId, message.type)) {
                                 currentConversationId = message.conversationId
-                                notifyEncryptedMessage(message.senderId, preview, message.type)
+                                notifyEncryptedMessage(message.senderId, preview, message.type, message.conversationId)
                             }
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }
@@ -350,8 +351,8 @@ class RedConnectionService : Service() {
         if (message.conversationId.length <= 32) {
             runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
         }
-        if (SettingsRuntime.current.notificationEnabled) {
-            notifyEncryptedMessage(message.senderId, preview, message.type)
+        if (shouldNotify(message.conversationId, message.type)) {
+            notifyEncryptedMessage(message.senderId, preview, message.type, message.conversationId)
         }
     }
 
@@ -366,10 +367,18 @@ class RedConnectionService : Service() {
         }.getOrNull()
     }
 
+    private fun shouldNotify(conversationId: String, messageType: String): Boolean {
+        if (!SettingsRuntime.current.messageNotifications) return false
+        val isGroup = conversationId.length > 32 || messageType == "GROUP_MESSAGE"
+        if (isGroup && !SettingsRuntime.current.groupNotifications) return false
+        val mutedUntil = runCatching { MessageStore(this).conversationPreference(conversationId).third }.getOrDefault(0L)
+        return mutedUntil <= System.currentTimeMillis()
+    }
+
     /** إشعار رسالة (فردية أو مجموعة) — يدعم التجميع والمعاينة المحسّنة. */
-    private fun notifyEncryptedMessage(sender: String, plaintext: String?, messageType: String = "TEXT") {
+    private fun notifyEncryptedMessage(sender: String, plaintext: String?, messageType: String = "TEXT", conversationId: String? = null) {
         val manager = getSystemService(NotificationManager::class.java)
-        val convoId = currentConversationId ?: sender
+        val convoId = conversationId ?: currentConversationId ?: sender
         val isGroup = convoId.length > 32
         val rawPreview = plaintext?.take(120)
         val preview = rawPreview?.takeIf { SettingsRuntime.current.notificationPreview }
@@ -448,6 +457,7 @@ class RedConnectionService : Service() {
         private const val EXTRA_GROUP = "group"
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_GROUP_RICH = "groupRich"
+        private const val EXTRA_GROUP_TYPE = "groupType"
         private val ALLOWED_MESSAGE_TYPES = setOf("TEXT", "RICH_TEXT", "FILE", "VOICE", "IMAGE", "VIDEO", "AUDIO", "STICKER")
 
         fun start(context: Context) = context.startForegroundService(Intent(context, RedConnectionService::class.java))
@@ -499,4 +509,4 @@ class RedConnectionService : Service() {
 }
 
 private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray)
-private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false)
+private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false, val type: String? = null)
