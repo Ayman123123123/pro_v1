@@ -64,6 +64,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     private var recordingFile: File? = null
     private var ticker: Job? = null
     private var pendingTarget: Triple<String, String, String>? = null
+    private var pendingGroup: com.red.sovereign.groups.Group? = null
     private var recordingPaused = false
     private var startTimeMs: Long = 0L
     private var pausedDurationMs: Long = 0L
@@ -99,8 +100,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         qualityMode = mode
     }
 
+    fun startForGroup(group: com.red.sovereign.groups.Group) {
+        start(group.id, group.id)
+        pendingGroup = group
+    }
+
     fun start(targetRedId: String, conversationId: String) {
         if (recorder != null || state is VoiceMessageState.Sending) return
+        pendingGroup = null
         pendingTarget = Triple(targetRedId, conversationId, "VOICE")
         val file = File.createTempFile("voice-", ".m4a", getApplication<Application>().cacheDir)
         val instance = runCatching {
@@ -264,11 +271,16 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             when (val result = encryptUploadAndGrant(file, target?.first ?: return@launch, duration, recordedWaveform)) {
                 is ApiResult.Error -> state = VoiceMessageState.Error(result.message)
                 is ApiResult.Success -> {
-                    target?.let {
-                        RedConnectionService.sendPayload(
-                            getApplication(), it.first, it.second, it.third,
-                            result.value.toByteArray(Charsets.UTF_8)
-                        )
+                    val group = pendingGroup
+                    if (group != null) {
+                        RedConnectionService.sendGroupPayload(getApplication(), group, "VOICE", result.value)
+                    } else {
+                        target?.let {
+                            RedConnectionService.sendPayload(
+                                getApplication(), it.first, it.second, it.third,
+                                result.value.toByteArray(Charsets.UTF_8)
+                            )
+                        }
                     }
                     state = VoiceMessageState.Sent(duration)
                 }
@@ -297,6 +309,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         previewDuration = 0
         previewWaveform = emptyList()
         pendingTarget = null
+        pendingGroup = null
         waveform = emptyList()
         elapsedSeconds = 0
         isLocked = false

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -188,8 +189,16 @@ fun SovereignGroupInfoScreen(
     var showAddMembers by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    val tabs = listOf("الأعضاء", "الإعدادات")
+    val tabs = listOf("الأعضاء", "الوسائط", "الإعدادات")
     var selectedTab by remember { mutableIntStateOf(0) }
+    val actions = remember { com.red.sovereign.core.ConversationActions(ctx) }
+    val org = actions.organization
+    val groupScope = rememberCoroutineScope()
+    var muted by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(group?.id, org.revision) {
+        val id = group?.id ?: return@LaunchedEffect
+        muted = com.red.sovereign.core.MessageStore(ctx).conversationPreference(id).third > System.currentTimeMillis()
+    }
 
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian)) {
         // رأس المجموعة
@@ -284,14 +293,30 @@ fun SovereignGroupInfoScreen(
                 }
             }
             1 -> {
-                // الإعدادات
+                LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    item {
+                        Text("معرض الوسائط المشفّرة يُفتح من رأس المحادثة: ⋮ ثم «الوسائط المشتركة».", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
+                    }
+                    item {
+                        InfoRow(Icons.Rounded.Photo, "العودة للمحادثة", "الصور والفيديو تُفك على الجهاز فقط") { onBack() }
+                    }
+                }
+            }
+            2 -> {
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (group != null) {
                         item {
-                            InfoRow(Icons.Rounded.Schedule, "رسائل مؤقتة", "أرسل رسائل تختفي بعد وقت — من شاشة المحادثة") { }
+                            val current = org.disappearingMs(group.id)
+                            InfoRow(Icons.Rounded.Schedule, "رسائل مؤقتة", if (current > 0) "مفعّلة لهذه المجموعة" else "اضغط لتفعيل اختفاء 24 ساعة") {
+                                org.setDisappearingMs(group.id, if (current > 0) 0L else 86_400_000L)
+                            }
                         }
                         item {
-                            InfoRow(Icons.Rounded.VolumeOff, "كتم الإشعارات", "إيقاف تنبيهات هذه المجموعة") { }
+                            InfoRow(Icons.Rounded.VolumeOff, if (muted) "إلغاء كتم المجموعة" else "كتم الإشعارات", if (muted) "التنبيهات متوقفة" else "إيقاف تنبيهات هذه المجموعة") {
+                                groupScope.launch {
+                                    if (muted) actions.unmute(group.id) else actions.mute(group.id, com.red.sovereign.core.ConversationActions.MUTE_FOREVER)
+                                }
+                            }
                         }
                         item {
                             InfoRow(Icons.Rounded.Shield, "رمز أمان المجموعة", "تأكد من تطابق رمز الأمان مع الأعضاء") { }
