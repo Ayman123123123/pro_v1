@@ -21,11 +21,10 @@ if exist "%DIR%RED_Ultimate\docker-compose.yml" (
 
 echo   المشروع: %ROOT%
 echo.
-echo   [1] تشغيل كامل عبر Docker Compose (موصى به للإنتاج المحلي)
-echo   [2] تشغيل سريع للتطوير (لوحة الإدارة + API محلي)
-echo   [3] لوحة الإدارة فقط (Vite React على 8088)
-echo   [4] فحص اتصال بوابة DINSTAR UC2000-VE-8G (192.168.11.1)
-echo   [5] الفحص الشامل الآلي (11 فحصًا)
+echo   [1] تشغيل المنصة الحقيقية عبر Docker Compose (المسار الوحيد)
+echo   [2] فتح لوحة Vite مقابل Compose على 8088 (بدون SQLite)
+echo   [3] فحص اتصال بوابة DINSTAR UC2000-VE-8G (192.168.11.1)
+echo   [4] الفحص الشامل الآلي
 echo.
 set /p CHOICE="اختر رقم الخيار [1]: "
 if "%CHOICE%"=="" set CHOICE=1
@@ -53,27 +52,16 @@ if "%CHOICE%"=="1" (
 
 if "%CHOICE%"=="2" (
     echo.
-    echo ⚡ جاري تشغيل بيئة التطوير السريعة ^(خادم SQLite حقيقي^)...
+    echo 🌐 لوحة Vite تتحدث إلى Compose على 8088 — لا خادم Node/SQLite.
     cd /d "%ROOT%\admin_dashboard"
     call npm install
-    start "RED Dev API (SQLite)" /min node dev-server\server.cjs
-    set "RED_API_TARGET=http://127.0.0.1:8080"
-    call npm run dev -- --port 8088
+    set "RED_API_TARGET=http://127.0.0.1:8088"
+    call npm run dev -- --port 5173
     pause
     exit /b
 )
 
 if "%CHOICE%"=="3" (
-    echo.
-    echo 🌐 جاري تشغيل لوحة الإدارة...
-    cd /d "%ROOT%\admin_dashboard"
-    call npm install
-    call npm run dev -- --port 8088
-    pause
-    exit /b
-)
-
-if "%CHOICE%"=="4" (
     echo.
     echo 🔍 فحص الاتصال ببوابة DINSTAR...
     ping -n 2 192.168.11.1
@@ -83,7 +71,7 @@ if "%CHOICE%"=="4" (
     exit /b
 )
 
-if "%CHOICE%"=="5" (
+if "%CHOICE%"=="4" (
     echo.
     echo 🔍 جاري تشغيل الفحص الشامل الآلي (11 فحصًا)...
     cd /d "%ROOT%"
