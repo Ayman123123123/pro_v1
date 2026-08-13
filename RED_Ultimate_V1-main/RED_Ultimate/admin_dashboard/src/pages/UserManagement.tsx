@@ -151,7 +151,7 @@ export default function UserManagement() {
   const handleUnban = async (user: UserRecord) => {
     try {
       await unbanUser(user.id);
-      message.success(`تم رفع الحظر عن ${user.username}`);
+      message.success(`رُفع الحظر عن ${user.username}. الحساب في الانتظار حتى يسجّل جهازاً جديداً.`);
       await afterChange();
     } catch (e: any) {
       message.error(e.message || 'رفع الحظر يتطلب إعادة تسجيل الجهاز ثم موافقة صريحة');

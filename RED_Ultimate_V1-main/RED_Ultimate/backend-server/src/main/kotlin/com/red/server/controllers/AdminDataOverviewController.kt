@@ -23,11 +23,11 @@ class AdminDataOverviewController(
     private val redis: StringRedisTemplate
 ) {
     @GetMapping("/overview")
-    fun overview(): Map<String, Any> = runCatching {
+    fun overview(): Map<String, Any> {
         val cutoff = System.currentTimeMillis() - PRESENCE_WINDOW_MS
         runCatching { redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble()) }
-
-        mapOf(
+        val online = runCatching { redis.opsForZSet().zCard("red:presence:index") ?: 0L }.getOrDefault(0L)
+        return mapOf(
             "generatedAt" to Instant.now().toString(),
             "users" to mapOf(
                 "total" to sqlCount("users"),
@@ -35,7 +35,7 @@ class AdminDataOverviewController(
                 "pending" to sqlCount("users", "status='PENDING'"),
                 "banned" to sqlCount("users", "status='BANNED'"),
                 "administrators" to sqlCount("users", "role='ADMIN'"),
-                "online" to (redis.opsForZSet().zCard("red:presence:index") ?: 0L)
+                "online" to online
             ),
             "devices" to mapOf(
                 "total" to sqlCount("user_devices"),
@@ -61,7 +61,7 @@ class AdminDataOverviewController(
             ),
             "communications" to mapOf(
                 "callHistory" to sqlCount("call_history"),
-                "activeCalls" to (redis.opsForSet().size("red:calls:active") ?: 0L),
+                "activeCalls" to runCatching { redis.opsForSet().size("red:calls:active") ?: 0L }.getOrDefault(0L),
                 "dinstarCdr" to sqlCount("dinstar_cdr"),
                 "gateways" to sqlCount("telecom_gateways"),
                 "gatewayPorts" to sqlCount("gateway_port_snapshots")
@@ -72,21 +72,9 @@ class AdminDataOverviewController(
                 "notifications" to sqlCount("user_notifications")
             )
         )
-    }.getOrElse {
-        mapOf(
-            "generatedAt" to Instant.now().toString(),
-            "users" to emptyMap<String, Any>(),
-            "devices" to emptyMap<String, Any>(),
-            "moderation" to emptyMap<String, Any>(),
-            "content" to emptyMap<String, Any>(),
-            "communications" to emptyMap<String, Any>(),
-            "storage" to emptyMap<String, Any>(),
-            "partial" to true
-        )
     }
 
     private fun sqlCount(table: String, predicate: String? = null): Long = runCatching {
-        // Table names and predicates are compile-time constants in this class.
         postgres.queryForObject("SELECT COUNT(*) FROM $table${predicate?.let { " WHERE $it" } ?: ""}", Long::class.java) ?: 0L
     }.getOrDefault(0L)
 
