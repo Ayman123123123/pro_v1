@@ -22,6 +22,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 
 /**

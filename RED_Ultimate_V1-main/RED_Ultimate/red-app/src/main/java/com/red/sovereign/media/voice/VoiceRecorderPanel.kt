@@ -381,5 +381,5 @@ private fun androidx.compose.ui.Modifier.border(
     color: androidx.compose.ui.graphics.Color,
     shape: androidx.compose.ui.graphics.Shape
 ) = this.then(
-    androidx.compose.foundation.border(width, color, shape)
+    Modifier.border(width, color, shape)
 )
