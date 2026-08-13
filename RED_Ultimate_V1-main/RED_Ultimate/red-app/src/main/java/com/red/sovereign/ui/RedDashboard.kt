@@ -2308,14 +2308,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
 private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     return Card(Modifier.fillMaxWidth().clickable {
-        // Redial on tap — fixes history not calling
-        if (call.peerId.matches(RED_ID_PATTERN)) {
-            YounesCallService.start(context, call.peerId, call.type == "VIDEO")
+        when (call.type) {
+            "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
+            "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
+            "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
+            else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                YounesCallService.start(context, call.peerId, call.type == "VIDEO")
+            }
         }
     }) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(if (call.route == "DINSTAR") AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
-            Icon(if (call.type == "VIDEO") Icons.Default.Videocam else Icons.Default.Call, null, tint = Color.Black)
+        val glyph = callTypeGlyph(call.type, call.route)
+        Box(Modifier.size(44.dp).clip(CircleShape).background(glyph.second.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            Icon(glyph.first, null, tint = glyph.second)
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(call.peerLabel.ifBlank { call.peerId }, fontWeight = FontWeight.Bold)
