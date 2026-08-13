@@ -57,6 +57,8 @@ services:
         reservations:
           memory: 512M
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - YOUNES_RUNTIME=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}

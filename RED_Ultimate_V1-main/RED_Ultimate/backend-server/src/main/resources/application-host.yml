@@ -1,0 +1,12 @@
+# For a JVM on Windows/Linux talking to databases published on loopback:
+#   docker compose -f docker-compose.yml -f docker-compose.host-debug.yml up -d
+#   SPRING_PROFILES_ACTIVE=host YOUNES_RUNTIME=host ./gradlew :backend-server:bootRun
+# Production stays on profile `docker`. Never mix the two.
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/red_sovereign
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:red_user}:${MONGO_PASSWORD}@127.0.0.1:27017/red_sovereign?authSource=admin
+    redis:
+      host: 127.0.0.1
