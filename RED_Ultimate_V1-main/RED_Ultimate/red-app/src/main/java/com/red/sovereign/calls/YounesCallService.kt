@@ -453,14 +453,17 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         }
     }
     private fun fail(message: String) {
+        clearRingTimeout()
+        stopRingback()
+        stopRingtone()
         CallRuntime.state = CallUiState.Error(message)
         updateNotification(message)
         scope.launch {
             kotlinx.coroutines.delay(3000)
             if (CallRuntime.state is CallUiState.Error) {
-                CallRuntime.state = CallUiState.Idle
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                endCall(sendSignal = false)
+                promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false)
+                runCatching { signaling.connect() }
             }
         }
     }
@@ -621,7 +624,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     private fun serviceIntent(action: String) = PendingIntent.getService(this, action.hashCode(), Intent(this, YounesCallService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    override fun onDestroy() { getSystemService(SensorManager::class.java).unregisterListener(this); scope.cancel(); engine?.release(); super.onDestroy() }
+    override fun onDestroy() {
+        getSystemService(SensorManager::class.java).unregisterListener(this)
+        clearRingTimeout()
+        stopRingback()
+        stopRingtone()
+        scope.cancel()
+        engine?.release()
+        super.onDestroy()
+    }
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {

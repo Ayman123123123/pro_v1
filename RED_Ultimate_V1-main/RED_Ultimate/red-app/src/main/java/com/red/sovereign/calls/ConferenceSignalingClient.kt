@@ -80,6 +80,12 @@ class ConferenceSignalingClient(
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
+    fun reconnect(roomId: String) {
+        runCatching { socket?.cancel() }
+        socket = null
+        connect(roomId)
+    }
+
     fun connect(roomId: String) {
         if (socket != null) return
         val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")

@@ -105,6 +105,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                 showIncomingLiveStreamNotification(streamId, userId, broadcasterName)
             }
             ACTION_START -> {
+                stopping = false
+                cleanedUp = false
                 streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 streamTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "بث مباشر يونس" }
@@ -208,6 +210,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
             if (isBroadcaster) engine?.create(CallMediaKind.LIVE) else engine?.create(CallMediaKind.VIDEO, simulcastEnabled = false, svc = false)
             if (isBroadcaster) {
                 LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack
+                LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, true, System.currentTimeMillis())
+                startStatsPolling()
             }
             signaling.join(streamId, userId, if (isBroadcaster) "broadcaster" else "viewer")
         }
@@ -236,8 +240,15 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
                     )
                 )
             }
+            "STREAM_ENDED" -> {
+                stopStream()
+                return
+            }
             "VIEWER_JOINED" -> {
-                if (isBroadcaster) LiveStreamRuntime.viewerCount += 1
+                if (isBroadcaster) {
+                    LiveStreamRuntime.viewerCount += 1
+                    engine?.offer()
+                }
             }
             "VIEWER_LEFT" -> {
                 if (isBroadcaster) LiveStreamRuntime.viewerCount = (LiveStreamRuntime.viewerCount - 1).coerceAtLeast(0)
@@ -274,16 +285,32 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         }
     }
 
-    override fun onDisconnected() { stopStream() }
+    override fun onDisconnected() {
+        when (LiveStreamRuntime.state) {
+            is LiveStreamUiState.Active, is LiveStreamUiState.Connecting -> {
+                LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
+                runCatching { signaling.reconnect(streamId) }
+            }
+            else -> stopStream()
+        }
+    }
     override fun onError(message: String) {
+        if (message == "UNAUTHORIZED" || message == "LIVE_STREAM_REGISTRATION_FAILED") {
+            LiveStreamRuntime.state = LiveStreamUiState.Error(message)
+            scope.launch {
+                kotlinx.coroutines.delay(1500)
+                stopStream()
+            }
+            return
+        }
+        if (LiveStreamRuntime.state is LiveStreamUiState.Active || LiveStreamRuntime.state is LiveStreamUiState.Connecting) {
+            runCatching { signaling.reconnect(streamId) }
+            return
+        }
         LiveStreamRuntime.state = LiveStreamUiState.Error(message)
         scope.launch {
             kotlinx.coroutines.delay(3000)
-            if (LiveStreamRuntime.state is LiveStreamUiState.Error) LiveStreamRuntime.state = LiveStreamUiState.Idle
-        }
-        scope.launch {
-            kotlinx.coroutines.delay(500)
-            stopStream()
+            if (LiveStreamRuntime.state is LiveStreamUiState.Error) stopStream()
         }
     }
 
@@ -362,6 +389,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
         LiveStreamRuntime.reactions = emptyList()
         LiveStreamRuntime.raisedHands = emptyList()
         LiveStreamRuntime.isCoHost = false
+        LiveStreamRuntime.isMuted = false
+        LiveStreamRuntime.isAudioOnly = false
+        LiveStreamRuntime.isRecording = false
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (terminateService) stopSelf()
     }
@@ -384,15 +414,16 @@ class LiveStreamService : Service(), WebRtcEngine.Events, LiveStreamSignalingCli
 
         val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setContentTitle("بث مباشر يونس 🔴")
-            .setContentText("بدأ ${broadcasterName.ifBlank { "المُبث" }} بثاً مباشراً الآن!")
+            .setContentTitle("بث مباشر يونس")
+            .setContentText("بدأ ${broadcasterName.ifBlank { "المُبث" }} بثاً مباشراً")
             .setContentIntent(mainIntent)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setFullScreenIntent(mainIntent, true)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setSilent(false)
             .setColor(0xFFE53935.toInt())
-            .setOngoing(true)
-            .addAction(0, "مشاهدة البث", watchPending)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .addAction(0, "مشاهدة", watchPending)
             .addAction(0, "تجاهل", dismissPending)
             .build()
 
