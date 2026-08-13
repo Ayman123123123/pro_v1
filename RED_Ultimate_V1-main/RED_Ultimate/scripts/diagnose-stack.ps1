@@ -12,6 +12,7 @@
   Usage (from RED_Ultimate):
     powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-stack.ps1
     powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-stack.ps1 -RestartBackend
+    powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
 #>
 param(
     [switch]$RestartBackend

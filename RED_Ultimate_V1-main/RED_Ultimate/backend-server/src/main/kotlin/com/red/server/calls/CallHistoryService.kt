@@ -40,16 +40,39 @@ class CallHistoryService(
             require(it.initiatorId == actorId || it.targetId == actorId) { "Only call participants can end" }
         }
         val now = Instant.now()
-        it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED
         it.endedAt = now
-        val durationMs = if (it.answeredAt != null) Duration.between(it.answeredAt, now).toMillis() else 0L
-        publisher.callEnded(callId, durationMs, if (failed) "FAILED" else "NORMAL")
+        if (failed) {
+            it.status = CallStatus.FAILED
+            publisher.callEnded(callId, 0L, "FAILED")
+            return@update
+        }
+        if (it.answeredAt == null || it.status == CallStatus.RINGING) {
+            it.status = CallStatus.MISSED
+            publisher.callMissed(callId)
+            return@update
+        }
+        val durationMs = Duration.between(it.answeredAt, now).toMillis()
+        it.status = CallStatus.ENDED
+        publisher.callEnded(callId, durationMs, "NORMAL")
     }
 
     fun missed(callId: String): CallHistoryDocument = update(callId) {
         it.status = CallStatus.MISSED
         it.endedAt = Instant.now()
         publisher.callMissed(callId)
+    }
+
+    /** WhatsApp/Telegram: unanswered RINGING older than 45s becomes MISSED. */
+    fun expireStaleRinging(olderThan: Duration = Duration.ofSeconds(45)): Int {
+        val cutoff = Instant.now().minus(olderThan)
+        val query = Query(
+            Criteria.where("status").`is`(CallStatus.RINGING).and("startedAt").lt(cutoff)
+        ).limit(200)
+        val stale = mongo.find(query, CallHistoryDocument::class.java)
+        stale.forEach { doc ->
+            runCatching { missed(doc.id) }
+        }
+        return stale.size
     }
 
     fun history(redId: String, limit: Int): List<CallHistoryItem> {

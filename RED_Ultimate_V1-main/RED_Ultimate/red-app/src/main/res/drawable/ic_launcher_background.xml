@@ -1,26 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    🎨 YOUNES Sovereign — App Icon Background
-    Deep navy/green gradient (matches the official cleaned app icon)
--->
+<!-- YOUNES — Adaptive icon background. Deep navy matches the official Q/Y launcher. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
     <path android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
         <aapt:attr name="android:fillColor">
             <gradient
                 android:type="linear"
-                android:startX="0"
+                android:startX="54"
                 android:startY="0"
-                android:endX="108"
-                android:endY="108"
-                android:startColor="#0A3D3A"
-                android:centerColor="#0A2636"
-                android:endColor="#050A16" />
+                android:endX="54"
+                android:endY="108">
+                <item android:color="#FF0B1E33" android:offset="0"/>
+                <item android:color="#FF000C1C" android:offset="1"/>
+            </gradient>
         </aapt:attr>
     </path>
 </vector>

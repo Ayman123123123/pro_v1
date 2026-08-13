@@ -63,6 +63,17 @@ class CallHistoryAuthorizationTest {
     }
 
     @Test
+    fun `ending a ringing call is recorded as missed`() {
+        whenever(mongo.findById(call.id, CallHistoryDocument::class.java)).thenReturn(call)
+        whenever(mongo.save(any<CallHistoryDocument>())).thenAnswer { it.arguments[0] }
+
+        val updated = history.end(call.id, call.initiatorId)
+
+        assertEquals(CallStatus.MISSED, updated.status)
+        verify(publisher).callMissed(call.id)
+    }
+
+    @Test
     fun `call id reuse cannot redirect an existing call`() {
         whenever(mongo.findById(call.id, CallHistoryDocument::class.java)).thenReturn(call)
 

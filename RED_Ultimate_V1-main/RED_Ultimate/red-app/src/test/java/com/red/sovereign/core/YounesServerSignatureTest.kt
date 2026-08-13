@@ -16,12 +16,12 @@ class YounesServerSignatureTest {
     }
 
     @Test
-    fun `dev server health without version is accepted when authority matches`() {
+    fun `sqlite mock health is rejected`() {
         val health = """{"status":"UP","service":"red-dev-server","db":"sqlite"}"""
         val authority = """{"publicKey":"abc","algorithm":"SHA256withECDSA","curve":"prime256v1"}"""
-        assertTrue(YounesServerSignature.isYounesHealth(health))
-        assertTrue(YounesServerSignature.isYounesAuthority(authority))
-        assertTrue(YounesServerSignature.isYounesServer(health, authority))
+        assertFalse(YounesServerSignature.isYounesHealth(health))
+        assertFalse(YounesServerSignature.isYounesAuthority(authority))
+        assertFalse(YounesServerSignature.isYounesServer(health, authority))
     }
 
     @Test
@@ -47,8 +47,8 @@ class YounesServerSignatureTest {
 
     @Test
     fun `ports always try api then dashboard`() {
-        assertEquals(listOf(8088, 8080, 8443), YounesServerSignature.ports(8088))
-        assertEquals(listOf(8080, 8088, 8443), YounesServerSignature.ports(8080))
+        assertEquals(listOf(8088, 8443), YounesServerSignature.ports(8088))
+        assertEquals(listOf(8088, 8443), YounesServerSignature.ports(0))
     }
 
     @Test

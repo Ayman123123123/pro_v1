@@ -94,6 +94,7 @@ import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
@@ -169,7 +170,9 @@ import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.CallRuntime
 import com.red.sovereign.calls.CallUiState
 import com.red.sovereign.calls.UnifiedCallOverlays
+import com.red.sovereign.calls.ConferenceRuntime
 import com.red.sovereign.calls.ConferenceService
+import com.red.sovereign.calls.ConferenceUiState
 import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
@@ -394,9 +397,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = deepLinkSender, deepLinkConversation = deepLinkConversation)
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory) {
+                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
-                }
+                }, onPstn = { showDinstar = true })
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
@@ -960,6 +963,15 @@ private fun ChatHubScreen(
         val cameraGranted = !pendingCallVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         if (audioGranted && cameraGranted && target.matches(RED_ID_PATTERN)) YounesCallService.start(context, target, pendingCallVideo)
     }
+    var pendingGroupVideo by remember { mutableStateOf(false) }
+    val groupCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val cameraGranted = !pendingGroupVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val group = groups.groups.firstOrNull { it.id == groupConversationId }
+        if (audioGranted && cameraGranted && group != null) {
+            ConferenceService.join(context, group.id, account.redId, pendingGroupVideo, inviteRedIds = group.members.map { it.redId })
+        }
+    }
     LaunchedEffect(Unit) { DecryptedMessageBus.messages.collect { item ->
         decrypted.add(item)
         // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
@@ -1079,16 +1091,14 @@ private fun ChatHubScreen(
                         Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
                         Text(activePerson?.let { val ls = directory.lastSeenLabel(it.redId); ls ?: "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton({ pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }) { Icon(Icons.Default.Call, "مكالمة صوتية عبر يونس") }
-                    IconButton({ pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) }) { Icon(Icons.Default.Videocam, "مكالمة فيديو عبر يونس") }
-                    IconButton({
-                        val room = conversationId(account.redId, target)
-                        ConferenceService.join(context, room, account.redId, true)
-                    }) { Icon(Icons.Default.Groups, "مؤتمر فيديو جماعي") }
-                    IconButton({ showMessageSearch = true }) { Icon(Icons.Default.Search, "البحث في المحادثة") }
-                    IconButton({ showMediaGallery = true }) { Icon(Icons.Default.Photo, "الوسائط المشتركة") }
-                    IconButton({ safety.open(target) }) { Icon(Icons.Default.Security, "رمز الأمان") }
-                    if (activePerson != null) IconButton({ selectedContact = activePerson }) { Icon(Icons.Default.MoreVert, "خيارات المحادثة") }
+                    PrivateChatCallActions(
+                        onVideoCall = { pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                        onVoiceCall = { pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                        onSearch = { showMessageSearch = true },
+                        onMedia = { showMediaGallery = true },
+                        onSafety = { safety.open(target) },
+                        onProfile = activePerson?.let { person -> { selectedContact = person } }
+                    )
                 }
             }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
@@ -1431,24 +1441,50 @@ private fun ChatHubScreen(
                     }
                 }
             } else {
+                val liveRoomId = when (val live = ConferenceRuntime.state) {
+                    is ConferenceUiState.Active -> live.roomId
+                    is ConferenceUiState.Connecting -> live.roomId
+                    is ConferenceUiState.Incoming -> live.roomId
+                    else -> ""
+                }
+                val groupSessionLive = liveRoomId == openGroup.id
+                val groupSessionVideo = ConferenceRuntime.isVideoEnabled && groupSessionLive
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
-                        GroupAvatar(openGroup, groups); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(openGroup.name, fontWeight = FontWeight.SemiBold); Text("${openGroup.members.size} أعضاء · Sender Keys", color = YounesEmerald, style = MaterialTheme.typography.labelSmall) }
-                        IconButton({ com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = false) }) { Icon(Icons.Default.Videocam, "مؤتمر فيديو جماعي", tint = YounesEmerald) }
-                        Box {
-                            IconButton({ showGroupMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات المجموعة") }
-                            DropdownMenu(expanded = showGroupMenu, onDismissRequest = { showGroupMenu = false }) {
-                                DropdownMenuItem(text = { Text("معلومات المجموعة") }, leadingIcon = { Icon(Icons.Default.Info, null) }, onClick = { showGroupMenu = false; onManageGroup(openGroup.id) })
-                                DropdownMenuItem(text = { Text("بحث في المجموعة") }, leadingIcon = { Icon(Icons.Default.Search, null) }, onClick = { showGroupMenu = false; showMessageSearch = true })
-                                DropdownMenuItem(text = { Text("الوسائط المشتركة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; showGroupMediaGallery = true })
-                                DropdownMenuItem(text = { Text("مؤتمر فيديو") }, leadingIcon = { Icon(Icons.Default.Videocam, null) }, onClick = { showGroupMenu = false; com.red.sovereign.calls.ConferenceService.join(context, openGroup.id, account.redId, video = true) })
-                                DropdownMenuItem(text = { Text("تغيير صورة المجموعة") }, leadingIcon = { Icon(Icons.Default.Photo, null) }, onClick = { showGroupMenu = false; groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) })
-                                DropdownMenuItem(text = { Text("إنشاء استطلاع") }, leadingIcon = { Icon(Icons.Default.Forum, null) }, onClick = { showGroupMenu = false; groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true })
-                                DropdownMenuItem(text = { Text("مغادرة المجموعة") }, leadingIcon = { Icon(Icons.Default.Logout, null) }, onClick = { showGroupMenu = false; groups.leave(openGroup) { groupConversationId = null } })
+                        GroupAvatar(openGroup, groups)
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            Text(openGroup.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                if (groupSessionLive) (if (groupSessionVideo) "مؤتمر فيديو جارٍ" else "مساحة صوتية جارية") else "${openGroup.members.size} أعضاء · مشفّرة",
+                                color = if (groupSessionLive) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        GroupChatCallActions(
+                            spaceLive = groupSessionLive && !groupSessionVideo,
+                            meetingLive = groupSessionLive && groupSessionVideo,
+                            onSpace = { pendingGroupVideo = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                            onMeeting = { pendingGroupVideo = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                            onInfo = { onManageGroup(openGroup.id) },
+                            onSearch = { showMessageSearch = true },
+                            onMedia = { showGroupMediaGallery = true },
+                            onAvatar = { groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) },
+                            onPoll = { groupPollQuestion = ""; groupPollOptions = listOf("", ""); showGroupPollDialog = true },
+                            onLeave = { groups.leave(openGroup) { groupConversationId = null } }
+                        )
+                    }
+                }
+                if (groupSessionLive) {
+                    GroupLiveSessionBanner(
+                        isVideo = groupSessionVideo,
+                        inSession = ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting,
+                        onJoinOrReturn = {
+                            if (ConferenceRuntime.state is ConferenceUiState.Incoming) {
+                                ConferenceService.join(context, openGroup.id, account.redId, groupSessionVideo, asHost = false)
                             }
                         }
-                    }
+                    )
                 }
                 val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
                 androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
@@ -1951,7 +1987,7 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit) {
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: () -> Unit = {}) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
@@ -1970,21 +2006,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         "DINSTAR" -> call.route == "DINSTAR"; else -> true
     } }
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        Text("مركز المكالمات والبث المباشر 📞", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("سجل موحد للاتصالات والمؤتمرات والبث الحية والمساحات الصوتية والهاتف اليمني.", color = Color.LightGray)
-        
-        // Dedicated Quick Action Buttons
-        LazyRow(
-            Modifier.fillMaxWidth().padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item { RoundCallAction(Icons.Default.Call, "مكالمة جديدة", Color(0xFF00C98C), true) { showNewCallDialog = true } }
-            item { RoundCallAction(Icons.Default.Groups, "مؤتمر جماعي", AqyalCyanGlow, true) { showJoinDialog = true } }
-            item { RoundCallAction(Icons.Default.LiveTv, "بث مباشر", Color.Red, true) { showLiveDialog = true } }
-            item { RoundCallAction(Icons.Default.RecordVoiceOver, "مساحات", Color(0xFFA78BFA), true) { showSpaceDialog = true } }
-            item { RoundCallAction(Icons.Default.Search, "اكتشاف البثوث", Color(0xFFF5C842), true, onExplore) }
-            item { RoundCallAction(Icons.Default.PhoneInTalk, "هاتف يمني", Color(0xFFE31E24), true) { showDinstarDialog = true } }
-        }
+        Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("الفردي يرن. المؤتمر والمساحة والبث أزرار مستقلة هنا — ليست أزرار الدردشة.", color = Color.LightGray, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        CallsHubLaunchers(
+            onPrivateCall = { showNewCallDialog = true },
+            onConference = { showJoinDialog = true },
+            onLive = { showLiveDialog = true },
+            onSpace = { showSpaceDialog = true },
+            onExplore = onExplore,
+            onPstn = onPstn
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
         }
@@ -2016,7 +2050,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showJoinDialog = false
-                        ConferenceService.join(context, roomInput.trim(), ownUserId, true)
+                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
                         roomInput = ""
                     },
                     enabled = roomInput.trim().isNotBlank()
@@ -2147,7 +2181,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         // معرف تلقائي فريد إن لم يُدخل المستخدم واحدًا
                         val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
                         // video=false → مسار صوتي صرف — هذا هو الفرق بين المساحة والمؤتمر المرئي
-                        ConferenceService.join(context, spaceId, ownUserId, false)
+                        ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
                         roomInput = ""
                         isSpaceHost = false
                     }
@@ -2199,17 +2233,11 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showDinstarDialog = false
-                        val intent = Intent(context, YounesCallService::class.java).apply {
-                            action = YounesCallService.ACTION_START
-                            putExtra(YounesCallService.EXTRA_TARGET, dinstarNumberInput.trim())
-                            putExtra(YounesCallService.EXTRA_MODE, "VOICE")
-                        }
-                        ContextCompat.startForegroundService(context, intent)
                         dinstarNumberInput = ""
-                    },
-                    enabled = dinstarNumberInput.trim().length >= 6
+                        onPstn()
+                    }
                 ) {
-                    Text("اتصال خطي عبر GSM")
+                    Text("فتح الهاتف اليمني")
                 }
             },
             dismissButton = {
@@ -2274,14 +2302,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
 private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     return Card(Modifier.fillMaxWidth().clickable {
-        // Redial on tap — fixes history not calling
-        if (call.peerId.matches(RED_ID_PATTERN)) {
-            YounesCallService.start(context, call.peerId, call.type == "VIDEO")
+        when (call.type) {
+            "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
+            "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
+            "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
+            else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                YounesCallService.start(context, call.peerId, call.type == "VIDEO")
+            }
         }
     }) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(if (call.route == "DINSTAR") AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
-            Icon(if (call.type == "VIDEO") Icons.Default.Videocam else Icons.Default.Call, null, tint = Color.Black)
+        val glyph = callTypeGlyph(call.type, call.route)
+        Box(Modifier.size(44.dp).clip(CircleShape).background(glyph.second.copy(alpha = 0.22f)), contentAlignment = Alignment.Center) {
+            Icon(glyph.first, null, tint = glyph.second)
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(call.peerLabel.ifBlank { call.peerId }, fontWeight = FontWeight.Bold)

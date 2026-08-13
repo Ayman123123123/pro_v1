@@ -17,7 +17,8 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must cont
 if (!ANNOUNCED_IP) console.warn('MEDIASOUP_ANNOUNCED_IP is unset; LAN/WAN ICE candidates may be unreachable');
 
 const mediaCodecs = [
-  { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2, parameters: { useinbandfec: 1 } },
+  { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2, parameters: { useinbandfec: 1, usedtx: 1, stereo: 0 } },
+  { kind: 'video', mimeType: 'video/VP9', clockRate: 90000, parameters: { 'profile-id': 0, 'x-google-start-bitrate': 1000 } },
   { kind: 'video', mimeType: 'video/VP8', clockRate: 90000, parameters: { 'x-google-start-bitrate': 800 } },
   { kind: 'video', mimeType: 'video/H264', clockRate: 90000, parameters: { 'packetization-mode': 1, 'profile-level-id': '42e01f', 'level-asymmetry-allowed': 1 } }
 ];
@@ -181,6 +182,18 @@ wss.on('connection', (ws, _req, claims) => {
         if (!consumer) throw new Error('Consumer not found');
         await consumer.resume();
         return send(ws, requestId, { status: 'consumerResumed', consumerId: consumer.id });
+      }
+      if (type === 'pauseProducer') {
+        const producer = peer.producers.get(message.producerId);
+        if (!producer) throw new Error('Producer not found');
+        await producer.pause();
+        return send(ws, requestId, { status: 'producerPaused', producerId: producer.id });
+      }
+      if (type === 'resumeProducer') {
+        const producer = peer.producers.get(message.producerId);
+        if (!producer) throw new Error('Producer not found');
+        await producer.resume();
+        return send(ws, requestId, { status: 'producerResumed', producerId: producer.id });
       }
       if (type === 'leave') { cleanupPeer(context); return send(ws, requestId, { status: 'left' }); }
       throw new Error('Unknown message type');

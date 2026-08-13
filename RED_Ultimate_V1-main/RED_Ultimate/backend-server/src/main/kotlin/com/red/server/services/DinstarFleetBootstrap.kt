@@ -1,6 +1,7 @@
 package com.red.server.services
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -24,12 +25,17 @@ import org.springframework.stereotype.Component
  */
 @Component
 class DinstarFleetBootstrap(
-    private val fleet: DinstarFleetService
+    private val fleet: DinstarFleetService,
+    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean
 ) {
     private val log = LoggerFactory.getLogger(DinstarFleetBootstrap::class.java)
 
     @EventListener(ApplicationReadyEvent::class)
     fun registerSeedGateway() {
+        if (!dinstarEnabled) {
+            log.info("DINSTAR disabled (DINSTAR_ENABLED=false) — seed gateway skipped; internet calls still work")
+            return
+        }
         // فشل تسجيل البذرة يجب ألا يمنع إقلاع الخادم: بقية المنصة
         // (المحادثات، المكالمات عبر WebRTC، اللوحة) لا تعتمد على PSTN.
         runCatching { fleet.ensureSeedGateway() }

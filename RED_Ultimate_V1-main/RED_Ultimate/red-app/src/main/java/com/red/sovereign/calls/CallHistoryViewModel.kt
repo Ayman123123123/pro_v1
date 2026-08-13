@@ -70,8 +70,8 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         direction = direction,
         route = route.toString(),
         status = status.toString(),
-        timestamp = startedAt.toLongOrNull() ?: 0L,
-        answeredAt = answeredAt?.toLongOrNull(),
-        endedAt = endedAt?.toLongOrNull()
+        timestamp = parseCallTimestamp(startedAt) ?: 0L,
+        answeredAt = parseCallTimestamp(answeredAt),
+        endedAt = parseCallTimestamp(endedAt)
     )
 }

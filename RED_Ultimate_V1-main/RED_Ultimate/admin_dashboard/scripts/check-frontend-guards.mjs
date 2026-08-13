@@ -101,6 +101,17 @@ for (const file of files) {
   }
 }
 
+{
+  const login = readFileSync(join(SRC, 'pages/Login.tsx'), 'utf8');
+  if (/كلمة المرور\s*<b>\s*SovereignAdmin1/i.test(login)) {
+    violations.push({
+      rule: 'شاشة الدخول تعرض كلمة مرور وهمية لخادم Node',
+      at: 'pages/Login.tsx',
+      detail: 'Docker يستخدم RED_ADMIN_PASSWORD من .env وليس SovereignAdmin1',
+    });
+  }
+}
+
 if (violations.length > 0) {
   console.error(`\n❌ حارس الواجهة رصد ${violations.length} مخالفة:\n`);
   for (const v of violations) {

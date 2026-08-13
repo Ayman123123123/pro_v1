@@ -41,6 +41,12 @@ class LiveStreamSignalingClient(
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
 
+    fun reconnect(streamId: String) {
+        runCatching { socket?.cancel() }
+        socket = null
+        connect(streamId)
+    }
+
     fun connect(streamId: String) {
         if (socket != null) return
         val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")
@@ -64,7 +70,8 @@ class LiveStreamSignalingClient(
                     socket = null; listener.onDisconnected()
                 }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    socket = null; listener.onError(t.message ?: "LIVESTREAM_SIGNALING_FAILED")
+                    socket = null
+                    listener.onDisconnected()
                 }
             }
         )
@@ -82,30 +89,41 @@ class LiveStreamSignalingClient(
         LiveStreamSignal(type = "LEAVE", roomId = streamId, userId = userId)
     )
 
-    fun sendIce(streamId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String) = send(
+    fun sendIce(streamId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String, targetUserId: String = "") = send(
         LiveStreamSignal(
             type = "ICE",
             roomId = streamId,
             userId = userId,
-            payload = mapOf("sdpMid" to sdpMid, "sdpMLineIndex" to sdpMLineIndex.toString(), "candidate" to candidate)
+            payload = buildMap {
+                put("sdpMid", sdpMid)
+                put("sdpMLineIndex", sdpMLineIndex.toString())
+                put("candidate", candidate)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 
-    fun sendOffer(streamId: String, userId: String, sdp: String) = send(
+    fun sendOffer(streamId: String, userId: String, sdp: String, targetUserId: String = "") = send(
         LiveStreamSignal(
             type = "OFFER",
             roomId = streamId,
             userId = userId,
-            payload = mapOf("sdp" to sdp)
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 
-    fun sendAnswer(streamId: String, userId: String, sdp: String) = send(
+    fun sendAnswer(streamId: String, userId: String, sdp: String, targetUserId: String = "") = send(
         LiveStreamSignal(
             type = "ANSWER",
             roomId = streamId,
             userId = userId,
-            payload = mapOf("sdp" to sdp)
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 

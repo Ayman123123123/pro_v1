@@ -169,7 +169,11 @@ class ChannelService(
     }
 
     private fun channelUsernameExists(username: String): Boolean {
-        val c = jdbc.queryForObject("SELECT COUNT(*) FROM channels WHERE LOWER(username)=LOWER(?)", Int::class.java, username) ?: 0
+        val c = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM channels WHERE username = ?",
+            Int::class.java,
+            username.trim().lowercase(),
+        ) ?: 0
         return c > 0
     }
 }

@@ -1,0 +1,26 @@
+# LAN overlay — use when the UC2000 is on the host management NIC
+# (factory 192.168.11.1). Do NOT move the box onto the Wi-Fi subnet;
+# the ethernet cable IS the path. Internet stays on Wi-Fi.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d
+#
+# Docker Desktop still needs a route to 192.168.11.0/24. Run:
+#   powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
+name: red-sovereign
+
+services:
+  backend:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
+    environment:
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-true}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+
+  pstn-gateway:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
+    environment:
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - ASTERISK_LOCAL_NET=192.168.11.0/24,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12

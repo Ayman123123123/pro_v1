@@ -1,28 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    🎨 YOUNES Sovereign — Monochrome (Material You / Android 13+)
-    Single color, alpha-based (will be tinted by system based on theme)
--->
+<!-- YOUNES — Material You monochrome: gold Q/Y speech-bubble mark -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- Shield/chat bubble background -->
     <path
-        android:fillColor="#000000"
-        android:pathData="M32,34 C36,28 42,25 50,25 C62,25 72,33 72,44 C72,52 68,58 60,62 L62,70 L52,65 C50,65 48,65 46,65 C36,65 28,58 28,48 C28,42 30,38 32,34 Z" />
-
-    <!-- Y letter (main symbol) -->
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,22C37.4,22 24,35.4 24,52C24,63.6 30.2,73.7 39.4,79L32,93L50.2,85.2C51.4,85.5 52.7,85.7 54,85.7C70.6,85.7 84,72.3 84,55.7C84,39.1 70.6,22 54,22Z M54,32C66.15,32 76,41.85 76,54C76,66.15 66.15,76 54,76C41.85,76 32,66.15 32,54C32,41.85 41.85,32 54,32Z"/>
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,33 L46,33 L50,40 L54,33 L60,33 L52,46 L52,56 L48,56 L48,46 Z" />
-
-    <!-- Center dot -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.6"
-        android:pathData="M50,48 m-1.2,0 a1.2,1.2 0,1 0 2.4,0 a1.2,1.2 0,1 0 -2.4,0" />
-
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,36L46.6,36L54,49.2L61.4,36L70,36L57.4,56.8L57.4,74L50.6,74L50.6,56.8Z"/>
 </vector>

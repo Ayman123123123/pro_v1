@@ -33,12 +33,28 @@ project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
 
 ## التشغيل
 
-```bash
-npm install
-RED_API_TARGET=http://127.0.0.1:8080 npm run dev
+### المصدر الوحيد: Docker على 8088
+
+اللوحة والـ API والمكالمات تعمل من Compose فقط:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\scripts\compose-recover.ps1 -RebuildBackend
 ```
 
-### تشغيل كامل بقاعدة بيانات حقيقية (تطوير)
+ثم **http://127.0.0.1:8088/** بـ `RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD` من `.env`.
+
+`npm run dev` يفتح Vite على 5173 ويتحدث إلى الخادم الحقيقي على 8088. خادم Node/SQLite مرفوض.
+
+إنتاجيًا عبر Docker Compose، Nginx الرئيسي يمرر:
+
+```text
+/       -> admin-panel:3000
+/api    -> backend:8080
+/ws     -> backend WebSocket
+/sfu    -> media-sfu:4000
+```
+
+### أرشيف عقد الاختبار (ليس مسار تشغيل)
 
 لا يتطلب JDK ولا PostgreSQL/Mongo/Redis/MinIO:
 

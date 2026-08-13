@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,6 +54,11 @@ fun YounesLiveStreamOverlay() {
     val remoteVideo = LiveStreamRuntime.remoteVideo
     var chatText by remember { mutableStateOf("") }
     var showRaisedHandsSheet by remember { mutableStateOf(false) }
+
+    if (state is LiveStreamUiState.Incoming) {
+        LiveIncomingCard(state)
+        return
+    }
 
     Dialog(
         onDismissRequest = {},
@@ -480,6 +486,52 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
             renderer?.let {
                 track?.removeSink(it)
                 it.release()
+            }
+        }
+    }
+}
+
+/** بطاقة «بدأ البث» — مشاهدة أو تجاهل، بلا رنة هاتف. */
+@Composable
+private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
+    val context = LocalContext.current
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xCC02080C))
+                .clickable { LiveStreamService.stop(context) },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth(0.88f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color(0xFF0D1B2A))
+                    .padding(22.dp)
+                    .clickable(enabled = false) {},
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(Modifier.background(Color(0xFFE53935), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text("مباشر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text(
+                    "${state.broadcasterName.ifBlank { "مستخدم يونس" }} بدأ بثاً",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("شاهد عندما تريد — بدون رنين", color = Color.Gray, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TextButton(onClick = { LiveStreamService.stop(context) }) { Text("تجاهل", color = Color.White) }
+                    Button(onClick = { LiveStreamService.start(context, state.streamId, state.userId, false) }) {
+                        Text("مشاهدة")
+                    }
+                }
             }
         }
     }

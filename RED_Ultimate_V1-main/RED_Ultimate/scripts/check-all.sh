@@ -80,17 +80,13 @@ while IFS= read -r script; do
   check "bash -n $script" bash -n "$script"
 done < <(find scripts -maxdepth 1 -type f -name '*.sh' -print | sort)
 
-printf '%s\n' '[8/8] Mock API smoke test'
-check 'health + inventory + user operations' bash -c '
-  python3 scripts/mock_backend.py >/tmp/red-mock-smoke.log 2>&1 &
-  pid=$!
-  trap "kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true" EXIT
-  sleep 1.2
-  curl -sf http://127.0.0.1:8080/health >/dev/null
-  curl -sf http://127.0.0.1:8080/api/admin/dinstar/inventory | grep -q portIndex
-  curl -sf http://127.0.0.1:8080/api/admin/users/user_uuid_001/overview | grep -q messages24h
-  test "$(curl -sfo /dev/null -w "%{http_code}" -X POST http://127.0.0.1:8080/api/admin/users/user_uuid_001/temporary-password)" = 204
-'
+printf '%s\n' '[8/8] Live Compose stack (real Kotlin API on 8088)'
+if curl -fsS --max-time 3 http://127.0.0.1:8088/health/live >/dev/null 2>&1; then
+  check 'live /health/live is YOUNES' bash -c 'curl -fsS http://127.0.0.1:8088/health/live | grep -q YOUNES'
+  check 'live /health reports bindings' bash -c 'curl -fsS http://127.0.0.1:8088/health | grep -q mongodbHost'
+else
+  skip 'live Compose /health' 'stack is not up — run scripts/compose-recover.ps1'
+fi
 
 printf '\n════════════════════════════════════════════════\n'
 printf '  Result: %d passed | %d failed | %d skipped\n' "$PASS" "$FAIL" "$SKIP"
