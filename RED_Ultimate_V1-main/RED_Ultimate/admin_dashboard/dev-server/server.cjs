@@ -22,8 +22,9 @@
  * ⚠️ تطوير محلي فقط: بلا مصادقة حقيقية، وغير مُضمَّن في صورة Docker.
  *    الإنتاج يمر عبر backend-server + PostgreSQL/Mongo/Redis/MinIO.
  */
-if (process.env.NODE_ENV === 'production' || process.env.RED_RUNTIME_MODE === 'production') {
-  throw new Error('The SQLite dev-server is a test double and must never run in production. Use backend-server with PostgreSQL/MongoDB/Redis/MinIO.');
+if (process.env.NODE_ENV === 'production' || process.env.RED_RUNTIME_MODE === 'production' || process.env.YOUNES_RUNTIME === 'docker') {
+  console.error('PRODUCTION LOCK: SQLite dev-server must never run in production. Use backend-server + Compose.');
+  process.exit(1);
 }
 
 const http = require('node:http');
