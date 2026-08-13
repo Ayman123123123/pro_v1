@@ -123,11 +123,11 @@ class AdminV2Controller(
         val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status", "role") } ?: "createdAt"
         val direction = runCatching { Sort.Direction.fromString(sortDir ?: "desc") }.getOrDefault(Sort.Direction.DESC)
         val pageable = AdminUserSort.pageable(page, safeSize, safeSort, direction)
-        val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.let {
-            runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
+        val parsedStatus = status?.trim()?.takeIf(String::isNotEmpty)?.uppercase()?.let {
+            runCatching { AccountStatus.valueOf(it) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_STATUS") }
         }
-        val parsedRole = role?.trim()?.takeIf(String::isNotEmpty)?.let {
-            runCatching { AccountRole.valueOf(it.uppercase()) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_ROLE") }
+        val parsedRole = role?.trim()?.takeIf(String::isNotEmpty)?.uppercase()?.let {
+            runCatching { AccountRole.valueOf(it) }.getOrElse { throw IllegalArgumentException("INVALID_ACCOUNT_ROLE") }
         }
         val normalizedSearch = search?.trim()?.takeIf { it.length >= 2 }?.take(80)
         val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
