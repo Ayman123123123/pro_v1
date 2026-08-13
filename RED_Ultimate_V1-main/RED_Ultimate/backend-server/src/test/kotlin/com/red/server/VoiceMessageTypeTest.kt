@@ -132,7 +132,7 @@ class VoiceMessageTypeTest {
     fun `VOICE message rejects ciphertext type 4 (group-only)`() {
         val message = buildMessage(type = "VOICE", ciphertextType = 4)
         val exception = runCatching { validateCiphertext(message) }.exceptionOrNull()
-        assertNotNull("VOICE should reject ciphertext type 4 (group-only)", exception)
+        assertNotNull(exception, "VOICE should reject ciphertext type 4 (group-only)")
     }
 
     @Test

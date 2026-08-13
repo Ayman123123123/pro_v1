@@ -143,14 +143,132 @@ export function authErrorMessage(data: any, status: number): string {
 }
 
 // ━━━━━━━━━━━━━━━━ 🔐 Auth ━━━━━━━━━━━━━━━━
+export type BackendProbe = {
+  state: 'CHECKING' | 'LIVE' | 'READY' | 'DOWN';
+  status?: string;
+  hint: string;
+};
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const value = JSON.parse(text);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAdminPanelPlaceholder(text: string): boolean {
+  return /^healthy\s*$/i.test(text.trim());
+}
+
+/**
+ * Login badge must not treat a dead JVM as “wrong password”, and must not
+ * treat the admin-panel container’s plaintext `/health` as the Kotlin API.
+ */
+export async function probeBackend(timeoutMs = 2500): Promise<BackendProbe> {
+  const ctrl = new AbortController();
+  const kill = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  const fetchText = async (path: string) => {
+    const response = await fetch(path, { signal: ctrl.signal, cache: 'no-store' });
+    const text = await response.text();
+    return { response, text };
+  };
+  try {
+    try {
+      const live = await fetchText('/health/live');
+      if (isAdminPanelPlaceholder(live.text)) {
+        return {
+          state: 'DOWN',
+          hint: 'طلب الصحة وصل للوحة لا للخادم. افتح http://127.0.0.1:8088/ عبر Nginx.',
+        };
+      }
+      const liveJson = parseJsonObject(live.text);
+      if (live.response.ok && liveJson && String(liveJson.probe || '').toLowerCase() === 'live') {
+        try {
+          const ready = await fetchText('/health');
+          const readyJson = parseJsonObject(ready.text);
+          const status = String(readyJson?.status || '').toUpperCase();
+          if (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') {
+            return { state: 'READY', status, hint: 'الخادم جاهز لتسجيل الدخول' };
+          }
+        } catch {
+          /* JVM is up; databases may still be starting */
+        }
+        return { state: 'LIVE', status: 'STARTING', hint: 'الخادم يعمل وجاري تجهيز قواعد البيانات' };
+      }
+    } catch {
+      /* fall through to /health */
+    }
+
+    const ready = await fetchText('/health');
+    if (isAdminPanelPlaceholder(ready.text)) {
+      return {
+        state: 'DOWN',
+        hint: 'طلب /health وصل للوحة لا لـ Kotlin. استخدم المنفذ 8088 لا 3000.',
+      };
+    }
+    const readyJson = parseJsonObject(ready.text);
+    const status = String(readyJson?.status || '').toUpperCase();
+    if (readyJson && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED')) {
+      return { state: 'READY', status, hint: 'الخادم جاهز لتسجيل الدخول' };
+    }
+    if (ready.response.ok && readyJson) {
+      return { state: 'LIVE', status: status || 'STARTING', hint: 'الخادم يعمل وجاري التجهيز' };
+    }
+    return {
+      state: 'DOWN',
+      hint: 'تعذر الوصول إلى /health. شغّل Docker ثم: .\\scripts\\compose-recover.ps1',
+    };
+  } catch {
+    return {
+      state: 'DOWN',
+      hint: 'الخادم غير متصل. افتح http://127.0.0.1:8088/ بعد تشغيل Docker Desktop.',
+    };
+  } finally {
+    window.clearTimeout(kill);
+  }
+}
+
+export function loginFailureMessage(status: number | undefined, body: Record<string, unknown> | null, networkFailed: boolean): string {
+  if (networkFailed) {
+    return 'الخادم غير متصل. ليست مشكلة كلمة مرور. شغّل Docker وافتح http://127.0.0.1:8088/';
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Nginx لا يجد الباك اند بعد. انتظر حتى يصبح /health أخضر ثم أعد المحاولة.';
+  }
+  const code = String(body?.error || body?.message || '');
+  if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
+    return 'بيانات الدخول مرفوضة. استخدم RED_ADMIN_USERNAME و RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
+  }
+  if (status === 403 || status === 423) {
+    return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
+  }
+  return code || (status ? `تعذر الدخول (HTTP ${status})` : 'تعذر تسجيل الدخول');
+}
+
 export async function adminLogin(username: string, password: string) {
-  const response = await fetch('/api/auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-RED-Admin-Web': '1' }, credentials: 'same-origin',
-    body: JSON.stringify({ username, password })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.user?.role !== 'ADMIN') throw new Error(data.error || 'بيانات المسؤول غير صحيحة');
-  authStore.set(data.accessToken, data.refreshToken || undefined, data.user);
+  let response: Response;
+  try {
+    response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RED-Admin-Web': '1' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ username, password }),
+    });
+  } catch {
+    throw new Error(loginFailureMessage(undefined, null, true));
+  }
+  const raw = await response.text();
+  const data = parseJsonObject(raw) || {};
+  if (!response.ok) {
+    throw new Error(loginFailureMessage(response.status, data, false));
+  }
+  const user = data.user as { role?: string } | undefined;
+  if (user?.role !== 'ADMIN') {
+    throw new Error('هذا الحساب ليس مسؤولاً. ادخل بـ RED_ADMIN_USERNAME من ملف .env');
+  }
+  authStore.set(String(data.accessToken || ''), typeof data.refreshToken === 'string' ? data.refreshToken : undefined, data.user);
   return data;
 }
 

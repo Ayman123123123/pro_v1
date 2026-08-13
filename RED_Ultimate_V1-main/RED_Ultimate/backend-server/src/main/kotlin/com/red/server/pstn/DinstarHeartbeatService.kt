@@ -3,35 +3,37 @@ package com.red.server.pstn
 import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * ❤️ Heartbeat قوي بين الباك إند وبوابات Dinstar
- * - يفحص حالة كل بوابة كل 30 ثانية عبر getHardwareStatus
- * - يحدّث health_state و last_seen_at في DB
- * - يحرر المنافذ العالقة التي بقيت ACTIVE لأكثر من 10 دقائق بلا HangupEvent
- * - يكشف انقطاع الشبكة ويعيد الاتصال AMI تلقائيًا
- *
- * يمنع تعليق خطوط SIM عند سقوط WebSocket أو فقدان حدث Hangup.
+ * Heartbeat between the backend and Dinstar gateways.
+ * - Skips entirely when DINSTAR_ENABLED=false (no hardware / Docker cannot see LAN).
+ * - Logs WARN only on state change or every 5 minutes (no 30s spam).
+ * - Releases ports stuck ACTIVE > 10 minutes.
  */
 @Service
 @EnableScheduling
 class DinstarHeartbeatService(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService,
-    private val loadBalancer: DinstarLoadBalancer
+    private val loadBalancer: DinstarLoadBalancer,
+    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean
 ) {
     companion object { private val log = LoggerFactory.getLogger(DinstarHeartbeatService::class.java) }
 
-    // تتبع وقت بدء كل مكالمة نشطة لمنع التعليق
-    private val activeCalls = ConcurrentHashMap<String, Instant>() // key: gatewayId#port
+    private val activeCalls = ConcurrentHashMap<String, Instant>()
+    private val lastWarnAt = ConcurrentHashMap<String, Instant>()
+    private val lastReachable = ConcurrentHashMap<String, Boolean>()
 
-    @Scheduled(fixedDelay = 30_000, initialDelay = 10_000)
+    @Scheduled(fixedDelayString = "\${red.dinstar.heartbeat-ms:30000}", initialDelay = 15_000)
     fun heartbeat() {
+        if (!dinstarEnabled) return
         val gateways = try { fleet.listGateways(onlyEnabled = true) } catch (e: Exception) {
             log.warn("DINSTAR heartbeat: failed to list gateways: {}", e.message)
             return
@@ -45,8 +47,6 @@ class DinstarHeartbeatService(
             try {
                 val ports = hardware.getHardwareStatus(gw)
                 fleet.markHealthy(gw.id)
-
-                // فحص المنافذ العالقة: إذا بقيت ACTIVE لأكثر من 10 دقائق بدون تحديث، حررها
                 for (port in ports) {
                     val idx = (port["index"] as? Number)?.toInt() ?: continue
                     val callState = port["callState"]?.toString()
@@ -54,31 +54,45 @@ class DinstarHeartbeatService(
                     if (callState.equals("ACTIVE", true)) {
                         activeCalls.putIfAbsent(key, Instant.now())
                         val started = activeCalls[key] ?: Instant.now()
-                        if (java.time.Duration.between(started, Instant.now()).toMinutes() > 10) {
+                        if (Duration.between(started, Instant.now()).toMinutes() > 10) {
                             log.warn("DINSTAR port {} on gateway {} stuck ACTIVE >10min — force releasing", idx, gw.host)
                             loadBalancer.releasePort(gw.id, idx)
                             activeCalls.remove(key)
                         }
                     } else {
                         activeCalls.remove(key)
-                        // إذا أصبح غير مشغول، تأكد من تحريره من الموزع
                         if (callState.equals("IDLE", true) || callState.equals("REGISTERED", true)) {
                             loadBalancer.releasePort(gw.id, idx)
                         }
                     }
                 }
-                log.debug("DINSTAR heartbeat ok: gateway={} ports={}", gw.host, ports.size)
+                val recovered = lastReachable.put(gw.host, true) == false
+                if (recovered) log.info("DINSTAR gateway {} is reachable again", gw.host)
+                else log.debug("DINSTAR heartbeat ok: gateway={} ports={}", gw.host, ports.size)
             } catch (e: Exception) {
-                log.warn("DINSTAR heartbeat failed for gateway {}: {}", gw.host, e.message)
                 fleet.markFailure(gw.id, e.message ?: "heartbeat failed")
+                val firstFailure = lastReachable.put(gw.host, false) != false
+                val last = lastWarnAt[gw.host]
+                val quiet = last != null && Duration.between(last, Instant.now()).toMinutes() < 5
+                if (firstFailure || !quiet) {
+                    log.warn(
+                        "DINSTAR heartbeat failed for {} — power, LAN IP, or Docker cannot reach the box. Set DINSTAR_ENABLED=false if no hardware. ({})",
+                        gw.host,
+                        e.message
+                    )
+                    lastWarnAt[gw.host] = Instant.now()
+                } else {
+                    log.debug("DINSTAR still unreachable {}: {}", gw.host, e.message)
+                }
             }
         }
     }
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     fun cleanupStaleCalls() {
+        if (!dinstarEnabled) return
         val now = Instant.now()
-        val stale = activeCalls.filter { java.time.Duration.between(it.value, now).toMinutes() > 15 }
+        val stale = activeCalls.filter { Duration.between(it.value, now).toMinutes() > 15 }
         for ((key, _) in stale) {
             log.warn("DINSTAR cleanup: releasing stale call {}", key)
             val parts = key.split("#")
@@ -88,7 +102,6 @@ class DinstarHeartbeatService(
                     val port = parts[1].toIntOrNull()
                     if (port != null) loadBalancer.releasePort(gwId, port)
                 } catch (_: Exception) {
-                    // gatewayId might be "local" for single-gateway mode
                     val port = parts[1].toIntOrNull()
                     if (port != null) loadBalancer.releasePort(null, port)
                 }

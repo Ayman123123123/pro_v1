@@ -38,6 +38,9 @@ services:
       - no-new-privileges:true
 
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
+  # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
+  # Never publish 8080 to the host — that port is reserved for the optional
+  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
@@ -54,6 +57,8 @@ services:
         reservations:
           memory: 512M
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - YOUNES_RUNTIME=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -66,6 +71,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
@@ -78,6 +84,7 @@ services:
       - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
+      - YOUNES_FCM_SERVER_KEY=${YOUNES_FCM_SERVER_KEY:-}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
@@ -90,6 +97,8 @@ services:
       # Set RED_ADMIN_COOKIE_SECURE=true only behind real TLS.
       - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-false}
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - identity-secrets:/run/secrets:ro
       - backup-data:/backups
@@ -129,6 +138,7 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
+      - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
     security_opt:

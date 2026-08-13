@@ -23,7 +23,7 @@ import {
   CloudServerOutlined,
   DatabaseOutlined,
 } from '@ant-design/icons';
-import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals } from './api';
+import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
 import ErrorBoundary from './components/ErrorBoundary';
 import { usePolling } from './hooks/usePolling';
@@ -132,11 +132,10 @@ export default function App() {
     try {
       const [pending, health] = await Promise.all([
         getPendingApprovals().catch(() => []),
-        fetch('/health', { signal: AbortSignal.timeout(6000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('down')))),
+        probeBackend(3000),
       ]);
       setPendingCount(Array.isArray(pending) ? pending.length : 0);
-      const status = String(health?.status || '').toUpperCase();
-      if (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') {
+      if (health.state === 'READY' || health.state === 'LIVE') {
         healthFailsRef.current = 0;
         setApiUp(true);
       } else {

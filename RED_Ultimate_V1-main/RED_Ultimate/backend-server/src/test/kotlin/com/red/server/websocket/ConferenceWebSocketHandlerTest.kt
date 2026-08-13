@@ -76,6 +76,20 @@ class ConferenceWebSocketHandlerTest {
         }
     }
 
+    @Test fun `targeted OFFER reaches only the named peer`() {
+        val alice = Probe("s1", "73066")
+        val bob = Probe("s2", "28261")
+        val cara = Probe("s3", "11154")
+        handler.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        handler.handleTextMessage(bob.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        handler.handleTextMessage(cara.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        alice.sent.clear(); bob.sent.clear(); cara.sent.clear()
+        handler.handleTextMessage(alice.session, TextMessage("""{"type":"OFFER","roomId":"red-room-12345","payload":{"sdp":"v=0","targetUserId":"28261"}}"""))
+        assertTrue(bob.sent.any { it.contains("OFFER") }) { "Bob is the target" }
+        assertTrue(cara.sent.none { it.contains("OFFER") }) { "Cara must not receive Alice's offer to Bob" }
+        assertTrue(alice.sent.none { it.contains("OFFER") })
+    }
+
     @Test fun `LEAVE notifies other peers`() {
         val alice = Probe("s1", "73066")
         val bob = Probe("s2", "28261")

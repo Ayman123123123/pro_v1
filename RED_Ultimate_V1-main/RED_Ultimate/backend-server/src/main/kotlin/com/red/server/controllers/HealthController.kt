@@ -37,7 +37,10 @@ class HealthController(
     @Value("\${spring.datasource.url:}") private val dbUrl: String,
     @Value("\${red.dinstar.ip:}") private val dinstarIp: String,
     @Value("\${red.dinstar.port:443}") private val dinstarPort: Int,
-    @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String
+    @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String,
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean,
+    @Value("\${spring.data.mongodb.uri:}") private val mongoUri: String,
+    @Value("\${spring.data.redis.host:}") private val redisHost: String
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(HealthController::class.java)
@@ -148,9 +151,16 @@ class HealthController(
                 )
             ),
             "dinstar" to mapOf(
+                "enabled" to dinstarEnabled,
                 "host" to dinstarIp,
                 "port" to dinstarPort,
                 "scheme" to dinstarScheme
+            ),
+            "bindings" to mapOf(
+                "runtime" to InfrastructureBinding.detectRuntime().name,
+                "mongodbHost" to (InfrastructureBinding.mongoHost(mongoUri) ?: "unset"),
+                "postgresHost" to (InfrastructureBinding.postgresHost(dbUrl) ?: "unset"),
+                "redisHost" to redisHost.ifBlank { "unset" }
             ),
             "flyway" to mapOf(
                 "latestVersion" to flywayResult.getOrNull()?.first,

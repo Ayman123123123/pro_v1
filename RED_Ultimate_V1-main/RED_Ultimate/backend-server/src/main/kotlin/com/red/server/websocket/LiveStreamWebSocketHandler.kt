@@ -85,7 +85,8 @@ class LiveStreamWebSocketHandler(
                         val notif = objectMapper.writeValueAsString(mapOf(
                             "type" to "VIEWER_JOINED",
                             "roomId" to signal.roomId,
-                            "payload" to mapOf("userId" to userId, "isBroadcaster" to false)
+                            "userId" to userId,
+                            "payload" to mapOf("userId" to userId, "isBroadcaster" to "false")
                         ))
                         runCatching { broadcaster.sendMessage(TextMessage(notif)) }
                     }
@@ -94,15 +95,20 @@ class LiveStreamWebSocketHandler(
             "OFFER" -> {
                 val role = sessionRole[session.id] ?: return
                 if (role == Role.BROADCASTER) {
-                    // Broadcast OFFER to all viewers (true live)
                     val vs = viewers[signal.roomId] ?: return
+                    val targetId = signal.payload["targetUserId"]?.toString()?.takeIf { it.isNotBlank() }
                     val outbound = objectMapper.writeValueAsString(mapOf(
                         "type" to "OFFER",
                         "roomId" to signal.roomId,
                         "userId" to userId,
                         "payload" to signal.payload
                     ))
-                    vs.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
+                    val recipients = if (targetId != null) {
+                        vs.filter { it.isOpen && (it.attributes["userId"] as? String) == targetId }
+                    } else {
+                        vs.filter { it.isOpen }
+                    }
+                    recipients.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
                 } else {
                     // Viewer should not send OFFER in live mode, but relay to broadcaster for co-host case
                     val broadcaster = broadcasters[signal.roomId] ?: return
