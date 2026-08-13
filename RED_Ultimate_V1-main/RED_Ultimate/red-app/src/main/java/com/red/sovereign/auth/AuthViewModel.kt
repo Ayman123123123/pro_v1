@@ -49,6 +49,28 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * تعيين عنوان الخادم يدويًا.
+     *
+     * كان غياب هذا المدخل يجعل المستخدم رهينة الاكتشاف التلقائي لشبكة /24؛
+     * إن كان الخادم على شبكة فرعية أخرى أو عبر نفق (WireGuard/Tailscale) فلا
+     * سبيل لإدخال عنوانه. يعيد null عند النجاح أو رسالة خطأ عربية.
+     */
+    fun setServerUrl(value: String): String? {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)"
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            return "يجب أن يبدأ العنوان بـ http:// أو https://"
+        }
+        return try {
+            ServerEndpoint.update(getApplication(), trimmed)
+            serverState = ServerState.Ready(ServerEndpoint.url())
+            null
+        } catch (_: Exception) {
+            "عنوان غير صالح. استخدم صيغة http://IP:8088 أو https://domain"
+        }
+    }
+
     fun showRegister() { state = AuthState.Register }
     fun showLogin() { state = AuthState.Login }
     fun showRecovery() { state = AuthState.Recovery }
@@ -225,6 +247,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "لم يُعثر على خادم يونس آمن في الشبكة المحلية. تأكد من اتصال الـ Wi-Fi."
         value.contains("already registered", ignoreCase = true) || value.contains("Username is taken", ignoreCase = true) ->
             "اسم المستخدم هذا محجوز بالفعل؛ يرجى اختيار اسم مستخدم آخر."
+        value.contains("3-32 characters", ignoreCase = true) || value.contains("3-20", ignoreCase = true) ->
+            "اسم المستخدم يجب أن يكون 3-32 حرفاً إنكليزياً ويبدأ بحرف، دون مسافات أو رموز."
         value.contains("12-128 characters", ignoreCase = true) ->
             "كلمة المرور يجب أن تكون بين 12 و128 حرفاً وتتضمن مزيجاً من الأحرف والأرقام."
         value.contains("contain the username", ignoreCase = true) ->
@@ -233,8 +257,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "كلمة المرور هذه شائعة وسهلة التخمين؛ يرجى اختيار كلمة مرور أكثر تعقيداً."
         value.contains("2-100 visible characters", ignoreCase = true) ->
             "الاسم الظاهر يجب أن يتكون من 2 إلى 100 حرف واضح."
+        value.contains("Base64", ignoreCase = true) || value.contains("deviceName", ignoreCase = true) ->
+            "تعذر إنشاء مفاتيح التشفير بشكل صحيح. أعد تشغيل التطبيق وحاول مجدداً."
+        value.contains("Device enrollment is required", ignoreCase = true) ->
+            "تعذر تجهيز بيانات الجهاز المشفرة. أعد المحاولة."
         value.contains("UNAUTHENTICATED", ignoreCase = true) ->
             "انتهت الجلسة أو غير مصرح. يرجى تسجيل الدخول مجدداً."
+        value.contains("INVALID_REQUEST", ignoreCase = true) || value.contains("MALFORMED_JSON", ignoreCase = true) || value.contains("VALIDATION_FAILED", ignoreCase = true) ->
+            "الطلب غير صالح أو ناقص البيانات. تأكد من اتصالك بالخادم الصحيح ثم أعد المحاولة."
+        value.contains("INTERNAL_ERROR", ignoreCase = true) ->
+            "حدث خطأ داخلي في الخادم. يرجى المحاولة لاحقاً أو التواصل مع الإدارة."
         else -> value.ifBlank { "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." }
     }
 
