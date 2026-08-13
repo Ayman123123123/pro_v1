@@ -35,12 +35,14 @@ lottie-compose = "6.7.1"
 haze = "1.5.3"
 
 # Other versions
-# 0.99.1 is SHA-256 pinned and keeps the existing PQXDH/Kyber session API.
-# 0.100.0 makes SPQR mandatory for every session and needs a protocol rollout.
-libsignal-client = "0.99.1"
+# Maven Central latest published as of 2025-11-18 is 0.86.5 (confirmed on
+# central.sonatype.com and mvnrepository). 0.99.1 / 0.96.3 are NOT published
+# and 404 on every public mirror. 0.86.5 includes KEMKeyPair + KyberPreKeyRecord
+# and is SHA-256 pinned in verification-metadata.xml + local-maven prefetch.
+libsignal-client = "0.86.5"
 mp4parser = "1.9.39"
 androidx-room = "2.8.4"
-accompanist = "0.28.0"
+accompanist = "0.37.3"
 nanohttpd = "2.3.1"
 navigation-safe-args-gradle-plugin = "2.9.8"
 protobuf-gradle-plugin = "0.10.0"

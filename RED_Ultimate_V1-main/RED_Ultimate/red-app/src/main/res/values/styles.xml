@@ -13,55 +13,31 @@
     <style name="TextAppearance.Younes.Arabic" parent="TextAppearance.Younes" />
 
     <!-- ===== THEME BASE ===== -->
-    <style name="Theme.Younes" parent="android:style/Theme.Material.NoActionBar">
-        <!-- الألوان الأساسية -->
+    <!-- Framework theme only: do not reference AppCompat/Material attrs
+         (colorHighlight, colorHint, buttonStyleHighlight, textInputStyle)
+         with the android: prefix — AAPT2 fails resource linking. -->
+    <style name="Theme.Younes" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorPrimary">@color/yns_primary</item>
         <item name="android:colorPrimaryDark">@color/yns_primary_dark</item>
         <item name="android:colorAccent">@color/yns_secondary</item>
         <item name="android:colorForeground">@color/yns_on_background</item>
         <item name="android:colorBackground">@color/yns_background</item>
-        <item name="android:colorHighlight">@color/yns_primary_light</item>
-        <item name="android:colorHint">@color/yns_text_tertiary</item>
-        <item name="android:colorError">@color/yns_error</item>
-        
-        <!-- النوافذ -->
         <item name="android:windowBackground">@color/yns_background</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@color/yns_status_bar</item>
         <item name="android:navigationBarColor">@color/yns_navigation_bar</item>
         <item name="android:windowNoTitle">true</item>
-        
-        <!-- الخطوط -->
-        <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColorPrimary">@color/yns_text_primary</item>
         <item name="android:textColorSecondary">@color/yns_text_secondary</item>
-        <item name="android:textColorTertiary">@color/yns_text_tertiary</item>
         <item name="android:textColorHint">@color/yns_text_tertiary</item>
-        
-        <!-- الأزرار -->
         <item name="android:buttonStyle">@style/Widget.Younes.Button</item>
-        <item name="android:buttonStyleHighlight">@style/Widget.Younes.Button.Highlight</item>
-        
-        <!-- أزرار التبديل والإضافات المصغرة -->
         <item name="android:checkboxStyle">@style/Widget.Younes.CheckBox</item>
         <item name="android:radioButtonStyle">@style/Widget.Younes.RadioButton</item>
-        <item name="android:switchStyle">@style/Widget.Younes.Switch</item>
-        
-        <!-- الإدخالات -->
-        <item name="android:textInputStyle">@style/Widget.Younes.TextInputLayout</item>
         <item name="android:editTextStyle">@style/Widget.Younes.EditText</item>
-        
         <item name="android:editTextColor">@color/yns_text_primary</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowIsFloating">false</item>
-        <item name="android:windowIsTranslucent">false</item>
-        
-        <!-- الظلال والارتفاع -->
-        <item name="android:elevation">0dp</item>
-        <item name="android:outlineSpotShadowColor">@android:color/transparent</item>
     </style>
     
     <!-- ===== BUTTON STYLES ===== -->
