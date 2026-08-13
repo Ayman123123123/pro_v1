@@ -1,23 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- YOUNES — Adaptive icon background. Deep navy matches the official Q/Y launcher. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-  <group>
-    <path android:pathData="M108 0H0v108h108V0Z">
-      <aapt:attr name="android:fillColor">
-        <gradient
-            android:type="linear"
-            android:startX="54"
-            android:startY="0"
-            android:endX="54"
-            android:endY="108">
-          <item android:color="#FF0B1E33" android:offset="0"/>
-          <item android:color="#FF000C1C" android:offset="1"/>
-        </gradient>
-      </aapt:attr>
+    <path android:pathData="M0,0 L108,0 L108,108 L0,108 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="108">
+                <item android:color="#FF0B1E33" android:offset="0"/>
+                <item android:color="#FF000C1C" android:offset="1"/>
+            </gradient>
+        </aapt:attr>
     </path>
-  </group>
 </vector>
