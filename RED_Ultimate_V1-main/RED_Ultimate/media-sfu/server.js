@@ -12,8 +12,16 @@ const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT || 40100);
 const WORKER_COUNT = Math.max(1, Number(process.env.MEDIASOUP_WORKERS || Math.min(4, os.cpus().length)));
 const ANNOUNCED_IP = process.env.MEDIASOUP_ANNOUNCED_IP || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
+const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+const MAX_TRANSPORTS_PER_PEER = 4;
+const MAX_PRODUCERS_PER_PEER = 4;
+const MAX_CONSUMERS_PER_PEER = 256;
 
 if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
+if (!Number.isInteger(RTC_MIN_PORT) || !Number.isInteger(RTC_MAX_PORT) || RTC_MIN_PORT < 1024 || RTC_MAX_PORT > 65535 || RTC_MIN_PORT > RTC_MAX_PORT) {
+  throw new Error('RTC_MIN_PORT/RTC_MAX_PORT must define a valid non-privileged UDP range');
+}
+if (!Number.isInteger(WORKER_COUNT) || WORKER_COUNT > 32) throw new Error('MEDIASOUP_WORKERS must be between 1 and 32');
 if (!ANNOUNCED_IP) console.warn('MEDIASOUP_ANNOUNCED_IP is unset; LAN/WAN ICE candidates may be unreachable');
 
 const mediaCodecs = [
@@ -41,6 +49,9 @@ function authenticate(header) {
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw new Error('Unauthorized');
   const claims = JSON.parse(base64UrlDecode(parts[1]).toString('utf8'));
   if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Expired or invalid token');
+  if (claims.scope !== 'sfu' || !ROOM_ID_PATTERN.test(String(claims.roomId || '')) || typeof claims.canProduce !== 'boolean') {
+    throw new Error('Invalid SFU capability');
+  }
   return claims;
 }
 
@@ -114,7 +125,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(404); res.end();
 });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   if (!req.url.startsWith('/sfu')) { socket.destroy(); return; }
   let claims;
@@ -133,12 +144,21 @@ wss.on('connection', (ws, _req, claims) => {
       if (type === 'join') {
         if (context.room) throw new Error('Already joined');
         const roomId = String(message.roomId || '');
-        if (!/^[A-Za-z0-9_-]{8,128}$/.test(roomId)) throw new Error('Invalid roomId');
+        if (!ROOM_ID_PATTERN.test(roomId)) throw new Error('Invalid roomId');
+        if (roomId !== String(claims.roomId)) throw new Error('Ticket is not valid for this room');
         const room = await roomFor(roomId);
         const peerId = claims.redId;
         const existing = room.peers.get(peerId);
         if (existing) { existing.ws.close(4001, 'replaced'); for (const t of existing.transports.values()) t.close(); }
-        const peer = { ws, accountId: claims.sub, transports: new Map(), producers: new Map(), consumers: new Map() };
+        const peer = {
+          ws,
+          accountId: claims.sub,
+          canProduce: claims.canProduce,
+          transports: new Map(),
+          transportDirections: new Map(),
+          producers: new Map(),
+          consumers: new Map()
+        };
         room.peers.set(peerId, peer);
         Object.assign(context, { roomId, peerId, room, peer });
         return send(ws, requestId, { status: 'joined', peerId, rtpCapabilities: room.router.rtpCapabilities,
@@ -147,10 +167,18 @@ wss.on('connection', (ws, _req, claims) => {
 
       const peer = requirePeer(context);
       if (type === 'createTransport') {
+        const direction = String(message.direction || '');
+        if (direction !== 'send' && direction !== 'recv') throw new Error('Transport direction must be send or recv');
+        if (direction === 'send' && !peer.canProduce) throw new Error('This ticket cannot create a sending transport');
+        if (peer.transports.size >= MAX_TRANSPORTS_PER_PEER) throw new Error('Transport limit reached');
         const transport = await createTransport(context.room.router);
         peer.transports.set(transport.id, transport);
-        transport.on('close', () => peer.transports.delete(transport.id));
-        return send(ws, requestId, { status: 'transportCreated', direction: message.direction, transportOptions: transportOptions(transport) });
+        peer.transportDirections.set(transport.id, direction);
+        transport.on('close', () => {
+          peer.transports.delete(transport.id);
+          peer.transportDirections.delete(transport.id);
+        });
+        return send(ws, requestId, { status: 'transportCreated', direction, transportOptions: transportOptions(transport) });
       }
       if (type === 'connectTransport') {
         const transport = peer.transports.get(message.transportId);
@@ -159,8 +187,11 @@ wss.on('connection', (ws, _req, claims) => {
         return send(ws, requestId, { status: 'transportConnected', transportId: transport.id });
       }
       if (type === 'produce') {
+        if (!peer.canProduce) throw new Error('This ticket cannot produce media');
         const transport = peer.transports.get(message.transportId);
-        if (!transport) throw new Error('Transport not found');
+        if (!transport || peer.transportDirections.get(message.transportId) !== 'send') throw new Error('Sending transport not found');
+        if (peer.producers.size >= MAX_PRODUCERS_PER_PEER) throw new Error('Producer limit reached');
+        if (message.kind !== 'audio' && message.kind !== 'video') throw new Error('Unsupported producer kind');
         const producer = await transport.produce({ kind: message.kind, rtpParameters: message.rtpParameters, appData: { peerId: context.peerId } });
         peer.producers.set(producer.id, producer);
         producer.on('transportclose', () => peer.producers.delete(producer.id));
@@ -169,7 +200,8 @@ wss.on('connection', (ws, _req, claims) => {
       }
       if (type === 'consume') {
         const transport = peer.transports.get(message.transportId);
-        if (!transport) throw new Error('Transport not found');
+        if (!transport || peer.transportDirections.get(message.transportId) !== 'recv') throw new Error('Receiving transport not found');
+        if (peer.consumers.size >= MAX_CONSUMERS_PER_PEER) throw new Error('Consumer limit reached');
         if (!context.room.router.canConsume({ producerId: message.producerId, rtpCapabilities: message.rtpCapabilities })) throw new Error('Cannot consume producer');
         const consumer = await transport.consume({ producerId: message.producerId, rtpCapabilities: message.rtpCapabilities, paused: true });
         peer.consumers.set(consumer.id, consumer);

@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.ConferenceRoomService
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -16,11 +17,19 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
     private val objectMapper = ObjectMapper()
-    private val handler = ConferenceWebSocketHandler(objectMapper)
+    private val rooms = ConferenceRoomService()
+    private val handler = ConferenceWebSocketHandler(objectMapper, rooms)
+
+    init {
+        rooms.createRoom("red-room-12345", "73066", "Alice", "73066", "Test", false, false, null)
+        rooms.addParticipant("red-room-12345", "73066")
+        rooms.addParticipant("red-room-12345", "28261")
+        rooms.addParticipant("red-room-12345", "11154")
+    }
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()
-        private val attrs: MutableMap<String, Any> = mutableMapOf("userId" to userId)
+        private val attrs: MutableMap<String, Any> = mutableMapOf("userId" to userId, "accountId" to userId)
         val session: WebSocketSession = mock<WebSocketSession>().also { sock ->
             whenever(sock.id).thenReturn(sessionId)
             whenever(sock.attributes).thenReturn(attrs)
@@ -33,6 +42,14 @@ class ConferenceWebSocketHandlerTest {
             doAnswer { null }.whenever(sock).close()
             doAnswer { null }.whenever(sock).close(any<CloseStatus>())
         }
+    }
+
+    @Test fun `direct websocket JOIN without REST membership is rejected`() {
+        val outsider = Probe("outsider", "99999")
+        val failure = runCatching {
+            handler.handleTextMessage(outsider.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
     }
 
     @Test fun `JOIN adds session to room and sends ROOM_STATE`() {

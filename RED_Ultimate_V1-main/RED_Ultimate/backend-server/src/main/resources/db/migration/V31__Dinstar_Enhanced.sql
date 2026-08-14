@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════
 -- DINSTAR Enhanced - جداول إضافية للوظائف المتقدمة
--- V26 - 2026-08-13
+-- V31 - 2026-08-14 (forward-only repair after duplicate V25/V26 versions)
 -- ═══════════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════════
@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS dinstar_cdr (
     raw_data JSONB, -- بيانات خام من البوابة
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- V15 already creates dinstar_cdr with the authoritative billing schema.  The
+-- CREATE TABLE above is therefore a no-op on every upgraded installation.  Add
+-- the hardware/API fields explicitly instead of relying on an incompatible
+-- second CREATE TABLE definition.  Keep V15's UUID primary key and constraints.
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS duration INTEGER;
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS codec VARCHAR(20);
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS hangup_cause VARCHAR(50);
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS sip_call_id VARCHAR(100);
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS asterisk_channel VARCHAR(100);
+ALTER TABLE dinstar_cdr ADD COLUMN IF NOT EXISTS raw_data JSONB;
+
 
 CREATE INDEX IF NOT EXISTS idx_cdr_gateway ON dinstar_cdr(gateway_id);
 CREATE INDEX IF NOT EXISTS idx_cdr_port ON dinstar_cdr(port_index);
@@ -241,7 +253,7 @@ SELECT
     c.call_type,
     c.hangup_cause,
     CASE 
-        WHEN c.direction = 'INBOUND' THEN c.caller_number
+        WHEN LOWER(c.direction) = 'inbound' THEN c.caller_number
         ELSE c.callee_number
     END as contact_number
 FROM dinstar_cdr c

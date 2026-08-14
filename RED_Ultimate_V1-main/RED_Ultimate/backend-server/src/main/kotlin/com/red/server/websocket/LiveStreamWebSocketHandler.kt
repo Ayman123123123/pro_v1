@@ -30,13 +30,17 @@ class LiveStreamWebSocketHandler(
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
-        val accountId = session.attributes["accountId"] as? String
+        val accountId = session.attributes["accountId"] as? String ?: error("Authenticated account ID is missing")
         val redId = session.attributes["redId"] as? String ?: userId
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "streamId is required" }
         require(signal.roomId.matches(STREAM_ID)) { "Invalid streamId" }
+        val type = signal.type.uppercase()
+        if (type != "JOIN") {
+            require(sessionToStream[session.id] == signal.roomId) { "Join this stream before sending signaling frames" }
+        }
 
-        when (signal.type.uppercase()) {
+        when (type) {
             "JOIN" -> {
                 val requestedRole = if ((signal.payload["role"] ?: "viewer").toString().equals("broadcaster", ignoreCase = true)) Role.BROADCASTER else Role.VIEWER
                 // Ownership verification for broadcaster
@@ -68,6 +72,9 @@ class LiveStreamWebSocketHandler(
                         return
                     }
                     // Owner verified
+                    sessionToStream[session.id]?.let { existing ->
+                        require(existing == signal.roomId) { "A signaling socket can join only one stream" }
+                    }
                     sessionToStream[session.id] = signal.roomId
                     sessionRole[session.id] = Role.BROADCASTER
                     broadcasters[signal.roomId]?.let { old ->
@@ -75,7 +82,29 @@ class LiveStreamWebSocketHandler(
                     }
                     broadcasters[signal.roomId] = session
                 } else {
-                    // Viewer path — ensure stream exists (allow viewer before broadcaster join for UX?)
+                    // REST /join is the authorization boundary for private streams.
+                    // Requiring its viewer registration here prevents a direct WS
+                    // upgrade from bypassing the stream password.
+                    val record = liveStreamService.getStreamRecord(signal.roomId)
+                    val authorizedViewer = record != null && (
+                        record.broadcasterId == accountId ||
+                            liveStreamService.isViewer(signal.roomId, accountId)
+                        )
+                    if (!authorizedViewer) {
+                        val err = objectMapper.writeValueAsString(
+                            mapOf(
+                                "type" to "ERROR",
+                                "roomId" to signal.roomId,
+                                "payload" to mapOf("code" to "JOIN_REQUIRED", "message" to "Join the live stream through REST first")
+                            )
+                        )
+                        runCatching { session.sendMessage(TextMessage(err)) }
+                        runCatching { session.close() }
+                        return
+                    }
+                    sessionToStream[session.id]?.let { existing ->
+                        require(existing == signal.roomId) { "A signaling socket can join only one stream" }
+                    }
                     sessionToStream[session.id] = signal.roomId
                     sessionRole[session.id] = Role.VIEWER
                     viewers.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }.add(session)

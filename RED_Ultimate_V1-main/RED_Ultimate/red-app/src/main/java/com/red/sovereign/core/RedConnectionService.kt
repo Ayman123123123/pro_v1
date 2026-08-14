@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
@@ -65,6 +66,10 @@ class RedConnectionService : Service() {
     @Volatile private var connected = false
     private val pendingSends = ConcurrentLinkedQueue<PendingSend>()
     private val pendingGroupSends = ConcurrentLinkedQueue<PendingGroupSend>()
+    private val pendingAcks = ConcurrentLinkedQueue<PendingAck>()
+    // One bounded consumer preserves server sequence order and prevents an
+    // unbounded coroutine-per-frame fan-out during reconnect bursts.
+    private val incomingEnvelopes = Channel<RedProtos.RedRED>(capacity = 256)
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var tokenStore: TokenStore
@@ -86,6 +91,9 @@ class RedConnectionService : Service() {
         keyManager = DeviceKeyManager(this)
         socket = RedWebSocketClient(this, tokenStore, ::onEnvelope, ::onState)
         scope.launch {
+            for (envelope in incomingEnvelopes) handleEnvelope(envelope)
+        }
+        scope.launch {
             if (signal.replenishPreKeys() is ApiResult.Error) {
                 notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_error))
             }
@@ -96,7 +104,7 @@ class RedConnectionService : Service() {
         startForeground(CONNECTION_NOTIFICATION, connectionNotification(getString(com.red.sovereign.R.string.status_connecting)))
         if (intent?.action == ACTION_MARK_READ) {
             val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return START_STICKY
-            socket.acknowledge(messageId, intent.getLongExtra(EXTRA_SEQUENCE, 0), "READ")
+            acknowledgeOrQueue(messageId, intent.getLongExtra(EXTRA_SEQUENCE, 0), "READ")
         } else if (intent?.action == ACTION_SEND_PAYLOAD) {
             val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
@@ -122,6 +130,24 @@ class RedConnectionService : Service() {
         return START_STICKY
     }
 
+    private fun acknowledgeOrQueue(messageId: String, sequence: Long, status: String) {
+        if (!connected || !socket.acknowledge(messageId, sequence, status)) {
+            pendingAcks.removeIf { it.messageId == messageId && it.status == status }
+            pendingAcks.add(PendingAck(messageId, sequence, status))
+            if (!connected) socket.connect()
+        }
+    }
+
+    private fun drainAcks() {
+        while (connected) {
+            val ack = pendingAcks.poll() ?: break
+            if (!socket.acknowledge(ack.messageId, ack.sequence, ack.status)) {
+                pendingAcks.add(ack)
+                break
+            }
+        }
+    }
+
     private fun drainSends() {
         while (connected) {
             val pending = pendingSends.poll() ?: break
@@ -144,8 +170,19 @@ class RedConnectionService : Service() {
                         failOutgoing(pending.clientId, group.id, prepared.message)
                     }
                     is ApiResult.Success -> {
-                        prepared.value.distributions.forEach { distribution ->
-                            socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
+                        for (distribution in prepared.value.distributions) {
+                            if (socket.sendEncrypted(
+                                    distribution.receiverRedId,
+                                    group.id,
+                                    "GROUP_KEY_DISTRIBUTION",
+                                    keyManager.protocolDeviceId(),
+                                    distribution.encrypted
+                                ) == null
+                            ) {
+                                failOutgoing(pending.clientId, group.id, "NOT_CONNECTED")
+                                socket.reconnect()
+                                return@launch
+                            }
                         }
                         val sendType = pending.type?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: if (pending.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
                         // تفاعل الإيموجي الجماعي: يُطبّق محلياً ولا يُحفظ كرسالة
@@ -155,9 +192,14 @@ class RedConnectionService : Service() {
                             return@launch
                         }
                         var firstId: String? = null
-                        prepared.value.recipients.forEach { recipient ->
+                        for (recipient in prepared.value.recipients) {
                             val envelope = prepared.value.groupCiphertext.copy(receiverDeviceId = recipient.protocolDeviceId)
                             val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope)
+                            if (id == null) {
+                                failOutgoing(pending.clientId, group.id, "NOT_CONNECTED")
+                                socket.reconnect()
+                                return@launch
+                            }
                             if (firstId == null) firstId = id
                         }
                         firstId?.let {
@@ -182,12 +224,14 @@ class RedConnectionService : Service() {
                 is ApiResult.Success -> {
                     var firstId: String? = null
                     runCatching {
-                        encrypted.value.forEach { envelope ->
+                        for (envelope in encrypted.value) {
                             val id = socket.sendEncrypted(pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope)
+                                ?: error("RED WebSocket disconnected during send")
                             if (firstId == null) firstId = id
                         }
                     }.onFailure { error ->
                         failOutgoing(pending.clientId, pending.conversation, error.message ?: "NOT_CONNECTED")
+                        socket.reconnect()
                         return@launch
                     }
                     firstId?.let {
@@ -239,6 +283,7 @@ class RedConnectionService : Service() {
                         is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_error))
                     }
                 }
+                drainAcks()
                 drainSends()
                 drainGroupSends()
             }
@@ -266,6 +311,13 @@ class RedConnectionService : Service() {
     }
 
     private fun onEnvelope(envelope: RedProtos.RedRED) {
+        if (incomingEnvelopes.trySend(envelope).isFailure) {
+            android.util.Log.e("RedConnectionService", "Inbound queue saturated; reconnecting for server replay")
+            socket.reconnect()
+        }
+    }
+
+    private suspend fun handleEnvelope(envelope: RedProtos.RedRED) {
         when (envelope.signalCase) {
             RedProtos.RedRED.SignalCase.MESSAGE -> {
                 val message = envelope.message
@@ -288,6 +340,7 @@ class RedConnectionService : Service() {
                     }.onSuccess { plaintext ->
                         if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
+                            acknowledgeOrQueue(message.id, message.sequenceNumber, "DELIVERED")
                         } else if (message.type == "RICH_TEXT") {
                             val rich = com.red.sovereign.core.RichMessage.decode(plaintext)
                             when (rich?.action) {
@@ -313,7 +366,7 @@ class RedConnectionService : Service() {
                                 }
                                 else -> storeRichOrPlainMessage(message, plaintext)
                             }
-                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
+                            acknowledgeOrQueue(message.id, message.sequenceNumber, "DELIVERED")
                         } else {
                             repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
                             DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
@@ -327,7 +380,7 @@ class RedConnectionService : Service() {
                                 currentConversationId = message.conversationId
                                 notifyEncryptedMessage(message.senderId, preview, message.type, message.conversationId)
                             }
-                            socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
+                            acknowledgeOrQueue(message.id, message.sequenceNumber, "DELIVERED")
                         }
                     }
                 } else if (message.senderId == tokenStore.redId) {
@@ -358,6 +411,17 @@ class RedConnectionService : Service() {
             RedProtos.RedRED.SignalCase.TYPING -> {
                 val typing = envelope.typing
                 TypingEventBus.publish(TypingEvent(typing.conversationId, typing.userId, typing.isTyping))
+            }
+            RedProtos.RedRED.SignalCase.REMOTE_WIPE -> {
+                val commandId = envelope.remoteWipe.commandId
+                if (commandId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) {
+                    // Queue the acknowledgement before erasing credentials and the
+                    // encrypted databases. The typed frame can only arrive over the
+                    // authenticated /ws/master connection.
+                    socket.acknowledgeRemoteWipe(commandId)
+                    com.red.sovereign.security.RemoteAppWipe.execute(applicationContext)
+                    stopSelf()
+                }
             }
             else -> Unit
         }
@@ -428,7 +492,9 @@ class RedConnectionService : Service() {
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
         }
-        manager.notify(sender.hashCode(), builder.build())
+        // One notification slot per conversation, not per sender: the same user
+        // can speak in several groups without collapsing unrelated threads.
+        manager.notify(convoId.hashCode(), builder.build())
     }
 
     private fun connectionNotification(text: String) = NotificationCompat.Builder(this, CONNECTION_CHANNEL)
@@ -458,7 +524,8 @@ class RedConnectionService : Service() {
         if (!senderRedId.isNullOrBlank()) i.putExtra("sender_red_id", senderRedId)
         if (!conversationId.isNullOrBlank()) i.putExtra("conversation_id", conversationId)
         i.addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        return PendingIntent.getActivity(this, senderRedId?.hashCode() ?: 0, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val requestCode = (conversationId ?: senderRedId).orEmpty().hashCode()
+        return PendingIntent.getActivity(this, requestCode, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
     private fun createChannels() {
@@ -468,7 +535,7 @@ class RedConnectionService : Service() {
     }
 
     override fun onDestroy() {
-        reconnectTask?.cancel(true); scheduler.shutdownNow(); scope.cancel(); socket.disconnect(); super.onDestroy()
+        reconnectTask?.cancel(true); incomingEnvelopes.close(); socket.disconnect(); scope.cancel(); scheduler.shutdownNow(); super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -583,5 +650,6 @@ class RedConnectionService : Service() {
     }
 }
 
+private data class PendingAck(val messageId: String, val sequence: Long, val status: String)
 private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray, val clientId: String? = null)
 private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false, val type: String? = null, val clientId: String? = null)

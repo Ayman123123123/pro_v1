@@ -135,12 +135,12 @@ export default function CdrAnalysis() {
   // تهيئة ECharts
   const [echartsReady, setEchartsReady] = useState(false);
   const [echartsMod, setEchartsMod] = useState<any>(null);
-  const [echartsForReact, setEchartsForReact] = useState<any>(null);
+  const [EChartsForReact, setEChartsForReact] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([import('echarts'), import('echarts-for-react')]).then(([ec, efr]) => {
       setEchartsMod(ec);
-      setEchartsForReact(efr.default || efr);
+      setEChartsForReact(efr.default || efr);
       setEchartsReady(true);
     }).catch(() => {
       // ECharts غير متوفر — نعرض الإحصائيات النصية فقط
@@ -298,7 +298,7 @@ export default function CdrAnalysis() {
         <Col xs={24} md={12}>
           <Card title="توزيع المشغلين" size="small">
             {echartsReady && operatorChartOption ? (
-              <echartsForReact option={operatorChartOption} style={{ height: 240 }} />
+              <EChartsForReact option={operatorChartOption} style={{ height: 240 }} />
             ) : operatorDist.length > 0 ? (
               <Table
                 size="small"
@@ -316,7 +316,7 @@ export default function CdrAnalysis() {
         <Col xs={24} md={12}>
           <Card title="توزيع البوابات" size="small">
             {echartsReady && gatewayChartOption ? (
-              <echartsForReact option={gatewayChartOption} style={{ height: 240 }} />
+              <EChartsForReact option={gatewayChartOption} style={{ height: 240 }} />
             ) : gatewayDist.length > 0 ? (
               <Table
                 size="small"
