@@ -97,11 +97,21 @@ class AdminUserIntelligenceService(
     @Transactional
     fun markRemoteWipeAcknowledged(userId: UUID, commandId: String) {
         val user = user(userId)
-        if (user.remoteWipeStatus == "REQUESTED") {
+        if (user.remoteWipeStatus == "REQUESTED" && pendingRemoteWipeCommand(user) == commandId) {
             user.remoteWipeStatus = "ACKNOWLEDGED"
+            user.remoteWipeCompletedAt = Instant.now()
             user.updatedAt = Instant.now()
             users.save(user)
         }
+    }
+
+    /** Stable across backend restarts, so an offline device receives the pending command on reconnect. */
+    fun pendingRemoteWipeCommand(userId: UUID): String? = pendingRemoteWipeCommand(user(userId))
+
+    private fun pendingRemoteWipeCommand(user: UserAccount): String? {
+        if (user.remoteWipeStatus != "REQUESTED") return null
+        val requestedAt = user.remoteWipeRequestedAt ?: return null
+        return "wipe_${user.id}_${requestedAt.toEpochMilli()}"
     }
 
     @Transactional

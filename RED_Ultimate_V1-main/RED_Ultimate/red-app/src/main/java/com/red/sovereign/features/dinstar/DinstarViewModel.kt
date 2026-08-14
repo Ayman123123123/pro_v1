@@ -24,7 +24,7 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
 
     private val tokens = TokenStore(application)
     private val client = AuthorizedApiClient(tokens)
-    private val wsBridge = DinstarWebSocketBridge()
+    private val wsBridge = DinstarWebSocketBridge(application)
     private val mapper = ObjectMapper()
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 

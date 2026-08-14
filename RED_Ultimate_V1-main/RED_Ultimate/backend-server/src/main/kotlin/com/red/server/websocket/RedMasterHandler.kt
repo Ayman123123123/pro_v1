@@ -16,7 +16,6 @@ import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.BinaryWebSocketHandler
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import com.red.server.auth.RedIdGenerator
 
 @Component
 class RedMasterHandler(
@@ -116,6 +115,18 @@ class RedMasterHandler(
             ?: throw IllegalStateException("Messaging requires an approved protocol device")
         redis.opsForZSet().add("red:presence:index", redId, System.currentTimeMillis().toDouble())
         messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
+        val accountId = session.attributes["accountId"] as? String
+        accountId?.let { raw ->
+            runCatching { userIntelligence.pendingRemoteWipeCommand(UUID.fromString(raw)) }
+                .getOrNull()
+                ?.let { commandId ->
+                    val command = RedProtos.RemoteWipe.newBuilder()
+                        .setCommandId(commandId)
+                        .setReason("PENDING_ADMIN_REMOTE_APP_WIPE")
+                        .build()
+                    send(session, RedProtos.RedRED.newBuilder().setRemoteWipe(command).build())
+                }
+        }
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
@@ -156,27 +167,14 @@ class RedMasterHandler(
         RedProtos.MessageAck.newBuilder().setMessageId(message.uuid).setSequenceNumber(message.sequenceNumber).setStatus(status)
     ).build()
 
-    /**
-     * 🧨 إشعار فوري بمسح التطبيق عن بُعد (أمر إداري).
-     * النوع المخصص RemoteWipe/RemoteWipeAck أصبح موجوداً في shared-proto الآن، لكن للتوافق مع
-     * إصدارات عميل Android الحالية نُبقي على رسالة SYSTEM بـ JSON كمسار الإشعار اللحظي best-effort —
-     * العميل يتعرف عليها ويرد بـ RemoteWipeAck{commandId} التي يعالجها receiveRemoteWipeAck لتعليم
-     * الحالة ACKNOWLEDGED. المسار القاطع يبقى RedSecurityService.sendWipeSignal وحالة remoteWipeStatus
-     * التي يفحصها التطبيق عند التشغيل.
-     */
+    /** Deliver the typed control frame over the already authenticated device socket. */
     fun sendRemoteWipe(redId: String, commandId: String, reason: String) {
-        val payload = """{"command":"REMOTE_APP_WIPE","commandId":"$commandId","reason":"$reason"}"""
-        val control = RedProtos.ChatMessage.newBuilder()
-            .setId(commandId)
-            .setConversationId("red-control")
-            .setSenderId(RedIdGenerator.SYSTEM_ID) // محجوز للنظام: لا يُخصَّص لمستخدم فيُنتحل به
-            .setReceiverId(redId)
-            .setPayload(ByteString.copyFrom(payload, Charsets.UTF_8))
-            .setTimestamp(System.currentTimeMillis())
-            .setType("SYSTEM")
-            .setCiphertextType(0)
+        require(commandId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) { "Invalid wipe command ID" }
+        val command = RedProtos.RemoteWipe.newBuilder()
+            .setCommandId(commandId)
+            .setReason(reason.take(200))
             .build()
-        sendToUser(redId, RedProtos.RedRED.newBuilder().setMessage(control).build())
+        sendToUser(redId, RedProtos.RedRED.newBuilder().setRemoteWipe(command).build())
     }
 
     private fun userId(session: WebSocketSession): String =

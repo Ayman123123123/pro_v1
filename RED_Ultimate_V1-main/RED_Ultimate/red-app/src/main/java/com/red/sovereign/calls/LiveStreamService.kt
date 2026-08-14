@@ -85,6 +85,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     private var streamId = ""
     private var userId = ""
     private var streamTitle = ""
+    private var isPrivateStream = false
+    private var streamPassword: String? = null
     private var isBroadcaster = false
     private var stopping = false
     private var cleanedUp = false
@@ -111,6 +113,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 streamTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "بث مباشر يونس" }
+                isPrivateStream = intent.getBooleanExtra(EXTRA_PRIVATE, false)
+                streamPassword = intent.getStringExtra(EXTRA_PASSWORD)?.takeIf(String::isNotBlank)
                 isBroadcaster = intent.getBooleanExtra(EXTRA_BROADCASTER, false)
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()
@@ -190,7 +194,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         val payload = org.json.JSONObject()
             .put("streamId", streamId)
             .put("title", streamTitle)
-            .put("isPrivate", false)
+            .put("isPrivate", isPrivateStream)
+            .apply { streamPassword?.let { put("password", it) } }
             .toString()
         return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/create", payload)) {
             is ApiResult.Success -> true
@@ -200,7 +205,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
 
     private suspend fun joinAsViewer(): Boolean {
         if (streamId.isBlank()) return false
-        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/$streamId/join", "{}")) {
+        val payload = org.json.JSONObject().apply { streamPassword?.let { put("password", it) } }.toString()
+        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/$streamId/join", payload)) {
             is ApiResult.Success -> true
             is ApiResult.Error -> false
         }
@@ -526,6 +532,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         const val EXTRA_BROADCASTER = "broadcaster"
         const val EXTRA_BROADCASTER_NAME = "broadcaster_name"
         const val EXTRA_TITLE = "stream_title"
+        const val EXTRA_PRIVATE = "stream_private"
+        const val EXTRA_PASSWORD = "stream_password"
         const val EXTRA_CHAT_TEXT = "chat_text"
         const val EXTRA_SENDER_NAME = "sender_name"
         const val EXTRA_REACTION_EMOJI = "reaction_emoji"
@@ -579,7 +587,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             streamId: String,
             userId: String,
             isBroadcaster: Boolean,
-            title: String = "بث مباشر يونس"
+            title: String = "بث مباشر يونس",
+            isPrivate: Boolean = false,
+            password: String? = null
         ) {
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_START
@@ -587,6 +597,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_BROADCASTER, isBroadcaster)
                 putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_PRIVATE, isPrivate)
+                password?.takeIf(String::isNotBlank)?.let { putExtra(EXTRA_PASSWORD, it) }
             }
             ContextCompat.startForegroundService(context, intent)
         }

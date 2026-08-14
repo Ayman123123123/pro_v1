@@ -74,10 +74,22 @@ data class VoiceMetadata(
 )
 
 @Document("post_reactions")
-data class PostReaction(@Id val id: String, val postId: String, val userId: String, val type: String, val createdAt: Instant = Instant.now())
+data class PostReaction(
+    @Id val id: String,
+    @Indexed val postId: String,
+    @Indexed val userId: String,
+    val type: String,
+    val createdAt: Instant = Instant.now()
+)
 
 @Document("poll_votes")
-data class PollVote(@Id val id: String, val postId: String, val userId: String, val optionId: String, val createdAt: Instant = Instant.now())
+data class PollVote(
+    @Id val id: String,
+    @Indexed val postId: String,
+    @Indexed val userId: String,
+    @Indexed val optionId: String,
+    val createdAt: Instant = Instant.now()
+)
 
 @Document("follows")
 data class FollowDocument(

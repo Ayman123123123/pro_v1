@@ -287,7 +287,7 @@ private fun MediaItemViewer(
                 enabled = filePath != null,
                 onClick = {
                     val file = filePath?.let(::File) ?: return@TextButton
-                    val uri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     val mime = when (item.type) {
                         "IMAGE" -> "image/*"
                         "VIDEO" -> "video/*"

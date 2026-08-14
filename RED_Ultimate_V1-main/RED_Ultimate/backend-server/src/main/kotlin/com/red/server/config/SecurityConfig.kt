@@ -127,7 +127,11 @@ class SecurityConfig(
                     .requestMatchers("/api/channels/**").authenticated()
                     .requestMatchers("/api/messages/pins/**").authenticated()
                     .requestMatchers("/api/messages/**", "/api/contacts/**", "/api/devices/**").authenticated()
-                    .requestMatchers("/api/pstn/**", "/api/dinstar/**").authenticated()
+                    // Users may place PSTN calls only through the authorization-aware
+                    // facade. Raw DINSTAR management can power ports, send SMS/USSD and
+                    // expose SIM metadata, so it is an administrator surface.
+                    .requestMatchers("/api/pstn/**").authenticated()
+                    .requestMatchers("/api/dinstar/**").hasRole("ADMIN")
                     .requestMatchers("/api/admin/dinstar/sms/**").hasRole("ADMIN")
                     .requestMatchers("/api/media/**").authenticated()
                     .requestMatchers("/api/**").authenticated()

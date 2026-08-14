@@ -136,9 +136,11 @@ services:
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
-      - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
       - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
+      # Keep the worker range, Docker publication and Dockerfile EXPOSE identical.
+      - RTC_MIN_PORT=40000
+      - RTC_MAX_PORT=40100
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
     security_opt:
@@ -146,7 +148,7 @@ services:
     cap_drop: ["ALL"]
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -164,25 +166,39 @@ services:
           memory: 256M
           cpus: '0.5'
     environment:
+      - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
+      - TURN_INTERNAL_IP=${TURN_INTERNAL_IP:-}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
+    # Compose cannot conditionally omit the `/private-ip` half of --external-ip.
+    # Build that one argument in POSIX sh so an unset TURN_INTERNAL_IP never
+    # becomes the invalid value `public-ip/`.
+    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - --no-cli
-      - --log-file=stdout
-      - --fingerprint
-      - --use-auth-secret
-      - --static-auth-secret=${TURN_SECRET:?TURN_SECRET is required}
-      - --realm=red.sovereign
-      - --min-port=45000
-      - --max-port=45050
-      - --external-ip=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-127.0.0.1}}/${TURN_INTERNAL_IP:-}
+      - |
+        advertised="$${TURN_EXTERNAL_IP:-$${TURN_PUBLIC_HOST}}"
+        [ -n "$$advertised" ] || { echo 'TURN_EXTERNAL_IP or TURN_PUBLIC_HOST is required' >&2; exit 64; }
+        external="--external-ip=$$advertised"
+        if [ -n "$${TURN_INTERNAL_IP}" ]; then
+          external="--external-ip=$$advertised/$${TURN_INTERNAL_IP}"
+        fi
+        exec turnserver \
+          --no-cli \
+          --log-file=stdout \
+          --fingerprint \
+          --use-auth-secret \
+          "--static-auth-secret=$${TURN_SECRET}" \
+          --realm=red.sovereign \
+          --min-port=45000 \
+          --max-port=45050 \
+          "$$external"
     ports:
-      - "3478:3478/tcp"
-      - "3478:3478/udp"
+      - "${TURN_PORT:-3478}:3478/tcp"
+      - "${TURN_PORT:-3478}:3478/udp"
       - "45000-45050:45000-45050/udp"
     healthcheck:
-      # صورة coturn لا تحوي curl — نفحص منفذ TURN عبر bash /dev/tcp
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
+      # The Alpine image has POSIX sh/busybox but no bash or curl.
+      test: ["CMD-SHELL", "pidof turnserver >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -204,11 +220,12 @@ services:
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
-      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
-      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
-      - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
+      - DINSTAR_IPS=${DINSTAR_IPS:-}
+      # Asterisk and mediasoup are separate RTP stacks. Do not reuse the SFU's
+      # announced address for SIP/RTP NAT; leave blank on a flat LAN.
+      - EXTERNAL_MEDIA_ADDRESS=${ASTERISK_EXTERNAL_MEDIA_ADDRESS:-}
+      - EXTERNAL_SIGNALING_ADDRESS=${ASTERISK_EXTERNAL_SIGNALING_ADDRESS:-}
+      - ASTERISK_LOCAL_NET=${ASTERISK_LOCAL_NET:-192.168.0.0/16,172.16.0.0/12,10.0.0.0/8}
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"

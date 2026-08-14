@@ -23,6 +23,8 @@ class LiveStreamWebSocketHandlerTest {
     @BeforeEach
     fun startOwnedStream() {
         streams.startStream("stream-12345678", "91179")
+        streams.addViewer("stream-12345678", "11154")
+        streams.addViewer("stream-12345678", "22261")
     }
 
     private class Probe(sessionId: String, userId: String) {
@@ -44,6 +46,12 @@ class LiveStreamWebSocketHandlerTest {
             doAnswer { null }.whenever(sock).close()
             doAnswer { null }.whenever(sock).close(any<CloseStatus>())
         }
+    }
+
+    @Test fun `viewer cannot bypass REST join over websocket`() {
+        val outsider = Probe("outside", "99999")
+        handler.handleTextMessage(outsider.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
+        assertTrue(outsider.sent.any { it.contains("JOIN_REQUIRED") })
     }
 
     @Test fun `broadcaster JOIN registers them and notifies viewers`() {
