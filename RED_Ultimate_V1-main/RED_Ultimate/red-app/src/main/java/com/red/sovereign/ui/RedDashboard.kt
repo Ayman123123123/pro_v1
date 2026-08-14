@@ -2398,7 +2398,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onConference = { conferenceLauncher() },
             onSpace = { spaceLauncher() },
             onLive = { liveLauncher() },
-            onPstn = { onPstn() },
+            onPstn = { showDinstarDialog = true },
             onExplore = { onExplore() }
         )
         Spacer(Modifier.height(16.dp))
@@ -2525,54 +2525,22 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     }
 
     if (showDinstarDialog) {
-        val operator = YemeniOperatorDetector.getOperatorInfo(dinstarNumberInput)
-        AlertDialog(
+        androidx.compose.ui.window.Dialog(
             onDismissRequest = { showDinstarDialog = false; dinstarNumberInput = "" },
-            title = { Text("لوحة اتصال الهاتف اليمني (DINSTAR GSM)") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("اتصال آمن ومباشر بأي رقم هاتف يمني ثابت أو محمول عبر بوابات Dinstar GSM:", color = Color.Gray, fontSize = 13.sp)
-                    
-                    OutlinedTextField(
-                        value = dinstarNumberInput,
-                        onValueChange = { dinstarNumberInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("أدخل الرقم (مثال: 777123456)") },
-                        singleLine = true
-                    )
-
-                    if (operator != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(operator.brandColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                                Text("الشبكة المكتشفة: ${operator.name}", color = operator.brandColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(operator.technology, color = Color.White, fontSize = 12.sp)
-                            }
-                        }
-                    }
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            com.red.sovereign.features.pstn.DialPadScreen(
+                onDismiss = { showDinstarDialog = false },
+                onNavigateToWebRtcCall = { targetNum ->
+                    showDinstarDialog = false
+                    YounesCallService.start(context, targetNum, false)
+                },
+                onNavigateToPstnCall = { targetNum ->
+                    showDinstarDialog = false
+                    onPstn()
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDinstarDialog = false
-                        dinstarNumberInput = ""
-                        onPstn()
-                    }
-                ) {
-                    Text("فتح الهاتف اليمني")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDinstarDialog = false; dinstarNumberInput = "" }) {
-                    Text("إلغاء")
-                }
-            }
-        )
+            )
+        }
     }
 
     if (showNewCallDialog) {
