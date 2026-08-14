@@ -1,6 +1,6 @@
 package com.red.server.services
 
-import com.red.server.pstn.DinstarWebSocketHandler
+import com.red.server.websocket.DinstarWebSocketHandler
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate

@@ -133,6 +133,38 @@ class DinstarWebSocketHandler(
         broadcastEvent("DINSTAR_EXCEPTION", exception)
     }
 
+    /**
+     * بث حالة الجهاز (CPU, Memory, Flash) لجميع العملاء.
+     * يُستدعى من DinstarApiService بعد جلب حالة الجهاز.
+     */
+    fun broadcastDeviceStatus(gatewayId: String, status: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_DEVICE_STATUS", mapOf("gatewayId" to gatewayId) + status)
+    }
+
+    /**
+     * بث رد USSD لجميع العملاء.
+     * يُستدعى من DinstarApiService بعد إرسال USSD.
+     */
+    fun broadcastUssdResponse(gatewayId: String, port: Int, response: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_USSD", mapOf(
+            "gatewayId" to gatewayId,
+            "port" to port,
+            "response" to response
+        ))
+    }
+
+    /**
+     * بث تغيير تحكم بالمنفذ (طاقة، تحويل مكالمات) لجميع العملاء.
+     * يُستدعى من DinstarApiService بعد تغيير حالة المنفذ.
+     */
+    fun broadcastPortControl(gatewayId: String, port: Int, control: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_PORT_CONTROL", mapOf(
+            "gatewayId" to gatewayId,
+            "port" to port,
+            "control" to control
+        ))
+    }
+
     private fun sendPortStatusUpdate(session: WebSocketSession) {
         try {
             if (session.isOpen) {

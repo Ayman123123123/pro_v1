@@ -24,7 +24,7 @@ import java.time.Instant
  */
 @RestController
 @RequestMapping("/api/live")
-class LiveStreamController(private val streams: LiveStreamService) {
+class LiveStreamAdminController(private val streams: LiveStreamService) {
 
     @GetMapping("/streams")
     fun listStreams(): List<LiveStreamRecord> = streams.getActiveStreams()
