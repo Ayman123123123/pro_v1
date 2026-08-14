@@ -247,6 +247,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # أول initdb على Windows Docker (virtiofs) قد يتجاوز 30 ثانية؛
+      # بلا start_period تُحسب الفحوص المبكرة فشلًا ظاهريًا ويُجهَض الإقلاع.
+      start_period: 60s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 6. MongoDB 8 ━━━━━━━━━━━━
@@ -295,6 +298,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
@@ -323,6 +327,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks: ["red-net"]
 
   # ━━━━ تهيئة TLS للتطوير ━━━━
