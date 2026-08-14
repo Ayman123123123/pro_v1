@@ -298,7 +298,8 @@ export default function CdrAnalysis() {
         <Col xs={24} md={12}>
           <Card title="توزيع المشغلين" size="small">
             {echartsReady && operatorChartOption ? (
-              <echartsForReact option={operatorChartOption} style={{ height: 240 }} />
+              // echarts-for-react يُستورد ديناميكيًا — React.createElement لأن المكوّن في متغيّر state
+              React.createElement(echartsForReact, { option: operatorChartOption, style: { height: 240 } })
             ) : operatorDist.length > 0 ? (
               <Table
                 size="small"
@@ -316,7 +317,7 @@ export default function CdrAnalysis() {
         <Col xs={24} md={12}>
           <Card title="توزيع البوابات" size="small">
             {echartsReady && gatewayChartOption ? (
-              <echartsForReact option={gatewayChartOption} style={{ height: 240 }} />
+              React.createElement(echartsForReact, { option: gatewayChartOption, style: { height: 240 } })
             ) : gatewayDist.length > 0 ? (
               <Table
                 size="small"
