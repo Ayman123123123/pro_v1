@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
 
 /**
- * Live broadcast management API.
+ * Live broadcast management API. (bean: liveStreamPublicController —
+ * كان الاسم القديم LiveStreamController يتصادم مع نظيره في حزمة calls
+ * على اسم الـ bean الافتراضي نفسه فيُسقط Spring Boot الإقلاع كله.)
  *
  *  - GET  /api/live/streams                       -> list of active streams
  *  - GET  /api/live/streams/{streamId}/viewers    -> current viewer count
@@ -24,7 +26,7 @@ import java.time.Instant
  */
 @RestController
 @RequestMapping("/api/live")
-class LiveStreamController(private val streams: LiveStreamService) {
+class LiveStreamPublicController(private val streams: LiveStreamService) {
 
     @GetMapping("/streams")
     fun listStreams(): List<LiveStreamRecord> = streams.getActiveStreams()

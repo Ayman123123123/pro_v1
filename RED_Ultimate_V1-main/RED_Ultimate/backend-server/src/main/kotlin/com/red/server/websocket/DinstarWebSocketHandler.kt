@@ -26,7 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * - DINSTAR_USSD: رد USSD
  * - DINSTAR_EXCEPTION: حدث استثناء (فشل مكالمة، شريحة منزوعة)
  */
-@Component
+// اسم صريح يميّزه عن com.red.server.pstn.DinstarWebSocketHandler —
+// اشتراك الصنفين في اسم الـ bean الافتراضي كان يرمي
+// ConflictingBeanDefinitionException ويُسقط إقلاع الخادم كله.
+@Component("dinstarEventWebSocketHandler")
 class DinstarWebSocketHandler(
     private val hardware: DinstarHardwareService,
     private val fleet: DinstarFleetService,
