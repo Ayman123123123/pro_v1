@@ -49,7 +49,9 @@ spring:
       ddl-auto: validate
       naming:
         physical-strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
-        implicit-strategy: org.springframework.boot.orm.jpa.hibernate.SpringImplicitNamingStrategy
+        # implicit-strategy: لا تُضبط صراحةً — Spring Boot يطبّق افتراضه
+        # (SpringImplicitNamingStrategy) من حزمته الخاصة بنسخته؛ الإشارة إلى
+        # مسار Boot 3 (org.springframework.boot.orm.jpa.hibernate.*) تكسر Boot 4.
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
