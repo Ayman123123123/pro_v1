@@ -19,7 +19,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val history: CallHistoryService,
-    private val notifications: NotificationService
+    private val notifications: NotificationService,
+    private val activeCalls: ActiveCallRegistry
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
@@ -36,8 +37,18 @@ class CallWebSocketHandler(
                 val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }
                 require(invitees.isNotEmpty()) { "inviteeIds is required" }
                 groupRooms[groupCallId] = GroupCallRoom(host = source, members = invitees)
+                // سجّل المضيف وكل المدعوين كـ "في مكالمة" — لكشف BUSY ولمعالجة الجماعية
+                activeCalls.register(groupCallId, listOf(source) + invitees)
                 val payload = signal.payload + ("hostName" to (signal.payload["hostName"] ?: ""))
                 invitees.forEach { invitee ->
+                    // خط مشغول: العضو في مكالمة نشطة (1:1 أو جماعية) — أخبر المضيف فوراً بدل الرنين
+                    if (activeCalls.isInCall(invitee)) {
+                        val busySignal = OutgoingCallSignal(groupCallId, invitee, source, "GROUP_CALL_STATUS", signal.mode.uppercase(), mapOf("memberStatus" to "busy"))
+                        val hostTargets = liveSessions(source)
+                        if (hostTargets.isEmpty()) enqueue(source, busySignal)
+                        else hostTargets.forEach { target -> runCatching { target.sendMessage(TextMessage(objectMapper.writeValueAsString(busySignal))) } }
+                        return@forEach
+                    }
                     val outbound = OutgoingCallSignal(groupCallId, source, invitee, type, signal.mode.uppercase(), payload)
                     val targets = liveSessions(invitee)
                     if (targets.isEmpty()) {
@@ -57,6 +68,10 @@ class CallWebSocketHandler(
                 val groupCallId = requireCallId(signal)
                 val room = groupRooms[groupCallId]
                 val hostId = room?.host ?: source
+                // رفض/غادر/لم يرد → حرّر العضو ليصبح متاحاً لاستقبال المكالمات من جديد
+                if (type == "GROUP_CALL_DECLINE" || signal.memberStatus == "no_answer" || signal.memberStatus == "left") {
+                    activeCalls.releaseMember(groupCallId, source)
+                }
                 val outbound = OutgoingCallSignal(groupCallId, source, hostId, type, signal.mode.uppercase(), signal.payload + ("memberStatus" to signal.memberStatus.orEmpty()))
                 val targets = liveSessions(hostId)
                 if (targets.isEmpty()) {
@@ -71,6 +86,7 @@ class CallWebSocketHandler(
             "GROUP_CALL_END" -> {
                 val groupCallId = requireCallId(signal)
                 val room = groupRooms.remove(groupCallId)
+                activeCalls.unregister(groupCallId)
                 val targets = (room?.members ?: emptyList()) + room?.host
                 dropPending(groupCallId)
                 targets.filterNotNull().filter { it.isNotBlank() && it != source }.forEach { memberId ->
@@ -86,15 +102,34 @@ class CallWebSocketHandler(
 
         require(signal.targetUserId.isNotBlank()) { "targetUserId is required" }
         require(signal.targetUserId != source) { "Cannot call the same RED ID" }
-        val callId = when (type) {
-            "OFFER" -> history.start(source, signal.targetUserId, signal.targetUserId,
+        val callId: String
+        if (type == "OFFER") {
+            // خط مشغول حقيقي: المُستدعى في مكالمة نشطة (1:1 أو جماعية) — لا يُرن أبداً
+            if (activeCalls.isInCall(signal.targetUserId)) {
+                val busyCallId = history.start(source, signal.targetUserId, signal.targetUserId,
+                    callTypeForMode(signal.mode), CallRoute.RED, signal.callId).id
+                runCatching { history.busy(busyCallId) }
+                dropPending(busyCallId)
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                    "type" to "BUSY",
+                    "callId" to busyCallId,
+                    "sourceUserId" to signal.targetUserId
+                ))))
+                return
+            }
+            callId = history.start(source, signal.targetUserId, signal.targetUserId,
                 callTypeForMode(signal.mode), CallRoute.RED, signal.callId).id
-            "ANSWER" -> requireCallId(signal).also { history.answer(it, source) }
-            "END" -> requireCallId(signal).also { history.end(it, source) }
-            "ICE", "HOLD", "RESUME", "RENEGOTIATE", "CALL_REACTION", "CALL_RAISE_HAND" -> requireCallId(signal)
-            "REJECT" -> requireCallId(signal).also { history.end(it, source) }
-            "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
-            else -> throw IllegalArgumentException("Unsupported call signal type")
+            // سجّل المكالمة كنشطة: لكشف BUSY للوارد لاحقاً + عداد لوحة الأدمن
+            activeCalls.register(callId, listOf(source, signal.targetUserId))
+        } else {
+            callId = when (type) {
+                "ANSWER" -> requireCallId(signal).also { history.answer(it, source); activeCalls.touch(it) }
+                "END" -> requireCallId(signal).also { history.end(it, source); activeCalls.unregister(it) }
+                "ICE", "HOLD", "RESUME", "RENEGOTIATE", "CALL_REACTION", "CALL_RAISE_HAND" -> requireCallId(signal).also { activeCalls.touch(it) }
+                "REJECT" -> requireCallId(signal).also { history.rejected(it, source); activeCalls.unregister(it) }
+                "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
+                else -> throw IllegalArgumentException("Unsupported call signal type")
+            }
         }
 
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)

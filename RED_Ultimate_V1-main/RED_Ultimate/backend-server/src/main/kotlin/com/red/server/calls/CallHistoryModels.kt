@@ -23,7 +23,7 @@ data class CallHistoryDocument(
 
 enum class CallType { AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, LIVE_STREAM, SPACE }
 enum class CallRoute { RED, DINSTAR }
-enum class CallStatus { INITIATED, RINGING, ACTIVE, ENDED, MISSED, FAILED }
+enum class CallStatus { INITIATED, RINGING, ACTIVE, ENDED, MISSED, REJECTED, BUSY, FAILED }
 
 data class CallHistoryItem(
     val id: String,

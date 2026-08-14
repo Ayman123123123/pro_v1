@@ -93,7 +93,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             ACTION_START -> {
                 outgoingPending = true
                 target = intent.getStringExtra(EXTRA_TARGET).orEmpty(); mode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
-                require(target.isNotBlank()); callId = UUID.randomUUID().toString()
+                // لا تقصف الخدمة إذا وصل intent بلا هدف (PendingIntent قديم/إشعار) — أظهر حالة خطأ بأمان
+                if (target.isBlank()) {
+                    CallRuntime.state = CallUiState.Error("معرّف المكالمة غير صالح")
+                    updateNotification("تعذر بدء المكالمة: المعرّف غير صالح")
+                    return START_STICKY
+                }
+                callId = UUID.randomUUID().toString()
                 // ضبط الحالة فوراً ليظهر الـ overlay والتبويب الصحيح بلا تأخير
                 CallRuntime.state = CallUiState.Connecting(callId ?: UUID.randomUUID().toString(), target, mode)
                 scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
@@ -273,12 +279,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         clearRingTimeout()
         stopRingtone()
         val offer = incomingOffer ?: return
+        // فحص الأذونات قبل القبول — إن لم يُمنح الميكروفون لا نقبل بصمت (يسبب فشل WebRTC لاحقاً)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            fail("امنح إذن الميكروفون من إعدادات التطبيق لاستقبال المكالمات")
+            return
+        }
+        val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         promote(notification("جارٍ قبول المكالمة…", true), media = true)
         prepareAudio(); signaling.connect()
         scope.launch {
             if (createEngine(offer.mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
             engine?.setMicrophoneEnabled(micOn)
-            if (offer.mode == "VIDEO" && !cameraOn) engine?.setCameraEnabled(false)
+            if (offer.mode == "VIDEO") engine?.setCameraEnabled(cameraOn && cameraGranted)
             val sdp = offer.payload["sdp"] ?: return@launch fail("عرض المكالمة غير صالح")
             engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
             CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)

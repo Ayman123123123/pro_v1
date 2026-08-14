@@ -43,9 +43,12 @@ class MasterStatsService(
         )
     }
 
-    /** Active calls are supplied only when a real media worker registers them. */
+    /** Active calls are supplied from the real-time ActiveCallRegistry via the Redis ZSet. */
     fun getVoipMetrics(): Map<String, Any> = mapOf(
-        "active_calls" to (redis.opsForSet().size("red:calls:active") ?: 0),
+        "active_calls" to (redis.opsForZSet().zCard("red:calls:active") ?: 0),
+        "calls" to (redis.opsForZSet().range("red:calls:active", 0, -1) ?: emptyList()).map { callId ->
+            mapOf("id" to callId, "type" to "VOIP", "room" to callId)
+        },
         "source" to "realtime",
         "timestamp" to System.currentTimeMillis()
     )

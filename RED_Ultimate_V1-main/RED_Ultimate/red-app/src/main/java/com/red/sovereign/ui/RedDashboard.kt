@@ -178,6 +178,7 @@ import com.red.sovereign.calls.ConferenceRuntime
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.ConferenceUiState
 import com.red.sovereign.calls.LiveStreamService
+import com.red.sovereign.calls.CreateConferenceScreen
 import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.calls.GroupCallService
@@ -2342,6 +2343,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     var showSpaceDialog by remember { mutableStateOf(false) }
     var showDinstarDialog by remember { mutableStateOf(false) }
     var showGroupCallPicker by remember { mutableStateOf(false) }
+    var showCreateConferenceScreen by remember { mutableStateOf(false) }
     var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
     var publicStreamSearchQuery by remember { mutableStateOf("") }
     var dinstarNumberInput by remember { mutableStateOf("") }
@@ -2431,118 +2433,39 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     }
 
     if (showJoinDialog) {
-        AlertDialog(
-            onDismissRequest = { showJoinDialog = false; roomInput = "" },
-            title = { Text("الانضمام إلى مؤتمر جماعي") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("أدخل اسم الغرفة أو معرف المؤتمر للاتصال الآمن عبر SFU:", color = Color.Gray, fontSize = 14.sp)
-                    OutlinedTextField(
-                        value = roomInput,
-                        onValueChange = { roomInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف الغرفة (مثال: red-room-123)") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showJoinDialog = false
-                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
-                        roomInput = ""
-                    },
-                    enabled = roomInput.trim().isNotBlank()
-                ) {
-                    Text("انضمام")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showJoinDialog = false; roomInput = "" }) {
-                    Text("إلغاء")
-                }
+        ConferenceHubDialog(
+            onDismiss = { showJoinDialog = false },
+            onCreateNew = { showCreateConferenceScreen = true },
+            onJoinExisting = { roomId ->
+                ConferenceService.join(context, roomId, ownUserId, true, asHost = false)
             }
         )
     }
 
-    var streamTitleInput by remember { mutableStateOf("") }
-    var isPrivateStream by remember { mutableStateOf(false) }
-    var streamPasswordInput by remember { mutableStateOf("") }
+    if (showCreateConferenceScreen) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showCreateConferenceScreen = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            CreateConferenceScreen(
+                friendIds = contacts.map { it.redId },
+                friendNames = contacts.map { it.displayName },
+                myUserId = ownUserId,
+                onBack = { showCreateConferenceScreen = false },
+                onLaunched = { showCreateConferenceScreen = false }
+            )
+        }
+    }
 
     if (showLiveDialog) {
-        AlertDialog(
-            onDismissRequest = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false },
-            title = { Text("مركز البث المباشر 🔴") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("انضم لمشاهدة بث عام عبر البحث بالاسم/المعرف أو أنشئ بثك الخاص:", color = Color.Gray, fontSize = 13.sp)
-                    
-                    OutlinedTextField(
-                        value = roomInput,
-                        onValueChange = { roomInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف البث أو رابط الدعوة (مثال: stream-123)") },
-                        singleLine = true
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(checked = isBroadcaster, onCheckedChange = { isBroadcaster = it })
-                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-
-                    if (isBroadcaster) {
-                        OutlinedTextField(
-                            value = streamTitleInput,
-                            onValueChange = { streamTitleInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("عنوان البث (مثال: بث سيادي عام)") },
-                            singleLine = true
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(checked = isPrivateStream, onCheckedChange = { isPrivateStream = it })
-                            Text("بث خاص بكلمة سر 🔒", fontSize = 14.sp)
-                        }
-
-                        if (isPrivateStream) {
-                            OutlinedTextField(
-                                value = streamPasswordInput,
-                                onValueChange = { streamPasswordInput = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("كلمة سر البث الخاص") },
-                                singleLine = true
-                            )
-                        }
-                    }
-                }
+        LiveStreamHubDialog(
+            onDismiss = { showLiveDialog = false },
+            onStartBroadcasting = { title, isPriv, pass ->
+                val streamId = "stream_${java.util.UUID.randomUUID().toString().take(8)}"
+                LiveStreamService.start(context, streamId, ownUserId, true, title)
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLiveDialog = false
-                        val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster, streamTitleInput.trim().ifBlank { "بث مباشر يونس" })
-                        roomInput = ""
-                        streamTitleInput = ""
-                        streamPasswordInput = ""
-                        isPrivateStream = false
-                    },
-                    enabled = roomInput.trim().isNotBlank() || isBroadcaster
-                ) {
-                    Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false }) {
-                    Text("إلغاء")
-                }
+            onWatchStream = { streamId ->
+                LiveStreamService.start(context, streamId, ownUserId, false)
             }
         )
     }

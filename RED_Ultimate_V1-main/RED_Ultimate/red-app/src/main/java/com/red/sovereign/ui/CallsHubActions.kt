@@ -276,6 +276,408 @@ fun GroupCallPickerDialog(
 }
 
 // ===============================================================
+// Conference Hub Dialog — مؤتمرات ومساحات صوتية
+// ===============================================================
+
+@Composable
+fun ConferenceHubDialog(
+    onDismiss: () -> Unit,
+    onCreateNew: () -> Unit,
+    onJoinExisting: (roomId: String) -> Unit
+) {
+    var isJoining by remember { mutableStateOf(false) }
+    var roomIdInput by remember { mutableStateOf("") }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(0.7f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))))
+                    .border(1.dp, Color(0xFFA78BFA).copy(0.3f), RoundedCornerShape(24.dp))
+                    .clickable(enabled = false) {}
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFFA78BFA).copy(0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Headset, null, tint = Color(0xFFA78BFA), modifier = Modifier.size(24.dp))
+                        }
+                        Column {
+                            Text("المؤتمرات والمساحات", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("نمط Twitter/X Spaces و Zoom", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, null, tint = Color.White.copy(0.7f))
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(0.1f))
+
+                if (!isJoining) {
+                    // Option 1: Create New
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFFA78BFA).copy(0.2f), Color(0xFFA78BFA).copy(0.05f))))
+                            .border(1.dp, Color(0xFFA78BFA).copy(0.4f), RoundedCornerShape(16.dp))
+                            .clickable {
+                                onDismiss()
+                                onCreateNew()
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            Modifier.size(46.dp).clip(CircleShape).background(Color(0xFFA78BFA)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.Add, null, tint = Color.White, modifier = Modifier.size(26.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("إنشاء جلسة / مساحة جديدة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("مساحة صوتية أو مؤتمر فيديو، دعوة أصدقاء وتخصيص كامل", color = Color.White.copy(0.65f), fontSize = 11.sp, lineHeight = 15.sp)
+                        }
+                    }
+
+                    // Option 2: Join Existing
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(0.04f))
+                            .border(1.dp, Color.White.copy(0.12f), RoundedCornerShape(16.dp))
+                            .clickable { isJoining = true }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.MeetingRoom, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("الانضمام إلى جلسة قائمة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text("أدخل رمز أو معرّف الغرفة للدخول الفوري", color = Color.White.copy(0.65f), fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    // Join Form
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("أدخل معرّف الغرفة أو رابط المؤتمر:", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                        OutlinedTextField(
+                            value = roomIdInput,
+                            onValueChange = { roomIdInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("مثال: room-123 أو majlis-01", color = Color.Gray) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFA78BFA),
+                                unfocusedBorderColor = Color.White.copy(0.2f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = { isJoining = false },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("رجوع", color = Color.White)
+                            }
+                            Button(
+                                onClick = {
+                                    if (roomIdInput.isNotBlank()) {
+                                        onJoinExisting(roomIdInput.trim())
+                                        onDismiss()
+                                    }
+                                },
+                                enabled = roomIdInput.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA78BFA)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("انضمام", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===============================================================
+// Live Stream Hub Dialog — مركز البث المباشر (TikTok Style)
+// ===============================================================
+
+@Composable
+fun LiveStreamHubDialog(
+    onDismiss: () -> Unit,
+    onStartBroadcasting: (title: String, isPrivate: Boolean, password: String) -> Unit,
+    onWatchStream: (streamId: String) -> Unit
+) {
+    var mode by remember { mutableStateOf<Int>(0) } // 0: choice, 1: create, 2: watch
+    var streamTitle by remember { mutableStateOf("") }
+    var isPrivate by remember { mutableStateOf(false) }
+    var streamPassword by remember { mutableStateOf("") }
+    var watchStreamId by remember { mutableStateOf("") }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(0.75f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFF1E0A14), Color(0xFF0F0A1A))))
+                    .border(1.dp, Color(0xFFF91850).copy(0.35f), RoundedCornerShape(24.dp))
+                    .clickable(enabled = false) {}
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(Color(0xFFF91850), Color(0xFF25F4EE)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.LiveTv, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                        Column {
+                            Text("مركز البث المباشر 🔴", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("نمط TikTok — بث تفاعلي وإعجابات حية", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Rounded.Close, null, tint = Color.White.copy(0.7f))
+                    }
+                }
+
+                HorizontalDivider(color = Color.White.copy(0.1f))
+
+                when (mode) {
+                    0 -> {
+                        // Choice 1: Broadcast
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Brush.linearGradient(listOf(Color(0xFFF91850).copy(0.25f), Color(0xFFF91850).copy(0.05f))))
+                                .border(1.dp, Color(0xFFF91850).copy(0.5f), RoundedCornerShape(16.dp))
+                                .clickable { mode = 1 }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                Modifier.size(46.dp).clip(CircleShape).background(Color(0xFFF91850)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.Videocam, null, tint = Color.White, modifier = Modifier.size(26.dp))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text("بدء بث مباشر جديد", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("بث صوت وفيديو لجمهورك مع تفاعل وشات فوري", color = Color.White.copy(0.65f), fontSize = 11.sp, lineHeight = 15.sp)
+                            }
+                        }
+
+                        // Choice 2: Watch
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color.White.copy(0.04f))
+                                .border(1.dp, Color.White.copy(0.12f), RoundedCornerShape(16.dp))
+                                .clickable { mode = 2 }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Box(
+                                Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Rounded.PlayArrow, null, tint = Color(0xFF25F4EE), modifier = Modifier.size(26.dp))
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text("مشاهدة بث مباشر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                Text("أدخل معرف البث للانضمام والمشاهدة", color = Color.White.copy(0.65f), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                    1 -> {
+                        // Create Stream Form
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("عنوان البث:", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                            OutlinedTextField(
+                                value = streamTitle,
+                                onValueChange = { streamTitle = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("مثال: بث سيادي مباشر", color = Color.Gray) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFFF91850),
+                                    unfocusedBorderColor = Color.White.copy(0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color.White.copy(0.04f))
+                                    .clickable { isPrivate = !isPrivate }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("بث خاص بكلمة سر 🔒", color = Color.White, fontSize = 13.sp)
+                                Checkbox(
+                                    checked = isPrivate,
+                                    onCheckedChange = { isPrivate = it },
+                                    colors = CheckboxDefaults.colors(checkedColor = Color(0xFFF91850))
+                                )
+                            }
+
+                            if (isPrivate) {
+                                OutlinedTextField(
+                                    value = streamPassword,
+                                    onValueChange = { streamPassword = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("كلمة السر الخاصة بالبث", color = Color.Gray) },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFFF91850),
+                                        unfocusedBorderColor = Color.White.copy(0.2f),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White
+                                    )
+                                )
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedButton(
+                                    onClick = { mode = 0 },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("رجوع", color = Color.White)
+                                }
+                                Button(
+                                    onClick = {
+                                        onStartBroadcasting(streamTitle.ifBlank { "بث مباشر يونس" }, isPrivate, streamPassword)
+                                        onDismiss()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("إطلاق البث 🔴", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        // Watch Stream Form
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("أدخل معرّف البث المباشر:", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                            OutlinedTextField(
+                                value = watchStreamId,
+                                onValueChange = { watchStreamId = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("مثال: stream-xyz أو رابط البث", color = Color.Gray) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF25F4EE),
+                                    unfocusedBorderColor = Color.White.copy(0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedButton(
+                                    onClick = { mode = 0 },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("رجوع", color = Color.White)
+                                }
+                                Button(
+                                    onClick = {
+                                        if (watchStreamId.isNotBlank()) {
+                                            onWatchStream(watchStreamId.trim())
+                                            onDismiss()
+                                        }
+                                    },
+                                    enabled = watchStreamId.isNotBlank(),
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25F4EE)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("مشاهدة", color = Color.Black, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===============================================================
 // Permission Helper — طلب الصلاحية قبل المكالمة
 // ===============================================================
 

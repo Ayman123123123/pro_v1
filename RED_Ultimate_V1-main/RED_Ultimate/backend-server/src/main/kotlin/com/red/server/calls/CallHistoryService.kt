@@ -62,6 +62,21 @@ class CallHistoryService(
         publisher.callMissed(callId)
     }
 
+    /** الطرف المُستدعى رفض المكالمة صراحةً — تُسجَّل REJECTED وليس MISSED. */
+    fun rejected(callId: String, actorId: String? = null): CallHistoryDocument = update(callId) {
+        if (actorId != null) require(it.targetId == actorId) { "Only the called account can reject" }
+        it.status = CallStatus.REJECTED
+        it.endedAt = Instant.now()
+        publisher.callEnded(callId, 0L, "REJECTED")
+    }
+
+    /** الطرف المُستدعى في مكالمة نشطة بالفعل — تُسجَّل BUSY. */
+    fun busy(callId: String): CallHistoryDocument = update(callId) {
+        it.status = CallStatus.BUSY
+        it.endedAt = Instant.now()
+        publisher.callEnded(callId, 0L, "BUSY")
+    }
+
     /** WhatsApp/Telegram: unanswered RINGING older than 45s becomes MISSED. */
     fun expireStaleRinging(olderThan: Duration = Duration.ofSeconds(45)): Int {
         val cutoff = Instant.now().minus(olderThan)
