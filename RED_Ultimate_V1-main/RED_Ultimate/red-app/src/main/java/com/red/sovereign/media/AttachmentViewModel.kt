@@ -66,7 +66,20 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         state = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")
         state = when (val result = repository.downloadAndDecrypt(manifestJson)) {
             is ApiResult.Error -> AttachmentState.Error(result.message)
-            is ApiResult.Success -> AttachmentState.Downloaded(result.value.absolutePath, result.value.name)
+            is ApiResult.Success -> {
+                val file = result.value
+                val manifest = runCatching {
+                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                        .decodeFromString(AttachmentManifest.serializer(), manifestJson)
+                }.getOrNull()
+                GallerySaver.saveIfAllowed(
+                    getApplication(),
+                    file,
+                    manifest?.mimeType.orEmpty(),
+                    manifest?.name ?: file.name,
+                )
+                AttachmentState.Downloaded(file.absolutePath, manifest?.name ?: file.name)
+            }
         }
     }
 
