@@ -115,6 +115,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -179,10 +180,12 @@ import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
+import com.red.sovereign.core.ChatComposer
 import com.red.sovereign.core.ConversationActions
 import com.red.sovereign.core.InboxFilter
 import com.red.sovereign.core.InboxQuery
 import com.red.sovereign.core.MessageStore
+import com.red.sovereign.core.OutgoingSendBus
 import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.core.RedQualityManager
 import com.red.sovereign.core.ReactionEventBus
@@ -273,6 +276,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔗 فتح محادثة خاصة من قائمة أعضاء المجموعة أو جهات الاتصال (يتغذى على deepLinkSender في ChatHubScreen)
     var pendingChatTarget by remember { mutableStateOf<String?>(null) }
+    var threadOpen by remember { mutableStateOf(false) }
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
         if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
@@ -372,7 +376,17 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 val tokens = remember { TokenStore(context) }
                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             }
-            SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
+            SovereignScreen.CONTACTS -> ContactsScreen(
+                directory = directory,
+                onBack = { currentScreen = SovereignScreen.DASHBOARD },
+                onChat = { person ->
+                    pendingChatTarget = person.redId
+                    section = MainSection.CHATS
+                    currentScreen = SovereignScreen.DASHBOARD
+                },
+                onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) },
+                onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP },
+            )
             else -> currentScreen = SovereignScreen.DASHBOARD
         }
         // Still show call overlays even when not on dashboard — unified
@@ -383,7 +397,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     Scaffold(
         containerColor = Color.Transparent,
         floatingActionButton = {
-            if (!showDinstar) when (section) {
+            // زر المحادثة المفتوحة يقع في نفس الزاوية. إبقاء FAB فوقه يسرق الضغط عن الإرسال.
+            if (!showDinstar && !threadOpen) when (section) {
                 MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
                 MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
                 MainSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
@@ -413,8 +428,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation)
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
+                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onThreadOpenChange = { threadOpen = it })
+                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onThreadOpenChange = { threadOpen = it })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
                 }, onPstn = { showDinstar = true })
@@ -802,14 +817,15 @@ private fun ChatHubScreen(
     deepLinkSender: String? = null,
     deepLinkConversation: String? = null,
     onManageGroup: (String) -> Unit = {},
-    onCreateGroup: () -> Unit = {}
+    onCreateGroup: () -> Unit = {},
+    onThreadOpenChange: (Boolean) -> Unit = {},
 ) {
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
     // فتح محادثة من إشعار رسالة
     LaunchedEffect(deepLinkSender, deepLinkConversation) {
-        if (!showGroups && deepLinkSender != null && deepLinkSender.matches(RED_ID_PATTERN)) target = deepLinkSender
+        if (!showGroups && deepLinkSender != null && YounesId.isValid(deepLinkSender)) target = deepLinkSender
     }
     var showDirectory by remember { mutableStateOf(false) }
     var showMessageSearch by remember { mutableStateOf(false) }
@@ -833,7 +849,17 @@ private fun ChatHubScreen(
     var joinToken by remember { mutableStateOf("") }
     var manageGroupId by remember { mutableStateOf<String?>(null) }
     var groupConversationId by remember { mutableStateOf<String?>(null) }
-    var showGro(false) }
+    LaunchedEffect(target, groupConversationId, showGroups) {
+        onThreadOpenChange(
+            if (showGroups) !groupConversationId.isNullOrBlank()
+            else YounesId.isValid(target)
+        )
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { onThreadOpenChange(false) }
+    }
+    var showGroupEmoji by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf<String?>(null) }
     var groupReplyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var showGroupAttachmentSheet by remember { mutableStateOf(false) }
     var showGroupVoicePanel by remember { mutableStateOf(false) }
@@ -884,6 +910,19 @@ private fun ChatHubScreen(
             if (index != -1) {
                 decrypted[index] = decrypted[index].copy(status = ack.status)
             }
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        OutgoingSendBus.events.collect { event ->
+            val update = ChatComposer.consumeOutgoingEvent(event, decrypted)
+            update.restoreText?.let { restored ->
+                if (event.conversationId.length > 32) {
+                    if (groupMessageText.isBlank()) groupMessageText = restored
+                } else if (messageText.isBlank()) {
+                    messageText = restored
+                }
+            }
+            sendError = update.error
         }
     }
     // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
@@ -1319,6 +1358,7 @@ private fun ChatHubScreen(
                                         val ticks = when (item.status) {
                                             "READ" -> "✓✓"
                                             "DELIVERED" -> "✓✓"
+                                            "PENDING" -> "…"
                                             else -> "✓"
                                         }
                                         Text(ticks, color = if (item.status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -1423,35 +1463,53 @@ private fun ChatHubScreen(
                     }
                 }
             )
+            sendError?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            val canSendText = YounesId.isValid(target) && messageText.isNotBlank()
+            val voiceBusy = voiceMessages.state is VoiceMessageState.Recording ||
+                voiceMessages.state is VoiceMessageState.Preview ||
+                voiceMessages.state is VoiceMessageState.Sending
+            val sendPrivate = {
+                val peer = YounesId.parseOrNull(target)
+                if (peer == null) {
+                    sendError = if (target.isBlank()) "افتح محادثة أولاً ثم اكتب الرسالة." else YounesId.ERROR_MESSAGE
+                } else {
+                    val built = ChatComposer.buildText(
+                        action = if (editingMessageId != null) "EDIT" else "MESSAGE",
+                        text = messageText,
+                        replyTo = replyToMessage?.id,
+                        editOf = editingMessageId,
+                        disappearingMs = disappearingDurationMs,
+                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                        hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                    )
+                    built.fold(
+                        onSuccess = { rich ->
+                            val clientId = ChatComposer.newClientId()
+                            decrypted.add(
+                                DecryptedMessage(
+                                    clientId, conversation, account.redId, RichMessage.encode(rich),
+                                    System.currentTimeMillis(), 0, type = "RICH_TEXT", outgoing = true, status = "PENDING",
+                                )
+                            )
+                            RedConnectionService.sendRichText(context, peer, conversation, rich, clientId)
+                            messageText = ""
+                            showEmoji = false
+                            replyToMessage = null
+                            editingMessageId = null
+                            sendError = null
+                        },
+                        onFailure = { sendError = ChatComposer.humanizeSendError(it.message) },
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton({ showEmoji = !showEmoji; showStickers = false }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
-                IconButton({ showStickers = !showStickers; showEmoji = false }, enabled = target.matches(RED_ID_PATTERN)) { Icon(Icons.Default.Add, "ملصقات") }
-                IconButton({ showAttachmentSheet = true }, enabled = target.matches(RED_ID_PATTERN) && attachments.state !is AttachmentState.Working) {
+                IconButton({ showStickers = !showStickers; showEmoji = false }, enabled = YounesId.isValid(target)) { Icon(Icons.Default.Add, "ملصقات") }
+                IconButton({ showAttachmentSheet = true }, enabled = YounesId.isValid(target) && attachments.state !is AttachmentState.Working) {
                     Icon(Icons.Default.AttachFile, "إرفاق")
                 }
-                VoiceRecordButton(
-                    state = voiceMessages.state,
-                    isLocked = voiceMessages.isLocked,
-                    hasPermission = target.matches(RED_ID_PATTERN) && voiceMessages.state !is VoiceMessageState.Sending,
-                    onPress = { voiceMessages.lockRecording() },
-                    onRelease = { voiceMessages.stopAndPreview(target, conversation) },
-                    onLockRequest = { voiceMessages.lockRecording() },
-                    onCancel = { voiceMessages.cancel() },
-                    onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
-                    onClick = {
-                        if (voiceMessages.state is VoiceMessageState.Recording) {
-                            voiceMessages.stopAndPreview(target, conversation)
-                        } else if (voiceMessages.state is VoiceMessageState.Preview) {
-                            voiceMessages.stopAndSend(target, conversation)
-                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            voiceMessages.start(target, conversation)
-                        } else {
-                            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    }
-                )
                 Column(Modifier.weight(1f)) {
-                    // Mentions @ + Hashtags # autocomplete
                     val mentionQuery = USERNAME_PARTIAL.find(messageText)?.groupValues?.get(1)
                     if (mentionQuery != null && directory.contacts.isNotEmpty()) {
                         val suggestions = directory.contacts.filter { it.username.contains(mentionQuery, ignoreCase = true) || it.displayName.contains(mentionQuery, ignoreCase = true) }.take(3)
@@ -1483,54 +1541,67 @@ private fun ChatHubScreen(
                             }
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            messageText,
-                            { messageText = it },
-                            Modifier.weight(1f),
-                            placeholder = { Text("رسالة مشفرة… @ # ⏳") },
-                            maxLines = if (SettingsRuntime.current.enterToSend) 1 else 4,
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = if (SettingsRuntime.current.enterToSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
-                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = {
-                                if (SettingsRuntime.current.enterToSend && messageText.isNotBlank() && target.matches(RED_ID_PATTERN)) {
-                                    val rich = RichMessage(
-                                        action = if (editingMessageId != null) "EDIT" else "MESSAGE",
-                                        text = messageText.trim(), replyTo = replyToMessage?.id, editOf = editingMessageId,
-                                        expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it },
-                                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
-                                        hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
-                                        disappearingMs = disappearingDurationMs
-                                    )
-                                    RedConnectionService.sendRichText(context, target, conversation, rich)
-                                    messageText = ""; showEmoji = false; replyToMessage = null; editingMessageId = null
+                    OutlinedTextField(
+                        messageText,
+                        { messageText = it; if (sendError != null) sendError = null },
+                        Modifier.fillMaxWidth(),
+                        placeholder = { Text("رسالة مشفرة…") },
+                        maxLines = if (SettingsRuntime.current.enterToSend) 1 else 4,
+                        leadingIcon = {
+                            IconButton({ showEmoji = !showEmoji; showStickers = false }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                        },
+                        trailingIcon = {
+                            if (disappearingDurationMs != null) {
+                                val label = when (disappearingDurationMs) {
+                                    3600000L -> "1س"
+                                    86400000L -> "24س"
+                                    604800000L -> "7ي"
+                                    else -> "⏳"
                                 }
-                            })
-                        )
-                        if (disappearingDurationMs != null) {
-                            val label = when (disappearingDurationMs) {
-                                3600000L -> "1س"
-                                86400000L -> "24س"
-                                604800000L -> "7ي"
-                                else -> "⏳"
+                                TextButton({ disappearingDurationMs = null }) { Text("⏳$label", color = AqyalGold, fontSize = 11.sp) }
+                            } else {
+                                IconButton({ disappearingDurationMs = 86400000L }) { Icon(Icons.Default.History, "رسالة مؤقتة", tint = Color.Gray) }
                             }
-                            AssistChip(onClick = { disappearingDurationMs = null }, label = { Text("⏳ $label", color = AqyalGold) }, colors = AssistChipDefaults.assistChipColors(containerColor = AqyalGold.copy(alpha = 0.2f)))
-                        } else {
-                            IconButton({ disappearingDurationMs = 86400000L }) { Icon(Icons.Default.History, "رسالة مؤقتة", tint = Color.Gray) }
-                        }
-                    }
-                }
-                FilledIconButton({
-                    val rich = RichMessage(
-                        action = if (editingMessageId != null) "EDIT" else "MESSAGE",
-                        text = messageText.trim(), replyTo = replyToMessage?.id, editOf = editingMessageId,
-                        expiresAt = disappearingDurationMs?.let { System.currentTimeMillis() + it },
-                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
-                        hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
-                        disappearingMs = disappearingDurationMs
+                        },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = if (SettingsRuntime.current.enterToSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = {
+                            if (SettingsRuntime.current.enterToSend && canSendText) sendPrivate()
+                        })
                     )
-                    RedConnectionService.sendRichText(context, target, conversation, rich)
-                    messageText = ""; showEmoji = false; replyToMessage = null; editingMessageId = null
-                }, enabled = target.matches(RED_ID_PATTERN) && messageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال") }
+                }
+                if (canSendText && !voiceBusy) {
+                    FilledIconButton(
+                        onClick = sendPrivate,
+                        modifier = Modifier.size(48.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = YounesEmerald,
+                            contentColor = Color(0xFF002117),
+                        ),
+                    ) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال") }
+                } else {
+                    VoiceRecordButton(
+                        state = voiceMessages.state,
+                        isLocked = voiceMessages.isLocked,
+                        hasPermission = YounesId.isValid(target) && voiceMessages.state !is VoiceMessageState.Sending,
+                        onPress = { voiceMessages.lockRecording() },
+                        onRelease = { voiceMessages.stopAndPreview(target, conversation) },
+                        onLockRequest = { voiceMessages.lockRecording() },
+                        onCancel = { voiceMessages.cancel() },
+                        onUpdateCancelProgress = { voiceMessages.updateCancelProgress(it) },
+                        onClick = {
+                            if (voiceMessages.state is VoiceMessageState.Recording) {
+                                voiceMessages.stopAndPreview(target, conversation)
+                            } else if (voiceMessages.state is VoiceMessageState.Preview) {
+                                voiceMessages.stopAndSend(target, conversation)
+                            } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                voiceMessages.start(target, conversation)
+                            } else {
+                                microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
+                        size = 48.dp,
+                    )
+                }
             }
             }
         } else Column(Modifier.fillMaxSize().padding(14.dp)) {
@@ -1717,6 +1788,7 @@ private fun ChatHubScreen(
                                         val ticks = when (message.status) {
                                             "READ" -> "✓✓"
                                             "DELIVERED" -> "✓✓"
+                                            "PENDING" -> "…"
                                             else -> "✓"
                                         }
                                         Text(ticks, color = if (message.status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -1738,27 +1810,63 @@ private fun ChatHubScreen(
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.Bottom) {
+                sendError?.let { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                val canSendGroup = groupMessageText.isNotBlank()
+                val sendGroup = {
+                    val built = ChatComposer.buildText(
+                        text = groupMessageText,
+                        replyTo = groupReplyToMessage?.id,
+                        disappearingMs = disappearingDurationMs ?: organization.disappearingMs(openGroup.id),
+                    )
+                    built.fold(
+                        onSuccess = { rich ->
+                            val clientId = ChatComposer.newClientId()
+                            decrypted.add(
+                                DecryptedMessage(
+                                    clientId, openGroup.id, account.redId, RichMessage.encode(rich),
+                                    System.currentTimeMillis(), 0, type = "RICH_TEXT", outgoing = true, status = "PENDING",
+                                )
+                            )
+                            RedConnectionService.sendGroupRichText(context, openGroup, rich, clientId)
+                            groupMessageText = ""
+                            groupReplyToMessage = null
+                            showGroupEmoji = false
+                            sendError = null
+                        },
+                        onFailure = { sendError = ChatComposer.humanizeSendError(it.message) },
+                    )
+                }
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconButton({ showGroupAttachmentSheet = true }) { Icon(Icons.Default.AttachFile, "إرفاق بالمجموعة") }
                     IconButton({ showStickers = !showStickers; showGroupEmoji = false }) { Icon(Icons.Default.Add, "ملصقات المجموعة") }
-                    IconButton({
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            voiceMessages.startForGroup(openGroup)
-                        } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }) { Icon(Icons.Default.Mic, "صوت للمجموعة") }
-                    OutlinedTextField(groupMessageText, { groupMessageText = it }, Modifier.weight(1f), placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") }, maxLines = 4)
-                    IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
-                    FilledIconButton({
-                        val expire = (disappearingDurationMs ?: organization.disappearingMs(openGroup.id)).takeIf { it > 0 }
-                        val rich = RichMessage(
-                            text = groupMessageText.trim(),
-                            replyTo = groupReplyToMessage?.id,
-                            expiresAt = expire?.let { System.currentTimeMillis() + it },
-                            disappearingMs = expire
-                        )
-                        RedConnectionService.sendGroupRichText(context, openGroup, rich)
-                        groupMessageText = ""; groupReplyToMessage = null; showGroupEmoji = false
-                    }, enabled = groupMessageText.isNotBlank()) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                    OutlinedTextField(
+                        groupMessageText,
+                        { groupMessageText = it; if (sendError != null) sendError = null },
+                        Modifier.weight(1f),
+                        placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") },
+                        maxLines = 4,
+                        leadingIcon = {
+                            IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
+                        },
+                    )
+                    if (canSendGroup) {
+                        FilledIconButton(
+                            onClick = sendGroup,
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = YounesEmerald,
+                                contentColor = Color(0xFF002117),
+                            ),
+                        ) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
+                    } else {
+                        IconButton({
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                voiceMessages.startForGroup(openGroup)
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }) { Icon(Icons.Default.Mic, "صوت للمجموعة") }
+                    }
                 }
                 if (showStickers && groupConversationId != null) {
                     val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
@@ -3487,8 +3595,5 @@ private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
 private fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
     val canonical = listOf(first, second).sorted().joinToString("|")
-    return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
-}
-tring("|")
     return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 }
