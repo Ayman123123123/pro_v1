@@ -49,13 +49,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
             is ApiResult.Error -> state = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
                 val manifestJson = result.value.manifestJson
-                val type = when {
-                    result.value.mimeType.startsWith("image/") -> "IMAGE"
-                    result.value.mimeType.startsWith("video/") -> "VIDEO"
-                    result.value.mimeType.startsWith("audio/") -> "AUDIO"
-                    else -> "FILE"
-                }
-                RedConnectionService.sendGroupPayload(getApplication(), group, type, manifestJson)
+                RedConnectionService.sendGroupText(getApplication(), group, manifestJson)
                 state = AttachmentState.Sent(result.value.name)
             }
         }
@@ -66,20 +60,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         state = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")
         state = when (val result = repository.downloadAndDecrypt(manifestJson)) {
             is ApiResult.Error -> AttachmentState.Error(result.message)
-            is ApiResult.Success -> {
-                val file = result.value
-                val manifest = runCatching {
-                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                        .decodeFromString(AttachmentManifest.serializer(), manifestJson)
-                }.getOrNull()
-                GallerySaver.saveIfAllowed(
-                    getApplication(),
-                    file,
-                    manifest?.mimeType.orEmpty(),
-                    manifest?.name ?: file.name,
-                )
-                AttachmentState.Downloaded(file.absolutePath, manifest?.name ?: file.name)
-            }
+            is ApiResult.Success -> AttachmentState.Downloaded(result.value.absolutePath, result.value.name)
         }
     }
 

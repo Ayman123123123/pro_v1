@@ -352,8 +352,7 @@ fun VoiceRecordButton(
     onCancel: () -> Unit,
     onUpdateCancelProgress: (Float) -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    size: Dp = 48.dp,
+    modifier: Modifier = Modifier
 ) {
     val isRecording = state is VoiceMessageState.Recording
     val isPreview = state is VoiceMessageState.Preview
@@ -379,10 +378,9 @@ fun VoiceRecordButton(
         label = "button_scale"
     )
 
-    val inner = size * 0.87f
     Box(
         modifier = modifier
-            .size(size)
+            .size(64.dp)
             .scale(buttonScale)
             .pointerInput(state, hasPermission) {
                 if (!hasPermission) return@pointerInput
@@ -415,14 +413,14 @@ fun VoiceRecordButton(
     ) {
         PulsingRecordingIndicator(
             color = buttonColor,
-            size = inner,
+            size = 56.dp,
             isActive = isRecording && !isLocked
         )
 
         // Inner icon
         Box(
             modifier = Modifier
-                .size(inner)
+                .size(56.dp)
                 .clip(CircleShape)
                 .background(buttonColor),
             contentAlignment = Alignment.Center

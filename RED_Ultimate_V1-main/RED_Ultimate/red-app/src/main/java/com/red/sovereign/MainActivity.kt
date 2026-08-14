@@ -159,8 +159,7 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         if (authViewModel.state is AuthState.Authenticated && SettingsRuntime.current.appLockEnabled) {
             val awayMs = System.currentTimeMillis() - lastBackgroundAt
-            val timeoutMs = SettingsRuntime.current.lockTimeoutSeconds.coerceIn(5, 300) * 1000L
-            if (lastBackgroundAt == 0L || awayMs >= timeoutMs) {
+            if (lastBackgroundAt == 0L || awayMs >= 15_000L) {
                 appLocked = true
             }
         }
