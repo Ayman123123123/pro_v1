@@ -1,6 +1,8 @@
 package com.red.server.database
 
+import org.springframework.data.redis.core.ScanOptions
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
 import java.time.Duration
 import java.util.concurrent.TimeUnit
@@ -37,6 +39,41 @@ import java.util.concurrent.TimeUnit
 @Component
 class RedisManager(private val redis: StringRedisTemplate) {
 
+    // عدّاد ذرّي لـ Rate Limit: INCR ثم PEXPIRE عند أول زيادة فقط — لا منافسة بين عمليتين
+    private val rateLimitScript: DefaultRedisScript<Long> = DefaultRedisScript<Long>().apply {
+        setScriptText(
+            """
+            local current = redis.call('INCR', KEYS[1])
+            if current == 1 then
+                redis.call('PEXPIRE', KEYS[1], ARGV[1])
+            end
+            return current
+            """.trimIndent()
+        )
+        resultType = Long::class.javaObjectType
+    }
+
+    // SCAN تدريجي بدل KEYS — لا يجمّد Redis على مجموعات كبيرة
+    private fun scanKeys(pattern: String, count: Int = 200): Set<String> {
+        return try {
+            redis.execute { connection ->
+                val cursor = connection.scan(
+                    org.springframework.data.redis.core.ScanOptions.scanOptions()
+                        .match(pattern)
+                        .count(count.toLong())
+                        .build()
+                )
+                val keys = mutableSetOf<String>()
+                while (cursor.hasNext()) {
+                    keys.add(String(cursor.next(), Charsets.UTF_8))
+                }
+                keys
+            } ?: emptySet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
     // ══════════════════════════════════════════
     // 📊 التسلسل الرقمي (ACID-like counter)
     // ══════════════════════════════════════════
@@ -72,7 +109,15 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     fun getOnlineUsers(): Set<String> {
-        return redis.opsForSet().members("red:online") ?: emptySet()
+        val members = redis.opsForSet().members("red:online") ?: return emptySet()
+        if (members.isEmpty()) return emptySet()
+        // نظافة ذاتية: أي عضو انتهت صلاحية presence الخاص به (خدمة ماتت دون go-offline) يُزاح تلقائياً
+        val live = members.filter { redis.hasKey("red:presence:$it") }.toSet()
+        if (live.size != members.size) {
+            val stale = members - live
+            if (stale.isNotEmpty()) redis.opsForSet().remove("red:online", *stale.toTypedArray())
+        }
+        return live
     }
 
     fun isUserOnline(userId: String): Boolean {
@@ -113,7 +158,7 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     fun getTypingUsers(conversationId: String): Set<String> {
-        val keys = redis.keys("red:typing:$conversationId:*") ?: emptySet()
+        val keys = scanKeys("red:typing:$conversationId:*")
         return keys.map { it.substringAfterLast(":") }.toSet()
     }
 
@@ -122,10 +167,12 @@ class RedisManager(private val redis: StringRedisTemplate) {
     // ══════════════════════════════════════════
 
     fun checkRateLimit(key: String, maxRequests: Int, windowSeconds: Long): Boolean {
-        val current = redis.opsForValue().increment("red:ratelimit:$key") ?: 1L
-        if (current == 1L) {
-            redis.expire("red:ratelimit:$key", windowSeconds, TimeUnit.SECONDS)
-        }
+        // INCR + PEXPIRE ذرّية في سكربت واحد — لا نافذة يمكن تجاوزها بطلبين متزامنين
+        val current = redis.execute(
+            rateLimitScript,
+            listOf("red:ratelimit:$key"),
+            windowSeconds * 1000
+        ) ?: 1L
         return current <= maxRequests
     }
 

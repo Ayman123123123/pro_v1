@@ -96,6 +96,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Videocam
@@ -2344,6 +2345,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     var showDinstarDialog by remember { mutableStateOf(false) }
     var showGroupCallPicker by remember { mutableStateOf(false) }
     var showCreateConferenceScreen by remember { mutableStateOf(false) }
+    var showRecordings by remember { mutableStateOf(false) }
     var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
     var publicStreamSearchQuery by remember { mutableStateOf("") }
     var dinstarNumberInput by remember { mutableStateOf("") }
@@ -2402,7 +2404,14 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onExplore = { onExplore() }
         )
         Spacer(Modifier.height(16.dp))
-        Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showRecordings = true }) {
+                Icon(Icons.Default.FiberManualRecord, null, tint = AqyalGold, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("التسجيلات", color = AqyalGold, fontSize = 13.sp)
+            }
+        }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
         }
@@ -2458,6 +2467,15 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 onBack = { showCreateConferenceScreen = false },
                 onLaunched = { showCreateConferenceScreen = false }
             )
+        }
+    }
+
+    if (showRecordings) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showRecordings = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            com.red.sovereign.features.calls.CallRecordingsScreen(onBack = { showRecordings = false })
         }
     }
 
@@ -3356,23 +3374,18 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
     }
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
-    val isDownloaded = when (val current = attachments.getDownloadState(item.id)) {
-        is AttachmentState.Downloaded -> current.name == manifest.name
-        is AttachmentState.Exported -> current.name == manifest.name
-        else -> false
-    }
-    val isDownloading = attachments.getDownloadState(item.id) is AttachmentState.Working
-    val downloadedUri = when (val current = attachments.getDownloadState(item.id)) {
-        is AttachmentState.Downloaded -> if (current.name == manifest.name) {
-            android.net.Uri.fromFile(java.io.File(current.path))
-        } else null
-        is AttachmentState.Exported -> if (current.name == manifest.name) {
-            android.net.Uri.fromFile(java.io.File(current.path))
-        } else null
+    val downloadState = attachments.getDownloadState(item.id)
+    val downloadedPath = when (downloadState) {
+        is AttachmentState.Downloaded -> downloadState.path
+        is AttachmentState.Exported -> downloadState.path
         else -> null
     }
+    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+    val isDownloaded = downloadedFile != null
+    val isDownloading = downloadState is AttachmentState.Working
+    val downloadedUri = downloadedFile?.let { android.net.Uri.fromFile(it) }
 
     if (downloadedUri != null) {
         // 🎙️ مشغّل احترافي مع waveform
@@ -3409,7 +3422,7 @@ private fun AttachmentMessage(item: DecryptedMessage, attachments: AttachmentVie
     }
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
     when {
         manifest.mimeType.startsWith("image/") -> ImageMessage(item, manifest, attachments)
@@ -3421,28 +3434,31 @@ private fun AttachmentMessage(item: DecryptedMessage, attachments: AttachmentVie
 
 @Composable
 private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
-    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
-        is AttachmentState.Downloaded -> current.path to current.name
-        is AttachmentState.Exported -> current.path to current.name
+    val downloadState = attachments.getDownloadState(item.id)
+    val downloadedPath = when (downloadState) {
+        is AttachmentState.Downloaded -> downloadState.path
+        is AttachmentState.Exported -> downloadState.path
         else -> null
     }
-    val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
-    if (downloaded?.second == manifest.name) {
-        val file = java.io.File(downloaded.first)
-        val bitmap = remember(file.lastModified()) {
-            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-            android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
+    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+    val isWorking = downloadState is AttachmentState.Working
+
+    if (downloadedFile != null) {
+        val bitmap = remember(downloadedFile.lastModified()) {
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 1 }
+            android.graphics.BitmapFactory.decodeFile(downloadedFile.absolutePath, opts)?.asImageBitmap()
         }
         if (bitmap != null) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
                 androidx.compose.foundation.Image(
                     bitmap, contentDescription = "صورة",
                     modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
-                        val uri = android.net.Uri.fromFile(file)
+                        val uri = android.net.Uri.fromFile(downloadedFile)
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "image/*")
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -3456,6 +3472,8 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(" ✓ مشفرة • ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
                 }
             }
+        } else {
+            Text("صورة مشفرة (${manifest.name})", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
@@ -3469,7 +3487,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Spacer(Modifier.height(6.dp))
                     Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
                     Text("${formatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                    IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                    IconButton({ attachments.download(item.id, manifestJson) }, enabled = !isWorking) {
                         Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
                             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
                         }
@@ -3482,25 +3500,29 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 
 @Composable
 private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
-    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
-        is AttachmentState.Downloaded -> current.path to current.name
-        is AttachmentState.Exported -> current.path to current.name
+    val downloadState = attachments.getDownloadState(item.id)
+    val downloadedPath = when (downloadState) {
+        is AttachmentState.Downloaded -> downloadState.path
+        is AttachmentState.Exported -> downloadState.path
         else -> null
     }
-    if (downloaded?.second == manifest.name) {
+    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+
+    if (downloadedFile != null) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
-                StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
+                StoryVideoPlayer(android.net.Uri.fromFile(downloadedFile), Modifier.fillMaxSize())
                 Surface(
                     modifier = Modifier.align(Alignment.Center).size(52.dp),
                     shape = CircleShape,
                     color = Color.Black.copy(alpha = 0.55f),
                     onClick = {
-                        val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
+                        val uri = android.net.Uri.fromFile(downloadedFile)
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "video/*")
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -3513,7 +3535,7 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
             }
         }
     } else {
-        val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
+        val isWorking = downloadState is AttachmentState.Working
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(YounesEmerald.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
@@ -3524,7 +3546,7 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
-                else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                else IconButton({ attachments.download(item.id, manifestJson) }, enabled = !isWorking) {
                     Icon(Icons.Default.Download, "تنزيل الفيديو", tint = YounesEmerald)
                 }
             }
@@ -3534,16 +3556,20 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 
 @Composable
 private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
-    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
-        is AttachmentState.Downloaded -> current.path to current.name
-        is AttachmentState.Exported -> current.path to current.name
+    val downloadState = attachments.getDownloadState(item.id)
+    val downloadedPath = when (downloadState) {
+        is AttachmentState.Downloaded -> downloadState.path
+        is AttachmentState.Exported -> downloadState.path
         else -> null
     }
-    if (downloaded?.second == manifest.name) {
+    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+
+    if (downloadedFile != null) {
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3553,7 +3579,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
-                VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), isOutgoing = item.outgoing, modifier = Modifier.fillMaxWidth())
+                VoiceNotePlayer(android.net.Uri.fromFile(downloadedFile), isOutgoing = item.outgoing, modifier = Modifier.fillMaxWidth())
             }
         }
     } else {
@@ -3566,7 +3592,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     Text("صوت مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
-                IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.sendState !is AttachmentState.Working) {
+                IconButton({ attachments.download(item.id, manifestJson) }, enabled = attachments.sendState !is AttachmentState.Working) {
                     Icon(Icons.Default.Download, "تنزيل الصوت")
                 }
             }
@@ -3576,11 +3602,19 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 
 @Composable
 private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
+        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
-    val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
+    val downloadState = attachments.getDownloadState(item.id)
+    val downloadedPath = when (downloadState) {
+        is AttachmentState.Downloaded -> downloadState.path
+        is AttachmentState.Exported -> downloadState.path
+        else -> null
+    }
+    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+    val isWorking = downloadState is AttachmentState.Working
     val fileColor = when {
         manifest.mimeType.contains("pdf") -> AqyalCyanGlow
         manifest.mimeType.contains("zip") || manifest.mimeType.contains("compressed") -> AqyalGold
@@ -3589,18 +3623,35 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
         manifest.mimeType.contains("presentation") || manifest.mimeType.contains("powerpoint") -> Color(0xFFF06292)
         else -> AqyalCyanGlow
     }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
+    Card(
+        Modifier.fillMaxWidth().clickable(enabled = downloadedFile != null) {
+            downloadedFile?.let { file ->
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, manifest.mimeType)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runCatching { context.startActivity(intent) }
+            }
+        },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(16.dp)
+    ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(fileColor.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = fileColor, modifier = Modifier.size(30.dp))
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}${if (downloadedFile != null) " · جاهز للفتح" else ""}", style = MaterialTheme.typography.labelSmall)
             }
             if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
-            else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
-                Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
+            else if (downloadedFile == null) {
+                IconButton({ attachments.download(item.id, manifestJson) }) {
+                    Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
+                }
+            } else {
+                Icon(Icons.Default.Check, "تم التنزيل", tint = YounesEmerald, modifier = Modifier.size(24.dp))
             }
         }
     }

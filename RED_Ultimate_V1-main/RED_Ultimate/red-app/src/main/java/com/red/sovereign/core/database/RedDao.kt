@@ -62,6 +62,10 @@ interface RedDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCallLog(log: CallLogEntity)
 
+    // إدراج دفعة في معاملة واحدة — أسرع بكثير من حلقة insert منفردة عند مزامنة السجل
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCallLogs(logs: List<CallLogEntity>)
+
     @Query("SELECT * FROM call_logs ORDER BY timestamp DESC")
     fun getCallLogs(): Flow<List<CallLogEntity>>
 

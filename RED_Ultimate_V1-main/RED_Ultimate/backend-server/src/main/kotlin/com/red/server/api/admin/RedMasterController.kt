@@ -77,7 +77,7 @@ class RedMasterController(
             ORDER BY started_at DESC
             LIMIT ? OFFSET ?
             """.trimIndent(),
-            *if (where.isBlank()) arrayOf(safeLimit, safeOffset) else arrayOf(status!!, safeLimit, safeOffset)
+            *if (where.isBlank()) arrayOf<Any>(safeLimit, safeOffset) else arrayOf<Any>(status!!, safeLimit, safeOffset)
         )
         return ResponseEntity.ok(mapOf("total" to total, "calls" to rows))
     }

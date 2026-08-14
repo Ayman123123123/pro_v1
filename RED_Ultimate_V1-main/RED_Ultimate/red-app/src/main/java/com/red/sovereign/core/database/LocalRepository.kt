@@ -70,7 +70,7 @@ class LocalRepository(context: Context) {
 
     // --- Call Logs ---
     suspend fun saveCallLog(log: CallLogEntity) = dao.insertCallLog(log)
-    suspend fun saveCallLogs(logs: List<CallLogEntity>) = logs.forEach { dao.insertCallLog(it) } // Simplify batch for now
+    suspend fun saveCallLogs(logs: List<CallLogEntity>) = dao.insertCallLogs(logs)
     fun getCallLogs(): Flow<List<CallLogEntity>> = dao.getCallLogs()
 
     // --- Stories ---

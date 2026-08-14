@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.Index
 
-@Entity(tableName = "messages", indices = [Index("conversationId"), Index("status")])
+@Entity(tableName = "messages", indices = [Index("conversationId"), Index("status"), Index(value = ["conversationId", "createdAt"])])
 data class MessageEntity(
     @PrimaryKey val id: String,
     val conversationId: String,

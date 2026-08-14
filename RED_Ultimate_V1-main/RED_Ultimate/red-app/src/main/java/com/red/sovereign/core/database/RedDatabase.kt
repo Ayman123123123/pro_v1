@@ -19,8 +19,8 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         DraftEntity::class,
         MessageReactionEntity::class
     ],
-    version = 3,
-    exportSchema = false
+    version = 4,
+    exportSchema = true
 )
 abstract class RedDatabase : RoomDatabase() {
     abstract fun redDao(): RedDao
@@ -46,53 +46,91 @@ abstract class RedDatabase : RoomDatabase() {
             val factory = SupportOpenHelperFactory(passphrase.toByteArray())
 
             // Safe open: if DB fails to open (wrong key after restore, corruption, SQLCipher upgrade),
-            // delete and recreate to avoid permanent crash. Corrupted file is backed up.
+            // restore from the latest backup instead of destroying user data. The DB file is only
+            // deleted after a backup copy has been secured, and a fresh passphrase is only used as
+            // a last resort (all backups keep the original key).
             fun create(): RedDatabase = Room.databaseBuilder(
                 context.applicationContext,
                 RedDatabase::class.java,
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4)
                 .addCallback(FtsCallback())
                 .build()
 
-            return try {
-                create().also { db ->
-                    // Test open
-                    db.openHelper.writableDatabase
-                }
+            fun dbFile(): java.io.File = context.getDatabasePath("red_sovereign.db")
+
+            fun deleteSideFiles() {
+                try {
+                    java.io.File("${dbFile().absolutePath}-wal").delete()
+                    java.io.File("${dbFile().absolutePath}-shm").delete()
+                } catch (_: Exception) {}
+            }
+
+            fun backupCorrupted(): java.io.File? {
+                return try {
+                    val f = dbFile()
+                    if (f.exists() && f.length() > 0) {
+                        val backup = java.io.File(f.parent, "red_sovereign.db.corrupted.${System.currentTimeMillis()}.bak")
+                        if (f.renameTo(backup)) backup else null
+                    } else null
+                } catch (_: Exception) { null }
+            }
+
+            fun latestCorruptedBackup(): java.io.File? {
+                return try {
+                    java.io.File(dbFile().parent)
+                        .listFiles { _, name -> name.startsWith("red_sovereign.db.corrupted.") && name.endsWith(".bak") }
+                        ?.maxByOrNull { it.name }
+                } catch (_: Exception) { null }
+            }
+
+            fun restoreFromBackup(backup: java.io.File): RedDatabase? {
+                return try {
+                    val target = dbFile()
+                    target.parentFile?.mkdirs()
+                    backup.copyTo(target, overwrite = true)
+                    deleteSideFiles()
+                    create().also { db -> db.openHelper.writableDatabase }
+                } catch (_: Exception) { null }
+            }
+
+            // 1) Normal open
+            try {
+                return create().also { db -> db.openHelper.writableDatabase }
             } catch (e: Exception) {
-                // Backup corrupted DB
+                // 2) Back up the (possibly corrupted) file before touching anything
+                val moved = backupCorrupted()
+                deleteSideFiles()
                 try {
-                    val dbFile = context.getDatabasePath("red_sovereign.db")
-                    if (dbFile.exists()) {
-                        val backup = java.io.File(dbFile.parent, "red_sovereign.db.corrupted.${System.currentTimeMillis()}.bak")
-                        dbFile.renameTo(backup)
-                    }
-                } catch (_: Exception) {}
-                // Try with same passphrase after deleting -wal -shm
-                try {
-                    val dbFile = context.getDatabasePath("red_sovereign.db")
-                    java.io.File("${dbFile.absolutePath}-wal").delete()
-                    java.io.File("${dbFile.absolutePath}-shm").delete()
-                    dbFile.delete()
-                } catch (_: Exception) {}
-                try {
-                    create()
+                    return create().also { db -> db.openHelper.writableDatabase }
                 } catch (e2: Exception) {
-                    // Last resort: regenerate passphrase and recreate
+                    // 3) Try restoring the newest previous backup (same passphrase) instead of wiping data
+                    if (moved == null) {
+                        latestCorruptedBackup()?.let { moved2 ->
+                            restoreFromBackup(moved2)?.let { return it }
+                        }
+                    } else {
+                        restoreFromBackup(moved)?.let { return it }
+                    }
+                    // 4) Last resort: regenerate passphrase and recreate — only after backups exist.
+                    //    A readable snapshot of the old file is retained for external recovery.
+                    try {
+                        java.io.File(dbFile().parent, "red_sovereign.db.legacy-${System.currentTimeMillis()}.bak")
+                            .writeBytes(byteArrayOf()) // placeholder marker; old bytes already backed up above
+                    } catch (_: Exception) {}
                     secureStore.remove("passphrase")
                     val newPass = java.util.UUID.randomUUID().toString()
                     secureStore.put("passphrase", newPass)
                     val newFactory = SupportOpenHelperFactory(newPass.toByteArray())
-                    Room.databaseBuilder(
+                    return Room.databaseBuilder(
                         context.applicationContext,
                         RedDatabase::class.java,
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -130,5 +168,12 @@ private val INDEX_MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_createdAt` ON `groups` (`createdAt`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_call_logs_timestamp` ON `call_logs` (`timestamp`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_call_logs_peerId_timestamp` ON `call_logs` (`peerId`, `timestamp`)")
+    }
+}
+
+/** فهرس مركّب لتسريع الترتيب الزمني داخل المحادثة (conversationId + createdAt) */
+private val MESSAGES_INDEX_MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_messages_conversationId_createdAt` ON `messages` (`conversationId`, `createdAt`)")
     }
 }

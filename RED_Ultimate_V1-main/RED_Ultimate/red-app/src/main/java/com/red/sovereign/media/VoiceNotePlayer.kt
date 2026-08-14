@@ -91,8 +91,13 @@ fun VoiceNotePlayer(
                     isPlaying = playing
                 }
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY && duration == C.TIME_UNSET.toLong()) {
+                    if (playbackState == Player.STATE_READY && duration > 0) {
                         totalDurationMs = duration
+                    } else if (playbackState == Player.STATE_ENDED) {
+                        seekTo(0)
+                        pause()
+                        isPlaying = false
+                        currentPositionMs = 0L
                     }
                 }
             })

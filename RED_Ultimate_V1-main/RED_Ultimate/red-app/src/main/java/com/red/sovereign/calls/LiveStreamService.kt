@@ -128,8 +128,18 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             }
             ACTION_TOGGLE_VIDEO -> {
                 val isVideoOn = LiveStreamRuntime.localVideo?.enabled() == true
-                engine?.setCameraEnabled(!isVideoOn)
-                mesh?.setCameraEnabled(!isVideoOn)
+                if (!isVideoOn && LiveStreamRuntime.localVideo == null) {
+                    // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
+                    scope.launch {
+                        val ok = engine?.retryCamera() == true || mesh?.retryCamera() == true
+                        if (ok) {
+                            LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack ?: mesh?.localVideo
+                        }
+                    }
+                } else {
+                    engine?.setCameraEnabled(!isVideoOn)
+                    mesh?.setCameraEnabled(!isVideoOn)
+                }
             }
             ACTION_SWITCH_CAMERA -> {
                 engine?.switchCamera()
@@ -142,11 +152,13 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 mesh?.setCameraEnabled(cameraOn)
             }
             ACTION_START_RECORDING -> {
-                if (recordingManager == null && streamId.isNotBlank()) {
+                // موافقة صريحة من واجهة المستخدم — لا تُفترض أبداً (خصوصية الطرفين)
+                val consent = intent.getBooleanExtra(YounesCallService.EXTRA_CONSENT, false)
+                if (consent && recordingManager == null && streamId.isNotBlank()) {
                     recordingManager = CallRecordingManager(this, streamId)
                 }
-                recordingManager?.start(consentGranted = true)
-                LiveStreamRuntime.isRecording = true
+                recordingManager?.start(consentGranted = consent)
+                LiveStreamRuntime.isRecording = consent
             }
             ACTION_STOP_RECORDING -> {
                 scope.launch {
@@ -312,9 +324,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             else -> stopStream()
         }
     }
+    override fun onCameraUnavailable() {}
     override fun onError(message: String) {
         if (message == "UNAUTHORIZED" || message == "LIVE_STREAM_REGISTRATION_FAILED") {
-            LiveStreamRuntime.state = LiveStreamUiState.Error(message)
             scope.launch {
                 kotlinx.coroutines.delay(1500)
                 stopStream()

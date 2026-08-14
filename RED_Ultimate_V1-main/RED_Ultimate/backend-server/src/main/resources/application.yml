@@ -42,7 +42,10 @@ spring:
     # Windows Docker often reports Postgres healthy before it accepts JDBC.
     connect-retries: 30
     connect-retries-interval: 5s
-    # Never mix with hand-piped V1.sql — Flyway owns V1..V28.
+    # Never mix with hand-piped SQL — Flyway owns V1..V31 (unique versions, no duplicates).
+    # V28/V29 previously had duplicate filenames; renumbered: Widen→V30, Legendary→V31.
+    # V29 (drops stale groups FKs) and V30 (widen admin_audit constraints) are independent,
+    # so the renumbering is safe in any existing database where both were already applied.
 
   jpa:
     hibernate:

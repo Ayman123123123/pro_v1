@@ -62,15 +62,19 @@ object ConferenceRuntime {
     var isSpeaker by mutableStateOf(true)
     var selfRole by mutableStateOf("LISTENER")
     var mediaPath by mutableStateOf("MESH")
+    var isRecording by mutableStateOf(false)
     var pinnedMessage by mutableStateOf("")
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
     var reactions: List<SpaceReaction> by mutableStateOf(emptyList())
 }
 
-class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener {
+class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: ConferenceSignalingClient
     private var mesh: MeshRtcSession? = null
+    private var sfu: SfuMediaClient? = null
+    private var mediaStarted = false
+    private var recordingManager: CallRecordingManager? = null
     private var roomId = ""
     private var userId = ""
     private var startedAsHost = false
@@ -157,10 +161,27 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (!ConferenceRuntime.isSpeaker) return START_STICKY
                 ConferenceRuntime.isMuted = !ConferenceRuntime.isMuted
                 mesh?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
+                sfu?.setMicrophoneEnabled(!ConferenceRuntime.isMuted)
             }
             ACTION_TOGGLE_VIDEO -> {
-                ConferenceRuntime.isVideoEnabled = !ConferenceRuntime.isVideoEnabled
-                mesh?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                val enabling = !ConferenceRuntime.isVideoEnabled
+                ConferenceRuntime.isVideoEnabled = enabling
+                if (enabling && ConferenceRuntime.localVideo == null) {
+                    // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
+                    scope.launch {
+                        val ok = if (sfu != null) {
+                            sfu!!.retryCamera()
+                        } else {
+                            mesh?.retryCamera() == true
+                        }
+                        if (ok) {
+                            ConferenceRuntime.localVideo = sfu?.localVideo ?: mesh?.localVideo
+                        }
+                    }
+                } else {
+                    mesh?.setCameraEnabled(enabling)
+                    sfu?.setCameraEnabled(enabling)
+                }
             }
             ACTION_RAISE_HAND -> signaling.raiseHand(roomId, userId)
             ACTION_APPROVE_SPEAKER -> {
@@ -200,7 +221,25 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             ACTION_SET_QUALITY -> {
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
-                if (quality == "AUDIO") mesh?.setCameraEnabled(false) else mesh?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                if (quality == "AUDIO") {
+                    mesh?.setCameraEnabled(false)
+                    sfu?.setCameraEnabled(false)
+                } else {
+                    mesh?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                    sfu?.setCameraEnabled(ConferenceRuntime.isVideoEnabled)
+                }
+            }
+            ACTION_START_RECORDING -> {
+                // موافقة صريحة من واجهة المستخدم — لا تُفترض أبداً
+                val consent = intent.getBooleanExtra(YounesCallService.EXTRA_CONSENT, false)
+                if (recordingManager == null && roomId.isNotBlank()) {
+                    recordingManager = CallRecordingManager(this, roomId)
+                }
+                ConferenceRuntime.isRecording = recordingManager?.start(consentGranted = consent) == true
+            }
+            ACTION_STOP_RECORDING -> {
+                scope.launch { recordingManager?.stop(); recordingManager = null }
+                ConferenceRuntime.isRecording = false
             }
         }
         return START_STICKY
@@ -208,18 +247,48 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
 
     override fun onConnected() {
         scope.launch {
-            if (mesh == null) {
+            if (!mediaStarted) {
+                mediaStarted = true
                 val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
-                mesh = MeshRtcSession(this@ConferenceService, userId, this@ConferenceService)
-                ConferenceRuntime.mediaPath = "MESH"
-                ConferenceRuntime.eglContext = mesh?.eglContext
-                mesh?.start(kind)
-                ConferenceRuntime.localVideo = mesh?.localVideo
-                applyListenerMute()
-                markConferenceReady()
+                // SFU أولاً (mediasoup): أفضل للأداء عند نمو الحضور، مع fallback تلقائي للميش
+                if (roomId.isNotBlank() && roomId.length in 4..128) {
+                    sfu = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
+                    if (attachSfuWithRetry(sfu!!, roomId)) {
+                        sfu?.publish(kind)
+                        ConferenceRuntime.mediaPath = "SFU"
+                        ConferenceRuntime.eglContext = sfu?.eglContext
+                        ConferenceRuntime.localVideo = sfu?.localVideo
+                        applyListenerMute()
+                        markConferenceReady()
+                    } else {
+                        sfu?.release(); sfu = null
+                        startMesh(kind)
+                    }
+                } else {
+                    startMesh(kind)
+                }
             }
             signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, ConferenceRuntime.isSpeaker)
         }
+    }
+
+    /** attach مع إعادة محاولة قصيرة — يعالج تأخيرات الشبكة عند إصدار التذكرة. */
+    private suspend fun attachSfuWithRetry(sfu: SfuMediaClient, roomId: String): Boolean {
+        repeat(4) { attempt ->
+            if (sfu.attach(roomId)) return true
+            if (attempt < 3) kotlinx.coroutines.delay(350)
+        }
+        return false
+    }
+
+    private fun startMesh(kind: CallMediaKind) {
+        mesh = MeshRtcSession(this@ConferenceService, userId, this@ConferenceService)
+        ConferenceRuntime.mediaPath = "MESH"
+        ConferenceRuntime.eglContext = mesh?.eglContext
+        scope.launch { mesh?.start(kind) }
+        ConferenceRuntime.localVideo = mesh?.localVideo
+        applyListenerMute()
+        markConferenceReady()
     }
 
     private fun markConferenceReady() {
@@ -233,6 +302,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (ConferenceRuntime.isSpeaker) return
         ConferenceRuntime.isMuted = true
         mesh?.setMicrophoneEnabled(false)
+        sfu?.setMicrophoneEnabled(false)
     }
 
     override fun onSignal(signal: ConferenceSignal) {
@@ -379,6 +449,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         mesh?.detachPeer(leftUserId)
     }
 
+    /** SFU: غادر العضو غرفة الوسائط — نفس معالجة onParticipantLeft (من صافي أحداث الخادم). */
+    override fun onPeerLeft(peerId: String) {
+        onParticipantLeft(peerId)
+    }
+
     override fun onDisconnected() {
         when (ConferenceRuntime.state) {
             is ConferenceUiState.Active, is ConferenceUiState.Connecting -> {
@@ -462,6 +537,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         statsJob = scope.launch {
             while (true) {
                 mesh?.pollStats()
+                sfu?.pollStats()
                 kotlinx.coroutines.delay(2000)
             }
         }
@@ -478,8 +554,13 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             runCatching { signaling.leave(closingRoomId, closingUserId) }
         }
         runCatching { signaling.close() }
+        recordingManager?.let { scope.launch { it.stop() } }
+        recordingManager = null
         mesh?.release(); mesh = null
+        sfu?.release(); sfu = null
+        mediaStarted = false
         ConferenceRuntime.mediaPath = "MESH"
+        ConferenceRuntime.isRecording = false
         ConferenceRuntime.selfRole = "LISTENER"
         ConferenceRuntime.state = ConferenceUiState.Idle
         ConferenceRuntime.participants = emptyList()
@@ -616,6 +697,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         const val ACTION_MUTE_USER = "com.red.sovereign.conference.MUTE_USER"
         const val ACTION_SEND_REACTION = "com.red.sovereign.conference.SEND_REACTION"
         const val ACTION_PIN_MESSAGE = "com.red.sovereign.conference.PIN_MESSAGE"
+        const val ACTION_START_RECORDING = "com.red.sovereign.conference.START_RECORDING"
+        const val ACTION_STOP_RECORDING = "com.red.sovereign.conference.STOP_RECORDING"
 
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"
@@ -706,8 +789,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         fun leave(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, ConferenceService::class.java).setAction(ACTION_LEAVE))
         }
-        fun action(context: Context, act: String) {
-            ContextCompat.startForegroundService(context, Intent(context, ConferenceService::class.java).setAction(act))
+        fun action(context: Context, act: String, consent: Boolean = false) {
+            val intent = Intent(context, ConferenceService::class.java).setAction(act)
+            if (consent) intent.putExtra(YounesCallService.EXTRA_CONSENT, true)
+            ContextCompat.startForegroundService(context, intent)
         }
     }
 }

@@ -7,6 +7,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.IBinder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +88,7 @@ object GroupCallRuntime {
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
     var isHost by mutableStateOf(false)
+    var isRecording by mutableStateOf(false)
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
 }
 
@@ -103,16 +106,19 @@ object GroupCallRuntime {
  * • المضيف يمكنه رؤية من قَبِل، من رفض، من لم يرد.
  * • حتى 8 مشاركين (Mesh WebRTC، مثالي للمجموعات الصغيرة).
  */
-class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, CallSignalingClient.Listener {
+class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, CallSignalingClient.Listener, SfuMediaClient.Events {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: CallSignalingClient
     private var engine: WebRtcEngine? = null
     private var mesh: MeshRtcSession? = null
+    private var sfu: SfuMediaClient? = null
     private var recordingManager: CallRecordingManager? = null
+    private var ringback: ToneGenerator? = null
 
     private var groupCallId = ""
     private var myUserId = ""
+    private var hostId = ""
     private var hostDisplayName = ""
     private var isHost = false
     private var isVideo = false
@@ -121,6 +127,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
     // مهلة الرنين — 45 ثانية قبل اعتبار الأعضاء "لم يردوا"
     private var ringTimeout: kotlinx.coroutines.Job? = null
+    // مهلة الرنين الواردة — 30 ثانية دون رد → رفض تلقائي (تظهر للمضيف "لم يرد")
+    private var incomingRingTimeout: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -177,19 +185,40 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 isHost = false
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, false)
                 val hostId = intent.getStringExtra(EXTRA_HOST_ID).orEmpty()
+                this.hostId = hostId
                 val hostName = intent.getStringExtra(EXTRA_HOST_NAME).orEmpty()
                 val others = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 GroupCallRuntime.state = GroupCallUiState.IncomingGroup(groupCallId, hostId, hostName, isVideo, others)
                 showIncomingGroupCallNotification(groupCallId, hostName, others.size, isVideo)
+                // مهلة الرنين الواردة: 30 ثانية دون رد → رفض تلقائي يظهر للمضيف كـ "لم يرد"
+                incomingRingTimeout?.cancel()
+                incomingRingTimeout = scope.launch {
+                    delay(30_000)
+                    val current = GroupCallRuntime.state
+                    if (current is GroupCallUiState.IncomingGroup && current.groupCallId == groupCallId) {
+                        runCatching { signaling.sendGroupCallResponse(groupCallId, accepted = false) }
+                        stopGroupCall()
+                    }
+                }
             }
 
             ACTION_ACCEPT_GROUP_CALL -> {
                 ringTimeout?.cancel()
+                incomingRingTimeout?.cancel()
                 val gId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID) ?: myUserId
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, isVideo)
                 groupCallId = gId
                 GroupCallRuntime.isVideoEnabled = isVideo
+                // لا تبقَ واجهة "الدعوة الواردة" معلّقة — انتقل فوراً للواجهة النشطة
+                // (المضيف سيرى انضمامنا، والوسائط تبدأ عبر onConnected بعد connect)
+                GroupCallRuntime.state = GroupCallUiState.Active(
+                    gId, isVideo,
+                    listOf(GroupCallMember(userId = myUserId, displayName = myUserId, status = GroupCallMemberStatus.JOINED)),
+                    System.currentTimeMillis()
+                )
+                // أزل إشعار "الدعوة الواردة" ثم ارفع إشعار المكالمة النشطة
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 promoteToForeground()
                 scope.launch {
                     signaling.connect()
@@ -198,6 +227,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             }
 
             ACTION_DECLINE_GROUP_CALL -> {
+                ringTimeout?.cancel()
+                incomingRingTimeout?.cancel()
                 val gId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId
                 scope.launch {
                     runCatching { signaling.connect() }
@@ -213,18 +244,39 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 val on = !GroupCallRuntime.isMuted
                 engine?.setMicrophoneEnabled(on)
                 mesh?.setMicrophoneEnabled(on)
+                sfu?.setMicrophoneEnabled(on)
             }
 
             ACTION_TOGGLE_VIDEO -> {
                 val isOn = GroupCallRuntime.localVideo?.enabled() == true
-                engine?.setCameraEnabled(!isOn)
-                mesh?.setCameraEnabled(!isOn)
-                GroupCallRuntime.isVideoEnabled = !isOn
+                if (!isOn && GroupCallRuntime.localVideo == null) {
+                    // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
+                    scope.launch {
+                        val ok = if (sfu != null) {
+                            sfu!!.retryCamera()
+                        } else {
+                            // في وضع Mesh: mesh يُرسل فعلياً، engine يُعرض محلياً — نجح أحدهما يكفي
+                            val m = mesh?.retryCamera()
+                            val e = engine?.retryCamera()
+                            m == true || e == true
+                        }
+                        if (ok) {
+                            GroupCallRuntime.localVideo = sfu?.localVideo ?: mesh?.localVideo ?: engine?.localMedia?.videoTrack
+                            GroupCallRuntime.isVideoEnabled = true
+                        }
+                    }
+                } else {
+                    engine?.setCameraEnabled(!isOn)
+                    mesh?.setCameraEnabled(!isOn)
+                    sfu?.setCameraEnabled(!isOn)
+                    GroupCallRuntime.isVideoEnabled = !isOn
+                }
             }
 
             ACTION_SWITCH_CAMERA -> {
                 engine?.switchCamera()
                 mesh?.switchCamera()
+                sfu?.switchCamera()
             }
 
             ACTION_START_RECORDING -> {
@@ -233,11 +285,12 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 if (recordingManager == null && groupCallId.isNotBlank()) {
                     recordingManager = CallRecordingManager(this, groupCallId)
                 }
-                recordingManager?.start(consentGranted = consent)
+                GroupCallRuntime.isRecording = recordingManager?.start(consentGranted = consent) == true
             }
 
             ACTION_STOP_RECORDING -> {
                 scope.launch { recordingManager?.stop(); recordingManager = null }
+                GroupCallRuntime.isRecording = false
             }
         }
         return START_STICKY
@@ -247,6 +300,34 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
     override fun onConnected() {
         scope.launch {
+            // الدعوة تُرسَل أولاً من المضيف: الخادم يسجّل المكالمة في ActiveCallRegistry
+            // قبل طلب تذكرة SFU — التذكرة تُرفض لغرف غير مسجّلة (أمان ضد الغرف العشوائية).
+            if (isHost) {
+                val state = GroupCallRuntime.state
+                if (state is GroupCallUiState.Ringing) {
+                    signaling.sendGroupCallInvite(groupCallId, state.members.map { it.userId }, isVideo, hostDisplayName)
+                }
+            }
+            // SFU أولاً (mediasoup): خادم وسائط مركزي بدل شبكة Mesh — أداء أفضل مع نمو الأعضاء.
+            // إذا فشل التوصيل نعود تلقائياً إلى Mesh (مثل واتساب عندما لا يتوفر SFU).
+            if (groupCallId.isNotBlank() && groupCallId.length in 4..128) {
+                sfu = SfuMediaClient(this@GroupCallService, TokenStore(this@GroupCallService), this@GroupCallService)
+                if (attachSfuWithRetry(sfu!!, groupCallId)) {
+                    val kind = if (isVideo) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
+                    sfu?.publish(kind)
+                    GroupCallRuntime.eglContext = sfu?.eglContext
+                    GroupCallRuntime.localVideo = sfu?.localVideo
+                    if (isVideo && GroupCallRuntime.localVideo == null) {
+                        // SFU قد يفشل في فتح الكاميرا — الميش هو المسار الاحتياطي
+                        sfu?.release(); sfu = null
+                    } else {
+                        startRingbackForHost()
+                        return@launch
+                    }
+                } else {
+                    sfu?.release(); sfu = null
+                }
+            }
             engine = WebRtcEngine(this@GroupCallService, this@GroupCallService)
             GroupCallRuntime.eglContext = engine?.eglContext
             val kind = if (isVideo) CallMediaKind.VIDEO else CallMediaKind.VOICE
@@ -254,11 +335,50 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             if (isVideo) GroupCallRuntime.localVideo = engine?.localMedia?.videoTrack
             mesh = MeshRtcSession(this@GroupCallService, myUserId, this@GroupCallService)
 
-            if (isHost) {
-                val state = GroupCallRuntime.state
-                if (state is GroupCallUiState.Ringing) {
-                    signaling.sendGroupCallInvite(groupCallId, state.members.map { it.userId }, isVideo, hostDisplayName)
-                }
+            // المنضم: ثبّت الـ Mesh مع المضيف فوراً (المضيف يثبّت عند تلقّي GROUP_CALL_ACCEPT)
+            if (!isHost && hostId.isNotBlank()) {
+                mesh?.attachPeer(hostId)
+                mesh?.offerTo(hostId)
+            }
+
+            startRingbackForHost()
+        }
+    }
+
+    /**
+     * attach مع إعادة محاولة قصيرة: تسجيل المضيف للغرفة قد يلحق بطلب التذكرة
+     * عبر شبكة بطيئة — محاولات إضافية تصلح السباق دون تأخير محسوس.
+     */
+    private suspend fun attachSfuWithRetry(sfu: SfuMediaClient, roomId: String): Boolean {
+        repeat(4) { attempt ->
+            if (sfu.attach(roomId)) return true
+            if (attempt < 3) kotlinx.coroutines.delay(350)
+        }
+        return false
+    }
+
+    /** نغمة الرنين (ringback) للمضيف أثناء انتظار الردود — مثل المكالمات الفردية. */
+    private fun startRingbackForHost() {
+        if (!isHost) return
+        stopRingback()
+        runCatching {
+            ringback = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70).also {
+                it.startTone(ToneGenerator.TONE_SUP_RINGTONE, 45_000)
+            }
+        }
+    }
+
+    private fun stopRingback() {
+        runCatching { ringback?.stopTone(); ringback?.release() }
+        ringback = null
+    }
+
+    /** نغمة مشغول قصيرة عند إخبار الخادم أن عضواً ما في مكالمة أخرى. */
+    private fun playBusyTone() {
+        runCatching {
+            ToneGenerator(AudioManager.STREAM_VOICE_CALL, 70).also {
+                it.startTone(ToneGenerator.TONE_SUP_BUSY, 1500)
+                scope.launch { kotlinx.coroutines.delay(1700); it.release() }
             }
         }
     }
@@ -278,6 +398,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                             val updated = cur.members.map {
                                 if (it.userId == joinerId) it.copy(status = GroupCallMemberStatus.JOINED) else it
                             }
+                            stopRingback()
                             GroupCallRuntime.state = GroupCallUiState.Active(cur.groupCallId, cur.isVideo, updated, System.currentTimeMillis())
                         }
                         is GroupCallUiState.Active -> {
@@ -313,7 +434,10 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 if (status != null && uid.isNotBlank()) {
                     updateMemberStatus(uid, status)
                     // العضو مشغول — يعتبر رافضاً للدعوة ونُكمِل باقي الأعضاء
-                    if (status == GroupCallMemberStatus.BUSY) checkIfAllDone()
+                    if (status == GroupCallMemberStatus.BUSY) {
+                        playBusyTone()
+                        checkIfAllDone()
+                    }
                 }
             }
 
@@ -348,6 +472,13 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         }
     }
 
+    /** SFU: عضو غادر غرفة الوسائط — نُحدّث الحالة كالمغادرة العادية. */
+    override fun onPeerLeft(peerId: String) {
+        updateMemberStatus(peerId, GroupCallMemberStatus.LEFT)
+        GroupCallRuntime.remoteVideos = GroupCallRuntime.remoteVideos - peerId
+        checkIfAllDone()
+    }
+
     override fun onLocalDescription(description: SessionDescription) {
         val type = if (description.type == SessionDescription.Type.ANSWER) "ANSWER" else "OFFER"
         signaling.send(CallSignal(callId = groupCallId, type = type, groupCallId = groupCallId, payload = mapOf("sdp" to description.description)))
@@ -377,6 +508,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     }
 
     override fun onNetworkStats(stats: NetworkStats) { GroupCallRuntime.networkStats = stats }
+    override fun onCameraUnavailable() {}
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {}
     override fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState) {
         if (state == PeerConnection.PeerConnectionState.DISCONNECTED || state == PeerConnection.PeerConnectionState.FAILED) {
@@ -425,10 +557,14 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     private fun finishStop() {
         if (cleanedUp) return
         cleanedUp = true
+        ringTimeout?.cancel()
+        incomingRingTimeout?.cancel()
         recordingManager?.let { scope.launch { it.stop() } }
         recordingManager = null
+        stopRingback()
         engine?.release(); engine = null
         mesh?.release(); mesh = null
+        sfu?.release(); sfu = null
         signaling.close()
         GroupCallRuntime.state = GroupCallUiState.Ended
         GroupCallRuntime.localVideo = null
@@ -436,6 +572,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         GroupCallRuntime.eglContext = null
         GroupCallRuntime.isMuted = false
         GroupCallRuntime.isVideoEnabled = false
+        GroupCallRuntime.isRecording = false
         GroupCallRuntime.networkStats = NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

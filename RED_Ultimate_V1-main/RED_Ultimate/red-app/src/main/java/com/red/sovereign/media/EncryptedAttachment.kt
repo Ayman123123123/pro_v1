@@ -67,7 +67,19 @@ class EncryptedAttachmentRepository(
                     digest.update(buffer, 0, count)
                     output.write(buffer, 0, count)
                 }
-            } }
+            }
+            }
+            val shaHex = digest.digest().toHex()
+            val safeName = metadata.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
+            val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
+            val localCache = File(outputDir, "${shaHex.take(16)}-$safeName")
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.use { inStream ->
+                    FileOutputStream(localCache).use { outStream ->
+                        inStream.copyTo(outStream)
+                    }
+                }
+            }
             when (val uploaded = media.uploadEncrypted(encrypted, metadata.name.substringBeforeLast('.'))) {
                 is ApiResult.Error -> uploaded
                 is ApiResult.Success -> when (val granted = media.grant(uploaded.value.objectKey, targetRedId)) {
@@ -79,7 +91,7 @@ class EncryptedAttachmentRepository(
                             name = metadata.name,
                             mimeType = metadata.mimeType,
                             size = metadata.size,
-                            sha256 = digest.digest().toHex(),
+                            sha256 = shaHex,
                             key = Base64.getEncoder().encodeToString(key),
                             nonce = Base64.getEncoder().encodeToString(nonce)
                         )
@@ -101,13 +113,16 @@ class EncryptedAttachmentRepository(
             ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_MANIFEST")
         if (manifest.version != 1 || manifest.size !in 1..MAX_BYTES || !allowedMime(manifest.mimeType))
             return@withContext ApiResult.Error(null, "UNSUPPORTED_ATTACHMENT_MANIFEST")
+        val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
+        val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
+        val output = File(outputDir, "${manifest.sha256.take(16)}-$safeName")
+        if (output.exists() && output.length() == manifest.size) {
+            return@withContext ApiResult.Success(200, output)
+        }
         val key = runCatching { Base64.getDecoder().decode(manifest.key) }.getOrNull()
             ?.takeIf { it.size == 32 } ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_KEY")
         val nonce = runCatching { Base64.getDecoder().decode(manifest.nonce) }.getOrNull()
             ?.takeIf { it.size == 12 } ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_NONCE")
-        val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
-        val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
-        val output = File(outputDir, "${manifest.sha256.take(16)}-$safeName")
         when (val downloaded = media.downloadToPrivateCache(manifest.url, "bin")) {
             is ApiResult.Error -> downloaded
             is ApiResult.Success -> try {
