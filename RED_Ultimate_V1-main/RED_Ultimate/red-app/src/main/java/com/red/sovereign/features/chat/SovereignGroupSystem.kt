@@ -23,7 +23,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.collectAsState
 import com.red.sovereign.contacts.PublicRedProfile
+import com.red.sovereign.core.database.LocalRepository
+import com.red.sovereign.features.media.ConversationMediaGrid
+import com.red.sovereign.features.media.toDecryptedMessage
 import com.red.sovereign.groups.Group
 import com.red.sovereign.groups.GroupMember
 import com.red.sovereign.groups.GroupViewModel
@@ -293,12 +297,21 @@ fun SovereignGroupInfoScreen(
                 }
             }
             1 -> {
-                LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    item {
-                        Text("معرض الوسائط المشفّرة يُفتح من رأس المحادثة: ⋮ ثم «الوسائط المشتركة».", color = Color.Gray, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
-                    }
-                    item {
-                        InfoRow(Icons.Rounded.Photo, "العودة للمحادثة", "الصور والفيديو تُفك على الجهاز فقط") { onBack() }
+                val groupId = group?.id
+                if (groupId == null) {
+                    Text("لا توجد مجموعة.", color = Color.Gray, modifier = Modifier.padding(16.dp))
+                } else {
+                    val history = remember { LocalRepository(ctx) }
+                    val stored by history.mediaForConversation(groupId).collectAsState(initial = emptyList())
+                    val mediaMessages = remember(stored) { stored.map { it.toDecryptedMessage() } }
+                    Column(Modifier.fillMaxSize().padding(12.dp)) {
+                        Text(
+                            "تُفك الصور على هذا الجهاز فقط. الخادم لا يرى المحتوى.",
+                            color = Color.Gray,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        ConversationMediaGrid(messages = mediaMessages, modifier = Modifier.fillMaxSize())
                     }
                 }
             }

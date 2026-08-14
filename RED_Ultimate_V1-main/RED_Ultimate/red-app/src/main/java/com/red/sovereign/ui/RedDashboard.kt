@@ -183,6 +183,7 @@ import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.ChatComposer
 import com.red.sovereign.core.ConversationActions
+import com.red.sovereign.core.GroupMentions
 import com.red.sovereign.core.InboxFilter
 import com.red.sovereign.core.InboxQuery
 import com.red.sovereign.core.MessageStore
@@ -1337,7 +1338,9 @@ private fun ChatHubScreen(
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(item, attachments)
                                     "VOICE" -> VoiceMessage(item, attachments)
                                     "STICKER" -> StickerMessage(item, attachments)
-                                    "RICH_TEXT" -> RichTextMessage(item, conversationMessages)
+                                    "RICH_TEXT" -> RichTextMessage(item, conversationMessages) { id ->
+                                        GroupMentions.displayLabel(id, emptyList(), directory.contacts)
+                                    }
                                     else -> Text(item.plaintext.toString(Charsets.UTF_8), color = if (item.outgoing) Color(0xFF001B14) else Color.White, fontSize = 16.sp)
                                 }
                                 // تفاعلات الإيموجي تحت الرسالة (E2EE)
@@ -1481,7 +1484,7 @@ private fun ChatHubScreen(
                         replyTo = replyToMessage?.id,
                         editOf = editingMessageId,
                         disappearingMs = disappearingDurationMs,
-                        mentions = RED_ID_PARTIAL.findAll(messageText).map { it.value }.toList(),
+                        mentions = GroupMentions.mentionIds(messageText, emptyList(), directory.contacts),
                         hashtags = HASHTAG_PARTIAL.findAll(messageText).map { it.value }.toList(),
                     )
                     built.fold(
@@ -1527,7 +1530,7 @@ private fun ChatHubScreen(
                                 Column {
                                     suggestions.forEach { person ->
                                         Row(Modifier.fillMaxWidth().clickable {
-                                            messageText = messageText.replace(USERNAME_PARTIAL, "@${person.redId} ")
+                                            messageText = messageText.replace(USERNAME_PARTIAL, "@${person.username} ")
                                         }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                             Text("@${person.username}", color = YounesEmerald, fontWeight = FontWeight.Bold)
                                             Text(" • ${person.displayName}", color = Color.Gray, fontSize = 12.sp)
@@ -1736,7 +1739,9 @@ private fun ChatHubScreen(
                                     Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
                                 when (message.type) {
-                                    "RICH_TEXT" -> RichTextMessage(message, groupMessages)
+                                    "RICH_TEXT" -> RichTextMessage(message, groupMessages) { id ->
+                                        GroupMentions.displayLabel(id, openGroup.members, directory.contacts)
+                                    }
                                     "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
                                     "VOICE" -> VoiceMessage(message, attachments)
                                     "STICKER" -> StickerMessage(message, attachments)
@@ -1790,6 +1795,7 @@ private fun ChatHubScreen(
                         text = groupMessageText,
                         replyTo = groupReplyToMessage?.id,
                         disappearingMs = disappearingDurationMs ?: organization.disappearingMs(openGroup.id),
+                        mentions = GroupMentions.mentionIds(groupMessageText, openGroup.members, directory.contacts),
                     )
                     built.fold(
                         onSuccess = { rich ->
@@ -1824,6 +1830,15 @@ private fun ChatHubScreen(
                     onStickers = { showStickers = !showStickers; showGroupEmoji = false },
                     onAttach = { showGroupAttachmentSheet = true },
                     onSend = sendGroup,
+                    extra = {
+                        val mentionQuery = GroupMentions.query(groupMessageText)
+                        if (mentionQuery != null) {
+                            GroupMentionBar(
+                                candidates = GroupMentions.candidates(mentionQuery, openGroup.members, directory.contacts, account.redId),
+                                onPick = { picked -> groupMessageText = GroupMentions.insert(groupMessageText, picked.username) },
+                            )
+                        }
+                    },
                     voice = {
                         androidx.compose.material3.IconButton({
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
@@ -2874,14 +2889,14 @@ private fun messageDisplayText(message: DecryptedMessage): String =
     if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext)?.text.orEmpty() else message.plaintext.toString(Charsets.UTF_8)
 
 @Composable
-private fun RichTextMessage(message: DecryptedMessage, conversation: List<DecryptedMessage>) {
+private fun RichTextMessage(message: DecryptedMessage, conversation: List<DecryptedMessage>, mentionLabel: (String) -> String = { it }) {
     val rich = RichMessage.decode(message.plaintext)
     if (rich == null) { Text("رسالة غير صالحة", color = MaterialTheme.colorScheme.error); return }
     rich.replyTo?.let { replyId -> conversation.firstOrNull { it.id == replyId }?.let { quoted -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .45f))) { Text(messageDisplayText(quoted), Modifier.padding(7.dp), maxLines = 2, style = MaterialTheme.typography.bodySmall) } } }
     if (rich.forwardOf != null) Text("معاد توجيهها", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val annotated = remember(rich.text, rich.mentions, rich.hashtags) {
         val t = rich.text
-        val mentions = rich.mentions + RED_ID_PARTIAL.findAll(t).map { it.value }.toList()
+        val mentions = (rich.mentions + RED_ID_PARTIAL.findAll(t).map { it.value } + GroupMentions.NAME_TOKEN.findAll(t).map { it.value }).distinct()
         val hashtags = rich.hashtags + HASHTAG_PARTIAL.findAll(t).map { it.value }.toList()
         androidx.compose.ui.text.buildAnnotatedString {
             append(t)
@@ -2903,7 +2918,7 @@ private fun RichTextMessage(message: DecryptedMessage, conversation: List<Decryp
         }
         Text("⏳ مؤقتة • $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
     }
-    if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
+    if (rich.mentions.isNotEmpty()) Text("ذكر: ${rich.mentions.joinToString { mentionLabel(it) }}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
 }
 
 @Composable
