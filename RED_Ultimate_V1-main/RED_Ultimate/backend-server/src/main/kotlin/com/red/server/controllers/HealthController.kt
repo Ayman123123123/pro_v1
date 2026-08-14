@@ -13,13 +13,15 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
- * YOUNES readiness endpoint.
- *
- * This is deliberately stricter than a liveness probe: an HTTP 200 means every
- * mandatory data service is usable. Docker/Nginx therefore cannot report a
- * healthy platform while the response body quietly says DOWN.
+ * المصنع: `/health/live` و `/health` عامان لمراقبة النشر (status فقط).
+ * `/health/detailed` كامل (قواعد البيانات، Dinstar، Flyway، خصائص المضيف)
+ * ومحميّ بصلاحية ADMIN — تُحفظ كل المعلومات لكن لا تتسرب للعامة.
  */
 @RestController
 class HealthController(
@@ -31,33 +33,132 @@ class HealthController(
     @Value("\${spring.datasource.url:}") private val dbUrl: String,
     @Value("\${red.dinstar.ip:}") private val dinstarIp: String,
     @Value("\${red.dinstar.port:443}") private val dinstarPort: Int,
-    @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String
+    @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String,
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean,
+    @Value("\${spring.mongodb.uri:}") private val mongoUri: String,
+    @Value("\${spring.data.redis.host:}") private val redisHost: String
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(HealthController::class.java)
+        private val probePool = Executors.newFixedThreadPool(4) { task ->
+            Thread(task, "younes-health").apply { isDaemon = true }
+        }
+        private const val PROBE_TIMEOUT_MS = 800L
     }
+
+    @GetMapping("/health/live")
+    fun live(): ResponseEntity<Map<String, Any>> = ResponseEntity.ok(
+        mapOf(
+            "brand" to "YOUNES",
+            "displayName" to "يونس",
+            "status" to "UP",
+            "version" to "1.0.0-YOUNES",
+            "probe" to "live",
+            "timestamp" to Instant.now().toString()
+        )
+    )
 
     @GetMapping("/health")
     fun health(): ResponseEntity<Map<String, Any>> {
-        val startMs = System.currentTimeMillis()
+        val (label, totalMs, probes) = runProbes()
+        val payload: Map<String, Any> = mapOf(
+            "brand" to "YOUNES",
+            "displayName" to "يونس",
+            "status" to label,
+            "version" to "1.0.0-YOUNES",
+            "timestamp" to Instant.now().toString(),
+            "responseTimeMs" to totalMs,
+            "services" to mapOf(
+                "postgresql" to mapOf("status" to if (probes.postgresOk) "UP" else "DOWN", "error" to if (probes.postgresOk) null else "POSTGRESQL_UNAVAILABLE"),
+                "mongodb" to mapOf("status" to if (probes.mongoOk) "UP" else "DOWN", "error" to if (probes.mongoOk) null else "MONGODB_UNAVAILABLE"),
+                "redis" to mapOf("status" to if (probes.redisOk) "UP" else "DOWN", "error" to if (probes.redisOk) null else "REDIS_UNAVAILABLE"),
+                "minio" to mapOf("status" to if (probes.minioOk) "UP" else "DOWN", "error" to if (probes.minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE")
+            )
+        )
+        val status = if (probes.postgresOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
+        return ResponseEntity.status(status).body(payload)
+    }
 
-        val postgresResult = runCatching {
-            jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1
+    /**
+     * 👑 تفاصيل كاملة (مسارات قواعد البيانات، Dinstar، Flyway، خصائص المضيف، دلو MinIO).
+     * محمي بصلاحية ADMIN في SecurityConfig — لا يُكشف للعامة.
+     */
+    @GetMapping("/health/detailed")
+    fun detailed(): ResponseEntity<Map<String, Any>> {
+        val (label, totalMs, probes) = runProbes()
+        val flywayResult = runCatching {
+            val latest = jdbcTemplate.queryForObject(
+                "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1",
+                String::class.java
+            )
+            val applied = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
+                Int::class.java
+            ) ?: 0
+            latest to applied
         }
-        val postgresOk = postgresResult.getOrDefault(false)
 
-        // MongoDatabase.name is a local accessor and does not contact MongoDB.
-        // A real ping is required for this endpoint to be a readiness signal.
-        val mongoResult = runCatching {
+        val payload: Map<String, Any> = mapOf(
+            "brand" to "YOUNES",
+            "displayName" to "يونس",
+            "status" to label,
+            "version" to "1.0.0-YOUNES",
+            "timestamp" to Instant.now().toString(),
+            "responseTimeMs" to totalMs,
+            "services" to mapOf(
+                "postgresql" to mapOf(
+                    "status" to if (probes.postgresOk) "UP" else "DOWN",
+                    "database" to dbUrl.substringAfterLast('/').substringBefore('?'),
+                    "error" to if (probes.postgresOk) null else "POSTGRESQL_UNAVAILABLE"
+                ),
+                "mongodb" to mapOf(
+                    "status" to if (probes.mongoOk) "UP" else "DOWN",
+                    "database" to if (probes.mongoOk) mongoTemplate.db.name else "unreachable",
+                    "error" to if (probes.mongoOk) null else "MONGODB_UNAVAILABLE"
+                ),
+                "redis" to mapOf(
+                    "status" to if (probes.redisOk) "UP" else "DOWN",
+                    "host" to redisHost,
+                    "error" to if (probes.redisOk) null else "REDIS_UNAVAILABLE"
+                ),
+                "minio" to mapOf(
+                    "status" to if (probes.minioOk) "UP" else "DOWN",
+                    "bucket" to minioBucket,
+                    "error" to if (probes.minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE"
+                )
+            ),
+            "dinstar" to mapOf(
+                "enabled" to dinstarEnabled,
+                "host" to dinstarIp,
+                "port" to dinstarPort,
+                "scheme" to dinstarScheme
+            ),
+            "flyway" to mapOf(
+                "latestVersion" to flywayResult.getOrNull()?.first,
+                "appliedCount" to (flywayResult.getOrNull()?.second ?: 0),
+                "error" to if (flywayResult.isSuccess) null else "FLYWAY_HISTORY_UNAVAILABLE"
+            ),
+            "system" to mapOf(
+                "javaVersion" to System.getProperty("java.version"),
+                "availableProcessors" to Runtime.getRuntime().availableProcessors(),
+                "maxMemoryMb" to Runtime.getRuntime().maxMemory() / 1024 / 1024
+            )
+        )
+        val status = if (probes.postgresOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
+        return ResponseEntity.status(status).body(payload)
+    }
+
+    private data class ProbeResult(val postgresOk: Boolean, val mongoOk: Boolean, val redisOk: Boolean, val minioOk: Boolean)
+
+    private fun runProbes(): Triple<String, Long, ProbeResult> {
+        val startMs = System.currentTimeMillis()
+        val postgresFuture = asyncProbe { jdbcTemplate.queryForObject("SELECT 1", Int::class.java) == 1 }
+        val mongoFuture = asyncProbe {
             val reply = mongoTemplate.executeCommand(Document("ping", 1))
             (reply["ok"] as? Number)?.toDouble() == 1.0
         }
-        val mongoOk = mongoResult.getOrDefault(false)
-
-        val redisResult = runCatching {
-            val connection = requireNotNull(redisTemplate.connectionFactory?.connection) {
-                "Redis connection factory is unavailable"
-            }
+        val redisFuture = asyncProbe {
+            val connection = requireNotNull(redisTemplate.connectionFactory?.connection) { "Redis connection factory is unavailable" }
             try {
                 connection.ping()
                 true
@@ -65,81 +166,37 @@ class HealthController(
                 connection.close()
             }
         }
-        val redisOk = redisResult.getOrDefault(false)
-
-        val minioResult = runCatching {
+        val minioFuture = asyncProbe {
             minioClient.bucketExists(BucketExistsArgs.builder().bucket(minioBucket).build())
         }
-        val minioOk = minioResult.getOrDefault(false)
 
-        val flywayResult = runCatching {
-            jdbcTemplate.queryForObject(
-                "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1",
-                String::class.java
-            )
-        }
+        val postgresOk = awaitProbe(postgresFuture, "postgresql")
+        val mongoOk = awaitProbe(mongoFuture, "mongodb")
+        val redisOk = awaitProbe(redisFuture, "redis")
+        val minioOk = awaitProbe(minioFuture, "minio")
 
         val allOk = mongoOk && redisOk && postgresOk && minioOk
-        val totalMs = System.currentTimeMillis() - startMs
-
-        if (!allOk) {
-            val down = buildList {
-                if (!mongoOk) add("mongodb")
-                if (!redisOk) add("redis")
-                if (!postgresOk) add("postgresql")
-                if (!minioOk) add("minio")
-            }
-            log.warn("Readiness DOWN — unavailable services: {} ({}ms)", down.joinToString(), totalMs)
-            postgresResult.exceptionOrNull()?.let { log.debug("PostgreSQL readiness failure", it) }
-            mongoResult.exceptionOrNull()?.let { log.debug("MongoDB readiness failure", it) }
-            redisResult.exceptionOrNull()?.let { log.debug("Redis readiness failure", it) }
-            minioResult.exceptionOrNull()?.let { log.debug("MinIO readiness failure", it) }
+        val apiReady = postgresOk
+        val statusLabel = when {
+            allOk -> "UP"
+            apiReady -> "DEGRADED"
+            else -> "DOWN"
         }
+        val totalMs = System.currentTimeMillis() - startMs
+        return Triple(statusLabel, totalMs, ProbeResult(postgresOk, mongoOk, redisOk, minioOk))
+    }
 
-        // Public readiness output contains stable error codes, not exception text
-        // that could disclose hosts, credentials, drivers, or internal topology.
-        val payload: Map<String, Any> = mapOf(
-            "brand" to "YOUNES",
-            "displayName" to "يونس",
-            "status" to if (allOk) "UP" else "DOWN",
-            "version" to "1.0.0-YOUNES",
-            "timestamp" to Instant.now().toString(),
-            "responseTimeMs" to totalMs,
-            "services" to mapOf(
-                "postgresql" to mapOf(
-                    "status" to if (postgresOk) "UP" else "DOWN",
-                    "database" to dbUrl.substringAfterLast('/').substringBefore('?'),
-                    "error" to if (postgresOk) null else "POSTGRESQL_UNAVAILABLE"
-                ),
-                "mongodb" to mapOf(
-                    "status" to if (mongoOk) "UP" else "DOWN",
-                    "database" to if (mongoOk) mongoTemplate.db.name else "unreachable",
-                    "error" to if (mongoOk) null else "MONGODB_UNAVAILABLE"
-                ),
-                "redis" to mapOf(
-                    "status" to if (redisOk) "UP" else "DOWN",
-                    "error" to if (redisOk) null else "REDIS_UNAVAILABLE"
-                ),
-                "minio" to mapOf(
-                    "status" to if (minioOk) "UP" else "DOWN",
-                    "bucket" to minioBucket,
-                    "error" to if (minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE"
-                )
-            ),
-            "dinstar" to mapOf(
-                "host" to dinstarIp,
-                "port" to dinstarPort,
-                "scheme" to dinstarScheme
-            ),
-            "flyway" to mapOf("latestVersion" to flywayResult.getOrNull()),
-            "system" to mapOf(
-                "javaVersion" to System.getProperty("java.version"),
-                "availableProcessors" to Runtime.getRuntime().availableProcessors(),
-                "maxMemoryMb" to Runtime.getRuntime().maxMemory() / 1024 / 1024
-            )
-        )
+    private fun asyncProbe(block: () -> Boolean): CompletableFuture<Boolean> =
+        CompletableFuture.supplyAsync({ runCatching(block).getOrDefault(false) }, probePool)
 
-        val status = if (allOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE
-        return ResponseEntity.status(status).body(payload)
+    private fun awaitProbe(future: CompletableFuture<Boolean>, name: String): Boolean = try {
+        future.get(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    } catch (timeout: TimeoutException) {
+        log.warn("Readiness probe timed out: {} ({}ms)", name, PROBE_TIMEOUT_MS)
+        future.cancel(true)
+        false
+    } catch (error: Exception) {
+        log.debug("Readiness probe failed: {}", name, error)
+        false
     }
 }

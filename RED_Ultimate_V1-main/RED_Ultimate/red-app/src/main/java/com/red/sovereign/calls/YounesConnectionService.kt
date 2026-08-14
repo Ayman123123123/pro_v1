@@ -40,9 +40,7 @@ class YounesConnectionService : ConnectionService() {
             setConnectionProperties(Connection.PROPERTY_SELF_MANAGED)
             setConnectionCapabilities(
                 Connection.CAPABILITY_SUPPORT_HOLD or
-                Connection.CAPABILITY_HOLD or
-                Connection.CAPABILITY_VOICE_AUDIO or
-                (if (Build.VERSION.SDK_INT >= 30) Connection.CAPABILITY_VIDEO else 0)
+                Connection.CAPABILITY_HOLD
             )
             setAudioModeIsVoip(true)
         }
@@ -68,9 +66,7 @@ class YounesConnectionService : ConnectionService() {
             setConnectionProperties(Connection.PROPERTY_SELF_MANAGED)
             setConnectionCapabilities(
                 Connection.CAPABILITY_SUPPORT_HOLD or
-                Connection.CAPABILITY_HOLD or
-                Connection.CAPABILITY_VOICE_AUDIO or
-                (if (Build.VERSION.SDK_INT >= 30) Connection.CAPABILITY_VIDEO else 0)
+                Connection.CAPABILITY_HOLD
             )
             setAudioModeIsVoip(true)
             setRinging()
@@ -104,51 +100,47 @@ class YounesConnectionService : ConnectionService() {
         override fun onAnswer() {
             // يطلب من YounesCallService قبول المكالمة
             setActive()
-            val intent = Intent(context, YounesCallService::class.java).setAction(YounesCallService.ACTION_ACCEPT)
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(this@YounesConnectionService, YounesCallService::class.java).setAction(YounesCallService.ACTION_ACCEPT)
+            ContextCompat.startForegroundService(this@YounesConnectionService, intent)
         }
 
         override fun onReject() {
-            val intent = Intent(context, YounesCallService::class.java).setAction(YounesCallService.ACTION_REJECT)
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(this@YounesConnectionService, YounesCallService::class.java).setAction(YounesCallService.ACTION_REJECT)
+            ContextCompat.startForegroundService(this@YounesConnectionService, intent)
             setDisconnected(DisconnectCause(DisconnectCause.REJECTED))
             destroy()
         }
 
         override fun onDisconnect() {
-            val intent = Intent(context, YounesCallService::class.java).setAction(YounesCallService.ACTION_END)
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(this@YounesConnectionService, YounesCallService::class.java).setAction(YounesCallService.ACTION_END)
+            ContextCompat.startForegroundService(this@YounesConnectionService, intent)
             setDisconnected(DisconnectCause(DisconnectCause.LOCAL))
             destroy()
         }
 
         override fun onHold() {
             // النظام يطلب hold — نرسل HOLD signal للطرف الآخر
-            val intent = Intent(context, YounesCallService::class.java).setAction(YounesCallService.ACTION_HOLD)
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(this@YounesConnectionService, YounesCallService::class.java).setAction(YounesCallService.ACTION_HOLD)
+            ContextCompat.startForegroundService(this@YounesConnectionService, intent)
             setOnHold()
         }
 
         override fun onUnhold() {
-            val intent = Intent(context, YounesCallService::class.java).setAction(YounesCallService.ACTION_RESUME)
-            ContextCompat.startForegroundService(context, intent)
+            val intent = Intent(this@YounesConnectionService, YounesCallService::class.java).setAction(YounesCallService.ACTION_RESUME)
+            ContextCompat.startForegroundService(this@YounesConnectionService, intent)
             setActive()
-        }
-
-        override fun onSeparateFromParentConnection() {
-            // Conference call: نخبر المستخدم أن مكالمته انفصلت
         }
 
         override fun onShowIncomingCallUi() {
             // يفتح MainActivity لاستقبال المكالمة
-            val ui = Intent(context, com.red.sovereign.MainActivity::class.java)
+            val ui = Intent(this@YounesConnectionService, com.red.sovereign.MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            context.startActivity(ui)
+            this@YounesConnectionService.startActivity(ui)
         }
 
         override fun onPlayDtmfTone(c: Char) {
             // DTMF من النظام (مثلاً dial pad في car mode)
-            YounesCallService.dtmf(context, c)
+            YounesCallService.dtmf(this@YounesConnectionService, c)
         }
     }
 

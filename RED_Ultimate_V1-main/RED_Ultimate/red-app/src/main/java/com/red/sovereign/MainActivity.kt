@@ -35,7 +35,9 @@ import com.red.sovereign.ui.theme.SovereignBackground
 
 class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
-    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        Log.i("Permissions", "Initial permissions granted: $grants")
+    }
     private val localNetworkPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         Log.i("LocalNetwork", if (granted) "LAN access granted" else "LAN access denied")
     }
@@ -73,12 +75,32 @@ class MainActivity : ComponentActivity() {
                         val state = authViewModel.state
                         LaunchedEffect(state is AuthState.Authenticated) {
                             if (state is AuthState.Authenticated) {
-                                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                val needed = buildList {
+                                    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                        add(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                                        add(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                                        add(Manifest.permission.CAMERA)
+                                    }
+                                    if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                                        add(Manifest.permission.BLUETOOTH_CONNECT)
+                                    }
+                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                                        add(Manifest.permission.READ_PHONE_STATE)
+                                    }
+                                    // Android 14+ Foreground service specific permissions (optional, but good if the OS enforces them at runtime)
+                                    // Though typically they are declared in manifest and granted automatically if CAMERA/RECORD_AUDIO are granted.
+                                }
+                                if (needed.isNotEmpty()) {
+                                    appPermissions.launch(needed.toTypedArray())
                                 }
                                 runCatching { com.red.sovereign.core.RedConnectionService.start(this@MainActivity) }
                                 runCatching { com.red.sovereign.calls.YounesCallService.listen(this@MainActivity) }
                                 runCatching { com.red.sovereign.calls.YounesConnectionService.register(this@MainActivity) }
+                                runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivity) }
                                 // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
                                 val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
                                 try {

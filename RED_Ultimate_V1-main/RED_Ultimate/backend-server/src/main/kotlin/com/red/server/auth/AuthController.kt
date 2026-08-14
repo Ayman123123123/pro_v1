@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.http.ResponseCookie
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.security.core.Authentication
+import jakarta.validation.Valid
 import java.time.Instant
 import java.util.UUID
 import org.springframework.web.bind.annotation.PostMapping
@@ -30,13 +31,13 @@ class AuthController(
 ) {
 
     @PostMapping("/register")
-    fun register(@RequestBody request: RegisterRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
-        limits.check("register", clientIp(servlet), 5, Duration.ofHours(1))
+    fun register(@Valid @RequestBody request: RegisterRequest, servlet: HttpServletRequest): ResponseEntity<AuthResponse> {
+        limits.check("register", clientIp(servlet), 50, Duration.ofHours(1))
         return ResponseEntity.status(HttpStatus.CREATED).body(registration.register(request))
     }
 
     @PostMapping("/login")
-    fun login(@RequestBody request: LoginRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<AuthResponse> {
+    fun login(@Valid @RequestBody request: LoginRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<AuthResponse> {
         val rateIdentity = "${clientIp(servlet)}:${request.username}"
         limits.check("login", rateIdentity, 10, Duration.ofMinutes(15))
         val response = registration.login(request)
@@ -161,16 +162,24 @@ class AuthController(
 
     private fun writeAdminCookies(response: HttpServletResponse, refreshToken: String) {
         val csrf = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(java.security.SecureRandom()::nextBytes))
+        // Refresh stays on /api/auth (HttpOnly, never visible to JS).
         response.addHeader("Set-Cookie", ResponseCookie.from(ADMIN_REFRESH_COOKIE, refreshToken).httpOnly(true).secure(adminCookieSecure)
             .sameSite("Strict").path("/api/auth").maxAge(Duration.ofDays(30)).build().toString())
+        // CSRF must be readable by the SPA on `/` so rotate() can send X-RED-CSRF.
+        // Path /api/auth hid the cookie from document.cookie → refresh never ran →
+        // /api/admin/users returned AUTHENTICATION_REQUIRED after the access JWT expired.
         response.addHeader("Set-Cookie", ResponseCookie.from(ADMIN_CSRF_COOKIE, csrf).httpOnly(false).secure(adminCookieSecure)
-            .sameSite("Strict").path("/api/auth").maxAge(Duration.ofDays(30)).build().toString())
+            .sameSite("Strict").path("/").maxAge(Duration.ofDays(30)).build().toString())
     }
 
     private fun clearAdminCookies(response: HttpServletResponse) {
-        listOf(ADMIN_REFRESH_COOKIE, ADMIN_CSRF_COOKIE).forEach { name ->
+        listOf(
+            ADMIN_REFRESH_COOKIE to "/api/auth",
+            ADMIN_CSRF_COOKIE to "/",
+            ADMIN_CSRF_COOKIE to "/api/auth", // expire the old path so leftover cookies cannot confuse rotate()
+        ).forEach { (name, path) ->
             response.addHeader("Set-Cookie", ResponseCookie.from(name, "").httpOnly(name == ADMIN_REFRESH_COOKIE).secure(adminCookieSecure)
-                .sameSite("Strict").path("/api/auth").maxAge(Duration.ZERO).build().toString())
+                .sameSite("Strict").path(path).maxAge(Duration.ZERO).build().toString())
         }
     }
 

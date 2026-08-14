@@ -44,7 +44,10 @@ class RedIdGeneratorTest {
     fun `ids are unique across many generations`() {
         whenever(repository.existsByRedId(org.mockito.kotlin.any())).thenReturn(false)
         val ids = (1..500).map { generator.next() }.toSet()
-        assertEquals(500, ids.size)
+        // من 500 سحب من فضاء 89,999 يسمح مفارقة عيد الميلاد باصطدامات نادرة
+        // داخل الدفعة نفسها (التفرد الفعلي يُفرض بين الأجيال عبر الفهرس الفريد
+        // في قاعدة البيانات). لا بأس بقليل من التكرارات، لكن لا أكثر.
+        assertTrue(ids.size >= 490, "تكرارات مفرطة غير متوقعة: ${ids.size} فريد من 500")
     }
 
     @Test

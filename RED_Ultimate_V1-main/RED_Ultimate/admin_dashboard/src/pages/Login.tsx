@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography, Space, Tag, Badge, Divider } from 'antd';
 import {
   ApiOutlined,
@@ -8,7 +8,8 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { adminLogin } from '../api';
+import { adminLogin, probeBackend, type BackendProbe } from '../api';
+import { usePolling } from '../hooks/usePolling';
 
 interface LoginProps {
   onLogin?: (username: string, password: string) => Promise<void>;
@@ -16,35 +17,33 @@ interface LoginProps {
   isLoading?: boolean;
 }
 
-type HealthState = 'CHECKING' | 'UP' | 'DOWN';
-
 export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const [error, setError] = useState('');
   const [internalLoading, setInternalLoading] = useState(false);
-  const [health, setHealth] = useState<HealthState>('CHECKING');
+  const [probe, setProbe] = useState<BackendProbe>({ state: 'CHECKING', hint: 'جاري الاتصال بالسيرفر' });
   const loading = isLoading ?? internalLoading;
+  // عداد الفشل المتتالي: لا نعلن «غير متصل» من أول فشل عابر — فوسيط المعاينة
+  // أو بدء تشغيل الخادم قد يبطئ الطلب الأول فقط.
+  const failsRef = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/health')
-      .then(r => r.ok ? r.json().catch(() => ({})) : Promise.reject(new Error(`HTTP ${r.status}`)))
-      // كان الطرفان 'UP' في الشرطي نفسه، فأي ردّ — حتى ردّ خادم معطوب
-      // يعلن حالته DOWN — كان يُظهر «الخادم متصل». الشارة صارت تعكس
-      // الحالة المُبلَّغة فعلًا لا مجرّد وصول ردّ.
-      .then(data => {
-        if (cancelled) return;
-        const status = String(data?.status ?? '').toUpperCase();
-        setHealth(status === 'UP' || status === 'HEALTHY' ? 'UP' : 'DOWN');
-      })
-      .catch(() => { if (!cancelled) setHealth('DOWN'); });
-    return () => { cancelled = true; };
+  const refreshProbe = useCallback(async () => {
+    const next = await probeBackend();
+    if (next.state === 'READY' || next.state === 'LIVE') {
+      failsRef.current = 0;
+      setProbe(next);
+      return;
+    }
+    failsRef.current += 1;
+    if (failsRef.current >= 2) setProbe(next);
   }, []);
+  usePolling(refreshProbe, 4000);
 
   const healthMeta = useMemo(() => {
-    if (health === 'UP') return { color: 'success' as const, text: 'الخادم متصل' };
-    if (health === 'DOWN') return { color: 'error' as const, text: 'الخادم غير متصل' };
-    return { color: 'processing' as const, text: 'فحص الاتصال' };
-  }, [health]);
+    if (probe.state === 'READY') return { color: 'success' as const, text: 'الخادم متصل' };
+    if (probe.state === 'LIVE') return { color: 'warning' as const, text: 'الخادم يعمل — جاري التجهيز' };
+    if (probe.state === 'DOWN') return { color: 'error' as const, text: 'الخادم غير متصل' };
+    return { color: 'processing' as const, text: 'جاري الاتصال بالسيرفر' };
+  }, [probe]);
 
   const submit = async (values: { username: string; password: string }) => {
     if (onLogin) {
@@ -123,15 +122,33 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             </div>
             <Typography.Title level={3} style={{ color: '#F1F5F9', margin: 0, fontWeight: 800 }}>دخول المسؤول السيادي</Typography.Title>
             <Space style={{ marginTop: 8 }}>
-              <Badge status={healthMeta.color} text={<span style={{ color: health === 'DOWN' ? '#FCA5A5' : '#94A3B8', fontSize: 12 }}>{healthMeta.text}</span>} />
+              <Badge status={healthMeta.color} text={<span style={{ color: probe.state === 'DOWN' ? '#FCA5A5' : '#94A3B8', fontSize: 12 }}>{healthMeta.text}</span>} />
             </Space>
           </div>
 
           <Card style={{ width: '100%', borderColor: '#1E293B', background: '#0F172A', borderRadius: 18, boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }} styles={{ body: { padding: 28 } }}>
             {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 20, borderRadius: 10 }} />}
-            {health === 'DOWN' && <Alert type="warning" showIcon message="تعذر الوصول إلى /health" description="يمكنك محاولة الدخول إذا كان البروكسي أو الخادم يبدأان الآن." style={{ marginBottom: 20, borderRadius: 10 }} />}
+            {!error && probe.state === 'DOWN' && (
+              <Alert
+                type="warning"
+                showIcon
+                message="الخادم غير متصل"
+                description={probe.hint}
+                style={{ marginBottom: 20, borderRadius: 10 }}
+                action={<Button size="small" onClick={() => { failsRef.current = 0; setProbe({ state: 'CHECKING', hint: 'جاري الاتصال بالسيرفر' }); void refreshProbe(); }}>إعادة الفحص</Button>}
+              />
+            )}
+            {!error && probe.state === 'LIVE' && (
+              <Alert
+                type="info"
+                showIcon
+                message="الخادم يبدأ الآن"
+                description="يمكنك المحاولة بعد ثوانٍ. كلمة المرور من RED_ADMIN_PASSWORD في ملف .env."
+                style={{ marginBottom: 20, borderRadius: 10 }}
+              />
+            )}
             <Form layout="vertical" onFinish={submit} size="large">
-              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]}>
+              <Form.Item name="username" rules={[{ required: true, message: 'أدخل اسم المستخدم' }]} initialValue="red_admin">
                 <Input prefix={<UserOutlined style={{color:'#64748B'}} />} placeholder="اسم المستخدم — red_admin" autoComplete="username"
                   style={{ background: '#1E293B', borderColor: '#334155', color: '#fff', height: 48, borderRadius: 10 }} />
               </Form.Item>
@@ -151,8 +168,11 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             </Space>
           </Card>
 
+          <Typography.Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center', lineHeight: 1.7 }}>
+            Docker: اسم المستخدم من <b>RED_ADMIN_USERNAME</b> وكلمة المرور من <b>RED_ADMIN_PASSWORD</b> في ملف <b>RED_Ultimate/.env</b>
+          </Typography.Text>
           <Typography.Text style={{ color: '#334155', fontSize: 11, textAlign: 'center', lineHeight: 1.7 }}>
-            نسيت كلمة المرور؟ استخدم حساب مسؤول آخر لإصدار كلمة مؤقتة من مركز المستخدمين. لا يوجد استرداد ذاتي للمسؤول السيادي.
+            لا يوجد استرداد ذاتي للمسؤول السيادي. كلمة المرور ليست في الواجهة.
           </Typography.Text>
         </Space>
       </div>

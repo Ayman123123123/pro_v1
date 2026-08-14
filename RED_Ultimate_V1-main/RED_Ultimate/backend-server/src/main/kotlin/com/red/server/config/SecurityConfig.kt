@@ -78,7 +78,10 @@ class SecurityConfig(
                     // المعرّفات (89,999) قابلًا للتعداد الكامل، فما كان
                     // صعبًا عمليًا صار زحفًا مباشرًا على الدليل كله.
                     .requestMatchers(HttpMethod.GET, "/api/identity/directory/**").authenticated()
-                    .requestMatchers("/health", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                    // التفاصيل الكاملة (قواعد البيانات، Dinstar، المضيف) للمسؤولين فقط؛
+                    // المساران العامان أدناه يُبقيان الحالة وحدها.
+                    .requestMatchers("/health/detailed").hasRole("ADMIN")
+                    .requestMatchers("/health", "/health/live", "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                     .requestMatchers("/ws/**").permitAll()
                     // ── مشاركة المستخدم في المحتوى ──
                     //

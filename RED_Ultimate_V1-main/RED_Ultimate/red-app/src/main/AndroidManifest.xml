@@ -17,6 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
@@ -40,6 +41,10 @@
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service
             android:name=".calls.LiveStreamService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall" />
+        <service
+            android:name=".calls.GroupCallService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service

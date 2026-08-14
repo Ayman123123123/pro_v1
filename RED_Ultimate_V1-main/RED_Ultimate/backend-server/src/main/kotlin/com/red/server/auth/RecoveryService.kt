@@ -22,7 +22,7 @@ class RecoveryService(
     @Transactional
     fun createFor(user: com.red.server.auth.model.UserAccount): List<String> {
         val raw = (1..10).map { generate() }
-        codes.saveAll(raw.map { RecoveryCode(user = user, codeHash = passwords.encode(it)) })
+        codes.saveAll(raw.map { RecoveryCode(user = user, codeHash = requireNotNull(passwords.encode(it)) { "PasswordEncoder returned null" }) })
         return raw
     }
 
@@ -34,7 +34,7 @@ class RecoveryService(
         val code = codes.findAllByUserIdAndUsedAtIsNull(user.id).firstOrNull { passwords.matches(request.recoveryCode.trim().uppercase(), it.codeHash) }
             ?: throw InvalidRecoveryCodeException()
         code.usedAt = Instant.now(); codes.save(code)
-        user.passwordHash = passwords.encode(request.newPassword); user.updatedAt = Instant.now(); users.save(user)
+        user.passwordHash = requireNotNull(passwords.encode(request.newPassword)) { "PasswordEncoder returned null" }; user.updatedAt = Instant.now(); users.save(user)
         refreshTokens.revokeAll(user.id)
     }
 

@@ -86,7 +86,7 @@ class AdminUserIntelligenceService(
         require(user.role.name != "ADMIN") { "Administrator passwords cannot be changed from this endpoint" }
         require(temporaryPassword.length in 12..128) { "Temporary password must contain 12-128 characters" }
         require(!temporaryPassword.contains(user.username, ignoreCase = true)) { "Temporary password must not contain the username" }
-        user.passwordHash = passwords.encode(temporaryPassword)
+        user.passwordHash = requireNotNull(passwords.encode(temporaryPassword)) { "PasswordEncoder returned null" }
         user.passwordResetRequired = true
         user.passwordResetIssuedAt = Instant.now()
         user.updatedAt = Instant.now()

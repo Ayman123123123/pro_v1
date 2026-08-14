@@ -12,7 +12,7 @@
 .gradle-cache/
 
 # Nothing below is consumed by backend-server/Dockerfile
-red-app/
+# red-app/
 admin_dashboard/
 media-sfu/
 pstn-asterisk/
@@ -20,3 +20,14 @@ scripts/
 docs/
 *.md
 *.log
+
+# ── Secrets: لا تُرسل إلى daemon عشوائي، ولا تُخبَّأ في build cache ──
+.env
+.env.*
+secrets/
+**/*.pem
+**/*.p12
+**/*.keystore
+**/*.jks
+local.properties
+**/signing/

@@ -22,8 +22,9 @@
  * ⚠️ تطوير محلي فقط: بلا مصادقة حقيقية، وغير مُضمَّن في صورة Docker.
  *    الإنتاج يمر عبر backend-server + PostgreSQL/Mongo/Redis/MinIO.
  */
-if (process.env.NODE_ENV === 'production' || process.env.RED_RUNTIME_MODE === 'production') {
-  throw new Error('The SQLite dev-server is a test double and must never run in production. Use backend-server with PostgreSQL/MongoDB/Redis/MinIO.');
+if (process.env.NODE_ENV === 'production' || process.env.RED_RUNTIME_MODE === 'production' || process.env.YOUNES_RUNTIME === 'docker') {
+  console.error('PRODUCTION LOCK: SQLite dev-server must never run in production. Use backend-server + Compose.');
+  process.exit(1);
 }
 
 const http = require('node:http');
@@ -90,7 +91,8 @@ const flagDto = (r) => ({
 const reportDto = (r) => ({
   id: r.id, reporterId: r.reporter_id, reporterUsername: r.reporter_username,
   reportedUserId: r.reported_user_id, reportedUsername: r.reported_username,
-  category: r.category, status: r.status, description: r.description,
+  targetUserId: r.reported_user_id, targetContentType: r.content_type,
+  category: r.category, status: r.status, description: r.description, reason: r.description,
   contentType: r.content_type, contentId: r.content_id, assignedTo: r.assigned_to,
   resolution: r.resolution, notes: r.notes, createdAt: r.created_at, resolvedAt: r.resolved_at,
 });
@@ -111,27 +113,39 @@ const pollDto = (r) => ({
   id: r.id, question: r.question, pollType: r.poll_type, status: r.status,
   isAnonymous: !!r.is_anonymous, allowAddOptions: !!r.allow_add_options,
   options: JSON.parse(r.options), totalVotes: r.total_votes,
-  createdBy: r.created_by, createdAt: r.created_at, closesAt: r.closes_at,
+  uniqueVoters: r.total_votes,
+  createdBy: r.created_by, createdAt: r.created_at,
+  closesAt: r.closes_at, endsAt: r.closes_at,
 });
 
-const eventDto = (r) => ({
-  id: r.id, title: r.title, description: r.description, eventType: r.event_type,
-  status: r.status, visibility: r.visibility, rsvpEnabled: !!r.rsvp_enabled,
-  attendeeCount: r.attendee_count, startsAt: r.starts_at, endsAt: r.ends_at,
-  createdBy: r.created_by, createdAt: r.created_at,
-});
+const eventDto = (r) => {
+  const status = r.status === 'COMPLETED' ? 'ENDED' : r.status;
+  return {
+    id: r.id, title: r.title, description: r.description, eventType: r.event_type,
+    status, visibility: r.visibility, rsvpEnabled: !!r.rsvp_enabled,
+    attendeeCount: r.attendee_count, currentAttendees: r.attendee_count,
+    maxAttendees: r.max_attendees || null,
+    locationName: r.location_name || null,
+    startsAt: r.starts_at, endsAt: r.ends_at,
+    createdBy: r.created_by, createdAt: r.created_at,
+  };
+};
 
 const tagDto = (r) => ({
-  id: r.id, tag: r.tag, usageCount: r.usage_count, trendScore: r.trend_score,
-  isBlocked: !!r.is_blocked, lastUsedAt: r.last_used_at, createdAt: r.created_at,
+  id: r.id, tag: r.tag, tagName: r.tag,
+  usageCount: r.usage_count,
+  trendScore: r.trend_score, trendingScore: Number(r.trend_score || 0),
+  isBlocked: !!r.is_blocked,
+  isTrending: Number(r.trend_score || 0) >= 70,
+  postsCount: r.usage_count, storiesCount: Math.max(0, Math.round((r.usage_count || 0) * 0.18)),
+  uniqueUsers: Math.max(1, Math.round((r.usage_count || 0) * 0.35)),
+  lastUsedAt: r.last_used_at, createdAt: r.created_at,
 });
 
 const packDto = (r) => ({
   id: r.id, name: r.name, description: r.description, isOfficial: !!r.is_official,
   isPublished: !!r.is_published, isFree: !!r.is_free, priceCents: r.price_cents,
-  stickerCount: r.sticker_count,
-  // Admin UI historically called this coverUrl; red-app's production DTO uses
-  // coverMediaKey. Return both while the clients converge on one contract.
+  currency: 'YER', stickerCount: r.sticker_count, totalDownloads: r.sticker_count * 12,
   coverUrl: r.cover_url, coverMediaKey: r.cover_url || '', previewMediaKey: null,
   createdAt: r.created_at,
 });
@@ -257,7 +271,33 @@ function match(pattern, pathname) {
 }
 
 // ── الصحة والمصادقة ──
-on('GET', '/health', () => ok({ status: 'UP', service: 'red-dev-server', db: 'sqlite', timestamp: nowIso() }));
+on('GET', '/health', () => ok({
+  brand: 'YOUNES',
+  displayName: 'يونس',
+  status: 'UP',
+  version: '1.0.0-YOUNES',
+  service: 'red-dev-server',
+  db: 'sqlite',
+  timestamp: nowIso(),
+  services: {
+    postgresql: { status: 'UP', detail: 'SQLite stand-in for local admin', database: 'red_sovereign' },
+    mongodb: { status: 'UP', detail: 'SQLite stand-in for local admin' },
+    redis: { status: 'UP', detail: 'in-process cache' },
+    minio: { status: 'UP', bucket: 'red-media', detail: 'local stand-in' },
+    mediasfu: { status: 'DEGRADED', detail: 'development double' },
+    asterisk: { status: 'UP', detail: 'simulated AMI' },
+  },
+  flyway: { latestVersion: '29', appliedCount: 29, error: null },
+  system: { javaVersion: 'dev-server', availableProcessors: 1, maxMemoryMb: 0 },
+}));
+on('GET', '/health/live', () => ok({
+  brand: 'YOUNES',
+  displayName: 'يونس',
+  status: 'UP',
+  version: '1.0.0-YOUNES',
+  probe: 'live',
+  timestamp: nowIso(),
+}));
 on('GET', '/sfu-health', () => ok({ status: 'UP', workers: 4, rooms: 2, peers: 5 }));
 /**
  * تسجيل الدخول الموحّد — نفس المسار الذي يستخدمه التطبيق واللوحة، تمامًا
@@ -311,6 +351,55 @@ on('GET', '/api/admin/metrics/realtime', () => ok({
   timestamp: nowIso(),
 }));
 
+on('GET', '/api/admin/operations/overview', () => {
+  const count = (sql, ...p) => Number(get(sql, ...p)?.c || 0);
+  return ok({
+    generatedAt: nowIso(),
+    users: {
+      total: count('SELECT COUNT(*) c FROM users'),
+      approved: count("SELECT COUNT(*) c FROM users WHERE status='APPROVED'"),
+      pending: count("SELECT COUNT(*) c FROM users WHERE status='PENDING'"),
+      banned: count("SELECT COUNT(*) c FROM users WHERE status='BANNED'"),
+      administrators: count("SELECT COUNT(*) c FROM users WHERE role='ADMIN'"),
+      online: count("SELECT COUNT(*) c FROM users WHERE status='APPROVED' AND last_seen > ?", iso(0, 0.05)),
+    },
+    devices: {
+      total: count('SELECT COUNT(*) c FROM devices'),
+      approved: count("SELECT COUNT(*) c FROM devices WHERE status='APPROVED'"),
+      pending: count("SELECT COUNT(*) c FROM devices WHERE status='PENDING'"),
+      revoked: count("SELECT COUNT(*) c FROM devices WHERE status='REVOKED'"),
+      activeRefreshSessions: count('SELECT COUNT(*) c FROM refresh_sessions WHERE revoked_at IS NULL'),
+    },
+    moderation: {
+      openReports: count("SELECT COUNT(*) c FROM reports WHERE status='PENDING'"),
+      securityAlerts24h: count("SELECT COUNT(*) c FROM audit_log WHERE severity IN ('WARNING','CRITICAL') AND created_at > ?", iso(1)),
+      auditEvents24h: count("SELECT COUNT(*) c FROM audit_log WHERE created_at > ?", iso(1)),
+    },
+    content: {
+      groups: count('SELECT COUNT(*) c FROM groups_tbl'),
+      messages: 0,
+      stories: 0,
+      posts: count('SELECT COUNT(*) c FROM posts'),
+      channels: 0,
+      polls: count('SELECT COUNT(*) c FROM polls'),
+      events: count('SELECT COUNT(*) c FROM events'),
+      stickerPacks: count('SELECT COUNT(*) c FROM sticker_packs'),
+    },
+    communications: {
+      callHistory: count('SELECT COUNT(*) c FROM call_history'),
+      activeCalls: 2,
+      dinstarCdr: 12,
+      gateways: count('SELECT COUNT(*) c FROM telecom_gateways'),
+      gatewayPorts: count('SELECT COALESCE(SUM(port_count),0) c FROM telecom_gateways WHERE enabled=1'),
+    },
+    storage: {
+      mediaGrants: 0,
+      backups: count('SELECT COUNT(*) c FROM backups'),
+      notifications: count('SELECT COUNT(*) c FROM notifications'),
+    },
+  });
+});
+
 // ── المستخدمون ──
 on('GET', '/api/admin/users/pending', () =>
   ok(all("SELECT * FROM users WHERE status='PENDING' ORDER BY created_at ASC").map((r) => userDto(r))));
@@ -318,12 +407,33 @@ on('GET', '/api/admin/users/pending', () =>
 on('GET', '/api/admin/users/:userId/overview', (p) => {
   const u = get('SELECT * FROM users WHERE id = ?', p.userId);
   if (!u) return notFound('USER_NOT_FOUND');
+  const revoked = get("SELECT COUNT(*) c FROM devices WHERE user_id=? AND status='REVOKED'", u.id).c;
+  const calls = all('SELECT * FROM call_history WHERE user_id = ?', u.id);
+  const posts = get('SELECT COUNT(*) c FROM posts WHERE author_id = ?', u.id).c;
   return ok({
-    user: userDto(u), devices: devicesOf(u.id),
-    online: u.status === 'APPROVED', sessions: u.status === 'APPROVED' ? 1 : 0,
-    messagesSent: 420, messagesReceived: 388, callsTotal: 36,
-    lastSeen: u.last_seen, pstnEnabled: !!u.pstn_enabled, pstnDailyLimit: u.pstn_daily_limit,
+    user: userDto(u),
+    devices: devicesOf(u.id),
+    online: u.status === 'APPROVED' && !!u.last_seen,
+    sessions: u.status === 'APPROVED' ? 1 : 0,
+    messagesSent: 120 + posts * 8,
+    messagesReceived: 96 + posts * 6,
+    messages24h: 18,
+    callsMade: calls.filter((c) => c.direction === 'OUTGOING').length,
+    callsReceived: calls.filter((c) => c.direction === 'INCOMING').length,
+    redCalls: calls.filter((c) => c.route === 'RED').length,
+    pstnCalls: calls.filter((c) => c.route === 'PSTN' || c.route === 'DINSTAR').length,
+    callsTotal: calls.length,
+    lastSeen: u.last_seen,
+    pstnEnabled: !!u.pstn_enabled,
+    pstnDailyLimit: u.pstn_daily_limit,
     storageUsedBytes: 1073741824,
+    passwordResetRequired: false,
+    remoteWipeStatus: revoked > 0 ? 'QUEUED' : 'NONE',
+    managedDeviceWipeAllowed: false,
+    securityEvents: all(
+      'SELECT * FROM audit_log WHERE target_id = ? ORDER BY created_at DESC LIMIT 12',
+      u.id,
+    ).map(auditDto),
   });
 });
 
@@ -409,9 +519,13 @@ on('PUT', '/api/admin/users/:userId/role', (p, _q, body) => {
   return ok(userDto(get('SELECT * FROM users WHERE id = ?', p.userId)));
 });
 
-on('POST', '/api/admin/users/:userId/temporary-password', (p) => {
+on('POST', '/api/admin/users/:userId/temporary-password', (p, _q, b) => {
   const u = get('SELECT * FROM users WHERE id = ?', p.userId);
   if (!u) return notFound('USER_NOT_FOUND');
+  const temporary = String(b?.temporaryPassword || '');
+  if (temporary.length >= 12 && temporary.length <= 128) {
+    run('UPDATE users SET password_hash=?, updated_at=? WHERE id=?', d.hashPassword(temporary), nowIso(), p.userId);
+  }
   run('UPDATE refresh_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL', nowIso(), p.userId);
   recordAudit({ adminId: adminRow().id, action: 'TEMPORARY_PASSWORD_ISSUED', category: 'SECURITY',
     targetId: p.userId, description: u.red_id, severity: 'WARNING' });
@@ -592,7 +706,6 @@ on('GET', '/api/admin/moderation/reports', (_p, q) => {
   const requested = String(q.get('status') || 'OPEN').toUpperCase();
   if (!MODERATION_STATUSES.has(requested)) return bad(`INVALID_STATUS: ${requested}`);
   const wanted = toStoredStatus(requested);
-  // الربط يجلب معرّف يونس كما يفعل ModerationController تمامًا.
   return ok(all(`SELECT r.*, reporter.red_id AS reporter_red_id, reported.red_id AS reported_red_id
                  FROM reports r
                  LEFT JOIN users reporter ON reporter.id = r.reporter_id
@@ -1136,6 +1249,10 @@ on('GET', '/api/master/v1/stats/realtime', () => {
     active_users: a.approvedUsers, pending_approvals: a.pendingUsers,
     gsm_signal: 'STABLE', db_storage: '4.2 GB / 25 GB',
     messages_24h: day.messagesSent ?? 0, messages_today: day.messagesSent ?? 0,
+    delivered_messages_24h: day.messagesDelivered ?? 0,
+    read_messages_24h: day.messagesRead ?? 0,
+    pending_messages_24h: Math.max(0, (day.messagesSent ?? 0) - (day.messagesDelivered ?? 0)),
+    active_conversations: Math.max(12, Math.round((day.messagesSent ?? 0) / 180)),
     delivery_rate_percent: day.messagesSent ? Number(((day.messagesDelivered / day.messagesSent) * 100).toFixed(1)) : 0,
     avg_latency_ms: 38, system_load: '12%', cpu_usage: 18.5, memory_usage: 42.1, db_health: 'UP',
   });
@@ -1149,10 +1266,26 @@ on('GET', '/api/master/v1/media/active-calls', () => ok([
 // ── الإشعارات والاجتماعي ──
 on('GET', '/api/notifications/unread-count', () =>
   ok({ count: get('SELECT COUNT(*) c FROM notifications WHERE is_read = 0').c }));
-on('GET', '/api/notifications', (_p, q) =>
-  ok(page(all('SELECT * FROM notifications ORDER BY created_at DESC').map((r) => ({
-    id: r.id, type: r.type, title: r.title, body: r.body, isRead: !!r.is_read, createdAt: r.created_at,
-  })), Number(q.get('page') || 0), Number(q.get('size') || 50))));
+on('GET', '/api/notifications', (_p, q) => {
+  const type = q.get('type');
+  const pageNum = Number(q.get('page') || 0);
+  const size = Number(q.get('size') || 50);
+  const rows = all('SELECT * FROM notifications ORDER BY created_at DESC')
+    .filter((r) => !type || r.type === type)
+    .map((r) => ({
+      id: r.id, type: r.type, title: r.title, body: r.body, isRead: !!r.is_read, createdAt: r.created_at,
+    }));
+  const paged = page(rows, pageNum, size);
+  return ok({
+    notifications: paged.content,
+    unreadCount: get('SELECT COUNT(*) c FROM notifications WHERE is_read = 0').c,
+    page: pageNum,
+    content: paged.content,
+    size,
+    totalElements: paged.totalElements,
+    totalPages: paged.totalPages,
+  });
+});
 on('PUT', '/api/notifications/read-all', () => {
   run('UPDATE notifications SET is_read = 1');
   return ok({ success: true });
@@ -1202,7 +1335,7 @@ function adminGuard(method, pathname, headers) {
 
   // نعيد استعمال `currentUser` من app-routes بدل تكرار منطق الجلسات.
   const user = appRoutes.currentUser({ headers });
-  if (!user) return { status: 401, data: { error: 'UNAUTHORIZED' } };
+  if (!user) return { status: 401, data: { error: 'AUTHENTICATION_REQUIRED' } };
   if (user.role !== 'ADMIN') return { status: 403, data: { error: 'FORBIDDEN', required: 'ADMIN' } };
   return null;
 }
@@ -1247,7 +1380,12 @@ const server = http.createServer((req, res) => {
         const result = route.handler(params, parsed.searchParams, body, {
           ip: req.socket.remoteAddress, userAgent: req.headers['user-agent'], headers: req.headers,
         });
-        res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8' });
+        const extra = result.headers || {};
+        if (extra['Set-Cookie']) {
+          res.setHeader('Set-Cookie', extra['Set-Cookie']);
+          delete extra['Set-Cookie'];
+        }
+        res.writeHead(result.status, { 'Content-Type': 'application/json; charset=utf-8', ...extra });
         return res.end(JSON.stringify(result.data));
       }
       console.warn(`[dev-server] مسار غير معرّف: ${req.method} ${parsed.pathname}`);
@@ -1273,8 +1411,37 @@ function wsFrame(text) {
   return Buffer.concat([header, payload]);
 }
 
+function acceptWebSocket(req, socket) {
+  const accept = crypto.createHash('sha1')
+    .update((req.headers['sec-websocket-key'] || '') + GUID).digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${accept}\r\n\r\n`);
+}
+
 server.on('upgrade', (req, socket) => {
   const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+  // تطبيق الهاتف يتصل بـ /ws/master فور الدخول. رفضه بـ 401 كان يُبقي
+  // الإشعار على «جارٍ الاتصال» ثم يدور تجديد الجلسة بلا نهاية.
+  if (parsed.pathname === '/ws/master') {
+    const header = req.headers.authorization || '';
+    const bearer = header.startsWith('Bearer ') ? header.slice(7) : parsed.searchParams.get('access');
+    const user = bearer ? appRoutes.currentUser({ headers: { authorization: `Bearer ${bearer}` } }) : null;
+    if (!user || user.status !== 'APPROVED') {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      return socket.destroy();
+    }
+    acceptWebSocket(req, socket);
+    const ping = setInterval(() => {
+      if (socket.destroyed) return clearInterval(ping);
+      try { socket.write(wsFrame(`${nowIso()}  INFO  [dev-server] master socket alive for ${user.red_id}`)); }
+      catch { clearInterval(ping); }
+    }, 25000);
+    socket.on('close', () => clearInterval(ping));
+    socket.on('error', () => clearInterval(ping));
+    return;
+  }
+
   if (parsed.pathname !== WS_PATH || !parsed.searchParams.get('ticket')) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     return socket.destroy();

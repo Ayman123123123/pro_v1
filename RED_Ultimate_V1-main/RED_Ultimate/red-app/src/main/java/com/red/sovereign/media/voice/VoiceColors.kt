@@ -383,31 +383,79 @@ fun VoiceRecordButton(
             .size(64.dp)
             .scale(buttonScale)
             .pointerInput(state, hasPermission) {
-                if (!hasPermission) return@pointerInput
-                detectTapGestures(
-                    onTap = { onClick() }
-                )
-            }
-            .pointerInput(state, hasPermission) {
-                if (!hasPermission || !isRecording) return@pointerInput
-                detectDragGestures(
-                    onDragStart = { onPress() },
-                    onDragEnd = { onRelease() },
-                    onDragCancel = { onCancel() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        // Calculate cancel progress based on upward drag distance
-                        val maxCancelDistance = 120f
-                        val dragY = -dragAmount.y // negative = upward
-                        val progress = (dragY / maxCancelDistance).coerceIn(0f, 1f)
-                        onUpdateCancelProgress(progress)
-                        if (progress > 0.6f) {
-                            onCancel()
-                        } else if (progress < 0.05f && !isLocked) {
-                            onLockRequest()
+                if (!hasPermission) {
+                    detectTapGestures(onTap = { onClick() })
+                    return@pointerInput
+                }
+                
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitPointerEvent().changes.firstOrNull { it.pressed } ?: continue
+                        
+                        if (isRecording) {
+                            // If it's already recording (e.g. locked), a tap stops/previews
+                            down.consume()
+                            val up = awaitPointerEvent().changes.firstOrNull { !it.pressed }
+                            if (up != null) {
+                                onClick()
+                            }
+                            continue
                         }
+                        
+                        if (isPreview || isSending) {
+                            down.consume()
+                            val up = awaitPointerEvent().changes.firstOrNull { !it.pressed }
+                            if (up != null) {
+                                onClick()
+                            }
+                            continue
+                        }
+
+                        // Idle state -> Start recording immediately on press down
+                        down.consume()
+                        onPress()
+
+                        var isCancelled = false
+                        var totalDragY = 0f
+                        var totalDragX = 0f
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val pos = event.changes.firstOrNull() ?: break
+                            if (pos.isConsumed) continue
+                            
+                            if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Move) {
+                                val dragAmount = pos.position - pos.previousPosition
+                                totalDragY += dragAmount.y
+                                totalDragX += dragAmount.x
+                                
+                                // Negative Y is upward (lock), Negative X is leftward (cancel)
+                                // Standard: Swipe UP to lock, Swipe LEFT to cancel.
+                                val lockProgress = (-totalDragY / 120f).coerceIn(0f, 1f)
+                                val cancelProgressValue = (-totalDragX / 120f).coerceIn(0f, 1f)
+                                
+                                // Only update cancel progress if they are dragging left
+                                if (cancelProgressValue > 0.1f) {
+                                    onUpdateCancelProgress(cancelProgressValue)
+                                    if (cancelProgressValue > 0.6f) {
+                                        isCancelled = true
+                                        onCancel()
+                                        break
+                                    }
+                                } else if (lockProgress > 0.4f && !isLocked) {
+                                    onLockRequest()
+                                    // Once locked, we break the press-hold cycle
+                                    break
+                                }
+                            } else if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Release) {
+                                if (!isCancelled && !isLocked) {
+                                    onRelease()
+                                }
+                                break
+                            }
+                        } while (event.changes.any { it.pressed })
                     }
-                )
+                }
             },
         contentAlignment = Alignment.Center
     ) {

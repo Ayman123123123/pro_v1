@@ -25,7 +25,7 @@ const MessagingTab: React.FC = () => {
             <Row gutter={[16, 16]}>
                 <Col span={6}>
                     <Card>
-                        <Statistic title="Messages Today" value={messageStats?.messages_24h ?? '—'}
+                        <Statistic title="رسائل اليوم" value={messageStats?.messages_24h ?? '—'}
                             prefix={<MessageOutlined />} valueStyle={{ color: '#1890ff' }} />
                     </Card>
                 </Col>

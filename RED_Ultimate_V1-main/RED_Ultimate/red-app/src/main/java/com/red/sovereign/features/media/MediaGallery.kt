@@ -1,5 +1,6 @@
 package com.red.sovereign.features.media
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +34,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,24 +43,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.media.AttachmentManifest
+import com.red.sovereign.media.AttachmentState
 import com.red.sovereign.media.AttachmentViewModel
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 import kotlinx.serialization.json.Json
+import java.io.File
 
 /**
  * معرض الوسائط الاحترافي — شبكة صور مصغّرة + فلترة بالنوع + عدّاد.
  * يعمل للمحادثات الفردية والمجموعات. الوسائط مشفّرة E2EE.
- *
- * @param messages كل الرسائل المفكوكة في المحادثة/المجموعة (يُفلتر منها الوسائط)
- * @param attachments ViewModel لفك تشفير الصور المصغّرة
+ * النقر على أي وسيط: تنزيل وفك تشفير ثم فتح بالعارض المناسب.
  */
 @Composable
 fun MediaGalleryDialog(
@@ -67,9 +72,39 @@ fun MediaGalleryDialog(
     onDismiss: () -> Unit
 ) {
     val json = remember { Json { ignoreUnknownKeys = true } }
+    val context = LocalContext.current
 
     // فلتر النوع: 0=الكل، 1=صور، 2=فيديو، 3=ملفات، 4=صوت
     var filter by remember { mutableStateOf(0) }
+
+    // الوسيط الجاري فتحه (تنزيل + عرض تلقائي عند اكتمال فك التشفير)
+    var openingManifest by remember { mutableStateOf<AttachmentManifest?>(null) }
+    var openingMessageId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(openingManifest, openingMessageId?.let { attachments.getDownloadState(it) }) {
+        val current = openingMessageId?.let { attachments.getDownloadState(it) } ?: AttachmentState.Idle
+        if (openingManifest != null && current is AttachmentState.Downloaded && current.name == openingManifest?.name) {
+            val file = File(current.path)
+            if (file.isFile) {
+                val uri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                runCatching {
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, openingManifest?.mimeType ?: "application/octet-stream")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(intent)
+                }.onFailure { cause ->
+                    // لا يوجد تطبيق معالِج لهذا النوع — إبلاغ واضح بدل الفشل الصامت
+                    android.widget.Toast.makeText(
+                        context,
+                        "لا يوجد تطبيق لفتح هذا النوع من الملفات",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            openingManifest = null
+        }
+    }
 
     val allMedia = remember(messages) {
         messages.filter { it.type in setOf("IMAGE", "VIDEO", "FILE", "AUDIO") }
@@ -100,7 +135,6 @@ fun MediaGalleryDialog(
                 }
             } else {
                 Column {
-                    // شريط الفلترة
                     Row(
                         Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -118,7 +152,6 @@ fun MediaGalleryDialog(
                             Text("لا توجد ${listOf("الكل","صور","فيديو","ملفات","صوت")[filter]}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                         }
                     } else {
-                        // الشبكة: صورتان في الصف للصور/الفيديو، قائمة للملفات/الصوت
                         if (filter == 0 || filter == 1 || filter == 2) {
                             val gridItems = filtered.filter { it.type in setOf("IMAGE", "VIDEO") }
                             LazyVerticalGrid(
@@ -127,20 +160,18 @@ fun MediaGalleryDialog(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                items(gridItems, key = { it.id }) { item -> MediaThumbnail(item, attachments) }
+                                items(gridItems, key = { it.id }) { item -> MediaThumbnail(item, attachments, json, openingManifest != null) { manifest, id -> openingManifest = manifest; openingMessageId = id } }
                             }
-                            // الملفات/الصوت تحت الشبكة لو الفلتر «الكل»
                             if (filter == 0) {
                                 val others = filtered.filter { it.type in setOf("FILE", "AUDIO") }
                                 if (others.isNotEmpty()) {
                                     Spacer(Modifier.height(8.dp))
-                                    others.forEach { item -> MediaListRow(item) }
+                                    others.forEach { item -> MediaListRow(item, attachments, json, openingManifest != null) { manifest, id -> openingManifest = manifest; openingMessageId = id } }
                                 }
                             }
                         } else {
-                            // قائمة للملفات/الصوت
                             Column(Modifier.height(360.dp)) {
-                                filtered.forEach { item -> MediaListRow(item) }
+                                filtered.forEach { item -> MediaListRow(item, attachments, json, openingManifest != null) { manifest, id -> openingManifest = manifest; openingMessageId = id } }
                             }
                         }
                     }
@@ -151,16 +182,23 @@ fun MediaGalleryDialog(
     )
 }
 
-/** خلية شبكة: أيقونة نوع واضحة (صورة/فيديو) + شارة تشغيل للفيديو.
- *  لا نحاول فك تشفير كل صورة هنا — AttachmentViewModel مصمّم لرسالة واحدة،
- *  ومشاركة حالته بين كل الخلايا تُظهر نفس الصورة لجميع الخلايا (عيب).
- *  الحل النظيف: أيقونات نوع + النقر يفتح الرسالة الكاملة (حيث يُفك التشفير فعلياً). */
+/** خلية شبكة: أيقونة نوع واضحة + النقر يفتح الوسيط (تنزيل مشفّر ثم عرض). */
 @Composable
-private fun MediaThumbnail(item: DecryptedMessage, attachments: AttachmentViewModel) {
+private fun MediaThumbnail(
+    item: DecryptedMessage,
+    attachments: AttachmentViewModel,
+    json: Json,
+    isOpening: Boolean,
+    onOpen: (AttachmentManifest, String) -> Unit
+) {
     val isVideo = item.type == "VIDEO"
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
+    val manifest = remember(manifestJson) { runCatching { json.decodeFromString<AttachmentManifest>(manifestJson) }.getOrNull() }
 
     Surface(
-        Modifier.aspectRatio(1f).clip(RoundedCornerShape(8.dp)).clickable { /* فتح الشاشة الكاملة */ },
+        Modifier.aspectRatio(1f).clip(RoundedCornerShape(8.dp)).clickable(enabled = !isOpening && manifest != null) {
+            manifest?.let { onOpen(it, item.id); attachments.download(item.id, manifestJson) }
+        },
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -170,7 +208,6 @@ private fun MediaThumbnail(item: DecryptedMessage, attachments: AttachmentViewMo
                 else -> Icon(Icons.Default.InsertDriveFile, null, modifier = Modifier.size(28.dp))
             }
             if (isVideo) {
-                // شارة تشغيل فوق الفيديو
                 Surface(
                     Modifier.align(Alignment.Center).size(28.dp),
                     shape = androidx.compose.foundation.shape.CircleShape,
@@ -183,14 +220,23 @@ private fun MediaThumbnail(item: DecryptedMessage, attachments: AttachmentViewMo
     }
 }
 
-/** صف قائمة للملفات والصوت — أيقونة + اسم + حجم + تاريخ. */
+/** صف قائمة للملفات والصوت — أيقونة + اسم + حجم + تاريخ + فتح عند النقر. */
 @Composable
-private fun MediaListRow(item: DecryptedMessage) {
+private fun MediaListRow(
+    item: DecryptedMessage,
+    attachments: AttachmentViewModel,
+    json: Json,
+    isOpening: Boolean,
+    onOpen: (AttachmentManifest, String) -> Unit
+) {
+    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
     val manifest = remember(item.id) {
-        runCatching { Json { ignoreUnknownKeys = true }.decodeFromString<AttachmentManifest>(item.plaintext.toString(Charsets.UTF_8)) }.getOrNull()
+        runCatching { json.decodeFromString<AttachmentManifest>(manifestJson) }.getOrNull()
     }
     Surface(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable(enabled = !isOpening && manifest != null) {
+            manifest?.let { onOpen(it, item.id); attachments.download(item.id, manifestJson) }
+        },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
@@ -224,6 +270,9 @@ private fun MediaListRow(item: DecryptedMessage) {
                     fontSize = 11.sp
                 )
             }
+            if (isOpening && attachments.getDownloadState(item.id) is AttachmentState.Working) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = AqyalGold)
+            }
         }
     }
 }
@@ -233,3 +282,6 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
     else -> "$bytes B"
 }
+
+
+

@@ -134,4 +134,23 @@ class LocalRepository(context: Context) {
 
     /** وسائط محادثة (Flow) — لمعرض الوسائط. الصور/الفيديو/الملفات/الصوت. */
     fun mediaForConversation(convId: String) = dao.mediaForConversation(convId)
+
+    /**
+     * ⏳ حذف الرسائل المنتهية (disappearing) فعلياً من قاعدة البيانات.
+     * `expiresAt` يعيش داخل حمولة RichMessage — نفك ترميز كل رسالة غنية
+     * ونحذف ما انقضت مهلته. يُستدعى عند تشغيل الخدمة ثم دورياً.
+     * @return عدد الرسائل المحذوفة
+     */
+    suspend fun purgeExpiredMessages(now: Long = System.currentTimeMillis()): Int {
+        var deleted = 0
+        dao.allRichHistory().forEach { stored ->
+            val rich = runCatching { com.red.sovereign.core.RichMessage.decode(stored.encryptedPlaintext) }.getOrNull() ?: return@forEach
+            val expiresAt = rich.expiresAt ?: return@forEach
+            if (expiresAt <= now) {
+                dao.deleteLocalHistory(stored.id)
+                deleted++
+            }
+        }
+        return deleted
+    }
 }

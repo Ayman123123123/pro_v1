@@ -35,7 +35,7 @@ class CertificatePinnerTest {
 
     @Test
     fun generatePinProducesSha256Pin() {
-        val pin = CertificatePinner.generatePin(FakeCertificate("certificate-data".toByteArray()))
+        val pin = CertificatePinner.generatePin(FakeCertificate("certificate-data".toByteArray(), keyPair.public))
         assertTrue(pin.startsWith("sha256/"))
         assertTrue(pin.length > "sha256/".length)
     }
@@ -68,11 +68,16 @@ class CertificatePinnerTest {
         assertEquals(DebugSecurityManager.hashData("test"), DebugSecurityManager.hashData("test"))
     }
 
-    private class FakeCertificate(private val bytes: ByteArray) : Certificate("X.509") {
+    private val keyPair = java.security.KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+
+    private class FakeCertificate(
+        private val bytes: ByteArray,
+        private val publicKey: PublicKey
+    ) : Certificate("X.509") {
         override fun getEncoded(): ByteArray = bytes
         override fun verify(key: PublicKey?) = Unit
         override fun verify(key: PublicKey?, sigProvider: String?) = Unit
         override fun toString(): String = "FakeCertificate"
-        override fun getPublicKey(): PublicKey? = null
+        override fun getPublicKey(): PublicKey = publicKey
     }
 }

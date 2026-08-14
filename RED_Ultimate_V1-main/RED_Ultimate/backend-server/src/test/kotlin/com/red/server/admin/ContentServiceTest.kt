@@ -26,6 +26,8 @@ class ContentServiceTest {
     private lateinit var hashtagFollows: HashtagFollowRepository
     private lateinit var savedMessages: SavedMessageRepository
     private lateinit var stickerPacks: StickerPackRepository
+    private lateinit var stickers: StickerRepository
+    private lateinit var userStickerPacks: UserStickerPackRepository
     private lateinit var service: ContentService
 
     @BeforeEach
@@ -40,10 +42,12 @@ class ContentServiceTest {
         hashtagFollows = mock()
         savedMessages = mock()
         stickerPacks = mock()
+        stickers = mock()
+        userStickerPacks = mock()
         service = ContentService(
             polls, pollOptions, pollVotes, events, eventAttendees,
             highlights, hashtags, hashtagFollows, savedMessages, stickerPacks,
-            ObjectMapper()
+            stickers, userStickerPacks, ObjectMapper()
         )
     }
 
@@ -77,6 +81,7 @@ class ContentServiceTest {
         whenever(polls.findById(pollId)).thenReturn(Optional.of(poll))
         whenever(pollVotes.countByPollIdAndUserId(pollId, userId)).thenReturn(0L)
         whenever(pollOptions.findById(optionId)).thenReturn(Optional.of(option))
+        whenever(pollOptions.findByPollId(pollId)).thenReturn(listOf(option))
 
         service.vote(pollId, userId, listOf(optionId))
 
@@ -87,13 +92,18 @@ class ContentServiceTest {
     }
 
     @Test
-    fun `vote is ignored if already voted`() {
+    fun `vote is rejected if already voted`() {
         val pollId = UUID.randomUUID()
+        val optionId = UUID.randomUUID()
         val userId = UUID.randomUUID()
-        whenever(polls.findById(pollId)).thenReturn(Optional.of(mock()))
+        val poll = Poll(id = pollId, status = "ACTIVE")
+        whenever(polls.findById(pollId)).thenReturn(Optional.of(poll))
+        whenever(pollOptions.findByPollId(pollId)).thenReturn(listOf(PollOption(id = optionId, pollId = pollId)))
         whenever(pollVotes.countByPollIdAndUserId(pollId, userId)).thenReturn(1L)
 
-        service.vote(pollId, userId, listOf(UUID.randomUUID()))
+        org.junit.jupiter.api.assertThrows<IllegalStateException> {
+            service.vote(pollId, userId, listOf(optionId))
+        }
         verify(pollVotes, never()).save(any<PollVote>())
     }
 

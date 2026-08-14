@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Tag, Space, Button, Modal, Form, Input, message, Card,
-  Select, Statistic, Row, Col, Typography, Empty, Timeline, Badge
+  Select, Statistic, Row, Col, Typography, Empty, Timeline, Badge, Alert
 } from 'antd';
 import {
   AlertOutlined, CheckOutlined, CloseOutlined, ReloadOutlined,
@@ -17,6 +17,7 @@ const { TextArea } = Input;
 
 const CATEGORY_LABELS: Record<string, { label: string; color: string; icon: string }> = {
   SPAM: { label: 'إزعاج', color: 'orange', icon: '🚫' },
+  ABUSE: { label: 'إساءة', color: 'red', icon: '⚠️' },
   HARASSMENT: { label: 'تحرش', color: 'red', icon: '⚠️' },
   HATE_SPEECH: { label: 'خطاب كراهية', color: 'red', icon: '🚷' },
   VIOLENCE: { label: 'عنف', color: 'red', icon: '⚡' },
@@ -63,9 +64,11 @@ export default function Reports() {
   const [resolveForm] = Form.useForm();
   const [dismissForm] = Form.useForm();
   const [stats, setStats] = useState({ pending: 0, resolved: 0, dismissed: 0, today: 0 });
+  const [error, setError] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const result = await getReports({
         page, size,
@@ -75,7 +78,6 @@ export default function Reports() {
       const items = Array.isArray(result) ? result : result.content ?? [];
       setReports(items);
       setTotal(Array.isArray(result) ? items.length : (result.totalElements ?? items.length));
-      // Update stats
       setStats({
         pending: items.filter((r: any) => r.status === 'PENDING').length,
         resolved: items.filter((r: any) => r.status === 'RESOLVED').length,
@@ -83,10 +85,12 @@ export default function Reports() {
         today: items.filter((r: any) => {
           const d = new Date(r.createdAt);
           const today = new Date();
-          return d.toDateString() === today.toDateString();
+          return Number.isFinite(d.getTime()) && d.toDateString() === today.toDateString();
         }).length,
       });
     } catch (e: any) {
+      setReports([]);
+      setError(e.message || 'تعذر تحميل البلاغات');
       message.error('تعذر تحميل البلاغات: ' + (e.message ?? ''));
     } finally {
       setLoading(false);
@@ -152,7 +156,7 @@ export default function Reports() {
       render: (id: string) => (
         <Space>
           <UserOutlined />
-          <Text code style={{ fontSize: 11 }}>{id.slice(0, 8)}...</Text>
+          <Text code style={{ fontSize: 11 }}>{id ? `${String(id).slice(0, 8)}…` : '—'}</Text>
         </Space>
       ),
     },
@@ -160,27 +164,34 @@ export default function Reports() {
       title: 'المُبلَّغ عنه',
       dataIndex: 'targetUserId',
       key: 'targetUserId',
-      render: (id: string) => id ? (
-        <Text code style={{ fontSize: 11 }}>{id.slice(0, 8)}...</Text>
-      ) : <Text type="secondary">—</Text>,
+      render: (_id: string, r: any) => {
+        const id = r.targetUserId || r.reportedUserId;
+        return id ? (
+          <Text code style={{ fontSize: 11 }}>{String(id).slice(0, 8)}...</Text>
+        ) : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: 'المحتوى',
       dataIndex: 'targetContentType',
       key: 'targetContentType',
-      render: (type: string) => type ? (
-        <Tag>{type}</Tag>
-      ) : <Text type="secondary">—</Text>,
+      render: (_type: string, r: any) => {
+        const type = r.targetContentType || r.contentType;
+        return type ? <Tag>{type}</Tag> : <Text type="secondary">—</Text>;
+      },
     },
     {
       title: 'السبب',
       dataIndex: 'reason',
       key: 'reason',
-      render: (reason: string) => (
-        <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: reason }}>
-          {reason || '—'}
-        </Text>
-      ),
+      render: (_reason: string, r: any) => {
+        const reason = r.reason || r.description;
+        return (
+          <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: reason }}>
+            {reason || '—'}
+          </Text>
+        );
+      },
     },
     {
       title: 'الحالة',
@@ -204,7 +215,7 @@ export default function Reports() {
     {
       title: 'إجراءات',
       key: 'actions',
-      render: (r: any) => (
+      render: (_value: unknown, r: any) => (
         <Space size="small">
           {r.status === 'PENDING' && (
             <>
@@ -307,10 +318,12 @@ export default function Reports() {
         </Space>
       </Card>
 
+      {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={load}>إعادة المحاولة</Button>} />}
+
       {/* Table */}
       <Card>
         {reports.length === 0 ? (
-          <Empty description="لا توجد بلاغات" />
+          <Empty description={error ? 'تعذر التحميل' : 'لا توجد بلاغات'} />
         ) : (
           <Table
             rowKey="id"

@@ -8,7 +8,7 @@ plugins {
 // المنفذ إلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما
 // الخادم يستمع على 8088 (بوابة Nginx) — فيفشل كل طلب بـ NETWORK_ERROR بلا
 // سبب ظاهر. البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.1.50:8088")
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.0.181:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
@@ -51,6 +51,11 @@ android {
             isMinifyEnabled = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Alpha/إصدارات ما قبل الإنتاج تُوقَّع بنفس الهوية المستقرة بين
+            // Docker وWindows حتى تبقى تحديثات APK متوافقة. للتوزيع الرسمي لاحقاً
+            // استبدل بما يلي: قراءة keystore ومعرّفاته من متغيرات بيئة/ملف غير معمول
+            // (لأمان أفضل، لا يُعتمد مفتاح مضمّن في المستودع).
+            signingConfig = signingConfigs.getByName("redLocalDebug")
         }
     }
 
@@ -118,6 +123,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.square.okhttp3)
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation(libs.libsignal.android)
     implementation(libs.google.zxing.core)
     implementation(libs.androidx.media3.common)

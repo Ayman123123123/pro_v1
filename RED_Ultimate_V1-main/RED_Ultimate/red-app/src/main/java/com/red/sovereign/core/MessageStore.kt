@@ -41,7 +41,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         // 🔍 FTS5 for encrypted local search (never synced)
         try { db.execSQL("""
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-                messageId UNINDEXED, conversationId UNINDEXED, senderId UNINDEXED, content, tokenize='unicode61 "remove_diacritics 1"')
+                messageId UNINDEXED, conversationId UNINDEXED, senderId UNINDEXED, content, tokenize='unicode61 remove_diacritics 1')
         """.trimIndent()) } catch (_: Exception) {}
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {

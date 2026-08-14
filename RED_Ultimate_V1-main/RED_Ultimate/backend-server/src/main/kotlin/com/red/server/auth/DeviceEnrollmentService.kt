@@ -21,7 +21,7 @@ class DeviceEnrollmentService(private val devices: UserDeviceRepository) {
         require(request.signedPreKeyId >= 0 && request.kyberPreKeyId >= 0) { "Invalid pre-key ID" }
         val name = request.deviceName.trim()
         require(name.length in 1..100) { "deviceName must be 1-100 characters" }
-        val platform = request.platform.trim().uppercase()
+        val platform = (request.platform ?: "ANDROID").trim().uppercase()
         require(platform in setOf("ANDROID", "IOS", "DESKTOP", "WEB")) { "Unsupported device platform" }
 
         return devices.save(

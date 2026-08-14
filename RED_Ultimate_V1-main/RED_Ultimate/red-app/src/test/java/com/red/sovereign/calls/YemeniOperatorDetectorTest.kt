@@ -17,11 +17,11 @@ class YemeniOperatorDetectorTest {
     }
 
     @Test fun `mobile 71 Y(واي) with 00967 prefix`() {
-        assertEquals("Y (واي)", YemeniOperatorDetector.getOperatorInfo("00967112345678")!!.name)
+        assertEquals("Y (واي)", YemeniOperatorDetector.getOperatorInfo("00967712345678")!!.name)
     }
 
-    @Test fun `mobile 70 يمن(يو) after stripping leading zero`() {
-        assertEquals("يمن (يو)", YemeniOperatorDetector.getOperatorInfo("0701234567")!!.name)
+    @Test fun `mobile 70 يو YOU after stripping leading zero`() {
+        assertEquals("يو (YOU)", YemeniOperatorDetector.getOperatorInfo("0701234567")!!.name)
     }
 
     @Test fun `landline 1 هاتف ثابت صنعاء`() {

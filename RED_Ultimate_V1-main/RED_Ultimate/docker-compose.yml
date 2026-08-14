@@ -38,6 +38,9 @@ services:
       - no-new-privileges:true
 
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
+  # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
+  # Never publish 8080 to the host — that port is reserved for the optional
+  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
@@ -54,10 +57,13 @@ services:
         reservations:
           memory: 512M
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - YOUNES_RUNTIME=docker
+      - MONGO_PASSWORD=${MONGO_PASSWORD}
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
-      - SPRING_DATA_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
+      - SPRING_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - ASTERISK_AMI_HOST=pstn-gateway
@@ -66,6 +72,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
@@ -78,6 +85,7 @@ services:
       - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
+      - YOUNES_FCM_SERVER_KEY=${YOUNES_FCM_SERVER_KEY:-}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
@@ -86,7 +94,12 @@ services:
       # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
       - RED_TRUST_X_FORWARDED_FOR=true
       - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      # Local compose is HTTP on 8088. Secure cookies would be dropped by the browser.
+      # Set RED_ADMIN_COOKIE_SECURE=true only behind real TLS.
+      - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-false}
       - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - identity-secrets:/run/secrets:ro
       - backup-data:/backups
@@ -103,9 +116,10 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      timeout: 5s
+      retries: 8
+      # Flyway + JPA validate + first JDBC on Windows Docker regularly exceed 60s.
+      start_period: 180s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 2. VoIP/Conference SFU ━━━━━━━━━━━━
@@ -125,6 +139,7 @@ services:
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
+      - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
     security_opt:
@@ -132,7 +147,8 @@ services:
     cap_drop: ["ALL"]
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      # صورة node:22-bookworm-slim لا تحوي curl — نستخدم node نفسه.
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -321,52 +337,6 @@ services:
     image: red-tls-init:local
     container_name: red-certs-init
     restart: "no"
-    environment:
-      - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
-    command:
-      - "sh"
-      - "-ec"
-      - |
-        case "$$TLS_SAN_IP" in
-          *[!0-9.]*|'') echo '[tls] TLS_SAN_IP must be an IPv4 address' >&2; exit 1 ;;
-        esac
-        printf '%s\n' "$$TLS_SAN_IP" | awk -F. 'NF != 4 { exit 1 } { for (i=1;i<=4;i++) if ($$i !~ /^[0-9]+$$/ || $$i > 255) exit 1 }' \
-          || { echo '[tls] TLS_SAN_IP must be a valid IPv4 address' >&2; exit 1; }
-        mkdir -p /etc/ssl/red /var/www/certbot
-        cert=/etc/ssl/red/fullchain.pem
-        key=/etc/ssl/red/privkey.pem
-        for path in "$$cert" "$$key"; do
-          if [ -d "$$path" ]; then
-            echo "[tls] removing directory mistaken for a certificate file: $$path"
-            rm -rf "$$path"
-          fi
-        done
-        valid=false
-        if [ -s "$$cert" ] && [ -s "$$key" ] \
-          && openssl x509 -in "$$cert" -noout -checkend 86400 >/dev/null 2>&1 \
-          && openssl pkey -in "$$key" -noout -check >/dev/null 2>&1 \
-          && openssl x509 -in "$$cert" -noout -ext subjectAltName 2>/dev/null | grep -F "IP Address:$$TLS_SAN_IP" >/dev/null; then
-          cert_pub="$$(openssl x509 -in "$$cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
-          key_pub="$$(openssl pkey -in "$$key" -pubout -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
-          [ -n "$$cert_pub" ] && [ "$$cert_pub" = "$$key_pub" ] && valid=true
-        fi
-        if [ "$$valid" != true ]; then
-          echo '[tls] generating a new atomic self-signed development certificate'
-          rm -f "$$cert.tmp" "$$key.tmp"
-          openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 825 \
-            -subj '/CN=red.local' \
-            -addext "subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1,IP:$$TLS_SAN_IP" \
-            -keyout "$$key.tmp" \
-            -out "$$cert.tmp"
-          openssl x509 -in "$$cert.tmp" -noout >/dev/null
-          openssl pkey -in "$$key.tmp" -noout -check >/dev/null
-          mv -f "$$key.tmp" "$$key"
-          mv -f "$$cert.tmp" "$$cert"
-        else
-          echo '[tls] existing certificate and private key passed validation'
-        fi
-        chmod 600 "$$key"
-        chmod 644 "$$cert"
     volumes:
       - red-certs:/etc/ssl/red
       - certbot-www:/var/www/certbot

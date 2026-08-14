@@ -1,5 +1,11 @@
 package com.red.sovereign.calls
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -43,6 +49,10 @@ import org.webrtc.VideoTrack
 fun YounesConferenceOverlay() {
     val state = ConferenceRuntime.state
     if (state is ConferenceUiState.Idle) return
+    if (state is ConferenceUiState.Incoming) {
+        ConferenceInviteSheet(state)
+        return
+    }
 
     val context = LocalContext.current
     val participants = ConferenceRuntime.participants
@@ -114,35 +124,28 @@ fun YounesConferenceOverlay() {
                             )
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Layout Switcher (Grid vs Speaker Focus)
-                            IconButton(
-                                onClick = { isSpeakerFocusMode = !isSpeakerFocusMode },
-                                modifier = Modifier.size(36.dp).background(if (isSpeakerFocusMode) Color(0xFFF5C842) else Color.White.copy(alpha = 0.15f), CircleShape)
-                            ) {
-                                Icon(if (isSpeakerFocusMode) Icons.Default.Person else Icons.Default.GridView, contentDescription = "تغيير العرض", tint = if (isSpeakerFocusMode) Color.Black else Color.White, modifier = Modifier.size(18.dp))
-                            }
-
-                            // Copy Link Button
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = {
-                                    if (activeRoomId.isNotBlank()) {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("younes://space/$activeRoomId"))
-                                        android.widget.Toast.makeText(context, "تم نسخ رابط المساحة 🔗", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.size(36.dp).background(Color.White.copy(alpha = 0.15f), CircleShape)
+                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activeRoomId))
+                                    android.widget.Toast.makeText(context, "تم نسخ معرف الغرفة", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = "مشاركة الرابط", tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Share, contentDescription = "مشاركة المعرف", tint = Color.White)
                             }
-
-                            // Network Health Indicator
-                            val stats = ConferenceRuntime.networkStats
-                            QualityIndicator(stats)
+                            if (ConferenceRuntime.participants.any { it.raisedHand }) {
+                                IconButton(
+                                    onClick = { showRaisedHandsSheet = true }
+                                ) {
+                                    BadgedBox(badge = { Badge { Text(ConferenceRuntime.participants.count { it.raisedHand }.toString()) } }) {
+                                        Icon(Icons.Default.Handshake, contentDescription = "الأيدي المرفوعة", tint = Color(0xFFF5C842))
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    // Pinned Message Banner (if available)
+                    // Pinned Note in Meeting/Space
                     if (ConferenceRuntime.pinnedMessage.isNotBlank()) {
                         Box(
                             modifier = Modifier
@@ -175,6 +178,17 @@ fun YounesConferenceOverlay() {
                             val speakers = participants.filter { it.role in setOf("HOST", "CO_HOST", "SPEAKER") || it.isHost }
                             val listeners = participants.filter { !speakers.contains(it) }
 
+                            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                            val pulseScale by infiniteTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.08f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(durationMillis = 750, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "pulseScale"
+                            )
+
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(3),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -183,16 +197,39 @@ fun YounesConferenceOverlay() {
                             ) {
                                 // Local User Stage Card
                                 item {
+                                    val isLocalSpeaking = ConferenceRuntime.isSpeaker && !ConferenceRuntime.isMuted
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Box(
                                             modifier = Modifier
-                                                .size(72.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF1E293B))
-                                                .border(2.dp, if (!ConferenceRuntime.isMuted) Color(0xFF00C98C) else Color.Transparent, CircleShape),
+                                                .size(76.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("أنت", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            if (isLocalSpeaking) {
+                                                Box(
+                                                    Modifier
+                                                        .size(76.dp * pulseScale)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0x3300C98C))
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(70.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        androidx.compose.ui.graphics.Brush.radialGradient(
+                                                            listOf(Color(0xFF1E3A5F), Color(0xFF0F172A))
+                                                        )
+                                                    )
+                                                    .border(
+                                                        2.dp,
+                                                        if (isLocalSpeaking) Color(0xFF00C98C) else Color(0x33FFFFFF),
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("أنت", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                         Text("أنت (${if (ConferenceRuntime.isSpeaker) "متحدث" else "مستمع"})", color = Color.White, fontSize = 12.sp)
                                     }
@@ -200,18 +237,41 @@ fun YounesConferenceOverlay() {
 
                                 // Remote Speakers
                                 items(speakers) { speaker ->
+                                    val isSpeaking = speaker.isSpeaking
                                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Box(
                                             modifier = Modifier
-                                                .size(72.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF1E293B))
-                                                .border(2.dp, if (speaker.isSpeaking) Color(0xFF00C98C) else Color.Transparent, CircleShape),
+                                                .size(76.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text(speaker.userId.take(2).uppercase(), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            if (isSpeaking) {
+                                                Box(
+                                                    Modifier
+                                                        .size(76.dp * pulseScale)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0x3300C98C))
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(70.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        androidx.compose.ui.graphics.Brush.radialGradient(
+                                                            listOf(Color(0xFF1E293B), Color(0xFF090D16))
+                                                        )
+                                                    )
+                                                    .border(
+                                                        2.dp,
+                                                        if (isSpeaking) Color(0xFF00C98C) else if (speaker.isHost) Color(0xFFF5C842) else Color(0x33FFFFFF),
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(speaker.userId.take(2).uppercase(), color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
-                                        Text(speaker.userId.take(10), color = Color.White, fontSize = 12.sp)
+                                        Text(speaker.userId.take(10), color = if (speaker.isHost) Color(0xFFF5C842) else Color.White, fontSize = 12.sp, fontWeight = if (speaker.isHost) FontWeight.Bold else FontWeight.Normal)
                                     }
                                 }
                             }
@@ -336,13 +396,15 @@ fun YounesConferenceOverlay() {
                         }
                     }
 
-                    IconButton(
-                        onClick = { ConferenceService.action(context, ConferenceService.ACTION_TOGGLE_VIDEO) },
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(if (!ConferenceRuntime.isVideoEnabled) Color.White.copy(alpha = 0.2f) else Color(0xFF00C98C), CircleShape)
-                    ) {
-                        Icon(if (!ConferenceRuntime.isVideoEnabled) Icons.Default.VideocamOff else Icons.Default.Videocam, contentDescription = "الكاميرا", tint = Color.White)
+                    if (isVideoMode) {
+                        IconButton(
+                            onClick = { ConferenceService.action(context, ConferenceService.ACTION_TOGGLE_VIDEO) },
+                            modifier = Modifier
+                                .size(52.dp)
+                                .background(if (!ConferenceRuntime.isVideoEnabled) Color.White.copy(alpha = 0.2f) else Color(0xFF00C98C), CircleShape)
+                        ) {
+                            Icon(if (!ConferenceRuntime.isVideoEnabled) Icons.Default.VideocamOff else Icons.Default.Videocam, contentDescription = "الكاميرا", tint = Color.White)
+                        }
                     }
 
                     IconButton(
@@ -351,7 +413,7 @@ fun YounesConferenceOverlay() {
                             .size(60.dp)
                             .background(Color.Red, CircleShape)
                     ) {
-                        Icon(Icons.Default.CallEnd, contentDescription = "مغادرة", tint = Color.White)
+                        Icon(Icons.Filled.CallEnd, contentDescription = "مغادرة", tint = Color.White)
                     }
                 }
             }
@@ -389,6 +451,52 @@ fun YounesConferenceOverlay() {
                 TextButton(onClick = { showInCallChat = false }) { Text("إغلاق") }
             }
         )
+    }
+}
+
+@Composable
+private fun ConferenceInviteSheet(state: ConferenceUiState.Incoming) {
+    val context = LocalContext.current
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(0xFF071018))
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(24.dp)
+        ) {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (state.video) "دعوة مؤتمر فيديو" else "دعوة مساحة صوتية",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "من ${state.inviter.ifBlank { "مجموعة يونس" }}",
+                        color = Color.White.copy(0.7f),
+                        fontSize = 15.sp
+                    )
+                    Text("انضم عندما تريد — لا رنين على كل الأعضاء", color = Color.Gray, fontSize = 13.sp)
+                }
+                PulseAvatar(letter = state.inviter, pulsing = false)
+                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    EndCallButton("لاحقاً") { ConferenceService.leave(context) }
+                    AcceptCallButton("انضمام") {
+                        ConferenceService.join(context, state.roomId, state.userId, state.video, asHost = false)
+                    }
+                }
+            }
+        }
     }
 }
 

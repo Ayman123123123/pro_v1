@@ -8,13 +8,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
-    private val api = AuthApi(application)
+    // مهلة قصيرة على LAN: 15 ثانية كانت تُبقي شاشة «جارٍ الاتصال» بلا داعٍ.
+    private val api = AuthApi(
+        application,
+        SecureOkHttpClient.build(application, connectTimeout = 4, readTimeout = 6, writeTimeout = 4),
+    )
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
     private val pstn = PstnApi(tokens)
@@ -38,9 +44,31 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun discoverServer() = viewModelScope.launch {
         serverState = ServerState.Discovering
-        serverState = when (val result = discovery.discover()) {
+        serverState = when (val result = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)) {
             is ApiResult.Success -> ServerState.Ready(result.value)
             is ApiResult.Error -> ServerState.Error(localize(result.message), ServerEndpoint.url())
+        }
+    }
+
+    /**
+     * تعيين عنوان الخادم يدويًا.
+     *
+     * كان غياب هذا المدخل يجعل المستخدم رهينة الاكتشاف التلقائي لشبكة /24؛
+     * إن كان الخادم على شبكة فرعية أخرى أو عبر نفق (WireGuard/Tailscale) فلا
+     * سبيل لإدخال عنوانه. يعيد null عند النجاح أو رسالة خطأ عربية.
+     */
+    fun setServerUrl(value: String): String? {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)"
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            return "يجب أن يبدأ العنوان بـ http:// أو https://"
+        }
+        return try {
+            ServerEndpoint.update(getApplication(), trimmed)
+            serverState = ServerState.Ready(ServerEndpoint.url())
+            null
+        } catch (_: Exception) {
+            "عنوان غير صالح. استخدم صيغة http://IP:8088 أو https://domain"
         }
     }
 
@@ -113,7 +141,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val updated = state
                 if (updated is AuthState.Authenticated) {
                     state = updated.copy(username = trimmed)
-                    TokenStore(getApplication()).apply { if (get("username") != null) { /* تحديث اسم المستخدم المحفوظ */ } }
+                    tokens.saveUsername(trimmed)
                     done(true, "تم تحديث اسم المستخدم")
                 } else done(false, "لا يوجد حساب نشط")
             }
@@ -140,13 +168,44 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun restore() = viewModelScope.launch {
         val refresh = tokens.refreshToken
-        if (refresh == null) { state = AuthState.Welcome; return@launch }
-        when (val result = withServerDiscoveryRetry { api.refresh(refresh) }) {
+        if (refresh == null) {
+            state = AuthState.Welcome
+            discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            return@launch
+        }
+        val result = withTimeoutOrNull(RESTORE_TIMEOUT_MS) { api.refresh(refresh) }
+        when (result) {
             is ApiResult.Success -> {
                 tokens.updateTokens(result.value)
                 state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
             }
-            is ApiResult.Error -> { tokens.clearSession(); state = AuthState.Welcome }
+            is ApiResult.Error -> {
+                if (result.code == 401 || result.code == 403) tokens.clearSession()
+                state = AuthState.Welcome
+                if (result.code == null) discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            }
+            null -> {
+                state = AuthState.Welcome
+                discoverInBackground(LocalServerDiscovery.Mode.FAST)
+            }
+        }
+    }
+
+    private fun discoverInBackground(mode: LocalServerDiscovery.Mode) = viewModelScope.launch {
+        if (serverState is ServerState.Discovering) return@launch
+        serverState = ServerState.Discovering
+        val result = discovery.discover(mode)
+        if (result is ApiResult.Error && mode == LocalServerDiscovery.Mode.FAST) {
+            // الفحص السريع فشل → تصعيد تلقائي لمسح LAN الشامل قبل إظهار الخطأ.
+            val thorough = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)
+            if (thorough is ApiResult.Success) {
+                serverState = ServerState.Ready(thorough.value)
+                return@launch
+            }
+        }
+        serverState = when (result) {
+            is ApiResult.Success -> ServerState.Ready(result.value)
+            is ApiResult.Error -> ServerState.Error(localize(result.message), ServerEndpoint.url())
         }
     }
 
@@ -172,7 +231,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val first = request()
         if (first !is ApiResult.Error || first.code != null) return first
         serverState = ServerState.Discovering
-        return when (val discovered = discovery.discover()) {
+        return when (val discovered = discovery.discover(LocalServerDiscovery.Mode.FAST)) {
             is ApiResult.Success -> {
                 serverState = ServerState.Ready(discovered.value)
                 request()
@@ -193,10 +252,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "معرّف يونس أو رمز الاستعادة غير صحيح. أعد التأكد من الرموز المحفوظة."
         value.contains("RATE_LIMITED", ignoreCase = true) || value.contains("Too many attempts", ignoreCase = true) ->
             "محاولات كثيرة متكررة؛ انتظر دقيقة واحدة ثم أعد المحاولة لحماية حسابك."
-        value.contains("RED_SERVER_NOT_FOUND_ON_LAN", ignoreCase = true) ->
+        value.contains("RED_SERVER_NOT_FOUND_ON_LAN", ignoreCase = true) ||
+            value.contains("YOUNES_SERVER_NOT_FOUND", ignoreCase = true) ->
             "لم يُعثر على خادم يونس آمن في الشبكة المحلية. تأكد من اتصال الـ Wi-Fi."
         value.contains("already registered", ignoreCase = true) || value.contains("Username is taken", ignoreCase = true) ->
             "اسم المستخدم هذا محجوز بالفعل؛ يرجى اختيار اسم مستخدم آخر."
+        value.contains("USERNAME_TAKEN", ignoreCase = true) ->
+            "اسم المستخدم هذا محجوز بالفعل؛ يرجى اختيار اسم مستخدم آخر."
+        value.contains("3-32 characters", ignoreCase = true) || value.contains("3-20", ignoreCase = true) ->
+            "اسم المستخدم يجب أن يكون 3-32 حرفاً إنكليزياً ويبدأ بحرف، دون مسافات أو رموز."
         value.contains("12-128 characters", ignoreCase = true) ->
             "كلمة المرور يجب أن تكون بين 12 و128 حرفاً وتتضمن مزيجاً من الأحرف والأرقام."
         value.contains("contain the username", ignoreCase = true) ->
@@ -205,9 +269,23 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "كلمة المرور هذه شائعة وسهلة التخمين؛ يرجى اختيار كلمة مرور أكثر تعقيداً."
         value.contains("2-100 visible characters", ignoreCase = true) ->
             "الاسم الظاهر يجب أن يتكون من 2 إلى 100 حرف واضح."
+        value.contains("Account is not approved", ignoreCase = true) || value.contains("PENDING_APPROVAL", ignoreCase = true) ->
+            "حسابك قيد المراجعة من الإدارة؛ ستتمكن من الدخول بعد الموافقة."
+        value.contains("Base64", ignoreCase = true) || value.contains("deviceName", ignoreCase = true) ->
+            "تعذر إنشاء مفاتيح التشفير بشكل صحيح. أعد تشغيل التطبيق وحاول مجدداً."
+        value.contains("Device enrollment is required", ignoreCase = true) ->
+            "تعذر تجهيز بيانات الجهاز المشفرة. أعد المحاولة."
         value.contains("UNAUTHENTICATED", ignoreCase = true) ->
             "انتهت الجلسة أو غير مصرح. يرجى تسجيل الدخول مجدداً."
+        value.contains("INVALID_REQUEST", ignoreCase = true) || value.contains("MALFORMED_JSON", ignoreCase = true) || value.contains("VALIDATION_FAILED", ignoreCase = true) ->
+            "الطلب غير صالح أو ناقص البيانات. تأكد من اتصالك بالخادم الصحيح ثم أعد المحاولة."
+        value.contains("INTERNAL_ERROR", ignoreCase = true) ->
+            "حدث خطأ داخلي في الخادم. يرجى المحاولة لاحقاً أو التواصل مع الإدارة."
         else -> value.ifBlank { "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً." }
+    }
+
+    private companion object {
+        const val RESTORE_TIMEOUT_MS = 3_500L
     }
 }
 

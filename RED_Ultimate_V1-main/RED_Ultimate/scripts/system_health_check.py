@@ -17,6 +17,13 @@ import subprocess
 import socket
 from pathlib import Path
 
+# Fix UnicodeEncodeError on Windows
+if sys.stdout.encoding.lower() != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
 # ANSI Colors
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
@@ -193,7 +200,7 @@ def audit_environment():
     
     if env_file.is_file():
         print(f"  {GREEN}✓ Environment File:{RESET} Present ({env_file})")
-        content = env_file.read_text()
+        content = env_file.read_text(encoding='utf-8')
         required_vars = ["DB_PASSWORD", "MONGO_PASSWORD", "REDIS_PASSWORD", "JWT_SECRET", "TURN_SECRET"]
         missing = []
         for var in required_vars:

@@ -33,7 +33,7 @@ class CallActionContractTest {
             YounesCallService.ACTION_START_RECORDING,
             YounesCallService.ACTION_STOP
         )
-        assertEquals(18, actions.size) { "Expected 18 distinct action constants" }
+        assertEquals("Expected 18 distinct action constants", 18, actions.size)
     }
 
     @Test fun `HOLD and RESUME have different semantics`() {
@@ -59,8 +59,6 @@ class CallActionContractTest {
             LiveStreamService.ACTION_TOGGLE_VIDEO
         )
         // No overlap between conference and live actions
-        assertTrue(conferenceActions.intersect(liveActions).isEmpty()) {
-            "Conference and Live action sets must not overlap"
-        }
+        assertTrue("Conference and Live action sets must not overlap", conferenceActions.intersect(liveActions).isEmpty())
     }
 }

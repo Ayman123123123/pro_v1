@@ -1317,6 +1317,14 @@
             </intent-filter>
         </service>
 
+        <!-- RED Call Foreground Service — keeps calls alive in background -->
+        <service
+            android:name="com.red.sovereign.features.calls.service.CallForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone|camera"
+            android:stopWithTask="false" />
+
         <receiver
             android:name="androidx.media.session.MediaButtonReceiver"
             android:exported="true">

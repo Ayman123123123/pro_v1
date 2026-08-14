@@ -56,6 +56,8 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
             is ApiResult.Success -> runCatching { json.decodeFromString<List<Group>>(result.value) }
                 .onSuccess { list ->
                     state = GroupState.Ready
+                    groups.clear()
+                    groups.addAll(list)
                     repository.saveGroups(list.map { 
                         GroupEntity(it.id, it.name, it.description, it.avatarUrl, it.ownerRedId, it.members.size)
                     })
@@ -204,3 +206,4 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 sealed interface GroupState { data object Loading:GroupState; data object Saving:GroupState; data object Ready:GroupState; data class Error(val message:String):GroupState }
+

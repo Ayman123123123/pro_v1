@@ -183,21 +183,25 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
     fun refresh() = viewModelScope.launch {
         _state.update { it.copy(loading = true, error = null) }
         val query = _state.value.query
-        val streams = api.streams(query)
-        val spaces = api.spaces(query)
-        if (streams is ApiResult.Error) {
-            _state.update { it.copy(loading = false, error = streams.message) }
-            return@launch
+        val streamResult = when (val streams = api.streams(query)) {
+            is ApiResult.Success -> streams
+            is ApiResult.Error -> {
+                _state.update { it.copy(loading = false, error = streams.message) }
+                return@launch
+            }
         }
-        if (spaces is ApiResult.Error) {
-            _state.update { it.copy(loading = false, error = spaces.message) }
-            return@launch
+        val spaceResult = when (val spaces = api.spaces(query)) {
+            is ApiResult.Success -> spaces
+            is ApiResult.Error -> {
+                _state.update { it.copy(loading = false, error = spaces.message) }
+                return@launch
+            }
         }
         _state.update {
             it.copy(
                 loading = false,
-                streams = streams.value,
-                spaces = spaces.value,
+                streams = streamResult.value,
+                spaces = spaceResult.value,
                 error = null
             )
         }

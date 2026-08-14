@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { Button, ConfigProvider, Layout, Menu, Spin, theme } from 'antd';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, Tag, theme } from 'antd';
 import {
   DashboardOutlined,
   MobileOutlined,
@@ -23,9 +23,10 @@ import {
   CloudServerOutlined,
   DatabaseOutlined,
 } from '@ant-design/icons';
-import { adminLogin, adminLogout, authStore } from './api';
+import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
 import ErrorBoundary from './components/ErrorBoundary';
+import { usePolling } from './hooks/usePolling';
 import './styles.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -113,12 +114,60 @@ export default function App() {
   const [authenticated, setAuthenticated] = useState(() => authStore.isAuthenticated());
   const [currentPage, setCurrentPage] = useState<PageKey>('dashboard');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [apiUp, setApiUp] = useState(true);
+  const adminUser = authStore.user();
+  // عداد فشل متتالٍ لفحص صحة الخادم: لا نقلب «متصل» إلى «غير متصل» من طلة
+  // عابرة واحدة — فوسيط المعاينة أو انقطاع شبكة مؤقت قد يفشل دورة واحدة فقط.
+  const healthFailsRef = useRef(0);
 
   useEffect(() => {
     const onExpired = () => setAuthenticated(false);
     window.addEventListener('younes:auth-expired', onExpired);
     return () => window.removeEventListener('younes:auth-expired', onExpired);
   }, []);
+
+  const refreshShell = useCallback(async () => {
+    if (!authenticated) return;
+    try {
+      const [pending, health] = await Promise.all([
+        getPendingApprovals().catch(() => []),
+        probeBackend(3000),
+      ]);
+      setPendingCount(Array.isArray(pending) ? pending.length : 0);
+      if (health.state === 'READY' || health.state === 'LIVE') {
+        healthFailsRef.current = 0;
+        setApiUp(true);
+      } else {
+        healthFailsRef.current += 1;
+        if (healthFailsRef.current >= 2) setApiUp(false);
+      }
+    } catch {
+      healthFailsRef.current += 1;
+      if (healthFailsRef.current >= 2) setApiUp(false);
+    }
+  }, [authenticated]);
+
+  usePolling(refreshShell, authenticated ? 20000 : null);
+
+  /**
+   * 🛡️ تحقق فوري من صحة الجلسة عند فتح اللوحة.
+   *
+   * جلسة قديمة عالقة (مثلًا بعد إعادة تشغيل الخادم أو إعادة بناء قاعدة
+   * البيانات) تُبقي `authStore` ممتلئًا برمز وصول لم يعد صالحًا، فتعرض
+   * الصفحات أخطاء «انتهت الجلسة» بدل توجيه المسؤول للدخول من جديد.
+   * نداء خفيف هنا يتحقق من الصلاحية فورًا؛ إن فشل التجديد يمسح `apiFetch`
+   * الجلسة ويُطلق حدث `younes:auth-expired` فيعود المسؤول لشاشة الدخول.
+   */
+  useEffect(() => {
+    if (!authenticated) return;
+    let cancelled = false;
+    void apiFetch('/api/admin/operations/overview').then((res) => {
+      // 500/503 تعني عطل خادم لا جلسة منتهية — لا تُخرج المسؤول.
+      if (!cancelled && res.status === 401) authStore.clear();
+    });
+    return () => { cancelled = true; };
+  }, [authenticated]);
 
   const login = async (username: string, password: string) => {
     setLoginLoading(true);
@@ -173,7 +222,9 @@ export default function App() {
     children: menuItems.filter(m => m.group === group).map(m => ({
       key: m.key,
       icon: m.icon,
-      label: m.label,
+      label: m.key === 'approvals' && pendingCount > 0
+        ? <span>{m.label} <Badge count={pendingCount} size="small" color="#E8B84A" /></span>
+        : m.label,
     })),
   }));
 
@@ -220,7 +271,16 @@ export default function App() {
             <span style={{ color: '#E8B84A', fontSize: 16, fontWeight: 'bold' }}>
               {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
             </span>
-            <Button danger onClick={logout}>تسجيل الخروج</Button>
+            <Space>
+              <Tag color={apiUp ? 'green' : 'red'}>{apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}</Tag>
+              {pendingCount > 0 && (
+                <Badge count={pendingCount} color="#E8B84A">
+                  <Button size="small" onClick={() => setCurrentPage('approvals')}>موافقات</Button>
+                </Badge>
+              )}
+              {adminUser?.username && <Tag>{adminUser.username}</Tag>}
+              <Button danger onClick={logout}>تسجيل الخروج</Button>
+            </Space>
           </Header>
           <Content style={{
             margin: 16, padding: 24, background: '#07111F',

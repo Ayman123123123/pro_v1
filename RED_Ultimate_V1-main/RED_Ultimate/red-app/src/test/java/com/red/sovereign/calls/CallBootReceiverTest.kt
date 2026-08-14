@@ -17,7 +17,7 @@ class CallBootReceiverTest {
         assertTrue(CallBootReceiver.SUPPORTED_ACTIONS.contains("android.intent.action.MY_PACKAGE_REPLACED"))
     }
 
-    @Test fun `QUICKBOOT_POWERON is supported (HTC/Samsung)`() {
+    @Test fun `QUICKBOOT_POWERON is supported (HTC Samsung)`() {
         assertTrue(CallBootReceiver.SUPPORTED_ACTIONS.contains("android.intent.action.QUICKBOOT_POWERON"))
     }
 

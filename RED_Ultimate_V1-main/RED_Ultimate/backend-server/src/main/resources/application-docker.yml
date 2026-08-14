@@ -1,0 +1,10 @@
+# Activated by SPRING_PROFILES_ACTIVE=docker inside Compose.
+# Hostnames here exist only on the red-net bridge.
+spring:
+  datasource:
+    url: jdbc:postgresql://db-postgres:5432/red_sovereign
+  mongodb:
+    uri: ${SPRING_MONGODB_URI:mongodb://${MONGO_USER:red_user}:${MONGO_PASSWORD}@db-mongo:27017/red_sovereign?authSource=admin}
+  data:
+    redis:
+      host: cache-redis

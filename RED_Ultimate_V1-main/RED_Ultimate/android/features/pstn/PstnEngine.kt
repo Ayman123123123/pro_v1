@@ -12,37 +12,36 @@ import com.red.features.dinstar.YemenOperator
  * STRICT ISOLATION: No WebRTC or VoIP imports allowed here.
  */
 class PstnEngine(
-    val gateway: String,
-    val protocol: String,
-    private val dinstarViewModel: DinstarViewModel? = null
+    private val apiClient: Any? = null // Placeholder for backend API client (e.g., Retrofit interface)
 ) {
 
     companion object {
         private const val TAG = "RED.PstnEngine"
     }
 
+    /**
+     * Request the backend to prepare a PSTN connection.
+     * The client DOES NOT connect to DINSTAR directly.
+     */
     fun connectToDinstar() {
-        Log.i(TAG, "Connecting to Dinstar SIM Gateway via Asterisk SIP...")
-        dinstarViewModel?.discoverGateway()
+        Log.i(TAG, "Requesting PSTN call token from Backend (Asterisk SIP)...")
+        // apiClient.requestPstnToken()
     }
 
     /**
      * إجراء مكالمة GSM عبر Dinstar
      * @param phoneNumber الرقم اليمني
-     * @param port المنفذ المختار (إذا null، يُختار تلقائياً)
      * @return معلومات المكالمة أو null إذا فشل
      */
-    fun makeGsmCall(phoneNumber: String, port: Int? = null): GsmCallInfo? {
-        val optimalPort = port ?: dinstarViewModel?.selectOptimalPort(phoneNumber)?.index ?: 0
+    fun makeGsmCall(phoneNumber: String): GsmCallInfo? {
         val operator = YemenOperator.fromNumber(phoneNumber)
         
-        Log.i(TAG, "Initiating PSTN call to $phoneNumber via port $optimalPort (${operator.arabicName})")
+        Log.i(TAG, "Initiating PSTN call to $phoneNumber (${operator.arabicName}) via Backend")
         
-        // في الإنتاج: الطلب يذهب للباكند POST /api/pstn/dial
-        // الباكند يتعامل مع Asterisk AMI → PJSIP → DINSTAR
+        // التطبيق يطلب من الباكند: POST /api/pstn/dial
+        // الباكند هو المسؤول عن اختيار المنفذ (Port) والتواصل مع DINSTAR عبر Asterisk
         
         return GsmCallInfo(
-            slotIndex = optimalPort,
             number = phoneNumber,
             operator = operator.arabicName,
             operatorEnglish = operator.englishName,
@@ -51,7 +50,6 @@ class PstnEngine(
     }
 
     data class GsmCallInfo(
-        val slotIndex: Int,
         val number: String,
         val operator: String,
         val operatorEnglish: String,

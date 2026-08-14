@@ -7,40 +7,69 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun LuxuryChatBubble(message: String, isMe: Boolean, status: String) {
-    val gradient = if (isMe) {
-        Brush.linearGradient(listOf(Color(0xFFD32F2F), Color(0xFFB71C1C)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFF1E1E1E), Color(0xFF121212)))
-    }
+fun LuxuryChatBubble(
+    message: String,
+    isMe: Boolean,
+    time: String,
+    status: String,
+    modifier: Modifier = Modifier
+) {
+    val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val timeColor = textColor.copy(alpha = 0.7f)
+    
+    // Modern shape: smooth rounded corners, with a sharper edge indicating direction
+    val shape = RoundedCornerShape(
+        topStart = 18.dp,
+        topEnd = 18.dp,
+        bottomStart = if (isMe) 18.dp else 4.dp,
+        bottomEnd = if (isMe) 4.dp else 18.dp
+    )
 
     Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         contentAlignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Surface(
-            shape = RoundedCornerShape(
-                topStart = 20.dp, topEnd = 20.dp,
-                bottomStart = if (isMe) 20.dp else 4.dp,
-                bottomEnd = if (isMe) 4.dp else 20.dp
-            ),
-            color = Color.Transparent,
-            shadowElevation = 4.dp
+        Column(
+            modifier = Modifier
+                .clip(shape)
+                .background(bubbleColor)
+                .padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 8.dp)
+                .widthIn(max = 280.dp)
         ) {
-            Column(modifier = Modifier.background(gradient).padding(12.dp)) {
-                Text(text = message, color = Color.White, fontSize = 16.sp)
-                Row(modifier = Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                    Text("12:45 PM", fontSize = 10.sp, color = Color.White.copy(0.6f))
-                    if (isMe) {
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (status == "READ") "✓✓" else "✓", color = if (status == "READ") Color.Cyan else Color.White)
-                    }
+            Text(
+                text = message,
+                color = textColor,
+                fontSize = 16.sp,
+                lineHeight = 22.sp
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Row(
+                modifier = Modifier.align(Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = time,
+                    fontSize = 11.sp,
+                    color = timeColor
+                )
+                if (isMe) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = if (status == "READ" || status == "DELIVERED") "✓✓" else "✓",
+                        color = if (status == "READ") com.red.sovereign.ui.theme.AqyalCyanGlow else timeColor,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }

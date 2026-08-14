@@ -84,7 +84,7 @@ interface HashtagRepository : JpaRepository<Hashtag, UUID> {
     @Query("SELECT h FROM Hashtag h WHERE h.isBlocked = FALSE ORDER BY h.usageCount DESC")
     fun findPopular(): List<Hashtag>
 
-    @Query("SELECT h FROM Hashtag h WHERE h.tagName LIKE LOWER(CONCAT('%', :query, '%')) AND h.isBlocked = FALSE")
+    @Query("SELECT h FROM Hashtag h WHERE LOWER(h.tagName) LIKE :query AND h.isBlocked = FALSE")
     fun searchByTagName(@Param("query") query: String, pageable: Pageable): Page<Hashtag>
 }
 
@@ -116,5 +116,5 @@ interface StickerRepository : JpaRepository<Sticker, UUID> {
 
 interface UserStickerPackRepository : JpaRepository<UserStickerPack, UserStickerPackId> {
     fun findByUserIdOrderByInstalledAtDesc(userId: UUID): List<UserStickerPack>
-    fun findByIdUserIdAndIdPackId(userId: UUID, packId: UUID): UserStickerPack?
+    fun findByUserIdAndPackId(userId: UUID, packId: UUID): UserStickerPack?
 }

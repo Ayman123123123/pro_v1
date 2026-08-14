@@ -92,28 +92,21 @@ class MediaSecurityScanner {
     }
 
     /**
-     * يتحقق من توقيع MP4/M4A — box "ftyp" في أي مكان من أول 16 بايت
-     * MP4 boxes: 4 bytes size + 4 bytes type ("ftyp", "moov", "mdat", etc.)
+     * يتحقق من توقيع MP4/M4A — box "ftyp" ضمن أول bytesRead بايت.
+     * MP4 boxes: 4 bytes size + 4 bytes type ("ftyp", "free", "moov", "mdat", ...).
+     * قد يسبق ftyp صندوق حر (free) أو moov — لذلك نبحث عن "ftyp" في أي موضع
+     * من أول 16 بايت (حتى إصدارات fragmented/سابقة التشذير).
      */
     private fun validateMp4(header: ByteArray, bytesRead: Int): Boolean {
-        if (bytesRead < 12) return false
-        // ftyp يجب أن يكون في أول box (offset 4-7)
-        if (header[4] == 0x66.toByte() && header[5] == 0x74.toByte() &&
-            header[6] == 0x79.toByte() && header[7] == 0x70.toByte()) {
-            return true
-        }
-        // أو في box ثانوي (offset 8-11)
-        if (bytesRead >= 12 && header[8] == 0x66.toByte() && header[9] == 0x74.toByte() &&
-            header[10] == 0x79.toByte() && header[11] == 0x70.toByte()) {
-            return true
-        }
-        // fallback: box type في أي موضع ضمن أول 12 بايت (بعض الـ fragmented MP4)
-        // ByteArray.indexOf يقبل عنصراً واحداً فقط — نبحث يدوياً عن التسلسل f,t,y,p
+        if (bytesRead < 8) return false
         val f = 0x66.toByte(); val t = 0x74.toByte(); val y = 0x79.toByte(); val p = 0x70.toByte()
-        for (i in 4..8) {
-            if (i + 3 < header.size && header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
+        val last = bytesRead - 4
+        var i = 4
+        while (i <= last) {
+            if (header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
                 return true
             }
+            i++
         }
         return false
     }
@@ -129,24 +122,23 @@ class MediaSecurityScanner {
 
     /**
      * يتحقق من MP3 — إما ID3v2 tag (0x49 0x44 0x33 = "ID3")
-     * أو MPEG frame sync (0xFF 0xFB/0xF3/0xF2)
+     * أو MPEG frame sync (11 بت مزامنة: byte0 = 0xFF + أول 3 بتات من byte1).
+     * البتات التالية (version/layer) لا تُرفض إلا إن كانت محجوزة.
      */
     private fun validateMp3(header: ByteArray): Boolean {
         // ID3v2
         if (header[0] == 0x49.toByte() && header[1] == 0x44.toByte() && header[2] == 0x33.toByte()) {
             return true
         }
-        // MPEG audio frame sync: 11 bits set (0xFF) + 3 bits version + 2 bits layer
-        // Layer 3: bits 17-18 = 01 → 0xFA, 0xFB, 0xFC, 0xFD
-        // Layer 2: bits 17-18 = 10 → 0xF4, 0xF5, 0xF6, 0xF7
-        if (header.size >= 2 && header[0] == 0xFF.toByte() && header[1].toInt() and 0xE0 == 0xE0) {
+        if (header.size >= 2 && header[0] == 0xFF.toByte()) {
             val second = header[1].toInt() and 0xFF
-            // MPEG audio: bits 5,6 = layer (01=III, 10=II, 11=I)
-            val layer = (second shr 5) and 0x03
-            // bits 7,8 = version (00=2.5, 10=2, 11=1)
-            // bits 9,10 = not used
-            // Accept any valid combination
-            return layer in 1..3 && (second and 0x18) != 0x18
+            // 11 بت مزامنة: أول 3 بتات من البايت الثاني يجب أن تكون 111
+            if (second and 0xE0 != 0xE0) return false
+            // bits 5-4: layer (00 = محجوز)
+            if ((second shr 4) and 0x03 == 0) return false
+            // bits 7-6: version (01 = محجوز)
+            if ((second shr 6) and 0x03 == 1) return false
+            return true
         }
         return false
     }

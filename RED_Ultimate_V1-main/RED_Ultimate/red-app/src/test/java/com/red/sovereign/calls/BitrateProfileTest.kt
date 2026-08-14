@@ -56,10 +56,13 @@ class BitrateProfileTest {
         )
         progression.forEach { (quality, expectedBitrate) ->
             val profile = NetworkStats.recommendBitrate(quality)
-            assertEquals(expectedBitrate, profile.videoMaxBitrateKbps) {
-                "Quality $quality should give bitrate $expectedBitrate but was ${profile.videoMaxBitrateKbps}"
-            }
+            assertEquals("Quality $quality should give bitrate $expectedBitrate but was ${profile.videoMaxBitrateKbps}", expectedBitrate, profile.videoMaxBitrateKbps)
         }
+    }
+
+    @Test fun `MOS driven classify stays excellent on a clean path`() {
+        assertEquals(NetworkStats.Quality.EXCELLENT, NetworkStats.classify(40, 0.2, 2_000))
+        assertEquals(NetworkStats.Quality.POOR, NetworkStats.classify(600, 15.0, 100))
     }
 
     @Test fun `all profiles have valid scaleDown resolution`() {

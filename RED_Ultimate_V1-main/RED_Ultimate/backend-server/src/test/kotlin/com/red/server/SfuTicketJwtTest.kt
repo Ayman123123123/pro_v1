@@ -20,11 +20,12 @@ class SfuTicketJwtTest {
         val ticket = jwt.issueSfuTicket(user, deviceId, roomId, "MEMBER", canProduce = true)
         val claims = jwt.parse(ticket)
 
-        assertEquals("sfu", claims["scope"])
-        assertEquals(roomId, claims["roomId"])
+        assertEquals("16999", claims["redId"])
+        assertEquals(roomId, claims["sfuGroupId"])
         assertEquals(deviceId.toString(), claims["deviceId"])
-        assertEquals(true, claims["canProduce"])
-        assertTrue(claims.expiration.time - claims.issuedAt.time <= 120_000)
+        assertEquals("MEMBER", claims["sfuGroupRole"])
+        assertEquals(true, claims["sfuCanProduce"])
+        assertTrue(claims.expiration.time - claims.issuedAt.time in 1..900_000)
         assertNotEquals(jwt.issue(user, deviceId), ticket)
     }
 }

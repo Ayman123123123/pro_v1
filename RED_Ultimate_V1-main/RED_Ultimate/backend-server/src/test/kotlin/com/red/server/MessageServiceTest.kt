@@ -1,12 +1,16 @@
 package com.red.server
 
 import com.red.server.auth.RedIdGenerator
-
+import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.messaging.MessageService
 import com.red.sovereign.proto.RedProtos
 import com.google.protobuf.ByteString
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
+import org.springframework.data.mongodb.core.MongoTemplate
+import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
 
 /**
  * اختبارات خدمة الرسائل المشفرة - التحقق من القواعد الأساسية
@@ -14,13 +18,19 @@ import org.junit.jupiter.api.Test
 class MessageServiceTest {
 
     @Test
-    fun `message validation rejects invalid UUID`() {
-        // UUID v4 يجب أن يُرفض - فقط v7 مقبول
-        assertThrows(IllegalArgumentException::class.java) {
-            // سنختبر أن Regex يرفض UUID عادي
-            val badId = "550e8400-e29b-41d4-a716-446655440000" // v4
-            assertNotEquals(7, java.util.UUID.fromString(badId).version())
-        }
+    fun `message validation rejects non-UUIDv7 message IDs`() {
+        val service = MessageService(mock(), mock<RedisTemplate<String, String>>(), mock<UserAccountRepository>(), mock<JdbcTemplate>())
+        // UUID v4 يجب أن يُرفض - فقط v7 مقبول (validate يسري قبل أي تخزين)
+        val v4 = RedProtos.ChatMessage.newBuilder()
+            .setId("550e8400-e29b-41d4-a716-446655440000")
+            .setSenderId("10000")
+            .setReceiverId("10001")
+            .setConversationId("conv12345678")
+            .setSenderDeviceId(1)
+            .setReceiverDeviceId(1)
+            .setPayload(ByteString.copyFrom(ByteArray(8) { 1 }))
+            .build()
+        assertThrows(IllegalArgumentException::class.java) { service.processIncoming(v4) }
     }
 
     @Test

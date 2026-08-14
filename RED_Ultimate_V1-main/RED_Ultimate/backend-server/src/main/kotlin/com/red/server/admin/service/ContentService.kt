@@ -3,6 +3,7 @@ package com.red.server.admin.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
+import com.red.server.auth.repository.SqlLike
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
@@ -227,7 +228,7 @@ class ContentService(
         hashtags.findPopular().take(limit)
 
     fun searchHashtags(query: String, pageable: Pageable): Page<Hashtag> =
-        hashtags.searchByTagName(query.lowercase(), pageable)
+        hashtags.searchByTagName(SqlLike.contains(query), pageable)
 
     @Transactional
     fun blockHashtag(hashtagId: UUID, reason: String, adminId: UUID) {
@@ -368,7 +369,7 @@ class ContentService(
     fun installStickerPack(userId: UUID, packId: UUID): UserStickerPack {
         require(stickerPacks.existsById(packId)) { "STICKER_PACK_NOT_FOUND" }
         // إن كان مثبّتاً مسبقاً نُرجعه دون تكرار
-        userStickerPacks.findByIdUserIdAndIdPackId(userId, packId)?.let { return it }
+        userStickerPacks.findByUserIdAndPackId(userId, packId)?.let { return it }
         val installed = UserStickerPack(userId = userId, packId = packId, installedAt = Instant.now())
         return userStickerPacks.save(installed)
     }
@@ -376,7 +377,7 @@ class ContentService(
     /** يُلغي تثبيت حزمة. */
     @Transactional
     fun uninstallStickerPack(userId: UUID, packId: UUID): Boolean {
-        val existing = userStickerPacks.findByIdUserIdAndIdPackId(userId, packId) ?: return false
+        val existing = userStickerPacks.findByUserIdAndPackId(userId, packId) ?: return false
         userStickerPacks.delete(existing)
         return true
     }

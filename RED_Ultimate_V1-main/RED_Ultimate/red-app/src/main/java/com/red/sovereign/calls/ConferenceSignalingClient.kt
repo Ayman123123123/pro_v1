@@ -70,7 +70,8 @@ class ConferenceSignalingClient(
         fun onDisconnected()
         fun onSignal(signal: ConferenceSignal)
         fun onError(message: String)
-        fun onRoomState(participants: List<ConferenceParticipant>)
+        fun onRoomState(participants: List<ConferenceParticipant>, selfRole: String = "LISTENER")
+        fun onSelfRole(role: String) {}
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
     }
@@ -78,6 +79,12 @@ class ConferenceSignalingClient(
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private var socket: WebSocket? = null
+
+    fun reconnect(roomId: String) {
+        runCatching { socket?.cancel() }
+        socket = null
+        connect(roomId)
+    }
 
     fun connect(roomId: String) {
         if (socket != null) return
@@ -105,14 +112,19 @@ class ConferenceSignalingClient(
                                 val participants = signal.payload.entries
                                     .filter { it.key.startsWith("user_") }
                                     .map { entry ->
+                                        val role = signal.payload["${entry.value}_role"]
+                                            ?: if (signal.payload["host"] == entry.value) "HOST" else "LISTENER"
                                         ConferenceParticipant(
                                             userId = entry.value,
+                                            role = role,
                                             hasAudio = signal.payload["${entry.value}_audio"] == "true",
                                             hasVideo = signal.payload["${entry.value}_video"] == "true",
-                                            isHost = signal.payload["host"] == entry.value
+                                            isHost = signal.payload["host"] == entry.value || role == "HOST"
                                         )
                                     }
-                                listener.onRoomState(participants)
+                                val selfRole = signal.payload["self_role"] ?: "LISTENER"
+                                listener.onRoomState(participants, selfRole)
+                                listener.onSelfRole(selfRole)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
@@ -140,7 +152,7 @@ class ConferenceSignalingClient(
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     socket = null
-                    listener.onError(t.message ?: "CONFERENCE_SIGNALING_FAILED")
+                    listener.onDisconnected()
                 }
             }
         )
@@ -151,12 +163,15 @@ class ConferenceSignalingClient(
             ?: listener.onError("CONFERENCE_NOT_CONNECTED")
     }
 
-    fun join(roomId: String, userId: String, hasVideo: Boolean) = send(
+    fun join(roomId: String, userId: String, hasVideo: Boolean, speaker: Boolean = hasVideo) = send(
         ConferenceSignal(
             type = "JOIN",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("hasVideo" to hasVideo.toString(), "hasAudio" to "true")
+            payload = mapOf(
+                "hasVideo" to hasVideo.toString(),
+                "hasAudio" to speaker.toString()
+            )
         )
     )
 
@@ -164,21 +179,41 @@ class ConferenceSignalingClient(
         ConferenceSignal(type = "LEAVE", roomId = roomId, userId = userId)
     )
 
-    fun sendIce(roomId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String) = send(
+    fun sendIce(roomId: String, userId: String, sdpMid: String, sdpMLineIndex: Int, candidate: String, targetUserId: String = "") = send(
         ConferenceSignal(
             type = "ICE",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("sdpMid" to sdpMid, "sdpMLineIndex" to sdpMLineIndex.toString(), "candidate" to candidate)
+            payload = buildMap {
+                put("sdpMid", sdpMid)
+                put("sdpMLineIndex", sdpMLineIndex.toString())
+                put("candidate", candidate)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 
-    fun sendOffer(roomId: String, userId: String, sdp: String) = send(
+    fun sendOffer(roomId: String, userId: String, sdp: String, targetUserId: String = "") = send(
         ConferenceSignal(
             type = "OFFER",
             roomId = roomId,
             userId = userId,
-            payload = mapOf("sdp" to sdp)
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
+        )
+    )
+
+    fun sendAnswer(roomId: String, userId: String, sdp: String, targetUserId: String = "") = send(
+        ConferenceSignal(
+            type = "ANSWER",
+            roomId = roomId,
+            userId = userId,
+            payload = buildMap {
+                put("sdp", sdp)
+                if (targetUserId.isNotBlank()) put("targetUserId", targetUserId)
+            }
         )
     )
 

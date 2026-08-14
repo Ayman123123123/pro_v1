@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════
-     RELEASE / PRODUCTION — Strict TLS-only Enforcement (Legendary Hardening)
-     • No cleartext for ANY domain, including localhost — Android 9+ default + explicit
-     • Only system CAs trusted — user CAs allowed ONLY via debug-overrides (debuggable builds)
-     • Future: pin RED server cert via <pin-set> below — generate pins via: openssl x509 -in fullchain.pem -pubkey | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-     • Debug LAN cleartext is provided SOLELY via src/debug overlay — never merged into release
+     RELEASE / PRODUCTION — Network Security Policy
+     • Cleartext HTTP permitted: deployment is LAN-only over plain HTTP
+       (nginx :8088). Discovery scans raw LAN IPs, and Android Network
+       Security Config cannot match IP literals in <domain-config>, so a
+       global base-config is required for the app to reach the server.
+     • App-level hardening still enforced in code: YounesServerSignature
+       on the wire + CertificatePinner on SecureOkHttpClient when TLS is used.
+     • User CAs trusted ONLY when debuggable (debug builds). Release keeps
+       system-only trust anchors.
      ═══════════════════════════════════════════════════════════════════ -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

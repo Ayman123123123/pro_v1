@@ -6,22 +6,65 @@ function csrfToken(): string | undefined {
   return document.cookie.split('; ').find((item) => item.startsWith(`${CSRF_COOKIE}=`))?.split('=').slice(1).join('=');
 }
 
+const USER_KEY = 'red_admin_user';
+
 export const authStore = {
   access: () => sessionStorage.getItem(ACCESS_KEY),
   refresh: () => localStorage.getItem(REFRESH_KEY),
-  set(access: string, refresh?: string) {
+  user(): { id?: string; username?: string; displayName?: string; redId?: string; role?: string } | null {
+    try { return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
+  },
+  set(access: string, refresh?: string, user?: unknown) {
     sessionStorage.setItem(ACCESS_KEY, access);
-    // Browser-admin sessions intentionally have no JS-readable refresh token.
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
     else localStorage.removeItem(REFRESH_KEY);
+    if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clear() {
     sessionStorage.removeItem(ACCESS_KEY);
+    sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(REFRESH_KEY);
     window.dispatchEvent(new Event('younes:auth-expired'));
   },
-  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY) || !!csrfToken()
+  // Cookie-only (CSRF) is not a session. Production web login stores the access
+  // JWT here; the HttpOnly refresh cookie is used only during rotate().
+  isAuthenticated: () => !!sessionStorage.getItem(ACCESS_KEY)
 };
+
+export function asArray<T = any>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.content)) return obj.content as T[];
+    if (Array.isArray(obj.notifications)) return obj.notifications as T[];
+    if (Array.isArray(obj.items)) return obj.items as T[];
+  }
+  return [];
+}
+
+export function asPage<T = any>(data: unknown): PageResponse<T> {
+  const content = asArray<T>(data);
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>;
+    return {
+      content,
+      page: Number(obj.page ?? 0),
+      size: Number(obj.size ?? content.length),
+      totalElements: Number(obj.totalElements ?? content.length),
+      totalPages: Number(obj.totalPages ?? 1),
+    };
+  }
+  return { content, page: 0, size: content.length, totalElements: content.length, totalPages: 1 };
+}
+
+async function readJson(res: Response) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = (data && typeof data === 'object') ? (data as any) : {};
+    throw new Error(err.error || err.message || `HTTP ${res.status}`);
+  }
+  return data;
+}
 
 /**
  * وعد التجديد الجاري — حارس التزامن.
@@ -44,20 +87,24 @@ let rotating: Promise<boolean> | null = null;
 
 async function performRotate(): Promise<boolean> {
   const refreshToken = authStore.refresh();
-  // New admin sessions keep this secret in an HttpOnly cookie; old native/dev sessions may still carry it locally.
-  if (!refreshToken && !csrfToken()) { authStore.clear(); return false; }
+  const csrf = csrfToken();
+  // Browser admin sessions keep the refresh secret in an HttpOnly cookie
+  // (not readable here). Always attempt the cookie POST; CSRF is sent when
+  // the readable cookie is present. Local refresh is the native/dev fallback.
+  if (!refreshToken && !csrf && !authStore.access()) {
+    authStore.clear();
+    return false;
+  }
   try {
-    const csrf = csrfToken();
     const response = await fetch('/api/auth/refresh', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-RED-CSRF': csrf } : {}) },
-      // Legacy token is accepted for native/older sessions; browser admin sessions use HttpOnly cookie.
       body: JSON.stringify({ refreshToken: refreshToken || '' })
     });
     if (!response.ok) { authStore.clear(); return false; }
     const data = await response.json();
     if (!data.accessToken) { authStore.clear(); return false; }
-    authStore.set(data.accessToken, data.refreshToken || undefined);
+    authStore.set(data.accessToken, data.refreshToken || undefined, authStore.user() || undefined);
     return true;
   } catch {
     // Keep the refresh token during a temporary network outage; it may still be valid.
@@ -81,21 +128,150 @@ export async function apiFetch(path: string, init: RequestInit = {}, retry = tru
   const response = await fetch(path, { ...init, headers, credentials: init.credentials || 'same-origin' });
   if (response.status === 401 && retry) {
     const refreshed = await rotate();
-    // إعادة المحاولة برمز الوصول الجديد الذي كتبه التجديد في المخزن.
     if (refreshed) return apiFetch(path, init, false);
+    authStore.clear();
   }
   return response;
 }
 
+export function authErrorMessage(data: any, status: number): string {
+  const code = String(data?.error || data?.message || '');
+  if (status >= 500) {
+    return code || `عطل مؤقت في الخادم (HTTP ${status})`;
+  }
+  if (status === 401 || /AUTHENTICATION_REQUIRED|UNAUTHORIZED|UNAUTHENTICATED|JWT|TOKEN/i.test(code)) {
+    return 'انتهت الجلسة — أعد تسجيل الدخول';
+  }
+  return code || `HTTP ${status}`;
+}
+
 // ━━━━━━━━━━━━━━━━ 🔐 Auth ━━━━━━━━━━━━━━━━
+export type BackendProbe = {
+  state: 'CHECKING' | 'LIVE' | 'READY' | 'DOWN';
+  status?: string;
+  hint: string;
+};
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const value = JSON.parse(text);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAdminPanelPlaceholder(text: string): boolean {
+  return /^healthy\s*$/i.test(text.trim());
+}
+
+/**
+ * Login badge must not treat a dead JVM as “wrong password”, and must not
+ * treat the admin-panel container’s plaintext `/health` as the Kotlin API.
+ */
+export async function probeBackend(timeoutMs = 2500): Promise<BackendProbe> {
+  const ctrl = new AbortController();
+  const kill = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  const fetchText = async (path: string) => {
+    const response = await fetch(path, { signal: ctrl.signal, cache: 'no-store' });
+    const text = await response.text();
+    return { response, text };
+  };
+  try {
+    try {
+      const live = await fetchText('/health/live');
+      if (isAdminPanelPlaceholder(live.text)) {
+        return {
+          state: 'DOWN',
+          hint: 'طلب الصحة وصل للوحة لا للخادم. افتح http://127.0.0.1:8088/ عبر Nginx.',
+        };
+      }
+      const liveJson = parseJsonObject(live.text);
+      if (live.response.ok && liveJson && String(liveJson.probe || '').toLowerCase() === 'live') {
+        try {
+          const ready = await fetchText('/health');
+          const readyJson = parseJsonObject(ready.text);
+          const status = String(readyJson?.status || '').toUpperCase();
+          if (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED') {
+            return { state: 'READY', status, hint: 'الخادم جاهز لتسجيل الدخول' };
+          }
+        } catch {
+          /* JVM is up; databases may still be starting */
+        }
+        return { state: 'LIVE', status: 'STARTING', hint: 'الخادم يعمل وجاري تجهيز قواعد البيانات' };
+      }
+    } catch {
+      /* fall through to /health */
+    }
+
+    const ready = await fetchText('/health');
+    if (isAdminPanelPlaceholder(ready.text)) {
+      return {
+        state: 'DOWN',
+        hint: 'طلب /health وصل للوحة لا لـ Kotlin. استخدم المنفذ 8088 لا 3000.',
+      };
+    }
+    const readyJson = parseJsonObject(ready.text);
+    const status = String(readyJson?.status || '').toUpperCase();
+    if (readyJson && (status === 'UP' || status === 'HEALTHY' || status === 'DEGRADED')) {
+      return { state: 'READY', status, hint: 'الخادم جاهز لتسجيل الدخول' };
+    }
+    if (ready.response.ok && readyJson) {
+      return { state: 'LIVE', status: status || 'STARTING', hint: 'الخادم يعمل وجاري التجهيز' };
+    }
+    return {
+      state: 'DOWN',
+      hint: 'تعذر الوصول إلى /health. شغّل Docker ثم: .\\scripts\\compose-recover.ps1',
+    };
+  } catch {
+    return {
+      state: 'DOWN',
+      hint: 'الخادم غير متصل. افتح http://127.0.0.1:8088/ بعد تشغيل Docker Desktop.',
+    };
+  } finally {
+    window.clearTimeout(kill);
+  }
+}
+
+export function loginFailureMessage(status: number | undefined, body: Record<string, unknown> | null, networkFailed: boolean): string {
+  if (networkFailed) {
+    return 'الخادم غير متصل. ليست مشكلة كلمة مرور. شغّل Docker وافتح http://127.0.0.1:8088/';
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return 'Nginx لا يجد الباك اند بعد. انتظر حتى يصبح /health أخضر ثم أعد المحاولة.';
+  }
+  const code = String(body?.error || body?.message || '');
+  if (status === 401 || /INVALID_CREDENTIALS/i.test(code)) {
+    return 'بيانات الدخول مرفوضة. استخدم RED_ADMIN_USERNAME و RED_ADMIN_PASSWORD من ملف RED_Ultimate/.env';
+  }
+  if (status === 403 || status === 423) {
+    return 'الحساب موجود لكنه غير معتمد أو محظور. ادخل بحساب المسؤول من .env';
+  }
+  return code || (status ? `تعذر الدخول (HTTP ${status})` : 'تعذر تسجيل الدخول');
+}
+
 export async function adminLogin(username: string, password: string) {
-  const response = await fetch('/api/auth/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-RED-Admin-Web': '1' }, credentials: 'same-origin',
-    body: JSON.stringify({ username, password })
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.user?.role !== 'ADMIN') throw new Error(data.error || 'بيانات المسؤول غير صحيحة');
-  authStore.set(data.accessToken, data.refreshToken || undefined);
+  let response: Response;
+  try {
+    response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-RED-Admin-Web': '1' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ username, password }),
+    });
+  } catch {
+    throw new Error(loginFailureMessage(undefined, null, true));
+  }
+  const raw = await response.text();
+  const data = parseJsonObject(raw) || {};
+  if (!response.ok) {
+    throw new Error(loginFailureMessage(response.status, data, false));
+  }
+  const user = data.user as { role?: string } | undefined;
+  if (user?.role !== 'ADMIN') {
+    throw new Error('هذا الحساب ليس مسؤولاً. ادخل بـ RED_ADMIN_USERNAME من ملف .env');
+  }
+  authStore.set(String(data.accessToken || ''), typeof data.refreshToken === 'string' ? data.refreshToken : undefined, data.user);
   return data;
 }
 
@@ -117,7 +293,13 @@ export async function getNotifications(page = 0, size = 50, type?: string) {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (type) params.set('type', type);
   const res = await apiFetch(`/api/notifications?${params}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  const notifications = asArray(data);
+  return {
+    notifications,
+    unreadCount: Number(data?.unreadCount ?? 0),
+    page: Number(data?.page ?? page),
+  };
 }
 
 export async function markNotificationRead(id: string) {
@@ -174,6 +356,7 @@ export interface UserRecord {
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
   role: 'USER' | 'ADMIN';
   pstnEnabled: boolean;
+  pstnDailyLimit?: number;
   createdAt: string;
   approvedAt?: string;
   lastSeen?: number;
@@ -205,59 +388,74 @@ export async function getUsers(params: {
   if (params.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params.sortDir) searchParams.set('sortDir', params.sortDir);
   const res = await apiFetch(`/api/admin/users?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
+  return asPage<UserRecord>(data);
+}
+
+async function writeJson(res: Response) {
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
+  return data;
 }
 
 export async function getUserDetail(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}`);
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}`));
 }
 
 export async function approveUser(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/approve`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/approve`, { method: 'POST' }));
 }
 
 export async function rejectUser(userId: string, reason?: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/reject`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/reject`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function banUser(userId: string, reason: string, durationDays?: number) {
-  const res = await apiFetch(`/api/admin/users/${userId}/ban`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/ban`, {
     method: 'POST',
     body: JSON.stringify({ reason, durationDays })
-  });
-  return res.json();
+  }));
 }
 
 export async function unbanUser(userId: string) {
-  const res = await apiFetch(`/api/admin/users/${userId}/unban`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/unban`, { method: 'POST' }));
 }
 
 export async function promoteUser(userId: string, role: 'USER' | 'ADMIN') {
-  const res = await apiFetch(`/api/admin/users/${userId}/role`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/role`, {
     method: 'PUT',
     body: JSON.stringify({ role })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteUser(userId: string, hard = false) {
-  const res = await apiFetch(`/api/admin/users/${userId}${hard ? '?hard=true' : ''}`, {
+  return writeJson(await apiFetch(`/api/admin/users/${userId}${hard ? '?hard=true' : ''}`, {
     method: 'DELETE'
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
+export async function getOperationsOverview() {
+  const res = await apiFetch('/api/admin/operations/overview');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
+  if (!data || typeof data !== 'object' || !data.users) {
+    throw new Error('رد الجرد غير مكتمل من الخادم');
+  }
+  return data;
+}
+
 export async function getDashboardSummary() {
   const res = await apiFetch('/api/admin/dashboard/summary');
-  return res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || typeof data !== 'object' || Array.isArray(data) || !('analytics' in data)) {
+    return null;
+  }
+  return data;
 }
 
 export interface DashboardSummary {
@@ -299,17 +497,22 @@ export interface RealtimeMetrics {
 
 export async function getSystemAnalytics(startDate: string, endDate: string) {
   const res = await apiFetch(`/api/admin/analytics?start=${startDate}&end=${endDate}`);
-  return res.json();
+  const data = await res.json().catch(() => []);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  return [];
 }
 
 export async function getSystemHealth() {
   const res = await apiFetch('/api/admin/health');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return Array.isArray(data) ? data : [];
 }
 
 export async function getRealtimeMetrics() {
   const res = await apiFetch('/api/admin/metrics/realtime');
-  return res.json();
+  const data = await res.json().catch(() => null);
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
 }
 
 // ━━━━━━━━━━━━━━━━ 📝 Reports & Moderation ━━━━━━━━━━━━━━━━
@@ -325,31 +528,30 @@ export async function getReports(params: {
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/reports?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asPage(data);
 }
 
 export async function resolveReport(reportId: string, resolution: string, notes?: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/resolve`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/resolve`, {
     method: 'POST',
     body: JSON.stringify({ resolution, notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function dismissReport(reportId: string, notes?: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/dismiss`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/dismiss`, {
     method: 'POST',
     body: JSON.stringify({ notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function assignReport(reportId: string, adminId: string) {
-  const res = await apiFetch(`/api/admin/reports/${reportId}/assign`, {
+  return writeJson(await apiFetch(`/api/admin/reports/${reportId}/assign`, {
     method: 'POST',
     body: JSON.stringify({ adminId })
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🔒 Security & Audit ━━━━━━━━━━━━━━━━
@@ -368,7 +570,9 @@ export async function getAuditLog(params: {
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/audit?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return asPage(data);
 }
 
 export async function getSecurityAlerts(params: { page?: number; size?: number; severity?: string } = {}) {
@@ -377,7 +581,8 @@ export async function getSecurityAlerts(params: { page?: number; size?: number; 
     if (v !== undefined) searchParams.set(k, String(v));
   });
   const res = await apiFetch(`/api/admin/security/alerts?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getAdminSessions() {
@@ -398,7 +603,8 @@ export async function getAnnouncements(params: { published?: boolean } = {}) {
   const searchParams = new URLSearchParams();
   if (params.published !== undefined) searchParams.set('published', String(params.published));
   const res = await apiFetch(`/api/admin/announcements?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return asArray(data);
 }
 
 export async function createAnnouncement(data: {
@@ -411,54 +617,50 @@ export async function createAnnouncement(data: {
   showFrom?: string;
   showUntil?: string;
 }) {
-  const res = await apiFetch('/api/admin/announcements', {
+  return writeJson(await apiFetch('/api/admin/announcements', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function publishAnnouncement(id: string) {
-  const res = await apiFetch(`/api/admin/announcements/${id}/publish`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/announcements/${id}/publish`, { method: 'POST' }));
 }
 
 export async function deleteAnnouncement(id: string) {
-  const res = await apiFetch(`/api/admin/announcements/${id}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/announcements/${id}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 💾 Backups ━━━━━━━━━━━━━━━━
 export async function getBackups() {
   const res = await apiFetch('/api/admin/backups');
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function createBackup(type: 'FULL' | 'INCREMENTAL' | 'CONFIG_ONLY' | 'USER_DATA', notes?: string) {
-  const res = await apiFetch('/api/admin/backups', {
+  return writeJson(await apiFetch('/api/admin/backups', {
     method: 'POST',
     body: JSON.stringify({ type, notes })
-  });
-  return res.json();
+  }));
 }
 
 export async function restoreBackup(backupId: string, confirmCode: string) {
-  const res = await apiFetch(`/api/admin/backups/${backupId}/restore`, {
+  return writeJson(await apiFetch(`/api/admin/backups/${backupId}/restore`, {
     method: 'POST',
     body: JSON.stringify({ confirmCode })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteBackup(backupId: string) {
-  const res = await apiFetch(`/api/admin/backups/${backupId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/backups/${backupId}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🚩 Feature Flags ━━━━━━━━━━━━━━━━
 export async function getFeatureFlags() {
   const res = await apiFetch('/api/admin/feature-flags');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  return asArray(data);
 }
 
 export async function updateFeatureFlag(name: string, data: {
@@ -468,27 +670,101 @@ export async function updateFeatureFlag(name: string, data: {
   config?: Record<string, any>;
   description?: string;
 }) {
-  const res = await apiFetch(`/api/admin/feature-flags/${name}`, {
+  return writeJson(await apiFetch(`/api/admin/feature-flags/${name}`, {
     method: 'PUT',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 // ━━━━━━━━━━━━━━━━ 📡 Streaming (Server-Sent Events) ━━━━━━━━━━━━━━━━
-export function subscribeToEvents(onEvent: (event: any) => void): EventSource {
-  const access = authStore.access();
-  // EventSource doesn't support custom headers, use a query param workaround
-  const url = `/api/admin/events/stream${access ? `?access=${encodeURIComponent(access)}` : ''}`;
-  const es = new EventSource(url);
-  es.onmessage = (e) => {
-    try {
-      onEvent(JSON.parse(e.data));
-    } catch {
-      onEvent(e.data);
-    }
+/**
+ * Streaming events عبر fetch + ReadableStream بدل EventSource.
+ *
+ * EventSource لا يدعم رؤوسًا مخصصة، ووضع توكن الوصول في الاستعلام
+ * يسرّبه إلى السجلات والوسائط. الالتزام هنا هو apiFetch: التوكن في
+ * رأس Authorization فقط، والوصل مع نفس عقد المصادقة (401 ⇒ rotate).
+ */
+export function subscribeToEvents(onEvent: (event: any) => void, onState?: (s: 'OPEN' | 'CLOSED' | 'ERROR') => void): { close: () => void } {
+  const controller = new AbortController();
+  let closed = false;
+  let lineBuffer = '';
+
+  const close = () => {
+    closed = true;
+    controller.abort();
+    onState?.('CLOSED');
   };
-  return es;
+
+  (async () => {
+    const headers = new Headers();
+    headers.set('Accept', 'text/event-stream');
+    headers.set('Cache-Control', 'no-cache');
+    const access = authStore.access();
+    if (access) headers.set('Authorization', `Bearer ${access}`);
+
+    try {
+      const res = await fetch('/api/admin/events/stream', {
+        headers,
+        credentials: 'same-origin',
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) {
+        if (res.status === 401) {
+          const refreshed = await rotate();
+          if (refreshed) {
+            const headers2 = new Headers();
+            headers2.set('Accept', 'text/event-stream');
+            const access2 = authStore.access();
+            if (access2) headers2.set('Authorization', `Bearer ${access2}`);
+            const res2 = await fetch('/api/admin/events/stream', { headers: headers2, credentials: 'same-origin', signal: controller.signal });
+            if (!res2.ok || !res2.body) throw new Error(`HTTP ${res2.status}`);
+            stream(res2);
+            return;
+          }
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      stream(res);
+    } catch (err) {
+      if (!closed && !controller.signal.aborted) onState?.('ERROR');
+    }
+  })();
+
+  function stream(res: Response) {
+    onState?.('OPEN');
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done || closed) break;
+          lineBuffer += decoder.decode(value, { stream: true });
+          const lines = lineBuffer.split('\n');
+          lineBuffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) continue; // تعليقات keep-alive
+            const payload = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+            try {
+              onEvent(JSON.parse(payload));
+            } catch {
+              onEvent(payload);
+            }
+          }
+        }
+      } catch {
+        /* aborted */
+      } finally {
+        if (!closed) {
+          closed = true;
+          onState?.('CLOSED');
+        }
+      }
+    })();
+  }
+
+  return { close };
 }
 
 // ━━━━━━━━━━━━━━━━ 📊 Content Management ━━━━━━━━━━━━━━━━
@@ -562,7 +838,8 @@ export async function getPolls(params: { page?: number; size?: number; status?: 
   if (params.size !== undefined) searchParams.set('size', String(params.size));
   if (params.status) searchParams.set('status', params.status);
   const res = await apiFetch(`/api/admin/content/polls?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getActivePolls() {
@@ -583,21 +860,18 @@ export async function createPoll(data: {
   allowAddOptions?: boolean;
   endsAt?: string;
 }) {
-  const res = await apiFetch('/api/admin/content/polls', {
+  return writeJson(await apiFetch('/api/admin/content/polls', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function closePoll(pollId: string) {
-  const res = await apiFetch(`/api/admin/content/polls/${pollId}/close`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/polls/${pollId}/close`, { method: 'POST' }));
 }
 
 export async function deletePoll(pollId: string) {
-  const res = await apiFetch(`/api/admin/content/polls/${pollId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/polls/${pollId}`, { method: 'DELETE' }));
 }
 
 export async function getEvents(params: { page?: number; size?: number; status?: string } = {}) {
@@ -606,7 +880,8 @@ export async function getEvents(params: { page?: number; size?: number; status?:
   if (params.size !== undefined) searchParams.set('size', String(params.size));
   if (params.status) searchParams.set('status', params.status);
   const res = await apiFetch(`/api/admin/content/events?${searchParams}`);
-  return res.json();
+  const data = await res.json().catch(() => ({}));
+  return asPage(data);
 }
 
 export async function getUpcomingEvents() {
@@ -630,34 +905,31 @@ export async function createEvent(data: {
   maxAttendees?: number;
   rsvpEnabled?: boolean;
 }) {
-  const res = await apiFetch('/api/admin/content/events', {
+  return writeJson(await apiFetch('/api/admin/content/events', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function cancelEvent(eventId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/content/events/${eventId}/cancel`, {
+  return writeJson(await apiFetch(`/api/admin/content/events/${eventId}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function deleteEvent(eventId: string) {
-  const res = await apiFetch(`/api/admin/content/events/${eventId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/events/${eventId}`, { method: 'DELETE' }));
 }
 
 export async function getTrendingHashtags(limit = 50) {
   const res = await apiFetch(`/api/admin/content/hashtags/trending?limit=${limit}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function getPopularHashtags(limit = 50) {
   const res = await apiFetch(`/api/admin/content/hashtags/popular?limit=${limit}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function searchHashtags(query: string, page = 0, size = 20) {
@@ -666,21 +938,19 @@ export async function searchHashtags(query: string, page = 0, size = 20) {
 }
 
 export async function blockHashtag(hashtagId: string, reason: string) {
-  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/block`, {
+  return writeJson(await apiFetch(`/api/admin/content/hashtags/${hashtagId}/block`, {
     method: 'POST',
     body: JSON.stringify({ reason })
-  });
-  return res.json();
+  }));
 }
 
 export async function unblockHashtag(hashtagId: string) {
-  const res = await apiFetch(`/api/admin/content/hashtags/${hashtagId}/unblock`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/hashtags/${hashtagId}/unblock`, { method: 'POST' }));
 }
 
 export async function getStickerPacks(official = false) {
   const res = await apiFetch(`/api/admin/content/sticker-packs?official=${official}`);
-  return res.json();
+  return asArray(await res.json().catch(() => []));
 }
 
 export async function createStickerPack(data: {
@@ -691,35 +961,33 @@ export async function createStickerPack(data: {
   isFree?: boolean;
   priceCents?: number;
 }) {
-  const res = await apiFetch('/api/admin/content/sticker-packs', {
+  return writeJson(await apiFetch('/api/admin/content/sticker-packs', {
     method: 'POST',
     body: JSON.stringify(data)
-  });
-  return res.json();
+  }));
 }
 
 export async function publishStickerPack(packId: string) {
-  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}/publish`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/sticker-packs/${packId}/publish`, { method: 'POST' }));
 }
 
 export async function deleteStickerPack(packId: string) {
-  const res = await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/content/sticker-packs/${packId}`, { method: 'DELETE' }));
 }
 
 // ━━━━━━━━━━━━━━━━ 🏛️ Authority & User Intelligence (دمج القديم بالجديد — بيانات حقيقية) ━━━━━━━━━━━━━━━━
 export async function getPendingApprovals(): Promise<any[]> {
   const res = await apiFetch('/api/admin/users/pending');
-  return res.json();
+  const data = await res.json().catch(() => []);
+  if (!res.ok) throw new Error(authErrorMessage(data, res.status));
+  return asArray(data);
 }
 
 export async function approveRejectUser(userId: string, action: 'APPROVED' | 'REJECTED', reason?: string) {
-  const res = await apiFetch('/api/admin/users/action', {
+  return writeJson(await apiFetch('/api/admin/users/action', {
     method: 'POST',
     body: JSON.stringify({ userId, action, reason: reason || null }),
-  });
-  return res.json();
+  }));
 }
 
 export interface UserOverview {
@@ -739,8 +1007,7 @@ export interface UserOverview {
 }
 
 export async function getUserOverview(userId: string): Promise<UserOverview> {
-  const res = await apiFetch(`/api/admin/users/${userId}/overview`);
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/users/${userId}/overview`));
 }
 
 export async function createTemporaryPassword(userId: string, temporaryPassword: string) {
@@ -757,21 +1024,18 @@ export async function requestRemoteWipe(userId: string) {
 }
 
 export async function requestSecurityWipe(userId: string) {
-  const res = await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(userId)}`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/security/wipe?userId=${encodeURIComponent(userId)}`, { method: 'POST' }));
 }
 
 export async function activateKillSwitch(reason: string) {
-  const res = await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
-  return res.json();
+  return writeJson(await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' }));
 }
 
 export async function updatePstnAccess(userId: string, enabled: boolean, dailyLimit: number) {
-  const res = await apiFetch('/api/admin/users/pstn', {
+  return writeJson(await apiFetch('/api/admin/users/pstn', {
     method: 'PUT',
     body: JSON.stringify({ userId, enabled, dailyLimit }),
-  });
-  return res.json();
+  }));
 }
 
 export async function getPstnUsers(): Promise<any> {

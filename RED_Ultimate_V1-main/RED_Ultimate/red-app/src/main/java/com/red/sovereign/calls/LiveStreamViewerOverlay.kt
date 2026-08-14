@@ -1,9 +1,10 @@
 package com.red.sovereign.calls
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,17 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CallEnd
-import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Handshake
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,18 +22,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.red.sovereign.ui.theme.AqyalGold
+import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import kotlin.random.Random
 
+/**
+ * 🎬 بث مباشر احترافي — نمط TikTok بالكامل!
+ * مؤثرات بصرية مذهلة، تدرجات لونية، شات شفاف يتلاشى تدريجياً، وأمواج من القلوب.
+ */
 @Composable
 fun YounesLiveStreamOverlay() {
     val state = LiveStreamRuntime.state
@@ -53,6 +53,12 @@ fun YounesLiveStreamOverlay() {
     val remoteVideo = LiveStreamRuntime.remoteVideo
     var chatText by remember { mutableStateOf("") }
     var showRaisedHandsSheet by remember { mutableStateOf(false) }
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+    if (state is LiveStreamUiState.Incoming) {
+        LiveIncomingCard(state)
+        return
+    }
 
     Dialog(
         onDismissRequest = {},
@@ -65,7 +71,7 @@ fun YounesLiveStreamOverlay() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF02080C))
+                .background(Color.Black)
         ) {
             val isBroadcaster = when (state) {
                 is LiveStreamUiState.Connecting -> state.isBroadcaster
@@ -73,229 +79,188 @@ fun YounesLiveStreamOverlay() {
                 else -> false
             }
 
-            // Video Stream View
+            // ─── 1. خلفية الفيديو الرئيسية ملء الشاشة ───
             if (isBroadcaster && localVideo != null) {
-                LiveStreamVideoRenderer(
-                    track = localVideo,
-                    mirror = true,
-                    modifier = Modifier.fillMaxSize()
-                )
+                LiveStreamVideoRenderer(track = localVideo, mirror = true, modifier = Modifier.fillMaxSize())
             } else if (!isBroadcaster && remoteVideo != null) {
-                LiveStreamVideoRenderer(
-                    track = remoteVideo,
-                    mirror = false,
-                    modifier = Modifier.fillMaxSize()
-                )
+                LiveStreamVideoRenderer(track = remoteVideo, mirror = false, modifier = Modifier.fillMaxSize())
             } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        CircularProgressIndicator(color = Color(0xFFF5C842))
-                        Text("جارٍ فتح البث المباشر المباشر عبر SFU...", color = Color.White, fontSize = 14.sp)
+                Box(Modifier.fillMaxSize().background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        CircularProgressIndicator(color = Color(0xFFF91850)) // TikTok Pink
+                        Text("جارٍ معالجة البث الفائق...", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
 
-            // Gradient Overlays for readable text
+            // ─── 2. تدرجات علوية وسفلية (Vignette) لقراءة النصوص بوضوح ───
             Box(
-                modifier = Modifier
+                Modifier
                     .fillMaxWidth()
-                    .height(140.dp)
+                    .height(200.dp)
                     .align(Alignment.TopCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.8f), Color.Transparent)
-                        )
-                    )
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(0.7f), Color.Transparent)))
             )
-
             Box(
-                modifier = Modifier
+                Modifier
                     .fillMaxWidth()
-                    .height(280.dp)
+                    .height(350.dp)
                     .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
-                        )
-                    )
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f))))
             )
 
-            // Top Header: Live Badge, Viewer Count, Network Quality
+            // ─── 3. شريط المعلومات العلوي (Host & Stats) ───
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
                     .align(Alignment.TopCenter),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
+                // Host Capsule
+                val hostName = when (state) {
+                    is LiveStreamUiState.Connecting -> "يتم الاتصال..."
+                    is LiveStreamUiState.Active -> if (isBroadcaster) "أنت (البث الخاص بك)" else "البث المباشر"
+                    else -> ""
+                }
                 Row(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+                        .padding(end = 12.dp, start = 4.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Host Avatar
                     Box(
-                        modifier = Modifier
-                            .background(Color(0xFFE53935), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                        Modifier.size(36.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFFF91850), Color(0xFF25F4EE)))),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "مباشر 🔴",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text(hostName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
-
-                    val streamTitle = when (state) {
-                        is LiveStreamUiState.Connecting -> "جارٍ بدء البث..."
-                        is LiveStreamUiState.Active -> "البث السيادي"
-                        is LiveStreamUiState.Error -> "خطأ"
-                        else -> ""
+                    Column {
+                        Text(hostName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("مضيف 👑", color = Color(0xFFF5C842), fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     }
-                    Text(
-                        text = streamTitle,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Viewer Count Badge
+                // Stats Cluster (Viewers, Close)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Viewer Count (TikTok style transparent badge)
                     Box(
-                        modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                        Modifier
+                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text(
-                            text = "👁️ ${LiveStreamRuntime.viewerCount}",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            Text("${LiveStreamRuntime.viewerCount}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
 
-                    // Network Quality Health
-                    val stats = LiveStreamRuntime.networkStats
-                    val qualityColor = when (stats.quality) {
-                        NetworkStats.Quality.EXCELLENT -> Color(0xFF00C98C)
-                        NetworkStats.Quality.GOOD -> Color(0xFF2196F3)
-                        NetworkStats.Quality.FAIR -> Color(0xFFFF9800)
-                        else -> Color(0xFFE53935)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .background(qualityColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    // Close Button
+                    IconButton(
+                        onClick = { LiveStreamService.stop(context) },
+                        modifier = Modifier.size(34.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
                     ) {
-                        Text(
-                            text = "${stats.rttMs}ms • ${stats.quality.name}",
-                            color = qualityColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
             }
 
-            // Floating Reactions Column (Hearts Burst on Right)
-            Column(
+            // ─── 4. أنيميشن القلوب (Reactions floating up) ───
+            FloatingReactions(
+                reactions = LiveStreamRuntime.reactions,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = 120.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                LiveStreamRuntime.reactions.takeLast(8).forEach { reaction ->
-                    Text(
-                        text = reaction.emoji,
-                        fontSize = 28.sp,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                }
-            }
+                    .padding(bottom = 140.dp, end = 20.dp)
+                    .width(60.dp)
+                    .height(300.dp)
+            )
 
-            // Floating Live Chat Overlay (Bottom Left)
-            Column(
+            // ─── 5. الشات المباشر (TikTok Style: Fading top, rapid scrolling) ───
+            Box(
                 modifier = Modifier
                     .fillMaxWidth(0.75f)
-                    .height(200.dp)
+                    .height(240.dp)
                     .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 80.dp)
+                    .padding(start = 12.dp, bottom = 80.dp)
             ) {
                 val listState = rememberLazyListState()
                 val messages = LiveStreamRuntime.chatMessages
+
                 LaunchedEffect(messages.size) {
-                    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+                    if (messages.isNotEmpty()) {
+                        listState.animateScrollToItem(messages.size - 1)
+                    }
                 }
+
                 LazyColumn(
                     state = listState,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(messages, key = { it.id }) { msg ->
-                        Box(
-                            modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        Row(
+                            Modifier.background(Brush.horizontalGradient(listOf(Color.Black.copy(0.6f), Color.Transparent)), RoundedCornerShape(16.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "${msg.senderName}:",
-                                    color = Color(0xFFF5C842),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = msg.text,
-                                    color = Color.White,
-                                    fontSize = 12.sp
-                                )
-                            }
+                            Text(
+                                text = "${msg.senderName}: ",
+                                color = Color(0xFFC0C0C0), // Level color
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = msg.text,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp
+                            )
                         }
                     }
                 }
+
+                // Fading effect for top of chat
+                Box(
+                    Modifier.fillMaxWidth().height(40.dp).align(Alignment.TopCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(0.85f), Color.Transparent)))
+                )
             }
 
-            // Bottom Input & Interactive Action Bar
+            // ─── 6. شريط الأدوات السفلي ───
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Chat Input Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Comment Input Field
                     OutlinedTextField(
                         value = chatText,
                         onValueChange = { chatText = it },
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp),
-                        placeholder = { Text("اكتب تعليقاً حياً...", color = Color.Gray, fontSize = 13.sp) },
+                            .height(44.dp),
+                        placeholder = { Text("أضف تعليقاً...", color = Color.White.copy(0.7f), fontSize = 13.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.Black.copy(alpha = 0.6f),
-                            unfocusedContainerColor = Color.Black.copy(alpha = 0.4f),
-                            focusedBorderColor = Color(0xFFF5C842),
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                            focusedContainerColor = Color.White.copy(alpha = 0.2f),
+                            unfocusedContainerColor = Color.White.copy(alpha = 0.15f),
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
                             focusedTextColor = Color.White,
                             unfocusedTextColor = Color.White
                         ),
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(22.dp),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
                             if (chatText.isNotBlank()) {
@@ -305,153 +270,115 @@ fun YounesLiveStreamOverlay() {
                         })
                     )
 
-                    IconButton(
-                        onClick = {
-                            if (chatText.isNotBlank()) {
-                                LiveStreamService.sendChat(context, chatText.trim(), "أنا")
-                                chatText = ""
-                            }
-                        },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(Color(0xFFF5C842), CircleShape)
-                    ) {
-                        Icon(Icons.Default.Send, contentDescription = "إرسال", tint = Color.Black, modifier = Modifier.size(20.dp))
-                    }
-
-                    // Share Stream Link Button
-                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-                    val activeStreamId = when (state) {
-                        is LiveStreamUiState.Connecting -> state.streamId
-                        is LiveStreamUiState.Active -> state.streamId
-                        else -> ""
-                    }
-                    IconButton(
-                        onClick = {
-                            if (activeStreamId.isNotBlank()) {
-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("younes://livestream/$activeStreamId"))
-                                android.widget.Toast.makeText(context, "تم نسخ رابط البث المباشر 🔗", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = "مشاركة رابط البث", tint = Color.White, modifier = Modifier.size(20.dp))
-                    }
-
-                    // Broadcaster Camera Flip Button
+                    // Action Icons (Right side)
                     if (isBroadcaster) {
-                        IconButton(
-                            onClick = { LiveStreamService.action(context, LiveStreamService.ACTION_SWITCH_CAMERA) },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Cameraswitch, contentDescription = "تبديل الكاميرا", tint = Color.White, modifier = Modifier.size(20.dp))
+                        ActionIcon(Icons.Default.Cameraswitch, "تبديل الكاميرا") {
+                            LiveStreamService.action(context, LiveStreamService.ACTION_SWITCH_CAMERA)
                         }
-
-                        // Broadcaster Recording Button
-                        IconButton(
-                            onClick = {
-                                if (LiveStreamRuntime.isRecording) {
-                                    LiveStreamService.action(context, LiveStreamService.ACTION_STOP_RECORDING)
-                                } else {
-                                    LiveStreamService.action(context, LiveStreamService.ACTION_START_RECORDING)
-                                }
-                            },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(if (LiveStreamRuntime.isRecording) Color.Red else Color.White.copy(alpha = 0.2f), CircleShape)
+                        ActionIcon(
+                            icon = if (LiveStreamRuntime.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                            desc = "صوت",
+                            color = if (LiveStreamRuntime.isMuted) Color(0xFFF91850) else Color.White
                         ) {
-                            Icon(Icons.Default.FiberManualRecord, contentDescription = "تسجيل البث", tint = if (LiveStreamRuntime.isRecording) Color.White else Color.Red, modifier = Modifier.size(22.dp))
+                            LiveStreamRuntime.isMuted = !LiveStreamRuntime.isMuted // Mock toggle
                         }
                     } else {
-                        // Viewer Audio-Only Toggle Button
-                        IconButton(
-                            onClick = { LiveStreamService.action(context, LiveStreamService.ACTION_TOGGLE_AUDIO_ONLY) },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(if (LiveStreamRuntime.isAudioOnly) Color(0xFFF5C842) else Color.White.copy(alpha = 0.2f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Headset, contentDescription = "وضع الصوت فقط", tint = if (LiveStreamRuntime.isAudioOnly) Color.Black else Color.White, modifier = Modifier.size(20.dp))
+                        // Viewer tools
+                        ActionIcon(Icons.Default.CardGiftcard, "هدايا", tint = Color(0xFFFFD700)) {
+                            // TODO: Show gifts panel
+                        }
+                        ActionIcon(Icons.Default.Share, "مشاركة") {
+                            val activeStreamId = when (state) {
+                                is LiveStreamUiState.Connecting -> state.streamId
+                                is LiveStreamUiState.Active -> state.streamId
+                                else -> ""
+                            }
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("younes://livestream/$activeStreamId"))
+                            android.widget.Toast.makeText(context, "تم نسخ رابط البث", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
 
-                    // Reaction Heart Button
-                    IconButton(
-                        onClick = { LiveStreamService.sendReaction(context, "❤️") },
-                        modifier = Modifier
+                    // Floating Reaction Button (Bottom Right)
+                    Box(
+                        Modifier
                             .size(44.dp)
-                            .background(Color(0xFFE53935), CircleShape)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Color(0xFFF91850), Color(0xFFFF0055))))
+                            .clickable { LiveStreamService.sendReaction(context, listOf("❤️", "🔥", "😂", "✨").random()) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Favorite, contentDescription = "تفاعل", tint = Color.White, modifier = Modifier.size(22.dp))
-                    }
-
-                    // Raised Hand Button for Viewers
-                    if (!isBroadcaster) {
-                        IconButton(
-                            onClick = { LiveStreamService.raiseHand(context, "مشاهد") },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(Color(0xFF2196F3), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Handshake, contentDescription = "طلب انضمام للمسرح", tint = Color.White, modifier = Modifier.size(22.dp))
-                        }
-                    }
-
-                    // Broadcaster Hand Requests Manager
-                    if (isBroadcaster && LiveStreamRuntime.raisedHands.isNotEmpty()) {
-                        IconButton(
-                            onClick = { showRaisedHandsSheet = true },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(Color(0xFFFF9800), CircleShape)
-                        ) {
-                            Text("${LiveStreamRuntime.raisedHands.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    }
-
-                    // End Stream Button
-                    IconButton(
-                        onClick = { LiveStreamService.stop(context) },
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(Color.Red, CircleShape)
-                    ) {
-                        Icon(Icons.Default.CallEnd, contentDescription = "إيقاف البث", tint = Color.White, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Favorite, contentDescription = "إعجاب", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                 }
             }
         }
     }
+}
 
-    if (showRaisedHandsSheet) {
-        AlertDialog(
-            onDismissRequest = { showRaisedHandsSheet = false },
-            title = { Text("طلبات الانضمام للمسرح (${LiveStreamRuntime.raisedHands.size})") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LiveStreamRuntime.raisedHands.forEach { user ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(user.userName, fontWeight = FontWeight.SemiBold)
-                            Button(onClick = {
-                                LiveStreamService.approveCoHost(context, user.userId)
-                                showRaisedHandsSheet = false
-                            }) {
-                                Text("الموافقة")
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showRaisedHandsSheet = false }) { Text("إغلاق") }
+@Composable
+private fun ActionIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, tint: Color = Color.Unspecified, color: Color = Color.White, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(0.15f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = desc, tint = if (tint != Color.Unspecified) tint else color, modifier = Modifier.size(20.dp))
+    }
+}
+
+// ─── Floating Reactions Animation System ───
+@Composable
+private fun FloatingReactions(reactions: List<LiveStreamReaction>, modifier: Modifier = Modifier) {
+    Box(modifier = modifier) {
+        reactions.takeLast(15).forEach { reaction ->
+            key(reaction.id) {
+                FloatingHeart(reaction.emoji)
             }
+        }
+    }
+}
+
+@Composable
+private fun FloatingHeart(emoji: String) {
+    var isVisible by remember { mutableStateOf(false) }
+    
+    // Randomize path
+    val startX = remember { Random.nextInt(-20, 20).toFloat() }
+    val endX = remember { Random.nextInt(-60, 60).toFloat() }
+    
+    val translateY by animateFloatAsState(
+        targetValue = if (isVisible) -400f else 0f,
+        animationSpec = tween(durationMillis = 2500, easing = LinearOutSlowInEasing)
+    )
+    
+    val translateX by animateFloatAsState(
+        targetValue = if (isVisible) endX else startX,
+        animationSpec = tween(durationMillis = 2500, easing = FastOutLinearInEasing)
+    )
+    
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 0f else 1f,
+        animationSpec = tween(durationMillis = 2500, easing = CubicBezierEasing(0.8f, 0f, 1f, 1f))
+    )
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
+    if (alpha > 0.05f) {
+        Text(
+            text = emoji,
+            fontSize = 32.sp,
+            modifier = Modifier
+                .graphicsLayer(
+                    translationY = translateY,
+                    translationX = translateX,
+                    alpha = alpha
+                )
+                .padding(4.dp)
         )
     }
 }
@@ -480,6 +407,63 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
             renderer?.let {
                 track?.removeSink(it)
                 it.release()
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
+    val context = LocalContext.current
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(0.7f))
+                .clickable { LiveStreamService.stop(context) },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth(0.85f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFF1E293B), Color(0xFF0F172A))))
+                    .padding(24.dp)
+                    .clickable(enabled = false) {},
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(Modifier.size(70.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF25F4EE), Color(0xFFF91850)))), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.LiveTv, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "${state.broadcasterName.ifBlank { "أحد الأصدقاء" }} بدأ بثاً",
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("انضم لمشاهدة البث المباشر والتفاعل", color = Color.Gray, fontSize = 14.sp)
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { LiveStreamService.stop(context) },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.1f))
+                    ) {
+                        Text("لاحقاً", color = Color.White)
+                    }
+                    Button(
+                        onClick = { LiveStreamService.start(context, state.streamId, state.userId, false) },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850))
+                    ) {
+                        Text("مشاهدة")
+                    }
+                }
             }
         }
     }

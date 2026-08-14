@@ -25,7 +25,7 @@ class EncryptedMediaCache(context: Context) {
     fun put(key: String, plaintext: ByteArray): File {
         val file = fileFor(key)
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key)
+        cipher.init(Cipher.ENCRYPT_MODE, this.key)
         val encrypted = cipher.iv + cipher.doFinal(plaintext)
         file.writeBytes(encrypted)
         return file
@@ -38,7 +38,7 @@ class EncryptedMediaCache(context: Context) {
             val data = file.readBytes()
             require(data.size > 12)
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data.copyOfRange(0, 12)))
+            cipher.init(Cipher.DECRYPT_MODE, this.key, GCMParameterSpec(128, data.copyOfRange(0, 12)))
             cipher.doFinal(data.copyOfRange(12, data.size))
         } catch (_: Exception) { null }
     }

@@ -8,6 +8,7 @@ import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
 import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -289,7 +290,6 @@ class AdminService(
     fun getRecentBackups(): List<BackupHistory> = backups.findTop20ByOrderByStartedAtDesc()
 
     /**
-/**
      * Docker-host backup is intentionally not executed by the web process.
      * Giving Backend the Docker socket would make one application RCE equal to
      * root on the host. Operators must use scripts/backup-platform.sh instead.
@@ -321,5 +321,5 @@ class AdminService(
 /**
  * PageImpl helper
  */
-private class PageImpl<T>(content: List<T>, pageable: Pageable, total: Long) :
+private class PageImpl<T : Any>(content: List<T>, pageable: Pageable, total: Long) :
     org.springframework.data.domain.PageImpl<T>(content, pageable, total)

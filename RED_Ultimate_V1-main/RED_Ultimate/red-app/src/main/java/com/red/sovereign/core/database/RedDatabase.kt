@@ -19,7 +19,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         DraftEntity::class,
         MessageReactionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
@@ -53,7 +53,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -92,7 +92,7 @@ abstract class RedDatabase : RoomDatabase() {
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -117,5 +117,18 @@ private val REACTION_MIGRATION_1_2 = object : androidx.room.migration.Migration(
         )
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_conversationId` ON `message_reactions` (`conversationId`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_messageId` ON `message_reactions` (`messageId`)")
+    }
+}
+
+/** إضافة الفهارس المركبة لتسريع استعلامات الرسائل والمكالمات والمحادثات */
+private val INDEX_MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conversationId_createdAt` ON `local_history` (`conversationId`, `createdAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conversationId_messageType_createdAt` ON `local_history` (`conversationId`, `messageType`, `createdAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_archived_pinned_lastMessageTimestamp` ON `conversations` (`archived`, `pinned`, `lastMessageTimestamp`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_conversations_lastMessageTimestamp` ON `conversations` (`lastMessageTimestamp`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_createdAt` ON `groups` (`createdAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_call_logs_timestamp` ON `call_logs` (`timestamp`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_call_logs_peerId_timestamp` ON `call_logs` (`peerId`, `timestamp`)")
     }
 }

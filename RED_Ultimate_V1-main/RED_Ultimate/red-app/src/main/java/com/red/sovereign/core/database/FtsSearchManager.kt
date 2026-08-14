@@ -21,7 +21,7 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
                 conversationId UNINDEXED,
                 senderId UNINDEXED,
                 content,
-                tokenize='unicode61 "remove_diacritics 1"'
+                tokenize='unicode61 remove_diacritics 1'
             )
         """.trimIndent())
         db.execSQL("CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN DELETE FROM messages_fts WHERE messageId = old.id; END")
@@ -39,7 +39,7 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
         if (query.trim().length < 2) return emptyList()
         // Sanitize FTS query: escape quotes and wrap in quotes for phrase search
         val sanitized = query.trim().replace("\"", "\"\"").take(100)
-        val cursor = db.query("SELECT messageId, conversationId, senderId, content, rank FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?", arrayOf("\"$sanitized\"", limit))
+        val cursor = db.query("SELECT messageId, conversationId, senderId, content, rank FROM messages_fts WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?", arrayOf<Any>("\"$sanitized\"", limit))
         val results = mutableListOf<FtsResult>()
         while (cursor.moveToNext()) {
             results += FtsResult(

@@ -1,5 +1,6 @@
 package com.red.sovereign.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,14 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Info
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.filled.LocalPhone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -56,12 +59,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
@@ -129,7 +134,7 @@ private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onP
         SettingDestination(SettingsPage.CHATS, Icons.AutoMirrored.Filled.Chat, "الدردشات والوسائط", "التنزيل وسرعة الصوت وسلوك المحادثة", Color(0xFF5CC8FF)),
         SettingDestination(SettingsPage.NOTIFICATIONS, Icons.Default.Notifications, "الإشعارات", "الرسائل والمكالمات ومعاينة المحتوى", Color(0xFFFFB65C)),
         SettingDestination(SettingsPage.DATA, Icons.Default.Storage, "البيانات والتخزين", "${formatBytes(cacheBytes)} مستخدمة في cache", Color(0xFF8BC34A)),
-        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
+        SettingDestination(SettingsPage.CALLS, Icons.Filled.LocalPhone, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
         SettingDestination(SettingsPage.DEVICES, Icons.Default.Devices, "الأجهزة والشهادات", "الأجهزة المعتمدة وتنبيهات المفاتيح", Color(0xFFEC7FA9)),
         SettingDestination(SettingsPage.SERVER, Icons.Default.Wifi, "الخادم والشبكة", "Local-first وWireGuard وحالة نقطة الاتصال", Color(0xFF4DD0E1)),
         SettingDestination(SettingsPage.ABOUT, Icons.Default.Info, "حول يونس", "الإصدار والبنية والتراخيص", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -175,7 +180,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                 }
             }
         }
-        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
+        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Filled.LocalPhone) }
         item {
             Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)
@@ -200,7 +205,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { ToggleSetting("قفل التطبيق بالبصمة", "اطلب بصمة/نمط الجهاز لفتح يونس — مفاتيحك محمية بخطوة إضافية", vm.state.appLockEnabled, vm::setAppLockEnabled) }
     item { ToggleSetting("إخفاء آخر ظهور", "لا يرى الآخرون متى كنت متصلاً آخر مرة", vm.state.hideLastSeen, vm::setHideLastSeen) }
     item { ToggleSetting("إيصالات القراءة", "إرسال READ بعد فتح الرسالة", vm.state.readReceipts, vm::setReadReceipts) }
-    item { LockedSetting("مؤشر الكتابة", "سيُفعّل بعد ربط debounce ودورة حياة محرر الرسالة دون تسريب زائد للبيانات الوصفية") }
+    item { ToggleSetting("مؤشر الكتابة", "يرسل حدث كتابة أثناء الإدخال ويظهر اسم الكاتب عند كتابته", vm.state.typingIndicators, vm::setTypingIndicators) }
     item { LockedSetting("معاينات الروابط", "متوقفة حتى اكتمال proxy آمن وحماية SSRF وإخفاء عنوان IP") }
     item { LockedSetting("حماية لقطات الشاشة", "مفعلة إجباريًا للمحادثات والمفاتيح الحساسة") }
     item { LockedSetting("مفاتيح الهوية", "تبقى داخل Android Keystore ولا يمكن تصديرها") }
@@ -208,6 +213,51 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun AppearanceSettings(vm: SettingsViewModel) = SettingsList {
     item {
+        Text("ثيم ومظهر التطبيق", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        com.red.sovereign.ui.theme.AppThemePreset.entries.forEach { preset ->
+            val isSelected = com.red.sovereign.ui.theme.AppThemeState.currentPreset == preset
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable { com.red.sovereign.ui.theme.AppThemeState.currentPreset = preset },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Preview color swatch
+                    val dotColor = when (preset) {
+                        com.red.sovereign.ui.theme.AppThemePreset.SOVEREIGN -> Color(0xFF00C98C)
+                        com.red.sovereign.ui.theme.AppThemePreset.TELEGRAM_DARK -> Color(0xFF2AABEE)
+                        com.red.sovereign.ui.theme.AppThemePreset.WHATSAPP_DARK -> Color(0xFF00A884)
+                        com.red.sovereign.ui.theme.AppThemePreset.OLED_BLACK -> Color(0xFF00E676)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(preset.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        Text(preset.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    }
+                    if (isSelected) {
+                        Icon(Icons.Default.Check, "مفعل", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+    item {
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("حجم الخط · ${(vm.state.fontScale * 100).toInt()}%", fontWeight = FontWeight.SemiBold)
         Slider(value = vm.state.fontScale, onValueChange = vm::setFontScale, valueRange = .85f..1.30f, steps = 8)
     }
@@ -230,7 +280,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun NotificationSettings(vm: SettingsViewModel) = SettingsList {
     item { ToggleSetting("إشعارات الرسائل", "تنبيه عند وصول رسالة مشفرة", vm.state.messageNotifications, vm::setMessageNotifications) }
-    item { LockedSetting("إشعارات المكالمات", "ستُفعّل مع خدمة المكالمات الواردة وFull-screen intent الموثق") }
+    item { ToggleSetting("إشعارات المكالمات", "تنبيه عند استقبال مكالمة صوتية أو فيديو", vm.state.callNotifications, vm::setCallNotifications) }
     item { ToggleSetting("إظهار محتوى الرسالة", "غير موصى به على شاشة القفل", vm.state.notificationPreview, vm::setNotificationPreview) }
     item { InfoCard("قنوات Android", "يمكن ضبط الصوت والاهتزاز من إعدادات نظام Android لكل قناة.", Icons.Default.Notifications) }
 }
@@ -244,8 +294,8 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
     item { LockedSetting("توفير بيانات المكالمات", "سيُربط بقيود bitrate وطبقات simulcast بعد اكتمال WebRTC Android") }
-    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
-    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
+    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Filled.LocalPhone) }
+    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Filled.LocalPhone) }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {

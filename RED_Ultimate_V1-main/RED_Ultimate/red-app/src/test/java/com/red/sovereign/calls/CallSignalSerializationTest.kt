@@ -26,6 +26,36 @@ class CallSignalSerializationTest {
         assertEquals("v=0...", decoded.payload["sdp"])
     }
 
+    @Test fun `RENEGOTIATE signal round-trips without becoming a new OFFER`() {
+        val original = CallSignal(
+            callId = "same-call",
+            targetUserId = "73066",
+            sourceUserId = "28261",
+            type = "RENEGOTIATE",
+            mode = "VOICE",
+            payload = mapOf("sdp" to "v=0-restart")
+        )
+        val decoded = json.decodeFromString(CallSignal.serializer(), json.encodeToString(CallSignal.serializer(), original))
+        assertEquals("RENEGOTIATE", decoded.type)
+        assertEquals("same-call", decoded.callId)
+        assertEquals("v=0-restart", decoded.payload["sdp"])
+    }
+
+    @Test fun `conference invite is not an OFFER`() {
+        val original = CallSignal(
+            callId = "room-1",
+            targetUserId = "73066",
+            sourceUserId = "28261",
+            type = "CONFERENCE_INVITE",
+            mode = "SPACE",
+            payload = mapOf("inviter" to "علي", "video" to "false")
+        )
+        val decoded = json.decodeFromString(CallSignal.serializer(), json.encodeToString(CallSignal.serializer(), original))
+        assertEquals("CONFERENCE_INVITE", decoded.type)
+        assertEquals("SPACE", decoded.mode)
+        assertEquals("علي", decoded.payload["inviter"])
+    }
+
     @Test fun `ICE signal carries sdpMid, sdpMLineIndex, candidate`() {
         val original = CallSignal(
             callId = "x",

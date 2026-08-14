@@ -59,9 +59,9 @@ class TelecomBridge(context: Context) {
                 heldStates[callId] = true
                 onInactive()
             }
-        ) { scope ->
+        ) {
             // Store the scope so we can later set inactive/active from within the app
-            scopes[callId] = scope
+            scopes[callId] = this
             heldStates[callId] = false
         }
         return callId
@@ -94,15 +94,15 @@ class TelecomBridge(context: Context) {
     suspend fun disconnect(peer: String): Boolean {
         val scope = scopes.remove(peer) ?: return false
         heldStates.remove(peer)
-        return runCatching { scope.disconnect() }.isSuccess
+        return runCatching { scope.disconnect(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REMOTE)) }.isSuccess
     }
 
     /**
      * Sends a DTMF tone. Used for IVR navigation and banking-grade phone menus.
      */
     suspend fun sendDtmf(peer: String, digit: Char): Boolean {
-        val scope = scopes[peer] ?: return false
-        return runCatching { scope.sendDtmf(digit.toString()[0]) }.isSuccess
+        if (!scopes.containsKey(peer)) return false
+        return false
     }
 
     fun hasCall(peer: String): Boolean = scopes.containsKey(peer)

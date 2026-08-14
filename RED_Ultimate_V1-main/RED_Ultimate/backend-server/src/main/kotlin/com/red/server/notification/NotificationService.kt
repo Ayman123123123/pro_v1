@@ -46,6 +46,7 @@ class NotificationService(
         val dataKey = NOTIF_DATA_PREFIX + id
         redis.opsForHash<String, String>().apply {
             put(dataKey, "id", id)
+            put(dataKey, "userId", userId)
             put(dataKey, "type", type)
             put(dataKey, "title", title)
             put(dataKey, "body", body)
@@ -116,7 +117,7 @@ class NotificationService(
 
     fun markAsRead(userId: String, notificationId: String) {
         val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + notificationId)
-        if (data.isNotEmpty() && data["isRead"] != "true") {
+        if (data.isNotEmpty() && data["userId"] == userId && data["isRead"] != "true") {
             redis.opsForHash<String, String>().put(NOTIF_DATA_PREFIX + notificationId, "isRead", "true")
             redis.opsForValue().decrement(UNREAD_PREFIX + userId)
         }
@@ -134,6 +135,11 @@ class NotificationService(
     }
 
     fun delete(userId: String, notificationId: String) {
+        val data = redis.opsForHash<String, String>().entries(NOTIF_DATA_PREFIX + notificationId)
+        if (data.isNotEmpty() && data["userId"] != userId) {
+            // لا يجوز للمستخدم حذف إشعار لا يملكه.
+            return
+        }
         redis.opsForList().remove(NOTIF_LIST_PREFIX + userId, 1, notificationId)
         redis.delete(NOTIF_DATA_PREFIX + notificationId)
     }

@@ -11,6 +11,9 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -64,6 +67,7 @@ val YounesAccentSoft   = Color(0xFF64B5F6)  // أزرق أفتح للحدود
 val YounesCobalt       = Color(0xFF2AABEE)  // أزرق نقي
 val YounesPurple       = Color(0xFF388E3C)  // أخضر إضافي
 val YounesRose         = Color(0xFFE53935)  // أحمر تحذيري خفيف للإنهاء والبث
+val YounesRuby         = Color(0xFFE03131)  // أحمر ياقوتي لأزرار إنهاء المكالمات
 
 // ─── ألوان الخلفية — داكنة فائقة التباين والوضوح (Telegram Dark Theme) ──────
 val YounesVoid         = Color(0xFF0E1621)  // داكن تلجرام الرئيسي — مريح وبلا تشويش
@@ -235,29 +239,94 @@ private val redHighContrastColorScheme = redColorScheme.copy(
     outline           = YounesPrimaryGlow,
 )
 
+enum class AppThemePreset(val label: String, val description: String) {
+    SOVEREIGN("يونس السيادي", "أسود ملكي مع أخضر زمردي ولمسات ذهبية"),
+    TELEGRAM_DARK("تلجرام الكحلي", "أزرق تلجرام الأنيق مع كحلي داكن"),
+    WHATSAPP_DARK("واتساب الزمردي", "أخضر واتساب الكلاسيكي المريح للعين"),
+    OLED_BLACK("أوليد فائق السواد", "سواد تام 100% لتوفير الطاقة وأقصى تباين")
+}
+
+object AppThemeState {
+    var currentPreset by androidx.compose.runtime.mutableStateOf(AppThemePreset.WHATSAPP_DARK)
+}
+
+val telegramColorScheme = redColorScheme.copy(
+    primary = Color(0xFF2AABEE),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF1E3A5F),
+    secondary = Color(0xFF64B5F6),
+    background = Color(0xFF0E1621),
+    surface = Color(0xFF17212B),
+    surfaceVariant = Color(0xFF232E3C),
+    outline = Color(0xFF2B5278)
+)
+
+val whatsAppColorScheme = redColorScheme.copy(
+    primary = Color(0xFF00A884),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF005C4B),
+    secondary = Color(0xFF25D366),
+    background = Color(0xFF0B141A),
+    surface = Color(0xFF111B21),
+    surfaceVariant = Color(0xFF202C33),
+    outline = Color(0xFF2A3942)
+)
+
+val oledColorScheme = redColorScheme.copy(
+    primary = Color(0xFF00E676),
+    onPrimary = Color.Black,
+    primaryContainer = Color(0xFF00381C),
+    secondary = Color(0xFFFFD54F),
+    background = Color(0xFF000000),
+    surface = Color(0xFF0D0D0D),
+    surfaceVariant = Color(0xFF161616),
+    outline = Color(0xFF262626)
+)
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ثيم يونس الرئيسي
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun YounesTheme(
+    preset: AppThemePreset = AppThemeState.currentPreset,
     highContrast: Boolean = false,
     content: @Composable () -> Unit
-) = MaterialTheme(
-    colorScheme = if (highContrast) redHighContrastColorScheme else redColorScheme,
-    typography  = redTypography,
-    shapes      = redShapes,
-    content     = content
-)
+) {
+    val baseScheme = when (preset) {
+        AppThemePreset.SOVEREIGN -> redColorScheme
+        AppThemePreset.TELEGRAM_DARK -> telegramColorScheme
+        AppThemePreset.WHATSAPP_DARK -> whatsAppColorScheme
+        AppThemePreset.OLED_BLACK -> oledColorScheme
+    }
+    val finalScheme = if (highContrast) baseScheme.copy(
+        onBackground = Color.White,
+        onSurface = Color.White,
+        outline = baseScheme.primary
+    ) else baseScheme
+
+    MaterialTheme(
+        colorScheme = finalScheme,
+        typography = redTypography,
+        shapes = redShapes,
+        content = content
+    )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // خلفية الشاشة الرئيسية — تدرج داكن عميق
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun SovereignBackground(content: @Composable () -> Unit) {
+    val bgBrush = when (AppThemeState.currentPreset) {
+        AppThemePreset.OLED_BLACK    -> Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF0A0A0A)))
+        AppThemePreset.WHATSAPP_DARK -> Brush.verticalGradient(listOf(Color(0xFF0B141A), Color(0xFF111B21), Color(0xFF0B141A)))
+        AppThemePreset.TELEGRAM_DARK -> Brush.verticalGradient(listOf(Color(0xFF0E1621), Color(0xFF17212B), Color(0xFF0E1621)))
+        AppThemePreset.SOVEREIGN     -> GradientBackground
+    }
     Box(
         Modifier
             .fillMaxSize()
-            .background(GradientBackground)
+            .background(bgBrush)
     ) { content() }
 }
 

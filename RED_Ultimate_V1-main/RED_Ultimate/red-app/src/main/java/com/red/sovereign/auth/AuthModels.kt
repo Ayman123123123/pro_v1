@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class DeviceEnrollmentRequest(
     val deviceName: String,
-    val platform: String = "ANDROID",
+    val platform: String,
     val registrationId: Int,
     val protocolDeviceId: Int,
     val signedPreKeyId: Int,

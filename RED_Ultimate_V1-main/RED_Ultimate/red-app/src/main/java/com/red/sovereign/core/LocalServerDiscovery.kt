@@ -5,84 +5,185 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import com.red.sovereign.BuildConfig
 import com.red.sovereign.auth.ApiResult
-import com.red.sovereign.security.SecureOkHttpClient
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.Inet4Address
 import java.net.NetworkInterface
-import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * 🧠 YOUNES Smart Server & IP Auto-Discovery Engine.
+ * اكتشاف خادم يونس على الشبكة المحلية.
  *
- * يكتشف مكان الخادم آلياً وذكياً حتى لو تغير عنوان IP أو شبكة الخادم (LAN / WAN / Wi-Fi / Dynamic IP):
- * 1. فحص كفاءة آخر عنوان معروف (Stored Last-Known Endpoint)
- * 2. فحص النطاق الافتراضي المكون (Configured Domain / URL)
- * 3. الفحص الشبكي الآلي الموازي للنطاق المحلي (/24 Subnet Parallel Scanner)
- * 4. خدمة الاكتشاف الآلي عبر mDNS / Android NsdManager (_younes._tcp.)
- * 5. فحص الخادم المباشر عبر الهوية والمعيار (/health + /api/identity/authority)
+ * العطل السابق: `SecureOkHttpClient.build(connectTimeout = 800)` يفسر الرقم **ثواني**
+ * لا ملي ثانية، ثم يُمسح النطاق /24 كاملًا (254 عنوانًا) دفعتين دفعتين مع `awaitAll`.
+ * النتيجة: شاشة «جارٍ الاتصال بالسيرفر» لعشرات الثواني أو دقائق.
+ *
+ * المسار السريع يجرب العناوين المعروفة ومنفذ الإنتاج 8088 خلال أقل من ثانيتين
+ * ويعود فور أول نجاح. لا يُقبل خادم Node على 8080.
  */
 class LocalServerDiscovery(private val context: Context) {
-    private val client: OkHttpClient = SecureOkHttpClient.build(
-        context = context,
-        connectTimeout = 800,
-        readTimeout = 1000,
-        writeTimeout = 1000
-    )
+    enum class Mode { FAST, THOROUGH }
 
-    suspend fun discover(port: Int = preferredPort()): ApiResult<String> = withContext(Dispatchers.IO) {
-        val candidates = candidateHosts().toList()
-        
-        // 1) فحص الدفعة الأولى من العناوين المرشحة بمتوازيات فائقة السرعة
-        for (batch in candidates.chunked(32)) {
-            val found = coroutineScope {
-                batch.map { host -> async(Dispatchers.IO) { verify(host, port) } }.awaitAll().firstOrNull { it != null }
-            }
-            if (found != null) {
-                ServerEndpoint.update(context, found)
-                return@withContext ApiResult.Success(200, found)
-            }
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(CONNECT_MS, TimeUnit.MILLISECONDS)
+        .readTimeout(READ_MS, TimeUnit.MILLISECONDS)
+        .writeTimeout(WRITE_MS, TimeUnit.MILLISECONDS)
+        .callTimeout(CALL_MS, TimeUnit.MILLISECONDS)
+        .retryOnConnectionFailure(false)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
+    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً — يعيد العنوان المقبول أو null. */
+    suspend fun verifyExplicit(base: String): String? = withContext(Dispatchers.IO) {
+        val normalized = base.trim().ifBlank { return@withContext null }
+        val withScheme = if (normalized.contains("://")) normalized else "http://$normalized"
+        verify(withScheme)
+    }
+
+    suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
+        val known = knownBases()
+        firstVerified(known, if (mode == Mode.FAST) FAST_BUDGET_MS else FAST_BUDGET_MS)?.let { found ->
+            ServerEndpoint.update(context, found)
+            return@withContext ApiResult.Success(200, found)
         }
 
-        // 2) إذا لم يُعثر عليه في المسح السريع، يتم تشغيل ميزة mDNS / NSD Discovery على شبكة Wi-Fi المحلية
-        val nsdEndpoint = discoverMdnsNsd(port)
-        if (nsdEndpoint != null) {
-            ServerEndpoint.update(context, nsdEndpoint)
-            return@withContext ApiResult.Success(200, nsdEndpoint)
+        if (mode == Mode.FAST) {
+            return@withContext ApiResult.Error(null, "YOUNES_SERVER_NOT_FOUND")
+        }
+
+        firstVerified(lanBases(), THOROUGH_BUDGET_MS)?.let { found ->
+            ServerEndpoint.update(context, found)
+            return@withContext ApiResult.Success(200, found)
+        }
+
+        val nsd = withTimeoutOrNull(MDNS_BUDGET_MS) { discoverMdnsNsd() }
+        if (nsd != null) {
+            ServerEndpoint.update(context, nsd)
+            return@withContext ApiResult.Success(200, nsd)
         }
 
         ApiResult.Error(null, "YOUNES_SERVER_NOT_FOUND")
     }
 
-    private fun verify(host: String, port: Int): String? = runCatching {
-        val scheme = if (port == 443 || port == 8443) "https" else "http"
-        val base = if (host.startsWith("http://") || host.startsWith("https://")) host.trimEnd('/') else "$scheme://$host:$port"
-        val health = client.newCall(Request.Builder().url("$base/health").get().build()).execute().use { response ->
-            if (!response.isSuccessful) return null
+    private fun verify(base: String): String? = runCatching {
+        val normalized = base.trimEnd('/')
+        val healthCall = client.newCall(Request.Builder().url("$normalized/health").get().build())
+        val health = healthCall.execute().use { response ->
+            // 503 مع جسم يونس يعني أن العملية حيّة والتبعيات لم تكتمل بعد.
+            if (response.code !in 200..599) return null
             response.body?.string().orEmpty()
         }
-        if (!health.contains("\"status\":\"UP\"") && !health.contains("\"status\": \"UP\"")) return null
-        if (!health.contains("1.0.0-YOUNES") && !health.contains("1.0.0-RED")) return null
+        if (!YounesServerSignature.isReadyHealth(health)) return null
 
-        val authority = client.newCall(Request.Builder().url("$base/api/identity/authority").get().build()).execute().use { response ->
-            if (!response.isSuccessful) return null
+        val authorityCall = client.newCall(Request.Builder().url("$normalized/api/identity/authority").get().build())
+        val authority = authorityCall.execute().use { response ->
+            if (!response.isSuccessful) return@use ""
             response.body?.string().orEmpty()
         }
-        if (!authority.contains("ECDSA_P256_SHA256") || !authority.contains("\"v1\"")) return null
-        base
+        if (!YounesServerSignature.isYounesServer(health, authority)) return null
+        normalized
     }.getOrNull()
 
-    private fun discoverMdnsNsd(port: Int): String? {
+    private suspend fun firstVerified(targets: Collection<String>, budgetMs: Long): String? {
+        val unique = targets.map { it.trimEnd('/') }.filter { it.startsWith("http") }.distinct()
+        if (unique.isEmpty()) return null
+        return supervisorScope {
+            val done = CompletableDeferred<String>()
+            val gate = Semaphore(MAX_PARALLEL)
+            val jobs = unique.map { target ->
+                async(Dispatchers.IO) {
+                    gate.withPermit {
+                        if (done.isCompleted) return@async
+                        val hit = verify(target) ?: return@async
+                        done.complete(hit)
+                    }
+                }
+            }
+            val winner = withTimeoutOrNull(budgetMs) { done.await() }
+            jobs.forEach { it.cancel() }
+            winner
+        }
+    }
+
+    private fun knownBases(): LinkedHashSet<String> {
+        val bases = linkedSetOf<String>()
+        val preferred = preferredPort()
+        val seeds = listOf(
+            ServerEndpoint.url(),
+            BuildConfig.RED_SERVER_URL,
+            "http://10.0.2.2:8088",
+            "http://192.168.1.50:8088",
+        )
+        seeds.forEach { seed ->
+            val host = YounesServerSignature.hostOf(seed) ?: return@forEach
+            YounesServerSignature.ports(YounesServerSignature.portOf(seed, preferred)).forEach { port ->
+                bases += YounesServerSignature.baseUrl(host, port)
+            }
+        }
+        return bases
+    }
+
+    private fun lanBases(): LinkedHashSet<String> {
+        val bases = linkedSetOf<String>()
+        val ports = YounesServerSignature.ports(preferredPort())
+        val lastKnown = YounesServerSignature.hostOf(ServerEndpoint.url())
+        val lastOctet = lastKnown?.substringAfterLast('.')?.toIntOrNull()
+
+        val interfaces = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+        interfaces.filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }.forEach { network ->
+            network.interfaceAddresses.forEach { binding ->
+                val address = binding.address as? Inet4Address ?: return@forEach
+                if (!address.isSiteLocalAddress) return@forEach
+                val bytes = address.address.map { it.toInt() and 0xff }
+                val prefix = "${bytes[0]}.${bytes[1]}.${bytes[2]}"
+                val self = bytes[3]
+                val octets = linkedSetOf(1, 2, 50, 100, 101, 254, self)
+                lastOctet?.let(octets::add)
+                for (delta in -3..3) {
+                    val value = self + delta
+                    if (value in 1..254) octets += value
+                }
+                octets.forEach { last ->
+                    ports.forEach { port -> bases += YounesServerSignature.baseUrl("$prefix.$last", port) }
+                }
+            }
+        }
+
+        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف — مفيد عند وجود توجيه بين الشبكتين.
+        val knownHost = YounesServerSignature.hostOf(BuildConfig.RED_SERVER_URL)
+        if (knownHost != null && knownHost != lastKnown) {
+            val parts = knownHost.split('.').map { it.toIntOrNull() }
+            if (parts.size == 4 && parts.take(3).none { it == null } && parts[3] != null) {
+                val prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
+                val hostOctet = parts[3]!!
+                val octets = linkedSetOf(hostOctet, 1, 2, 50, 100, 101, 254)
+                for (delta in -3..3) {
+                    val value = hostOctet + delta
+                    if (value in 1..254) octets += value
+                }
+                octets.forEach { last ->
+                    ports.forEach { port -> bases += YounesServerSignature.baseUrl("$prefix.$last", port) }
+                }
+            }
+        }
+        return bases
+    }
+
+    private fun discoverMdnsNsd(): String? {
         val nsdManager = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return null
         val latch = CountDownLatch(1)
         var discoveredHost: String? = null
+        val preferred = preferredPort()
 
         val listener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) { latch.countDown() }
@@ -91,54 +192,42 @@ class LocalServerDiscovery(private val context: Context) {
             override fun onDiscoveryStopped(serviceType: String?) {}
             override fun onServiceLost(serviceInfo: NsdServiceInfo?) {}
             override fun onServiceFound(serviceInfo: NsdServiceInfo?) {
-                if (serviceInfo?.serviceType?.contains("younes") == true || serviceInfo?.serviceType?.contains("red") == true) {
-                    nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
-                        override fun onResolveFailed(serviceInfo: NsdServiceInfo?, errorCode: Int) { latch.countDown() }
-                        override fun onServiceResolved(resolvedInfo: NsdServiceInfo?) {
-                            val host = resolvedInfo?.host?.hostAddress
-                            if (!host.isNullOrBlank()) {
-                                discoveredHost = verify(host, resolvedInfo.port)
-                            }
-                            latch.countDown()
+                val type = serviceInfo?.serviceType.orEmpty()
+                if (!type.contains("younes") && !type.contains("red")) return
+                nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo?, errorCode: Int) { latch.countDown() }
+                    override fun onServiceResolved(resolvedInfo: NsdServiceInfo?) {
+                        val host = resolvedInfo?.host?.hostAddress
+                        val port = resolvedInfo?.port?.takeIf { it > 0 } ?: preferred
+                        if (!host.isNullOrBlank()) {
+                            discoveredHost = verify(YounesServerSignature.baseUrl(host, port))
                         }
-                    })
-                }
+                        latch.countDown()
+                    }
+                })
             }
         }
 
         try {
             nsdManager.discoverServices("_younes._tcp.", NsdManager.PROTOCOL_DNS_SD, listener)
-            latch.await(2, TimeUnit.SECONDS)
-            nsdManager.stopDiscovery(listener)
+            latch.await(MDNS_BUDGET_MS, TimeUnit.MILLISECONDS)
+nsdManager.stopServiceDiscovery(listener)
         } catch (_: Exception) {
-            runCatching { nsdManager.stopDiscovery(listener) }
+            runCatching { nsdManager.stopServiceDiscovery(listener) }
         }
-
         return discoveredHost
     }
 
-    private fun candidateHosts(): LinkedHashSet<String> {
-        val result = linkedSetOf<String>()
-        // إضافة آخر عنوان ناجح معروف
-        runCatching { URI(ServerEndpoint.url()).host }.getOrNull()?.let(result::add)
-        result.add(BuildConfig.RED_SERVER_URL)
-        result.add("10.0.2.2") // Android Emulator Host Loopback
-        result.add("192.168.1.1")
-        result.add("192.168.0.1")
+    private fun preferredPort(): Int = YounesServerSignature.portOf(ServerEndpoint.url(), 8080)
 
-        // مسح عناوين النطاق المحلي /24 لكل واجهات الشبكة
-        val interfaces = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-        interfaces.filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }.forEach { network ->
-            network.interfaceAddresses.forEach { binding ->
-                val address = binding.address as? Inet4Address ?: return@forEach
-                if (!address.isSiteLocalAddress) return@forEach
-                val bytes = address.address.map { it.toInt() and 0xff }
-                for (last in 1..254) result += "${bytes[0]}.${bytes[1]}.${bytes[2]}.$last"
-            }
-        }
-        result.remove("127.0.0.1")
-        return result
+    private companion object {
+        const val CONNECT_MS = 250L
+        const val READ_MS = 600L
+        const val WRITE_MS = 400L
+        const val CALL_MS = 800L
+        const val FAST_BUDGET_MS = 1_800L
+        const val THOROUGH_BUDGET_MS = 3_200L
+        const val MDNS_BUDGET_MS = 1_200L
+        const val MAX_PARALLEL = 16
     }
-
-    private fun preferredPort(): Int = runCatching { URI(ServerEndpoint.url()).port.takeIf { it > 0 } ?: 8088 }.getOrDefault(8088)
 }

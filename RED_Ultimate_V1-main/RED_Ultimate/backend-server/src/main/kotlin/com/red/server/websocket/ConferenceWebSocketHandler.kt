@@ -25,7 +25,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
     private val roomHosts = ConcurrentHashMap<String, String>() // roomId -> host userId
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "roomId is required" }
@@ -93,13 +93,20 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
 
     private fun relay(session: WebSocketSession, signal: IncomingConferenceSignal) {
         val room = rooms[signal.roomId] ?: return
+        val source = session.attributes["userId"] as? String ?: ""
+        val targetId = signal.payload["targetUserId"]?.toString()?.takeIf { it.isNotBlank() }
         val outbound = objectMapper.writeValueAsString(mapOf(
             "type" to signal.type.uppercase(),
             "roomId" to signal.roomId,
-            "userId" to (session.attributes["userId"] as? String ?: ""),
+            "userId" to source,
             "payload" to signal.payload
         ))
-        room.filter { it.id != session.id && it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
+        val recipients = if (targetId != null) {
+            room.filter { it.isOpen && (it.attributes["userId"] as? String) == targetId }
+        } else {
+            room.filter { it.id != session.id && it.isOpen }
+        }
+        recipients.forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
     }
 
     private fun handleStageManagement(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {

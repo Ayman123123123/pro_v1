@@ -50,7 +50,10 @@ console.log('\n🔗 تطابق نظراء PJSIP بين الأسطول وAsterisk
 const login = await fetch(`${BASE}/api/auth/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username: 'younes_sovereign', password: 'RedSovereign#2026' }),
+  body: JSON.stringify({
+    username: process.env.RED_DEV_ADMIN_USERNAME || 'younes_sovereign',
+    password: process.env.RED_DEV_ADMIN_PASSWORD || 'SovereignAdmin1',
+  }),
 });
 const token = (await login.json()).accessToken;
 if (!token) { console.error('❌ تعذّر تسجيل الدخول — هل خادم التطوير يعمل؟'); process.exit(1); }

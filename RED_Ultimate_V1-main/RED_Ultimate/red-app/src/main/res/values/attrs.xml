@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes for YOUNES -->
+    <attr name="buttonStyleHighlight" format="reference" />
+    <attr name="textInputStyle" format="reference" />
+
+    <!-- Material 3 Bridge Attributes -->
+    <attr name="colorOnSurface" format="color" />
+    <attr name="colorPrimaryContainer" format="color" />
+    <attr name="colorOnPrimaryContainer" format="color" />
+    <attr name="colorSecondaryContainer" format="color" />
+    <attr name="colorOnSecondaryContainer" format="color" />
+    <attr name="colorSurfaceVariant" format="color" />
+    <attr name="colorOnSurfaceVariant" format="color" />
+    <attr name="colorOutline" format="color" />
+</resources>

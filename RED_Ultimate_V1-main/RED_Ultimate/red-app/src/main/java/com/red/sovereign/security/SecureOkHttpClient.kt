@@ -11,6 +11,10 @@ object SecureOkHttpClient {
     @Volatile
     private var defaultClient: OkHttpClient? = null
 
+    /**
+     * Timeouts are **seconds**. Passing 800 here is 13 minutes, not 800ms.
+     * LAN probes must build their own client with `TimeUnit.MILLISECONDS`.
+     */
     fun build(
         context: Context,
         connectTimeout: Long = 15,

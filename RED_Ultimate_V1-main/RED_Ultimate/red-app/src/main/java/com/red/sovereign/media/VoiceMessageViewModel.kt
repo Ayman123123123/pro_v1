@@ -64,6 +64,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     private var recordingFile: File? = null
     private var ticker: Job? = null
     private var pendingTarget: Triple<String, String, String>? = null
+    private var pendingGroup: com.red.sovereign.groups.Group? = null
     private var recordingPaused = false
     private var startTimeMs: Long = 0L
     private var pausedDurationMs: Long = 0L
@@ -94,14 +95,22 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     // Whether recording is silent
     var isSilent by mutableStateOf(false); private set
 
-    fun setQualityMode(mode: VoiceQuality) {
-        if (state is VoiceMessageState.Recording) return
-        qualityMode = mode
-    }
-
     fun start(targetRedId: String, conversationId: String) {
         if (recorder != null || state is VoiceMessageState.Sending) return
         pendingTarget = Triple(targetRedId, conversationId, "VOICE")
+        pendingGroup = null
+        startRecorder()
+    }
+
+    /** يبدأ تسجيلاً موجهاً لمجموعة (مسار تشفير المجموعة عند الإرسال). */
+    fun startForGroup(group: com.red.sovereign.groups.Group) {
+        if (recorder != null || state is VoiceMessageState.Sending) return
+        pendingTarget = null
+        pendingGroup = group
+        startRecorder()
+    }
+
+    private fun startRecorder() {
         val file = File.createTempFile("voice-", ".m4a", getApplication<Application>().cacheDir)
         val instance = runCatching {
             createRecorder().apply {
@@ -117,7 +126,9 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 start()
             }
         }.getOrElse {
-            file.delete(); pendingTarget = null; state = VoiceMessageState.Error(it.message ?: "VOICE_RECORDER_START_FAILED"); return
+            file.delete(); pendingTarget = null; pendingGroup = null
+            state = VoiceMessageState.Error("VOICE_RECORDER_START_FAILED: ${it.message.orEmpty()}")
+            return
         }
         recordingFile = file
         recorder = instance
@@ -222,6 +233,10 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         if (duration < 1 || file.length() <= 0) {
             file.delete()
             state = VoiceMessageState.Error("VOICE_TOO_SHORT")
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2500)
+                if (state is VoiceMessageState.Error) state = VoiceMessageState.Idle
+            }
             return
         }
         if (targetRedId != null && conversationId != null) {
@@ -236,11 +251,20 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
 
     fun stopAndSend(targetRedId: String, conversationId: String) {
         pendingTarget = Triple(targetRedId, conversationId, "VOICE")
+        pendingGroup = null
+        stopAndSendPendingTarget()
+    }
+
+    /** يوقف التسجيل ويرسله إلى المجموعة عبر مسار تشفير المجموعة (Sender Keys). */
+    fun stopAndSendToGroup(group: com.red.sovereign.groups.Group) {
+        pendingTarget = null
+        pendingGroup = group
         stopAndSendPendingTarget()
     }
 
     private fun stopAndSendPendingTarget() {
         val target = pendingTarget
+        val group = pendingGroup
         val duration: Int
         val recordedWaveform: List<Int>
         val file: File
@@ -256,24 +280,57 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             releaseRecorder(deleteFile = false)
         }
 
-        if (duration < 1 || file.length() <= 0) { file.delete(); state = VoiceMessageState.Error("VOICE_TOO_SHORT"); return }
+        if (duration < 1 || file.length() <= 0) {
+            file.delete()
+            state = VoiceMessageState.Error("VOICE_TOO_SHORT")
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2500)
+                if (state is VoiceMessageState.Error) state = VoiceMessageState.Idle
+            }
+            return
+        }
+        val grantTarget = target?.first ?: group?.id ?: run {
+            file.delete()
+            state = VoiceMessageState.Error("VOICE_NO_TARGET")
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2500)
+                if (state is VoiceMessageState.Error) state = VoiceMessageState.Idle
+            }
+            return
+        }
         viewModelScope.launch {
             state = VoiceMessageState.Sending
-            when (val result = encryptUploadAndGrant(file, target?.first ?: return@launch, duration, recordedWaveform)) {
-                is ApiResult.Error -> state = VoiceMessageState.Error(result.message)
+            when (val result = encryptUploadAndGrant(file, grantTarget, duration, recordedWaveform)) {
+                is ApiResult.Error -> {
+                    state = VoiceMessageState.Error(result.message)
+                    kotlinx.coroutines.delay(3000)
+                    if (state is VoiceMessageState.Error) state = VoiceMessageState.Idle
+                }
                 is ApiResult.Success -> {
-                    target?.let {
-                        RedConnectionService.sendPayload(
-                            getApplication(), it.first, it.second, it.third,
+                    if (group != null) {
+                        RedConnectionService.sendGroupPayload(
+                            getApplication(),
+                            group,
+                            "VOICE",
                             result.value.toByteArray(Charsets.UTF_8)
                         )
+                    } else {
+                        target?.let {
+                            RedConnectionService.sendPayload(
+                                getApplication(), it.first, it.second, it.third,
+                                result.value.toByteArray(Charsets.UTF_8)
+                            )
+                        }
                     }
                     state = VoiceMessageState.Sent(duration)
+                    kotlinx.coroutines.delay(2000)
+                    if (state is VoiceMessageState.Sent) state = VoiceMessageState.Idle
                 }
             }
             file.delete()
             previewPath = null
             pendingTarget = null
+            pendingGroup = null
         }
     }
 

@@ -40,6 +40,7 @@ data class CallRecordingDocument(
 
 interface CallRecordingRepository : MongoRepository<CallRecordingDocument, String> {
     fun findByOwnerIdOrderByCreatedAtDesc(ownerId: String): List<CallRecordingDocument>
+    fun findTop200ByOwnerIdOrderByCreatedAtDesc(ownerId: String): List<CallRecordingDocument>
 }
 
 @RestController
@@ -71,7 +72,8 @@ class CallRecordingController(private val repository: CallRecordingRepository) {
 
     @GetMapping
     fun list(authentication: Authentication): List<CallRecordingDocument> {
-        return repository.findByOwnerIdOrderByCreatedAtDesc(authentication.name)
+        // سقف 200 حتى لا يُحمّل تاريخ كامل بلا حدود في ذاكرة الخادم.
+        return repository.findTop200ByOwnerIdOrderByCreatedAtDesc(authentication.name)
     }
 
     @GetMapping("/{id}/manifest")

@@ -1,4 +1,59 @@
-# 🔧 استكشاف الأخطاء وإصلاحها — Docker Build DNS Issues
+# 🔧 استكشاف الأخطاء وإصلاحها
+
+## Docker Desktop توقف + اللوحة لا تجد السيرفر + صفحة المستخدمين تنهار
+
+هذه ثلاث مشاكل منفصلة كانت تُخلط معًا:
+
+| العَرَض | السبب الحقيقي | المصدر الصحيح |
+|---|---|---|
+| `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` | محرّك Docker Desktop انهار | أعد تشغيل Docker Desktop وانتظر الحوت الأخضر |
+| `/health` فاشل في المتصفح و«بقايا» جلسة قديمة | لا أحد يستمع على البروكسي | افتح **http://127.0.0.1:8088** لا 8080 |
+| `function lower(bytea) does not exist` عند «المستخدمون» | Hibernate كان يربط `:search` كـ `bytea` ثم يستدعي `LOWER()` | أُصلح بـ JPA Specification + `ILIKE` — أعد بناء صورة `backend` |
+
+### القاعدة الوحيدة بعد الإصلاح
+
+- **Docker = المصدر الإنتاجي:** Kotlin + PostgreSQL + Mongo + Redis + Nginx على المنفذ **8088**.
+- **Node + SQLite** (`npm run dev:server`) يحتل المنفذ **8080** على ويندوز وهو خادم تطوير فقط. لا تشغّله مع Docker.
+- الباك اند داخل الحاوية يسمع على 8080 *داخل الشبكة الافتراضية فقط*. المتصفح لا يصل إليه مباشرة.
+
+```powershell
+# من مجلد RED_Ultimate بعد أن يصبح Docker Desktop أخضر:
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
+```
+
+بعد نجاح `/health` افتح اللوحة من `http://127.0.0.1:8088/` وامسح كاش المتصفح لتبويب الدخول القديم.
+
+حساب المسؤول يُقرأ من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`). لا تعتمد كلمة مرور مكتوبة في محادثة سابقة بعد مسح القاعدة.
+
+`SovereignAdmin1` يخص خادم Node+SQLite التجريبي فقط. إن ظهرت في اللوحة «الخادم غير متصل» و«بيانات المسؤول غير صحيحة» معًا فالخادم متوقف أو استُخدمت كلمة المرور الوهمية. شغّل:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
+```
+
+ثم ادخل بـ `RED_ADMIN_PASSWORD` من `.env` على **http://127.0.0.1:8088/**.
+
+## Mongo على `localhost:27017` بدل `db-mongo`
+
+داخل Docker، `localhost` هو الحاوية نفسها. Mongo اسمه `db-mongo` على شبكة `red-net` فقط.
+
+- الباك اند في Compose يجب أن يطبع عند الإقلاع: `INFRA binding: runtime=DOCKER mongodb.host=db-mongo`
+- `/health` يعرض `bindings.mongodbHost`. إن ظهر `localhost` فأنت تشغّل JVM على ويندوز أو نسخت URI خاطئ.
+- لا تشغّل `bootRun` بجانب Compose إلا عبر `docker-compose.host-debug.yml` و`SPRING_PROFILES_ACTIVE=host`.
+
+## DINSTAR جاهز على `192.168.11.1` — لا تغيّر الـ IP إلى Wi-Fi
+
+الجهاز بلا Wi-Fi. كرت Realtek ↔ `192.168.11.1` هو مسار الإدارة الصحيح. فكّ الكابل = انقطاع مهما كان العنوان.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
+```
+
+في واجهة الجهاز (`enFrame.htm` → SIP Server) ضع **عنوان ويندوز على 192.168.11.x** والمنفذ 5060. Asterisk يتعرّف على البوابة بالعنوان (`type=identify`).
+
+---
+
+# 🔧 Docker Build DNS Issues
 
 ## ❌ المشكلة
 

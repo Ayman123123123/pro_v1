@@ -1,6 +1,7 @@
 package com.red.server.pstn
 
 import com.red.server.calls.CallHistoryController
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -27,17 +28,27 @@ class PstnCallController(
     }
 
     /**
-     * إنهاء مكالمة — يُحرّر المنفذ في Load Balancer
+     * إنهاء مكالمة — يُحرّر المنفذ في Load Balancer.
+     *
+     * ⚠️ الأمان: لا يُحرَّر إلا المنفذ المرتبط فعلياً بمكالمة المستخدم نفسه
+     * (يُربط في لحظة النداء). منعاً لأي مستخدم من تحرير منافذ الغير أو
+     * إعادة ضبط عدّادات الاستخدام عبر الأسطول.
      */
     @PostMapping("/calls/{callId}/hangup")
-    fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?): ResponseEntity<Map<String, Any>> {
-        // عدد المنافذ يعتمد على طراز البوابة (4 أو 8) وقد تتعدد الأجهزة،
-        // فلم يعد المدى 0..7 صالحًا كحارس.
-        val port = body?.get("port") ?: -1
-        if (port >= 0) {
-            loadBalancer.releasePort(gatewayId = null, port = port)
+    fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?, authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        val bound = calls.resolveActivePort(userId)
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "NO_ACTIVE_PSTN_CALL"))
+
+        val requestedPort = body?.get("port") ?: -1
+        if (requestedPort >= 0 && requestedPort != bound.second) {
+            // منفذ مقدَّم لا يخصّ هذه المكالمة — نرفض بدل تحرير منفذ اعتباطي.
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PORT_MISMATCH"))
         }
-        return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to port))
+
+        loadBalancer.releasePort(bound.first, bound.second)
+        calls.clearActive(userId)
+        return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to bound.second))
     }
 
     /**

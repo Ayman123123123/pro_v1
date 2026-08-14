@@ -135,7 +135,7 @@ class PollsApiTest {
         val paginated = """{"content":[{"id":"p1","creatorId":"u1","question":"Q","pollType":"SINGLE_CHOICE","status":"ACTIVE","startsAt":"2026-01-01T00:00:00Z","targetType":"GLOBAL","totalVotes":0,"uniqueVoters":0,"createdAt":"2026-01-01T00:00:00Z"}],"page":0,"size":20,"totalElements":1,"totalPages":1}"""
         val parsed = JsonLenient.decodeFromString<PageResponsePoll>(paginated)
         assertEquals(1, parsed.content.size)
-        assertEquals(0L, parsed.totalElements)
+        assertEquals(1L, parsed.totalElements)
         assertEquals(1, parsed.totalPages)
     }
 
@@ -171,14 +171,14 @@ class PollsApiTest {
             startsAt = "2026-10-01T10:00:00Z",
             endsAt = "2026-10-01T16:00:00Z",
             eventType = "WORKSHOP".let { "MEETING" }, // MEETING is the closest valid type
-            visibility = "PUBLIC",
+            visibility = "PRIVATE",
             maxAttendees = 50,
             rsvpEnabled = true
         )
         val json = JsonLenient.encodeToString(CreateEventRequest.serializer(), req)
         assertTrue("Expected title", json.contains("\"title\":\"ورشة عمل\""))
         assertTrue("Expected startsAt", json.contains("\"startsAt\":\"2026-10-01T10:00:00Z\""))
-        assertTrue("Expected visibility", json.contains("\"visibility\":\"PUBLIC\""))
+        assertTrue("Expected visibility", json.contains("\"visibility\":\"PRIVATE\""))
     }
 
     @Test

@@ -28,10 +28,13 @@ data class RichMessage(
     val poll: InlinePoll? = null, // استطلاع مضمّن داخل الرسالة (مشفر)
     // تفاعلات الإيموجي على رسالة (E2EE ضمن الحوار/المجموعة — لا يرى الخادم الإيموجي)
     val reactionOf: String? = null, // id الرسالة المُتفاعل معها
-    val emoji: String? = null // الإيموجي المُتفاعل به (للإضافة)؛ null مع REACTION_REMOVE = إزالة تفاعل
+    val emoji: String? = null, // الإيموجي المُتفاعل به (للإضافة)؛ null مع REACTION_REMOVE = إزالة تفاعل
+    // تصويت استطلاع المجموعة (E2EE — كل تصويت رسالة غنية تصل للأعضاء)
+    val pollVoteOf: String? = null, // pollId
+    val pollVoteOption: Int? = null // فهرس الخيار المُصوَّت عليه (أو null لإلغاء التصويت)
 ) {
     init {
-        require(action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "REACTION", "REACTION_REMOVE")) { "Unknown action: $action" }
+        require(action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "REACTION", "REACTION_REMOVE", "POLL_VOTE", "CALL_STARTED")) { "Unknown action: $action" }
         require(text.length <= 65_536)
         require(mentions.size <= 20) { "Too many mentions" }
         require(hashtags.size <= 10) { "Too many hashtags" }
@@ -43,6 +46,10 @@ data class RichMessage(
             (action == "REACTION_REMOVE" && reactionOf != null) ||
             action !in setOf("REACTION", "REACTION_REMOVE")
         ) { "Invalid reaction payload" }
+        require(
+            (action == "POLL_VOTE" && pollVoteOf != null && (pollVoteOption == null || pollVoteOption in 0..50)) ||
+            action != "POLL_VOTE"
+        ) { "Invalid poll vote payload" }
     }
 
     companion object {

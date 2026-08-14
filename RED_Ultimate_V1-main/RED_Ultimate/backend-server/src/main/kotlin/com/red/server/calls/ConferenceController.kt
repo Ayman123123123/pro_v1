@@ -131,7 +131,9 @@ class ConferenceRoomService {
 class ConferenceController(
     private val roomService: ConferenceRoomService,
     private val users: UserAccountRepository,
-    private val notifications: NotificationService
+    private val notifications: NotificationService,
+    private val history: CallHistoryService,
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler
 ) {
 
     @PostMapping("/create")
@@ -153,6 +155,16 @@ class ConferenceController(
             password = request.password
         )
         val inviteLink = "younes://${if (request.isSpace) "space" else "conference"}/$roomId"
+        runCatching {
+            history.start(
+                initiator = user.redId,
+                target = record.roomId,
+                targetLabel = record.title,
+                type = if (request.isSpace) CallType.SPACE else CallType.GROUP_VIDEO,
+                route = CallRoute.RED,
+                requestedId = record.roomId
+            )
+        }
         return ResponseEntity.ok(ConferenceRoomResponse(
             roomId = record.roomId,
             title = record.title,
@@ -239,13 +251,22 @@ class ConferenceController(
     ): ResponseEntity<Map<String, Any>> {
         val record = roomService.getRoom(roomId)
             ?: throw NoSuchElementException("Room not found")
-        val inviter = authentication.name
-        request.memberIds.forEach { memberId ->
-            notifications.sendVoipPushNotification(
-                targetUserId = memberId,
-                callerId = inviter,
-                callId = roomId,
-                mode = if (record.isSpace) "SPACE" else "CONFERENCE"
+        val accountId = UUID.fromString(authentication.name)
+        val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val mode = if (record.isSpace) "SPACE" else "CONFERENCE"
+        request.memberIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { memberId ->
+            notifications.sendVoipPushNotification(memberId, inviter.redId, roomId, mode)
+            callSignaling.deliverInvite(
+                targetRedId = memberId,
+                type = "CONFERENCE_INVITE",
+                roomId = roomId,
+                sourceRedId = inviter.redId,
+                mode = mode,
+                payload = mapOf(
+                    "title" to record.title,
+                    "inviter" to inviter.displayName,
+                    "video" to (!record.isSpace).toString()
+                )
             )
         }
         return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.memberIds.size, "roomId" to roomId))

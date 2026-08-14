@@ -25,7 +25,14 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
 
     suspend fun download(path: String, maximumBytes: Int = 25 * 1024 * 1024): ApiResult<ByteArray> {
         require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
-        return client.requestBytes(path, maximumBytes)
+        val tmp = File.createTempFile("media-down-", ".bin", context.cacheDir)
+        return when (val result = client.download(path, tmp)) {
+            is ApiResult.Error -> result
+            is ApiResult.Success -> {
+                if (tmp.length() > maximumBytes) ApiResult.Error(413, "MEDIA_TOO_LARGE")
+                else ApiResult.Success(200, tmp.readBytes())
+            }
+        }
     }
 
     private val encryptedCache by lazy { EncryptedMediaCache(context) }
@@ -48,7 +55,7 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
             try { encryptedCache.put(cacheKey, destination.readBytes()) } catch (_: Exception) {}
             return ApiResult.Success(200, destination)
         }
-        return when (val result = client.requestFile(path, destination)) {
+        return when (val result = client.download(path, destination)) {
             is ApiResult.Success -> {
                 try { encryptedCache.put(cacheKey, result.value.readBytes()) } catch (_: Exception) {}
                 result

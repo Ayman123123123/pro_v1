@@ -23,10 +23,10 @@ class NetworkStatsTest {
     }
 
     @Test fun `quality considers available bitrate`() {
-        // No RTT/loss data but high available bitrate = UNKNOWN (not enough info)
-        assertEquals(NetworkStats.Quality.UNKNOWN, NetworkStats.classify(0, 0.0, 5000))
-        // But high RTT with high bandwidth = still POOR
-        assertEquals(NetworkStats.Quality.POOR, NetworkStats.classify(500, 0.0, 5000))
+        // No RTT/loss but a high available bitrate is treated as a healthy link
+        assertEquals(NetworkStats.Quality.EXCELLENT, NetworkStats.classify(0, 0.0, 5000))
+        // But 500ms RTT alone drops a high-bandwidth link to FAIR
+        assertEquals(NetworkStats.Quality.FAIR, NetworkStats.classify(500, 0.0, 5000))
     }
 
     @Test fun `BitrateProfile recommendation matches quality`() {

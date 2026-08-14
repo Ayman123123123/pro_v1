@@ -10,15 +10,6 @@ import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
-/**
- * إدارة أسطول بوابات DINSTAR — عدة أجهزة UC2000-VE-8G / UC2000-VE-8T.
- *
- * كانت اللوحة تخاطب بوابة واحدة يحددها ملف الإعدادات. هذه المسارات
- * تسمح بتسجيل عدة أجهزة، والتعرّف عليها تلقائيًا بفحص نطاق الإدارة،
- * ومتابعة صحّة كل جهاز على حدة.
- *
- * كل المسارات تحت `/api/admin/**` أي محصورة بدور ADMIN في SecurityConfig.
- */
 @RestController
 @RequestMapping("/api/admin/dinstar/fleet")
 class DinstarFleetController(
@@ -28,22 +19,12 @@ class DinstarFleetController(
     private val audit: AuditService
 ) {
 
-    /** قائمة الأجهزة المسجّلة مع حالتها. */
     @GetMapping
     fun list(): List<Map<String, Any?>> = fleet.listGateways().map(::present)
 
-    /** الطرازات المدعومة — تستخدمها اللوحة لملء قائمة الإضافة. */
     @GetMapping("/models")
     fun models(): List<Map<String, Any>> = DinstarModelProfile.entries.map { it.metadata() }
 
-    /**
-     * التعرّف التلقائي: فحص نطاقات الإدارة بحثًا عن بوابات.
-     *
-     * الفحص عملية ثقيلة نسبيًا ومقصورة على شبكات خاصة، ولا يُفعّل إلا
-     * إذا كان `red.dinstar.discovery.enabled=true`.
-     *
-     * @param adopt عند `true` تُسجَّل النتائج مباشرة في الأسطول.
-     */
     @PostMapping("/discover")
     fun discover(
         @RequestBody(required = false) body: Map<String, Any?>?,
@@ -75,7 +56,6 @@ class DinstarFleetController(
         ))
     }
 
-    /** فحص عنوان واحد دون تسجيله — للتأكد قبل الإضافة. */
     @PostMapping("/probe")
     fun probe(@RequestBody body: Map<String, Any?>): ResponseEntity<Map<String, Any?>> {
         val host = (body["host"] as? String)?.trim().orEmpty()
@@ -86,7 +66,7 @@ class DinstarFleetController(
         val result = fleet.probeHost(host, port, scheme)
             ?: return ResponseEntity.ok(mapOf(
                 "reachable" to false,
-                "message" to "لا توجد استجابة get_port_info مصادَقة على $scheme://$host:$port"
+                "message" to "No response from gateway"
             ))
 
         return ResponseEntity.ok(mapOf(
@@ -96,7 +76,6 @@ class DinstarFleetController(
         ))
     }
 
-    /** تسجيل بوابة يدويًا. */
     @PostMapping
     fun register(
         @RequestBody body: Map<String, Any?>,
@@ -124,7 +103,6 @@ class DinstarFleetController(
         return ResponseEntity.status(201).body(mapOf("id" to id, "host" to host, "model" to profile.modelId))
     }
 
-    /** تفعيل أو تعطيل بوابة دون حذفها. */
     @PostMapping("/{id}/enabled")
     fun setEnabled(
         @PathVariable id: UUID,
@@ -148,7 +126,6 @@ class DinstarFleetController(
         return mapOf("id" to id, "removed" to true)
     }
 
-    /** حالة منافذ بوابة بعينها. */
     @GetMapping("/{id}/ports")
     fun ports(@PathVariable id: UUID): List<Map<String, Any?>> {
         val gateway = requireNotNull(fleet.findGateway(id)) { "Gateway not found" }
@@ -158,10 +135,6 @@ class DinstarFleetController(
             .getOrThrow()
     }
 
-    /**
-     * نظرة موحّدة على كل منافذ الأسطول — ما تعرضه صفحة DINSTAR.
-     * لا تُسقط بوابة ساقطة العملية كلها: تُدرَج بخطئها ويستمر الباقي.
-     */
     @GetMapping("/ports")
     fun allPorts(): Map<String, Any?> {
         val gateways = fleet.listGateways(onlyEnabled = true)
@@ -186,20 +159,11 @@ class DinstarFleetController(
                 "online" to gateways.count { it.healthState == "ONLINE" },
                 "ports" to allPorts.size,
                 "registered" to allPorts.count { (it["status"]?.toString() ?: "").equals("REGISTERED", true) },
-                // الفارق بين «مسجّلة» و«جاهزة» هو ما كان مخفيًا: شريحة
-                // مسجّلة بإشارة غير قابلة للقياس لا تصلح لحمل مكالمة.
                 "usable" to allPorts.count { it["signalUsable"] == true }
             )
         )
     }
 
-    /**
-     * محاكاة اختيار المنفذ لرقم وجهة — **دون إجراء أي مكالمة**.
-     *
-     * تُظهر أي بوابة ومنفذ سيحملان الاتصال ولماذا استُبعد الباقي. كانت
-     * أعطال التوجيه تظهر سابقًا على شكل «مكالمة فشلت» بلا تفسير؛ هذا
-     * المسار يجعل القرار قابلًا للفحص قبل الاتصال.
-     */
     @PostMapping("/routing/select")
     fun previewRouting(@RequestBody body: Map<String, Any?>): ResponseEntity<Map<String, Any?>> {
         val number = (body["number"] as? String)?.trim().orEmpty()
@@ -208,7 +172,7 @@ class DinstarFleetController(
         val selection = loadBalancer.selectPort(number)
             ?: return ResponseEntity.status(503).body(mapOf(
                 "error" to "NO_USABLE_PORT",
-                "message" to "لا يوجد منفذ مسجّل وغير مشغول وبإشارة كافية في الأسطول"
+                "message" to "No usable port in fleet"
             ))
 
         return ResponseEntity.ok(mapOf(
@@ -227,7 +191,6 @@ class DinstarFleetController(
         ))
     }
 
-    /** آخر قرارات التوجيه — للتدقيق ومعرفة سبب اختيار جهاز بعينه. */
     @GetMapping("/routing/decisions")
     fun routingDecisions(): List<Map<String, Any?>> = fleet.recentRouteDecisions()
 

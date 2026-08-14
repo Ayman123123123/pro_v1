@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.kotlin.*
 import java.time.Instant
+import java.util.Optional
 import java.util.UUID
 
 /**
@@ -83,13 +84,14 @@ class AdminServiceTest {
         whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.PENDING)).thenReturn(listOf(mock(), mock()))
         whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.BANNED)).thenReturn(listOf(mock()))
         whenever(users.findAllByStatusOrderByCreatedAtAsc(AccountStatus.APPROVED)).thenReturn(List(95) { mock() })
-        whenever(users.findAll()).thenReturn(List(100) { createMockUser(it) })
+        val allUsers = List(100) { createMockUser(it) }
+        whenever(users.findAll()).thenReturn(allUsers)
 
         val result = service.calculateCurrentAnalytics()
         assertEquals(100L, result["totalUsers"])
-        assertEquals(95L, result["approvedUsers"])
-        assertEquals(2L, result["pendingUsers"])
-        assertEquals(1L, result["bannedUsers"])
+        assertEquals(95, result["approvedUsers"])
+        assertEquals(2, result["pendingUsers"])
+        assertEquals(1, result["bannedUsers"])
     }
 
     private fun createMockUser(idx: Int): UserAccount {
@@ -181,6 +183,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val report = UserReport(id = reportId, status = "PENDING")
         whenever(userReports.findById(reportId)).thenReturn(Optional.of(report))
+        whenever(userReports.save(any<UserReport>())).thenAnswer { it.arguments[0] as UserReport }
 
         val result = service.resolveReport(reportId, adminId, "WARNING_ISSUED", "Test note")
         assertNotNull(result)
@@ -196,6 +199,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val report = UserReport(id = reportId, status = "PENDING")
         whenever(userReports.findById(reportId)).thenReturn(Optional.of(report))
+        whenever(userReports.save(any<UserReport>())).thenAnswer { it.arguments[0] as UserReport }
 
         val result = service.dismissReport(reportId, adminId, "False alarm")
         assertNotNull(result)
@@ -212,6 +216,7 @@ class AdminServiceTest {
 
     @Test
     fun `createAnnouncement saves new announcement`() {
+        whenever(announcements.save(any<SystemAnnouncement>())).thenAnswer { it.arguments[0] as SystemAnnouncement }
         val adminId = UUID.randomUUID()
         val saved = service.createAnnouncement(
             title = "Test", body = "Test body", type = "INFO",
@@ -229,6 +234,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val ann = SystemAnnouncement(id = id, title = "Test")
         whenever(announcements.findById(id)).thenReturn(Optional.of(ann))
+        whenever(announcements.save(any<SystemAnnouncement>())).thenAnswer { it.arguments[0] as SystemAnnouncement }
 
         val result = service.publishAnnouncement(id, adminId)
         assertNotNull(result)

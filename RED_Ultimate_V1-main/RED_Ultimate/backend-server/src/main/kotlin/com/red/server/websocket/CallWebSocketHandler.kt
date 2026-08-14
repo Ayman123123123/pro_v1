@@ -10,10 +10,11 @@ import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** Authenticated WebRTC signaling router with multi-device ringing. */
+/** Authenticated WebRTC signaling router with multi-device ringing and offline offer mailbox. */
 @Component
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
@@ -21,30 +22,89 @@ class CallWebSocketHandler(
     private val notifications: NotificationService
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
+    private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
+    private val groupRooms = ConcurrentHashMap<String, GroupCallRoom>()
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
+        val type = signal.type.uppercase()
+        when (type) {
+            // دعوة مكالمة جماعية: targetUserId فارغ والقائمة في inviteeIds — يُرن لكل مدعو
+            "GROUP_CALL_INVITE" -> {
+                val groupCallId = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+                val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }
+                require(invitees.isNotEmpty()) { "inviteeIds is required" }
+                groupRooms[groupCallId] = GroupCallRoom(host = source, members = invitees)
+                val payload = signal.payload + ("hostName" to (signal.payload["hostName"] ?: ""))
+                invitees.forEach { invitee ->
+                    val outbound = OutgoingCallSignal(groupCallId, source, invitee, type, signal.mode.uppercase(), payload)
+                    val targets = liveSessions(invitee)
+                    if (targets.isEmpty()) {
+                        enqueue(invitee, outbound)
+                        notifications.sendVoipPushNotification(invitee, source, groupCallId, signal.mode)
+                    } else {
+                        val json = objectMapper.writeValueAsString(outbound)
+                        targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+                    }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                return
+            }
+
+            // إشارات المكالمة الجماعية: الردود من الأعضاء إلى المضيف، والإنهاء للجميع
+            "GROUP_CALL_ACCEPT", "GROUP_CALL_DECLINE", "GROUP_CALL_STATUS" -> {
+                val groupCallId = requireCallId(signal)
+                val room = groupRooms[groupCallId]
+                val hostId = room?.host ?: source
+                val outbound = OutgoingCallSignal(groupCallId, source, hostId, type, signal.mode.uppercase(), signal.payload + ("memberStatus" to signal.memberStatus.orEmpty()))
+                val targets = liveSessions(hostId)
+                if (targets.isEmpty()) {
+                    enqueue(hostId, outbound)
+                } else {
+                    val json = objectMapper.writeValueAsString(outbound)
+                    targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                return
+            }
+            "GROUP_CALL_END" -> {
+                val groupCallId = requireCallId(signal)
+                val room = groupRooms.remove(groupCallId)
+                val targets = (room?.members ?: emptyList()) + room?.host
+                dropPending(groupCallId)
+                targets.filterNotNull().filter { it.isNotBlank() && it != source }.forEach { memberId ->
+                    val outbound = OutgoingCallSignal(groupCallId, source, memberId, type, signal.mode.uppercase(), signal.payload)
+                    val memberTargets = liveSessions(memberId)
+                    if (memberTargets.isEmpty()) enqueue(memberId, outbound)
+                    else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                return
+            }
+        }
+
         require(signal.targetUserId.isNotBlank()) { "targetUserId is required" }
         require(signal.targetUserId != source) { "Cannot call the same RED ID" }
-        val type = signal.type.uppercase()
         val callId = when (type) {
             "OFFER" -> history.start(source, signal.targetUserId, signal.targetUserId,
-                CallType.valueOf(signal.mode.uppercase()), CallRoute.RED, signal.callId).id
-            "ANSWER" -> requireCallId(signal).also(history::answer)
-            "END" -> requireCallId(signal).also { history.end(it) }
-            "ICE", "HOLD", "RESUME" -> requireCallId(signal)
-            "REJECT" -> requireCallId(signal).also { history.end(it) }
+                callTypeForMode(signal.mode), CallRoute.RED, signal.callId).id
+            "ANSWER" -> requireCallId(signal).also { history.answer(it, source) }
+            "END" -> requireCallId(signal).also { history.end(it, source) }
+            "ICE", "HOLD", "RESUME", "RENEGOTIATE", "CALL_REACTION", "CALL_RAISE_HAND" -> requireCallId(signal)
+            "REJECT" -> requireCallId(signal).also { history.end(it, source) }
+            "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
 
         val outbound = OutgoingCallSignal(callId, source, signal.targetUserId, type, signal.mode.uppercase(), signal.payload)
-        val targets = sessions[signal.targetUserId]?.filter(WebSocketSession::isOpen).orEmpty()
+        val targets = liveSessions(signal.targetUserId)
         if (targets.isEmpty()) {
+            enqueue(signal.targetUserId, outbound)
             if (type == "OFFER") {
-                // Dispatch High-Priority FCM / Sovereign Push to wake up the callee device for incoming call
                 notifications.sendVoipPushNotification(signal.targetUserId, source, callId, signal.mode)
             }
+            if (type in TERMINAL_TYPES) dropPending(callId)
             session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "RINGING_PUSH_SENT", "callId" to callId))))
             return
         }
@@ -54,7 +114,8 @@ class CallWebSocketHandler(
         session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
 
         // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
-        if (type in setOf("ANSWER", "REJECT", "END")) {
+        if (type in TERMINAL_TYPES) {
+            dropPending(callId)
             val cancelType = if (type == "ANSWER") "CANCELLED" else type
             val cancel = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
             targets.filter { it.id != session.id }.forEach { target -> runCatching { target.sendMessage(TextMessage(cancel)) } }
@@ -66,6 +127,7 @@ class CallWebSocketHandler(
         val list = sessions.computeIfAbsent(redId) { CopyOnWriteArrayList() }
         list.removeIf { !it.isOpen }
         list.add(session)
+        flushPending(redId, session)
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
@@ -80,15 +142,87 @@ class CallWebSocketHandler(
         }
     }
 
+    private fun liveSessions(redId: String) = sessions[redId]?.filter(WebSocketSession::isOpen).orEmpty()
+
+    private fun enqueue(target: String, signal: OutgoingCallSignal) {
+        val list = pending.computeIfAbsent(target) { CopyOnWriteArrayList() }
+        list.removeIf { it.expiresAt.isBefore(Instant.now()) }
+        list.add(
+            PendingCallSignal(
+                json = objectMapper.writeValueAsString(signal),
+                expiresAt = Instant.now().plusSeconds(PENDING_TTL_SECONDS),
+                callId = signal.callId,
+                type = signal.type
+            )
+        )
+    }
+
+    private fun flushPending(redId: String, session: WebSocketSession) {
+        val list = pending.remove(redId) ?: return
+        val now = Instant.now()
+        list.filter { it.expiresAt.isAfter(now) }.forEach { item ->
+            runCatching { session.sendMessage(TextMessage(item.json)) }
+        }
+    }
+
+    private fun dropPending(callId: String) {
+        pending.values.forEach { list -> list.removeIf { it.callId == callId } }
+        pending.entries.removeIf { it.value.isEmpty() }
+    }
+
+    /** Deliver a conference/live invite to a RED ID: live socket if present, else 60s mailbox. */
+    fun deliverInvite(targetRedId: String, type: String, roomId: String, sourceRedId: String, mode: String, payload: Map<String, Any?> = emptyMap()) {
+        val outbound = OutgoingCallSignal(roomId, sourceRedId, targetRedId, type.uppercase(), mode.uppercase(), payload)
+        val targets = liveSessions(targetRedId)
+        if (targets.isEmpty()) {
+            enqueue(targetRedId, outbound)
+            notifications.sendVoipPushNotification(targetRedId, sourceRedId, roomId, mode)
+            return
+        }
+        val json = objectMapper.writeValueAsString(outbound)
+        targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+    }
+
     private fun requireCallId(signal: IncomingCallSignal) =
         requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+
+    /** تحويل أنماط التطبيق (VOICE/VIDEO/…) إلى أنواع سجل المكالمات عند بدء OFFER. */
+    private fun callTypeForMode(mode: String): CallType = when (mode.uppercase()) {
+        "VIDEO" -> CallType.VIDEO_1V1
+        "VOICE" -> CallType.AUDIO_1V1
+        "GROUP" -> CallType.GROUP_AUDIO
+        "GROUP_VIDEO" -> CallType.GROUP_VIDEO
+        "LIVE" -> CallType.LIVE_STREAM
+        "SPACE" -> CallType.SPACE
+        else -> CallType.AUDIO_1V1
+    }
+
+    companion object {
+        private const val PENDING_TTL_SECONDS = 60L
+        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+    }
 }
+
+private data class PendingCallSignal(
+    val json: String,
+    val expiresAt: Instant,
+    val callId: String,
+    val type: String
+)
+
+/** غرفة مكالمة جماعية — يوجّه السيرفر بها ردود الأعضاء إلى المضيف والإنهاء للجميع. */
+private data class GroupCallRoom(
+    val host: String,
+    val members: List<String>
+)
 
 data class IncomingCallSignal(
     val callId: String? = null,
     val targetUserId: String = "",
     val type: String = "",
     val mode: String = "VOICE",
+    val inviteeIds: List<String> = emptyList(),
+    val memberStatus: String? = null,
     val payload: Map<String, Any?> = emptyMap()
 )
 

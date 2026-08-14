@@ -33,20 +33,75 @@ const { uuid, nowIso, iso, all, get, run, recordAudit } = d;
 const sessions = new Map();   // accessToken  → userId
 const refreshes = new Map();  // refreshToken → userId
 
-function issueTokens(userId) {
+const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+function persistAccess(accessToken, userId, ttlSeconds = 900) {
+  sessions.set(accessToken, userId);
+  run(
+    `INSERT OR REPLACE INTO access_sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)`,
+    hashToken(accessToken), userId, nowIso(), new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+  );
+}
+
+function persistRefresh(refreshToken, userId, deviceId = null) {
+  refreshes.set(refreshToken, userId);
+  run(
+    `INSERT INTO refresh_sessions (id,user_id,device_id,token_hash,created_at,expires_at)
+     VALUES (?,?,?,?,?,?)`,
+    uuid(), userId, deviceId, hashToken(refreshToken), nowIso(),
+    new Date(Date.now() + 30 * 86400000).toISOString(),
+  );
+}
+
+function lookupAccessUserId(token) {
+  const cached = sessions.get(token);
+  if (cached) return cached;
+  const row = get(
+    'SELECT user_id FROM access_sessions WHERE token_hash = ? AND expires_at > ?',
+    hashToken(token), nowIso(),
+  );
+  if (!row) return null;
+  sessions.set(token, row.user_id);
+  return row.user_id;
+}
+
+function lookupRefreshUserId(refreshToken) {
+  if (!refreshToken) return null;
+  const cached = refreshes.get(refreshToken);
+  if (cached) return cached;
+  const row = get(
+    `SELECT user_id FROM refresh_sessions
+     WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
+    hashToken(refreshToken), nowIso(),
+  );
+  if (!row) return null;
+  refreshes.set(refreshToken, row.user_id);
+  return row.user_id;
+}
+
+function revokeRefresh(refreshToken) {
+  if (!refreshToken) return;
+  refreshes.delete(refreshToken);
+  run(
+    'UPDATE refresh_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL',
+    nowIso(), hashToken(refreshToken),
+  );
+}
+
+function issueTokens(userId, deviceId = null) {
   const accessToken = `red.${crypto.randomBytes(24).toString('base64url')}`;
   const refreshToken = `rfr.${crypto.randomBytes(24).toString('base64url')}`;
-  sessions.set(accessToken, userId);
-  refreshes.set(refreshToken, userId);
+  persistAccess(accessToken, userId);
+  persistRefresh(refreshToken, userId, deviceId);
   return { accessToken, refreshToken, tokenType: 'Bearer', expiresInSeconds: 900 };
 }
 
-/** يستخرج المستخدم من ترويسة Authorization. */
+/** يستخرج المستخدم من ترويسة Authorization — الذاكرة أولاً ثم SQLite بعد إعادة التشغيل. */
 function currentUser(ctx) {
   const header = ctx?.headers?.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
-  const userId = sessions.get(token);
+  const userId = lookupAccessUserId(token);
   return userId ? get('SELECT * FROM users WHERE id = ?', userId) : null;
 }
 
@@ -240,8 +295,9 @@ function registerAccount(b) {
   const id = uuid();
   const ts = nowIso();
   const redId = nextRedId();
-  run(`INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at)
-       VALUES (?,?,?,?,'PENDING','USER',0,0,?,?)`, id, redId, username, displayName, ts, ts);
+  const passwordHash = d.hashPassword(password);
+  run(`INSERT INTO users (id,red_id,username,display_name,status,role,pstn_enabled,pstn_daily_limit,created_at,updated_at,password_hash)
+       VALUES (?,?,?,?,'PENDING','USER',0,0,?,?,?)`, id, redId, username, displayName, ts, ts, passwordHash);
 
   const dev = b?.device || {};
   // البصمة تُشتق من المفتاح العام فقط — لا يصل الخادم أي مفتاح خاص
@@ -281,8 +337,12 @@ function registerAccount(b) {
  */
 function loginAccount(b) {
   const username = String(b?.username || '').trim().toLowerCase();
+  const password = String(b?.password || '');
   const user = get('SELECT * FROM users WHERE lower(username) = ?', username);
   if (!user) return { status: 401, data: { error: 'INVALID_CREDENTIALS' } };
+  if (password.length < 12 || password.length > 128 || !d.verifyPassword(password, user.password_hash)) {
+    return { status: 401, data: { error: 'INVALID_CREDENTIALS' } };
+  }
 
   if (user.status !== 'APPROVED') {
     return ok({
@@ -293,13 +353,8 @@ function loginAccount(b) {
   }
 
   const device = get("SELECT * FROM devices WHERE user_id=? AND status='APPROVED' ORDER BY created_at LIMIT 1", user.id);
-  const tokens = issueTokens(user.id);
+  const tokens = issueTokens(user.id, device?.id || null);
   run('UPDATE users SET last_seen=? WHERE id=?', nowIso(), user.id);
-  run(`INSERT INTO refresh_sessions (id,user_id,device_id,token_hash,created_at,expires_at)
-       VALUES (?,?,?,?,?,?)`,
-    uuid(), user.id, device?.id || null,
-    crypto.createHash('sha256').update(tokens.refreshToken).digest('hex'),
-    nowIso(), new Date(Date.now() + 30 * 86400000).toISOString());
   recordAudit({ adminId: user.id, adminUsername: user.username, action: 'USER_LOGIN',
     category: 'SECURITY', targetId: user.id, description: `${user.red_id} من التطبيق` });
 
@@ -313,19 +368,55 @@ module.exports = function registerAppRoutes(on) {
   on('POST', '/api/auth/register', (_p, _q, b) => registerAccount(b));
   on('POST', '/api/auth/login', (_p, _q, b) => loginAccount(b));
 
-  on('POST', '/api/auth/refresh', (_p, _q, b) => {
-    const userId = refreshes.get(b?.refreshToken);
+  on('POST', '/api/auth/refresh', (_p, _q, b, ctx) => {
+    // الذاكرة أولاً ثم SQLite — وإلا إعادة تشغيل الخادم تُسقط اللوحة بـ401
+    // رغم أن رمز التجديد ما زال صالحًا على القرص.
+    const cookies = Object.fromEntries(
+      String(ctx?.headers?.cookie || '').split(';').map((p) => {
+        const i = p.indexOf('=');
+        return i > 0 ? [p.slice(0, i).trim(), decodeURIComponent(p.slice(i + 1).trim())] : ['', ''];
+      }).filter(([k]) => k),
+    );
+    const cookieToken = cookies.red_admin_refresh;
+    const usingCookie = !!cookieToken;
+    if (usingCookie) {
+      const csrfCookie = cookies.red_admin_csrf;
+      const csrfHeader = ctx?.headers?.['x-red-csrf'];
+      if (!csrfCookie || csrfCookie !== csrfHeader) {
+        return { status: 401, data: { error: 'CSRF_VALIDATION_FAILED' } };
+      }
+    }
+    const presented = cookieToken || b?.refreshToken;
+    const userId = lookupRefreshUserId(presented);
     if (!userId) return unauthorized();
-    refreshes.delete(b.refreshToken); // تدوير: الرمز القديم يُبطل فورًا
+    revokeRefresh(presented); // تدوير: الرمز القديم يُبطل فورًا في الذاكرة والقرص
     const user = get('SELECT * FROM users WHERE id = ?', userId);
     if (!user || user.status !== 'APPROVED') return unauthorized();
-    return ok(issueTokens(userId));
+    const tokens = issueTokens(userId);
+    if (usingCookie) {
+      const csrf = crypto.randomBytes(32).toString('base64url');
+      return {
+        status: 200,
+        data: { ...tokens, refreshToken: '' },
+        headers: {
+          'Set-Cookie': [
+            `red_admin_refresh=${encodeURIComponent(tokens.refreshToken)}; Path=/api/auth; Max-Age=${30 * 24 * 3600}; HttpOnly; SameSite=Strict`,
+            `red_admin_csrf=${csrf}; Path=/; Max-Age=${30 * 24 * 3600}; SameSite=Strict`,
+          ],
+        },
+      };
+    }
+    return ok(tokens);
   });
 
   on('POST', '/api/auth/logout', (_p, _q, b, ctx) => {
     const header = ctx?.headers?.authorization || '';
-    if (header.startsWith('Bearer ')) sessions.delete(header.slice(7));
-    if (b?.refreshToken) refreshes.delete(b.refreshToken);
+    if (header.startsWith('Bearer ')) {
+      const token = header.slice(7);
+      sessions.delete(token);
+      run('DELETE FROM access_sessions WHERE token_hash = ?', hashToken(token));
+    }
+    if (b?.refreshToken) revokeRefresh(b.refreshToken);
     return noContent();
   });
 
@@ -537,7 +628,12 @@ module.exports = function registerAppRoutes(on) {
 
   // ═══ الهوية والمفاتيح العامة ═══
   on('GET', '/api/identity/authority', () =>
-    ok({ publicKey: d.identityAuthority().publicKeyBase64, algorithm: 'SHA256withECDSA', curve: 'prime256v1' }));
+    ok({
+      publicKey: d.identityAuthority().publicKeyBase64,
+      algorithm: 'ECDSA_P256_SHA256',
+      version: 'v1',
+      curve: 'prime256v1',
+    }));
 
   /**
    * حزم المفاتيح العامة لمستخدم — تتطلب مصادقة.
@@ -1020,7 +1116,7 @@ module.exports = function registerAppRoutes(on) {
     if (title.length < 3 || title.length > 120) return bad('ROOM_TITLE_INVALID');
     const roomId = String(body?.roomId || '').trim() || `room_${uuid().replaceAll('-', '').slice(0, 12)}`;
     const room = {
-      roomId, title, hostName: me.display_name, hostRedId: me.red_id,
+      roomId, title, hostId: me.id, hostName: me.display_name, hostRedId: me.red_id,
       isSpace: body?.isSpace !== false, isPrivate: !!body?.isPrivate, participantCount: 0,
       inviteLink: `younes://${body?.isSpace !== false ? 'space' : 'conference'}/${roomId}`,
     };
@@ -1035,6 +1131,26 @@ module.exports = function registerAppRoutes(on) {
     room.participantCount += 1;
     return ok({ authorized: true, roomId: room.roomId, title: room.title,
       isSpace: room.isSpace, hostName: room.hostName });
+  });
+
+  // التطبيق يستدعي leave ثم close عند إنهاء المساحة (ConferenceService).
+  on('POST', '/api/conference/:roomId/leave', (p, _q, _body, ctx) => {
+    if (!currentUser(ctx)) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    room.participantCount = Math.max(0, room.participantCount - 1);
+    return ok({ roomId: room.roomId, participantCount: room.participantCount });
+  });
+  on('POST', '/api/conference/:roomId/close', (p, _q, _body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    if (room.hostId !== me.id && room.hostRedId !== me.red_id) {
+      return { status: 403, data: { error: 'ONLY_HOST_CAN_CLOSE' } };
+    }
+    conferenceRooms.delete(p.roomId);
+    return ok({ roomId: p.roomId, closed: true });
   });
 
   // ═══ المكالمات ═══

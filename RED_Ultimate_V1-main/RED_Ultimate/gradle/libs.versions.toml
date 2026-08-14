@@ -35,9 +35,11 @@ lottie-compose = "6.7.1"
 haze = "1.5.3"
 
 # Other versions
-# 0.99.1 is SHA-256 pinned and keeps the existing PQXDH/Kyber session API.
-# 0.100.0 makes SPQR mandatory for every session and needs a protocol rollout.
-libsignal-client = "0.99.1"
+# Pinned to 0.86.5 — the vendored offline build in local-maven (aar 128MB +
+# client jar 105MB + .module metadata). 0.99.1 is not published to Maven Central
+# (central tops out at 0.76.1) and absent from every reachable mirror. 0.86.5
+# exposes the full PQXDH/Kyber API used by the app.
+libsignal-client = "0.86.5"
 mp4parser = "1.9.39"
 androidx-room = "2.8.4"
 accompanist = "0.28.0"

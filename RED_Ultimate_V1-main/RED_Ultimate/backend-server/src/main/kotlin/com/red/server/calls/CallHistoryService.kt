@@ -16,30 +16,63 @@ class CallHistoryService(
 ) {
     fun start(initiator: String, target: String, targetLabel: String, type: CallType, route: CallRoute, requestedId: String? = null): CallHistoryDocument {
         val id = requestedId?.takeIf { it.isNotBlank() } ?: UuidV7.next()
-        mongo.findById(id, CallHistoryDocument::class.java)?.let { return it }
+        mongo.findById(id, CallHistoryDocument::class.java)?.let { existing ->
+            require(existing.initiatorId == initiator && existing.targetId == target) {
+                "Call id reuse cannot redirect an existing call"
+            }
+            return existing
+        }
         val doc = mongo.save(CallHistoryDocument(id, initiator, target, targetLabel, type, route, CallStatus.RINGING))
         publisher.callStarted(id, initiator, target, type.name, route.name)
         return doc
     }
 
-    fun answer(callId: String) = update(callId) {
+    fun answer(callId: String, actorId: String? = null): CallHistoryDocument = update(callId) {
+        if (actorId != null) require(it.targetId == actorId) { "Only the called account can answer" }
+        require(it.status == CallStatus.RINGING) { "Call is not ringing" }
         it.status = CallStatus.ACTIVE
         it.answeredAt = Instant.now()
         publisher.callAnswered(callId)
     }
 
-    fun end(callId: String, failed: Boolean = false) = update(callId) {
+    fun end(callId: String, actorId: String? = null, failed: Boolean = false): CallHistoryDocument = update(callId) {
+        if (actorId != null) {
+            require(it.initiatorId == actorId || it.targetId == actorId) { "Only call participants can end" }
+        }
         val now = Instant.now()
-        it.status = if (failed) CallStatus.FAILED else CallStatus.ENDED
         it.endedAt = now
-        val durationMs = if (it.answeredAt != null) Duration.between(it.answeredAt, now).toMillis() else 0L
-        publisher.callEnded(callId, durationMs, if (failed) "FAILED" else "NORMAL")
+        if (failed) {
+            it.status = CallStatus.FAILED
+            publisher.callEnded(callId, 0L, "FAILED")
+            return@update
+        }
+        if (it.answeredAt == null || it.status == CallStatus.RINGING) {
+            it.status = CallStatus.MISSED
+            publisher.callMissed(callId)
+            return@update
+        }
+        val durationMs = Duration.between(it.answeredAt, now).toMillis()
+        it.status = CallStatus.ENDED
+        publisher.callEnded(callId, durationMs, "NORMAL")
     }
 
-    fun missed(callId: String) = update(callId) {
+    fun missed(callId: String): CallHistoryDocument = update(callId) {
         it.status = CallStatus.MISSED
         it.endedAt = Instant.now()
         publisher.callMissed(callId)
+    }
+
+    /** WhatsApp/Telegram: unanswered RINGING older than 45s becomes MISSED. */
+    fun expireStaleRinging(olderThan: Duration = Duration.ofSeconds(45)): Int {
+        val cutoff = Instant.now().minus(olderThan)
+        val query = Query(
+            Criteria.where("status").`is`(CallStatus.RINGING).and("startedAt").lt(cutoff)
+        ).limit(200)
+        val stale = mongo.find(query, CallHistoryDocument::class.java)
+        stale.forEach { doc ->
+            runCatching { missed(doc.id) }
+        }
+        return stale.size
     }
 
     fun history(redId: String, limit: Int): List<CallHistoryItem> {
@@ -47,13 +80,27 @@ class CallHistoryService(
             .with(Sort.by(Sort.Direction.DESC, "startedAt")).limit(limit.coerceIn(1, 100))
         return mongo.find(query, CallHistoryDocument::class.java).map { call ->
             val outgoing = call.initiatorId == redId
-            CallHistoryItem(call.id, if (outgoing) call.targetId else call.initiatorId,
-                if (outgoing) call.targetLabel else call.initiatorId, if (outgoing) "OUTGOING" else "INCOMING",
-                call.type, call.route, call.status, call.startedAt, call.answeredAt, call.endedAt)
+            CallHistoryItem(
+                id = call.id,
+                peerId = if (outgoing) call.targetId else call.initiatorId,
+                peerLabel = if (outgoing) call.targetLabel else call.initiatorId,
+                direction = if (outgoing) "OUTGOING" else "INCOMING",
+                type = call.type,
+                route = call.route,
+                status = call.status,
+                startedAt = call.startedAt,
+                answeredAt = call.answeredAt,
+                endedAt = call.endedAt,
+                mediaServerId = call.mediaServerId,
+                gatewayUsed = call.gatewayUsed
+            )
         }
     }
 
-    private fun update(id: String, action: (CallHistoryDocument) -> Unit) {
-        mongo.findById(id, CallHistoryDocument::class.java)?.let { action(it); mongo.save(it) }
+    private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {
+        val doc = mongo.findById(id, CallHistoryDocument::class.java)
+            ?: throw NoSuchElementException("Call not found")
+        action(doc)
+        return mongo.save(doc)
     }
 }

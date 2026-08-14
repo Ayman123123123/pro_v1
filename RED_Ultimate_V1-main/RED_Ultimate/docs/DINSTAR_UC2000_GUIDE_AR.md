@@ -651,6 +651,24 @@ red:
 3. عرّف نظير PJSIP لكل جهاز في Asterisk وسجّل اسمه في `pjsipEndpoint`.
 4. تحقق بـ `POST /fleet/probe` قبل التسجيل.
 
+### شبكة ويندوز + Docker — لا تنقل الجهاز إلى Wi-Fi
+
+عنوان المصنع `192.168.11.1` على كرت إيثرنت مخصّص هو التصميم الصحيح.
+الجهاز بلا Wi-Fi؛ فكّ الكابل يقطع الإدارة مهما غيّرت العنوان. الإنترنت
+يبقى على Wi-Fi.
+
+بعد نجاح الـ ping من ويندوز:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
+```
+
+في `enFrame.htm` → SIP Server ضع عنوان هذا الجهاز على `192.168.11.x`
+والمنفذ `5060`. Asterisk يتعرّف على البوابة بـ `type=identify`؛
+`DINSTAR_SIP_PASSWORD` محجوز لجذع مصادق لاحقًا.
+
+الباك اند داخل Compose يخاطب Mongo على `db-mongo:27017` لا `localhost`.
+
 ---
 
 ## المصادر

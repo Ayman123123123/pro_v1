@@ -33,12 +33,28 @@ project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
 
 ## التشغيل
 
-```bash
-npm install
-RED_API_TARGET=http://127.0.0.1:8080 npm run dev
+### المصدر الوحيد: Docker على 8088
+
+اللوحة والـ API والمكالمات تعمل من Compose فقط:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ..\scripts\compose-recover.ps1 -RebuildBackend
 ```
 
-### تشغيل كامل بقاعدة بيانات حقيقية (تطوير)
+ثم **http://127.0.0.1:8088/** بـ `RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD` من `.env`.
+
+`npm run dev` يفتح Vite على 5173 ويتحدث إلى الخادم الحقيقي على 8088. خادم Node/SQLite مرفوض.
+
+إنتاجيًا عبر Docker Compose، Nginx الرئيسي يمرر:
+
+```text
+/       -> admin-panel:3000
+/api    -> backend:8080
+/ws     -> backend WebSocket
+/sfu    -> media-sfu:4000
+```
+
+### أرشيف عقد الاختبار (ليس مسار تشغيل)
 
 لا يتطلب JDK ولا PostgreSQL/Mongo/Redis/MinIO:
 
@@ -103,8 +119,8 @@ npm run dev:server:reset   # لإعادة القاعدة إلى بيانات أ�
 npm run check             # عقد API + حارس الواجهة + فحص الأنواع (يشغّلها CI أيضًا)
 npm run build             # tsc --noEmit ثم حزمة Vite للإنتاج
 npm run check:live        # الفحصان التاليان معًا (يتطلبان dev:server مشغّلًا)
-npm run check:server      # 25 فحصًا: كل إجراء في اللوحة يغيّر الحالة فعليًا
-npm run check:integration # 18 فحصًا: الربط بين التطبيق والخادم واللوحة
+npm run check:server      # 28 فحصًا: كل إجراء في اللوحة يغيّر الحالة فعليًا
+npm run check:integration # 36 فحصًا: الربط بين التطبيق والخادم واللوحة
 ```
 
 `npm run build` صارم: TypeScript check + Vite bundle.
@@ -204,8 +220,8 @@ npm run check:integration # 18 فحصًا: الربط بين التطبيق وا
 - `scripts/check-api-contract.mjs` — فاحص عقد الواجهة والخادم.
 - `scripts/check-frontend-guards.mjs` — حارس Local-first والاستطلاع والأسرار.
 - `dev-server/db.cjs` — قاعدة SQLite حقيقية (مخطط مشتق من كيانات JPA) + إصدار شهادات ECDSA والتحقق منها.
-- `dev-server/server.cjs` — خادم تطوير (92 مسارًا + بث WebSocket) مطابق لعقد الخادم، كل إجراء يكتب في القاعدة.
-- `scripts/check-dev-server.mjs` — 25 فحصًا تنفيذيًا: نفّذ الإجراء ← أعد الجلب ← تأكد أن الحالة تغيّرت.
+- `dev-server/server.cjs` — خادم تطوير (197 مسارًا + بث WebSocket) مطابق لعقد الخادم، كل إجراء يكتب في القاعدة.
+- `scripts/check-dev-server.mjs` — 28 فحصًا تنفيذيًا: نفّذ الإجراء ← أعد الجلب ← تأكد أن الحالة تغيّرت.
 - `Dockerfile` + `dashboard.nginx.conf` — بناء وتقديم الإنتاج.
 
 ## الخطوط

@@ -18,13 +18,16 @@ import java.io.File
 
 class AttachmentViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = EncryptedAttachmentRepository(application, AuthorizedApiClient(TokenStore(application)))
-    var state: AttachmentState by mutableStateOf(AttachmentState.Idle); private set
+    var sendState: AttachmentState by mutableStateOf(AttachmentState.Idle); private set
+    private val downloadStates = androidx.compose.runtime.mutableStateMapOf<String, AttachmentState>()
+
+    fun getDownloadState(messageId: String): AttachmentState = downloadStates[messageId] ?: AttachmentState.Idle
 
     fun send(uri: Uri, targetRedId: String, conversationId: String) = viewModelScope.launch {
-        if (state is AttachmentState.Working) return@launch
-        state = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
+        if (sendState is AttachmentState.Working) return@launch
+        sendState = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
         when (val result = repository.prepare(uri, targetRedId)) {
-            is ApiResult.Error -> state = AttachmentState.Error(result.message)
+            is ApiResult.Error -> sendState = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
                 RedConnectionService.sendPayload(
                     getApplication(), targetRedId, conversationId,
@@ -36,38 +39,48 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                     },
                     result.value.manifestJson.toByteArray(Charsets.UTF_8)
                 )
-                state = AttachmentState.Sent(result.value.name)
+                sendState = AttachmentState.Sent(result.value.name)
             }
         }
     }
 
     /** يرسل مرفقاً داخل مجموعة عبر مسار تشفير المجموعة (Sender Keys). */
     fun sendToGroup(uri: Uri, group: com.red.sovereign.groups.Group) = viewModelScope.launch {
-        if (state is AttachmentState.Working) return@launch
-        state = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
+        if (sendState is AttachmentState.Working) return@launch
+        sendState = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
         when (val result = repository.prepare(uri, group.id)) {
-            is ApiResult.Error -> state = AttachmentState.Error(result.message)
+            is ApiResult.Error -> sendState = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
-                val manifestJson = result.value.manifestJson
-                RedConnectionService.sendGroupText(getApplication(), group, manifestJson)
-                state = AttachmentState.Sent(result.value.name)
+                val type = when {
+                    result.value.mimeType.startsWith("image/") -> "IMAGE"
+                    result.value.mimeType.startsWith("video/") -> "VIDEO"
+                    result.value.mimeType.startsWith("audio/") -> "AUDIO"
+                    else -> "FILE"
+                }
+                RedConnectionService.sendGroupPayload(
+                    getApplication(),
+                    group,
+                    type,
+                    result.value.manifestJson.toByteArray(Charsets.UTF_8)
+                )
+                sendState = AttachmentState.Sent(result.value.name)
             }
         }
     }
 
-    fun download(manifestJson: String) = viewModelScope.launch {
-        if (state is AttachmentState.Working) return@launch
-        state = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")
-        state = when (val result = repository.downloadAndDecrypt(manifestJson)) {
+    fun download(messageId: String, manifestJson: String) = viewModelScope.launch {
+        if (downloadStates[messageId] is AttachmentState.Working) return@launch
+        downloadStates[messageId] = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")
+        downloadStates[messageId] = when (val result = repository.downloadAndDecrypt(manifestJson)) {
             is ApiResult.Error -> AttachmentState.Error(result.message)
             is ApiResult.Success -> AttachmentState.Downloaded(result.value.absolutePath, result.value.name)
         }
     }
 
-    fun exportTo(destination: Uri) = viewModelScope.launch {
-        val downloaded = state as? AttachmentState.Downloaded ?: return@launch
-        state = AttachmentState.Working("جارٍ حفظ نسخة يختارها المستخدم…")
-        state = withContext(Dispatchers.IO) {
+    fun exportTo(messageId: String, destination: Uri) = viewModelScope.launch {
+        val downloaded = downloadStates[messageId] as? AttachmentState.Downloaded ?: return@launch
+        downloadStates[messageId] = AttachmentState.Working("جارٍ حفظ نسخة يختارها المستخدم…")
+        downloadStates[messageId] = withContext(Dispatchers.IO) {
             runCatching {
                 val source = File(downloaded.path)
                 require(source.isFile) { "Decrypted file is unavailable" }
@@ -79,7 +92,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun clear() { state = AttachmentState.Idle }
+    fun clear() { sendState = AttachmentState.Idle }
 }
 
 sealed interface AttachmentState {

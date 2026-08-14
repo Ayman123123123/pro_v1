@@ -23,6 +23,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+private fun storyTimestamp(value: String): Long =
+    value.toLongOrNull() ?: runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull() ?: 0L
+
 class StoryViewModel(application: Application) : AndroidViewModel(application) {
     private val client = AuthorizedApiClient(TokenStore(application))
     private val media = MediaApi(application, client)
@@ -61,7 +64,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
                 .onSuccess { list ->
                     state = StoryState.Idle
                     repository.saveStories(list.map { 
-                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, it.timestamp, it.timestamp + 86400000)
+                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, storyTimestamp(it.createdAt), storyTimestamp(it.createdAt) + 86400000)
                     })
                 }
                 .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }

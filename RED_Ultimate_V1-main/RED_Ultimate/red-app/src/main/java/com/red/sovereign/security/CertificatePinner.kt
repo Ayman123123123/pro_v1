@@ -1,7 +1,6 @@
 package com.red.sovereign.security
 
 import android.content.Context
-import android.util.Base64
 import android.util.Log
 import com.red.sovereign.BuildConfig
 import com.red.sovereign.core.SecureStore
@@ -10,6 +9,7 @@ import org.json.JSONObject
 import java.security.MessageDigest
 import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
+import java.util.Base64
 
 /**
  * Keystore-backed TLS SPKI pin registry.
@@ -75,7 +75,7 @@ object CertificatePinner {
     fun generatePin(certificate: Certificate): String {
         val spki = certificate.publicKey.encoded
         val hash = MessageDigest.getInstance("SHA-256").digest(spki)
-        return "sha256/${Base64.encodeToString(hash, Base64.NO_WRAP)}"
+        return "sha256/${Base64.getEncoder().withoutPadding().encodeToString(hash)}"
     }
 
     fun pemToPin(pemCertificate: String): String {
@@ -88,7 +88,7 @@ object CertificatePinner {
 
     fun derToPin(derCertificateBase64: String): String {
         val certificate = CertificateFactory.getInstance("X.509").generateCertificate(
-            Base64.decode(derCertificateBase64, Base64.DEFAULT).inputStream()
+            Base64.getMimeDecoder().decode(derCertificateBase64).inputStream()
         )
         return generatePin(certificate)
     }
@@ -157,7 +157,7 @@ object CertificatePinner {
 
     private fun validatePin(pin: String) {
         require(pin.startsWith("sha256/")) { "Certificate pin must start with sha256/" }
-        val digest = runCatching { Base64.decode(pin.removePrefix("sha256/"), Base64.NO_WRAP) }.getOrNull()
+        val digest = runCatching { Base64.getDecoder().decode(pin.removePrefix("sha256/")) }.getOrNull()
         require(digest?.size == SHA256_BYTES) { "Certificate pin must contain one SHA-256 digest" }
     }
 

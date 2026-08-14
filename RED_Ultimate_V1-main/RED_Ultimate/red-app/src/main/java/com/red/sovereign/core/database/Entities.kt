@@ -21,7 +21,13 @@ data class MessageEntity(
     val outgoing: Boolean
 )
 
-@Entity(tableName = "local_history", indices = [Index("conversationId")])
+@Entity(
+    tableName = "local_history",
+    indices = [
+        Index(value = ["conversationId", "createdAt"]),
+        Index(value = ["conversationId", "messageType", "createdAt"])
+    ]
+)
 data class LocalHistoryEntity(
     @PrimaryKey val id: String,
     val conversationId: String,
@@ -33,7 +39,13 @@ data class LocalHistoryEntity(
     val status: String = "SENT"
 )
 
-@Entity(tableName = "conversations")
+@Entity(
+    tableName = "conversations",
+    indices = [
+        Index(value = ["archived", "pinned", "lastMessageTimestamp"]),
+        Index("lastMessageTimestamp")
+    ]
+)
 data class ConversationEntity(
     @PrimaryKey val id: String,
     val peerId: String,
@@ -56,7 +68,10 @@ data class ContactEntity(
     val lastSeen: Long = 0
 )
 
-@Entity(tableName = "groups")
+@Entity(
+    tableName = "groups",
+    indices = [Index("createdAt")]
+)
 data class GroupEntity(
     @PrimaryKey val id: String,
     val name: String,
@@ -67,7 +82,13 @@ data class GroupEntity(
     val createdAt: Long = 0
 )
 
-@Entity(tableName = "call_logs")
+@Entity(
+    tableName = "call_logs",
+    indices = [
+        Index("timestamp"),
+        Index(value = ["peerId", "timestamp"])
+    ]
+)
 data class CallLogEntity(
     @PrimaryKey val id: String,
     val peerId: String,

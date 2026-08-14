@@ -1,11 +1,12 @@
 package com.red.server.social
 
+import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
-import com.red.server.groups.GroupService
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -47,7 +48,9 @@ class UserStatusService(
         require(visibleTo in setOf("EVERYONE", "CONTACTS", "NOBODY")) {
             "قيمة visibleTo غير مدعومة: $visibleTo"
         }
-        val key = STATUS_PREFIX + userId
+        val account = resolveAccount(userId) ?: throw NoSuchElementException("User not found")
+        val redId = account.redId
+        val key = STATUS_PREFIX + redId
         val entry = UserStatusEntry(type, customText, Instant.now())
 
         redis.opsForHash<String, String>().apply {
@@ -58,18 +61,22 @@ class UserStatusService(
         }
         redis.expire(key, STATUS_TTL_HOURS, TimeUnit.HOURS)
 
-        // تحديث مجموعة المتصلين
+        // مجموعة المتصلين تُخزَّن بمعرّف يونس — نفس مفتاح red:presence:index
         when (type) {
-            "ONLINE" -> redis.opsForSet().add(ONLINE_SET, userId)
-            "OFFLINE", "INVISIBLE" -> redis.opsForSet().remove(ONLINE_SET, userId)
+            "ONLINE" -> redis.opsForSet().add(ONLINE_SET, redId)
+            "OFFLINE", "INVISIBLE" -> redis.opsForSet().remove(ONLINE_SET, redId)
         }
 
-        log.debug("Status updated for {}: {}", userId, type)
+        log.debug("Status updated for {}: {}", redId, type)
         return entry
     }
 
     fun getVisibleStatus(targetUserId: String, requesterId: String): UserStatusEntry? {
-        val key = STATUS_PREFIX + targetUserId
+        val target = resolveAccount(targetUserId) ?: return null
+        val requester = resolveAccount(requesterId)
+        val targetRedId = target.redId
+        val requesterRedId = requester?.redId ?: requesterId
+        val key = STATUS_PREFIX + targetRedId
         val data = redis.opsForHash<String, String>().entries(key)
 
         if (data.isEmpty()) return null
@@ -79,17 +86,15 @@ class UserStatusService(
         val customText = data["customText"]?.takeIf { it.isNotBlank() }
         val updatedAt = parseInstant(data["updatedAt"])
 
-        // فحص الخصوصية
         val canSee = when (visibleTo) {
             "EVERYONE" -> true
-            "NOBODY" -> targetUserId == requesterId
-            "CONTACTS" -> targetUserId == requesterId || areContacts(targetUserId, requesterId)
+            "NOBODY" -> targetRedId == requesterRedId
+            "CONTACTS" -> targetRedId == requesterRedId || areContacts(targetRedId, requesterRedId)
             else -> true
         }
         if (!canSee) return null
 
-        // المستخدم المخفي يبدو غير متصل للآخرين
-        if (type == "INVISIBLE" && targetUserId != requesterId) {
+        if (type == "INVISIBLE" && targetRedId != requesterRedId) {
             return UserStatusEntry("OFFLINE", null, updatedAt)
         }
 
@@ -119,7 +124,7 @@ class UserStatusService(
     // ─── الخصوصية ───
 
     fun getPrivacySettings(userId: String): PrivacySettingsResponse {
-        val key = PRIVACY_PREFIX + userId
+        val key = PRIVACY_PREFIX + (resolveAccount(userId)?.redId ?: userId)
         val data = redis.opsForHash<String, String>().entries(key)
 
         return PrivacySettingsResponse(
@@ -136,7 +141,7 @@ class UserStatusService(
     }
 
     fun updatePrivacySettings(userId: String, request: PrivacySettingsRequest): PrivacySettingsResponse {
-        val key = PRIVACY_PREFIX + userId
+        val key = PRIVACY_PREFIX + (resolveAccount(userId)?.redId ?: userId)
         val ops = redis.opsForHash<String, String>()
 
         // validation for every value
@@ -165,13 +170,13 @@ class UserStatusService(
     // ─── جهات الاتصال المتصلة ───
 
     fun getOnlineContacts(userId: String): List<OnlineContact> {
+        val me = resolveAccount(userId) ?: return emptyList()
         val onlineUserIds = redis.opsForSet().members(ONLINE_SET) ?: emptySet()
 
         return onlineUserIds
-            .filter { it != userId }
+            .filter { it != me.redId }
             .mapNotNull { onlineId ->
-                val status = getVisibleStatus(onlineId, userId) ?: return@mapNotNull null
-                // جلب الاسم من UserAccountRepository — لا stubs
+                val status = getVisibleStatus(onlineId, me.redId) ?: return@mapNotNull null
                 val user = users.findByRedId(onlineId) ?: return@mapNotNull null
                 OnlineContact(
                     userId = onlineId,
@@ -182,6 +187,14 @@ class UserStatusService(
                     customText = status.customText
                 )
             }
+    }
+
+    private fun resolveAccount(id: String): UserAccount? {
+        val trimmed = id.trim()
+        if (trimmed.isEmpty()) return null
+        users.findByRedId(trimmed.uppercase())?.let { return it }
+        val uuid = runCatching { UUID.fromString(trimmed) }.getOrNull() ?: return null
+        return users.findById(uuid).orElse(null)
     }
 
     private fun parseInstant(value: String?): Instant {

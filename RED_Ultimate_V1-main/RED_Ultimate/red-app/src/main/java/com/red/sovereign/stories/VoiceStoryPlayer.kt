@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 
 /**
@@ -43,6 +45,7 @@ fun VoiceStoryPlayer(
 ) {
     val context = LocalContext.current
     val player = remember(mediaUrl) { buildPlayer(context, mediaUrl, onFinished) }
+    val scope = rememberCoroutineScope()
     var isPlaying by remember { mutableStateOf(false) }
     var currentMs by remember { mutableStateOf(0L) }
     var totalMs by remember { mutableStateOf(durationMs) }
@@ -59,8 +62,7 @@ fun VoiceStoryPlayer(
         player.addListener(listener)
 
         // Progress polling
-        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-        val job = coroutineScope.launch {
+        val job = scope.launch {
             while (isActive) {
                 currentMs = player.currentPosition.coerceAtLeast(0L)
                 if (totalMs <= 0) totalMs = player.duration.coerceAtLeast(0L)

@@ -29,6 +29,7 @@ class DeviceKeyManager(context: Context) {
         val deviceId = store.get(PROTOCOL_DEVICE_ID)?.toInt() ?: (SecureRandom().nextInt(127) + 1).also { store.put(PROTOCOL_DEVICE_ID, it.toString()) }
         return DeviceEnrollmentRequest(
             deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+            platform = "ANDROID",
             registrationId = registration,
             protocolDeviceId = deviceId,
             signedPreKeyId = signed.id,

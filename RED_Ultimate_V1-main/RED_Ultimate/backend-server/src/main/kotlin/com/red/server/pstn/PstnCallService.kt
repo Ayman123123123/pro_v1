@@ -56,13 +56,36 @@ class PstnCallService(
             log.info("PSTN dial: user={} number={} gateway={} port={}",
                 user.redId, number, selection.gatewayHost, selection.portIndex)
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
-            history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
+            history.start(user.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
+            // ربط المنفذ الفعلي بالمستخدم لضمان أن الإنهاء اللاحق يُحرر
+            // منفذ هذه المكالمة فقط، لا أي منفذ اعتباطي عبر الأسطول.
+            redis.opsForValue().set(activeKey(user.id), "${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
         }.getOrElse {
             redis.opsForValue().decrement(key)
             throw IllegalStateException("Asterisk rejected the PSTN call", it)
         }
     }
+
+    /**
+     * يعيد المنفذ النشط الحالي للمستخدم (المنفذ الذي رُبط بمكالمته الجارية).
+     * @return زوج (معرّف البوابة، فهرس المنفذ) أو null إذا لا توجد مكالمة نشطة.
+     */
+    fun resolveActivePort(userId: UUID): Pair<UUID?, Int>? {
+        val raw = redis.opsForValue().get(activeKey(userId)) ?: return null
+        val colon = raw.indexOf(':')
+        return try {
+            val gw = if (colon < 0) null else raw.substring(0, colon).takeIf { it != "null" }?.let(UUID::fromString)
+            val port = raw.substring(colon + 1).toInt()
+            gw to port
+        } catch (_: Exception) { null }
+    }
+
+    fun clearActive(userId: UUID) {
+        redis.delete(activeKey(userId))
+    }
+
+    private fun activeKey(userId: UUID) = "red:pstn:active:$userId"
 
     /**
      * Normalize and validate Yemeni phone numbers.

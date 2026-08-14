@@ -127,4 +127,8 @@ interface RedDao {
 
     @Query("SELECT * FROM local_history WHERE encryptedPlaintext LIKE :query ORDER BY createdAt DESC")
     suspend fun searchAllMessages(query: String): List<LocalHistoryEntity>
+
+    /** كل الرسائل الغنية المخزنة — لفحص مؤقت الاختفاء (expiresAt داخل حمولة RichMessage). */
+    @Query("SELECT * FROM local_history WHERE messageType = 'RICH_TEXT'")
+    suspend fun allRichHistory(): List<LocalHistoryEntity>
 }

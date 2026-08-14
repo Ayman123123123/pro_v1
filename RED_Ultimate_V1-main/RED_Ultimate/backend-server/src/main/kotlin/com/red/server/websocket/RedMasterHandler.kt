@@ -91,6 +91,7 @@ class RedMasterHandler(
         val sender = userId(session)
         require(typing.userId == sender) { "userId does not match authenticated RED ID" }
         require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
+        messages.requireDirectAllowed(sender, typing.targetUserId)
         redisManager.setTyping(sender, typing.conversationId)
         sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
     }

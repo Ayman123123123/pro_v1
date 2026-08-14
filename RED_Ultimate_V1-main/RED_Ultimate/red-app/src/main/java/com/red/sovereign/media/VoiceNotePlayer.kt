@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,8 @@ import com.red.sovereign.media.voice.VoiceWaveformCanvas
 import com.red.sovereign.settings.SettingsRuntime
 import kotlinx.coroutines.delay
 
+import androidx.compose.material3.MaterialTheme
+
 /**
  * 🎙️ YOUNES Sovereign — Professional Voice Note Player
  *
@@ -53,6 +56,7 @@ fun VoiceNotePlayer(
     uri: Uri,
     waveform: List<Int> = emptyList(),
     durationSeconds: Int = 0,
+    isOutgoing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -63,6 +67,12 @@ fun VoiceNotePlayer(
     var totalDurationMs by remember(uri) { mutableStateOf(durationSeconds * 1000L) }
     var currentSpeed by remember(uri) { mutableStateOf(preferredSpeed) }
     var showSpeedMenu by remember(uri) { mutableStateOf(false) }
+
+    val bubbleBorderColor = if (isOutgoing) VoiceColors.BubbleOutgoingBorder else VoiceColors.BubbleIncomingBorder
+    val waveformColor = if (isOutgoing) VoiceColors.WaveformOutgoing else VoiceColors.WaveformIncoming
+    val onColor = if (isOutgoing) Color(0xFF001B14) else Color.White
+    val surfaceColor = if (isOutgoing) VoiceColors.BubbleOutgoing else VoiceColors.BubbleIncoming
+    val primaryColor = waveformColor
 
     val player = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
@@ -114,18 +124,32 @@ fun VoiceNotePlayer(
         modifier = modifier
             .fillMaxWidth()
             .shadow(2.dp, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(
+                topStart = 20.dp,
+                topEnd = 20.dp,
+                bottomStart = if (isOutgoing) 20.dp else 4.dp,
+                bottomEnd = if (isOutgoing) 4.dp else 20.dp
+            ))
             .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF1A2F4A),
-                        Color(0xFF0A1628)
+                if (isOutgoing) {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            VoiceColors.BubbleOutgoing,
+                            VoiceColors.BubbleOutgoing.copy(alpha = 0.85f)
+                        )
                     )
-                )
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            VoiceColors.BubbleIncoming,
+                            VoiceColors.BubbleIncoming.copy(alpha = 0.95f)
+                        )
+                    )
+                }
             )
             .border(
                 width = 1.dp,
-                color = VoiceColors.PlayedEmerald.copy(alpha = 0.3f),
+                color = bubbleBorderColor.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(20.dp)
             )
             .padding(12.dp)
@@ -138,6 +162,7 @@ fun VoiceNotePlayer(
             // Large play/pause button
             PlayPauseCircle(
                 isPlaying = isPlaying,
+                isOutgoing = isOutgoing,
                 onClick = {
                     if (isPlaying) {
                         player.pause()
@@ -152,20 +177,20 @@ fun VoiceNotePlayer(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "رسالة صوتية",
-                    color = Color.White,
+                    color = onColor,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = formatDurationMs(currentPositionMs),
-                        color = VoiceColors.PlayedEmerald,
+                        color = primaryColor,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = " / ${formatDurationMs(totalDurationMs)}",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = onColor.copy(alpha = 0.7f),
                         fontSize = 12.sp
                     )
                 }
@@ -185,7 +210,7 @@ fun VoiceNotePlayer(
                 ) {
                     Text(
                         text = "${currentSpeed}×",
-                        color = Color.White,
+                        color = onColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -241,11 +266,13 @@ fun VoiceNotePlayer(
                             }
                         )
                     }
-                    .clickable { offset ->
-                        val newProgress = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        val newPosition = (newProgress * totalDurationMs).toLong()
-                        player.seekTo(newPosition)
-                        currentPositionMs = newPosition
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val newProgress = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            val newPosition = (newProgress * totalDurationMs).toLong()
+                            player.seekTo(newPosition)
+                            currentPositionMs = newPosition
+                        }
                     },
                 playheadProgress = animatedProgress,
                 isActive = isPlaying
@@ -258,8 +285,8 @@ fun VoiceNotePlayer(
                     .fillMaxWidth()
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp)),
-                color = VoiceColors.PlayedEmerald,
-                trackColor = Color.White.copy(alpha = 0.1f)
+                color = primaryColor,
+                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
             )
         }
     }
@@ -268,28 +295,30 @@ fun VoiceNotePlayer(
 @Composable
 private fun PlayPauseCircle(
     isPlaying: Boolean,
+    isOutgoing: Boolean = false,
     onClick: () -> Unit
 ) {
+    val gradientColors = if (isOutgoing) listOf(
+        Color(0xFF001B14).copy(alpha = 0.2f),
+        Color(0xFF001B14).copy(alpha = 0.1f)
+    ) else listOf(
+        Color.White.copy(alpha = 0.2f),
+        Color.White.copy(alpha = 0.1f)
+    )
+    val iconColor = if (isOutgoing) Color(0xFF001B14) else Color.White
     Box(
         modifier = Modifier
-            .size(56.dp)
-            .shadow(6.dp, CircleShape)
+            .size(52.dp)
+            .shadow(2.dp, CircleShape)
             .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        VoiceColors.PlayedEmerald,
-                        VoiceColors.PlayheadGold.copy(alpha = 0.7f)
-                    )
-                )
-            )
+            .background(Brush.radialGradient(colors = gradientColors))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
             contentDescription = if (isPlaying) "إيقاف" else "تشغيل",
-            tint = Color.White,
+            tint = iconColor,
             modifier = Modifier.size(28.dp)
         )
     }
