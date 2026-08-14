@@ -392,10 +392,25 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         if (state == PeerConnection.PeerConnectionState.CONNECTED) {
             LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, isBroadcaster, System.currentTimeMillis())
             startStatsPolling()
+            ensureNetworkWatcher()
         }
     }
 
     private var statsJob: kotlinx.coroutines.Job? = null
+    private var networkWatcher: NetworkChangeWatcher? = null
+    private fun ensureNetworkWatcher() {
+        if (networkWatcher == null) {
+            networkWatcher = NetworkChangeWatcher(this) {
+                if (!stopping && LiveStreamRuntime.state is LiveStreamUiState.Active) {
+                    engine?.restartIce()
+                    mesh?.restartIce()
+                }
+            }.also { it.start() }
+        }
+    }
+    private fun stopNetworkWatcher() {
+        networkWatcher?.stop(); networkWatcher = null
+    }
     private fun startStatsPolling() {
         statsJob?.cancel()
         statsJob = scope.launch {
@@ -455,6 +470,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         if (cleanedUp) return
         cleanedUp = true
         statsJob?.cancel(); statsJob = null
+        stopNetworkWatcher()
         if (streamId.isNotBlank()) signaling.leave(streamId, userId)
         signaling.close()
         engine?.release()

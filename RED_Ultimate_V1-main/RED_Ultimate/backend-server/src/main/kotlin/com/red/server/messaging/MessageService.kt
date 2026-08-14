@@ -5,6 +5,8 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.database.ConversationSequence
 import com.red.server.database.MessageDocument
 import com.red.server.groups.GroupMember
+import com.red.server.groups.GroupDocument
+import com.red.server.groups.GroupRole
 import com.red.sovereign.proto.RedProtos
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
@@ -173,8 +175,14 @@ class MessageService(
     private fun enforceGroupMembership(message: RedProtos.ChatMessage) {
         val sender = users.findByRedId(message.senderId) ?: throw NoSuchElementException("Sender identity not found")
         val receiver = users.findByRedId(message.receiverId) ?: throw NoSuchElementException("Receiver identity not found")
-        require(mongo.exists(Query(Criteria.where("id").`is`("${message.conversationId}:${sender.id}")), GroupMember::class.java)) { "Sender is not a group member" }
+        val senderMember = mongo.findOne(Query(Criteria.where("id").`is`("${message.conversationId}:${sender.id}")), GroupMember::class.java)
+        require(senderMember != null) { "Sender is not a group member" }
         require(mongo.exists(Query(Criteria.where("id").`is`("${message.conversationId}:${receiver.id}")), GroupMember::class.java)) { "Receiver is not a group member" }
+        val group = mongo.findById(message.conversationId, GroupDocument::class.java)
+            ?: throw NoSuchElementException("Group not found")
+        require(!group.settings.onlyAdminsCanSend || senderMember.role in setOf(GroupRole.OWNER, GroupRole.ADMIN)) {
+            "Only group administrators may send messages"
+        }
     }
 
     private fun nextSequence(conversationId: String): Long {

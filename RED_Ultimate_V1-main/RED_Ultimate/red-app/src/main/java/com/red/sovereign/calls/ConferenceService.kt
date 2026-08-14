@@ -295,6 +295,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (ConferenceRuntime.state is ConferenceUiState.Connecting) {
             ConferenceRuntime.state = ConferenceUiState.Active(roomId, System.currentTimeMillis())
             startStatsPolling()
+            ensureNetworkWatcher()
         }
     }
 
@@ -532,6 +533,17 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     }
 
     private var statsJob: kotlinx.coroutines.Job? = null
+    private var networkWatcher: NetworkChangeWatcher? = null
+    private fun ensureNetworkWatcher() {
+        if (networkWatcher == null) {
+            networkWatcher = NetworkChangeWatcher(this) {
+                if (!leaving && ConferenceRuntime.state is ConferenceUiState.Active) mesh?.restartIce()
+            }.also { it.start() }
+        }
+    }
+    private fun stopNetworkWatcher() {
+        networkWatcher?.stop(); networkWatcher = null
+    }
     private fun startStatsPolling() {
         statsJob?.cancel()
         statsJob = scope.launch {
@@ -548,6 +560,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (leaving) return
         leaving = true
         statsJob?.cancel(); statsJob = null
+        stopNetworkWatcher()
         val closingRoomId = roomId
         val closingUserId = userId
         saveConferenceCallLogLocally()

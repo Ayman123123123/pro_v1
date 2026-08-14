@@ -75,7 +75,7 @@ fun VoiceNotePlayer(
     val primaryColor = waveformColor
 
     val player = remember(uri) {
-        ExoPlayer.Builder(context).build().apply {
+        val exo = ExoPlayer.Builder(context).build().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -85,23 +85,24 @@ fun VoiceNotePlayer(
             )
             setMediaItem(MediaItem.fromUri(uri))
             setPlaybackSpeed(preferredSpeed)
-            prepare()
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
-                }
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY && duration > 0) {
-                        totalDurationMs = duration
-                    } else if (playbackState == Player.STATE_ENDED) {
-                        seekTo(0)
-                        pause()
-                        isPlaying = false
-                        currentPositionMs = 0L
-                    }
-                }
-            })
         }
+        exo.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY && exo.duration > 0) {
+                    totalDurationMs = exo.duration
+                } else if (playbackState == Player.STATE_ENDED) {
+                    exo.seekTo(0)
+                    exo.pause()
+                    isPlaying = false
+                    currentPositionMs = 0L
+                }
+            }
+        })
+        exo.prepare()
+        exo
     }
 
     // Update position while playing

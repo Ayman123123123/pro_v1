@@ -32,7 +32,7 @@ bindaddr = 0.0.0.0
 
 [red_admin]
 secret = ${AMI_PASSWORD}
-read = call,reporting,system
+read = call,reporting,system,command
 write = call,originate
 writetimeout = 5000
 EOF

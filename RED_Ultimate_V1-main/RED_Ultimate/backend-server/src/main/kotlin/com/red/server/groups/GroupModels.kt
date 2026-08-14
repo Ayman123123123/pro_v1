@@ -13,6 +13,8 @@ data class GroupDocument(
     val description: String?,
     val ownerRedId: String,
     val avatarMediaKey: String? = null,
+    val privacy: GroupPrivacy = GroupPrivacy.PRIVATE,
+    val settings: GroupSettings = GroupSettings(),
     val createdAt: Instant = Instant.now(),
     var updatedAt: Instant = Instant.now()
 )
@@ -30,9 +32,22 @@ data class GroupMember(
 )
 
 enum class GroupRole { OWNER, ADMIN, MEMBER }
+enum class GroupPrivacy { PRIVATE, PUBLIC }
+
+/** Server-enforced controls; clients must not be trusted to enforce group policy. */
+data class GroupSettings(
+    val onlyAdminsCanSend: Boolean = false,
+    val onlyAdminsCanEditInfo: Boolean = true,
+    val requireJoinApproval: Boolean = true
+)
 data class CreateGroupRequest(val name: String, val description: String? = null, val privacy: String = "PRIVATE")
+data class UpdateGroupSettingsRequest(
+    val onlyAdminsCanSend: Boolean,
+    val onlyAdminsCanEditInfo: Boolean,
+    val requireJoinApproval: Boolean
+)
 data class AddGroupMemberRequest(val redId: String, val role: GroupRole = GroupRole.MEMBER)
 data class UpdateGroupRoleRequest(val role: GroupRole)
 data class TransferGroupOwnershipRequest(val targetUserId: java.util.UUID)
 data class UpdateGroupAvatarRequest(val mediaKey: String)
-data class GroupResponse(val id: String, val name: String, val description: String?, val ownerRedId: String, val avatarUrl: String?, val createdAt: Instant, val members: List<GroupMember>)
+data class GroupResponse(val id: String, val name: String, val description: String?, val ownerRedId: String, val avatarUrl: String?, val privacy: GroupPrivacy, val settings: GroupSettings, val createdAt: Instant, val members: List<GroupMember>)

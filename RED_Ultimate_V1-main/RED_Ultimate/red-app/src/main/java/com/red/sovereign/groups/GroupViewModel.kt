@@ -44,7 +44,7 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
                     // (قائمة Group.members تأتي من الخادم؛ نحتفظ بالعدد المحفوظ محلياً).
                     val memberCount = entity.memberCount.coerceAtLeast(0)
                     val placeholderMembers = if (memberCount > 0) List(memberCount) { GroupMember("", entity.id, "", "", "", "MEMBER", "") } else emptyList()
-                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, entity.createdAt.toString(), members = placeholderMembers)
+                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, createdAt = entity.createdAt.toString(), members = placeholderMembers)
                 })
             }
         }
@@ -136,9 +136,19 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateSettings(group: Group, settings: GroupSettings) = viewModelScope.launch {
+        state = GroupState.Saving
+        val request = UpdateGroupSettingsRequest(settings.onlyAdminsCanSend, settings.onlyAdminsCanEditInfo, settings.requireJoinApproval)
+        when (val result = client.request("PATCH", "/api/groups/${group.id}/settings", json.encodeToString(request))) {
+            is ApiResult.Success -> decodeAndStore(result.value) {}
+            is ApiResult.Error -> state = GroupState.Error(result.message)
+        }
+    }
+
     fun createInvite(group: Group, requireApproval: Boolean = true) = viewModelScope.launch {
         state = GroupState.Saving
-        when (val result = client.request("POST", "/api/groups/${group.id}/invites", json.encodeToString(CreateGroupInviteRequest(requireApproval = requireApproval)))) {
+        val effectiveApproval = requireApproval || group.settings.requireJoinApproval
+        when (val result = client.request("POST", "/api/groups/${group.id}/invites", json.encodeToString(CreateGroupInviteRequest(requireApproval = effectiveApproval)))) {
             is ApiResult.Success -> runCatching { json.decodeFromString<GroupInviteResponse>(result.value) }.onSuccess { latestInvite = it; state = GroupState.Ready }.onFailure { state = GroupState.Error("INVALID_INVITE_RESPONSE") }
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }

@@ -1,8 +1,12 @@
 package com.red.sovereign.media
 
 import android.app.Application
+import android.Manifest
+import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.SystemClock
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +66,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     private val random = SecureRandom()
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
+    /** MediaRecorder can exist after prepare() has failed; never treat that as a recording. */
+    private var recorderStarted = false
     private var ticker: Job? = null
     private var pendingTarget: Triple<String, String, String>? = null
     private var pendingGroup: com.red.sovereign.groups.Group? = null
@@ -111,6 +117,13 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun startRecorder() {
+        val app = getApplication<Application>()
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            state = VoiceMessageState.Error("MICROPHONE_PERMISSION_REQUIRED")
+            pendingTarget = null
+            pendingGroup = null
+            return
+        }
         val file = File.createTempFile("voice-", ".m4a", getApplication<Application>().cacheDir)
         val instance = runCatching {
             createRecorder().apply {
@@ -132,6 +145,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
         recordingFile = file
         recorder = instance
+        recorderStarted = true
         elapsedSeconds = 0
         waveform = emptyList()
         amplitudeHistory.clear()
@@ -140,7 +154,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         isLocked = false
         cancelProgress = 0f
         isSilent = false
-        startTimeMs = System.currentTimeMillis()
+        startTimeMs = SystemClock.elapsedRealtime()
         pausedDurationMs = 0L
         state = VoiceMessageState.Recording(paused = false)
         ticker = viewModelScope.launch {
@@ -149,7 +163,10 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 delay(250)
                 if (!recordingPaused) {
                     quarterSeconds++
-                    elapsedSeconds = quarterSeconds / 4
+                    // A monotonic clock remains correct when the system time changes and
+                    // avoids reporting a zero-length recording after the first second.
+                    elapsedSeconds = ((SystemClock.elapsedRealtime() - startTimeMs - pausedDurationMs) / 1_000L)
+                        .toInt().coerceAtLeast(0)
                     val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
                     val normalized = ((amplitude / 32767f) * 100).toInt().coerceIn(2, 100)
                     currentPeak = normalized
@@ -187,11 +204,11 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 instance.resume()
                 // Add paused duration
                 if (lastPauseTimeMs > 0) {
-                    pausedDurationMs += System.currentTimeMillis() - lastPauseTimeMs
+                    pausedDurationMs += SystemClock.elapsedRealtime() - lastPauseTimeMs
                 }
             } else {
                 instance.pause()
-                lastPauseTimeMs = System.currentTimeMillis()
+                lastPauseTimeMs = SystemClock.elapsedRealtime()
             }
             recordingPaused = !recordingPaused
             state = VoiceMessageState.Recording(recordingPaused)
@@ -229,7 +246,11 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         val file = recordingFile ?: return
         val duration = elapsedSeconds
         val recordedWaveform = waveform.toList()
-        releaseRecorder(deleteFile = false)
+        if (!releaseRecorder(deleteFile = false)) {
+            file.delete()
+            state = VoiceMessageState.Error("VOICE_RECORDER_STOP_FAILED")
+            return
+        }
         if (duration < 1 || file.length() <= 0) {
             file.delete()
             state = VoiceMessageState.Error("VOICE_TOO_SHORT")
@@ -277,7 +298,13 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             file = recordingFile ?: return
             duration = elapsedSeconds
             recordedWaveform = waveform
-            releaseRecorder(deleteFile = false)
+            if (!releaseRecorder(deleteFile = false)) {
+                file.delete()
+                state = VoiceMessageState.Error("VOICE_RECORDER_STOP_FAILED")
+                pendingTarget = null
+                pendingGroup = null
+                return
+            }
         }
 
         if (duration < 1 || file.length() <= 0) {
@@ -451,17 +478,23 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun releaseRecorder(deleteFile: Boolean) {
+    /**
+     * Stops and releases the recorder.  MediaRecorder.stop() throws when no audio
+     * frames were produced; returning that failure prevents uploading a corrupt M4A.
+     */
+    private fun releaseRecorder(deleteFile: Boolean): Boolean {
         ticker?.cancel(); ticker = null
-        runCatching { recorder?.stop() }
+        val stopped = if (recorderStarted && recorder != null) runCatching { recorder?.stop() }.isSuccess else true
         runCatching { recorder?.reset() }
         runCatching { recorder?.release() }
         recorder = null
+        recorderStarted = false
         if (deleteFile) recordingFile?.delete()
         recordingFile = null
         isLocked = false
         cancelProgress = 0f
         currentPeak = 0
+        return stopped
     }
 
     override fun onCleared() {

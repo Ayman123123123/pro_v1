@@ -384,6 +384,8 @@ private fun localizeVoiceError(message: String): String {
             "تحتاج إلى منح إذن الميكروفون. فعّل إذن الميكروفون من إعدادات التطبيق ثم أعد المحاولة."
         m.contains("VOICE_RECORDER_START_FAILED") || m.contains("prepare") || m.contains("start failed") || m.contains("MEDIARECORDER") ->
             "تعذر بدء التسجيل — قد يكون الميكروفون قيد الاستخدام من تطبيق آخر. أغلق أي مكالمة/تسجيل آخر ثم أعد المحاولة."
+        m.contains("VOICE_RECORDER_STOP_FAILED") ->
+            "لم يلتقط التسجيل صوتاً كافياً. سجّل لمدة ثانية واحدة على الأقل ثم أرسل الرسالة."
         m.contains("VOICE_TOO_SHORT") ->
             "التسجيل قصير جدًا — اضغط مطوّلاً وسجّل ثانية واحدة على الأقل."
         m.contains("VOICE_ENCRYPTION_FAILED") || m.contains("ENCRYPT") ->

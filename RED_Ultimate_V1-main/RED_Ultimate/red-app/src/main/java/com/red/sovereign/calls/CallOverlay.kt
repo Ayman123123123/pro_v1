@@ -343,7 +343,7 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
         Text(peer.ifBlank { "يونس" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         val subtitle = when (state) {
             is CallUiState.Incoming -> if (video) "مكالمة فيديو واردة" else "مكالمة صوتية واردة"
-            is CallUiState.Connecting -> if (video) "جارٍ الاتصال بالفيديو…" else "جارٍ الاتصال…"
+            is CallUiState.Connecting -> state.presenceLabel
             is CallUiState.Active -> if (state.isHeld) "معلّقة" else if (video) "مكالمة فيديو" else "مكالمة صوتية"
             is CallUiState.ActiveWithIncoming -> "نشطة · ${state.waiting.peer} ينتظر"
             is CallUiState.Error -> state.message
@@ -405,9 +405,29 @@ private fun IncomingBody(peer: String, video: Boolean, onAccept: () -> Unit, onA
 
 @Composable
 private fun ConnectingBody(peer: String, video: Boolean) {
+    val state = CallRuntime.state as? CallUiState.Connecting
+    val presenceIcon = when (state?.presenceState) {
+        CallPresenceMonitor.PresenceState.RINGING -> "🔔"
+        CallPresenceMonitor.PresenceState.WAKING_UP -> "⚡"
+        CallPresenceMonitor.PresenceState.NO_ANSWER -> "🔇"
+        else -> "📡"
+    }
+    val presenceSubtext = when (state?.presenceState) {
+        CallPresenceMonitor.PresenceState.RINGING -> "وصلت المكالمة — في انتظار الرد"
+        CallPresenceMonitor.PresenceState.WAKING_UP -> "جارٍ تنبيه الجهاز عبر مسار احتياطي"
+        CallPresenceMonitor.PresenceState.NO_ANSWER -> "لم يرد الطرف الآخر خلال المهلة"
+        else -> "انتظر حتى يرد الطرف الآخر"
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (!video) PulseAvatar(letter = peer, pulsing = true)
-        Text("انتظر حتى يرد الطرف الآخر", color = Color.White.copy(0.65f), fontSize = 14.sp)
+        if (!video) PulseAvatar(letter = peer, pulsing = state?.presenceState != CallPresenceMonitor.PresenceState.WAKING_UP)
+        // مؤشر حالة تسليم المكالمة
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(presenceIcon, fontSize = 18.sp)
+            Text(presenceSubtext, color = Color.White.copy(0.65f), fontSize = 14.sp)
+        }
     }
 }
 

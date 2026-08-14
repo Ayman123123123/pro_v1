@@ -44,7 +44,8 @@ import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
 import java.util.UUID
 
-class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Listener, SensorEventListener {
+class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Listener, SensorEventListener,
+        CallPresenceMonitor.Listener, CallDeliveryEngine.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var signaling: CallSignalingClient
     private lateinit var telecom: TelecomBridge
@@ -73,11 +74,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     /** هل انتهت مهلة الرنين الواردة دون رد — لتمييز MISSED عن REJECTED في السجل المحلي */
     private var ringTimedOut = false
 
+    // ── منظومة ضمان وصول المكالمة (Multi-Path Delivery) ─────────────────
+    private lateinit var deliveryEngine: CallDeliveryEngine
+    private lateinit var presenceMonitor: CallPresenceMonitor
+
     override fun onCreate() {
         super.onCreate(); createChannel()
         audio = getSystemService(AudioManager::class.java)
         telecom = TelecomBridge(this).also { runCatching(it::register) }
         signaling = CallSignalingClient(this, TokenStore(this), this)
+        val httpClient = com.red.sovereign.security.SecureOkHttpClient.buildWebSocketClient(this)
+        deliveryEngine = CallDeliveryEngine(this, TokenStore(this), signaling, httpClient)
+        presenceMonitor = CallPresenceMonitor(deliveryEngine)
         val sensors = getSystemService(SensorManager::class.java)
         sensors.getDefaultSensor(Sensor.TYPE_PROXIMITY)?.let { sensors.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
         // إعادة اتصال تلقائية عند انقطاع الإشارة (بدل إنهاء المكالمة)
@@ -244,6 +252,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     media = false
                 )
             }
+            "RINGING" -> {
+                // المستلم بدأ يرن — أبلغ نظام التسليم والـ presenceMonitor
+                presenceMonitor.onSignalReceived(callId.orEmpty(), "RINGING", this)
+                val cur = CallRuntime.state as? CallUiState.Connecting
+                if (cur != null) CallRuntime.state = cur.copy(presenceState = CallPresenceMonitor.PresenceState.RINGING)
+            }
             "ANSWER" -> signal.payload["sdp"]?.let { engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it)) { remoteDescriptionSet = true; flushIce() } }
             "ICE" -> {
                 val candidate = IceCandidate(signal.payload["sdpMid"], signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0, signal.payload["candidate"].orEmpty())
@@ -359,14 +373,27 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             isActiveCall() -> "RENEGOTIATE"
             else -> "OFFER"
         }
-        signaling.send(CallSignal(callId, target, type = type, mode = mode, payload = mapOf("sdp" to description.description)))
-        if (type == "OFFER") outgoingPending = false
+        val signal = CallSignal(callId, target, type = type, mode = mode, payload = mapOf("sdp" to description.description))
+        if (type == "OFFER") {
+            // ── ضمان وصول المكالمة للمستلم (Multi-Path Delivery) ──
+            outgoingPending = false
+            presenceMonitor.start(callId.orEmpty(), this)
+            deliveryEngine.deliverCallOffer(signal, target, this)
+        } else {
+            signaling.send(signal)
+        }
         if (!isActiveCall()) {
-            CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
+            CallRuntime.state = CallUiState.Connecting(
+                callId.orEmpty(), target, mode,
+                presenceState = CallPresenceMonitor.PresenceState.CONNECTING
+            )
         }
     }
 
-    override fun onIceCandidate(candidate: IceCandidate) = signaling.send(CallSignal(callId, target, type = "ICE", mode = mode, payload = mapOf("sdpMid" to candidate.sdpMid.orEmpty(), "sdpMLineIndex" to candidate.sdpMLineIndex.toString(), "candidate" to candidate.sdp)))
+    override fun onIceCandidate(candidate: IceCandidate) {
+        // استخدم CallDeliveryEngine للـ Trickle ICE مع إعادة الإرسال عند ICE restart
+        deliveryEngine.onLocalIceCandidate(callId.orEmpty(), candidate, target)
+    }
     override fun onRemoteVideo(track: VideoTrack) { CallRuntime.remoteVideo = track }
     override fun onNetworkStats(stats: NetworkStats) { CallRuntime.networkStats = stats; onStatsReceived(stats) }
     override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
@@ -461,6 +488,29 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
+
+    // ── CallPresenceMonitor.Listener ─────────────────────────────────────
+    override fun onPresenceState(callId: String, state: CallPresenceMonitor.PresenceState) {
+        val current = CallRuntime.state as? CallUiState.Connecting ?: return
+        if (current.callId != callId) return
+        CallRuntime.state = current.copy(presenceState = state)
+        val label = when (state) {
+            CallPresenceMonitor.PresenceState.CONNECTING -> "جارٍ الاتصال…"
+            CallPresenceMonitor.PresenceState.RINGING -> "يرن على جهاز المستلم…"
+            CallPresenceMonitor.PresenceState.WAKING_UP -> "جارٍ إيقاظ الجهاز…"
+            CallPresenceMonitor.PresenceState.NO_ANSWER -> "لا يوجد رد"
+            else -> return
+        }
+        updateNotification(label)
+    }
+
+    // ── CallDeliveryEngine.Listener ──────────────────────────────────────
+    override fun onDeliveryConfirmed(callId: String, via: CallDeliveryEngine.DeliveryPath) {
+        android.util.Log.d("YounesCallService", "[$callId] Delivery confirmed via $via")
+    }
+    override fun onDeliveryFailed(callId: String, reason: String) {
+        if (CallRuntime.state is CallUiState.Connecting) fail(reason)
+    }
 
     private fun isActiveCall(): Boolean =
         CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming ||
@@ -783,6 +833,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             scope.launch { runCatching { manager?.stop() } }
         }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
+        presenceMonitor.stop(callId.orEmpty())
+        deliveryEngine.clearCandidates(callId.orEmpty())
         ringTimedOut = false
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
         audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
@@ -985,12 +1037,27 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 sealed interface CallUiState {
     data object Idle : CallUiState
     data class Incoming(val callId: String, val peer: String, val mode: String) : CallUiState
-    data class Connecting(val callId: String, val peer: String, val mode: String) : CallUiState
+    /** حالة الاتصال الصادر — تحمل presenceState لتعكس وصول المكالمة للمستلم */
+    data class Connecting(
+        val callId: String,
+        val peer: String,
+        val mode: String,
+        val presenceState: CallPresenceMonitor.PresenceState = CallPresenceMonitor.PresenceState.CONNECTING
+    ) : CallUiState {
+        /** نص تفصيلي للعرض في الـ Overlay */
+        val presenceLabel: String get() = when (presenceState) {
+            CallPresenceMonitor.PresenceState.CONNECTING -> "جارٍ الاتصال…"
+            CallPresenceMonitor.PresenceState.RINGING -> "يرن على جهاز المستلم"
+            CallPresenceMonitor.PresenceState.WAKING_UP -> "جارٍ إيقاظ الجهاز…"
+            CallPresenceMonitor.PresenceState.NO_ANSWER -> "لا يوجد رد"
+            else -> "جارٍ الاتصال…"
+        }
+    }
     data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long, val isHeld: Boolean = false) : CallUiState
     /** مكالمة نشطة + مكالمة واردة ثانية (call waiting) */
     data class ActiveWithIncoming(val active: Active, val waiting: Incoming) : CallUiState
     data class Error(val message: String) : CallUiState
-    // ── حالات جديدة كاملة ──────────────────────────────────────────────────────
+    // ── حالات نهائية ─────────────────────────────────────────────────────────
     /** الطرف الآخر مشغول — تُشغَّل نغمة مشغول */
     data class Busy(val peer: String) : CallUiState
     /** الطرف الآخر رفض المكالمة صراحةً */

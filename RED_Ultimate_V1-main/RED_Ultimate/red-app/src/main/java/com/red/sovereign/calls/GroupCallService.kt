@@ -238,6 +238,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     listOf(GroupCallMember(userId = myUserId, displayName = myUserId, status = GroupCallMemberStatus.JOINED)),
                     System.currentTimeMillis()
                 )
+                ensureNetworkWatcher()
                 // أزل إشعار "الدعوة الواردة" ثم ارفع إشعار المكالمة النشطة
                 stopRingtone()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -601,10 +602,23 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         if (members.all { it.status in terminal }) stopGroupCall()
     }
 
+    private var networkWatcher: NetworkChangeWatcher? = null
+    private fun ensureNetworkWatcher() {
+        if (networkWatcher == null) {
+            networkWatcher = NetworkChangeWatcher(this) {
+                if (!stopping && GroupCallRuntime.state is GroupCallUiState.Active) mesh?.restartIce()
+            }.also { it.start() }
+        }
+    }
+    private fun stopNetworkWatcher() {
+        networkWatcher?.stop(); networkWatcher = null
+    }
+
     private fun stopGroupCall() {
         if (stopping) return
         stopping = true
         ringTimeout?.cancel()
+        stopNetworkWatcher()
         saveGroupCallLogLocally()
         if (isHost && groupCallId.isNotBlank()) runCatching { signaling.sendGroupCallEnd(groupCallId) }
         scope.launch(Dispatchers.Main.immediate) { finishStop() }

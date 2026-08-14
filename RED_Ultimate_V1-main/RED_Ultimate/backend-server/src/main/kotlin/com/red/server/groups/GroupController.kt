@@ -21,6 +21,7 @@ class GroupController(private val groups: GroupService) {
     @PatchMapping("/{id}/members/{userId}") fun role(@PathVariable id: String, @PathVariable userId: UUID, @RequestBody request: UpdateGroupRoleRequest, auth: Authentication) = groups.role(UUID.fromString(auth.name), id, userId, request)
     @DeleteMapping("/{id}/members/{userId}") fun remove(@PathVariable id: String, @PathVariable userId: UUID, auth: Authentication) = groups.remove(UUID.fromString(auth.name), id, userId)
     @PatchMapping("/{id}/avatar") fun avatar(@PathVariable id: String, @RequestBody request: UpdateGroupAvatarRequest, auth: Authentication) = groups.updateAvatar(UUID.fromString(auth.name), id, request)
+    @PatchMapping("/{id}/settings") fun settings(@PathVariable id: String, @RequestBody request: UpdateGroupSettingsRequest, auth: Authentication) = groups.updateSettings(UUID.fromString(auth.name), id, request)
     @PostMapping("/{id}/invites") fun invite(@PathVariable id: String, @RequestBody request: CreateGroupInviteRequest, auth: Authentication) = groups.createInvite(UUID.fromString(auth.name), id, request)
     @DeleteMapping("/{id}/invites/{inviteId}") fun revokeInvite(@PathVariable id: String, @PathVariable inviteId: String, auth: Authentication) = groups.revokeInvite(UUID.fromString(auth.name), id, inviteId)
     @PostMapping("/join-requests") fun requestJoin(@RequestBody request: JoinGroupRequest, auth: Authentication) = groups.requestJoin(UUID.fromString(auth.name), request)
