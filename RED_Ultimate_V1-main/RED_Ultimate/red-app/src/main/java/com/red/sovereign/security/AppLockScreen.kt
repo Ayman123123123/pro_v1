@@ -39,10 +39,10 @@ import androidx.core.content.ContextCompat
 
 /**
  * شاشة قفل التطبيق بالبصمة/الوجه/النمط.
- * تُعرض عند تفعيل AppLock عندما يعود التطبيق للواجهة (onResume).
+ * تُعرض عند تفعيل AppLock بعد انتهاء مهلة الخلفية.
  * تستخدم BiometricPrompt الرسمي من AndroidX — آمن ومتصل بـ Keystore.
  *
- * @param onUnlocked يُستدعى عند نجاح المصادقة (أو تعذّر البصمة واختار المستخدم المتابعة)
+ * @param onUnlocked يُستدعى عند نجاح المصادقة فقط.
  */
 @Composable
 fun AppLockScreen(onUnlocked: () -> Unit) {
@@ -62,7 +62,6 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
         .setTitle("قفل يونس")
         .setSubtitle("استخدم بصمتك أو نمط جهازك لفتح التطبيق")
-        .setNegativeButtonText("خروج")
         .setAllowedAuthenticators(
             BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         )

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
+import com.red.sovereign.core.utils.MediaCompressor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -49,6 +50,26 @@ class EncryptedAttachmentRepository(
         val metadata = metadata(uri) ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT")
         if (metadata.size !in 1..MAX_BYTES) return@withContext ApiResult.Error(413, "ATTACHMENT_TOO_LARGE")
         if (!allowedMime(metadata.mimeType)) return@withContext ApiResult.Error(415, "ATTACHMENT_TYPE_NOT_ALLOWED")
+        // ضغط الصور محلياً قبل التشفير والرفع (مثل واتساب) — كان MediaCompressor كوداً ميتاً.
+        // أي فشل في الضغط لا يمنع الإرسال: يُرسَل الأصل كما كان.
+        var compressedFile: File? = null
+        if (metadata.mimeType.startsWith("image/")) {
+            val raw = File.createTempFile("attachment-raw-", ".img", context.cacheDir)
+            val compressed = File.createTempFile("attachment-", ".jpg", context.cacheDir)
+            try {
+                val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+                    raw.outputStream().use { out -> input.copyTo(out) }
+                } ?: 0L
+                if (copied > 0L) {
+                    val result = MediaCompressor.compressImage(raw.absolutePath, compressed.absolutePath)
+                    if (result.isFile && result.length() in 1..MAX_BYTES) compressedFile = result
+                }
+            } catch (_: Exception) {
+                compressedFile = null
+            } finally {
+                raw.delete()
+            }
+        }
         val key = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(12).also(random::nextBytes)
         val encrypted = File.createTempFile("attachment-", ".bin", context.cacheDir)
@@ -57,12 +78,16 @@ class EncryptedAttachmentRepository(
             val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
             }
-            val input = context.contentResolver.openInputStream(uri)
-                ?: return@withContext ApiResult.Error(null, "ATTACHMENT_OPEN_FAILED")
-            input.use { source -> CipherOutputStream(FileOutputStream(encrypted), cipher).use { output ->
+            val source: java.io.InputStream = if (compressedFile != null) {
+                FileInputStream(compressedFile)
+            } else {
+                context.contentResolver.openInputStream(uri)
+                    ?: return@withContext ApiResult.Error(null, "ATTACHMENT_OPEN_FAILED")
+            }
+            source.use { input -> CipherOutputStream(FileOutputStream(encrypted), cipher).use { output ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
-                    val count = source.read(buffer)
+                    val count = input.read(buffer)
                     if (count < 0) break
                     digest.update(buffer, 0, count)
                     output.write(buffer, 0, count)
@@ -74,12 +99,18 @@ class EncryptedAttachmentRepository(
             val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
             val localCache = File(outputDir, "${shaHex.take(16)}-$safeName")
             runCatching {
-                context.contentResolver.openInputStream(uri)?.use { inStream ->
-                    FileOutputStream(localCache).use { outStream ->
-                        inStream.copyTo(outStream)
+                if (compressedFile != null) {
+                    compressedFile.copyTo(localCache, overwrite = true)
+                } else {
+                    context.contentResolver.openInputStream(uri)?.use { inStream ->
+                        FileOutputStream(localCache).use { outStream ->
+                            inStream.copyTo(outStream)
+                        }
                     }
                 }
             }
+            val effectiveMime = if (compressedFile != null) "image/jpeg" else metadata.mimeType
+            val effectiveSize = compressedFile?.length() ?: metadata.size
             when (val uploaded = media.uploadEncrypted(encrypted, metadata.name.substringBeforeLast('.'))) {
                 is ApiResult.Error -> uploaded
                 is ApiResult.Success -> {
@@ -101,19 +132,20 @@ class EncryptedAttachmentRepository(
                         objectKey = uploaded.value.objectKey,
                         url = uploaded.value.url,
                         name = metadata.name,
-                        mimeType = metadata.mimeType,
-                        size = metadata.size,
+                        mimeType = effectiveMime,
+                        size = effectiveSize,
                         sha256 = shaHex,
                         key = Base64.getEncoder().encodeToString(key),
                         nonce = Base64.getEncoder().encodeToString(nonce)
                     )
-                    ApiResult.Success(uploaded.code, PreparedAttachment(json.encodeToString(manifest), metadata.name, metadata.mimeType, metadata.size))
+                    ApiResult.Success(uploaded.code, PreparedAttachment(manifestJson = json.encodeToString(manifest), name = metadata.name, mimeType = effectiveMime, size = effectiveSize))
                 }
             }
         } catch (error: Exception) {
             ApiResult.Error(null, error.message ?: "ATTACHMENT_ENCRYPTION_FAILED")
         } finally {
             encrypted.delete()
+            compressedFile?.delete()
             key.fill(0)
             nonce.fill(0)
         }

@@ -3,6 +3,8 @@ package com.red.sovereign.core.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
@@ -20,23 +22,57 @@ import java.io.FileOutputStream
  */
 object MediaCompressor {
 
+    /** أكبر بُعد للصورة بعد الضغط — ما هو أكبر يُصغَّر بنسبة ثابتة (مثل واتساب). */
+    const val DEFAULT_MAX_DIMENSION = 2048
+
     /** JPEG 85% balances readability, quality, and encrypted upload size. */
-    fun compressImage(inputPath: String, outputPath: String): File {
-        val bitmap = requireNotNull(BitmapFactory.decodeFile(inputPath)) {
-            "IMAGE_DECODE_FAILED"
-        }
+    fun compressImage(inputPath: String, outputPath: String, maxDimension: Int = DEFAULT_MAX_DIMENSION): File {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(inputPath, bounds)
+        val width = bounds.outWidth; val height = bounds.outHeight
+        if (width <= 0 || height <= 0) error("IMAGE_DECODE_FAILED")
+        var sample = 1
+        while (maxOf(width, height) / (sample * 2) >= maxDimension) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        var bitmap = requireNotNull(BitmapFactory.decodeFile(inputPath, options)) { "IMAGE_DECODE_FAILED" }
+        // اتجاه EXIF — بدونها تظهر صور الكاميرا مقلوبة/مدوّرة بعد الضغط
+        bitmap = runCatching {
+            when (ExifInterface(inputPath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> bitmap.rotated(90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> bitmap.rotated(180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> bitmap.rotated(270f)
+                else -> bitmap
+            }
+        }.getOrDefault(bitmap)
+        val scale = minOf(1f, maxDimension.toFloat() / maxOf(bitmap.width, bitmap.height))
+        val scaled = if (scale < 1f) {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+        } else bitmap
         val outputFile = File(outputPath)
         outputFile.parentFile?.mkdirs()
         try {
             FileOutputStream(outputFile).use { out ->
-                check(bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)) {
+                check(scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)) {
                     "IMAGE_COMPRESSION_FAILED"
                 }
             }
             return outputFile
         } finally {
+            if (scaled !== bitmap) scaled.recycle()
             bitmap.recycle()
         }
+    }
+
+    private fun Bitmap.rotated(degrees: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
+        if (rotated !== this) recycle()
+        return rotated
     }
 
     /**

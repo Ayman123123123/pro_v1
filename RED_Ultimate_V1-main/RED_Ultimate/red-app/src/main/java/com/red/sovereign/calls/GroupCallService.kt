@@ -178,6 +178,17 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                         val updated = current.members.map {
                             if (it.status == GroupCallMemberStatus.RINGING) it.copy(status = GroupCallMemberStatus.NO_ANSWER) else it
                         }
+                        updated.filter { it.status == GroupCallMemberStatus.NO_ANSWER }.forEach { member ->
+                            signaling.send(
+                                CallSignal(
+                                    callId = groupCallId,
+                                    type = "GROUP_CALL_STATUS",
+                                    groupCallId = groupCallId,
+                                    memberStatus = "no_answer",
+                                    payload = mapOf("memberId" to member.userId)
+                                )
+                            )
+                        }
                         withContext(Dispatchers.Main.immediate) {
                             GroupCallRuntime.state = current.copy(members = updated)
                         }
@@ -198,6 +209,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 val others = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 GroupCallRuntime.state = GroupCallUiState.IncomingGroup(groupCallId, hostId, hostName, isVideo, others)
                 showIncomingGroupCallNotification(groupCallId, hostName, others.size, isVideo)
+                // رنين المكالمة الجماعية الواردة — كان الإشعار صامتاً بلا تنبيه صوتي
+                if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) startRingtone()
                 // مهلة الرنين الواردة: 30 ثانية دون رد → رفض تلقائي يظهر للمضيف كـ "لم يرد"
                 incomingRingTimeout?.cancel()
                 incomingRingTimeout = scope.launch {
@@ -226,6 +239,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     System.currentTimeMillis()
                 )
                 // أزل إشعار "الدعوة الواردة" ثم ارفع إشعار المكالمة النشطة
+                stopRingtone()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 promoteToForeground()
                 scope.launch {
@@ -237,6 +251,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             ACTION_DECLINE_GROUP_CALL -> {
                 ringTimeout?.cancel()
                 incomingRingTimeout?.cancel()
+                stopRingtone()
                 val gId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId
                 scope.launch {
                     runCatching { signaling.connect() }
@@ -389,6 +404,38 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 scope.launch { kotlinx.coroutines.delay(1700); it.release() }
             }
         }
+    }
+
+    /** رنين المكالمة الجماعية الواردة — مثل المكالمة الفردية (نغمة + اهتزاز). */
+    private fun startRingtone() {
+        stopRingtone()
+        try {
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
+                isLooping = true
+                play()
+            }
+            vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            }
+            vibrator?.let { vib ->
+                val pattern = longArrayOf(0, 800, 400, 800)
+                if (Build.VERSION.SDK_INT >= 26) {
+                    vib.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                } else {
+                    @Suppress("DEPRECATION") vib.vibrate(pattern, 0)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun stopRingtone() {
+        try { ringtone?.stop() } catch (_: Exception) {}
+        ringtone = null
+        try { vibrator?.cancel() } catch (_: Exception) {}
+        vibrator = null
     }
 
     override fun onSignal(signal: CallSignal) {
@@ -614,6 +661,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         recordingManager?.let { scope.launch { it.stop() } }
         recordingManager = null
         stopRingback()
+        stopRingtone()
         engine?.release(); engine = null
         mesh?.release(); mesh = null
         sfu?.release(); sfu = null
@@ -765,4 +813,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
         fun action(context: Context, act: String) {
             ContextCompat.startForegroundService(context,
-          
+                Intent(context, GroupCallService::class.java).setAction(act))
+        }
+    }
+}

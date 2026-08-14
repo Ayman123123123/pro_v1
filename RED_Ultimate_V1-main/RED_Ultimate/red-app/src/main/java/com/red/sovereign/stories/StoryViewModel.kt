@@ -17,11 +17,15 @@ import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.core.database.StoryEntity
+import com.red.sovereign.core.utils.MediaCompressor
 import com.red.sovereign.media.MediaApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.File
 
 private fun storyTimestamp(value: String): Long =
     value.toLongOrNull() ?: runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull() ?: 0L
@@ -74,15 +78,40 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
 
     fun upload(uri: Uri, caption: String? = null, visibleTo: String = "EVERYONE", mediaType: String? = null) = viewModelScope.launch {
         state = StoryState.Uploading
-        // Professional: compress before upload (handled by MediaCompressor)
-        when (val uploaded = media.upload(uri)) {
+        val compressed = if (mediaType == null) compressStoryImage(uri) else null
+        when (val uploaded = if (compressed != null) media.uploadEncrypted(compressed, "story") else media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
-            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo, mediaType = mediaType ?: uploaded.value.mimeType)))) {
-                is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }
-                    .onSuccess { stories.add(0, it); state = StoryState.Idle }
-                    .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
-                is ApiResult.Error -> state = StoryState.Error(created.message)
+            is ApiResult.Success -> {
+                val effectiveType = mediaType ?: if (compressed != null) "image/jpeg" else uploaded.value.mimeType
+                when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo, mediaType = effectiveType)))) {
+                    is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }
+                        .onSuccess { stories.add(0, it); state = StoryState.Idle }
+                        .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
+                    is ApiResult.Error -> state = StoryState.Error(created.message)
+                }
             }
+        }
+        compressed?.delete()
+    }
+
+    /** ضغط الصور محلياً قبل الرفع — تفعيل MediaCompressor (كان كوداً ميتاً). أي فشل → الأصل. */
+    private suspend fun compressStoryImage(uri: Uri): File? = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+        val mime = app.contentResolver.getType(uri)?.lowercase()?.substringBefore(';').orEmpty()
+        if (!mime.startsWith("image/")) return@withContext null
+        val raw = File.createTempFile("story-raw-", ".img", app.cacheDir)
+        val compressed = File.createTempFile("story-", ".jpg", app.cacheDir)
+        try {
+            val copied = app.contentResolver.openInputStream(uri)?.use { input ->
+                raw.outputStream().use { out -> input.copyTo(out) }
+            } ?: 0L
+            if (copied <= 0L) return@withContext null
+            val result = MediaCompressor.compressImage(raw.absolutePath, compressed.absolutePath)
+            if (result.isFile && result.length() in 1..100L * 1024 * 1024) result else null
+        } catch (_: Exception) {
+            null
+        } finally {
+            raw.delete()
         }
     }
 

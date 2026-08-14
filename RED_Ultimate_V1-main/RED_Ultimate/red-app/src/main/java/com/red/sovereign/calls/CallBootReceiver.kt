@@ -27,6 +27,10 @@ class CallBootReceiver : BroadcastReceiver() {
             return
         }
         YounesCallService.listen(context)
+        // أعد تسجيل توكن الدفع (FCM/VoIP) بعد إعادة التشغيل أو تحديث التطبيق —
+        // دون ذلك يتجمد التسجيل حتى يفتح المستخدم التطبيق يدوياً.
+        // آمن بدون Firebase SDK: لا يُرسَل شيء إن لم يوجد توكن مخزّن.
+        runCatching { VoipPushRegistrar.register(context) }
     }
 
     companion object {

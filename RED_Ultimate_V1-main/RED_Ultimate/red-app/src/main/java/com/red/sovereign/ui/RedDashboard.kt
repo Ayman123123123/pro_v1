@@ -1873,8 +1873,7 @@ private fun ChatHubScreen(
                 }
                 // 📝 مؤشر كتابة جماعي (الخادم يبثه للأعضاء — لا يظهر لكاتب الرسالة نفسه)
                 if (typingUsers.containsKey(openGroup.id)) {
-                    item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             Card(
                                 Modifier.padding(vertical = 4.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -1890,7 +1889,6 @@ private fun ChatHubScreen(
                                 )
                             }
                         }
-                    }
                 }
                 if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
                 if (showGroupStickers) {
@@ -3275,7 +3273,7 @@ private fun searchDisplayText(entity: com.red.sovereign.core.database.LocalHisto
         entity.messageType == "GROUP_MESSAGE" || entity.messageType in setOf("FILE", "IMAGE", "VIDEO", "AUDIO", "VOICE", "STICKER") ->
             runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.name
                 ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.name
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { it.emojiTags.firstOrNull() ?: "ملصق" }
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { if (it.emoji.isNotBlank()) it.emoji else "ملصق" }
                 ?: text
         else -> text
     }
@@ -3288,7 +3286,7 @@ private fun messageDisplayText(message: DecryptedMessage): String =
             val text = message.plaintext.toString(Charsets.UTF_8)
             runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.let { "📎 ${it.name}" }
                 ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.let { "🎤 ${it.name}" }
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { "🖼️ ${it.emojiTags.firstOrNull() ?: "ملصق"}" }
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { "🖼️ ${if (it.emoji.isNotBlank()) it.emoji else "ملصق"}" }
                 ?: text
         }
         else -> message.plaintext.toString(Charsets.UTF_8)

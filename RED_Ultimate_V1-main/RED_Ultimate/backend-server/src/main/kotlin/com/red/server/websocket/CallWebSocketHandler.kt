@@ -73,7 +73,12 @@ class CallWebSocketHandler(
                 val hostId = room?.host ?: source
                 // رفض/غادر/لم يرد → حرّر العضو ليصبح متاحاً لاستقبال المكالمات من جديد
                 if (type == "GROUP_CALL_DECLINE" || signal.memberStatus == "no_answer" || signal.memberStatus == "left") {
-                    activeCalls.releaseMember(groupCallId, source)
+                    val memberId = if (source == room?.host && signal.memberStatus == "no_answer") {
+                        signal.payload["memberId"]?.toString()?.takeIf { it in room.members }
+                    } else {
+                        source
+                    }
+                    if (memberId != null) activeCalls.releaseMember(groupCallId, memberId)
                 }
                 val outbound = OutgoingCallSignal(groupCallId, source, hostId, type, signal.mode.uppercase(), signal.payload + ("memberStatus" to signal.memberStatus.orEmpty()))
                 val targets = liveSessions(hostId)

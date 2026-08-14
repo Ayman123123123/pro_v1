@@ -173,6 +173,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private var svcEnabled: Boolean = false
     private var mediaKind: CallMediaKind = CallMediaKind.VOICE
     private var lastStats: NetworkStats = NetworkStats()
+    // تتبع تفاضلي لمعدل البايتات — نحسب kbps الحقيقي كفرق بين دورتين ÷ الزمن
+    private var lastBytesReceived: Long = 0L
+    private var lastStatsElapsedMs: Long = 0L
 
     fun adjustQuality(stats: NetworkStats) {
         videoSender?.let { sender ->
@@ -457,7 +460,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                     when (stat.type) {
                         "remote-inbound-rtp" -> {
                             rtt = ((stat.members["roundTripTime"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
-                            availableBitrate = (stat.members["availableOutgoingBitrate"] as? Number)?.toLong() ?: 0L
                         }
                         "inbound-rtp" -> {
                             packetsLost += (stat.members["packetsLost"] as? Number)?.toLong() ?: 0L
@@ -466,11 +468,26 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                             jitter = ((stat.members["jitter"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
                             fps = (stat.members["framesPerSecond"] as? Number)?.toInt() ?: 0
                         }
+                        // سعة الشبكة الفعلية تُقرأ من زوج المرشحين الحالي — وليس من تقرير الطرف البعيد
+                        "candidate-pair" -> {
+                            val isSelected = (stat.members["selected"] as? Boolean) ?: false
+                            if (isSelected) {
+                                availableBitrate = (stat.members["availableOutgoingBitrate"] as? Number)?.toLong() ?: 0L
+                            }
+                        }
                     }
                 }
                 val total = packetsLost + packetsReceived
                 val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
-                val kbps = bytesReceived * 8L / 1024L
+                // معدل الحزمة الفعلي: فرق البايتات بين الدورتين ÷ الزمن المنقضي (kbps)
+                val nowMs = System.currentTimeMillis()
+                val elapsedMs = nowMs - (lastStatsElapsedMs.takeIf { it > 0L } ?: nowMs)
+                lastStatsElapsedMs = nowMs
+                var kbps = 0L
+                if (bytesReceived > lastBytesReceived && elapsedMs > 0L) {
+                    kbps = ((bytesReceived - lastBytesReceived) * 8L / 1024L) * 1000L / elapsedMs
+                }
+                lastBytesReceived = bytesReceived
                 val quality = NetworkStats.classify(rtt, lossPct, availableBitrate / 1000L)
                 val ns = NetworkStats(rtt, lossPct, kbps, availableBitrate / 1000L, jitter, fps, quality)
                 events.onNetworkStats(ns)

@@ -149,4 +149,20 @@ class CallWebSocketHandlerTest {
             "Member status must be forwarded to the host: ${host.sent}"
         }
     }
+
+    @Test
+    fun `host no answer status releases only the invited member`() {
+        val host = Probe("h", "11111")
+        handler.handleTextMessage(
+            host.session,
+            TextMessage("""{"callId":"g-4","type":"GROUP_CALL_INVITE","mode":"VOICE","inviteeIds":["22222"]}""")
+        )
+
+        handler.handleTextMessage(
+            host.session,
+            TextMessage("""{"callId":"g-4","type":"GROUP_CALL_STATUS","mode":"VOICE","memberStatus":"no_answer","payload":{"memberId":"22222"}}""")
+        )
+
+        verify(activeCalls).releaseMember("g-4", "22222")
+    }
 }

@@ -50,6 +50,7 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
     interface Listener { fun onSignal(signal: CallSignal); fun onConnected(); fun onDisconnected(); fun onError(message: String) }
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
+    private val pendingSignals = PendingCallSignalQueue()
     private var socket: WebSocket? = null
 
     fun connect() {
@@ -57,7 +58,10 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
         val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")
         val url = ServerEndpoint.url().replaceFirst("http://", "ws://").replaceFirst("https://", "wss://") + "/ws/calls"
         socket = http.newWebSocket(Request.Builder().url(url).header("Authorization", "Bearer $token").build(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) = listener.onConnected()
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                pendingSignals.flush(webSocket::send)
+                listener.onConnected()
+            }
             override fun onMessage(webSocket: WebSocket, text: String) { runCatching { json.decodeFromString<CallSignal>(text) }.onSuccess(listener::onSignal).onFailure { listener.onError("INVALID_CALL_SIGNAL") } }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { socket = null; listener.onDisconnected() }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -78,9 +82,11 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
     fun isConnected(): Boolean = socket != null
 
     fun send(signal: CallSignal) {
-        if (socket?.send(json.encodeToString(signal)) != true) {
-            listener.onError("CALL_SIGNALING_DISCONNECTED")
-        }
+        val encoded = json.encodeToString(signal)
+        if (socket?.send(encoded) == true) return
+
+        pendingSignals.enqueue(encoded)
+        connect()
     }
 
     /** إرسال دعوة مكالمة جماعية لقائمة من الأصدقاء */
@@ -120,6 +126,9 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
         send(CallSignal(callId = callId, targetUserId = targetUserId, type = "CALL_RAISE_HAND"))
     }
 
-    fun close() { socket?.close(1000, "call service stopped"); socket = null }
+    fun close() {
+        pendingSignals.clear()
+        socket?.close(1000, "call service stopped")
+        socket = null
+    }
 }
-

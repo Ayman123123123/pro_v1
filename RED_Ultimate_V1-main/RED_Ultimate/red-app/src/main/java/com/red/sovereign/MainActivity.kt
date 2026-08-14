@@ -5,9 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,11 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.security.AppLockScreen
+import com.red.sovereign.security.AppLockPolicy
 import com.red.sovereign.security.DebugSecurityManager
 import com.red.sovereign.security.CertificatePinner
 import com.red.sovereign.settings.SettingsRuntime
@@ -33,7 +35,7 @@ import com.red.sovereign.ui.RedDashboard
 import com.red.sovereign.ui.theme.YounesTheme
 import com.red.sovereign.ui.theme.SovereignBackground
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         Log.i("Permissions", "Initial permissions granted: $grants")
@@ -47,8 +49,9 @@ class MainActivity : ComponentActivity() {
     private var deepLinkConversation by mutableStateOf<String?>(null)
     private var deepLinkSender by mutableStateOf<String?>(null)
 
-    /** حالة قفل التطبيق — تُفعّل عند onResume إن كان AppLock مفعّلاً. */
+    /** حالة قفل التطبيق بعد تجاوز مهلة الخلفية. */
     private var appLocked by mutableStateOf(false)
+    private var backgroundedAtElapsedMs: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -170,10 +173,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** قفل التطبيق عند العودة للواجهة إن كان AppLock مفعّلاً ومستخدم مُصادق عليه. */
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            backgroundedAtElapsedMs = SystemClock.elapsedRealtime()
+        }
+    }
+
+    /** قفل التطبيق فقط بعد بقائه بالخلفية لمدة كافية. */
     override fun onResume() {
         super.onResume()
-        if (authViewModel.state is AuthState.Authenticated && SettingsRuntime.current.appLockEnabled) {
+        val shouldLock = authViewModel.state is AuthState.Authenticated && AppLockPolicy.shouldLock(
+            lockEnabled = SettingsRuntime.current.appLockEnabled,
+            backgroundedAtElapsedMs = backgroundedAtElapsedMs,
+            nowElapsedMs = SystemClock.elapsedRealtime()
+        )
+        backgroundedAtElapsedMs = null
+        if (shouldLock) {
             appLocked = true
         }
     }

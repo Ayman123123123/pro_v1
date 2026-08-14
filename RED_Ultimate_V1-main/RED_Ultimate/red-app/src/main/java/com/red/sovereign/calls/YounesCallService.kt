@@ -62,6 +62,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var proximityLock: PowerManager.WakeLock? = null
     private var ringtone: Ringtone? = null
     private var reconnect: CallReconnectManager? = null
+    private var networkWatcher: NetworkChangeWatcher? = null
     private var vibrator: Vibrator? = null
     private var audioFocus: AudioFocusRequest? = null
     private var recordingManager: CallRecordingManager? = null
@@ -163,6 +164,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     override fun onConnected() {
         reconnect?.stop()
+        // مراقبة تبديل الشبكة (Wi-Fi ↔ بيانات) — عند التعافي نعيد IceRestart
+        if (networkWatcher == null) {
+            networkWatcher = NetworkChangeWatcher(this) {
+                if (CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming) {
+                    engine?.restartIce()
+                    updateNotification("تبديل الشبكة — إعادة ضبط المسار…")
+                }
+            }.also { it.start() }
+        }
         // نجحت إعادة الاتصال أثناء مكالمة نشطة — استعد واجهة المكالمة مع مدة غير منكسرة
         val wasReconnecting = CallRuntime.state as? CallUiState.Reconnecting
         if (wasReconnecting != null) {
@@ -365,16 +375,40 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 clearRingTimeout()
                 stopRingback()
                 stopRingtone()
+                failedIceJob?.cancel()
                 CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis())
                 updateNotification("مكالمة يونس نشطة")
                 startStatsPolling()
             }
-            PeerConnection.PeerConnectionState.FAILED, PeerConnection.PeerConnectionState.CLOSED -> endCall(sendSignal = false)
+            PeerConnection.PeerConnectionState.FAILED -> {
+                // انقطاع مؤقت (تبديل شبكة، إغلاق مكتمل) — لا ننهي المكالمة فوراً:
+                // نحاول ICE restart، وننهي فقط إذا بقي الاتصال فاشلاً بعد المهلة.
+                if (CallRuntime.state !is CallUiState.Idle && CallRuntime.state !is CallUiState.Incoming) {
+                    failedIceJob?.cancel()
+                    engine?.restartIce()
+                    failedIceJob = scope.launch {
+                        kotlinx.coroutines.delay(ICE_RESTART_GRACE_MS)
+                        // لم يتعافَ الاتصال خلال المهلة → ننهي المكالمة نهائياً
+                        if (CallRuntime.state is CallUiState.Active ||
+                            CallRuntime.state is CallUiState.ActiveWithIncoming ||
+                            CallRuntime.state is CallUiState.Reconnecting
+                        ) {
+                            updateNotification("انقطع الاتصال — جارٍ الإنهاء…")
+                            endCall(sendSignal = false)
+                        }
+                    }
+                } else {
+                    endCall(sendSignal = false)
+                }
+            }
+            PeerConnection.PeerConnectionState.CLOSED -> endCall(sendSignal = false)
             else -> Unit
         }
     }
 
     private var statsJob: kotlinx.coroutines.Job? = null
+    private var failedIceJob: kotlinx.coroutines.Job? = null
+    private val ICE_RESTART_GRACE_MS: Long = 12_000L
     private fun startStatsPolling() {
         statsJob?.cancel()
         statsJob = scope.launch {
@@ -389,7 +423,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
      * يُستدعى من `onNetworkStats` لتسجيل الـ Telemetry.
      */
     private fun onStatsReceived(stats: NetworkStats) {
-        engine?.adjustQuality(stats)
+        // ملاحظة: لا نستدعي engine.adjustQuality هنا — التكييف النشط يتم عبر
+        // WebRtcEngine.applyAdaptiveBitrate (profiles + simulcast) داخل pollStats.
+        // الجمع بين النظامين كان يتعارض كل دورة (أحدهما يخفض والآخر يرفع).
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) {
@@ -714,6 +750,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private fun endCallCore(sendSignal: Boolean) {
         statsJob?.cancel(); statsJob = null
+        failedIceJob?.cancel(); failedIceJob = null
+        networkWatcher?.stop(); networkWatcher = null
         clearRingTimeout()
         stopRingback()
         val endedPeer = target
