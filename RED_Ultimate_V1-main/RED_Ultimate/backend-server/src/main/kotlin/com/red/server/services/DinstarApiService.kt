@@ -7,10 +7,14 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * خدمة API شاملة لـ DINSTAR
  * تتعامل مع جميع عمليات HTTP API الموثقة
+ *
+ * كل العمليات تُوجَّه عبر سجل الأسطول: بعنوان البوابة إن ذُكر،
+ * وإلا بالبوابة الافتراضية — حتى لا ترتهن بجهاز الإعدادات وحده.
  */
 @Service
 class DinstarApiService(
@@ -23,23 +27,30 @@ class DinstarApiService(
     private val log = LoggerFactory.getLogger(DinstarApiService::class.java)
 
     /**
+     * حلّ البوابة المقصودة: بعنوانها إن ذُكر في الطلب،
+     * وإلا البوابة الافتراضية من سجل الأسطول.
+     */
+    private fun resolveGateway(gatewayHost: String?): DinstarFleetService.Gateway? =
+        gatewayHost?.trim()?.takeIf(String::isNotEmpty)
+            ?.let { fleet.findGatewayByHost(it) }
+            ?: fleet.getDefaultGateway()
+
+    /**
      * جلب حالة الجهاز (CPU, Memory, Flash)
      * POST /api/get_status
      */
     fun getDeviceStatus(gatewayHost: String? = null): Map<String, Any?> {
         return try {
-            val gateway = gatewayHost?.let { fleet.findGatewayByHost(it) } ?: fleet.getDefaultGateway()
-            if (gateway == null) {
-                return mapOf("error" to "No gateway available")
-            }
+            val gateway = resolveGateway(gatewayHost)
+                ?: return mapOf("error" to "No gateway available")
 
             val status = hardware.getDeviceStatus(gateway)
-            
+
             // حفظ في قاعدة البيانات
             saveDeviceStatus(gateway.id, status)
-            
-            webSocketHandler.broadcastDeviceStatus(gateway.id, status)
-            
+
+            webSocketHandler.broadcastDeviceStatus(gateway.id.toString(), status)
+
             status
         } catch (e: Exception) {
             log.error("Error getting device status", e)
@@ -47,7 +58,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveDeviceStatus(gatewayId: String, status: Map<String, Any?>) {
+    private fun saveDeviceStatus(gatewayId: UUID, status: Map<String, Any?>) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_device_status 
@@ -93,18 +104,16 @@ class DinstarApiService(
         timeBefore: String? = null
     ): List<Map<String, Any?>> {
         return try {
-            val gateway = gatewayHost?.let { fleet.findGatewayByHost(it) } ?: fleet.getDefaultGateway()
-            if (gateway == null) {
-                return emptyList()
-            }
+            val gateway = resolveGateway(gatewayHost)
+                ?: return emptyList()
 
             val cdrList = hardware.getCdrRecords(gateway, port, timeAfter, timeBefore)
-            
+
             // حفظ في قاعدة البيانات
             cdrList.forEach { cdr ->
                 saveCdrRecord(gateway.id, cdr)
             }
-            
+
             cdrList
         } catch (e: Exception) {
             log.error("Error getting CDR records", e)
@@ -112,7 +121,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveCdrRecord(gatewayId: String, cdr: Map<String, Any?>) {
+    private fun saveCdrRecord(gatewayId: UUID, cdr: Map<String, Any?>) {
         try {
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             val startTime = (cdr["start_time"] as? String)?.let { 
@@ -163,18 +172,16 @@ class DinstarApiService(
         code: String
     ): Map<String, Any?> {
         return try {
-            val gateway = gatewayHost?.let { fleet.findGatewayByHost(it) } ?: fleet.getDefaultGateway()
-            if (gateway == null) {
-                return mapOf("error" to "No gateway available")
-            }
+            val gateway = resolveGateway(gatewayHost)
+                ?: return mapOf("error" to "No gateway available")
 
             val result = hardware.sendUssd(gateway, port, code)
-            
+
             // حفظ في قاعدة البيانات
             saveUssdLog(gateway.id, port, code, result["response_text"] as? String, result["status"] as? String)
-            
-            webSocketHandler.broadcastUssdResponse(gateway.id, port, result)
-            
+
+            webSocketHandler.broadcastUssdResponse(gateway.id.toString(), port, result)
+
             result
         } catch (e: Exception) {
             log.error("Error sending USSD", e)
@@ -182,7 +189,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveUssdLog(gatewayId: String, port: Int, code: String, response: String?, status: String?) {
+    private fun saveUssdLog(gatewayId: UUID, port: Int, code: String, response: String?, status: String?) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_ussd_log 
@@ -210,13 +217,11 @@ class DinstarApiService(
         powerOn: Boolean
     ): Map<String, Any?> {
         return try {
-            val gateway = gatewayHost?.let { fleet.findGatewayByHost(it) } ?: fleet.getDefaultGateway()
-            if (gateway == null) {
-                return mapOf("error" to "No gateway available")
-            }
+            val gateway = resolveGateway(gatewayHost)
+                ?: return mapOf("error" to "No gateway available")
 
             val result = hardware.setPortPower(gateway, port, powerOn)
-            
+
             // تحديث قاعدة البيانات
             jdbc.update("""
                 INSERT INTO dinstar_port_control 
@@ -235,7 +240,7 @@ class DinstarApiService(
             logConfigChange(gateway.id, null, "PORT_POWER", port, 
                 if (powerOn) "ON" else "OFF", null)
             
-            webSocketHandler.broadcastPortControl(gateway.id, port, mapOf("power" to powerOn))
+            webSocketHandler.broadcastPortControl(gateway.id.toString(), port, mapOf("power" to powerOn))
             
             result
         } catch (e: Exception) {
@@ -256,13 +261,22 @@ class DinstarApiService(
         condition: String? = null
     ): Map<String, Any?> {
         return try {
-            val gateway = gatewayHost?.let { fleet.findGatewayByHost(it) } ?: fleet.getDefaultGateway()
-            if (gateway == null) {
-                return mapOf("error" to "No gateway available")
-            }
+            val gateway = resolveGateway(gatewayHost)
+                ?: return mapOf("error" to "No gateway available")
 
-            val result = hardware.setCallForward(gateway, port, enabled, number, condition)
-            
+            // ترجمة دلالات اللوحة (enabled + condition) إلى قيم «param»
+            // الموثقة في UC2000 لمسار set_port_info?action=CallForward.
+            val param = if (!enabled) "CancelAll" else when (condition?.uppercase()) {
+                null, "", "ALWAYS" -> "Unconditional"
+                "NO_REPLY", "NOREPLY", "NOANSWER" -> "NoReply"
+                "BUSY" -> "Busy"
+                "NOT_REACHABLE", "UNREACHABLE", "OFFLINE" -> "Not_Reachable"
+                else -> throw IllegalArgumentException("Invalid forward condition: $condition")
+            }
+            val forwardNumber = if (enabled) number.orEmpty() else ""
+
+            val result = hardware.setCallForward(gateway, port, param, forwardNumber)
+
             // تحديث قاعدة البيانات
             jdbc.update("""
                 INSERT INTO dinstar_port_control 
@@ -286,7 +300,7 @@ class DinstarApiService(
             logConfigChange(gateway.id, null, "CALL_FORWARD", port, 
                 if (enabled) "ENABLED:$number:$condition" else "DISABLED", null)
             
-            webSocketHandler.broadcastPortControl(gateway.id, port, 
+            webSocketHandler.broadcastPortControl(gateway.id.toString(), port,
                 mapOf("callForward" to enabled, "number" to number))
             
             result
@@ -297,7 +311,7 @@ class DinstarApiService(
     }
 
     private fun logConfigChange(
-        gatewayId: String,
+        gatewayId: UUID,
         userId: String?,
         changeType: String,
         port: Int?,

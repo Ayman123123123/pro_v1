@@ -134,6 +134,20 @@ class DinstarFleetService(
 
     fun findGateway(id: UUID): Gateway? = listGateways().firstOrNull { it.id == id }
 
+    /** بحث بعنوان المضيف — تستعمله العمليات الموجّهة لجهاز بعينه بالاسم. */
+    fun findGatewayByHost(host: String): Gateway? =
+        listGateways().firstOrNull { it.host.equals(host.trim(), ignoreCase = true) }
+
+    /**
+     * البوابة الافتراضية للعمليات التي لا تُسمّي جهازًا:
+     * أوّل بوابة صالحة للتوجيه (مفعّلة وليست ساقطة، بالأولوية)،
+     * وإلا أوّل مفعّلة، وإلا أوّل سجل على الإطلاق.
+     */
+    fun getDefaultGateway(): Gateway? =
+        routableGateways().firstOrNull()
+            ?: listGateways(onlyEnabled = true).firstOrNull()
+            ?: listGateways().firstOrNull()
+
     /** البوابات الصالحة للتوجيه: مفعّلة وليست ساقطة، مرتّبة بالأولوية. */
     fun routableGateways(): List<Gateway> =
         listGateways(onlyEnabled = true).filter { it.healthState != "OFFLINE" }

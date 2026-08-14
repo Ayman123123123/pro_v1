@@ -40,6 +40,10 @@ dependencies {
 
     // Kotlin
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    // JavaTimeModule used by JacksonConfig — no longer pulled in transitively
+    // by Spring Boot 4 starters (Jackson 2 artifacts are opt-in there), so it
+    // must be declared explicitly or the backend fails to compile/boot.
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.19.2")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // PSTN / Asterisk

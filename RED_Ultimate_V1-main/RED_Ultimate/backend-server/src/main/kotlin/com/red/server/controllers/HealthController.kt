@@ -1,5 +1,6 @@
 package com.red.server.controllers
 
+import com.red.server.config.InfrastructureBinding
 import io.minio.BucketExistsArgs
 import io.minio.MinioClient
 import org.bson.Document

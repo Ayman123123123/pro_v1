@@ -323,6 +323,98 @@ class DinstarHardwareService(
     /** Get Device Status — POST /api/get_status */
     fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
 
+    // ═══════════════════════════════════════════════════════
+    // 🛰 Fleet-targeted Operations — عمليات موجّهة لبوابة بعينها
+    //    من سجل الأسطول بدل الاكتفاء بالعنوان المضبوط في الإعدادات.
+    // ═══════════════════════════════════════════════════════
+
+    /** العميل المرتبط ببوابة من سجل الأسطول. */
+    private fun clientFor(gateway: DinstarFleetService.Gateway) =
+        connections.clientFor(gateway.host, gateway.apiPort, gateway.scheme)
+
+    /** التحقق من المنفذ ضمن مدى طراز البوابة نفسها لا الطراز المكتشَف للعنوان النشط. */
+    private fun requireGatewayPort(gateway: DinstarFleetService.Gateway, port: Int) =
+        require(port in gateway.portRange) {
+            "منفذ خارج المدى: ${gateway.model} يدعم ${gateway.portRange.first}-${gateway.portRange.last}"
+        }
+
+    /** حالة جهاز بعينه (CPU/الذاكرة/الفلاش) — POST /api/get_status */
+    fun getDeviceStatus(gateway: DinstarFleetService.Gateway): Map<String, Any?> {
+        val response = clientFor(gateway).getDeviceStatus()
+        require(apiSuccess(response)) { "تعذّر استعلام حالة الجهاز: ${apiErrorMessage(response)}" }
+        return response
+    }
+
+    /**
+     * سجل مكالمات بوابة بعينها — POST /api/get_cdr.
+     *
+     * مثل [queryCdr] لكن موجّهًا لأي بوابة في الأسطول، مع إمكانية حصر
+     * المنفذ والنافذة الزمنية. يُعيد قائمة السجلات كما وردت من البوابة.
+     */
+    fun getCdrRecords(
+        gateway: DinstarFleetService.Gateway,
+        port: Int? = null,
+        timeAfter: String? = null,
+        timeBefore: String? = null
+    ): List<Map<String, Any?>> {
+        port?.let { requireGatewayPort(gateway, it) }
+        val body = mutableMapOf<String, Any>(
+            "port" to (port?.let { listOf(it) } ?: gateway.portRange.toList()),
+            "maximum" to 100
+        )
+        timeAfter?.let { body["time_after"] = it }
+        timeBefore?.let { body["time_before"] = it }
+        val response = clientFor(gateway).postJson("/api/get_cdr", body)
+        require(apiSuccess(response)) { "تعذّر جلب سجل المكالمات: ${apiErrorMessage(response)}" }
+        @Suppress("UNCHECKED_CAST")
+        return (response["cdr"] ?: response["info"]) as? List<Map<String, Any?>> ?: emptyList()
+    }
+
+    /** إرسال USSD عبر بوابة بعينها — POST /api/send_ussd */
+    fun sendUssd(gateway: DinstarFleetService.Gateway, port: Int, code: String): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        require(code.matches(Regex("^[*#0-9]{2,30}$"))) { "Invalid USSD code" }
+        val response = clientFor(gateway).postJson(
+            "/api/send_ussd",
+            mapOf("port" to listOf(port), "command" to "send", "text" to code)
+        )
+        require(apiSuccess(response)) { "تعذّر إرسال USSD: ${apiErrorMessage(response)}" }
+        return response
+    }
+
+    /** تشغيل/إيقاف منفذ في بوابة بعينها — GET /api/set_port_info?action=power */
+    fun setPortPower(gateway: DinstarFleetService.Gateway, port: Int, on: Boolean): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        val response = clientFor(gateway).getJson(
+            "/api/set_port_info",
+            mapOf("port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off")
+        )
+        require(apiSuccess(response)) { "تعذّر ضبط تشغيل المنفذ: ${apiErrorMessage(response)}" }
+        return response
+    }
+
+    /** تحويل مكالمات في بوابة بعينها — GET /api/set_port_info?action=CallForward */
+    fun setCallForward(
+        gateway: DinstarFleetService.Gateway,
+        port: Int,
+        param: String,
+        number: String
+    ): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        require(param in setOf("Unconditional", "NoReply", "Busy", "Not_Reachable", "CancelAll")) {
+            "Invalid CallForward param"
+        }
+        val response = clientFor(gateway).getJson(
+            "/api/set_port_info",
+            mapOf(
+                "port" to port.toString(), "action" to "CallForward",
+                "param" to param, "number" to number
+            )
+        )
+        require(apiSuccess(response)) { "تعذّر ضبط تحويل المكالمات: ${apiErrorMessage(response)}" }
+        return response
+    }
+
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
         registerGateway(0)
