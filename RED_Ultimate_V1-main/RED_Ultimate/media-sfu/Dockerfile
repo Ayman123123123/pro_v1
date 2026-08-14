@@ -13,7 +13,10 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY package.json package-lock.json install-worker.sh ./
-RUN chmod +x install-worker.sh \
+# Windows checkouts (core.autocrlf) convert the shebang to `#!/bin/sh\r`, which
+# makes ./install-worker.sh fail with "not found" inside Debian's dash.
+RUN sed -i 's/\r$//' install-worker.sh \
+    && chmod +x install-worker.sh \
     && PYTHON=python3 ./install-worker.sh \
     && npm cache clean --force
 
