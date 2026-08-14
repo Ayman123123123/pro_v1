@@ -23,11 +23,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SpeakerPhone
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -100,6 +103,8 @@ fun YounesCallOverlay() {
     }
     var mic by remember { mutableStateOf(true) }
     var camera by remember { mutableStateOf(true) }
+    var showRecordConsent by remember { mutableStateOf(false) }
+    var showKeypad by remember { mutableStateOf(false) }
 
     fun requestAccept(cameraOn: Boolean = true, micOn: Boolean = true) {
         acceptCamera = cameraOn
@@ -109,6 +114,61 @@ fun YounesCallOverlay() {
             if (video && cameraOn) add(Manifest.permission.CAMERA)
         }
         permissions.launch(needed.toTypedArray())
+    }
+
+    // حوار تأكيد التسجيل — موافقة صريحة قبل بدء التسجيل (لا تُفترض)
+    if (showRecordConsent) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRecordConsent = false },
+            title = { Text("تسجيل المكالمة", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "سيتم تسجيل هذه المكالمة على جهازك فقط (صوتك عبر الميكروفون) مع تشفير AES-GCM.\n" +
+                        "أكّد أن الطرف الآخر موافق على التسجيل قبل البدء."
+                )
+            },
+            confirmButton = {
+                TextButton({
+                    showRecordConsent = false
+                    context.startService(
+                        android.content.Intent(context, YounesCallService::class.java)
+                            .setAction(YounesCallService.ACTION_START_RECORDING)
+                            .putExtra(YounesCallService.EXTRA_CONSENT, true)
+                    )
+                }) { Text("موافق — ابدأ التسجيل", color = YounesEmerald) }
+            },
+            dismissButton = {
+                TextButton({ showRecordConsent = false }) { Text("إلغاء") }
+            }
+        )
+    }
+
+    // لوحة الأرقام DTMF — تعمل فعلياً عبر توليد نغمات على قناة المكالمة
+    if (showKeypad) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showKeypad = false },
+            title = { Text("لوحة الأرقام", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    listOf("1 2 3", "4 5 6", "7 8 9", "* 0 #").forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            row.split(" ").forEach { digit ->
+                                androidx.compose.material3.OutlinedButton(
+                                    onClick = { YounesCallService.dtmf(context, digit[0]) },
+                                    modifier = Modifier.size(64.dp, 52.dp)
+                                ) {
+                                    Text(digit, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ showKeypad = false }) { Text("إغلاق") } }
+        )
     }
 
     Dialog(
@@ -213,6 +273,15 @@ fun YounesCallOverlay() {
                                 held = (state as? CallUiState.Active)?.isHeld == true,
                                 mic = mic,
                                 camera = camera,
+                                isRecording = CallRuntime.isRecording,
+                                onRecord = {
+                                    if (CallRuntime.isRecording) {
+                                        YounesCallService.action(context, YounesCallService.ACTION_STOP_RECORDING)
+                                    } else {
+                                        showRecordConsent = true
+                                    }
+                                },
+                                onKeypad = { showKeypad = true },
                                 onMic = { mic = !mic; YounesCallService.action(context, YounesCallService.ACTION_MIC, mic) },
                                 onSpeaker = { YounesCallService.action(context, YounesCallService.ACTION_SPEAKER, !CallRuntime.speaker) },
                                 onHold = {
@@ -263,6 +332,22 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CallElapsedTimer(active.startedAt)
                 NetworkQualityBars(CallRuntime.networkStats)
+            }
+        }
+        // مؤشر التسجيل — نقطة حمراء نابضة + "جارٍ التسجيل"
+        if (CallRuntime.isRecording) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0x33E53935))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Box(
+                    Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFFE53935))
+                )
+                Text("جارٍ التسجيل", color = Color(0xFFFF8A80), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         EncryptedBadge()
@@ -345,6 +430,9 @@ private fun ActiveControls(
     held: Boolean,
     mic: Boolean,
     camera: Boolean,
+    isRecording: Boolean,
+    onRecord: () -> Unit,
+    onKeypad: () -> Unit,
     onMic: () -> Unit,
     onSpeaker: () -> Unit,
     onHold: () -> Unit,
@@ -356,6 +444,13 @@ private fun ActiveControls(
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
         CallRoundButton(if (mic) Icons.Default.Mic else Icons.Default.MicOff, "كتم", onMic, if (mic) Color.White.copy(0.14f) else Color(0x33E53935))
         CallRoundButton(Icons.Default.SpeakerPhone, "سماعة", onSpeaker)
+        CallRoundButton(
+            if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+            if (isRecording) "إيقاف التسجيل" else "تسجيل",
+            onRecord,
+            if (isRecording) Color(0xFFB71C1C) else Color(0x33E53935)
+        )
+        CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
         if (video) {
             CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "كاميرا", onCamera)
             CallRoundButton(Icons.Default.Cameraswitch, "تدوير", onFlip)

@@ -1,19 +1,14 @@
 package com.red.sovereign.calls
 
 import android.content.Context
-import android.media.MediaCodec
-import android.media.MediaCodecInfo
-import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.media.MediaRecorder
 import android.os.Build
-import com.red.sovereign.core.database.LocalRepository
+import android.os.SystemClock
 import com.red.sovereign.crypto.ProtocolRecordCipher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
 
 /**
  * Call recording with E2EE.
@@ -40,6 +35,7 @@ class CallRecordingManager(
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var isRecording: Boolean = false
+    private var startedAtElapsed: Long = 0L
     private val cipher = ProtocolRecordCipher()
 
     /**
@@ -53,7 +49,8 @@ class CallRecordingManager(
             return false
         }
         if (isRecording) return true
-        val dir = File(context.cacheDir, "recordings").apply { mkdirs() }
+        // تخزين دائم في filesDir (وليس cacheDir) — لا يُمحى عند مسح كاش التطبيق
+        val dir = File(context.filesDir, "recordings").apply { mkdirs() }
         outputFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
         val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
         try {
@@ -67,6 +64,7 @@ class CallRecordingManager(
             recorder.start()
             mediaRecorder = recorder
             isRecording = true
+            startedAtElapsed = SystemClock.elapsedRealtime()
             return true
         } catch (e: Exception) {
             android.util.Log.e("CallRecording", "Failed to start: ${e.message}")
@@ -89,9 +87,12 @@ class CallRecordingManager(
         recorder?.release()
         mediaRecorder = null
         isRecording = false
+        // المدة الفعلية تُحسب من ساعة الإيقاف — كانت 0 دائماً من قبل
+        val durationMs = (SystemClock.elapsedRealtime() - startedAtElapsed).coerceAtLeast(0L)
+        startedAtElapsed = 0L
         if (tempRawFile == null || !tempRawFile.exists()) return@withContext null
 
-        val dir = File(context.cacheDir, "recordings").apply { mkdirs() }
+        val dir = File(context.filesDir, "recordings").apply { mkdirs() }
         val encFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
 
         try {
@@ -109,7 +110,7 @@ class CallRecordingManager(
                 sizeBytes = encFile.length(),
                 encrypted = true,
                 createdAt = System.currentTimeMillis(),
-                durationMs = 0L
+                durationMs = durationMs
             )
         } catch (e: Exception) {
             android.util.Log.e("CallRecording", "Failed to encrypt recording: ${e.message}")

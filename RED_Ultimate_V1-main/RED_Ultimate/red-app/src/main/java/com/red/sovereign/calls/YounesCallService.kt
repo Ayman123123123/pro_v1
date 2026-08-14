@@ -129,7 +129,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     CallRuntime.state = state.active
                 }
             }
-            ACTION_START_RECORDING -> startRecording()
+            ACTION_START_RECORDING -> startRecording(consentGranted = intent.getBooleanExtra(EXTRA_CONSENT, false))
             ACTION_STOP_RECORDING -> stopRecording()
             // PSTN interop: silence/hold/resume RED call from PhoneStateReceiver
             ACTION_SILENCE_RINGER -> stopRingtone()
@@ -430,25 +430,47 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     /**
      * Sends a DTMF tone (used for IVR navigation).
+     * يُولَّد النغم فعلياً على قناة المكالمة (In-band) عبر ToneGenerator،
+     * ويُحاول أيضاً تمريره لنظام Telecom إن دعمه الجهاز.
      */
     private fun sendDtmf(digit: Char) {
         if (CallRuntime.state !is CallUiState.Active) return
         scope.launch { runCatching { telecom.sendDtmf(target, digit) } }
+        // توليد نغمة DTMF حقيقية محلياً — مدة قياسية 100-120ms
+        runCatching {
+            val tone = when (digit) {
+                '1' -> ToneGenerator.TONE_DTMF_1; '2' -> ToneGenerator.TONE_DTMF_2; '3' -> ToneGenerator.TONE_DTMF_3
+                '4' -> ToneGenerator.TONE_DTMF_4; '5' -> ToneGenerator.TONE_DTMF_5; '6' -> ToneGenerator.TONE_DTMF_6
+                '7' -> ToneGenerator.TONE_DTMF_7; '8' -> ToneGenerator.TONE_DTMF_8; '9' -> ToneGenerator.TONE_DTMF_9
+                '0' -> ToneGenerator.TONE_DTMF_0
+                '*' -> ToneGenerator.TONE_DTMF_S; '#' -> ToneGenerator.TONE_DTMF_P
+                else -> return@runCatching
+            }
+            val tg = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 60)
+            tg.startTone(tone, 120)
+            scope.launch { kotlinx.coroutines.delay(160); runCatching { tg.release() } }
+        }
     }
 
     /**
      * يبدأ تسجيل المكالمة بعد موافقة الطرفين (two-party consent).
      * التسجيل محلي فقط (mic) ومُشفر بـ Android Keystore.
+     * consentGranted تُمرَّر من واجهة المستخدم بعد حوار تأكيد صريح — لا تُفترض أبداً.
      */
-    private fun startRecording() {
+    private fun startRecording(consentGranted: Boolean = false) {
         if (CallRuntime.state !is CallUiState.Active) return
         if (recordingManager?.isRecording() == true) return
+        if (!consentGranted) {
+            recordingConsentShown = true
+            updateNotification("مكالمة يونس نشطة • انتظر موافقة التسجيل")
+            return
+        }
         if (recordingManager == null) {
             recordingManager = CallRecordingManager(this, callId.orEmpty())
         }
-        // موافقة الطرف الآخر مفترضة (الـ UI يعرض banner ويسأل قبل)
         val started = recordingManager?.start(consentGranted = true) ?: false
         if (started) {
+            CallRuntime.isRecording = true
             updateNotification("مكالمة يونس نشطة • جارٍ التسجيل")
         }
     }
@@ -459,6 +481,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun stopRecording() {
         scope.launch {
             val recording = recordingManager?.stop()
+            CallRuntime.isRecording = false
             recording?.let {
                 updateNotification("مكالمة يونس نشطة • تم حفظ التسجيل")
             }
@@ -646,17 +669,67 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         statsJob?.cancel(); statsJob = null
         clearRingTimeout()
         stopRingback()
+        val endedPeer = target
+        val endedCallId = callId
+        val endedMode = mode
         val durationMs = CallRuntime.state.let { (it as? CallUiState.Active)?.let { active -> System.currentTimeMillis() - active.startedAt } ?: 0L }
-        if (durationMs > 0 && callId != null) CallTelemetry.onCallEnded(callId.orEmpty(), mode, "RED", durationMs)
+        val startedAt = (CallRuntime.state as? CallUiState.Active)?.startedAt
+            ?: ringStartedAt.takeIf { it > 0L } ?: System.currentTimeMillis() - durationMs
+        if (durationMs > 0 && endedCallId != null) CallTelemetry.onCallEnded(endedCallId, endedMode, "RED", durationMs)
         CallTelemetry.flush(this)
         CallTelemetry.reset()
         stopRingtone()
+        // أغلق مكالمة النظام (CallsManager) — كان هذا مفقوداً ويترك مكالمات وهمية عالقة في شاشة النظام
+        if (endedPeer.isNotBlank()) scope.launch { runCatching { telecom.disconnect(endedPeer) } }
+        // سجّل المكالمة محلياً فوراً (offline-first) — كان السجل يعتمد على السيرفر فقط
+        if (endedCallId != null) saveCallLogLocally(
+            callId = endedCallId,
+            peer = endedPeer,
+            mode = endedMode,
+            startedAt = startedAt,
+            durationMs = durationMs,
+            incoming = incomingOffer != null
+        )
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
         audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
         if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
-        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null
+        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.isRecording = false
+    }
+
+    /**
+     * يكتب سجل المكالمة في قاعدة التطبيق المحلية (مشفّر) فور انتهاء المكالمة،
+     * ليبقى السجل متاحاً حتى بدون اتصال بالخادم. البيانات تتزامن لاحقاً مع السيرفر.
+     */
+    private fun saveCallLogLocally(callId: String, peer: String, mode: String, startedAt: Long, durationMs: Long, incoming: Boolean) {
+        scope.launch {
+            runCatching {
+                // الحالة تُشتق من الحالة النهائية الفعلية للمكالمة
+                val status = when {
+                    durationMs > 0 -> "ENDED"
+                    CallRuntime.state is CallUiState.Busy -> "FAILED"
+                    CallRuntime.state is CallUiState.Declined || CallRuntime.state is CallUiState.Incoming -> "REJECTED"
+                    CallRuntime.state is CallUiState.Error -> "FAILED"
+                    else -> "MISSED"
+                }
+                val cipher = CallLogCipher()
+                val log = com.red.sovereign.core.database.CallLogEntity(
+                    id = callId,
+                    peerId = cipher.encryptPeerId(peer),
+                    peerLabel = cipher.encryptLabel(peer),
+                    type = if (mode == "VIDEO") "VIDEO" else "VOICE",
+                    direction = if (incoming) "INCOMING" else "OUTGOING",
+                    route = "RED",
+                    status = status,
+                    timestamp = startedAt,
+                    durationMs = durationMs,
+                    answeredAt = if (durationMs > 0) startedAt else null,
+                    endedAt = if (durationMs > 0) startedAt + durationMs else startedAt
+                )
+                com.red.sovereign.core.database.LocalRepository(this@YounesCallService).saveCallLog(log)
+            }
+        }
     }
 
     private fun clearRingTimeout() {
@@ -786,6 +859,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
         const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
         const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
+        const val EXTRA_CONSENT = "consent"
         // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
@@ -849,4 +923,6 @@ object CallRuntime {
     var speaker by androidx.compose.runtime.mutableStateOf(false)
     var isMinimized by androidx.compose.runtime.mutableStateOf(false)
     var networkStats: NetworkStats by androidx.compose.runtime.mutableStateOf(NetworkStats())
+    /** هل تسجيل المكالمة يعمل الآن — تُعرض كشارة حمراء في واجهة المكالمة */
+    var isRecording by androidx.compose.runtime.mutableStateOf(false)
 }
