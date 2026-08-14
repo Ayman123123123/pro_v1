@@ -45,7 +45,7 @@ class EncryptedAttachmentRepository(
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val random = SecureRandom()
 
-    suspend fun prepare(uri: Uri, targetRedId: String): ApiResult<PreparedAttachment> = withContext(Dispatchers.IO) {
+    suspend fun prepare(uri: Uri, targetRedIds: List<String>): ApiResult<PreparedAttachment> = withContext(Dispatchers.IO) {
         val metadata = metadata(uri) ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT")
         if (metadata.size !in 1..MAX_BYTES) return@withContext ApiResult.Error(413, "ATTACHMENT_TOO_LARGE")
         if (!allowedMime(metadata.mimeType)) return@withContext ApiResult.Error(415, "ATTACHMENT_TYPE_NOT_ALLOWED")
@@ -82,21 +82,32 @@ class EncryptedAttachmentRepository(
             }
             when (val uploaded = media.uploadEncrypted(encrypted, metadata.name.substringBeforeLast('.'))) {
                 is ApiResult.Error -> uploaded
-                is ApiResult.Success -> when (val granted = media.grant(uploaded.value.objectKey, targetRedId)) {
-                    is ApiResult.Error -> { media.delete(uploaded.value.url); granted }
-                    is ApiResult.Success -> {
-                        val manifest = AttachmentManifest(
-                            objectKey = uploaded.value.objectKey,
-                            url = uploaded.value.url,
-                            name = metadata.name,
-                            mimeType = metadata.mimeType,
-                            size = metadata.size,
-                            sha256 = shaHex,
-                            key = Base64.getEncoder().encodeToString(key),
-                            nonce = Base64.getEncoder().encodeToString(nonce)
-                        )
-                        ApiResult.Success(uploaded.code, PreparedAttachment(json.encodeToString(manifest), metadata.name, metadata.mimeType, metadata.size))
+                is ApiResult.Success -> {
+                    // منح الوصول لكل مستلم (فرد واحد أو أعضاء المجموعة). فشل منح عضو واحد
+                    // (حساب غير معتمد مثلاً) لا يمنع الإرسال — يُتخطى، والعضو يرى الملف غير متاح.
+                    var anyGranted = false
+                    for (grantee in targetRedIds) {
+                        if (grantee.isBlank()) continue
+                        when (media.grant(uploaded.value.objectKey, grantee)) {
+                            is ApiResult.Success -> anyGranted = true
+                            is ApiResult.Error -> Unit
+                        }
                     }
+                    if (!anyGranted) {
+                        media.delete(uploaded.value.url)
+                        return@withContext ApiResult.Error(null, "ATTACHMENT_GRANT_FAILED")
+                    }
+                    val manifest = AttachmentManifest(
+                        objectKey = uploaded.value.objectKey,
+                        url = uploaded.value.url,
+                        name = metadata.name,
+                        mimeType = metadata.mimeType,
+                        size = metadata.size,
+                        sha256 = shaHex,
+                        key = Base64.getEncoder().encodeToString(key),
+                        nonce = Base64.getEncoder().encodeToString(nonce)
+                    )
+                    ApiResult.Success(uploaded.code, PreparedAttachment(json.encodeToString(manifest), metadata.name, metadata.mimeType, metadata.size))
                 }
             }
         } catch (error: Exception) {

@@ -1,11 +1,15 @@
 package com.red.server.social
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
 
 @Document("posts")
+// تغطي استعلامات الفيدز الثلاثة في FeedService (deletedAt=null + parentId=null + sort createdAt DESC)
+@CompoundIndex(name = "feed_active", def = "{'deletedAt': 1, 'parentId': 1, 'createdAt': -1}")
+@CompoundIndex(name = "feed_following", def = "{'authorId': 1, 'deletedAt': 1, 'createdAt': -1}")
 data class PostDocument(
     @Id val id: String,
     @Indexed val authorId: String,

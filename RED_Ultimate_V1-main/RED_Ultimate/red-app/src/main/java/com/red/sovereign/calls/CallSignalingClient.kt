@@ -74,6 +74,9 @@ class CallSignalingClient(private val context: Context, private val tokens: Toke
         connect()
     }
 
+    /** هل قناة الإشارات مفتوحة الآن — يُستخدم لمعرفة نجاح إعادة الاتصال فعلاً. */
+    fun isConnected(): Boolean = socket != null
+
     fun send(signal: CallSignal) {
         if (socket?.send(json.encodeToString(signal)) != true) {
             listener.onError("CALL_SIGNALING_DISCONNECTED")

@@ -115,6 +115,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
+        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — المكالمة تستمر صوتياً ويُعلم المستخدم. */
+        fun onCameraUnavailable() {}
     }
 
     private val egl = EglBase.create()
@@ -211,7 +213,85 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         cameraRequestedByUser = kind.wantsVideo
         svcEnabled = svc
         currentBitrateProfile = initialBitrateProfile()
-        val ice = loadIce() ?: return ApiResult.Error(null, "ICE_CONFIGURATION_FAILED")
+        val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
+        val pc = created
+
+        // Audio constraints كاملة — AEC, NS, AGC, HighPass, Stereo, TypingNoise
+        val audioConstraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("stereo", if (mediaKind.stereoAudio) "true" else "false"))
+        }
+        audioSource = factory.createAudioSource(audioConstraints)
+        val audio = factory.createAudioTrack("younes-audio", audioSource).apply { setEnabled(true) }
+        pc.addTrack(audio, listOf("younes-stream"))
+
+        val videoTrack = if (hasVideo) createVideoTrack() else null
+        if (videoTrack != null) {
+            val sender = pc.addTrack(videoTrack, listOf("younes-stream"))
+            videoSender = sender
+            if (simulcastEnabled) {
+                applySimulcast(sender, currentBitrateProfile, svcEnabled)
+            }
+        }
+        applyCodecPreferences(mediaKind)
+        localMedia = LocalMedia(audio, videoTrack)
+        return ApiResult.Success(200, Unit)
+    }
+
+    /**
+     * PeerConnection للاستقبال فقط (SFU consume): بدون أي tracks محلية.
+     * يُستخدم في مسار media-sfu لاستقبال بث الأعضاء الآخرين — نفس ICE servers
+     * ونفس إعدادات السياسة، ويُحدَّث mediaKind لضبط constraints الإجابة (answer).
+     */
+    suspend fun createReceiverOnly(kind: CallMediaKind): ApiResult<Unit> {
+        mediaKind = kind
+        hasVideo = kind.wantsVideo
+        cameraRequestedByUser = false
+        currentBitrateProfile = NetworkStats.BitrateProfile.STANDARD
+        val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
+        localMedia = null
+        return ApiResult.Success(200, Unit)
+    }
+
+    /**
+     * إعادة محاولة فتح الكاميرا بعد فشل سابق (إذن مرفوض ثم مُنح من الإعدادات،
+     * أو خلل مؤقت في الأجهزة). تُضاف مسار الفيديو إلى الاتصال القائم وتُطلب إعادة تفاوض.
+     * @return true إذا أصبح الفيديو المحلي متاحاً.
+     */
+    fun retryCamera(): Boolean {
+        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن — تُسجَّل الرغبة أولاً
+        cameraRequestedByUser = true
+        if (capturer != null || localMedia?.videoTrack != null) return true
+        val pc = peer ?: return false
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            events.onCameraUnavailable()
+            return false
+        }
+        val track = createVideoTrack() ?: return false
+        val audio = localMedia?.audioTrack ?: return false
+        val sender = pc.addTrack(track, listOf("younes-stream"))
+        videoSender = sender
+        applySimulcast(sender, currentBitrateProfile, svcEnabled)
+        applyCodecPreferences(mediaKind)
+        localMedia = LocalMedia(audio, track)
+        hasVideo = true
+        pc.createOffer(sdpObserver(setLocal = true), offerAnswerConstraints())
+        return true
+    }
+
+    private suspend fun createPeerConnection(kind: CallMediaKind): PeerConnection? {
+        val ice = loadIce() ?: return null
         val servers = ice.iceServers.map { value ->
             PeerConnection.IceServer.builder(value.urls)
                 .setUsername(value.username.orEmpty())
@@ -230,37 +310,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             iceCandidatePoolSize = 2
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
-        peer = factory.createPeerConnection(config, observer) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
-
-        // Audio constraints كاملة — AEC, NS, AGC, HighPass, Stereo, TypingNoise
-        val audioConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("stereo", if (mediaKind.stereoAudio) "true" else "false"))
-        }
-        audioSource = factory.createAudioSource(audioConstraints)
-        val audio = factory.createAudioTrack("younes-audio", audioSource).apply { setEnabled(true) }
-        peer?.addTrack(audio, listOf("younes-stream"))
-
-        val videoTrack = if (hasVideo) createVideoTrack() else null
-        if (videoTrack != null) {
-            val sender = peer?.addTrack(videoTrack, listOf("younes-stream"))
-            videoSender = sender
-            if (simulcastEnabled) {
-                applySimulcast(sender, currentBitrateProfile, svcEnabled)
-            }
-        }
-        applyCodecPreferences(mediaKind)
-        localMedia = LocalMedia(audio, videoTrack)
-        return ApiResult.Success(200, Unit)
+        val pc = factory.createPeerConnection(config, observer) ?: return null
+        peer = pc
+        return pc
     }
 
     /**
@@ -449,17 +501,29 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     private fun createVideoTrack(): VideoTrack? {
-        val selected = camera(Camera2Enumerator(context)) ?: return null
-        capturer = selected
-        videoSource = factory.createVideoSource(false)
-        textureHelper = SurfaceTextureHelper.create("YounesCamera", egl.eglBaseContext)
-        selected.initialize(textureHelper, context, videoSource?.capturerObserver)
-        val profile = currentBitrateProfile.takeUnless { it == NetworkStats.BitrateProfile.AUDIO_ONLY }
-            ?: NetworkStats.BitrateProfile.LOW
-        selected.startCapture(profile.videoWidth, profile.videoHeight, profile.videoFramerate)
-        return factory.createVideoTrack("younes-video", videoSource).apply {
-            setEnabled(cameraRequestedByUser && currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY)
+        // إذن الكاميرا غير ممنوح → لا نحاول أبداً (Camera2Enumerator قد يرمي SecurityException)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            events.onCameraUnavailable()
+            return null
         }
+        return runCatching {
+            val selected = camera(Camera2Enumerator(context)) ?: return null
+            capturer = selected
+            videoSource = factory.createVideoSource(false)
+            textureHelper = SurfaceTextureHelper.create("YounesCamera", egl.eglBaseContext)
+            selected.initialize(textureHelper, context, videoSource?.capturerObserver)
+            val profile = currentBitrateProfile.takeUnless { it == NetworkStats.BitrateProfile.AUDIO_ONLY }
+                ?: NetworkStats.BitrateProfile.LOW
+            selected.startCapture(profile.videoWidth, profile.videoHeight, profile.videoFramerate)
+            factory.createVideoTrack("younes-video", videoSource).apply {
+                setEnabled(cameraRequestedByUser && currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY)
+            }
+        }.onFailure {
+            events.onCameraUnavailable()
+            runCatching { capturer?.stopCapture() }
+        }.getOrNull()
     }
 
     private fun initialBitrateProfile(): NetworkStats.BitrateProfile {

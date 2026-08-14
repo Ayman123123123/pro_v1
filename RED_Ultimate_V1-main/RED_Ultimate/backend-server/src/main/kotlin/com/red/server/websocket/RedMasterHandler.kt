@@ -7,6 +7,7 @@ import com.red.server.database.RedisManager
 import com.red.server.messaging.DeleteService
 import com.red.server.messaging.MessageService
 import com.red.server.services.AdminUserIntelligenceService
+import com.red.server.services.NotificationService
 import com.red.sovereign.proto.RedProtos
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
@@ -25,7 +26,8 @@ class RedMasterHandler(
     private val redisManager: RedisManager,
     private val redis: StringRedisTemplate,
     private val userIntelligence: AdminUserIntelligenceService,
-    private val accessGuard: ApprovedDeviceSessionGuard
+    private val accessGuard: ApprovedDeviceSessionGuard,
+    private val notifications: NotificationService
 ) : BinaryWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
     // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
@@ -74,6 +76,12 @@ class RedMasterHandler(
         val stored = messages.processIncoming(incoming)
         send(session, ack(stored, "SENT"))
         sendToDevice(stored.receiverId, stored.receiverDeviceId, messageEnvelope(stored))
+        // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول FCM اختياري
+        // كي لا تُفوَّت الرسالة حتى لو لم يفتح التطبيق (البريد المعلق يغطي إعادة الاتصال فقط).
+        val receiverHasLiveSession = sessions[stored.receiverId]?.values?.any { it.isOpen } == true
+        if (!receiverHasLiveSession) {
+            notifications.sendChatMessagePush(stored.receiverId, stored.senderId)
+        }
         // Synchronize the sender's other approved devices without echoing to this socket.
         sendToUser(sender, messageEnvelope(stored), exceptSessionId = session.id)
     }
@@ -90,10 +98,19 @@ class RedMasterHandler(
     private fun receiveTyping(session: WebSocketSession, typing: RedProtos.TypingRED) {
         val sender = userId(session)
         require(typing.userId == sender) { "userId does not match authenticated RED ID" }
-        require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
-        messages.requireDirectAllowed(sender, typing.targetUserId)
         redisManager.setTyping(sender, typing.conversationId)
-        sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
+        // 📝 مؤشر الكتابة الجماعي: conversationId = معرف مجموعة (UUID > 32) — يُبث لكل الأعضاء
+        if (typing.conversationId.length > 32) {
+            messages.requireGroupMember(typing.conversationId, sender)
+            val envelope = RedProtos.RedRED.newBuilder().setTyping(typing).build()
+            messages.groupMemberRedIds(typing.conversationId)
+                .filter { it != sender }
+                .forEach { sendToUser(it, envelope) }
+        } else {
+            require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
+            messages.requireDirectAllowed(sender, typing.targetUserId)
+            sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
+        }
     }
 
     private fun sync(session: WebSocketSession, request: RedProtos.SyncRequest) {

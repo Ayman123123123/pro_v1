@@ -113,6 +113,18 @@ interface RedDao {
     @Query("DELETE FROM message_reactions WHERE conversationId = :convId")
     suspend fun deleteReactionsByConversation(convId: String)
 
+    @Query("DELETE FROM message_reactions WHERE messageId = :messageId")
+    suspend fun deleteReactionsForMessage(messageId: String)
+
+    @Query("SELECT COUNT(*) FROM local_history WHERE conversationId = :convId AND outgoing = 0 AND createdAt > :since")
+    suspend fun countIncomingSince(convId: String, since: Long): Int
+
+    @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :convId")
+    suspend fun clearUnread(convId: String)
+
+    @Query("SELECT * FROM local_history WHERE id = :id LIMIT 1")
+    suspend fun getLocalHistoryEntry(id: String): LocalHistoryEntity?
+
     // --- Delete ---
     @Query("DELETE FROM local_history WHERE id = :messageId")
     suspend fun deleteLocalHistory(messageId: String)

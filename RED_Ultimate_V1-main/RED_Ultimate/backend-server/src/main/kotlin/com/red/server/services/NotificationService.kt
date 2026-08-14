@@ -95,10 +95,29 @@ class NotificationService(
     }
 
     /**
+     * إشعار رسالة دردشة لمستخدم غير متصل الآن: يُسجَّل في قائمة الإشعارات داخل التطبيق
+     * (تظهر عند فتح التطبيق) ويُرسل FCM اختياري (عند ضبط YOUNES_FCM_SERVER_KEY).
+     */
+    fun sendChatMessagePush(targetUserId: String, senderId: String) {
+        runCatching {
+            inApp?.createNotification(
+                userId = targetUserId,
+                type = "MESSAGE",
+                title = "رسالة جديدة من $senderId",
+                body = "رسالة مشفرة",
+                senderId = senderId,
+                senderName = senderId,
+                threadId = null
+            )
+        }
+        dispatchOptionalFcm(targetUserId, "رسالة جديدة من $senderId", "رسالة مشفرة", targetUserId, "MESSAGE", dataType = "MESSAGE")
+    }
+
+    /**
      * Optional high-priority FCM data message when YOUNES_FCM_SERVER_KEY is configured.
      * Local / sovereign deployments skip this and rely on /ws/calls + the 60s mailbox.
      */
-    private fun dispatchOptionalFcm(targetUserId: String, title: String, body: String, callId: String, mode: String) {
+    private fun dispatchOptionalFcm(targetUserId: String, title: String, body: String, callId: String, mode: String, dataType: String = "VOIP") {
         val key = System.getenv("YOUNES_FCM_SERVER_KEY")?.takeIf { it.isNotBlank() } ?: return
         val tokens = buildList {
             addAll(pushTokens?.tokensFor(targetUserId).orEmpty())
@@ -110,7 +129,7 @@ class NotificationService(
                 // تُبنى الحمولة آمنة JSON (إفلات كل قيمة) بدل الربط الخام —
                 // أي محتوى title/body/callId لا يمكنه كسر غلاف الرسالة.
                 val payload = """
-                    {"to":${str(token)},"priority":"high","content_available":true,"data":{"type":"VOIP","callId":${str(callId)},"mode":${str(mode)},"title":${str(title)},"body":${str(body)}}}
+                    {"to":${str(token)},"priority":"high","content_available":true,"data":{"type":"$dataType","callId":${str(callId)},"mode":${str(mode)},"title":${str(title)},"body":${str(body)}}}
                 """.trimIndent()
                 val conn = java.net.URI("https://fcm.googleapis.com/fcm/send").toURL().openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"

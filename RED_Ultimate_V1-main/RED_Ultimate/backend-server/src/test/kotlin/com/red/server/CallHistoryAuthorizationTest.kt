@@ -26,7 +26,7 @@ class CallHistoryAuthorizationTest {
         initiatorId = "16999",
         targetId = "58414",
         targetLabel = "58414",
-        type = CallType.VOICE,
+        type = CallType.AUDIO_1V1,
         route = CallRoute.RED,
         status = CallStatus.RINGING,
         startedAt = Instant.now()

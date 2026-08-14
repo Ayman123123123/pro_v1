@@ -550,6 +550,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         statsJob?.cancel(); statsJob = null
         val closingRoomId = roomId
         val closingUserId = userId
+        saveConferenceCallLogLocally()
         if (closingRoomId.isNotBlank()) {
             runCatching { signaling.leave(closingRoomId, closingUserId) }
         }
@@ -595,8 +596,32 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
     }
 
+    /**
+     * يسجّل المؤتمر/المساحة محلياً في سجل المكالمات — كان السجل المحلي يقتصر على
+     * المكالمات الفردية بينما فلاتر "مساحات" في الواجهة تبقى فارغة دائماً.
+     */
+    private fun saveConferenceCallLogLocally() {
+        if (roomId.isBlank()) return
+        val startedAt = (ConferenceRuntime.state as? ConferenceUiState.Active)?.startedAt ?: 0L
+        val durationMs = if (startedAt > 0L) (System.currentTimeMillis() - startedAt).coerceAtLeast(0L) else 0L
+        val cipher = CallLogCipher()
+        val log = com.red.sovereign.core.database.CallLogEntity(
+            id = "$roomId-${startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()}",
+            peerId = cipher.encryptPeerId(roomId),
+            peerLabel = cipher.encryptLabel(roomId),
+            type = if (ConferenceRuntime.isVideoEnabled) "CONFERENCE" else "SPACE",
+            direction = if (startedAsHost) "OUTGOING" else "INCOMING",
+            route = "RED",
+            status = if (durationMs > 0L) "ENDED" else "FAILED",
+            timestamp = startedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            durationMs = durationMs,
+            answeredAt = startedAt.takeIf { it > 0L && durationMs > 0L },
+            endedAt = (startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()) + durationMs
+        )
+        scope.launch { runCatching { com.red.sovereign.core.database.LocalRepository(this@ConferenceService).saveCallLog(log) } }
+    }
+
     private fun showIncomingInvitationNotification(roomId: String, userId: String, inviter: String, isVideo: Boolean) {
-        // إذا كان المستخدم عطّل إشعارات المكالمات: إشعار صامت فقط (لإبقاء الخدمة حية) دون رنين/تنبيه
         if (!com.red.sovereign.settings.SettingsRuntime.current.callNotifications) {
             val silent = NotificationCompat.Builder(this, "red_calls")
                 .setSmallIcon(android.R.drawable.sym_action_call)

@@ -220,6 +220,7 @@ fun SovereignChatInputBar(
                             3600000L -> "1س"
                             86400000L -> "24س"
                             604800000L -> "7ي"
+                            7776000000L -> "90ي"
                             else -> "⏳"
                         }
                         AssistChip(

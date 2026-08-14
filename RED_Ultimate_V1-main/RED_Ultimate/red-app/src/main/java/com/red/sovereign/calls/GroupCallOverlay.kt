@@ -80,6 +80,7 @@ private fun GroupCallActivePanel(state: GroupCallUiState.Active, context: androi
     // Zoom style toggle for Speaker vs Gallery
     var isSpeakerView by remember { mutableStateOf(activeMembers.isNotEmpty()) }
     var showHostControls by remember { mutableStateOf(false) }
+    var showRecordConsent by remember { mutableStateOf(false) }
     
     // For speaker view, we'll just pick the first remote member as the "speaker" for now,
     // or fallback to local if nobody else is there.
@@ -246,6 +247,18 @@ private fun GroupCallActivePanel(state: GroupCallUiState.Active, context: androi
                     )
                 }
                 CallControlButton(
+                    icon = if (GroupCallRuntime.isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                    label = if (GroupCallRuntime.isRecording) "إيقاف التسجيل" else "تسجيل",
+                    color = if (GroupCallRuntime.isRecording) Color(0xFFE53935) else Color.White.copy(0.2f),
+                    onClick = {
+                        if (GroupCallRuntime.isRecording) {
+                            GroupCallService.action(context, GroupCallService.ACTION_STOP_RECORDING)
+                        } else {
+                            showRecordConsent = true
+                        }
+                    }
+                )
+                CallControlButton(
                     icon = Icons.Default.CallEnd,
                     label = "مغادرة",
                     color = Color(0xFFE53935),
@@ -254,6 +267,33 @@ private fun GroupCallActivePanel(state: GroupCallUiState.Active, context: androi
                 )
             }
         }
+    }
+
+    // موافقة صريحة قبل أي تسجيل — لا يُفترض أبداً (خصوصية الطرفين)
+    if (showRecordConsent) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRecordConsent = false },
+            title = { Text("تسجيل المكالمة الجماعية", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "سيُسجَّل صوتك عبر الميكروفون محلياً على جهازك بتشفير AES-GCM.\n" +
+                        "أكّد أن جميع الأعضاء موافقون على التسجيل قبل البدء."
+                )
+            },
+            confirmButton = {
+                TextButton({
+                    showRecordConsent = false
+                    context.startService(
+                        android.content.Intent(context, GroupCallService::class.java)
+                            .setAction(GroupCallService.ACTION_START_RECORDING)
+                            .putExtra(YounesCallService.EXTRA_CONSENT, true)
+                    )
+                }) { Text("موافق — ابدأ التسجيل", color = Color(0xFF00C98C)) }
+            },
+            dismissButton = {
+                TextButton({ showRecordConsent = false }) { Text("إلغاء") }
+            }
+        )
     }
 }
 

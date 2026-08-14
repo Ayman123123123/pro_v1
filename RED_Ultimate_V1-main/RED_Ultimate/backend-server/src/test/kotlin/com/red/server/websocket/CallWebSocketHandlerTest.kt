@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.ActiveCallRegistry
 import com.red.server.calls.CallHistoryDocument
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
@@ -26,7 +27,8 @@ class CallWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
     private val history: CallHistoryService = mock()
     private val notifications: NotificationService = mock()
-    private val handler = CallWebSocketHandler(objectMapper, history, notifications)
+    private val activeCalls: ActiveCallRegistry = mock()
+    private val handler = CallWebSocketHandler(objectMapper, history, notifications, activeCalls)
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()
@@ -130,12 +132,21 @@ class CallWebSocketHandlerTest {
 
     @Test
     fun `group call status is forwarded between members`() {
+        val host = Probe("h", "11111")
         val bob = Probe("b", "22222")
+        handler.afterConnectionEstablished(host.session)
         handler.afterConnectionEstablished(bob.session)
         handler.handleTextMessage(
-            Probe("a", "11111").session,
-            TextMessage("""{"callId":"g-3","targetUserId":"22222","type":"GROUP_CALL_STATUS","mode":"VOICE","payload":{"status":"joined"}}""")
+            host.session,
+            TextMessage("""{"callId":"g-3","type":"GROUP_CALL_INVITE","mode":"VOICE","inviteeIds":["22222"]}""")
         )
-        assertTrue(bob.sent.any { it.contains("GROUP_CALL_STATUS") })
+        assertTrue(bob.sent.any { it.contains("GROUP_CALL_INVITE") })
+        handler.handleTextMessage(
+            bob.session,
+            TextMessage("""{"callId":"g-3","type":"GROUP_CALL_STATUS","mode":"VOICE","payload":{"memberStatus":"joined"}}""")
+        )
+        assertTrue(host.sent.any { it.contains("GROUP_CALL_STATUS") && it.contains("g-3") }) {
+            "Member status must be forwarded to the host: ${host.sent}"
+        }
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Mic
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeOff
@@ -64,6 +66,7 @@ fun YounesConferenceOverlay() {
     var isSpeakerFocusMode by remember { mutableStateOf(false) }
     var showInCallChat by remember { mutableStateOf(false) }
     var inCallMessageInput by remember { mutableStateOf("") }
+    var showRecordConsent by remember { mutableStateOf(false) }
 
     val activeRoomId = when (state) {
         is ConferenceUiState.Connecting -> state.roomId
@@ -408,6 +411,25 @@ fun YounesConferenceOverlay() {
                     }
 
                     IconButton(
+                        onClick = {
+                            if (ConferenceRuntime.isRecording) {
+                                ConferenceService.action(context, ConferenceService.ACTION_STOP_RECORDING)
+                            } else {
+                                showRecordConsent = true
+                            }
+                        },
+                        modifier = Modifier
+                            .size(52.dp)
+                            .background(if (ConferenceRuntime.isRecording) Color(0xFFB71C1C) else Color.White.copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(
+                            if (ConferenceRuntime.isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                            contentDescription = "تسجيل",
+                            tint = Color.White
+                        )
+                    }
+
+                    IconButton(
                         onClick = { ConferenceService.leave(context) },
                         modifier = Modifier
                             .size(60.dp)
@@ -449,6 +471,29 @@ fun YounesConferenceOverlay() {
             },
             dismissButton = {
                 TextButton(onClick = { showInCallChat = false }) { Text("إغلاق") }
+            }
+        )
+    }
+
+    // موافقة صريحة قبل أي تسجيل — لا يُفترض أبداً (خصوصية الطرفين)
+    if (showRecordConsent) {
+        AlertDialog(
+            onDismissRequest = { showRecordConsent = false },
+            title = { Text("تسجيل المؤتمر", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "سيُسجَّل صوتك عبر الميكروفون محلياً على جهازك بتشفير AES-GCM.\n" +
+                        "أكّد أن جميع المشاركين موافقون على التسجيل قبل البدء."
+                )
+            },
+            confirmButton = {
+                TextButton({
+                    showRecordConsent = false
+                    ConferenceService.action(context, ConferenceService.ACTION_START_RECORDING, consent = true)
+                }) { Text("موافق — ابدأ التسجيل", color = Color(0xFF00C98C)) }
+            },
+            dismissButton = {
+                TextButton({ showRecordConsent = false }) { Text("إلغاء") }
             }
         )
     }

@@ -333,8 +333,8 @@ class SavedMessage(
     @Column(name = "user_id", nullable = false)
     var userId: UUID = UUID.randomUUID(),
 
-    @Column(name = "message_id", nullable = false)
-    var messageId: UUID = UUID.randomUUID(),
+    @Column(name = "message_id", nullable = false, columnDefinition = "VARCHAR(40)")
+    var messageId: String = "",
 
     @Column(name = "saved_at", nullable = false)
     var savedAt: Instant = Instant.now(),

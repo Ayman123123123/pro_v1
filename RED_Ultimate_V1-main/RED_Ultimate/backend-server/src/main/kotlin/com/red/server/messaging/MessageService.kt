@@ -147,6 +147,16 @@ class MessageService(
     fun requireDirectAllowed(senderRedId: String, receiverRedId: String) =
         enforceNotBlocked(senderRedId, receiverRedId)
 
+    /** تحقق أن المستخدم عضو فعلي في المجموعة (لإشارات المجموعة مثل مؤشر الكتابة الجماعي). */
+    fun requireGroupMember(conversationId: String, redId: String) {
+        val member = users.findByRedId(redId) ?: throw NoSuchElementException("Sender identity not found")
+        require(mongo.exists(Query(Criteria.where("id").`is`("$conversationId:${member.id}")), GroupMember::class.java)) { "Sender is not a group member" }
+    }
+
+    /** معرّفات الأعضاء النشطين للمجموعة — للبث الجماعي (مؤشر كتابة إلخ). */
+    fun groupMemberRedIds(conversationId: String): List<String> =
+        mongo.find(Query(Criteria.where("groupId").`is`(conversationId)), GroupMember::class.java).map { it.redId }
+
     private fun enforceNotBlocked(senderRedId: String, receiverRedId: String) {
         // V26: ملاحظة لنفسي — لا حظر للذات
         if (senderRedId == receiverRedId) return
@@ -194,7 +204,12 @@ class MessageService(
             // للتحقق العادي نتأكد أن المحادثة ليست ذاتية
             require(message.senderId != message.receiverId || message.conversationId.contains("self")) { "Invalid receiver YOUNES ID" }
         }
-        val allowedCiphertext = if (message.type == "GROUP_MESSAGE") message.ciphertextType == 4 else message.ciphertextType == 2 || message.ciphertextType == 3
+        // وسائط/ملفات المجموعة (IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER + RICH_TEXT) تُرسل
+        // بنص المجموعة المشفر (SenderKey type 4) تماماً كـ GROUP_MESSAGE — لا تُقيَّد بـ GROUP_MESSAGE فقط.
+        // أي رسالة بنص المجموعة يجب أن تكون بين عضوين فعليين في المجموعة (حماية الانتحال).
+        val isGroupCiphertext = message.ciphertextType == 4
+        if (isGroupCiphertext) enforceGroupMembership(message)
+        val allowedCiphertext = isGroupCiphertext || message.ciphertextType == 2 || message.ciphertextType == 3
         require(allowedCiphertext) { "Unsupported libsignal ciphertext type for ${message.type}" }
         // 🔐 E2EE Hardening: Group messages must reference existing group and members only
         if (message.type in GROUP_TYPES) {

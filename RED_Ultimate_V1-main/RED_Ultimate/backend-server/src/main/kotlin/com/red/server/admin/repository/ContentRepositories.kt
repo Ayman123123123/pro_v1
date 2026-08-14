@@ -98,8 +98,8 @@ interface HashtagFollowRepository : JpaRepository<HashtagFollow, Long> {
 interface SavedMessageRepository : JpaRepository<SavedMessage, UUID> {
     fun findByUserIdOrderBySavedAtDesc(userId: UUID, pageable: Pageable): Page<SavedMessage>
     fun findByUserIdAndCollectionOrderBySavedAtDesc(userId: UUID, collection: String, pageable: Pageable): Page<SavedMessage>
-    fun existsByUserIdAndMessageId(userId: UUID, messageId: UUID): Boolean
-    fun deleteByUserIdAndMessageId(userId: UUID, messageId: UUID)
+    fun existsByUserIdAndMessageId(userId: UUID, messageId: String): Boolean
+    fun deleteByUserIdAndMessageId(userId: UUID, messageId: String)
 }
 
 // ━━━━━━━━━━━━━━━━ Sticker Packs ━━━━━━━━━━━━━━━━

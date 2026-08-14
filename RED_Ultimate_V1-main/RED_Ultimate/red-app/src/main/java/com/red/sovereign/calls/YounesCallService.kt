@@ -69,6 +69,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var ringTimeoutJob: kotlinx.coroutines.Job? = null
     private var ringback: ToneGenerator? = null
     private var ringStartedAt: Long = 0L
+    /** هل انتهت مهلة الرنين الواردة دون رد — لتمييز MISSED عن REJECTED في السجل المحلي */
+    private var ringTimedOut = false
 
     override fun onCreate() {
         super.onCreate(); createChannel()
@@ -82,6 +84,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             scope = scope,
             onReconnect = {
                 runCatching { signaling.reconnect() }
+                signaling.isConnected()
             },
             onFailure = { fail("انقطع اتصال الإشارة") }
         )
@@ -112,7 +115,22 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             ACTION_REJECT -> rejectIncoming()
             ACTION_END -> endCall(sendSignal = true)
             ACTION_MIC -> engine?.setMicrophoneEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
-            ACTION_CAMERA -> engine?.setCameraEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
+            ACTION_CAMERA -> {
+                val enable = intent.getBooleanExtra(EXTRA_ENABLED, true)
+                if (enable && CallRuntime.localVideo == null) {
+                    // إعادة محاولة فتح الكاميرا (بعد منح الإذن من الإعدادات، أو خلل مؤقت)
+                    scope.launch {
+                        if (engine?.retryCamera() == true) {
+                            CallRuntime.localVideo = engine?.localMedia?.videoTrack
+                            CallRuntime.cameraNotice = false
+                            updateNotification("الكاميرا نشطة")
+                        }
+                    }
+                } else {
+                    engine?.setCameraEnabled(enable)
+                    CallRuntime.cameraNotice = false
+                }
+            }
             ACTION_SWITCH_CAMERA -> engine?.switchCamera()
             ACTION_SPEAKER -> setSpeaker(intent.getBooleanExtra(EXTRA_ENABLED, true))
             ACTION_BLUETOOTH -> routeBluetooth()
@@ -145,6 +163,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     override fun onConnected() {
         reconnect?.stop()
+        // نجحت إعادة الاتصال أثناء مكالمة نشطة — استعد واجهة المكالمة مع مدة غير منكسرة
+        val wasReconnecting = CallRuntime.state as? CallUiState.Reconnecting
+        if (wasReconnecting != null) {
+            CallRuntime.state = CallUiState.Active(
+                wasReconnecting.callId, wasReconnecting.peer, wasReconnecting.mode,
+                wasReconnecting.startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()
+            )
+            updateNotification("تم استعادة الاتصال — مكالمة يونس نشطة")
+        }
         if (incomingOffer != null || !outgoingPending) {
             // عند نجاح إعادة الاتصال بالشبكة والإشارة أثناء مكالمة قائمة، نقوم بإجراء ICE restart
             // لإعادة استكشاف المسار التلقائي وتمرير الحزم عبر الشبكة الجديدة دون انقطاع الصوت أو الفيديو
@@ -309,7 +336,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         engine?.release(); engine = WebRtcEngine(this, this); CallRuntime.eglContext = engine?.eglContext
         val kind = if (video) CallMediaKind.VIDEO else CallMediaKind.VOICE
         val result = engine!!.create(kind)
-        if (result is ApiResult.Success) CallRuntime.localVideo = engine?.localMedia?.videoTrack
+        if (result is ApiResult.Success) {
+            CallRuntime.localVideo = engine?.localMedia?.videoTrack
+            if (CallRuntime.localVideo != null) CallRuntime.cameraNotice = false
+        }
         return result
     }
 
@@ -371,9 +401,24 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         if (CallRuntime.state is CallUiState.Incoming) return
         fail(message)
     }
+    override fun onCameraUnavailable() {
+        // لا ننهي المكالمة — نعلم المستخدم ونكمل صوتياً
+        CallRuntime.cameraNotice = true
+        updateNotification("تعذر فتح الكاميرا — المكالمة صوتية")
+    }
     override fun onDisconnected() {
-        // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً
-        if (CallRuntime.state !is CallUiState.Idle) {
+        // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً، مع عرض حالة Reconnecting
+        val current = CallRuntime.state
+        if (current !is CallUiState.Idle) {
+            if (current is CallUiState.Active || current is CallUiState.ActiveWithIncoming || current is CallUiState.Reconnecting) {
+                val active = (current as? CallUiState.Active) ?: (current as? CallUiState.ActiveWithIncoming)?.active
+                CallRuntime.state = CallUiState.Reconnecting(
+                    active?.callId ?: callId.orEmpty(),
+                    active?.peer ?: target,
+                    active?.mode ?: mode,
+                    startedAt = active?.startedAt ?: 0L
+                )
+            }
             updateNotification("انقطع الاتصال — جارٍ إعادة الاتصال…")
             reconnect?.start()
         }
@@ -382,7 +427,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
 
     private fun isActiveCall(): Boolean =
-        CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming
+        CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming ||
+            CallRuntime.state is CallUiState.Reconnecting
 
     private fun isRenegotiation(signal: CallSignal): Boolean {
         if (signal.type == "RENEGOTIATE") return engine != null
@@ -589,6 +635,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 if (target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
                 handleNoAnswer()
             } else {
+                ringTimedOut = true
                 rejectIncoming()
             }
         }
@@ -698,10 +745,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             scope.launch { runCatching { manager?.stop() } }
         }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
+        ringTimedOut = false
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
         audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
         if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
-        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.isRecording = false
+        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.isRecording = false; CallRuntime.cameraNotice = false
     }
 
     /**
@@ -715,7 +763,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 val status = when {
                     durationMs > 0 -> "ENDED"
                     CallRuntime.state is CallUiState.Busy -> "FAILED"
-                    CallRuntime.state is CallUiState.Declined || CallRuntime.state is CallUiState.Incoming -> "REJECTED"
+                    CallRuntime.state is CallUiState.Declined || (CallRuntime.state is CallUiState.Incoming && !ringTimedOut) -> "REJECTED"
+                    CallRuntime.state is CallUiState.Incoming && ringTimedOut -> "MISSED"
                     CallRuntime.state is CallUiState.Error -> "FAILED"
                     else -> "MISSED"
                 }
@@ -918,8 +967,8 @@ sealed interface CallUiState {
         val callId: String,
         val canRedial: Boolean = true
     ) : CallUiState
-    /** جاري إعادة الاتصال بعد انقطاع مؤقت */
-    data class Reconnecting(val callId: String, val peer: String, val mode: String, val attempt: Int = 1) : CallUiState
+    /** جاري إعادة الاتصال بعد انقطاع مؤقت — يحمل مدة المكالمة الأصلية لاستعادتها */
+    data class Reconnecting(val callId: String, val peer: String, val mode: String, val attempt: Int = 1, val startedAt: Long = 0L) : CallUiState
 }
 object CallRuntime {
     var state: CallUiState by androidx.compose.runtime.mutableStateOf(CallUiState.Idle)
@@ -931,4 +980,6 @@ object CallRuntime {
     var networkStats: NetworkStats by androidx.compose.runtime.mutableStateOf(NetworkStats())
     /** هل تسجيل المكالمة يعمل الآن — تُعرض كشارة حمراء في واجهة المكالمة */
     var isRecording by androidx.compose.runtime.mutableStateOf(false)
+    /** فشل فتح الكاميرا (إذن/عتاد) — شارة "الكاميرا غير متاحة — مكالمة صوتية" */
+    var cameraNotice by androidx.compose.runtime.mutableStateOf(false)
 }

@@ -410,6 +410,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     private fun stopStream() {
         if (stopping) return
         stopping = true
+        saveLiveStreamCallLogLocally()
         val closingStreamId = streamId
         val endpoint = if (isBroadcaster) "stop" else "leave"
         scope.launch {
@@ -423,6 +424,31 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             }
             withContext(Dispatchers.Main.immediate) { finishStop() }
         }
+    }
+
+    /**
+     * يسجّل البث محلياً في سجل المكالمات — كان السجل المحلي يقتصر على المكالمات
+     * الفردية بينما فلتر "بث" في الواجهة يبقى فارغاً دائماً.
+     */
+    private fun saveLiveStreamCallLogLocally() {
+        if (streamId.isBlank()) return
+        val startedAt = (LiveStreamRuntime.state as? LiveStreamUiState.Active)?.startedAt ?: 0L
+        val durationMs = if (startedAt > 0L) (System.currentTimeMillis() - startedAt).coerceAtLeast(0L) else 0L
+        val cipher = CallLogCipher()
+        val log = com.red.sovereign.core.database.CallLogEntity(
+            id = "$streamId-${startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()}",
+            peerId = cipher.encryptPeerId(streamId),
+            peerLabel = cipher.encryptLabel(streamId),
+            type = "LIVE",
+            direction = if (isBroadcaster) "OUTGOING" else "INCOMING",
+            route = "RED",
+            status = if (durationMs > 0L) "ENDED" else "FAILED",
+            timestamp = startedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            durationMs = durationMs,
+            answeredAt = startedAt.takeIf { it > 0L && durationMs > 0L },
+            endedAt = (startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()) + durationMs
+        )
+        scope.launch { runCatching { com.red.sovereign.core.database.LocalRepository(this@LiveStreamService).saveCallLog(log) } }
     }
 
     private fun finishStop(terminateService: Boolean = true) {

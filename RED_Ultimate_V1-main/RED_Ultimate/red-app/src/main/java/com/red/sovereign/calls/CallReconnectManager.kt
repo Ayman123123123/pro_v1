@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  */
 class CallReconnectManager(
     private val scope: CoroutineScope,
-    private val onReconnect: () -> Unit,
+    private val onReconnect: () -> Boolean,
     private val onFailure: () -> Unit
 ) {
     private var job: Job? = null
@@ -37,13 +37,11 @@ class CallReconnectManager(
                 attempt++
                 val delayMs = (1000L * (1 shl (attempt - 1))).coerceAtMost(30_000L)
                 delay(delayMs)
-                try {
-                    onReconnect()
-                    // success
+                if (onReconnect()) {
+                    // نجحت إعادة الاتصال فعلاً (الـ socket مُعاد فتحه)
                     return@launch
-                } catch (_: Exception) {
-                    // continue retry
                 }
+                // فشلت المحاولة — نستمر بالتراجع الأسي
             }
             onFailure()
         }

@@ -26,7 +26,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
     fun send(uri: Uri, targetRedId: String, conversationId: String) = viewModelScope.launch {
         if (sendState is AttachmentState.Working) return@launch
         sendState = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
-        when (val result = repository.prepare(uri, targetRedId)) {
+        when (val result = repository.prepare(uri, listOf(targetRedId))) {
             is ApiResult.Error -> sendState = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
                 RedConnectionService.sendPayload(
@@ -44,11 +44,13 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** يرسل مرفقاً داخل مجموعة عبر مسار تشفير المجموعة (Sender Keys). */
+    /** يرسل مرفقاً داخل مجموعة عبر مسار تشفير المجموعة (Sender Keys).
+     *  منح الوصول للملف يتم لكل عضو (وليس لمعرّف المجموعة — الخادم يقبل مستخدمين فقط). */
     fun sendToGroup(uri: Uri, group: com.red.sovereign.groups.Group) = viewModelScope.launch {
         if (sendState is AttachmentState.Working) return@launch
         sendState = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
-        when (val result = repository.prepare(uri, group.id)) {
+        val members = group.members.map { it.redId }
+        when (val result = repository.prepare(uri, members)) {
             is ApiResult.Error -> sendState = AttachmentState.Error(result.message)
             is ApiResult.Success -> {
                 val type = when {

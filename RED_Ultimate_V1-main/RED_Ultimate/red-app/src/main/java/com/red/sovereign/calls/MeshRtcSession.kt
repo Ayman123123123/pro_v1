@@ -47,6 +47,8 @@ class MeshRtcSession(
         fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
+        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — يُعلم المستخدم إن لزم. */
+        fun onCameraUnavailable() {}
     }
 
     private val egl = EglBase.create()
@@ -234,16 +236,45 @@ class MeshRtcSession(
     }
 
     private fun createVideoTrack(): VideoTrack? {
-        val enumerator = Camera2Enumerator(context)
-        val selected = enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let { enumerator.createCapturer(it, null) }
-            ?: enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
-            ?: return null
-        capturer = selected
-        videoSource = factory.createVideoSource(false)
-        textureHelper = SurfaceTextureHelper.create("YounesMeshCamera", egl.eglBaseContext)
-        selected.initialize(textureHelper, context, videoSource?.capturerObserver)
-        selected.startCapture(640, 480, 24)
-        return factory.createVideoTrack("younes-mesh-video", videoSource).apply { setEnabled(cameraRequested) }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            events.onCameraUnavailable()
+            return null
+        }
+        return runCatching {
+            val enumerator = Camera2Enumerator(context)
+            val selected = enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let { enumerator.createCapturer(it, null) }
+                ?: enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
+                ?: return null
+            capturer = selected
+            videoSource = factory.createVideoSource(false)
+            textureHelper = SurfaceTextureHelper.create("YounesMeshCamera", egl.eglBaseContext)
+            selected.initialize(textureHelper, context, videoSource?.capturerObserver)
+            selected.startCapture(640, 480, 24)
+            factory.createVideoTrack("younes-mesh-video", videoSource).apply { setEnabled(cameraRequested) }
+        }.onFailure {
+            events.onCameraUnavailable()
+            runCatching { capturer?.stopCapture() }
+        }.getOrNull()
+    }
+
+    /** إعادة محاولة فتح الكاميرا — تُضاف لكل الأقران القائمين وتُعاد المفاوضة معهم. */
+    fun retryCamera(): Boolean {
+        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن
+        cameraRequested = true
+        if (localVideoTrack != null) return true
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            events.onCameraUnavailable()
+            return false
+        }
+        val track = createVideoTrack() ?: return false
+        localVideoTrack = track
+        peers.forEach { (_, slot) -> slot.peer?.addTrack(track, listOf("younes-mesh")) }
+        peers.forEach { (peerId, _) -> offerTo(peerId) }
+        return true
     }
 
     private inner class PeerSlot(val peerId: String) {

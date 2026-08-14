@@ -18,7 +18,7 @@ class AdminSession(
     @Column(name = "session_token_hash", nullable = false, length = 128)
     var sessionTokenHash: String = "",
 
-    @Column(name = "ip_address", columnDefinition = "INET")
+    @Column(name = "ip_address", columnDefinition = "TEXT")
     var ipAddress: String? = null,
 
     @Column(name = "user_agent", columnDefinition = "TEXT")

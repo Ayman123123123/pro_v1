@@ -379,7 +379,8 @@ class ContentController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val userId = UUID.fromString(authentication.name)
-        val messageId = UUID.fromString(body["messageId"] ?: return ResponseEntity.badRequest().body(mapOf("error" to "messageId required")))
+        val messageId = body["messageId"]?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return ResponseEntity.badRequest().body(mapOf("error" to "messageId required"))
         val saved = service.saveMessage(
             userId = userId,
             messageId = messageId,
@@ -396,7 +397,7 @@ class ContentController(
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
         val userId = UUID.fromString(authentication.name)
-        val success = service.unsaveMessage(userId, UUID.fromString(messageId))
+        val success = service.unsaveMessage(userId, messageId)
         return ResponseEntity.ok(mapOf("success" to success))
     }
 

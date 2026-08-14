@@ -321,20 +321,27 @@ class RedConnectionService : Service() {
             RedProtos.RedRED.SignalCase.MESSAGE -> {
                 val message = envelope.message
                 if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
+                    val isGroupConversation = message.conversationId.length > 32
                     val plaintext = try {
                         repository.saveIncomingMessage(message)
                         when (message.type) {
-                            "GROUP_MESSAGE" -> groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
+                            // توزيع مفاتيح المجموعة يُشفَّر زوجياً لكل عضو (ليس SenderKey)
+                            "GROUP_KEY_DISTRIBUTION" -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
                             "RICH_TEXT" -> {
                                 // رسالة غنية: قد تكون فردية أو جماعية. نحسم عبر طول conversationId:
                                 // محادثة فردية = hash مُقتطع (32 حرفاً)، معرف مجموعة = UUID طويل (>32).
-                                if (message.conversationId.length > 32) {
+                                if (isGroupConversation) {
                                     groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
                                 } else {
                                     signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
                                 }
                             }
-                            else -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
+                            // وسائط المجموعة (صورة/فيديو/صوت/ملف/ملصق) تُشفَّر بـ SenderKeys كـ GROUP_MESSAGE
+                            else -> if (isGroupConversation) {
+                                groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
+                            } else {
+                                signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
+                            }
                         }
                     } catch (t: Throwable) {
                         android.util.Log.w("RedConnectionService", "decrypt failed for ${message.id}: ${t.message}")
@@ -351,15 +358,24 @@ class RedConnectionService : Service() {
                                 DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
                                 socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                             } else when (rich?.action) {
-                                // التعديل: تحديث نص الرسالة الأصلية في التخزين (لا إضافة سجل جديد)
+                                // التعديل: تحديث نص الرسالة الأصلية في التخزين (لا إضافة سجل جديد).
+                                // 🔐 يُطبق فقط إن كان مُرسل التعديل هو مالك الرسالة الأصلية.
                                 "EDIT" -> rich.editOf?.let { editOf ->
-                                    repository.updateLocalHistoryText(editOf, com.red.sovereign.core.RichMessage.encode(rich.copy(replyTo = rich.replyTo)))
-                                    DecryptedMessageBus.publish(DecryptedMessage(editOf, message.conversationId, message.senderId, com.red.sovereign.core.RichMessage.encode(rich), message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                    val original = repository.getLocalHistoryEntry(editOf)
+                                    if (original != null && original.senderId == message.senderId) {
+                                        repository.updateLocalHistoryText(editOf, com.red.sovereign.core.RichMessage.encode(rich.copy(replyTo = rich.replyTo)))
+                                        DecryptedMessageBus.publish(DecryptedMessage(editOf, message.conversationId, message.senderId, com.red.sovereign.core.RichMessage.encode(rich), message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                    }
                                 }
-                                // الحذف للجميع: حذف الرسالة الأصلية من التخزين
+                                // الحذف للجميع: حذف الرسالة الأصلية من التخزين.
+                                // 🔐 يُطبق فقط إن كان مُرسل الحذف هو مالك الرسالة الأصلية (منع حذف رسائل الغير).
                                 "DELETE" -> rich.deleteOf?.let { deleteOf ->
-                                    repository.deleteLocalMessage(deleteOf)
-                                    DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                    val original = repository.getLocalHistoryEntry(deleteOf)
+                                    if (original != null && original.senderId == message.senderId) {
+                                        repository.deleteLocalMessage(deleteOf)
+                                        repository.deleteReactionsForMessage(deleteOf)
+                                        DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
+                                    }
                                 }
                                 // تفاعل إيموجي: لا يُحفظ كرسالة، بل يُطبّق على جدول التفاعلات
                                 "REACTION" -> rich.reactionOf?.let { targetId ->
@@ -380,7 +396,7 @@ class RedConnectionService : Service() {
                             // Show notification for incoming encrypted message
                             val preview = decodeMessagePreview(plaintext)
                             // تحديث/إنشاء صف المحادثة لتظهر في قائمة الدردشات (فردية فقط — لا لمجموعة)
-                            if (message.type != "GROUP_MESSAGE") {
+                            if (!isGroupConversation && message.type != "GROUP_MESSAGE") {
                                 try { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) } catch (_: Throwable) { }
                             }
                             if (SettingsRuntime.current.messageNotifications) {
@@ -423,9 +439,13 @@ class RedConnectionService : Service() {
         repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
         DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
         val preview = decodeMessagePreview(plaintext)
-        // المحادثة الفردية تُدار في جدول conversations؛ رسائل المجموعة (conversationId طويل = UUID) لا تُنشئ صف محادثة فردية.
         if (message.conversationId.length <= 32) {
+            // المحادثة الفردية تُدار في جدول conversations مع تتبع غير المقروء
             runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
+        } else {
+            // المجموعات: صف محادثة بمعرف المجموعة نفسه لتتبع عدد غير المقروء عبر عمليات إعادة التشغيل.
+            // قوائم الواجهة تستبعد صفوف المجموعات من المحادثات الفردية (معرف UUID > 32).
+            runCatching { repository.onMessageStored(message.conversationId, message.conversationId, preview.orEmpty(), message.timestamp, isIncoming = true) }
         }
         if (SettingsRuntime.current.messageNotifications && !isConversationMuted(message.conversationId)) {
             notifyEncryptedMessage(message.senderId, preview, message.type)

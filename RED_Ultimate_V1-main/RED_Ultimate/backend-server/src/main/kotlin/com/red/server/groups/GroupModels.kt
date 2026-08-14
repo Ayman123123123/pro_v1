@@ -1,6 +1,7 @@
 package com.red.server.groups
 
 import org.springframework.data.annotation.Id
+import org.springframework.data.mongodb.core.index.CompoundIndex
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
 import java.time.Instant
@@ -17,6 +18,7 @@ data class GroupDocument(
 )
 
 @Document("group_members")
+@CompoundIndex(name = "group_member_unique", def = "{'groupId': 1, 'userId': 1}", unique = true)
 data class GroupMember(
     @Id val id: String,
     @Indexed val groupId: String,

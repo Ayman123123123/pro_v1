@@ -255,7 +255,7 @@ class ContentServiceTest {
     @Test
     fun `saveMessage returns null if already saved`() {
         val userId = UUID.randomUUID()
-        val messageId = UUID.randomUUID()
+        val messageId = "0192a1b2-0001-7000-8000-000000000001"
         whenever(savedMessages.existsByUserIdAndMessageId(userId, messageId)).thenReturn(true)
 
         val result = service.saveMessage(userId, messageId)
@@ -265,7 +265,7 @@ class ContentServiceTest {
     @Test
     fun `saveMessage creates new entry`() {
         val userId = UUID.randomUUID()
-        val messageId = UUID.randomUUID()
+        val messageId = "0192a1b2-0002-7000-8000-000000000002"
         whenever(savedMessages.existsByUserIdAndMessageId(userId, messageId)).thenReturn(false)
         whenever(savedMessages.save(any<SavedMessage>())).thenAnswer { it.arguments[0] as SavedMessage }
 
@@ -273,6 +273,7 @@ class ContentServiceTest {
         assertNotNull(result)
         assertEquals("WORK", result!!.collection)
         assertEquals("Important", result.notes)
+        assertEquals(messageId, result.messageId)
     }
 
     // ━━━━━━━━━━━━━━━━ Story Highlights Tests ━━━━━━━━━━━━━━━━

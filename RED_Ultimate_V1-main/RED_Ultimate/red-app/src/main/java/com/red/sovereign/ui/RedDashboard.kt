@@ -128,6 +128,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -873,6 +874,8 @@ private fun ChatHubScreen(
     var groupMessageText by remember { mutableStateOf("") }
     var groupEditingMessageId by remember { mutableStateOf<String?>(null) }
     var groupDisappearingMs by remember { mutableStateOf<Long?>(null) }
+    var showDisappearingDialog by remember { mutableStateOf(false) }
+    var showGroupDisappearingDialog by remember { mutableStateOf(false) }
     var selectedGroupMember by remember { mutableStateOf<GroupMember?>(null) }
     var deleteGroupId by remember { mutableStateOf<String?>(null) }
     var memberRedId by remember { mutableStateOf("") }
@@ -925,6 +928,17 @@ private fun ChatHubScreen(
         }
     }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
+    // 📥 استعادة عدادات غير المقروء المحفوظة (تنجو من إعادة التشغيل) — ما لم تكن المحادثة مفتوحة حالياً
+    androidx.compose.runtime.LaunchedEffect(conversations.size, target, groupConversationId) {
+        val openConv = groupConversationId ?: target.takeIf { it.isNotBlank() }?.let { conversationId(account.redId, it) }
+        val groupIds = groups.groups.map(com.red.sovereign.groups.Group::id).toSet()
+        conversations.forEach { conv ->
+            if (conv.id != openConv && conv.unreadCount > 0) {
+                if (conv.id in groupIds) groupUnread[conv.id] = conv.unreadCount
+                else chatUnread[conv.id] = conv.unreadCount
+            }
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(conversations.size, target) {
         if (target.isBlank()) {
             chatDrafts.clear()
@@ -939,9 +953,11 @@ private fun ChatHubScreen(
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         com.red.sovereign.core.TypingEventBus.events.collect { event ->
-            if (SettingsRuntime.current.typingIndicators) {
-                if (event.isTyping) typingUsers[event.userId] = System.currentTimeMillis() + 5000L
-                else typingUsers.remove(event.userId)
+            if (SettingsRuntime.current.typingIndicators && event.userId != account.redId) {
+                // المفتاح = معرف المحادثة (خاصة أو جماعية) — يدعم مؤشر الكتابة الجماعي
+                val key = event.conversationId
+                if (event.isTyping) typingUsers[key] = System.currentTimeMillis() + 5000L
+                else typingUsers.remove(key)
             }
         }
     }
@@ -1009,6 +1025,30 @@ private fun ChatHubScreen(
         }
     }
     
+    // 📝 مؤشر الكتابة الجماعي — يُرسل بمعرف المجموعة كـ target/conversation (الخادم يبثه للأعضاء)
+    androidx.compose.runtime.LaunchedEffect(groupMessageText, groupConversationId) {
+        val groupId = groupConversationId ?: return@LaunchedEffect
+        if (SettingsRuntime.current.typingIndicators) {
+            val intent = Intent(context, com.red.sovereign.core.RedConnectionService::class.java).apply {
+                action = com.red.sovereign.core.RedConnectionService.ACTION_SEND_TYPING
+                putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_TARGET, groupId)
+                putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, groupId)
+                putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_IS_TYPING, groupMessageText.isNotEmpty())
+            }
+            context.startService(intent)
+            if (groupMessageText.isNotEmpty()) {
+                kotlinx.coroutines.delay(3000)
+                val stopIntent = Intent(context, com.red.sovereign.core.RedConnectionService::class.java).apply {
+                    action = com.red.sovereign.core.RedConnectionService.ACTION_SEND_TYPING
+                    putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_TARGET, groupId)
+                    putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_CONVERSATION, groupId)
+                    putExtra(com.red.sovereign.core.RedConnectionService.EXTRA_IS_TYPING, false)
+                }
+                context.startService(stopIntent)
+            }
+        }
+    }
+
     androidx.compose.runtime.DisposableEffect(target, groupConversationId) {
         onDispose {
             if (messageText.isNotBlank()) {
@@ -1077,7 +1117,14 @@ private fun ChatHubScreen(
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingCallVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val cleanTarget = com.red.sovereign.core.YounesId.normalizeInput(target).ifBlank { target }
-        if (audioGranted && cameraGranted && cleanTarget.isNotBlank()) YounesCallService.start(context, cleanTarget, pendingCallVideo)
+        // رفض الكاميرا لا يمنع المكالمة — نبدأها صوتية مع إعلام (المستخدم يفعّل الكاميرا لاحقاً من شارة إعادة المحاولة).
+        if (audioGranted && cleanTarget.isNotBlank()) {
+            val startVideo = pendingCallVideo && cameraGranted
+            YounesCallService.start(context, cleanTarget, startVideo)
+            if (pendingCallVideo && !cameraGranted) {
+                android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا — بدأت المكالمة صوتية. يمكنك تفعيل الكاميرا من شاشة المكالمة.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
     }
     var pendingGroupVideo by remember { mutableStateOf(false) }
     var pendingGroupRing by remember { mutableStateOf(true) }
@@ -1085,22 +1132,27 @@ private fun ChatHubScreen(
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingGroupVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val group = groups.groups.firstOrNull { it.id == groupConversationId }
-        if (audioGranted && cameraGranted && group != null) {
+        // رفض الكاميرا لا يمنع المكالمة الجماعية — تبدأ صوتية مع إعلام.
+        val effectiveVideo = pendingGroupVideo && cameraGranted
+        if (audioGranted && group != null) {
             // سقف Mesh: الصوت يتحمل عدداً أكبر، الفيديو يتدهور بسرعة —
             // منع الانضمام فوق السقف بدل مكالمة تالفة.
             val memberCount = group.members.size
-            val cap = if (pendingGroupVideo) 6 else 12
+            val cap = if (effectiveVideo) 6 else 12
             if (memberCount > cap && pendingGroupRing) {
                 android.widget.Toast.makeText(context, "المكالمة الجماعية (بالرنين) تدعم حتى $cap مشاركاً (حالياً $memberCount). استخدم المؤتمر المفتوح للعدد الأكبر.", android.widget.Toast.LENGTH_LONG).show()
                 return@rememberLauncherForActivityResult
             }
-            ConferenceService.join(context, group.id, account.redId, pendingGroupVideo, inviteRedIds = if (pendingGroupRing) group.members.map { it.redId } else emptyList())
+            if (pendingGroupVideo && !cameraGranted) {
+                android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا — ستبدأ المكالمة صوتية. يمكنك تفعيل الكاميرا لاحقاً.", android.widget.Toast.LENGTH_LONG).show()
+            }
+            ConferenceService.join(context, group.id, account.redId, effectiveVideo, inviteRedIds = if (pendingGroupRing) group.members.map { it.redId } else emptyList())
             
             // إرسال رسالة نظام للمجموعة ببدء المكالمة أو المساحة لكي يعلم الجميع بوجودها حتى لو لم يرن هاتفهم
             val title = if (pendingGroupRing) {
-                if (pendingGroupVideo) "مكالمة فيديو جماعية 📹" else "مكالمة صوتية جماعية 📞"
+                if (effectiveVideo) "مكالمة فيديو جماعية 📹" else "مكالمة صوتية جماعية 📞"
             } else {
-                if (pendingGroupVideo) "مؤتمر فيديو 🎥" else "مساحة صوتية 🎙"
+                if (effectiveVideo) "مؤتمر فيديو 🎥" else "مساحة صوتية 🎙"
             }
             val rich = com.red.sovereign.core.RichMessage(
                 action = "CALL_STARTED",
@@ -1113,15 +1165,27 @@ private fun ChatHubScreen(
         decrypted.add(item)
         if (item.type == "RICH_TEXT") {
             RichMessage.decode(item.plaintext)?.let { rich ->
-                if (rich.action == "EDIT" && rich.editOf != null) editedMessageIds[rich.editOf!!] = true
+                // 🔐 علامة ✏️ للمعدَّل: فقط إن كان مُرسل التعديل هو مالك الرسالة
+                if (rich.action == "EDIT" && rich.editOf != null) {
+                    if (decrypted.any { it.id == rich.editOf && it.senderRedId == item.senderRedId }) editedMessageIds[rich.editOf!!] = true
+                }
             }
         }
         // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
         if (!item.outgoing) {
             if (item.conversationId.length > 32) {
-                if (item.conversationId != groupConversationId) groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+                if (item.conversationId != groupConversationId) {
+                    groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
+                } else {
+                    // المجموعة مفتوحة: تصفير العداد المحفوظ كي لا يتراكم عند إعادة الفتح
+                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
+                }
             } else {
-                if (item.conversationId != conversationId(account.redId, target)) chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
+                if (item.conversationId != conversationId(account.redId, target)) {
+                    chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
+                } else {
+                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
+                }
             }
         }
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
@@ -1298,7 +1362,7 @@ private fun ChatHubScreen(
                     }
                     items(filteredConvos, key = { it.id }) { conv ->
                         val unread = chatUnread[conv.id] ?: 0
-                        Card(Modifier.fillMaxWidth().clickable { chatUnread.remove(conv.id); target = conv.peerId }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Card(Modifier.fillMaxWidth().clickable { chatUnread.remove(conv.id); target = conv.peerId; scope.launch { repository.clearUnread(conv.id) } }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                             val contact = directory.contacts.firstOrNull { it.redId == conv.peerId }
                             val displayName = contact?.displayName ?: conv.peerId
                             val isOnline = directory.isOnline(conv.peerId)
@@ -1400,7 +1464,7 @@ private fun ChatHubScreen(
                     }
                     }
                 }
-                if (typingUsers.containsKey(target) && target.isNotBlank()) {
+                if (typingUsers.containsKey(conversation) && target.isNotBlank()) {
                     item {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             Card(
@@ -1507,9 +1571,7 @@ private fun ChatHubScreen(
                     editingPreviewText = editingMessageId?.let { id -> conversationMessages.firstOrNull { it.id == id }?.let { messageDisplayText(it) } },
                     onCancelReplyOrEdit = { replyToMessage = null; editingMessageId = null },
                     disappearingMs = disappearingDurationMs,
-                    onToggleDisappearing = {
-                        disappearingDurationMs = if (disappearingDurationMs == null) 86400000L else null
-                    },
+                    onToggleDisappearing = { showDisappearingDialog = true },
                     onToggleEmoji = { showEmoji = !showEmoji; showStickers = false },
                     onToggleAttachments = { showAttachmentSheet = true },
                     voiceState = voiceMessages.state,
@@ -1555,11 +1617,12 @@ private fun ChatHubScreen(
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
                             val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
+                            val groupConvRow = conversations.firstOrNull { it.id == group.id }
                             val unread = groupUnread[group.id] ?: 0
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { groupUnread.remove(group.id); groupConversationId = group.id }
+                                    .clickable { groupUnread.remove(group.id); groupConversationId = group.id; scope.launch { repository.clearUnread(group.id) } }
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1578,9 +1641,9 @@ private fun ChatHubScreen(
                                             modifier = Modifier.weight(1f)
                                         )
                                         
-                                        if (lastGroupMsg != null) {
+                                        if (lastGroupMsg != null || groupConvRow != null) {
                                             Text(
-                                                text = relativeTime(lastGroupMsg.timestamp),
+                                                text = relativeTime(lastGroupMsg?.timestamp ?: groupConvRow?.lastMessageTimestamp ?: 0L),
                                                 fontSize = 12.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -1594,7 +1657,7 @@ private fun ChatHubScreen(
                                             text = lastGroupMsg?.let { msg ->
                                                 val t = messageDisplayText(msg)
                                                 (if (msg.outgoing) "أنت: " else "@" + msg.senderRedId.take(8) + ": ") + t
-                                            } ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
+                                            } ?: groupConvRow?.lastMessageText ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
@@ -1808,6 +1871,27 @@ private fun ChatHubScreen(
                     }
                 }
                 }
+                // 📝 مؤشر كتابة جماعي (الخادم يبثه للأعضاء — لا يظهر لكاتب الرسالة نفسه)
+                if (typingUsers.containsKey(openGroup.id)) {
+                    item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                            Card(
+                                Modifier.padding(vertical = 4.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 5.dp)
+                            ) {
+                                val lottieComposition by com.airbnb.lottie.compose.rememberLottieComposition(
+                                    com.airbnb.lottie.compose.LottieCompositionSpec.RawRes(com.red.sovereign.R.raw.typing_dots)
+                                )
+                                com.airbnb.lottie.compose.LottieAnimation(
+                                    composition = lottieComposition,
+                                    iterations = com.airbnb.lottie.compose.LottieConstants.IterateForever,
+                                    modifier = Modifier.width(60.dp).height(30.dp)
+                                )
+                            }
+                        }
+                    }
+                }
                 if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
                 if (showGroupStickers) {
                     com.red.sovereign.media.StickerPicker(
@@ -1853,15 +1937,13 @@ private fun ChatHubScreen(
                         )
                         RedConnectionService.sendGroupRichText(context, openGroup, rich)
                         if (groupEditingMessageId != null) editedMessageIds[groupEditingMessageId!!] = true
-                        groupMessageText = ""; groupReplyToMessage = null; groupEditingMessageId = null; showGroupEmoji = false; groupDisappearingMs = null
+                        groupMessageText = ""; groupReplyToMessage = null; groupEditingMessageId = null; showGroupEmoji = false
                     },
                     replyPreviewText = groupReplyToMessage?.let { "رد على ${if (it.outgoing) "نفسك" else it.senderRedId.take(12)}: " + messageDisplayText(it) },
                     editingPreviewText = groupEditingMessageId?.let { id -> groupMessages.firstOrNull { it.id == id }?.let { messageDisplayText(it) } },
                     onCancelReplyOrEdit = { groupReplyToMessage = null; groupEditingMessageId = null },
                     disappearingMs = groupDisappearingMs,
-                    onToggleDisappearing = {
-                        groupDisappearingMs = if (groupDisappearingMs == null) 86400000L else null
-                    },
+                    onToggleDisappearing = { showGroupDisappearingDialog = true },
                     onToggleEmoji = { showGroupEmoji = !showGroupEmoji; showGroupStickers = false },
                     onToggleAttachments = { showGroupAttachmentSheet = true },
                     voiceState = voiceMessages.state,
@@ -2006,12 +2088,25 @@ private fun ChatHubScreen(
                         } else {
                             RedConnectionService.sendRichText(context, target, message.conversationId, RichMessage(action = "DELETE", deleteOf = message.id))
                         }
+                        // تطبيق محلي فوري: الخادم لا يردّد أمر الحذف إلى نفس الجلسة التي أرسلته
+                        scope.launch {
+                            repository.deleteLocalMessage(message.id)
+                            repository.deleteReactionsForMessage(message.id)
+                        }
+                        reactionsByMessage.remove(message.id)
+                        editedMessageIds.remove(message.id)
+                        decrypted.removeAll { it.id == message.id }
                         selectedChatMessage = null
                     }
                 }
                 MessageActionRow(Icons.Default.Delete, "حذف لديّ", "احذفها من هذا الجهاز فقط") {
-                    scope.launch { repository.deleteLocalMessage(message.id) }
+                    scope.launch {
+                        repository.deleteLocalMessage(message.id)
+                        repository.deleteReactionsForMessage(message.id)
+                    }
                     reactionsByMessage.remove(message.id)
+                    editedMessageIds.remove(message.id)
+                    groupPinnedMessages.remove(message.id)
                     decrypted.removeAll { it.id == message.id }
                     selectedChatMessage = null
                 }
@@ -2037,8 +2132,12 @@ private fun ChatHubScreen(
                     messageInfo = message; selectedChatMessage = null
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { (label, ms) ->
-                        OutlinedButton({ disappearingDurationMs = ms; selectedChatMessage = null }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                    listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L, "90يوم" to 7_776_000_000L, "إيقاف" to 0L).forEach { (label, ms) ->
+                        OutlinedButton({
+                            val value = if (ms > 0) ms else null
+                            if (isGroupMsg) groupDisappearingMs = value else disappearingDurationMs = value
+                            selectedChatMessage = null
+                        }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
                     }
                 }
                 TextButton({ selectedChatMessage = null }, Modifier.align(Alignment.CenterHorizontally)) { Text("إغلاق", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -2225,6 +2324,42 @@ private fun ChatHubScreen(
             dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("إلغاء") } }
         )
     }
+    if (showDisappearingDialog) AlertDialog(
+        onDismissRequest = { showDisappearingDialog = false },
+        title = { Text("الرسائل المؤقتة") },
+        text = { Column {
+            Text("ستُحذف الرسائل الجديدة تلقائياً من الطرفين بعد انقضاء المدة المختارة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(10.dp))
+            listOf(0L to "إيقاف", 3_600_000L to "1 ساعة", 86_400_000L to "24 ساعة", 604_800_000L to "7 أيام", 7_776_000_000L to "90 يوماً").forEach { (ms, label) ->
+                Row(Modifier.fillMaxWidth().clickable {
+                    disappearingDurationMs = if (ms > 0) ms else null
+                    showDisappearingDialog = false
+                }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = (disappearingDurationMs ?: 0L) == ms, onClick = null)
+                    Text(label, color = MaterialTheme.colorScheme.onSurface, fontWeight = if ((disappearingDurationMs ?: 0L) == ms) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        } },
+        confirmButton = { TextButton({ showDisappearingDialog = false }) { Text("إغلاق") } }
+    )
+    if (showGroupDisappearingDialog) AlertDialog(
+        onDismissRequest = { showGroupDisappearingDialog = false },
+        title = { Text("الرسائل المؤقتة في المجموعة") },
+        text = { Column {
+            Text("ستُحذف الرسائل الجديدة تلقائياً بعد انقضاء المدة المختارة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(10.dp))
+            listOf(0L to "إيقاف", 3_600_000L to "1 ساعة", 86_400_000L to "24 ساعة", 604_800_000L to "7 أيام", 7_776_000_000L to "90 يوماً").forEach { (ms, label) ->
+                Row(Modifier.fillMaxWidth().clickable {
+                    groupDisappearingMs = if (ms > 0) ms else null
+                    showGroupDisappearingDialog = false
+                }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = (groupDisappearingMs ?: 0L) == ms, onClick = null)
+                    Text(label, color = MaterialTheme.colorScheme.onSurface, fontWeight = if ((groupDisappearingMs ?: 0L) == ms) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        } },
+        confirmButton = { TextButton({ showGroupDisappearingDialog = false }) { Text("إغلاق") } }
+    )
     if (showMediaGallery && target.isNotBlank()) {
         val convKey = conversationId(account.redId, target)
         MediaGalleryDialog(
@@ -2248,8 +2383,19 @@ private fun ChatHubScreen(
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(messageSearchQuery, { messageSearchQuery = it }, Modifier.fillMaxWidth(), label = { Text("كلمة أو عبارة") }, singleLine = true)
             val currentConversation = groupConversationId ?: conversationId(account.redId, target)
-            val results = if (messageSearchQuery.length >= 2) localMessages.search(messageSearchQuery).filter { it.conversationId == currentConversation } else emptyList()
-            LazyColumn(Modifier.height(280.dp)) { items(results, key = { it.id }) { result -> Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Column(Modifier.padding(10.dp)) { Text(if (result.type == "RICH_TEXT") RichMessage.decode(result.plaintext)?.text.orEmpty() else result.plaintext.toString(Charsets.UTF_8), maxLines = 4); Row(verticalAlignment = Alignment.CenterVertically) { Text(if (result.outgoing) "أنت" else result.senderId.take(12), color = AqyalCyanGlow, style = MaterialTheme.typography.labelSmall); Text(" • " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(result.timestamp)), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) } } } } }
+            // 🔍 البحث يستعلم السجل المحلي الحقيقي (Room) ويعرض النص المفكوك فقط
+            val searchResults = remember { mutableStateOf<List<com.red.sovereign.core.database.LocalHistoryEntity>>(emptyList()) }
+            androidx.compose.runtime.LaunchedEffect(messageSearchQuery, currentConversation) {
+                searchResults.value = if (messageSearchQuery.length >= 2) {
+                    repository.searchAll(messageSearchQuery).filter { it.conversationId == currentConversation && searchDisplayText(it).isNotBlank() }
+                } else emptyList()
+            }
+            if (messageSearchQuery.length >= 2) {
+                Text("${searchResults.value.size} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                LazyColumn(Modifier.height(260.dp)) { items(searchResults.value, key = { it.id }) { result -> Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Column(Modifier.padding(10.dp)) { Text(searchDisplayText(result), maxLines = 4); Row(verticalAlignment = Alignment.CenterVertically) { Text(if (result.outgoing) "أنت" else result.senderId.take(12), color = AqyalCyanGlow, style = MaterialTheme.typography.labelSmall); Text(" • " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(result.createdAt)), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) } } } } }
+            } else {
+                Text("اكتب كلمتين على الأقل للبحث في هذه المحادثة.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
         } },
         confirmButton = { TextButton({ showMessageSearch = false; messageSearchQuery = "" }) { Text("إغلاق") } }
     )
@@ -2261,6 +2407,31 @@ private fun ChatHubScreen(
                 OutlinedTextField(directoryQuery, { directoryQuery = it }, Modifier.fillMaxWidth(), label = { Text("username أو معرّف يونس") }, singleLine = true)
                 Button({ directory.search(directoryQuery) }, Modifier.fillMaxWidth(), enabled = directoryQuery.trim().length >= 3 && directory.state != DirectoryState.Loading) {
                     Icon(Icons.Default.Search, null); Text(" بحث آمن")
+                }
+                // 📤 التوجيه إلى مجموعة — يظهر فقط أثناء جلسة إعادة التوجيه
+                if (pendingForwardMessage != null && groups.groups.isNotEmpty()) {
+                    Text("التوجيه إلى مجموعة:", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    LazyColumn(Modifier.height(170.dp)) {
+                        items(groups.groups, key = { it.id }) { group ->
+                            Row(Modifier.fillMaxWidth().clickable {
+                                val forward = pendingForwardMessage
+                                if (forward != null) {
+                                    RedConnectionService.sendGroupRichText(context, group, RichMessage(text = messageDisplayText(forward), forwardOf = forward.id))
+                                    pendingForwardMessage = null
+                                }
+                                showDirectory = false; directory.clear()
+                            }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                GroupAvatar(group, groups)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(group.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("${group.members.size} عضو", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                }
+                                Text("توجيه", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
                 when (val state = directory.state) {
                     DirectoryState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally), color = AqyalGold)
@@ -3070,8 +3241,18 @@ private fun resolveRichMessages(source: List<DecryptedMessage>): List<DecryptedM
     source.sortedBy(DecryptedMessage::timestamp).forEach { message ->
         val rich = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
         when {
-            rich?.action == "DELETE" && rich.deleteOf != null -> visible.remove(rich.deleteOf)
-            rich?.action == "EDIT" && rich.editOf != null -> visible[rich.editOf]?.let { original -> visible[rich.editOf] = original.copy(plaintext = RichMessage.encode(RichMessage(text = rich.text, replyTo = RichMessage.decode(original.plaintext)?.replyTo))) }
+            // 🔐 الحذف: يطبق فقط إن كان مُرسل أمر الحذف هو مالك الرسالة الأصلية (منع حذف رسائل الغير)
+            rich?.action == "DELETE" && rich.deleteOf != null -> {
+                val original = visible[rich.deleteOf]
+                if (original != null && original.senderRedId == message.senderRedId) visible.remove(rich.deleteOf)
+            }
+            // 🔐 التعديل: يطبق فقط على رسائل مُرسل التعديل نفسه
+            rich?.action == "EDIT" && rich.editOf != null -> {
+                val original = visible[rich.editOf]
+                if (original != null && original.senderRedId == message.senderRedId) {
+                    visible[rich.editOf] = original.copy(plaintext = RichMessage.encode(RichMessage(text = rich.text, replyTo = RichMessage.decode(original.plaintext)?.replyTo)))
+                }
+            }
             // التفاعلات ليست رسائل — تُعرض كـ chips عبر جدول message_reactions، فلا تُدرج هنا
             rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE" -> Unit
             // أصوات الاستطلاع ليست رسائل — تُسجَّل في مخزن الأصوات من جامعات غير متزامنة فقط
@@ -3083,13 +3264,31 @@ private fun resolveRichMessages(source: List<DecryptedMessage>): List<DecryptedM
     return visible.values.toList()
 }
 
+/** نص بحثي نظيف للسجل المحلي: يستبعد إدخالات النظام ويفك شيفرة أسماء الوسائط. */
+private fun searchDisplayText(entity: com.red.sovereign.core.database.LocalHistoryEntity): String {
+    val text = entity.encryptedPlaintext.toString(Charsets.UTF_8)
+    return when {
+        entity.messageType == "RICH_TEXT" -> {
+            val rich = RichMessage.decode(entity.encryptedPlaintext)
+            if (rich == null || rich.action in setOf("POLL_VOTE", "REACTION", "REACTION_REMOVE", "DELETE", "EDIT")) "" else rich.text.orEmpty()
+        }
+        entity.messageType == "GROUP_MESSAGE" || entity.messageType in setOf("FILE", "IMAGE", "VIDEO", "AUDIO", "VOICE", "STICKER") ->
+            runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.name
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.name
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { it.emojiTags.firstOrNull() ?: "ملصق" }
+                ?: text
+        else -> text
+    }
+}
+
 private fun messageDisplayText(message: DecryptedMessage): String =
     when (message.type) {
         "RICH_TEXT" -> RichMessage.decode(message.plaintext)?.text.orEmpty()
-        "GROUP_MESSAGE" -> {
+        "GROUP_MESSAGE", "FILE", "IMAGE", "VIDEO", "AUDIO", "VOICE", "STICKER" -> {
             val text = message.plaintext.toString(Charsets.UTF_8)
-            runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.name
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.name
+            runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.let { "📎 ${it.name}" }
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.let { "🎤 ${it.name}" }
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { "🖼️ ${it.emojiTags.firstOrNull() ?: "ملصق"}" }
                 ?: text
         }
         else -> message.plaintext.toString(Charsets.UTF_8)

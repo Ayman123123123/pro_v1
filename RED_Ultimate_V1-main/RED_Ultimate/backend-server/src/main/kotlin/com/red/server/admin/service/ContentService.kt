@@ -302,7 +302,7 @@ class ContentService(
     }
 
     @Transactional
-    fun saveMessage(userId: UUID, messageId: UUID, collection: String = "DEFAULT", notes: String? = null): SavedMessage? {
+    fun saveMessage(userId: UUID, messageId: String, collection: String = "DEFAULT", notes: String? = null): SavedMessage? {
         if (savedMessages.existsByUserIdAndMessageId(userId, messageId)) return null
         return savedMessages.save(SavedMessage(
             userId = userId, messageId = messageId, collection = collection, notes = notes
@@ -310,7 +310,7 @@ class ContentService(
     }
 
     @Transactional
-    fun unsaveMessage(userId: UUID, messageId: UUID): Boolean {
+    fun unsaveMessage(userId: UUID, messageId: String): Boolean {
         val count = savedMessages.count()
         savedMessages.deleteByUserIdAndMessageId(userId, messageId)
         return true

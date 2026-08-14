@@ -343,6 +343,8 @@ wss.on('connection', (ws, _req, claims) => {
         if (context.room) throw new Error('Already joined');
         const roomId = String(message.roomId || '');
         if (!/^[A-Za-z0-9_-]{4,128}$/.test(roomId)) throw new Error('Invalid roomId');
+        // أمان: التذكرة مربوطة بغرفة محددة (claim sfuGroupId) — لا يُسمح بالانضمام لغرفة غير الغرفة المصرَّح بها
+        if (!claims.sfuGroupId || String(claims.sfuGroupId) !== roomId) throw new Error('Ticket not bound to this room');
 
         const room = await roomFor(roomId);
         const peerId = claims.redId;

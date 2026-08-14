@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,9 +95,16 @@ fun YounesCallOverlay() {
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audio = grants[Manifest.permission.RECORD_AUDIO] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val camOk = !video || grants[Manifest.permission.CAMERA] == true ||
+        if (!audio) return@rememberLauncherForActivityResult
+        val camOk = grants[Manifest.permission.CAMERA] == true ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        if (audio && camOk) YounesCallService.accept(context, cameraOn = acceptCamera, micOn = acceptMic)
+        if (video && !camOk) {
+            // رفض الكاميرا ≠ رفض المكالمة — نكمل صوتياً ونخبر المستخدم (لا نجمّد زر القبول)
+            android.widget.Toast.makeText(context, "الكاميرا غير متاحة — ستستمر المكالمة صوتياً", android.widget.Toast.LENGTH_SHORT).show()
+            YounesCallService.accept(context, cameraOn = false, micOn = acceptMic)
+        } else {
+            YounesCallService.accept(context, cameraOn = acceptCamera && camOk, micOn = acceptMic)
+        }
     }
     val bluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) YounesCallService.action(context, YounesCallService.ACTION_BLUETOOTH)
@@ -217,6 +225,26 @@ fun YounesCallOverlay() {
             ) {
                 CallHeader(peer, state, video)
 
+                // شارة صريحة عند فشل الكاميرا — مكالمة صوتية + زر إعادة محاولة
+                if (CallRuntime.cameraNotice) {
+                    Surface(
+                        color = Color(0xFFB45309).copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("تعذر فتح الكاميرا — المكالمة صوتية", color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { YounesCallService.action(context, YounesCallService.ACTION_CAMERA, true) }) {
+                                Text("إعادة المحاولة", color = Color(0xFFFFC107), fontSize = 12.sp)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
                 when (state) {
                     is CallUiState.Incoming -> IncomingBody(peer, video, onAccept = { requestAccept(true, true) }, onAcceptPrivate = { requestAccept(false, true) }, onReject = {
                         YounesCallService.action(context, YounesCallService.ACTION_REJECT)
@@ -259,7 +287,11 @@ fun YounesCallOverlay() {
                     })
                 }
 
-                if (state is CallUiState.Active || state is CallUiState.ActiveWithIncoming || state is CallUiState.Connecting) {
+                // أزرار التحكم تبقى متاحة في كل الحالات النشطة — بما فيها Reconnecting،
+                // حتى لا تعلق المكالمة بلا زر إنهاء عند انقطاع الشبكة
+                if (state is CallUiState.Active || state is CallUiState.ActiveWithIncoming ||
+                    state is CallUiState.Connecting || state is CallUiState.Reconnecting
+                ) {
                     var controlsVisible by remember { mutableStateOf(true) }
                     
                     Box(modifier = Modifier.fillMaxWidth().clickable { controlsVisible = !controlsVisible }) {

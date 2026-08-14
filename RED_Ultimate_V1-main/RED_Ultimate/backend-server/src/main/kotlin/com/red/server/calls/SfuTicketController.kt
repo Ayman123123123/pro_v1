@@ -19,7 +19,9 @@ import java.util.UUID
 class SfuTicketController(
     private val users: UserAccountRepository,
     private val groups: GroupService,
-    private val jwt: JwtService
+    private val jwt: JwtService,
+    private val activeCalls: ActiveCallRegistry,
+    private val conferenceRooms: ConferenceRoomService
 ) {
     @GetMapping("/{groupId}/ticket")
     fun issue(@PathVariable groupId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
@@ -41,6 +43,10 @@ class SfuTicketController(
     @GetMapping("/rooms/{roomId}/ticket")
     fun issueRoom(@PathVariable roomId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
         require(roomId.matches(ROOM_ID)) { "Invalid SFU room ID" }
+        // لا تذاكر لغرف عشوائية: الغرفة يجب أن تكون مؤتمراً/مساحة نشطة أو مكالمة جماعية مسجّلة.
+        // هذا يمنع فحص الغرف واستنزاف موارد mediasoup عبر استدعاءات join مجهولة.
+        val legitimateRoom = conferenceRooms.getRoom(roomId) != null || activeCalls.isActiveCall(roomId)
+        require(legitimateRoom) { "Room not open for SFU" }
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")

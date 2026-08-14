@@ -24,18 +24,23 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
 
     /** يسجّل مكالمة (1:1 أو جماعية) وأعضاءها كـ "في مكالمة". */
     fun register(callId: String, participants: List<String>) {
-        active[callId] = ActiveCallRecord(participants.filter { it.isNotBlank() }.toSet(), Instant.now())
+        active[callId] = ActiveCallRecord(participants.filter { it.isNotBlank() }.toSet(), Instant.now(), Instant.now())
         touch(callId)
     }
 
-    /** يُحدِّث وقت النشاط (يسجّل المكالمة نشطة في عدادات اللوحة). */
+    /** يُحدِّث وقت النشاط (يسجّل المكالمة نشطة في عدادات اللوحة ويؤجّل انتهاء صلاحيتها). */
     fun touch(callId: String) {
+        active[callId]?.let { active[callId] = it.copy(lastActivityAt = Instant.now()) }
         redis.opsForZSet().add(CALLS_KEY, callId, System.currentTimeMillis().toDouble())
     }
 
     /** هل المستخدم في مكالمة نشطة حالياً (1:1 أو جماعية)؟ */
     fun isInCall(redId: String): Boolean =
         redId.isNotBlank() && active.values.any { redId in it.participants }
+
+    /** هل المكالمة/الغرفة الجماعية مسجّلة ونشطة؟ تُستخدم للتحقق من صحة تذاكر SFU. */
+    fun isActiveCall(callId: String): Boolean =
+        callId.isNotBlank() && active.containsKey(callId)
 
     /** يُحرِّر عضواً واحداً (رفض الدعوة/غادر/لم يرد) — يصبح متاحاً لاستقبال المكالمات. */
     fun releaseMember(callId: String, redId: String) {
@@ -63,17 +68,19 @@ class ActiveCallRegistry(private val redis: StringRedisTemplate) {
         )
     }
 
-    /** تنظيف دوري: أي مكالمة بلا نشاط منذ 15 دقيقة تُعتبر معلّقة وتُزال. */
+    /** تنظيف دوري: أي مكالمة بلا نشاط منذ 15 دقيقة تُعتبر معلّقة وتُزال.
+     *  (الحذف حسب آخر نشاط فعلّ — لا حسب بدء المكالمة، فالمكالمات الطويلة حية). */
     @Scheduled(fixedDelay = 60_000, initialDelay = 30_000)
     fun expireStale() {
-        val cutoff = System.currentTimeMillis() - STALE_AFTER_MS
-        redis.opsForZSet().removeRangeByScore(CALLS_KEY, 0.0, cutoff.toDouble())
-        active.entries.removeIf { it.value.startedAt.isBefore(Instant.ofEpochMilli(cutoff)) }
+        val cutoff = Instant.now().minusMillis(STALE_AFTER_MS)
+        redis.opsForZSet().removeRangeByScore(CALLS_KEY, 0.0, cutoff.toEpochMilli().toDouble())
+        active.entries.removeIf { it.value.lastActivityAt.isBefore(cutoff) }
     }
 
     private data class ActiveCallRecord(
         val participants: Set<String>,
-        val startedAt: Instant
+        val startedAt: Instant,
+        val lastActivityAt: Instant
     )
 
     companion object {

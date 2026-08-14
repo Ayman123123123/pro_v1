@@ -289,7 +289,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             }
             return
         }
-        val grantTarget = target?.first ?: group?.id ?: run {
+        val grantTargets = if (group != null) group.members.map { it.redId } else target?.first?.let { listOf(it) } ?: emptyList()
+        if (grantTargets.isEmpty()) {
             file.delete()
             state = VoiceMessageState.Error("VOICE_NO_TARGET")
             viewModelScope.launch {
@@ -300,7 +301,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
         viewModelScope.launch {
             state = VoiceMessageState.Sending
-            when (val result = encryptUploadAndGrant(file, grantTarget, duration, recordedWaveform)) {
+            when (val result = encryptUploadAndGrant(file, grantTargets, duration, recordedWaveform)) {
                 is ApiResult.Error -> {
                     state = VoiceMessageState.Error(result.message)
                     kotlinx.coroutines.delay(3000)
@@ -391,7 +392,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         return samples.subList(start, end + 1)
     }
 
-    private suspend fun encryptUploadAndGrant(file: File, targetRedId: String, duration: Int, waveform: List<Int>): ApiResult<String> {
+    private suspend fun encryptUploadAndGrant(file: File, targetRedIds: List<String>, duration: Int, waveform: List<Int>): ApiResult<String> {
         val key = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(12).also(random::nextBytes)
         val encrypted = File.createTempFile("voice-encrypted-", ".bin", getApplication<Application>().cacheDir)
@@ -411,9 +412,21 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             } }
             when (val uploaded = media.uploadEncrypted(encrypted, "voice-note")) {
                 is ApiResult.Error -> uploaded
-                is ApiResult.Success -> when (val grant = media.grant(uploaded.value.objectKey, targetRedId)) {
-                    is ApiResult.Error -> { media.delete(uploaded.value.url); grant }
-                    is ApiResult.Success -> ApiResult.Success(uploaded.code, Json.encodeToString(
+                is ApiResult.Success -> {
+                    // منح الوصول لكل مستلم (فرد أو أعضاء المجموعة) — فشل عضو لا يمنع الإرسال
+                    var anyGranted = false
+                    for (grantee in targetRedIds) {
+                        if (grantee.isBlank()) continue
+                        when (media.grant(uploaded.value.objectKey, grantee)) {
+                            is ApiResult.Success -> anyGranted = true
+                            is ApiResult.Error -> Unit
+                        }
+                    }
+                    if (!anyGranted) {
+                        media.delete(uploaded.value.url)
+                        return ApiResult.Error(null, "VOICE_GRANT_FAILED")
+                    }
+                    ApiResult.Success(uploaded.code, Json.encodeToString(
                         VoiceManifest(
                             objectKey = uploaded.value.objectKey,
                             url = uploaded.value.url,

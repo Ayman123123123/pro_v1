@@ -8,8 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -115,6 +121,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     private var sfu: SfuMediaClient? = null
     private var recordingManager: CallRecordingManager? = null
     private var ringback: ToneGenerator? = null
+    private var ringtone: Ringtone? = null
+    private var vibrator: Vibrator? = null
 
     private var groupCallId = ""
     private var myUserId = ""
@@ -550,8 +558,52 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         if (stopping) return
         stopping = true
         ringTimeout?.cancel()
+        saveGroupCallLogLocally()
         if (isHost && groupCallId.isNotBlank()) runCatching { signaling.sendGroupCallEnd(groupCallId) }
         scope.launch(Dispatchers.Main.immediate) { finishStop() }
+    }
+
+    /**
+     * يسجّل المكالمة الجماعية محلياً (مشفّراً مثل المكالمة الفردية) — كان السجل
+     * يقتصر على المكالمات الفردية بينما فلاتر "جماعية" في الواجهة تبقى فارغة دائماً.
+     */
+    private fun saveGroupCallLogLocally() {
+        if (groupCallId.isBlank()) return
+        val state = GroupCallRuntime.state
+        val members: List<GroupCallMember> = when (state) {
+            is GroupCallUiState.Ringing -> state.members
+            is GroupCallUiState.Active -> state.members
+            else -> emptyList()
+        }
+        val startedAt = (state as? GroupCallUiState.Active)?.startedAt ?: 0L
+        val durationMs = if (startedAt > 0L) (System.currentTimeMillis() - startedAt).coerceAtLeast(0L) else 0L
+        val status = when {
+            durationMs > 0L || state is GroupCallUiState.Active -> "ENDED"
+            state is GroupCallUiState.IncomingGroup -> "REJECTED"
+            members.any { it.status == GroupCallMemberStatus.JOINED } -> "ENDED"
+            isHost -> "FAILED"
+            else -> "MISSED"
+        }
+        val peer = if (isHost) {
+            members.firstOrNull { it.status == GroupCallMemberStatus.JOINED }?.userId
+                ?: members.firstOrNull()?.userId
+        } else hostId
+        if (peer.isNullOrBlank()) return
+        val cipher = CallLogCipher()
+        val log = com.red.sovereign.core.database.CallLogEntity(
+            id = groupCallId,
+            peerId = cipher.encryptPeerId(peer),
+            peerLabel = cipher.encryptLabel(peer),
+            type = "GROUP",
+            direction = if (isHost) "OUTGOING" else "INCOMING",
+            route = "RED",
+            status = status,
+            timestamp = startedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            durationMs = durationMs,
+            answeredAt = startedAt.takeIf { it > 0L && durationMs > 0L },
+            endedAt = (startedAt.takeIf { it > 0L } ?: System.currentTimeMillis()) + durationMs
+        )
+        scope.launch { runCatching { com.red.sovereign.core.database.LocalRepository(this@GroupCallService).saveCallLog(log) } }
     }
 
     private fun finishStop() {
@@ -713,7 +765,4 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
         fun action(context: Context, act: String) {
             ContextCompat.startForegroundService(context,
-                Intent(context, GroupCallService::class.java).setAction(act))
-        }
-    }
-}
+          
