@@ -96,6 +96,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     /** آخر ظهور لجهة اتصال — يرجع النص المناسب للعرض أو null إن غير متاح. */
     fun lastSeenLabel(redId: String): String? {
         if (redId in onlineIds) return "متصل الآن"
+        if (com.red.sovereign.settings.SettingsRuntime.current.hideLastSeen) return null
         val lastSeen = lastSeenByContact[redId] ?: return null
         val diff = System.currentTimeMillis() - lastSeen
         return when {
