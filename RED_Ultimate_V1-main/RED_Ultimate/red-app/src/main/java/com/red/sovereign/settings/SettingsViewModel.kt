@@ -28,19 +28,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setDataSaverCalls(value: Boolean) = update(state.copy(dataSaverCalls = value))
     fun setDefaultPlaybackSpeed(value: Float) = update(state.copy(defaultPlaybackSpeed = value.takeIf { it in setOf(1f, 1.5f, 2f) } ?: 1f))
     fun setAppLockEnabled(value: Boolean) = update(state.copy(appLockEnabled = value))
-    fun setHideLastSeen(value: Boolean) = update(state.copy(hideLastSeen = value, lastSeenVisibility = if (value) "NOBODY" else "EVERYONE"))
-    fun setLastSeenVisibility(value: String) = update(state.copy(lastSeenVisibility = sanitizeVisibility(value), hideLastSeen = sanitizeVisibility(value) == "NOBODY"))
-    fun setProfilePhotoVisibility(value: String) = update(state.copy(profilePhotoVisibility = sanitizeVisibility(value)))
-    fun setAboutVisibility(value: String) = update(state.copy(aboutVisibility = sanitizeVisibility(value)))
-    fun setWhoCanAddToGroups(value: String) = update(state.copy(whoCanAddToGroups = sanitizeVisibility(value)))
-    fun setWhoCanCall(value: String) = update(state.copy(whoCanCall = sanitizeVisibility(value)))
-    fun setEnterToSend(value: Boolean) = update(state.copy(enterToSend = value))
-    fun setSaveMediaToGallery(value: Boolean) = update(state.copy(saveMediaToGallery = value))
-    fun setAutoArchiveMuted(value: Boolean) = update(state.copy(autoArchiveMuted = value))
-    fun setGroupNotifications(value: Boolean) = update(state.copy(groupNotifications = value))
-    fun setLockTimeoutSeconds(value: Int) = update(state.copy(lockTimeoutSeconds = value.coerceIn(5, 300)))
-
-    private fun sanitizeVisibility(value: String) = value.takeIf { it in VISIBILITY }.orEmpty().ifBlank { "CONTACTS" }
+    fun setHideLastSeen(value: Boolean) = update(state.copy(hideLastSeen = value))
 
     fun clearCache() {
         getApplication<Application>().cacheDir.listFiles()?.forEach(::deleteRecursivelySafe)
@@ -67,16 +55,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             .putFloat("playback_speed", value.defaultPlaybackSpeed)
             .putBoolean("app_lock_enabled", value.appLockEnabled)
             .putBoolean("hide_last_seen", value.hideLastSeen)
-            .putString("last_seen_visibility", value.lastSeenVisibility)
-            .putString("profile_photo_visibility", value.profilePhotoVisibility)
-            .putString("about_visibility", value.aboutVisibility)
-            .putString("who_can_add_groups", value.whoCanAddToGroups)
-            .putString("who_can_call", value.whoCanCall)
-            .putBoolean("enter_to_send", value.enterToSend)
-            .putBoolean("save_media_gallery", value.saveMediaToGallery)
-            .putBoolean("auto_archive_muted", value.autoArchiveMuted)
-            .putBoolean("group_notifications", value.groupNotifications)
-            .putInt("lock_timeout_seconds", value.lockTimeoutSeconds)
             .apply()
         SettingsRuntime.update(value)
     }
@@ -98,17 +76,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
         defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
         appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
-        hideLastSeen = preferences.getBoolean("hide_last_seen", false),
-        lastSeenVisibility = preferences.getString("last_seen_visibility", if (preferences.getBoolean("hide_last_seen", false)) "NOBODY" else "EVERYONE") ?: "EVERYONE",
-        profilePhotoVisibility = preferences.getString("profile_photo_visibility", "EVERYONE") ?: "EVERYONE",
-        aboutVisibility = preferences.getString("about_visibility", "EVERYONE") ?: "EVERYONE",
-        whoCanAddToGroups = preferences.getString("who_can_add_groups", "CONTACTS") ?: "CONTACTS",
-        whoCanCall = preferences.getString("who_can_call", "CONTACTS") ?: "CONTACTS",
-        enterToSend = preferences.getBoolean("enter_to_send", false),
-        saveMediaToGallery = preferences.getBoolean("save_media_gallery", false),
-        autoArchiveMuted = preferences.getBoolean("auto_archive_muted", false),
-        groupNotifications = preferences.getBoolean("group_notifications", true),
-        lockTimeoutSeconds = preferences.getInt("lock_timeout_seconds", 15)
+        hideLastSeen = preferences.getBoolean("hide_last_seen", false)
     ).also(SettingsRuntime::update)
 
     private fun cacheSize(root: File): Long = root.walkBottomUp().filter(File::isFile).sumOf(File::length)
@@ -132,20 +100,8 @@ data class YounesSettings(
     val dataSaverCalls: Boolean = true,
     val defaultPlaybackSpeed: Float = 1f,
     val appLockEnabled: Boolean = false,
-    val hideLastSeen: Boolean = false,
-    val lastSeenVisibility: String = "EVERYONE",
-    val profilePhotoVisibility: String = "EVERYONE",
-    val aboutVisibility: String = "EVERYONE",
-    val whoCanAddToGroups: String = "CONTACTS",
-    val whoCanCall: String = "CONTACTS",
-    val enterToSend: Boolean = false,
-    val saveMediaToGallery: Boolean = false,
-    val autoArchiveMuted: Boolean = false,
-    val groupNotifications: Boolean = true,
-    val lockTimeoutSeconds: Int = 15
-) {
-    val notificationEnabled: Boolean get() = messageNotifications
-}
+    val hideLastSeen: Boolean = false
+)
 
 object SettingsRuntime {
     var current by mutableStateOf(YounesSettings()); private set
@@ -169,21 +125,9 @@ object SettingsRuntime {
             dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
             defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
             appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
-            hideLastSeen = preferences.getBoolean("hide_last_seen", false),
-            lastSeenVisibility = preferences.getString("last_seen_visibility", if (preferences.getBoolean("hide_last_seen", false)) "NOBODY" else "EVERYONE") ?: "EVERYONE",
-            profilePhotoVisibility = preferences.getString("profile_photo_visibility", "EVERYONE") ?: "EVERYONE",
-            aboutVisibility = preferences.getString("about_visibility", "EVERYONE") ?: "EVERYONE",
-            whoCanAddToGroups = preferences.getString("who_can_add_groups", "CONTACTS") ?: "CONTACTS",
-            whoCanCall = preferences.getString("who_can_call", "CONTACTS") ?: "CONTACTS",
-            enterToSend = preferences.getBoolean("enter_to_send", false),
-            saveMediaToGallery = preferences.getBoolean("save_media_gallery", false),
-            autoArchiveMuted = preferences.getBoolean("auto_archive_muted", false),
-            groupNotifications = preferences.getBoolean("group_notifications", true),
-            lockTimeoutSeconds = preferences.getInt("lock_timeout_seconds", 15)
+            hideLastSeen = preferences.getBoolean("hide_last_seen", false)
         ))
     }
 
     fun update(value: YounesSettings) { current = value }
 }
-
-private val VISIBILITY = setOf("EVERYONE", "CONTACTS", "NOBODY")

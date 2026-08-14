@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,11 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.collectAsState
 import com.red.sovereign.contacts.PublicRedProfile
-import com.red.sovereign.core.database.LocalRepository
-import com.red.sovereign.features.media.ConversationMediaGrid
-import com.red.sovereign.features.media.toDecryptedMessage
 import com.red.sovereign.groups.Group
 import com.red.sovereign.groups.GroupMember
 import com.red.sovereign.groups.GroupViewModel
@@ -193,16 +188,8 @@ fun SovereignGroupInfoScreen(
     var showAddMembers by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    val tabs = listOf("الأعضاء", "الوسائط", "الإعدادات")
+    val tabs = listOf("الأعضاء", "الإعدادات")
     var selectedTab by remember { mutableIntStateOf(0) }
-    val actions = remember { com.red.sovereign.core.ConversationActions(ctx) }
-    val org = actions.organization
-    val groupScope = rememberCoroutineScope()
-    var muted by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(group?.id, org.revision) {
-        val id = group?.id ?: return@LaunchedEffect
-        muted = com.red.sovereign.core.MessageStore(ctx).conversationPreference(id).third > System.currentTimeMillis()
-    }
 
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian)) {
         // رأس المجموعة
@@ -297,39 +284,14 @@ fun SovereignGroupInfoScreen(
                 }
             }
             1 -> {
-                val groupId = group?.id
-                if (groupId == null) {
-                    Text("لا توجد مجموعة.", color = Color.Gray, modifier = Modifier.padding(16.dp))
-                } else {
-                    val history = remember { LocalRepository(ctx) }
-                    val stored by history.mediaForConversation(groupId).collectAsState(initial = emptyList())
-                    val mediaMessages = remember(stored) { stored.map { it.toDecryptedMessage() } }
-                    Column(Modifier.fillMaxSize().padding(12.dp)) {
-                        Text(
-                            "تُفك الصور على هذا الجهاز فقط. الخادم لا يرى المحتوى.",
-                            color = Color.Gray,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                        ConversationMediaGrid(messages = mediaMessages, modifier = Modifier.fillMaxSize())
-                    }
-                }
-            }
-            2 -> {
+                // الإعدادات
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (group != null) {
                         item {
-                            val current = org.disappearingMs(group.id)
-                            InfoRow(Icons.Rounded.Schedule, "رسائل مؤقتة", if (current > 0) "مفعّلة لهذه المجموعة" else "اضغط لتفعيل اختفاء 24 ساعة") {
-                                org.setDisappearingMs(group.id, if (current > 0) 0L else 86_400_000L)
-                            }
+                            InfoRow(Icons.Rounded.Schedule, "رسائل مؤقتة", "أرسل رسائل تختفي بعد وقت — من شاشة المحادثة") { }
                         }
                         item {
-                            InfoRow(Icons.Rounded.VolumeOff, if (muted) "إلغاء كتم المجموعة" else "كتم الإشعارات", if (muted) "التنبيهات متوقفة" else "إيقاف تنبيهات هذه المجموعة") {
-                                groupScope.launch {
-                                    if (muted) actions.unmute(group.id) else actions.mute(group.id, com.red.sovereign.core.ConversationActions.MUTE_FOREVER)
-                                }
-                            }
+                            InfoRow(Icons.Rounded.VolumeOff, "كتم الإشعارات", "إيقاف تنبيهات هذه المجموعة") { }
                         }
                         item {
                             InfoRow(Icons.Rounded.Shield, "رمز أمان المجموعة", "تأكد من تطابق رمز الأمان مع الأعضاء") { }

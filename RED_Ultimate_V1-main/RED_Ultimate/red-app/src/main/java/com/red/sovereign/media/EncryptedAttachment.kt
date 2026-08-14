@@ -108,9 +108,6 @@ class EncryptedAttachmentRepository(
         val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
         val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
         val output = File(outputDir, "${manifest.sha256.take(16)}-$safeName")
-        if (output.isFile && output.length() == manifest.size) {
-            return@withContext ApiResult.Success(200, output)
-        }
         when (val downloaded = media.downloadToPrivateCache(manifest.url, "bin")) {
             is ApiResult.Error -> downloaded
             is ApiResult.Success -> try {

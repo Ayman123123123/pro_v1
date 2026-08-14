@@ -29,20 +29,8 @@ interface RedDao {
     @Query("SELECT * FROM conversations WHERE archived = 0 ORDER BY pinned DESC, lastMessageTimestamp DESC")
     fun getActiveConversations(): Flow<List<ConversationEntity>>
 
-    @Query("SELECT * FROM conversations WHERE archived = 1 ORDER BY pinned DESC, lastMessageTimestamp DESC")
-    fun getArchivedConversations(): Flow<List<ConversationEntity>>
-
-    @Query("SELECT * FROM conversations ORDER BY pinned DESC, lastMessageTimestamp DESC")
-    fun getAllConversations(): Flow<List<ConversationEntity>>
-
     @Query("SELECT * FROM conversations WHERE id = :id")
     suspend fun getConversation(id: String): ConversationEntity?
-
-    @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :id")
-    suspend fun clearUnread(id: String)
-
-    @Query("UPDATE conversations SET unreadCount = :count WHERE id = :id")
-    suspend fun setUnreadCount(id: String, count: Int)
 
     @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: String, pinned: Boolean)
