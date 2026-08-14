@@ -301,7 +301,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         clearRingTimeout()
         stopRingtone()
         incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
-        incomingOffer = null
+        // لا نمسح incomingOffer هنا — endCallCore يحتاجه لتحديد اتجاه السجل (INCOMING)
         endCall(sendSignal = false)
     }
 
@@ -691,6 +691,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             incoming = incomingOffer != null
         )
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
+        // أوقف تسجيل المكالمة إن كان يعمل — كان التسجيل يستمر في الخلفية بعد انتهاء المكالمة
+        if (CallRuntime.isRecording || recordingManager?.isRecording() == true) {
+            val manager = recordingManager
+            recordingManager = null
+            scope.launch { runCatching { manager?.stop() } }
+        }
         engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
         audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null

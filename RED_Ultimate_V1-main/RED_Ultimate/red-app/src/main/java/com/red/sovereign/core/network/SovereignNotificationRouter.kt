@@ -49,6 +49,13 @@ class SovereignNotificationRouter : Service() {
             // وإلا يثبّت أندرويد أول إنشاء ويتجاهل الباقي — سلوك غير حتمي حسب ترتيب التشغيل.
             nm.createNotificationChannel(NotificationChannel(CHANNEL_MESSAGES, getString(com.red.sovereign.R.string.channel_messages_name), NotificationManager.IMPORTANCE_HIGH))
             nm.createNotificationChannel(NotificationChannel(CHANNEL_CALLS, getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH))
+            // قناة المكالمات الواردة — أولوية قصوى مع رنين وفتح أمام قفل الشاشة.
+            // إنشاؤها هنا يمنع ظهور إشعار المكالمة الواردة بدون قناة (نغمة صامتة) قبل أول مكالمة.
+            nm.createNotificationChannel(NotificationChannel("red_calls_incoming", getString(com.red.sovereign.R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
+                enableVibration(true)
+                setBypassDnd(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            })
             nm.createNotificationChannel(NotificationChannel(CHANNEL_DINSTAR, getString(com.red.sovereign.R.string.channel_dinstar_name), NotificationManager.IMPORTANCE_LOW))
             nm.createNotificationChannel(NotificationChannel("red_system", getString(com.red.sovereign.R.string.channel_system_name), NotificationManager.IMPORTANCE_MIN))
         }

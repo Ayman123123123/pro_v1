@@ -38,57 +38,118 @@ import com.red.sovereign.ui.theme.*
 
 @Composable
 fun CallsHubLaunchers(
+    onNewCall: () -> Unit,
     onGroupCallPicker: () -> Unit,
     onConference: () -> Unit,
-    onLive: () -> Unit
+    onSpace: () -> Unit,
+    onLive: () -> Unit,
+    onPstn: () -> Unit,
+    onExplore: () -> Unit
 ) {
-    val primary = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-        // 1. بث مباشر (Live Broadcast) - TikTok Style
+        // 1. بث مباشر (Live Broadcast) - TikTok Style (Banner)
         CallBentoCard(
-            modifier = Modifier.fillMaxWidth().height(120.dp),
+            modifier = Modifier.fillMaxWidth().height(115.dp),
             icon = Icons.Rounded.LiveTv,
-            title = "بث مباشر",
-            subtitle = "مثل تيك توك وتطبيقات البث — مشاهدة أو إنشاء بث",
+            title = "بث مباشر تفاعلي",
+            subtitle = "مثل تيك توك وتطبيقات البث — إطلاق بثك الخاص أو المشاهدة والتفاعل",
             accentColor = Color(0xFFE53935),
             gradientStart = Color(0xFF2A0A10),
             gradientEnd = Color(0xFF1A0005),
-            cornerRadius = 22.dp,
+            cornerRadius = 20.dp,
             onClick = onLive,
             trailing = {
                 Box(Modifier.clip(RoundedCornerShape(6.dp)).background(Color(0xFFE53935)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                    Text("مباشر", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    Text("مباشر 🔴", color = Color.White, fontWeight = FontWeight.Black, fontSize = 10.sp)
                 }
             }
         )
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // 2. المكالمات الجماعية (Ad-hoc Group Calls) - Zoom/IMO Style
+        // 2. المكالمات الجماعية والمؤتمرات
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // المكالمات الجماعية (Ad-hoc Group Calls) - Zoom/IMO Style
             CallBentoCard(
-                modifier = Modifier.weight(1f).height(140.dp),
+                modifier = Modifier.weight(1f).height(130.dp),
                 icon = Icons.Rounded.GroupAdd,
                 title = "مكالمات جماعية",
-                subtitle = "مثل Zoom و IMO\nتختار من قائمة الأصدقاء",
+                subtitle = "Zoom و IMO\nاختيار أصدقاء للرنين",
                 accentColor = Color(0xFF2AABEE),
                 gradientStart = Color(0xFF2AABEE).copy(alpha = 0.18f),
                 gradientEnd = Color(0xFF2AABEE).copy(alpha = 0.03f),
-                cornerRadius = 22.dp,
+                cornerRadius = 20.dp,
                 onClick = onGroupCallPicker
             )
             
-            // 3. المؤتمرات (Conferences / Spaces) - Twitter X Spaces Style
+            // المؤتمرات (Conferences / SFU)
             CallBentoCard(
-                modifier = Modifier.weight(1f).height(140.dp),
-                icon = Icons.Rounded.Headset,
-                title = "مؤتمرات / مساحات",
-                subtitle = "مثل مساحات تويتر (X)\nغرف صوتية ومرئية",
+                modifier = Modifier.weight(1f).height(130.dp),
+                icon = Icons.Rounded.Videocam,
+                title = "مؤتمرات فيديو",
+                subtitle = "غرف مرئية مشفرة\nعبر خادم SFU",
                 accentColor = Color(0xFFA78BFA),
                 gradientStart = Color(0xFFA78BFA).copy(alpha = 0.22f),
                 gradientEnd = Color(0xFFA78BFA).copy(alpha = 0.05f),
-                cornerRadius = 22.dp,
+                cornerRadius = 20.dp,
                 onClick = onConference
+            )
+        }
+
+        // 3. المساحات الصوتية والهاتف اليمني (DINSTAR)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // المساحات الصوتية (Twitter X Spaces)
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(130.dp),
+                icon = Icons.Rounded.Headset,
+                title = "مساحات صوتية",
+                subtitle = "مثل Twitter Spaces\nصوت فقط بلا كاميرا",
+                accentColor = Color(0xFF00C98C),
+                gradientStart = Color(0xFF00C98C).copy(alpha = 0.18f),
+                gradientEnd = Color(0xFF00C98C).copy(alpha = 0.03f),
+                cornerRadius = 20.dp,
+                onClick = onSpace
+            )
+            
+            // الهاتف اليمني (DINSTAR GSM)
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(130.dp),
+                icon = Icons.Rounded.PhoneInTalk,
+                title = "الهاتف اليمني",
+                subtitle = "DINSTAR GSM\nاتصال بالشبكات المحلية",
+                accentColor = AqyalGold,
+                gradientStart = AqyalGold.copy(alpha = 0.20f),
+                gradientEnd = AqyalGold.copy(alpha = 0.04f),
+                cornerRadius = 20.dp,
+                onClick = onPstn
+            )
+        }
+
+        // 4. مكالمة جديدة E2EE واستكشاف البثوث
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // مكالمة فردية جديدة
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(120.dp),
+                icon = Icons.Rounded.Phone,
+                title = "مكالمة جديدة E2EE",
+                subtitle = "صوت أو فيديو مباشر\nلمعرف أو جهة اتصال",
+                accentColor = Color(0xFF00E676),
+                gradientStart = Color(0xFF00E676).copy(alpha = 0.15f),
+                gradientEnd = Color(0xFF00E676).copy(alpha = 0.03f),
+                cornerRadius = 20.dp,
+                onClick = onNewCall
+            )
+
+            // استكشاف البثوث والمساحات
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(120.dp),
+                icon = Icons.Rounded.Explore,
+                title = "استكشاف البثوث",
+                subtitle = "البحث في البثوث العامة\nوالمساحات النشطة",
+                accentColor = Color(0xFF25F4EE),
+                gradientStart = Color(0xFF25F4EE).copy(alpha = 0.18f),
+                gradientEnd = Color(0xFF25F4EE).copy(alpha = 0.04f),
+                cornerRadius = 20.dp,
+                onClick = onExplore
             )
         }
     }

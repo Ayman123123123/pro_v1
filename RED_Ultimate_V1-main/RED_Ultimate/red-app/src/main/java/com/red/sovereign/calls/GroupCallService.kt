@@ -39,7 +39,8 @@ enum class GroupCallMemberStatus {
     JOINED,    // انضم
     DECLINED,  // رفض
     NO_ANSWER, // لم يرد
-    LEFT       // غادر
+    LEFT,      // غادر
+    BUSY       // مشغول بمكالمة أخرى (يكتشفها الخادم)
 }
 
 data class GroupCallMember(
@@ -227,10 +228,12 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             }
 
             ACTION_START_RECORDING -> {
+                // موافقة صريحة من واجهة المستخدم — لا تُفترض أبداً
+                val consent = intent.getBooleanExtra(YounesCallService.EXTRA_CONSENT, false)
                 if (recordingManager == null && groupCallId.isNotBlank()) {
                     recordingManager = CallRecordingManager(this, groupCallId)
                 }
-                recordingManager?.start(consentGranted = true)
+                recordingManager?.start(consentGranted = consent)
             }
 
             ACTION_STOP_RECORDING -> {
@@ -303,10 +306,15 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     "declined"  -> GroupCallMemberStatus.DECLINED
                     "no_answer" -> GroupCallMemberStatus.NO_ANSWER
                     "left"      -> GroupCallMemberStatus.LEFT
+                    "busy"      -> GroupCallMemberStatus.BUSY
                     else -> null
                 }
                 val uid = signal.sourceUserId.orEmpty()
-                if (status != null && uid.isNotBlank()) updateMemberStatus(uid, status)
+                if (status != null && uid.isNotBlank()) {
+                    updateMemberStatus(uid, status)
+                    // العضو مشغول — يعتبر رافضاً للدعوة ونُكمِل باقي الأعضاء
+                    if (status == GroupCallMemberStatus.BUSY) checkIfAllDone()
+                }
             }
 
             "OFFER" -> signal.payload["sdp"]?.let { sdp ->
@@ -402,7 +410,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             is GroupCallUiState.Active -> cur.members
             else -> return
         }
-        val terminal = setOf(GroupCallMemberStatus.DECLINED, GroupCallMemberStatus.NO_ANSWER, GroupCallMemberStatus.LEFT)
+        val terminal = setOf(GroupCallMemberStatus.DECLINED, GroupCallMemberStatus.NO_ANSWER, GroupCallMemberStatus.LEFT, GroupCallMemberStatus.BUSY)
         if (members.all { it.status in terminal }) stopGroupCall()
     }
 

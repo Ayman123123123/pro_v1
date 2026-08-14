@@ -48,7 +48,7 @@ export default function MasterOverview() {
       }
       if (c.ok) {
         const body = await c.json();
-        setCalls(Array.isArray(body) ? body : []);
+        setCalls(Array.isArray(body) ? body : Array.isArray(body?.calls) ? body.calls : []);
       }
       if (h.ok) setHealth(await h.json());
       setError('');

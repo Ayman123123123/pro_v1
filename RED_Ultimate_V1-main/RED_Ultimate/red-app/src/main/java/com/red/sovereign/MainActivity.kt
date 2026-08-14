@@ -99,7 +99,9 @@ class MainActivity : ComponentActivity() {
                                 }
                                 runCatching { com.red.sovereign.core.RedConnectionService.start(this@MainActivity) }
                                 runCatching { com.red.sovereign.calls.YounesCallService.listen(this@MainActivity) }
-                                runCatching { com.red.sovereign.calls.YounesConnectionService.register(this@MainActivity) }
+                                // ملاحظة: لا نسجّل YounesConnectionService القديم — TelegramBridge (CallsManager)
+                                // يُسجَّل تلقائياً من YounesCallService.onCreate. تسجيل الاثنين معاً يخلق
+                                // PhoneAccount مزدوجاً → مكالمات نظام عالقة/مكررة على بعض الأجهزة.
                                 runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivity) }
                                 // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
                                 val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)

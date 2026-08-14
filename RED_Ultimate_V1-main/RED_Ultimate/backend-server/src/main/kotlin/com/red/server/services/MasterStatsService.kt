@@ -1,5 +1,6 @@
 package com.red.server.services
 
+import com.red.server.calls.ActiveCallRegistry
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
@@ -13,7 +14,8 @@ import java.time.temporal.ChronoUnit
 class MasterStatsService(
     private val mongo: MongoTemplate,
     private val postgres: JdbcTemplate,
-    private val redis: StringRedisTemplate
+    private val redis: StringRedisTemplate,
+    private val activeCalls: ActiveCallRegistry
 ) {
     fun getLiveMetrics(): Map<String, Any> {
         val cutoff = System.currentTimeMillis() - 5 * 60_000
@@ -44,12 +46,18 @@ class MasterStatsService(
     }
 
     /** Active calls are supplied from the real-time ActiveCallRegistry via the Redis ZSet. */
-    fun getVoipMetrics(): Map<String, Any> = mapOf(
-        "active_calls" to (redis.opsForZSet().zCard("red:calls:active") ?: 0),
-        "calls" to (redis.opsForZSet().range("red:calls:active", 0, -1) ?: emptyList()).map { callId ->
+    fun getVoipMetrics(): Map<String, Any> {
+        // تفاصيل كاملة من السجل الحي إن توفرت، وإلا معرفات المكالمات من Redis فقط
+        val live = activeCalls.snapshot()
+        val calls = if (live.isNotEmpty()) live
+        else (redis.opsForZSet().range("red:calls:active", 0, -1) ?: emptyList()).map { callId ->
             mapOf("id" to callId, "type" to "VOIP", "room" to callId)
-        },
-        "source" to "realtime",
-        "timestamp" to System.currentTimeMillis()
-    )
+        }
+        return mapOf(
+            "active_calls" to calls.size,
+            "calls" to calls,
+            "source" to "realtime",
+            "timestamp" to System.currentTimeMillis()
+        )
+    }
 }

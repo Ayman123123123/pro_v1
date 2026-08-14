@@ -19,7 +19,9 @@ export default function MediaTab() {
       setOnline(response.ok);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const body = await response.json();
-      setCalls(Array.isArray(body) ? body : []);
+      // يدعم التنسيقين: مصفوفة مباشرة (قديم) أو كائن { active_calls, calls } (الحالي)
+      const list = Array.isArray(body) ? body : Array.isArray(body?.calls) ? body.calls : [];
+      setCalls(list);
       setSfu(sfuRes.ok ? await sfuRes.json().catch(() => null) : null);
       setError('');
     } catch (e: any) {

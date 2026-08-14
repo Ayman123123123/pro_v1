@@ -36,13 +36,15 @@ class CallWebSocketHandler(
                 val groupCallId = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
                 val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }
                 require(invitees.isNotEmpty()) { "inviteeIds is required" }
+                // حدّد المشغولين أولاً (قبل التسجيل — وإلا يُعتبر كل مدعو مشغولاً بنفسه)
+                val busyInvitees = invitees.filter { activeCalls.isInCall(it) }.toSet()
                 groupRooms[groupCallId] = GroupCallRoom(host = source, members = invitees)
-                // سجّل المضيف وكل المدعوين كـ "في مكالمة" — لكشف BUSY ولمعالجة الجماعية
-                activeCalls.register(groupCallId, listOf(source) + invitees)
+                // سجّل المضيف والمدعوين غير المشغولين كـ "في مكالمة" — لكشف BUSY ولمعالجة الجماعية
+                activeCalls.register(groupCallId, listOf(source) + invitees.filterNot { it in busyInvitees })
                 val payload = signal.payload + ("hostName" to (signal.payload["hostName"] ?: ""))
                 invitees.forEach { invitee ->
                     // خط مشغول: العضو في مكالمة نشطة (1:1 أو جماعية) — أخبر المضيف فوراً بدل الرنين
-                    if (activeCalls.isInCall(invitee)) {
+                    if (invitee in busyInvitees) {
                         val busySignal = OutgoingCallSignal(groupCallId, invitee, source, "GROUP_CALL_STATUS", signal.mode.uppercase(), mapOf("memberStatus" to "busy"))
                         val hostTargets = liveSessions(source)
                         if (hostTargets.isEmpty()) enqueue(source, busySignal)

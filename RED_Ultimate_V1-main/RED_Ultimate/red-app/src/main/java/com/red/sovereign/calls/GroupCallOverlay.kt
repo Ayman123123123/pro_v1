@@ -418,6 +418,7 @@ private fun MemberStatusTile(member: GroupCallMember) {
         GroupCallMemberStatus.DECLINED  -> Triple(Color(0xFFE53935), "رفض",      Color(0xFFE53935))
         GroupCallMemberStatus.NO_ANSWER -> Triple(Color(0xFF9E9E9E), "لم يرد",   Color(0xFF9E9E9E))
         GroupCallMemberStatus.LEFT      -> Triple(Color(0xFF9E9E9E), "غادر",     Color(0xFF9E9E9E))
+        GroupCallMemberStatus.BUSY      -> Triple(Color(0xFFFF8F00), "مشغول",    Color(0xFFFF8F00))
     }
     val scale = if (member.status == GroupCallMemberStatus.RINGING) pulse else 1f
 

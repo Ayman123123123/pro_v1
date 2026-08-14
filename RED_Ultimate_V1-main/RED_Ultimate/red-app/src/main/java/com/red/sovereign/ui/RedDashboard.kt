@@ -2393,9 +2393,13 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         )
 
         CallsHubLaunchers(
+            onNewCall = { privateCallLauncher() },
             onGroupCallPicker = { groupCallLauncher() },
             onConference = { conferenceLauncher() },
-            onLive = { liveLauncher() }
+            onSpace = { spaceLauncher() },
+            onLive = { liveLauncher() },
+            onPstn = { onPstn() },
+            onExplore = { onExplore() }
         )
         Spacer(Modifier.height(16.dp))
         Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -2706,6 +2710,13 @@ private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isMissed = call.status == "MISSED"
     val isOutgoing = call.direction == "OUTGOING"
+    // شارة الحالة: مرفوضة / مشغول / فشلت — بدل أن تظهر كلها "فائتة"
+    val statusBadge = when (call.status) {
+        "REJECTED" -> "مرفوضة" to Color(0xFFE53935)
+        "BUSY" -> "مشغول" to Color(0xFFFF8F00)
+        "FAILED" -> "فشلت" to Color(0xFFB0BEC5)
+        else -> null
+    }
     
     val durationSec = (call.endedAt?.toLongOrNull() ?: 0L) - (call.answeredAt?.toLongOrNull() ?: 0L)
     val durationText = if (durationSec > 0) {
@@ -2746,14 +2757,29 @@ private fun CallHistoryRow(call: CallHistoryItem) {
         
         // التفاصيل
         Column(Modifier.weight(1f)) {
-            Text(
-                text = call.peerLabel.ifBlank { call.peerId },
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 16.sp,
-                color = if (isMissed) Color(0xFFF44336) else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = call.peerLabel.ifBlank { call.peerId },
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    color = if (isMissed) Color(0xFFF44336) else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (statusBadge != null) {
+                    Text(
+                        text = statusBadge.first,
+                        color = statusBadge.second,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(statusBadge.second.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
             
             Spacer(Modifier.height(4.dp))
             

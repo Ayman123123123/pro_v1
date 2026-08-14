@@ -49,6 +49,7 @@ const MessagingCenter = lazy(() => import('./pages/MessagingCenter'));
 const InfrastructureCenter = lazy(() => import('./pages/InfrastructureCenter'));
 const ModerationCenter = lazy(() => import('./pages/ModerationCenter'));
 const DataOverview = lazy(() => import('./pages/DataOverview'));
+const CallHistory = lazy(() => import('./pages/CallHistory'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -72,7 +73,8 @@ type PageKey =
   | 'dinstar'
   | 'monitor'
   | 'diagnostics'
-  | 'data-overview';
+  | 'data-overview'
+  | 'call-history';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
@@ -85,6 +87,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
   { key: 'moderation', icon: <SafetyCertificateOutlined />, label: 'الإشراف السريع', group: 'main' },
   { key: 'messaging', icon: <MessageOutlined />, label: 'مركز الرسائل', group: 'main' },
+  { key: 'call-history', icon: <PhoneOutlined />, label: 'سجل المكالمات', group: 'main' },
   // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات + وسائط + بنية
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
@@ -200,6 +203,7 @@ export default function App() {
       case 'audit': return <AuditLog />;
       case 'moderation': return <ModerationCenter />;
       case 'messaging': return <MessagingCenter />;
+      case 'call-history': return <CallHistory />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;
