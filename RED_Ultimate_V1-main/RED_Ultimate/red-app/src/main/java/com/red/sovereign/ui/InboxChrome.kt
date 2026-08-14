@@ -1,7 +1,9 @@
 package com.red.sovereign.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +12,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Delete
@@ -44,11 +50,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.core.ChatFolder
 import com.red.sovereign.core.InboxFilter
 import com.red.sovereign.ui.theme.YounesEmerald
@@ -102,6 +111,106 @@ fun InboxFilterBar(
                 onClick = { onFolder(folder.id); onFilter(InboxFilter.ALL) },
                 label = { Text(folder.name, fontSize = 12.sp) }
             )
+        }
+    }
+}
+
+/**
+ * شريط حضور الأصدقاء — في قائمة الدردشات فقط.
+ * الضغط يفتح المحادثة كاملة. الضغط الطويل يفتح ورقة الصديق.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun FriendsPresenceRail(
+    people: List<PublicRedProfile>,
+    isOnline: (String) -> Boolean,
+    onOpen: (PublicRedProfile) -> Unit,
+    onLongPress: (PublicRedProfile) -> Unit,
+    onAdd: () -> Unit,
+) {
+    if (people.isEmpty()) return
+    val onlineCount = people.count { isOnline(it.redId) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("الأصدقاء", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            if (onlineCount > 0) {
+                Text(
+                    "  $onlineCount متصل",
+                    color = YounesEmerald,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Box(Modifier.weight(1f))
+            Text(
+                "إضافة",
+                color = YounesEmerald,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onAdd).padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            item(key = "add-friend") {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(64.dp).clickable(onClick = onAdd),
+                ) {
+                    Box(
+                        Modifier.size(56.dp).clip(CircleShape).background(YounesEmerald.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Add, "إضافة صديق", tint = YounesEmerald) }
+                    Text("جديد", fontSize = 11.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            items(people, key = { it.redId }) { person ->
+                val online = isOnline(person.redId)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(68.dp).combinedClickable(
+                        onClick = { onOpen(person) },
+                        onLongClick = { onLongPress(person) },
+                    ),
+                ) {
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        Box(
+                            Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (online) Modifier.border(2.dp, YounesEmerald, CircleShape)
+                                    else Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f), CircleShape)
+                                )
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                person.displayName.take(1).ifBlank { "?" },
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp,
+                                color = if (online) YounesEmerald else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (online) {
+                            Box(
+                                Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00C98C))
+                                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                            )
+                        }
+                    }
+                    Text(
+                        person.displayName,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        fontWeight = if (online) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
         }
     }
 }

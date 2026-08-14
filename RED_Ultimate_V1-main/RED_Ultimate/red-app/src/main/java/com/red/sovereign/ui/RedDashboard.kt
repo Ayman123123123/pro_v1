@@ -3,6 +3,7 @@ package com.red.sovereign.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -1087,7 +1088,27 @@ private fun ChatHubScreen(
         decrypted.filter { it.id in pinnedIds }.forEach { groupPinnedMessages[it.id] = it }
     }
     Column(Modifier.fillMaxSize()) {
-        if (tab == 0) Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (tab == 0) Column(Modifier.fillMaxSize()) {
+            val chatOpen = YounesId.isValid(target)
+            val activePerson = directory.contacts.firstOrNull { it.redId == target }
+            val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
+            val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
+            val openPrivateChat: (String) -> Unit = { redId ->
+                if (YounesId.isValid(redId)) {
+                    val conv = conversationId(account.redId, redId)
+                    chatUnread.remove(conv)
+                    scope.launch { conversationActions.markRead(conv) }
+                    chatUnlocked = !organization.isLocked(conv)
+                    sendError = null
+                    showEmoji = false
+                    showStickers = false
+                    replyToMessage = null
+                    target = redId
+                }
+            }
+            BackHandler(enabled = chatOpen) { target = "" }
+            if (!chatOpen) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (directory.requests.isNotEmpty()) {
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1118,71 +1139,58 @@ private fun ChatHubScreen(
                     Text((directory.state as DirectoryState.Message).text, color = YounesEmerald, modifier = Modifier.padding(12.dp), fontSize = 13.sp)
                 }
             }
-            if (directory.contacts.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("الأصدقاء", color = AqyalGold, fontWeight = FontWeight.Bold)
-                    Text("${directory.contacts.size}", color = Color.White, fontSize = 12.sp, modifier = Modifier.background(AqyalCyanGlow, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp))
-                    Spacer(Modifier.weight(1f))
-                    TextButton({ showDirectory = true }) { Text("إضافة +", color = AqyalGold, fontSize = 12.sp) }
-                }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // نحسب الترتيب مرة واحدة لكل recompose بدلاً من تكرار في كل item
-                    val sortedContacts = remember(directory.contacts, conversations, directory) {
-                        directory.contacts
-                            .filter { person -> conversations.none { it.peerId == person.redId && it.archived } }
-                            .sortedWith(
-                                compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }
-                                    .thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }
-                                    .thenBy { it.displayName }
-                            )
-                    }
-                    items(sortedContacts, key = { it.redId }) { person ->
-                        val online = directory.isOnline(person.redId)
-                        Card(
-                            Modifier.widthIn(max = 150.dp).clickable { target = person.redId },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Box(contentAlignment = Alignment.BottomEnd) {
-                                    Avatar(person.displayName.take(1))
-                                    if (online) Box(Modifier.size(12.dp).clip(CircleShape).background(Color(0xFF00C98C)).border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape))
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Text(person.displayName, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, overflow = TextOverflow.Ellipsis)
-                                Text(if (online) "متصل" else "@${person.username}", color = if (online) YounesEmerald else AqyalCyanGlow, maxLines = 1, fontSize = 10.sp)
-                                IconButton({ selectedContact = person }, Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            }
-                        }
-                    }
-                }
-            }
-            val activePerson = directory.contacts.firstOrNull { it.redId == target }
-            if (target.isBlank()) Card(Modifier.fillMaxWidth().clickable { showDirectory = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Search, null, tint = YounesEmerald)
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text("بدء محادثة خاصة", fontWeight = FontWeight.SemiBold); Text("ابحث بالاسم الدقيق أو معرّف يونس", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
-                }
-            } else Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton({ target = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة لقائمة الدردشات") }
-                    Avatar((activePerson?.displayName ?: target).take(1))
-                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                        Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
-                        Text(activePerson?.let { val ls = directory.lastSeenLabel(it.redId); ls ?: "@${it.username} · ${it.redId}" } ?: target, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    PrivateChatCallActions(
-                        onVideoCall = { pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
-                        onVoiceCall = { pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
-                        onSearch = { showMessageSearch = true },
-                        onMedia = { showMediaGallery = true },
-                        onSafety = { safety.open(target) },
-                        onProfile = activePerson?.let { person -> { selectedContact = person } }
+            val sortedContacts = remember(directory.contacts, conversations, directory) {
+                directory.contacts
+                    .filter { person -> conversations.none { it.peerId == person.redId && it.archived } }
+                    .sortedWith(
+                        compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }
+                            .thenByDescending { conversations.find { c -> c.peerId == it.redId }?.pinned ?: false }
+                            .thenBy { it.displayName }
                     )
+            }
+            FriendsPresenceRail(
+                people = sortedContacts,
+                isOnline = directory::isOnline,
+                onOpen = { person -> openPrivateChat(person.redId) },
+                onLongPress = { person -> selectedContact = person },
+                onAdd = { showDirectory = true },
+            )
+            } // نهاية واجهة القائمة فقط
+            } else {
+                val typingHere = typingUsers.containsKey(target)
+                val statusLine = when {
+                    typingHere -> "يكتب…"
+                    directory.isOnline(target) -> "متصل"
+                    else -> activePerson?.let { directory.lastSeenLabel(it.redId) ?: "@${it.username}" } ?: target
+                }
+                Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f), shadowElevation = 2.dp) {
+                    Row(Modifier.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton({ target = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة لقائمة الدردشات") }
+                        Box(
+                            Modifier
+                                .clip(CircleShape)
+                                .clickable { activePerson?.let { selectedContact = it } },
+                        ) { Avatar((activePerson?.displayName ?: target).take(1)) }
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .padding(horizontal = 10.dp)
+                                .clickable { activePerson?.let { selectedContact = it } },
+                        ) {
+                            Text(if (target == account.redId) "رسائلي" else (activePerson?.displayName ?: target), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(statusLine, color = if (typingHere || directory.isOnline(target)) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        PrivateChatCallActions(
+                            onVideoCall = { pendingCallVideo = true; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                            onVoiceCall = { pendingCallVideo = false; callPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
+                            onSearch = { showMessageSearch = true },
+                            onMedia = { showMediaGallery = true },
+                            onSafety = { safety.open(target) },
+                            onProfile = activePerson?.let { person -> { selectedContact = person } }
+                        )
+                    }
                 }
             }
-            val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
-            val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
             androidx.compose.runtime.LaunchedEffect(conversationMessages.size, target) {
                 if (conversationMessages.isNotEmpty()) messagesListState.animateScrollToItem(conversationMessages.lastIndex)
             }
@@ -1196,7 +1204,7 @@ private fun ChatHubScreen(
                 else -> null
             }
             LazyColumn(
-                Modifier.weight(1f).then(if (chatWallpaperBrush != null) Modifier.background(chatWallpaperBrush) else Modifier),
+                Modifier.weight(1f).padding(horizontal = if (chatOpen) 10.dp else 14.dp).then(if (chatWallpaperBrush != null) Modifier.background(chatWallpaperBrush) else Modifier),
                 state = messagesListState, verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (target.isBlank()) {
@@ -1233,7 +1241,7 @@ private fun ChatHubScreen(
                         )
                     }
                     if (inboxFilter == InboxFilter.ALL && inboxSearch.isBlank()) {
-                        item { SavedMessagesRow { target = account.redId; chatUnlocked = true } }
+                        item { SavedMessagesRow { openPrivateChat(account.redId) } }
                         item { ArchiveEntryRow(privateChats.count { it.archived }) { inboxFilter = InboxFilter.ARCHIVED } }
                     }
                     items(visible, key = { it.id }) { conv ->
@@ -1244,12 +1252,7 @@ private fun ChatHubScreen(
                         val typing = typingUsers.containsKey(conv.peerId)
                         Card(
                             Modifier.fillMaxWidth().combinedClickable(
-                                onClick = {
-                                    chatUnread.remove(conv.id)
-                                    scope.launch { conversationActions.markRead(conv.id) }
-                                    chatUnlocked = !organization.isLocked(conv.id)
-                                    target = conv.peerId
-                                },
+                                onClick = { openPrivateChat(conv.peerId) },
                                 onLongClick = {
                                     actionConversation = ConversationActionState(
                                         id = conv.id,
@@ -1463,9 +1466,6 @@ private fun ChatHubScreen(
                     }
                 }
             )
-            sendError?.let { error ->
-                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
             val canSendText = YounesId.isValid(target) && messageText.isNotBlank()
             val voiceBusy = voiceMessages.state is VoiceMessageState.Recording ||
                 voiceMessages.state is VoiceMessageState.Preview ||
@@ -1504,17 +1504,26 @@ private fun ChatHubScreen(
                     )
                 }
             }
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton({ showStickers = !showStickers; showEmoji = false }, enabled = YounesId.isValid(target)) { Icon(Icons.Default.Add, "ملصقات") }
-                IconButton({ showAttachmentSheet = true }, enabled = YounesId.isValid(target) && attachments.state !is AttachmentState.Working) {
-                    Icon(Icons.Default.AttachFile, "إرفاق")
-                }
-                Column(Modifier.weight(1f)) {
+            YounesComposer(
+                text = messageText,
+                onTextChange = { messageText = it; if (sendError != null) sendError = null },
+                sendError = sendError,
+                enabled = YounesId.isValid(target),
+                sendEnabled = canSendText && !voiceBusy,
+                enterToSend = SettingsRuntime.current.enterToSend,
+                disappearingMs = disappearingDurationMs,
+                onClearDisappearing = { disappearingDurationMs = null },
+                onSetDisappearing = { disappearingDurationMs = 86_400_000L },
+                onToggleEmoji = { showEmoji = !showEmoji; showStickers = false },
+                onStickers = { showStickers = !showStickers; showEmoji = false },
+                onAttach = { showAttachmentSheet = true },
+                onSend = sendPrivate,
+                extra = {
                     val mentionQuery = USERNAME_PARTIAL.find(messageText)?.groupValues?.get(1)
                     if (mentionQuery != null && directory.contacts.isNotEmpty()) {
                         val suggestions = directory.contacts.filter { it.username.contains(mentionQuery, ignoreCase = true) || it.displayName.contains(mentionQuery, ignoreCase = true) }.take(3)
                         if (suggestions.isNotEmpty()) {
-                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth()) {
                                 Column {
                                     suggestions.forEach { person ->
                                         Row(Modifier.fillMaxWidth().clickable {
@@ -1532,7 +1541,7 @@ private fun ChatHubScreen(
                     if (hashtagQuery != null) {
                         val popular = listOf("مهم", "يمن", "تقنية", "عام", "خاص").filter { it.contains(hashtagQuery, ignoreCase = true) }.take(3)
                         if (popular.isNotEmpty()) {
-                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth()) {
                                 Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     popular.forEach { tag ->
                                         AssistChip(onClick = { messageText = messageText.replace(HASHTAG_AUTOCOMPLETE, "#$tag ") }, label = { Text("#$tag", color = AqyalCyanGlow) })
@@ -1541,44 +1550,8 @@ private fun ChatHubScreen(
                             }
                         }
                     }
-                    OutlinedTextField(
-                        messageText,
-                        { messageText = it; if (sendError != null) sendError = null },
-                        Modifier.fillMaxWidth(),
-                        placeholder = { Text("رسالة مشفرة…") },
-                        maxLines = if (SettingsRuntime.current.enterToSend) 1 else 4,
-                        leadingIcon = {
-                            IconButton({ showEmoji = !showEmoji; showStickers = false }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
-                        },
-                        trailingIcon = {
-                            if (disappearingDurationMs != null) {
-                                val label = when (disappearingDurationMs) {
-                                    3600000L -> "1س"
-                                    86400000L -> "24س"
-                                    604800000L -> "7ي"
-                                    else -> "⏳"
-                                }
-                                TextButton({ disappearingDurationMs = null }) { Text("⏳$label", color = AqyalGold, fontSize = 11.sp) }
-                            } else {
-                                IconButton({ disappearingDurationMs = 86400000L }) { Icon(Icons.Default.History, "رسالة مؤقتة", tint = Color.Gray) }
-                            }
-                        },
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = if (SettingsRuntime.current.enterToSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = {
-                            if (SettingsRuntime.current.enterToSend && canSendText) sendPrivate()
-                        })
-                    )
-                }
-                if (canSendText && !voiceBusy) {
-                    FilledIconButton(
-                        onClick = sendPrivate,
-                        modifier = Modifier.size(48.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = YounesEmerald,
-                            contentColor = Color(0xFF002117),
-                        ),
-                    ) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال") }
-                } else {
+                },
+                voice = {
                     VoiceRecordButton(
                         state = voiceMessages.state,
                         isLocked = voiceMessages.isLocked,
@@ -1601,11 +1574,12 @@ private fun ChatHubScreen(
                         },
                         size = 48.dp,
                     )
-                }
+                },
+            )
             }
-            }
-        } else Column(Modifier.fillMaxSize().padding(14.dp)) {
+        } else Column(Modifier.fillMaxSize().padding(if (groupConversationId == null) 14.dp else 0.dp)) {
             val openGroup = groups.groups.firstOrNull { it.id == groupConversationId }
+            BackHandler(enabled = openGroup != null) { groupConversationId = null }
             if (openGroup == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onCreateGroup, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Text(" إنشاء") }
@@ -1810,9 +1784,6 @@ private fun ChatHubScreen(
                         }
                     }
                 }
-                sendError?.let { error ->
-                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
                 val canSendGroup = groupMessageText.isNotBlank()
                 val sendGroup = {
                     val built = ChatComposer.buildText(
@@ -1838,36 +1809,29 @@ private fun ChatHubScreen(
                         onFailure = { sendError = ChatComposer.humanizeSendError(it.message) },
                     )
                 }
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton({ showGroupAttachmentSheet = true }) { Icon(Icons.Default.AttachFile, "إرفاق بالمجموعة") }
-                    IconButton({ showStickers = !showStickers; showGroupEmoji = false }) { Icon(Icons.Default.Add, "ملصقات المجموعة") }
-                    OutlinedTextField(
-                        groupMessageText,
-                        { groupMessageText = it; if (sendError != null) sendError = null },
-                        Modifier.weight(1f),
-                        placeholder = { Text(if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…") },
-                        maxLines = 4,
-                        leadingIcon = {
-                            IconButton({ showGroupEmoji = !showGroupEmoji }) { Icon(Icons.Default.EmojiEmotions, "الرموز التعبيرية") }
-                        },
-                    )
-                    if (canSendGroup) {
-                        FilledIconButton(
-                            onClick = sendGroup,
-                            modifier = Modifier.size(48.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = YounesEmerald,
-                                contentColor = Color(0xFF002117),
-                            ),
-                        ) { Icon(Icons.AutoMirrored.Filled.Send, "إرسال للمجموعة") }
-                    } else {
-                        IconButton({
+                YounesComposer(
+                    text = groupMessageText,
+                    onTextChange = { groupMessageText = it; if (sendError != null) sendError = null },
+                    sendError = sendError,
+                    enabled = true,
+                    sendEnabled = canSendGroup,
+                    enterToSend = SettingsRuntime.current.enterToSend,
+                    disappearingMs = disappearingDurationMs,
+                    placeholder = if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…",
+                    onClearDisappearing = { disappearingDurationMs = null },
+                    onSetDisappearing = { disappearingDurationMs = 86_400_000L },
+                    onToggleEmoji = { showGroupEmoji = !showGroupEmoji; showStickers = false },
+                    onStickers = { showStickers = !showStickers; showGroupEmoji = false },
+                    onAttach = { showGroupAttachmentSheet = true },
+                    onSend = sendGroup,
+                    voice = {
+                        androidx.compose.material3.IconButton({
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                                 voiceMessages.startForGroup(openGroup)
                             } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
                         }) { Icon(Icons.Default.Mic, "صوت للمجموعة") }
-                    }
-                }
+                    },
+                )
                 if (showStickers && groupConversationId != null) {
                     val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
                     com.red.sovereign.media.StickerPicker(
@@ -2254,7 +2218,7 @@ private fun ChatHubScreen(
                                         if (forward != null) {
                                             RedConnectionService.sendRichText(context, person.redId, conversationId(account.redId, person.redId), RichMessage(text = messageDisplayText(forward), forwardOf = forward.id))
                                             pendingForwardMessage = null
-                                        } else target = person.redId
+                                        } else openPrivateChat(person.redId)
                                         showDirectory = false; directory.clear()
                                     }) { Text(if (pendingForwardMessage != null) "توجيه" else "محادثة") }
                                     Button({ directory.request(person) }) { Text("إضافة") }
