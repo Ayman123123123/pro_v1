@@ -342,8 +342,11 @@ services:
     restart: "no"
     environment:
       - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
+    # الصورة تضبط ENTRYPOINT ["sh"] مسبقًا؛ تمرير "sh" هنا مجددًا كان يجعل
+    # الأمر النهائي `sh sh -ec …` فيفسّر busybox ash الوسيط "sh" كملف سكربت
+    # ويخرج فورًا بـ exit 2 دون تنفيذ أي شيء. الاكتفاء بـ ["-ec", script] يجعل
+    # ش الرئيسي (entrypoint) يستلم الوسائط الصحيحة مباشرة.
     command:
-      - "sh"
       - "-ec"
       - |
         case "$$TLS_SAN_IP" in
