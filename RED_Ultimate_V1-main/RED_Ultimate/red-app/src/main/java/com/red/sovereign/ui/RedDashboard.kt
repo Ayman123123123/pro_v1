@@ -132,6 +132,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -426,7 +427,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            RedTopBar(account.redId, account.username, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
+            RedTopBar(account.redId, account.username, compact = WindowLayout.current().compactChrome, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
@@ -455,11 +456,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showCreate) CreateSheet(
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
-        onPost = { text -> feed.create(text) { showCreate = false } },
+        onPost = { text -> feed.create(text) { feed.discardDraft(); showCreate = false } },
         onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
-        onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE }
+        onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE },
+        feed = feed,
     )
     if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
@@ -532,6 +534,7 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
     IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: StoryViewModel, onCreate: () -> Unit) {
     var filter by remember { mutableIntStateOf(0) }
@@ -541,39 +544,54 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     var editText by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
+    val layout = WindowLayout.current()
+    val page = layout.pagePadding
     val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val refreshing = feed.state == FeedState.Loading && feed.posts.isNotEmpty()
+    PullToRefreshBox(isRefreshing = refreshing, onRefresh = { feed.refresh() }, modifier = Modifier.fillMaxSize()) {
+    LazyColumn(
+        Modifier.fillMaxSize().then(if (layout.isWide) Modifier.padding(horizontal = 48.dp) else Modifier),
+        verticalArrangement = Arrangement.spacedBy(if (layout.compactChrome) 8.dp else 10.dp),
+        contentPadding = PaddingValues(bottom = 16.dp),
+    ) {
         item {
-            LazyRow(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
                 items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
         item {
-            Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أتابعهم", "اليمن").forEachIndexed { i, title ->
-                    FilterChip(filter == i, {
-                        filter = i
-                        feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })
+            LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("لك" to null, "أتابعهم" to "FOLLOWING", "اليمن" to "YEMEN")) { (title, scope) ->
+                    val idx = when (scope) { "FOLLOWING" -> 1; "YEMEN" -> 2; else -> 0 }
+                    FilterChip(filter == idx, {
+                        filter = idx
+                        feed.load(scope)
                     }, { Text(title) })
                 }
             }
         }
         item {
-            Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar("أ"); Text("ماذا يحدث في يونس؟", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
+            Card(Modifier.fillMaxWidth().padding(horizontal = page).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
+                Row(Modifier.padding(if (layout.compactChrome) 12.dp else 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(account.username.take(1)); Text("ماذا يحدث في يونس؟", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
                 }
             }
         }
-        if (feed.state is FeedState.Message) item { Text((feed.state as FeedState.Message).text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) }
+        if (feed.state is FeedState.Message) item { Text((feed.state as FeedState.Message).text, color = AqyalGold, modifier = Modifier.padding(horizontal = page + 4.dp)) }
         when {
-            feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
-            feed.state is FeedState.Error -> item { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message) }
-            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
+            feed.state == FeedState.Loading && feed.posts.isEmpty() -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
+            feed.state is FeedState.Error && feed.posts.isEmpty() -> item {
+                Column(Modifier.fillMaxWidth().padding(page), horizontalAlignment = Alignment.CenterHorizontally) {
+                    EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message)
+                    Button(onClick = { feed.refresh() }) { Text("إعادة المحاولة") }
+                }
+            }
+            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات. هذا النبض عام — ليس E2EE.") }
             else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
+    }
     }
     threadPost?.let { root ->
         AlertDialog(
@@ -686,7 +704,7 @@ private fun PostCard(
     onMute: (Post) -> Unit = {},
     onReport: (Post) -> Unit = {}
 ) = Card(
-    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+    Modifier.fillMaxWidth().padding(horizontal = WindowLayout.current().pagePadding),
     colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy.copy(alpha = .96f)),
     shape = RoundedCornerShape(24.dp)
 ) {
@@ -837,6 +855,7 @@ private fun ChatHubScreen(
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
+    var messageText by remembr { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var selectedChatMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
@@ -1325,7 +1344,7 @@ private fun ChatHubScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
+                            Modifier.widthIn(max = WindowLayout.current().bubbleMax).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
                             colors = CardDefaults.cardColors(containerColor = if (item.outgoing) YounesEmerald.copy(alpha = .82f) else AqyalSurfaceRaised.copy(alpha = .94f)),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1626,7 +1645,7 @@ private fun ChatHubScreen(
                                         Text(
                                             lastGroupMsg?.let { msg ->
                                                 val t = if (msg.type == "RICH_TEXT") RichMessage.decode(msg.plaintext)?.text.orEmpty() else msg.plaintext.toString(Charsets.UTF_8)
-                                                (if (msg.outgoing) "أنت: " else "@" + msg.senderRedId.take(8) + ": ") + t
+                                                (if (msg.outgoing) "أنت: " else GroupMentions.senderName(msg.senderRedId, group.members, directory.contacts, account.redId) + ": ") + t
                                             } ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
                                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis
                                         )
@@ -1720,7 +1739,7 @@ private fun ChatHubScreen(
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.outgoing) Arrangement.End else Arrangement.Start) {
                         Card(
-                            Modifier.widthIn(max = 320.dp).combinedClickable(onClick = { groupReplyToMessage = message }, onLongClick = { selectedChatMessage = message }),
+                            Modifier.widthIn(max = WindowLayout.current().bubbleMax).combinedClickable(onClick = { groupReplyToMessage = message }, onLongClick = { selectedChatMessage = message }),
                             colors = CardDefaults.cardColors(containerColor = if (message.outgoing) YounesEmerald.copy(alpha = .82f) else MaterialTheme.colorScheme.surfaceVariant),
                             shape = RoundedCornerShape(
                                 topStart = 20.dp, topEnd = 20.dp,
@@ -1736,7 +1755,7 @@ private fun ChatHubScreen(
                                         Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
                                     )
                                     val colorIndex = kotlin.math.abs(message.senderRedId.hashCode()) % nameColors.size
-                                    Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
+                                    Text(GroupMentions.senderName(message.senderRedId, openGroup.members, directory.contacts, account.redId), color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                 }
                                 when (message.type) {
                                     "RICH_TEXT" -> RichTextMessage(message, groupMessages) { id ->
@@ -1782,7 +1801,7 @@ private fun ChatHubScreen(
                     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("رد على ${if (ref.outgoing) "نفسك" else ref.senderRedId.take(12)}", color = YounesEmerald, style = MaterialTheme.typography.labelMedium)
+                                Text("رد على ${if (ref.outgoing) "نفسك" else GroupMentions.senderName(ref.senderRedId, openGroup.members, directory.contacts, account.redId)}", color = YounesEmerald, style = MaterialTheme.typography.labelMedium)
                                 Text(messageDisplayText(ref), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             IconButton({ groupReplyToMessage = null }) { Icon(Icons.Default.Close, "إلغاء الرد") }
@@ -1927,7 +1946,7 @@ private fun ChatHubScreen(
                 // المعاينة: الرسالة المحددة
                 Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(if (message.outgoing) "أنت" else (if (isGroupMsg) message.senderRedId.take(12) else "المرسل"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(if (message.outgoing) "أنت" else (if (isGroupMsg) GroupMentions.senderName(message.senderRedId, groups.groups.firstOrNull { it.id == message.conversationId }?.members.orEmpty(), directory.contacts, account.redId) else "المرسل"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -2201,10 +2220,10 @@ private fun ChatHubScreen(
     }
     if (showMessageSearch) AlertDialog(
         onDismissRequest = { showMessageSearch = false; messageSearchQuery = "" },
-        title = { Text("البحث داخل المحادثة") },
+        title = { Text(if (groupConversationId != null) "البحث داخل المجموعة" else "البحث داخل المحادثة") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(messageSearchQuery, { messageSearchQuery = it }, Modifier.fillMaxWidth(), label = { Text("كلمة أو عبارة") }, singleLine = true)
-            val currentConversation = conversationId(account.redId, target)
+            val currentConversation = groupConversationId ?: conversationId(account.redId, target)
             val results = if (messageSearchQuery.length >= 2) localMessages.search(messageSearchQuery).filter { it.conversationId == currentConversation } else emptyList()
             LazyColumn(Modifier.height(280.dp)) { items(results, key = { it.id }) { result -> Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Column(Modifier.padding(10.dp)) { Text(if (result.type == "RICH_TEXT") RichMessage.decode(result.plaintext)?.text.orEmpty() else result.plaintext.toString(Charsets.UTF_8), maxLines = 4); Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(result.timestamp)), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) } } } }
         } },
@@ -2811,10 +2830,16 @@ private fun CreateSheet(
     onPoll: (String, List<String>, Int) -> Unit,
     onStory: () -> Unit,
     onLive: () -> Unit,
-    onExplore: () -> Unit
+    onExplore: () -> Unit,
+    feed: FeedViewModel? = null,
 ) {
     var mode by remember { mutableStateOf("menu") }
     var text by remember { mutableStateOf("") }
+    LaunchedEffect(mode) {
+        if (mode == "post" && text.isBlank()) {
+            feed?.loadDraft()?.let { saved -> if (saved.isNotBlank()) text = saved }
+        }
+    }
     var pollQuestion by remember { mutableStateOf("") }
     var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
     var pollHours by remember { mutableIntStateOf(24) }

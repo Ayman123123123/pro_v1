@@ -85,6 +85,17 @@ object GroupMentions {
         return id
     }
 
+    /** اسم يظهر فوق فقاعة المجموعة: صديق ثم username ثم المعرّف كاملاً — لا نقطع خمسة أرقام. */
+    fun senderName(
+        redId: String,
+        members: List<GroupMember>,
+        friends: List<PublicRedProfile>,
+        ownRedId: String = "",
+    ): String {
+        if (redId.isNotBlank() && redId == ownRedId) return "أنت"
+        return displayLabel(redId, members, friends)
+    }
+
     fun highlightTokens(
         text: String,
         members: List<GroupMember>,
