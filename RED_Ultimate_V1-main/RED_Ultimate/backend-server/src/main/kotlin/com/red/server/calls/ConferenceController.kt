@@ -10,7 +10,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Service
 import org.springframework.web.bind.annotation.*
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -54,7 +53,8 @@ class ConferenceRoomService {
         if (roomParticipants.containsKey(roomId)) {
             return activeRooms[roomId] ?: ConferenceRoomRecord(roomId, hostId)
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        require(!isPrivate || !password.isNullOrBlank()) { "A private room requires a password" }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let(RoomPasswordHasher::hash)
         val record = ConferenceRoomRecord(
             roomId = roomId,
             hostId = hostId,
@@ -76,7 +76,7 @@ class ConferenceRoomService {
         val record = activeRooms[roomId] ?: return false
         if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        return RoomPasswordHasher.verify(password, record.passwordHash)
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -112,6 +112,9 @@ class ConferenceRoomService {
 
     fun getParticipantCount(roomId: String): Int = roomParticipants[roomId]?.size ?: 0
 
+    fun isParticipant(roomId: String, accountId: String): Boolean =
+        roomParticipants[roomId]?.contains(accountId) == true
+
     fun closeRoom(roomId: String): Boolean {
         val removed = roomParticipants.remove(roomId) != null
         activeRooms.remove(roomId)
@@ -119,11 +122,6 @@ class ConferenceRoomService {
         return removed
     }
 
-    private fun hashPassword(password: String): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
-    }
 }
 
 @RestController

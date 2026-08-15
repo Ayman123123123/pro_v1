@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 /**
@@ -26,13 +27,25 @@ class LiveStreamServiceTest {
     }
 
     @Test
-    fun `starting the same stream twice keeps a single entry`() {
+    fun `a second broadcaster cannot hijack an existing stream id`() {
         service.startStream("stream-1", "96109")
-        service.startStream("stream-1", "57477") // لا يستبدل الموجود
+        assertThrows(IllegalArgumentException::class.java) {
+            service.startStream("stream-1", "57477")
+        }
 
         val active = service.getActiveStreams()
         assertEquals(1, active.size)
         assertEquals("96109", active.first().broadcasterId)
+    }
+
+    @Test
+    fun `private stream password is salted and verified`() {
+        val stream = service.createStream(
+            "private-stream", "96109", "Owner", "96109", "Private", true, "correct horse"
+        )
+        assertTrue(stream.passwordHash?.startsWith("pbkdf2-sha256-v1\$") == true)
+        assertTrue(service.verifyPassword("private-stream", "correct horse"))
+        assertFalse(service.verifyPassword("private-stream", "wrong password"))
     }
 
     @Test

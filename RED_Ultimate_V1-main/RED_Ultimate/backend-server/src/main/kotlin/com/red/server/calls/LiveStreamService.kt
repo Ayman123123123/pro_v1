@@ -55,7 +55,8 @@ class LiveStreamService {
             log.info("Stream {} already active for the same broadcaster", streamId)
             return existing
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        require(!isPrivate || !password.isNullOrBlank()) { "A private room requires a password" }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let(RoomPasswordHasher::hash)
         val record = LiveStreamRecord(
             streamId = streamId,
             broadcasterId = broadcasterId,
@@ -76,7 +77,7 @@ class LiveStreamService {
         val record = activeStreamRecords[streamId] ?: return false
         if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        return RoomPasswordHasher.verify(password, record.passwordHash)
     }
 
     fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
@@ -111,6 +112,9 @@ class LiveStreamService {
 
     fun getViewerCount(streamId: String): Int = liveViewers[streamId]?.size ?: 0
 
+    fun isViewer(streamId: String, accountId: String): Boolean =
+        liveViewers[streamId]?.contains(accountId) == true
+
     fun getActiveStreams(): List<LiveStreamRecord> {
         return activeStreamRecords.values.onEach { record -> record.viewerCount = getViewerCount(record.streamId) }.toList()
     }
@@ -122,10 +126,5 @@ class LiveStreamService {
         return removed
     }
 
-    private fun hashPassword(password: String): String {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
-    }
 
 }

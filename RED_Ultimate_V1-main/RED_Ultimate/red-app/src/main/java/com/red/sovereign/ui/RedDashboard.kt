@@ -1023,7 +1023,7 @@ private fun ChatHubScreen(
             val file = File(context.cacheDir, "camera/latest_photo.jpg")
             val group = groups.groups.firstOrNull { it.id == groupConversationId }
             if (file.isFile && group != null) {
-                val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                val providerUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 attachments.sendToGroup(providerUri, group)
             }
         }
@@ -1032,7 +1032,7 @@ private fun ChatHubScreen(
         if (success) {
             val file = File(context.cacheDir, "camera/latest_photo.jpg")
             if (file.isFile && target.isNotBlank()) {
-                val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                val providerUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 attachments.send(providerUri, target, conversationId(account.redId, target))
             }
         }
@@ -1442,7 +1442,7 @@ private fun ChatHubScreen(
                 onCamera = {
                     val dir = File(context.cacheDir, "camera").apply { mkdirs() }
                     val file = File(dir, "latest_photo.jpg")
-                    val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                    val providerUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     cameraPicker.launch(providerUri)
                 },
                 onGallery = { filePicker.launch(arrayOf("image/*", "video/*")) },
@@ -1889,7 +1889,7 @@ private fun ChatHubScreen(
                     onCamera = {
                         val dir = File(context.cacheDir, "camera").apply { mkdirs() }
                         val file = File(dir, "latest_photo.jpg")
-                        val providerUri = FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+                        val providerUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                         groupCameraPicker.launch(providerUri)
                     },
                     onGallery = { groupFilePicker.launch(arrayOf("image/*", "video/*")) },
@@ -2381,7 +2381,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showJoinDialog = false
-                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
+                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = false)
                         roomInput = ""
                     },
                     enabled = roomInput.trim().isNotBlank()
@@ -2445,12 +2445,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         if (isPrivateStream) {
                             OutlinedTextField(
                                 value = streamPasswordInput,
-                                onValueChange = { streamPasswordInput = it },
+                                onValueChange = { streamPasswordInput = it.take(128) },
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = { Text("كلمة سر البث الخاص") },
                                 singleLine = true
                             )
                         }
+                    } else {
+                        OutlinedTextField(
+                            value = streamPasswordInput,
+                            onValueChange = { streamPasswordInput = it.take(128) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("كلمة السر إن كان البث خاصاً") },
+                            singleLine = true
+                        )
                     }
                 }
             },
@@ -2459,13 +2467,22 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     onClick = {
                         showLiveDialog = false
                         val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster, streamTitleInput.trim().ifBlank { "بث مباشر يونس" })
+                        LiveStreamService.start(
+                            context,
+                            finalStreamId,
+                            ownUserId,
+                            isBroadcaster,
+                            streamTitleInput.trim().ifBlank { "بث مباشر يونس" },
+                            isPrivate = isBroadcaster && isPrivateStream,
+                            password = streamPasswordInput.takeIf(String::isNotBlank)
+                        )
                         roomInput = ""
                         streamTitleInput = ""
                         streamPasswordInput = ""
                         isPrivateStream = false
                     },
-                    enabled = roomInput.trim().isNotBlank() || isBroadcaster
+                    enabled = (roomInput.trim().isNotBlank() || isBroadcaster) &&
+                        (!isBroadcaster || !isPrivateStream || streamPasswordInput.length >= 4)
                 ) {
                     Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
                 }
@@ -3231,12 +3248,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 androidx.compose.foundation.Image(
                     bitmap, contentDescription = "صورة",
                     modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
-                        val uri = android.net.Uri.fromFile(file)
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "image/*")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        runCatching { context.startActivity(intent) }
+                        openDecryptedFile(context, file, "image/*")
                     },
                     contentScale = ContentScale.Crop
                 )
@@ -3289,12 +3301,7 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     shape = CircleShape,
                     color = Color.Black.copy(alpha = 0.55f),
                     onClick = {
-                        val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "video/*")
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        runCatching { context.startActivity(intent) }
+                        openDecryptedFile(context, java.io.File(downloaded.first), "video/*")
                     }
                 ) {
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
@@ -3392,6 +3399,19 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
                 Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
             }
         }
+    }
+}
+
+private fun openDecryptedFile(context: android.content.Context, file: java.io.File, mimeType: String) {
+    runCatching {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mimeType)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(intent)
+    }.onFailure { error ->
+        android.util.Log.w("RedDashboard", "No application can open ${file.name}: ${error.message}")
     }
 }
 

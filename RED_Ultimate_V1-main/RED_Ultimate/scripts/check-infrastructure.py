@@ -67,6 +67,21 @@ check("location /storage" not in nginx,
       "Direct MinIO /storage proxy bypasses authenticated MediaAccessService")
 check("proxy_read_timeout 3600s;" in nginx and "location /ws/" in nginx,
       "Canonical WebSocket route/idle timeout is missing")
+ws_config_files = list((ROOT / "backend-server/src/main/kotlin/com/red/server").rglob("WebSocketConfig.kt"))
+check(len(ws_config_files) == 1,
+      f"Exactly one authoritative WebSocketConfig is required, found {len(ws_config_files)}")
+if ws_config_files:
+    ws_config = ws_config_files[0].read_text(encoding="utf-8")
+    expected_ws_routes = {
+        "/ws/master", "/ws/calls", "/ws/conference", "/ws/livestream",
+        "/ws/typing", "/ws/admin/logs", "/ws/dinstar",
+    }
+    for route in sorted(expected_ws_routes):
+        check(f'"{route}"' in ws_config, f"Backend WebSocket route is not registered: {route}")
+    check(".addInterceptors(authentication)" in ws_config,
+          "Every WebSocket route must use JwtHandshakeInterceptor")
+    check('setAllowedOrigins("*")' not in ws_config,
+          "WebSocket browser origins must not use a wildcard")
 check(nginx.count("{") == nginx.count("}"), "nginx.conf braces are unbalanced")
 check(all("_" not in name for name in upstreams),
       "Nginx upstream names containing underscore can become invalid Host headers")
@@ -93,6 +108,16 @@ check("IP:$$TLS_SAN_IP" in compose and "TLS_SAN_IP=" in compose,
       "Development TLS certificate must include the configured LAN IP SAN")
 check("apk add" not in compose and (ROOT / "infrastructure/tls-init.Dockerfile").is_file(),
       "TLS repair must not download packages during container startup")
+check("bash -c '</dev/tcp" not in compose and "pidof turnserver" in compose,
+      "Coturn healthcheck must use tools present in the Alpine image")
+check('RTC_MIN_PORT=40000' in compose and 'RTC_MAX_PORT=40100' in compose and
+      '40000-40100:40000-40100/udp' in compose,
+      "mediasoup worker and published UDP ranges must match")
+check("MEDIASOUP_EXTERNAL_IP" not in compose,
+      "Dead MEDIASOUP_EXTERNAL_IP must not be advertised as a supported setting")
+check('--external-ip=$$advertised/$${TURN_INTERNAL_IP}' in compose and
+      'if [ -n "$${TURN_INTERNAL_IP}" ]' in compose,
+      "Coturn must omit the private-IP suffix when TURN_INTERNAL_IP is empty")
 
 # Every required interpolation must have a documented template key.
 env_keys = set(re.findall(r"(?m)^([A-Z][A-Z0-9_]*)=", text(".env.example")))

@@ -135,21 +135,17 @@ export default function CdrAnalysis() {
   // تهيئة ECharts
   const [echartsReady, setEchartsReady] = useState(false);
   const [echartsMod, setEchartsMod] = useState<any>(null);
-  const [echartsForReact, setEchartsForReact] = useState<any>(null);
+  const [EChartsForReact, setEChartsForReact] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([import('echarts'), import('echarts-for-react')]).then(([ec, efr]) => {
       setEchartsMod(ec);
-      setEchartsForReact(efr.default || efr);
+      setEChartsForReact(efr.default || efr);
       setEchartsReady(true);
     }).catch(() => {
       // ECharts غير متوفر — نعرض الإحصائيات النصية فقط
     });
   }, []);
-
-  // اسم محلي بحرف كبير — JSX يتطلب أن تبدأ مكوّنات الحالة بحرف كبير
-  // (الاسم الصغير `<echartsForReact>` كان يُعامل كعنصر HTML أصلي فيفشل tsc)
-  const EChartsForReact = echartsForReact;
 
   // رسم بياني — توزيع المشغلين
   const operatorChartOption = useMemo(() => {
@@ -301,7 +297,7 @@ export default function CdrAnalysis() {
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card title="توزيع المشغلين" size="small">
-            {echartsReady && operatorChartOption && EChartsForReact ? (
+            {echartsReady && operatorChartOption ? (
               <EChartsForReact option={operatorChartOption} style={{ height: 240 }} />
             ) : operatorDist.length > 0 ? (
               <Table
@@ -319,7 +315,7 @@ export default function CdrAnalysis() {
         </Col>
         <Col xs={24} md={12}>
           <Card title="توزيع البوابات" size="small">
-            {echartsReady && gatewayChartOption && EChartsForReact ? (
+            {echartsReady && gatewayChartOption ? (
               <EChartsForReact option={gatewayChartOption} style={{ height: 240 }} />
             ) : gatewayDist.length > 0 ? (
               <Table

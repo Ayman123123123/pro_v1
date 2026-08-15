@@ -399,7 +399,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 .put("roomId", roomId)
                 .put("title", if (isSpace) "مساحة صوتية" else "مؤتمر فيديو")
                 .put("isSpace", isSpace)
-                .put("isPrivate", true)
+                .put("isPrivate", false)
                 .toString()
             api.request("POST", "/api/conference/create", create)
         }
@@ -487,19 +487,18 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             .setContentTitle("دعوة إلى مؤتمر " + (if (isVideo) "فيديو" else "صوتي"))
             .setContentText("دعوة للانضمام للمؤتمر من: ${inviter.ifBlank { "مجموعة يونس" }}")
             .setContentIntent(mainIntent)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setColor(0xFF00C98C.toInt())
             .setOngoing(false)
             .setSilent(false)
-            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .addAction(0, "انضمام", acceptPending)
             .addAction(0, "لاحقاً", rejectPending)
             .build()
 
-        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-        if (isVideo) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        ServiceCompat.startForeground(this, 7402, notif, type)
+        // An invitation is notification-only. Do not claim camera/microphone FGS
+        // types (or light their privacy indicators) until the user actually joins.
+        ServiceCompat.startForeground(this, 7402, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
     }
 
     private fun promote() {
@@ -517,7 +516,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             .setSilent(true)
             .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
             .build()
-        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+        if (ConferenceRuntime.isSpeaker) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
         if (isVideo) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }

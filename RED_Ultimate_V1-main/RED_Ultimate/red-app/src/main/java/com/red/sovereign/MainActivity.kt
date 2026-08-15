@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
+import com.red.sovereign.calls.ConferenceService
+import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.security.AppLockScreen
@@ -44,6 +46,7 @@ class MainActivity : FragmentActivity() {
     /** المعرّف المستهدف من الإشعار (conversationId + sender) لفتح المحادثة مباشرة. */
     private var deepLinkConversation by mutableStateOf<String?>(null)
     private var deepLinkSender by mutableStateOf<String?>(null)
+    private var pendingCallLink by mutableStateOf<CallDeepLink?>(null)
 
     /** حالة قفل التطبيق — تُفعّل عند onResume إن كان AppLock مفعّلاً. */
     private var appLocked by mutableStateOf(false)
@@ -93,6 +96,16 @@ class MainActivity : FragmentActivity() {
                                 stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))
                             }
                         }
+                        LaunchedEffect(state, pendingCallLink) {
+                            val account = state as? AuthState.Authenticated ?: return@LaunchedEffect
+                            val link = pendingCallLink ?: return@LaunchedEffect
+                            pendingCallLink = null
+                            when (link.kind) {
+                                "conference" -> ConferenceService.join(this@MainActivity, link.id, account.redId, video = true, asHost = false)
+                                "space" -> ConferenceService.join(this@MainActivity, link.id, account.redId, video = false, asHost = false)
+                                "livestream" -> LiveStreamService.start(this@MainActivity, link.id, account.redId, isBroadcaster = false)
+                            }
+                        }
                         if (state is AuthState.Authenticated) {
                             if (appLocked && SettingsRuntime.current.appLockEnabled) {
                                 AppLockScreen(onUnlocked = { appLocked = false })
@@ -111,6 +124,13 @@ class MainActivity : FragmentActivity() {
         if (notificationIntent == null) return
         notificationIntent.getStringExtra("conversation_id")?.let { deepLinkConversation = it }
         notificationIntent.getStringExtra("sender_red_id")?.let { deepLinkSender = it }
+        notificationIntent.data?.let { uri ->
+            val kind = uri.host?.lowercase()
+            val id = uri.pathSegments.firstOrNull().orEmpty()
+            if (uri.scheme == "younes" && kind in CALL_LINK_KINDS && id.matches(ROOM_ID)) {
+                pendingCallLink = CallDeepLink(requireNotNull(kind), id)
+            }
+        }
     }
 
     /** عند فتح التطبيق من إشعار بينما هو مفتوح (launchMode singleTask). */
@@ -165,4 +185,11 @@ class MainActivity : FragmentActivity() {
             }
         }
     }
+
+    private companion object {
+        val CALL_LINK_KINDS = setOf("conference", "space", "livestream")
+        val ROOM_ID = Regex("^[A-Za-z0-9_-]{8,128}$")
+    }
 }
+
+private data class CallDeepLink(val kind: String, val id: String)

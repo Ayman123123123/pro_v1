@@ -19,6 +19,10 @@ class JwtService(
     @Value("\${red.jwt.secret}") private val configuredSecret: String,
     @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long
 ) {
+    companion object {
+        const val SFU_TICKET_TTL_SECONDS = 120L
+    }
+
     private val expirationMs: Long
         get() = accessExpirationMinutes.coerceIn(1, 60 * 24) * 60_000
 
@@ -46,7 +50,13 @@ class JwtService(
             .compact()
     }
 
-    /** Issues a short-lived SFU ticket for a specific group/room */
+    /**
+     * Issues a short-lived capability for exactly one SFU room.
+     *
+     * This is deliberately not interchangeable with an API access token: the
+     * media process requires `scope=sfu`, verifies [roomId] on JOIN and enforces
+     * [canProduce] before accepting any audio/video producer.
+     */
     fun issueSfuTicket(
         user: UserAccount,
         deviceId: UUID,
@@ -55,18 +65,18 @@ class JwtService(
         canProduce: Boolean
     ): String {
         val now = Instant.now()
-        val builder = Jwts.builder()
+        return Jwts.builder()
             .subject(user.id.toString())
             .claim("redId", user.redId)
             .claim("username", user.username)
             .claim("role", user.role.name)
             .claim("deviceId", deviceId.toString())
-            .claim("sfuGroupId", groupId)
-            .claim("sfuGroupRole", groupRole)
-            .claim("sfuCanProduce", canProduce)
-        return builder
+            .claim("scope", "sfu")
+            .claim("roomId", groupId)
+            .claim("roomRole", groupRole)
+            .claim("canProduce", canProduce)
             .issuedAt(Date.from(now))
-            .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
+            .expiration(Date.from(now.plus(SFU_TICKET_TTL_SECONDS, ChronoUnit.SECONDS)))
             .signWith(key)
             .compact()
     }

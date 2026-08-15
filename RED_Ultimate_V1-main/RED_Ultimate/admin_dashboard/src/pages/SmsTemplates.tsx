@@ -536,9 +536,9 @@ export default function SmsTemplates() {
           >
             <Input.TextArea rows={2} placeholder="777123456, 733445566" />
           </Form.Item>
-          {selectedTemplate && selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
+          {(selectedTemplate?.variables?.length ?? 0) > 0 && (
             <Card size="small" title="قيم المتغيرات" style={{ marginBottom: 12 }}>
-              {selectedTemplate.variables.map((varName) => (
+              {(selectedTemplate?.variables ?? []).map((varName) => (
                 <Form.Item key={varName} name={['variables', varName]} label={`{{${varName}}}`} style={{ marginBottom: 8 }}>
                   <Input placeholder={`قيمة ${varName}`} />
                 </Form.Item>
