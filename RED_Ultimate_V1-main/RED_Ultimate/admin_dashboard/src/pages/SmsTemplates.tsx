@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, Card, Col, Empty, Form, Input, InputNumber, List, Modal,
-  Popconfirm, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography, message,
+  Popconfirm, Row, Select, Space, Statistic, Switch, Table, Tag, Tooltip, Typography, message,
 } from 'antd';
 import {
   ClockCircleOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
@@ -536,7 +536,7 @@ export default function SmsTemplates() {
           >
             <Input.TextArea rows={2} placeholder="777123456, 733445566" />
           </Form.Item>
-          {selectedTemplate?.variables?.length > 0 && (
+          {selectedTemplate && selectedTemplate.variables && selectedTemplate.variables.length > 0 && (
             <Card size="small" title="قيم المتغيرات" style={{ marginBottom: 12 }}>
               {selectedTemplate.variables.map((varName) => (
                 <Form.Item key={varName} name={['variables', varName]} label={`{{${varName}}}`} style={{ marginBottom: 8 }}>
@@ -547,7 +547,7 @@ export default function SmsTemplates() {
           )}
         </Form>
         <Alert
-          type="secondary"
+          type="info"
           message="معاينة النص"
           description={selectedTemplate?.text || ''}
           style={{ marginTop: 8 }}

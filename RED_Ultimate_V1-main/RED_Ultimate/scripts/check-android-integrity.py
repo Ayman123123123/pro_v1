@@ -239,20 +239,24 @@ check(
 )
 
 # 19. Mongo indexes للنماذج الاجتماعية (تحسين وقائي ضد collection scans)
-mongo_docs = (BACKEND / "database/SovereignMongoDocuments.kt").read_text(encoding="utf-8")
+# كان الفحص يقرأ SovereignMongoDocuments.kt لكن التعريفات الفعلية لهذه
+# المستندات في social/PostModels.kt و stories/StoryModels.kt — الفحص يقرأ
+# الآن ملفَي الحقيقة الفعليين حتى لا يمرّ نقص الفهرس مرور الكرام.
+social_models = (BACKEND / "social/PostModels.kt").read_text(encoding="utf-8")
+story_models = (BACKEND / "stories/StoryModels.kt").read_text(encoding="utf-8")
 check(
     "Backend: StoryReaction.storyId و userId مُفهرسان (@Indexed)",
-    bool(_re.search(r'data class StoryReaction\(.*?@Indexed val storyId', mongo_docs, _re.DOTALL)),
+    bool(_re.search(r'data class StoryReaction\(.*?@Indexed val storyId', story_models, _re.DOTALL)),
     "StoryReaction بلا فهرس على storyId/userId ⇒ collection scan عند الاستعلام المستقبلي",
 )
 check(
     "Backend: PostReaction.postId و userId مُفهرسان (@Indexed)",
-    bool(_re.search(r'data class PostReaction\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
+    bool(_re.search(r'data class PostReaction\(.*?@Indexed val postId', social_models, _re.DOTALL)),
     "PostReaction بلا فهرس على postId/userId ⇒ collection scan",
 )
 check(
     "Backend: PollVote (Mongo) مُفهرس على postId/userId/optionId",
-    bool(_re.search(r'data class PollVote\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
+    bool(_re.search(r'data class PollVote\(.*?@Indexed val postId', social_models, _re.DOTALL)),
     "PollVote (Mongo) بلا فهرس ⇒ collection scan",
 )
 

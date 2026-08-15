@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -117,7 +120,7 @@ fun CallRoundButton(
 @Composable
 fun EndCallButton(label: String = "إنهاء", onClick: () -> Unit) {
     CallRoundButton(
-        icon = androidx.compose.material.icons.Icons.Default.CallEnd,
+        icon = Icons.Default.CallEnd,
         label = label,
         onClick = onClick,
         container = YounesRose,
@@ -129,7 +132,7 @@ fun EndCallButton(label: String = "إنهاء", onClick: () -> Unit) {
 @Composable
 fun AcceptCallButton(label: String = "قبول", onClick: () -> Unit) {
     CallRoundButton(
-        icon = androidx.compose.material.icons.Icons.Default.Call,
+        icon = Icons.Default.Call,
         label = label,
         onClick = onClick,
         container = YounesEmerald,

@@ -22,6 +22,7 @@ import {
   MessageOutlined,
   CloudServerOutlined,
   DatabaseOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -128,6 +129,8 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [apiUp, setApiUp] = useState(true);
+  // طي القائمة الجانبية على الشاشات الصغيرة — تفتح بزر في الشريط العلوي
+  const [siderCollapsed, setSiderCollapsed] = useState(false);
   const adminUser = authStore.user();
   // عداد فشل متتالٍ لفحص صحة الخادم: لا نقلب «متصل» إلى «غير متصل» من طلة
   // عابرة واحدة — فوسيط المعاينة أو انقطاع شبكة مؤقت قد يفشل دورة واحدة فقط.
@@ -259,7 +262,20 @@ export default function App() {
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#050A16' }}>
-        <Sider theme="dark" collapsible width={240}>
+        {/* breakpoint="lg" + collapsedWidth={0}: على الجوال تنطوي القائمة تمامًا
+            وتُفتح بزر ☰ في الشريط العلوي بدل شريط 240px يأكل ثلث الشاشة. */}
+        <Sider
+          theme="dark"
+          collapsible
+          collapsed={siderCollapsed}
+          onCollapse={(collapsed) => setSiderCollapsed(collapsed)}
+          breakpoint="lg"
+          onBreakpoint={(broken) => setSiderCollapsed(broken)}
+          collapsedWidth={0}
+          width={240}
+          trigger={null}
+          style={{ position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}
+        >
           <div style={{
             height: 64, padding: 16, color: '#fff', textAlign: 'center',
             borderBottom: '1px solid #1A2F4A', marginBottom: 8
@@ -274,7 +290,11 @@ export default function App() {
             mode="inline"
             selectedKeys={[currentPage]}
             items={groupedMenu}
-            onClick={({ key }) => setCurrentPage(key as PageKey)}
+            onClick={({ key }) => {
+              setCurrentPage(key as PageKey);
+              // بعد اختيار صفحة على الجوال تُغلق القائمة تلقائيًا
+              if (window.innerWidth < 992) setSiderCollapsed(true);
+            }}
             style={{ borderRight: 0 }}
           />
         </Sider>
@@ -282,11 +302,20 @@ export default function App() {
           <Header style={{
             background: '#081525', color: '#F1F7FA',
             borderBottom: '1px solid #17344A', padding: '0 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
           }}>
-            <span style={{ color: '#E8B84A', fontSize: 16, fontWeight: 'bold' }}>
-              {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
-            </span>
+            <Space>
+              <Button
+                type="text"
+                icon={<MenuUnfoldOutlined />}
+                onClick={() => setSiderCollapsed((c) => !c)}
+                aria-label="فتح قائمة التنقل"
+                style={{ color: '#8A9FB2', fontSize: 18 }}
+              />
+              <span style={{ color: '#E8B84A', fontSize: 16, fontWeight: 'bold' }}>
+                {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
+              </span>
+            </Space>
             <Space>
               <Tag color={apiUp ? 'green' : 'red'}>{apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}</Tag>
               {pendingCount > 0 && (

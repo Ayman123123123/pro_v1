@@ -147,6 +147,10 @@ export default function CdrAnalysis() {
     });
   }, []);
 
+  // اسم محلي بحرف كبير — JSX يتطلب أن تبدأ مكوّنات الحالة بحرف كبير
+  // (الاسم الصغير `<echartsForReact>` كان يُعامل كعنصر HTML أصلي فيفشل tsc)
+  const EChartsForReact = echartsForReact;
+
   // رسم بياني — توزيع المشغلين
   const operatorChartOption = useMemo(() => {
     if (!echartsMod || operatorDist.length === 0) return null;
@@ -297,8 +301,8 @@ export default function CdrAnalysis() {
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card title="توزيع المشغلين" size="small">
-            {echartsReady && operatorChartOption ? (
-              <echartsForReact option={operatorChartOption} style={{ height: 240 }} />
+            {echartsReady && operatorChartOption && EChartsForReact ? (
+              <EChartsForReact option={operatorChartOption} style={{ height: 240 }} />
             ) : operatorDist.length > 0 ? (
               <Table
                 size="small"
@@ -315,8 +319,8 @@ export default function CdrAnalysis() {
         </Col>
         <Col xs={24} md={12}>
           <Card title="توزيع البوابات" size="small">
-            {echartsReady && gatewayChartOption ? (
-              <echartsForReact option={gatewayChartOption} style={{ height: 240 }} />
+            {echartsReady && gatewayChartOption && EChartsForReact ? (
+              <EChartsForReact option={gatewayChartOption} style={{ height: 240 }} />
             ) : gatewayDist.length > 0 ? (
               <Table
                 size="small"
