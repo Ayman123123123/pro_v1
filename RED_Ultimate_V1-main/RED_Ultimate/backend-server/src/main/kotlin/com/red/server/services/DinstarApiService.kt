@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * خدمة API شاملة لـ DINSTAR
@@ -47,7 +48,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveDeviceStatus(gatewayId: String, status: Map<String, Any?>) {
+    private fun saveDeviceStatus(gatewayId: UUID, status: Map<String, Any?>) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_device_status 
@@ -112,40 +113,66 @@ class DinstarApiService(
         }
     }
 
-    private fun saveCdrRecord(gatewayId: String, cdr: Map<String, Any?>) {
+    private fun saveCdrRecord(gatewayId: UUID, cdr: Map<String, Any?>) {
         try {
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            val startTime = (cdr["start_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
-            }
-            val answerTime = (cdr["answer_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
-            }
-            val endTime = (cdr["end_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
-            }
+            fun parseTime(key: String): LocalDateTime? = (cdr[key] as? String)
+                ?.let { raw -> runCatching { LocalDateTime.parse(raw, formatter) }.getOrNull() }
+            val startTime = parseTime("start_time") ?: LocalDateTime.now()
+            val answerTime = parseTime("answer_time")
+            val endTime = parseTime("end_time")
+            val duration = (cdr["duration"] as? Number)?.toInt()?.coerceAtLeast(0) ?: 0
+            val caller = cdr["caller_number"]?.toString().orEmpty().take(30)
+            val callee = cdr["callee_number"]?.toString().orEmpty().take(30)
+            val direction = cdr["direction"]?.toString()?.lowercase()
+                ?.takeIf { it == "inbound" || it == "outbound" }
+                ?: "inbound"
+            val status = cdr["status"]?.toString()?.lowercase()
+                ?.replace(' ', '_')
+                ?.takeIf { it in setOf("answered", "no_answer", "busy", "failed", "cancelled") }
+                ?: if (answerTime != null || duration > 0) "answered" else "failed"
+            val externalCallId = (cdr["sip_call_id"] ?: cdr["call_id"] ?: cdr["id"])
+                ?.toString()?.take(100)
+            // Polling the DINSTAR CDR endpoint returns overlapping windows. A stable
+            // UUID makes persistence idempotent even when the same row is observed again.
+            val stableIdentity = listOf(gatewayId, externalCallId, startTime, caller, callee).joinToString("|")
+            val id = UUID.nameUUIDFromBytes(stableIdentity.toByteArray(Charsets.UTF_8))
 
             jdbc.update("""
-                INSERT INTO dinstar_cdr 
-                (gateway_id, port_index, start_time, answer_time, end_time, duration,
-                 caller_number, callee_number, direction, call_type, codec, 
-                 hangup_cause, sip_call_id, asterisk_channel, raw_data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO dinstar_cdr
+                (id, gateway_id, port_index, call_id, caller_number, callee_number,
+                 direction, call_type, status, duration_seconds, start_time,
+                 answer_time, end_time, duration, codec, hangup_cause, sip_call_id,
+                 asterisk_channel, raw_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSONB))
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    duration_seconds = EXCLUDED.duration_seconds,
+                    answer_time = EXCLUDED.answer_time,
+                    end_time = EXCLUDED.end_time,
+                    duration = EXCLUDED.duration,
+                    codec = EXCLUDED.codec,
+                    hangup_cause = EXCLUDED.hangup_cause,
+                    raw_data = EXCLUDED.raw_data
             """,
+                id,
                 gatewayId,
-                cdr["port"],
+                (cdr["port"] as? Number)?.toInt()?.coerceIn(0, 31) ?: 0,
+                externalCallId,
+                caller,
+                callee,
+                direction,
+                cdr["call_type"]?.toString()?.uppercase()?.take(20) ?: "VOICE",
+                status,
+                duration,
                 startTime,
                 answerTime,
                 endTime,
-                cdr["duration"],
-                cdr["caller_number"],
-                cdr["callee_number"],
-                cdr["direction"],
-                cdr["call_type"] ?: "VOICE",
-                cdr["codec"],
-                cdr["hangup_cause"],
-                cdr["sip_call_id"],
-                cdr["asterisk_channel"],
+                duration,
+                cdr["codec"]?.toString()?.take(20),
+                cdr["hangup_cause"]?.toString()?.take(50),
+                externalCallId,
+                cdr["asterisk_channel"]?.toString()?.take(100),
                 objectMapper.writeValueAsString(cdr)
             )
         } catch (e: Exception) {
@@ -182,7 +209,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveUssdLog(gatewayId: String, port: Int, code: String, response: String?, status: String?) {
+    private fun saveUssdLog(gatewayId: UUID, port: Int, code: String, response: String?, status: String?) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_ussd_log 
@@ -297,8 +324,8 @@ class DinstarApiService(
     }
 
     private fun logConfigChange(
-        gatewayId: String,
-        userId: String?,
+        gatewayId: UUID,
+        userId: UUID?,
         changeType: String,
         port: Int?,
         newValue: String?,

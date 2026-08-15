@@ -48,6 +48,8 @@ export default function Dashboard() {
   const [realtime, setRealtime] = useState<RealtimeMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // وقت نجاح آخر جلب فعلي — كان النص يعرض وقت التصيير لا وقت الجلب
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -69,6 +71,7 @@ export default function Dashboard() {
         end.toISOString().slice(0, 10)
       );
       setAnalytics(Array.isArray(ana) ? ana : []);
+      setLastUpdated(new Date());
       setError(null);
     } catch (e: any) {
       setError(e.message ?? 'تعذر تحميل لوحة الإدارة');
@@ -149,7 +152,7 @@ export default function Dashboard() {
           <ThunderboltOutlined /> لوحة الإدارة السيادية
         </Title>
         <Text type="secondary">
-          <ClockCircleOutlined /> آخر تحديث: {new Date().toLocaleString('ar-EG')}
+          <ClockCircleOutlined /> آخر تحديث: {lastUpdated ? lastUpdated.toLocaleString('ar-EG') : '—'}
           {realtime && <Tag color="green" style={{ marginRight: 12 }}>مباشر</Tag>}
         </Text>
       </div>

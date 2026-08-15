@@ -67,13 +67,17 @@ class AdminController(
 
     @PostMapping("/security/wipe")
     fun wipeUser(@RequestParam userId: String, authentication: Authentication): ResponseEntity<Any> {
-        audit.record(UUID.fromString(authentication.name), "REMOTE_WIPE_SENT", userId)
-        return ResponseEntity.ok(securityService.sendWipeSignal(userId))
+        val actorId = UUID.fromString(authentication.name)
+        val result = securityService.sendWipeSignal(userId, actorId)
+        audit.record(actorId, "REMOTE_WIPE_SENT", userId, mapOf("commandId" to result["commandId"]))
+        return ResponseEntity.accepted().body(result)
     }
 
     @PostMapping("/security/kill-switch")
     fun activateKillSwitch(@RequestParam reason: String, authentication: Authentication): ResponseEntity<Any> {
-        audit.record(UUID.fromString(authentication.name), "KILL_SWITCH_ACTIVATED", details = mapOf("reason" to reason))
-        return ResponseEntity.ok(securityService.activateKillSwitch(reason))
+        val actorId = UUID.fromString(authentication.name)
+        val result = securityService.activateKillSwitch(reason, actorId)
+        audit.record(actorId, "KILL_SWITCH_ACTIVATED", details = mapOf("reason" to reason, "requestedUsers" to result["requestedUsers"]))
+        return ResponseEntity.accepted().body(result)
     }
 }

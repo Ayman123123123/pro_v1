@@ -1,7 +1,9 @@
 package com.red.sovereign.features.dinstar
 
+import android.content.Context
 import android.util.Log
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import okhttp3.*
@@ -13,14 +15,18 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * 📡 YOUNES Dinstar WebSocket Bridge
  */
-class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url()) {
+class DinstarWebSocketBridge(
+    context: Context,
+    private val backendUrl: String = ServerEndpoint.url()
+) {
     companion object {
         private const val TAG = "RED.DinstarWS"
         private const val WS_PATH = "/ws/dinstar"
         private const val PING_INTERVAL_MS = 30_000L
     }
 
-    private val client = OkHttpClient.Builder()
+    private val client = SecureOkHttpClient.buildWebSocketClient(context)
+        .newBuilder()
         .pingInterval(PING_INTERVAL_MS, TimeUnit.MILLISECONDS)
         .build()
 
@@ -33,7 +39,10 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
 
     fun connect(token: String? = null) {
         if (isConnected.get()) return
-        val wsUrl = backendUrl.replace("http", "ws").trimEnd('/') + WS_PATH
+        val wsUrl = backendUrl
+            .replaceFirst("http://", "ws://")
+            .replaceFirst("https://", "wss://")
+            .trimEnd('/') + WS_PATH
         val request = Request.Builder().url(wsUrl).apply {
             if (token != null) header("Authorization", "Bearer $token")
         }.build()
@@ -61,27 +70,27 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
         runCatching {
             val json = org.json.JSONObject(text)
             val type = json.optString("type", "")
+            // The canonical server envelope keeps event metadata at the top and
+            // event-specific fields under `data`. Accept the old flat shape too
+            // so rolling upgrades do not drop live updates.
+            val data = json.optJSONObject("data") ?: json
             when (type) {
-                "DINSTAR_PORT_STATUS" -> _wsEvents.emit(
+                "DINSTAR_PORT_STATUS", "DINSTAR_PORT_CONTROL" -> _wsEvents.emit(
                     DinstarWsEvent.PortStatusChanged(
-                        // معرّف البوابة: بدونه لا يُعرف أي جهاز تغيّر منفذه
-                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
-                        port = json.optInt("port"),
-                        callState = json.optString("callState"),
-                        // optInt تُرجع 0 عند الغياب، و0 قراءةٌ صالحة تعني
-                        // ‎-113 dBm. التمييز بين «غياب القيمة» و«أضعف قيمة»
-                        // ضروري، لذا null صراحةً.
-                        signalDbm = if (json.isNull("signalDbm")) null else json.optInt("signalDbm"),
-                        signalUsable = json.optBoolean("signalUsable", false)
+                        gatewayId = data.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = if (data.has("port")) data.optInt("port") else -1,
+                        callState = data.optString("callState"),
+                        signalDbm = if (!data.has("signalDbm") || data.isNull("signalDbm")) null else data.optInt("signalDbm"),
+                        signalUsable = data.optBoolean("signalUsable", false)
                     )
                 )
                 "DINSTAR_CDR" -> _wsEvents.emit(DinstarWsEvent.CdrReceived(text))
                 "DINSTAR_SMS" -> _wsEvents.emit(
                     DinstarWsEvent.IncomingSms(
-                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
-                        port = json.optInt("port"),
-                        number = json.optString("number"),
-                        text = json.optString("text")
+                        gatewayId = data.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = if (data.has("port")) data.optInt("port") else -1,
+                        number = data.optString("number", data.optString("phoneNumber")),
+                        text = data.optString("text", data.optString("messageText"))
                     )
                 )
                 "HEARTBEAT" -> _wsEvents.emit(DinstarWsEvent.Heartbeat)

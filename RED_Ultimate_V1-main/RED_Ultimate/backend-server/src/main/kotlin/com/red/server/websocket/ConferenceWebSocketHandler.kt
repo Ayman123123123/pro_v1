@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.ConferenceRoomService
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
@@ -19,7 +20,10 @@ import java.util.concurrent.ConcurrentHashMap
  * For larger conferences (>4) the protocol proxies to media-sfu; Android speaks same shape.
  */
 @Component
-class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextWebSocketHandler() {
+class ConferenceWebSocketHandler(
+    private val objectMapper: ObjectMapper,
+    private val roomService: ConferenceRoomService
+) : TextWebSocketHandler() {
     private val rooms = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
     private val sessionToRoom = ConcurrentHashMap<String, String>()
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
@@ -27,12 +31,17 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
 
     override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
+        val accountId = session.attributes["accountId"] as? String ?: error("Authenticated account ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "roomId is required" }
         require(signal.roomId.matches(ROOM_ID)) { "Invalid roomId" }
+        val type = signal.type.uppercase()
+        if (type != "JOIN") {
+            require(sessionToRoom[session.id] == signal.roomId) { "Join this room before sending signaling frames" }
+        }
 
-        when (signal.type.uppercase()) {
-            "JOIN" -> handleJoin(session, userId, signal)
+        when (type) {
+            "JOIN" -> handleJoin(session, userId, accountId, signal)
             "OFFER", "ANSWER", "ICE", "PRODUCE", "CONSUME" -> relay(session, signal)
             "RAISE_HAND", "REACTION" -> relay(session, signal) // anyone can
             "APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST",
@@ -42,21 +51,35 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
         }
     }
 
-    private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
+    private fun handleJoin(
+        session: WebSocketSession,
+        userId: String,
+        accountId: String,
+        signal: IncomingConferenceSignal
+    ) {
+        val record = roomService.getRoom(signal.roomId)
+            ?: throw NoSuchElementException("Conference room not found; create or join it through REST first")
+        val isHost = record.hostId == accountId
+        require(isHost || roomService.isParticipant(signal.roomId, accountId)) {
+            "Join the conference through REST before opening signaling"
+        }
+        sessionToRoom[session.id]?.let { existing ->
+            require(existing == signal.roomId) { "A signaling socket can join only one room" }
+        }
+
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
         val roles = roomRoles.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
         synchronized(room) { room.add(session) }
         sessionToRoom[session.id] = signal.roomId
 
-        // First participant becomes HOST if no host yet
-        if (roomHosts[signal.roomId] == null) {
-            roomHosts[signal.roomId] = userId
-            roles[userId] = "HOST"
-        } else {
-            roles.putIfAbsent(userId, "LISTENER")
+        if (record.hostRedId.isNotBlank()) roomHosts.putIfAbsent(signal.roomId, record.hostRedId)
+        roles[userId] = when {
+            isHost -> "HOST"
+            record.isSpace -> roles[userId] ?: "LISTENER"
+            else -> roles[userId] ?: "SPEAKER"
         }
+        if (isHost) roomHosts[signal.roomId] = userId
         val myRole = roles[userId] ?: "LISTENER"
-        val isHost = roomHosts[signal.roomId] == userId
 
         // Notify existing peers
         val joinMsg = objectMapper.writeValueAsString(mapOf(
@@ -181,23 +204,10 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             "payload" to mapOf("userId" to userId)
         ))
         room.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
-        // If host left, elect new host from remaining if any
-        if (roomHosts[signal.roomId] == userId) {
-            val remaining = room.firstOrNull()?.attributes?.get("userId") as? String
-            if (remaining != null) {
-                roomHosts[signal.roomId] = remaining
-                roomRoles[signal.roomId]?.set(remaining, "HOST")
-                // notify new host election
-                val hostMsg = objectMapper.writeValueAsString(mapOf(
-                    "type" to "HOST_CHANGED",
-                    "roomId" to signal.roomId,
-                    "payload" to mapOf("userId" to remaining)
-                ))
-                room.forEach { runCatching { it.sendMessage(TextMessage(hostMsg)) } }
-            } else {
-                roomRoles.remove(signal.roomId)
-                roomHosts.remove(signal.roomId)
-            }
+        // Host authority comes from ConferenceRoomService/REST ownership. A socket
+        // disconnect must never promote the first remaining listener to host.
+        if (room.none { (it.attributes["userId"] as? String) == userId }) {
+            roomRoles[signal.roomId]?.remove(userId)
         }
         if (room.isEmpty()) {
             rooms.remove(signal.roomId)
@@ -217,15 +227,8 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             "payload" to mapOf("userId" to userId)
         ))
         room.forEach { runCatching { it.sendMessage(TextMessage(leaveMsg)) } }
-        if (roomHosts[roomId] == userId) {
-            val remaining = room.firstOrNull()?.attributes?.get("userId") as? String
-            if (remaining != null) {
-                roomHosts[roomId] = remaining
-                roomRoles[roomId]?.set(remaining, "HOST")
-            } else {
-                roomRoles.remove(roomId)
-                roomHosts.remove(roomId)
-            }
+        if (room.none { (it.attributes["userId"] as? String) == userId }) {
+            roomRoles[roomId]?.remove(userId)
         }
         if (room.isEmpty()) {
             rooms.remove(roomId)

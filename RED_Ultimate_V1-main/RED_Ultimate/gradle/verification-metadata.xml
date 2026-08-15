@@ -14,6 +14,15 @@ https://docs.gradle.org/current/userguide/dependency_verification.html
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>
       <trusted-artifacts>
+         <!--
+         Windows protoc artifact: builds on Windows with strict verification were failing
+         (rebuild_log.txt: "Dependency verification failed for ':shared-proto:protobufToolsLocator_protoc'").
+         This trust rule intentionally covers the binary; to pin its SHA-256 instead, run on Windows:
+             .\gradlew --write-verification-metadata sha256 :shared-proto:protobufToolsLocator_protoc
+         and copy the generated <artifact name="protoc-3.25.1-windows-x86_64.exe"> node under the
+         com.google.protobuf:protoc:3.25.1 component. Local dev also runs with
+         org.gradle.dependency.verification=off (see gradle.properties) for the same reason.
+         -->
          <trust file="protoc-3.25.1-windows-x86_64.exe" reason="Windows developer environment protoc artifact"/>
          <trust group="androidx.lifecycle" name="lifecycle-service" version="2.8.1" file="lifecycle-service-2.8.1.module" reason="Google Maven metadata; binary AAR remains SHA-256 pinned"/>
          <!-- Version-scoped bootstrap trust for the coordinated 2026 Android toolchain upgrade.

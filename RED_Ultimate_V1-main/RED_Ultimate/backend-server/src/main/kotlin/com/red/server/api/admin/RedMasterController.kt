@@ -46,8 +46,10 @@ class RedMasterController(
     fun getSlots() = ResponseEntity.ok(dinstarClient.getPortsRealtimeStatus())
 
     @PostMapping("/security/wipe")
-    fun initiateWipe(@RequestParam userId: String) =
-        ResponseEntity.ok(securityService.sendWipeSignal(userId))
+    fun initiateWipe(@RequestParam userId: String, authentication: Authentication) =
+        ResponseEntity.accepted().body(
+            securityService.sendWipeSignal(userId, UUID.fromString(authentication.name))
+        )
 
     @GetMapping("/media/active-calls")
     fun getActiveCalls() = ResponseEntity.ok(statsService.getVoipMetrics())

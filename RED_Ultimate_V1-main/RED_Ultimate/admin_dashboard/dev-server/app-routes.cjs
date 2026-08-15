@@ -1153,6 +1153,39 @@ module.exports = function registerAppRoutes(on) {
     return ok({ roomId: p.roomId, closed: true });
   });
 
+  // التطبيق يستدعي invite عند دعوة أعضاء لمساحة/مؤتمر (ConferenceService).
+  // يطابق ConferenceController.inviteMembers: لا يتطلب مضيفًا، يستثني المُدعِي نفسه.
+  on('POST', '/api/conference/:roomId/invite', (p, _q, body, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    const room = conferenceRooms.get(p.roomId);
+    if (!room) return notFound('CONFERENCE_ROOM_NOT_FOUND');
+    const memberIds = Array.isArray(body?.memberIds) ? body.memberIds : [];
+    const invited = memberIds
+      .map((id) => String(id || '').trim())
+      .filter((id) => id && id !== me.red_id);
+    return ok({ status: 'invited', invitedCount: invited.length, roomId: room.roomId });
+  });
+
+  // تذكرة SFU قصيرة العمر لمؤتمر/مساحة غير مخزنة كمجموعة
+  // (SfuTicketController.issueRoom — GET /api/sfu/groups/rooms/{roomId}/ticket).
+  on('GET', '/api/sfu/groups/rooms/:roomId/ticket', (_p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(_p.roomId)) return bad('INVALID_SFU_ROOM_ID');
+    const token = `sfu.${crypto.randomBytes(24).toString('base64url')}`;
+    return ok({ token, expiresInSeconds: 120, roomId: _p.roomId, role: 'MEMBER', canProduce: true });
+  });
+
+  // تذكرة SFU لمجموعة مخزنة (SfuTicketController.issue — GET /api/sfu/groups/{groupId}/ticket).
+  on('GET', '/api/sfu/groups/:groupId/ticket', (_p, _q, _b, ctx) => {
+    const me = currentUser(ctx);
+    if (!me) return unauthorized();
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(_p.groupId)) return bad('INVALID_SFU_ROOM_ID');
+    const token = `sfu.${crypto.randomBytes(24).toString('base64url')}`;
+    return ok({ token, expiresInSeconds: 120, roomId: _p.groupId, role: 'MEMBER', canProduce: true });
+  });
+
   // ═══ المكالمات ═══
   on('GET', '/api/calls/history', (_p, q, _b, ctx) => {
     const me = currentUser(ctx);

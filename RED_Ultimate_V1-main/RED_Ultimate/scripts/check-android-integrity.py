@@ -239,7 +239,10 @@ check(
 )
 
 # 19. Mongo indexes للنماذج الاجتماعية (تحسين وقائي ضد collection scans)
-mongo_docs = (BACKEND / "database/SovereignMongoDocuments.kt").read_text(encoding="utf-8")
+mongo_docs = "\n".join(
+    (BACKEND / relative).read_text(encoding="utf-8")
+    for relative in ("stories/StoryModels.kt", "social/PostModels.kt")
+)
 check(
     "Backend: StoryReaction.storyId و userId مُفهرسان (@Indexed)",
     bool(_re.search(r'data class StoryReaction\(.*?@Indexed val storyId', mongo_docs, _re.DOTALL)),

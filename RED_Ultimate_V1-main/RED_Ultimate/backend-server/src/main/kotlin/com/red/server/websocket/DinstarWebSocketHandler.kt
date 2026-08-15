@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component
 import org.springframework.web.socket.*
 import org.springframework.web.socket.handler.TextWebSocketHandler
 import java.time.Duration
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.atomic.AtomicInteger
@@ -44,6 +45,12 @@ class DinstarWebSocketHandler(
     private val portStatusCounter = AtomicInteger(0)
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
+        // DINSTAR exposes telecom inventory and live operational metadata.  It is
+        // intentionally stricter than the normal authenticated messaging sockets.
+        if (session.attributes["role"] != "ADMIN") {
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val sessionId = session.id
         sessions[sessionId] = session
         log.info("DINSTAR WebSocket connected: {} (total: {})", sessionId, sessions.size)
@@ -105,6 +112,21 @@ class DinstarWebSocketHandler(
         }
     }
 
+    /** Broadcast a fresh device snapshot after an explicit API query. */
+    fun broadcastDeviceStatus(gatewayId: UUID, status: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_DEVICE_STATUS", status + ("gatewayId" to gatewayId.toString()))
+    }
+
+    /** Broadcast a USSD response without exposing it outside authenticated admin sockets. */
+    fun broadcastUssdResponse(gatewayId: UUID, port: Int, response: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_USSD", response + mapOf("gatewayId" to gatewayId.toString(), "port" to port))
+    }
+
+    /** Broadcast an acknowledged port-control state change. */
+    fun broadcastPortControl(gatewayId: UUID, port: Int, control: Map<String, Any?>) {
+        broadcastEvent("DINSTAR_PORT_CONTROL", control + mapOf("gatewayId" to gatewayId.toString(), "port" to port))
+    }
+
     /**
      * إرسال حدث SMS وارد.
      */
@@ -131,38 +153,6 @@ class DinstarWebSocketHandler(
      */
     fun broadcastException(exception: Map<String, Any?>) {
         broadcastEvent("DINSTAR_EXCEPTION", exception)
-    }
-
-    /**
-     * بث حالة الجهاز (CPU, Memory, Flash) لجميع العملاء.
-     * يُستدعى من DinstarApiService بعد جلب حالة الجهاز.
-     */
-    fun broadcastDeviceStatus(gatewayId: String, status: Map<String, Any?>) {
-        broadcastEvent("DINSTAR_DEVICE_STATUS", mapOf("gatewayId" to gatewayId) + status)
-    }
-
-    /**
-     * بث رد USSD لجميع العملاء.
-     * يُستدعى من DinstarApiService بعد إرسال USSD.
-     */
-    fun broadcastUssdResponse(gatewayId: String, port: Int, response: Map<String, Any?>) {
-        broadcastEvent("DINSTAR_USSD", mapOf(
-            "gatewayId" to gatewayId,
-            "port" to port,
-            "response" to response
-        ))
-    }
-
-    /**
-     * بث تغيير تحكم بالمنفذ (طاقة، تحويل مكالمات) لجميع العملاء.
-     * يُستدعى من DinstarApiService بعد تغيير حالة المنفذ.
-     */
-    fun broadcastPortControl(gatewayId: String, port: Int, control: Map<String, Any?>) {
-        broadcastEvent("DINSTAR_PORT_CONTROL", mapOf(
-            "gatewayId" to gatewayId,
-            "port" to port,
-            "control" to control
-        ))
     }
 
     private fun sendPortStatusUpdate(session: WebSocketSession) {
