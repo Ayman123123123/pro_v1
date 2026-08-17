@@ -173,6 +173,8 @@ import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
+import com.red.sovereign.calls.CallFilterType
+import com.red.sovereign.features.calls.CallStatsScreen
 import com.red.sovereign.calls.CallRuntime
 import com.red.sovereign.calls.CallUiState
 import com.red.sovereign.calls.UnifiedCallOverlays
@@ -263,14 +265,12 @@ import com.red.sovereign.core.YounesId
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.media.EventsScreen
 import com.red.sovereign.media.PollsScreen
+import com.red.sovereign.ui.theme.CairoFamily
+import com.red.sovereign.ui.theme.TajawalFamily
+import com.red.sovereign.ui.theme.SovereignColors
+import androidx.compose.material3.OutlinedTextFieldDefaults
 
-private enum class MainSection(val label: String, val icon: ImageVector) {
-    CHATS("الدردشات", Icons.Default.ChatBubble),
-    GROUPS("المجموعات", Icons.Default.Groups),
-    CALLS("المكالمات", Icons.Default.Call),
-    HOME("الرئيسية", Icons.Default.Home),
-    MORE("المزيد", Icons.Default.MoreHoriz)
-}
+
 
 private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN }
 
@@ -297,6 +297,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
+    // رقم مُعبّأ مسبقًا لشاشة الهاتف — يصل من لوحة الاتصال السريعة كي لا يُعاد إدخاله
+    var dinstarPrefill by remember { mutableStateOf("") }
     var chatConversationOpen by remember { mutableStateOf(false) }
     // 🔧 إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
     var showCallDialer by remember { mutableStateOf(false) }
@@ -426,13 +428,13 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         Column(Modifier.fillMaxSize().padding(padding)) {
             RedTopBar(account.redId, account.username, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
-                showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
+                showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory, prefillNumber = dinstarPrefill)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, directory.contacts, onlineIds = directory.onlineIds.toSet(), myDisplayName = account.username, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
-                }, onPstn = { showDinstar = true })
+                }, onPstn = { num -> dinstarPrefill = num ?: ""; showDinstar = true })
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
@@ -566,10 +568,10 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
                 }
             }
         }
-        if (feed.state is FeedState.Message) item { Text((feed.state as FeedState.Message).text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) }
+        if (feed.state is FeedState.Message) item { (feed.state as? FeedState.Message)?.let { Text(it.text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) } }
         when {
             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
-            feed.state is FeedState.Error -> item { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", (feed.state as FeedState.Error).message) }
+            feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", it.message) } }
             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
             else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
@@ -890,7 +892,7 @@ private fun ChatHubScreen(
     // (يلتقط تثبيتات الأعضاء الآخرين أثناء بقائك في المحادثة)
     androidx.compose.runtime.LaunchedEffect(groupConversationId) {
         while (groupConversationId != null) {
-            when (val r = pinApi.listForGroup(groupConversationId!!)) {
+            when (val r = pinApi.listForGroup(groupConversationId.orEmpty())) {
                 is com.red.sovereign.auth.ApiResult.Success -> {
                     val known = r.value.map { it.messageUuid }.toSet()
                     groupPinnedMessages.keys.retainAll(known)
@@ -912,7 +914,7 @@ private fun ChatHubScreen(
     var groupMuted by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(groupConversationId) {
         groupMuted = if (groupConversationId != null) {
-            localMessages.conversationPreference(groupConversationId!!).third > System.currentTimeMillis()
+            localMessages.conversationPreference(groupConversationId.orEmpty()).third > System.currentTimeMillis()
         } else false
     }
     // إعادة بناء أصوات الاستطلاع من السجل المحلي عند فتح المجموعة
@@ -1049,12 +1051,13 @@ private fun ChatHubScreen(
         }
     }
 
+    val draftScope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.DisposableEffect(target, groupConversationId) {
         onDispose {
             if (messageText.isNotBlank()) {
                 val draftConvId = groupConversationId ?: target.takeIf { it.isNotBlank() }?.let { conversationId(account.redId, it) }
                 if (draftConvId != null) {
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    draftScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                         repository.saveDraft(draftConvId, messageText)
                     }
                 }
@@ -1178,13 +1181,13 @@ private fun ChatHubScreen(
                     groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
                 } else {
                     // المجموعة مفتوحة: تصفير العداد المحفوظ كي لا يتراكم عند إعادة الفتح
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
                 }
             } else {
                 if (item.conversationId != conversationId(account.redId, target)) {
                     chatUnread[item.conversationId] = (chatUnread[item.conversationId] ?: 0) + 1
                 } else {
-                    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
                 }
             }
         }
@@ -1241,7 +1244,7 @@ private fun ChatHubScreen(
             }
             if (directory.state is DirectoryState.Message) {
                 Card(colors = CardDefaults.cardColors(containerColor = YounesEmerald.copy(alpha = 0.2f)), modifier = Modifier.fillMaxWidth()) {
-                    Text((directory.state as DirectoryState.Message).text, color = YounesEmerald, modifier = Modifier.padding(12.dp), fontSize = 13.sp)
+                    (directory.state as? DirectoryState.Message)?.let { Text(it.text, color = YounesEmerald, modifier = Modifier.padding(12.dp), fontSize = 13.sp) }
                 }
             }
             if (target.isBlank()) {
@@ -1612,7 +1615,7 @@ private fun ChatHubScreen(
                 }
                 when {
                     groups.state == GroupState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(30.dp))
-                    groups.state is GroupState.Error -> EmptyState(Icons.Default.Groups, "تعذر تحميل المجموعات", (groups.state as GroupState.Error).message)
+                    groups.state is GroupState.Error -> (groups.state as? GroupState.Error)?.let { EmptyState(Icons.Default.Groups, "تعذر تحميل المجموعات", it.message) }
                     groups.groups.isEmpty() -> EmptyState(Icons.Default.Groups, "لا توجد مجموعات", "أنشئ مجموعة محلية بأدوار مالك ومسؤول وعضو.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
@@ -2494,7 +2497,7 @@ private fun ChatHubScreen(
                     MessageInfoRow("الحالة", when (info.status) { "READ" -> "مقروءة ✓✓"; "DELIVERED" -> "وصلت ✓✓"; else -> "أُرسلت ✓" })
                     if (editedMessageIds.containsKey(info.id)) MessageInfoRow("تعديل", "نعم")
                     if (richInfo?.forwardOf != null) MessageInfoRow("إعادة توجيه", "نعم")
-                    if (richInfo?.replyTo != null) MessageInfoRow("رد على", richInfo.replyTo!!.take(12))
+                    if (richInfo?.replyTo != null) MessageInfoRow("رد على", richInfo?.replyTo?.take(12).orEmpty())
                     if (richInfo?.expiresAt != null) MessageInfoRow("رسالة مؤقتة", "نعم")
                     MessageInfoRow("المعرّف", info.id.take(16))
                 }
@@ -2505,8 +2508,8 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit, onPstn: () -> Unit = {}) {
-    var filter by remember { mutableStateOf("الكل") }
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit, onPstn: (String?) -> Unit = {}) {
+    var showStatsScreen by remember { mutableStateOf(false) }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
@@ -2523,14 +2526,38 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     var isBroadcaster by remember { mutableStateOf(false) }
     var roomInput by remember { mutableStateOf("") }
     val context = LocalContext.current
-    val visible = history.calls.filter { call -> when (filter) {
-        "فائتة" -> call.status == "MISSED"; "صوت" -> call.type == "VOICE"; "فيديو" -> call.type == "VIDEO"
-        "جماعية" -> call.type == "GROUP"; "بث" -> call.type == "LIVE"; "مساحات" -> call.type == "SPACE"
-        "DINSTAR" -> call.route == "DINSTAR"; else -> true
-    } }
+
+    if (showStatsScreen) {
+        CallStatsScreen(
+            viewModel = history,
+            onBack = { showStatsScreen = false }
+        )
+        return
+    }
+
+    val visible = history.filteredCalls
+
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        Text("مركز المكالمات", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("الفردي يرن. المؤتمر والمساحة والبث أزرار مستقلة هنا — ليست أزرار الدردشة.", color = Color.LightGray, fontSize = 13.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("مركز المكالمات السيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = CairoFamily)
+                Text("المكالمات الفردية، المؤتمرات، والبث المباشر", color = Color.LightGray, fontSize = 12.sp, fontFamily = TajawalFamily)
+            }
+            IconButton(
+                onClick = { showStatsScreen = true },
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SovereignColors.SurfaceCard)
+                    .border(1.dp, SovereignColors.GlassBorder, CircleShape)
+            ) {
+                Icon(Icons.Filled.Poll, "إحصائيات وتحليلات المكالمات", tint = SovereignColors.GoldNeon, modifier = Modifier.size(20.dp))
+            }
+        }
         Spacer(Modifier.height(12.dp))
         val callLauncher = rememberCallPermissionLauncher(
             needCamera = true,
@@ -2570,24 +2597,70 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onSpace = { spaceLauncher() },
             onLive = { liveLauncher() },
             onPstn = { showDinstarDialog = true },
-            onExplore = { onExplore() }
+            onExplore = { onExplore() },
+            onScheduledCalls = {
+                val intent = Intent(context, com.red.sovereign.features.calls.ScheduledCallsScreen::class.java)
+                context.startActivity(intent)
+            }
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+
+        // شريط البحث المباشر في السجل
+        OutlinedTextField(
+            value = history.searchQuery,
+            onValueChange = { history.searchQuery = it },
+            placeholder = { Text("بحث في سجل المكالمات (اسم أو معرف أو رقم)...", fontSize = 12.sp, color = Color.Gray) },
+            leadingIcon = { Icon(Icons.Filled.Search, null, tint = SovereignColors.EmeraldNeon, modifier = Modifier.size(18.dp)) },
+            trailingIcon = {
+                if (history.searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { history.searchQuery = "" }) {
+                        Icon(Icons.Filled.Close, "مسح", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp)),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = SovereignColors.SurfaceCard,
+                unfocusedContainerColor = SovereignColors.ObsidianDeep,
+                focusedBorderColor = SovereignColors.EmeraldNeon,
+                unfocusedBorderColor = SovereignColors.GlassBorder,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            ),
+            singleLine = true
+        )
+
+        Spacer(Modifier.height(10.dp))
+
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("السجل المشفر", color = Color.White.copy(0.8f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showStatsScreen = true }) {
+                Icon(Icons.Filled.Poll, null, tint = SovereignColors.GoldNeon, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("الإحصائيات", color = SovereignColors.GoldNeon, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+            }
             TextButton(onClick = { showRecordings = true }) {
                 Icon(Icons.Default.FiberManualRecord, null, tint = AqyalGold, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("التسجيلات", color = AqyalGold, fontSize = 13.sp)
+                Text("التسجيلات", color = AqyalGold, fontSize = 12.5.sp)
             }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title -> FilterChip(filter == title, { filter = title }, { Text(title) }) }
+            items(CallFilterType.values()) { fType ->
+                FilterChip(
+                    selected = history.selectedFilter == fType,
+                    onClick = { history.selectedFilter = fType },
+                    label = { Text(fType.label, fontSize = 11.sp, fontWeight = if (history.selectedFilter == fType) FontWeight.Bold else FontWeight.Normal) }
+                )
+            }
         }
+        Spacer(Modifier.height(8.dp))
         when {
             history.loading -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
             history.error != null -> EmptyState(Icons.Default.History, "تعذر تحميل السجل", history.error.orEmpty())
-            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات", "ستظهر هنا كل المكالمات مع شارة توضح مسار يونس أو DINSTAR.")
+            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات تطابق البحث", "ستظهر هنا المكالمات المفلترة مع شارة توضح مسار يونس أو DINSTAR.")
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.id }) { CallHistoryRow(it) } }
         }
     }
@@ -2724,7 +2797,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 },
                 onNavigateToPstnCall = { targetNum ->
                     showDinstarDialog = false
-                    onPstn()
+                    onPstn(targetNum)
                 }
             )
         }
@@ -3058,7 +3131,7 @@ private fun MoreOption(icon: ImageVector, title: String, detail: String, color: 
     }
 
 @Composable
-private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null) {
+private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null, prefillNumber: String = "") {
     var tab by remember { mutableIntStateOf(0) }
     // 📞 أكثر الأرقام اليمنية اتصالًا — تُشتق من سجل DINSTAR الحقيقي (لا بيانات وهمية)
     val dinstarCalls = history?.calls?.filter { it.route == "DINSTAR" }.orEmpty()
@@ -3074,12 +3147,20 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
             }
         }
         PrimaryTabRow(tab) {
-            listOf(Icons.Default.Dialpad to "الأرقام", Icons.Default.Star to "المفضلة", Icons.Default.History to "السجل", Icons.Default.Contacts to "جهات الاتصال").forEachIndexed { i, item -> Tab(tab == i, { tab = i }, icon = { Icon(item.first, null) }, text = { Text(item.second, fontSize = 10.sp) }) }
+            listOf(
+                Icons.Default.Dialpad to "الأرقام",
+                Icons.Default.Message to "الرسائل",
+                Icons.Default.Star to "المفضلة",
+                Icons.Default.History to "السجل",
+                Icons.Default.Contacts to "جهات الاتصال"
+            ).forEachIndexed { i, item -> Tab(tab == i, { tab = i }, icon = { Icon(item.first, null) }, text = { Text(item.second, fontSize = 10.sp) }) }
         }
         when (tab) {
-            0 -> DialPad(account.pstnEnabled, viewModel)
+            0 -> DialPad(account.pstnEnabled, viewModel, prefillNumber)
+            // 📨 الرسائل — إرسال/استقبال SMS عبر شريحة DINSTAR
+            1 -> DinstarSmsScreen(viewModel, account.pstnEnabled)
             // ⭐ المفضلة — أكثر الأرقام اتصالًا عبر DINSTAR مع إعادة اتصال بنقرة
-            1 -> if (favorites.isEmpty()) {
+            2 -> if (favorites.isEmpty()) {
                 EmptyState(Icons.Default.Star, "لا مفضلة بعد", "ستظهر هنا أكثر الأرقام اليمنية اتصالًا عبر DINSTAR تلقائيًا")
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3101,7 +3182,7 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
                 }
             }
             // 🗂️ سجل DINSTAR الحقيقي — مفلتر من السجل الموحد
-            2 -> if (dinstarCalls.isEmpty()) {
+            3 -> if (dinstarCalls.isEmpty()) {
                 EmptyState(Icons.Default.History, "لا مكالمات DINSTAR بعد", "ستظهر هنا كل مكالماتك الهاتفية اليمنية")
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3114,8 +3195,22 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
 }
 
 @Composable
-private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
-    var number by remember { mutableStateOf("") }
+private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String = "") {
+    var number by remember(prefill) { mutableStateOf(prefill) }
+    // 📞 أثناء المكالمة النشطة نستبدل اللوحة بشاشة الاتصال الفاخرة كاملة التحكم
+    val pstnState = viewModel.pstnState
+    val isInPstnCall = pstnState is PstnState.Started || pstnState is PstnState.Bridging || pstnState is PstnState.Registering || pstnState is PstnState.Ringing || pstnState is PstnState.Dialing
+    if (isInPstnCall) {
+        com.red.sovereign.features.pstn.PstnCallScreen(
+            number = number,
+            state = viewModel.pstnState,
+            onHangup = { viewModel.hangupPstn("") },
+            onMuteToggle = { viewModel.togglePstnMute(it) },
+            onSpeakerToggle = { viewModel.togglePstnSpeaker(it) },
+            viewModel = viewModel
+        )
+        return
+    }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(number.ifEmpty { "أدخل الرقم" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -3133,18 +3228,222 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
         Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
         when (val state = viewModel.pstnState) {
             PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
-            is PstnState.Started -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("بدأ الاتصال · ${state.usedToday}/${state.dailyLimit} اليوم", color = AqyalGold)
-                // 📴 زر إنهاء فعلي — يستدعي POST /api/pstn/calls/{callId}/hangup ويحرّر منفذ GSM
-                OutlinedButton(
-                    onClick = { viewModel.hangupPstn(state.callId) },
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Icon(Icons.Default.Call, null, tint = MaterialTheme.colorScheme.error); Text(" إنهاء المكالمة") }
+            PstnState.Bridging -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري تجهيز الاتصال الآمن...", color = AqyalGold, fontSize = 13.sp)
+            }
+            PstnState.Registering -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري التسجيل في بوابة الصوت...", color = AqyalGold, fontSize = 13.sp)
+            }
+            PstnState.Ringing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(18.dp)); Text("جاري رنين الهاتف...", color = YounesEmerald, fontSize = 13.sp)
             }
             is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
             PstnState.Idle -> Unit
+            is PstnState.Started -> Unit // عُالجت أعلاه بشاشة الاتصال الكاملة
         }
     }
+}
+
+/**
+ * 📨 شاشة رسائل DINSTAR SMS — إرسال/استقبال عبر شريحة GSM
+ */
+@Composable
+private fun DinstarSmsScreen(viewModel: AuthViewModel, pstnEnabled: Boolean) {
+    var recipient by remember { mutableStateOf("") }
+    var messageText by remember { mutableStateOf("") }
+    var sentMessages by remember { mutableStateOf<List<SmsItem>>(emptyList()) }
+    var inboxMessages by remember { mutableStateOf<List<SmsIncomingMessage>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = إرسال، 1 = الوارد
+
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Header
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
+            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text("رسائل DINSTAR SMS", fontWeight = FontWeight.Bold, color = AqyalGold)
+                    Text(if (pstnEnabled) "الشريحة جاهزة للإرسال والاستقبال" else "غير مفعل — يفعله المسؤول من اللوحة", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Tab row
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabButton(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { Text("إرسال", fontSize = 12.sp) }
+            TabButton(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            ) { Text("الوارد", fontSize = 12.sp) }
+        }
+
+        // Content
+        when (selectedTab) {
+            0 -> SendSmsPanel(
+                pstnEnabled = pstnEnabled,
+                recipient = recipient,
+                onRecipientChange = { recipient = it },
+                messageText = messageText,
+                onMessageChange = { messageText = it },
+                onSend = {
+                    loading = true
+                    viewModel.sendSms(recipient, messageText) { success, msg ->
+                        loading = false
+                        if (success) {
+                            messageText = ""
+                            sentMessages = sentMessages + SmsItem(
+                                recipient = recipient,
+                                text = messageText,
+                                time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
+                                port = 2
+                            )
+                        }
+                    }
+                },
+                sentMessages = sentMessages,
+                loading = loading
+            )
+            1 -> InboxSmsPanel(
+                pstnEnabled = pstnEnabled,
+                inboxMessages = inboxMessages,
+                onRefresh = {
+                    loading = true
+                    viewModel.loadSmsInbox { msgs ->
+                        loading = false
+                        inboxMessages = msgs.map { SmsIncomingMessage(
+                            port = it.port,
+                            sender = it.sender,
+                            text = it.text,
+                            time = it.time,
+                            coding = it.coding,
+                            udh = it.udh
+                        ) }
+                    }
+                },
+                loading = loading
+            )
+        }
+    }
+}
+
+@Composable
+private fun SendSmsPanel(
+    pstnEnabled: Boolean,
+    recipient: String,
+    onRecipientChange: (String) -> Unit,
+    messageText: String,
+    onMessageChange: (String) -> Unit,
+    onSend: () -> Unit,
+    sentMessages: List<SmsItem>,
+    loading: Boolean
+) {
+    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = recipient,
+            onValueChange = onRecipientChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("رقم المستلم (مثال: 777123456)") },
+            singleLine = true,
+            enabled = pstnEnabled
+        )
+        OutlinedTextField(
+            value = messageText,
+            onValueChange = onMessageChange,
+            modifier = Modifier.fillMaxWidth().height(120.dp),
+            label = { Text("نص الرسالة") },
+            maxLines = 5,
+            enabled = pstnEnabled
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { }, enabled = false) { Text("${messageText.length}/160") }
+            Button(onClick = onSend, enabled = pstnEnabled && recipient.isNotBlank() && messageText.isNotBlank() && !loading) {
+                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("إرسال")
+            }
+        }
+        if (sentMessages.isNotEmpty()) {
+            Text("المرسلة حديثاً", style = MaterialTheme.typography.titleSmall, color = AqyalGold)
+            LazyColumn(Modifier.fillMaxWidth().height(200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(sentMessages) { item ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = YounesEmerald)
+                            Column(Modifier.padding(start = 8.dp).weight(1f)) {
+                                Text("إلى: ${item.recipient}", fontWeight = FontWeight.Bold)
+                                Text(item.text.take(60), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InboxSmsPanel(
+    pstnEnabled: Boolean,
+    inboxMessages: List<SmsIncomingMessage>,
+    onRefresh: () -> Unit,
+    loading: Boolean
+) {
+    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Button(onClick = onRefresh, enabled = pstnEnabled && !loading) {
+                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("تحديث")
+            }
+        }
+        if (inboxMessages.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Inbox, null, tint = AqyalGold.copy(alpha = 0.5f), modifier = Modifier.size(64.dp))
+                    Text("لا توجد رسائل واردة", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("ستظهر رسائل SMS هنا عند وصولها", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(inboxMessages) { item ->
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard)) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Message, null, tint = AqyalGold, modifier = Modifier.size(28.dp))
+                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                Text("من: ${item.sender}", fontWeight = FontWeight.Bold)
+                                Text(item.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class SmsItem(
+    val recipient: String = "",
+    val sender: String = "",
+    val text: String = "",
+    val time: String = "",
+    val port: Int = -1
+)
+
+private suspend fun sendSms(viewModel: AuthViewModel, recipient: String, text: String) {
+    // TODO: استدعاء API الإرسال الفعلي عبر PstnApi
+    // val result = viewModel.pstnApi.sendSms(recipient, text)
+    // for now simulate
+    delay(1000)
+}
+
+private suspend fun loadInbox(viewModel: AuthViewModel) {
+    // TODO: استدعاء API الوارد الفعلي
+    // val result = viewModel.pstnApi.getInbox()
+    delay(1000)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3351,7 +3650,7 @@ private fun InlinePollCard(
     // تصويتات متزامنة E2EE (المجموعات)؛ وإلا يعرض البطاقة محلياً فقط
     val synced = myRedId != null && onVote != null
     val votes = if (synced) PollVoteStore.counts(poll.pollId, poll.options.size) else poll.votes
-    val myVote = if (synced) PollVoteStore.myVote(poll.pollId, myRedId!!) else null
+    val myVote = if (synced) myRedId?.let { PollVoteStore.myVote(poll.pollId, it) } else null
     val total = votes.sum().coerceAtLeast(1)
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),

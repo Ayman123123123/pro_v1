@@ -14,13 +14,18 @@ import javax.crypto.spec.SecretKeySpec
  * Ice/TURN credentials endpoint.
  *
  * يدعم:
+ * ─── coturn محلي (للشبكة المحلية) ───
  * - STUN على port 3478 (UDP/TCP)
  * - TURN على port 3478 (UDP/TCP) — relayed traffic
  * - TURNS (TURN over TLS) على port 5349 (UDP/TCP) — firewall bypass
  * - TURN على port 443 (UDP/TCP) — للشبكات التي تمنع المنافذ الأخرى
  *
- * يستخدم REST API Time-Limited HMAC (RFC 7635) — credentials صالحة لمدة 1 ساعة.
- * الـ username = "${expiresAt}:${userId}" — يمكن لأي TURN server التحقق من التوقيع.
+ * ─── Open Relay عبر الإنترنت (يتجاوز CGNAT) ───
+ * - TURN على port 80 (UDP/TCP) — يتجاوز أي فيروال
+ * - TURNS على port 443 (TLS) — يتجاوز فيروال الشركات + CGNAT
+ *
+ * يستخدم REST API Time-Limited HMAC (RFC 7635) لـ coturn المحلي.
+ * Open Relay يستخدم static credentials.
  */
 @RestController
 @RequestMapping("/api/calls")
@@ -30,7 +35,11 @@ class IceServerController(
     @Value("\${red.turn.tls-port:5349}") private val tlsPort: Int,
     @Value("\${red.turn.443-port:443}") private val altPort: Int,
     @Value("\${red.turn.secret}") private val secret: String,
-    @Value("\${red.turn.ttl-seconds:3600}") private val ttlSeconds: Long
+    @Value("\${red.turn.ttl-seconds:3600}") private val ttlSeconds: Long,
+    // Open Relay (Metered.ca)
+    @Value("\${red.turn.openrelay.enabled:false}") private val openRelayEnabled: Boolean,
+    @Value("\${red.turn.openrelay.username:openrelayproject}") private val openRelayUsername: String,
+    @Value("\${red.turn.openrelay.password:openrelayproject}") private val openRelayPassword: String
 ) {
     @GetMapping("/ice-servers")
     fun iceServers(authentication: Authentication): IceConfiguration {
@@ -41,6 +50,9 @@ class IceServerController(
         val mac = Mac.getInstance("HmacSHA1").apply { init(SecretKeySpec(secret.toByteArray(), "HmacSHA1")) }
         val credential = Base64.getEncoder().encodeToString(mac.doFinal(username.toByteArray()))
         val servers = buildList {
+            // ═══════════════════════════════════════════════════
+            // coturn محلي — للشبكة المحلية (أسرع بدون إنترنت)
+            // ═══════════════════════════════════════════════════
             // 1) STUN — connectivity check
             add(IceServerResponse(listOf("stun:$host:$port")))
             // 2) TURN over UDP/TCP (المعيار)
@@ -60,6 +72,30 @@ class IceServerController(
                 add(IceServerResponse(
                     urls = listOf("turns:$host:$altPort?transport=tcp"),
                     username = username, credential = credential
+                ))
+            }
+
+            // ═══════════════════════════════════════════════════
+            // Open Relay — عبر الإنترنت (يتجاوز CGNAT + فيروال)
+            // ═══════════════════════════════════════════════════
+            if (openRelayEnabled) {
+                // 5) TURN on port 80 — يتجاوز أي فيروال (يبدو كـ HTTP عادي)
+                add(IceServerResponse(
+                    urls = listOf(
+                        "turn:openrelay.metered.ca:80?transport=udp",
+                        "turn:openrelay.metered.ca:80?transport=tcp",
+                        "turn:openrelay.metered.ca:443?transport=tcp"
+                    ),
+                    username = openRelayUsername,
+                    credential = openRelayPassword
+                ))
+                // 6) TURNS (TLS) on port 443 — أقوى تجاوز لفيروال الشركات + CGNAT
+                add(IceServerResponse(
+                    urls = listOf(
+                        "turns:openrelay.metered.ca:443?transport=tcp"
+                    ),
+                    username = openRelayUsername,
+                    credential = openRelayPassword
                 ))
             }
         }

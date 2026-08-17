@@ -158,7 +158,13 @@ class DinstarFleetController(
                 "gateways" to gateways.size,
                 "online" to gateways.count { it.healthState == "ONLINE" },
                 "ports" to allPorts.size,
-                "registered" to allPorts.count { (it["status"]?.toString() ?: "").equals("REGISTERED", true) },
+                "registered" to allPorts.count {
+                    // القيمة الخام من الجهاز قد تكون REGISTER_OK أو
+                    // REGISTERED/Mobile Registered — كلها مسجّل.
+                    val s = it["status"]?.toString()?.trim().orEmpty()
+                    s.equals("REGISTERED", true) || s.equals("REGISTER_OK", true) ||
+                        s.equals("Mobile Registered", true)
+                },
                 "usable" to allPorts.count { it["signalUsable"] == true }
             )
         )

@@ -12,7 +12,7 @@ import java.util.UUID
 /**
  * 🛡️ Admin Audit Log Repository
  */
-interface AdminAuditLogRepository : JpaRepository<AdminAuditLog, UUID> {
+interface AdminAuditLogRepository : JpaRepository<AdminAuditLog, UUID>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<AdminAuditLog> {
     fun findByAdminIdOrderByCreatedAtDesc(adminId: UUID, pageable: Pageable): Page<AdminAuditLog>
     fun findByActionOrderByCreatedAtDesc(action: String, pageable: Pageable): Page<AdminAuditLog>
     fun findByCategoryOrderByCreatedAtDesc(category: String, pageable: Pageable): Page<AdminAuditLog>

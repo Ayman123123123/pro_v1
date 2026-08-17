@@ -62,6 +62,8 @@ class CallHistoryService(
         publisher.callMissed(callId)
     }
 
+    fun findById(callId: String): CallHistoryDocument? = mongo.findById(callId, CallHistoryDocument::class.java)
+
     /** الطرف المُستدعى رفض المكالمة صراحةً — تُسجَّل REJECTED وليس MISSED. */
     fun rejected(callId: String, actorId: String? = null): CallHistoryDocument = update(callId) {
         if (actorId != null) require(it.targetId == actorId) { "Only the called account can reject" }

@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.ResponseCookie
 import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.security.core.Authentication
 import jakarta.validation.Valid
 import java.time.Instant
@@ -41,7 +42,10 @@ class AuthController(
         val rateIdentity = "${clientIp(servlet)}:${request.username}"
         limits.check("login", rateIdentity, 10, Duration.ofMinutes(15))
         val response = registration.login(request)
-        limits.reset("login", rateIdentity)
+        // إعادة العدّاد فقط بعد نجاح تسجيل الدخول الفعلي — تمنع هجوم brute-force
+        if (response.status == AccountStatus.APPROVED) {
+            limits.reset("login", rateIdentity)
+        }
         val status = when (response.status) {
             AccountStatus.APPROVED -> HttpStatus.OK
             AccountStatus.PENDING -> HttpStatus.LOCKED
@@ -155,6 +159,18 @@ class AuthController(
             "avatarUrl" to user.avatarUrl,
             "bio" to user.bio
         ))
+    }
+
+    /**
+     * يعيد بيانات المستخدم الحالي مع صلاحيات PSTN.
+     * يستدعيها التطبيق عند استئناف الواجهة لتحديث حالة التفعيل فوراً
+     * دون الحاجة لتسجيل خروج/دخول.
+     */
+    @GetMapping("/me")
+    fun me(authentication: Authentication): ResponseEntity<UserAccountResponse> {
+        val caller = UUID.fromString(authentication.name)
+        val user = users.findById(caller).orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
+        return ResponseEntity.ok(user.toResponse())
     }
 
     private fun isAdminWebRequest(request: HttpServletRequest, response: AuthResponse): Boolean =

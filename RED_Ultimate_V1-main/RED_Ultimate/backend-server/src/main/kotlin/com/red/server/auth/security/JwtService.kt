@@ -4,6 +4,7 @@ import com.red.server.auth.model.UserAccount
 import io.jsonwebtoken.Claims
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.security.Keys
+import jakarta.annotation.PostConstruct
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
@@ -19,6 +20,13 @@ class JwtService(
     @Value("\${red.jwt.secret}") private val configuredSecret: String,
     @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long
 ) {
+    @PostConstruct
+    fun validateSecret() {
+        require(configuredSecret.isNotBlank()) {
+            "FATAL: JWT_SECRET environment variable is not set. The server cannot start without a valid secret."
+        }
+    }
+
     private val expirationMs: Long
         get() = accessExpirationMinutes.coerceIn(1, 60 * 24) * 60_000
 

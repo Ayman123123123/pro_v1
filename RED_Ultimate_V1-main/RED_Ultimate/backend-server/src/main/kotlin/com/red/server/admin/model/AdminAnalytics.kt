@@ -95,7 +95,7 @@ class SystemHealth(
     @Column(name = "average_response_ms") var averageResponseMs: Float? = null,
     @Column(name = "error_rate") var errorRate: Float? = null,
 
-    @Column(columnDefinition = "JSONB")
+    @Column(columnDefinition = "TEXT")
     var details: String? = null,
 
     @Column(name = "last_check_at", nullable = false)

@@ -144,7 +144,6 @@ class PollsApi(private val client: AuthorizedApiClient) {
     suspend fun vote(pollId: String, optionIds: List<String>): ApiResult<String> {
         val body = json.encodeToString(VoteRequest(optionIds)).toRequestBody()
         return client.requestBody("POST", "/api/admin/content/polls/$pollId/vote", body)
-            .let { r -> r as ApiResult<String> }
     }
 
     suspend fun close(pollId: String): ApiResult<String> =

@@ -509,13 +509,25 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
         val dismissPending = PendingIntent.getService(this, 2, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val mainIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val mainIntent = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, IncomingCallActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(IncomingCallActivity.EXTRA_CALL_TYPE, IncomingCallActivity.CALL_TYPE_LIVESTREAM)
+                putExtra(EXTRA_STREAM_ID, streamId)
+                putExtra(EXTRA_USER_ID, userId)
+                putExtra(EXTRA_BROADCASTER_NAME, broadcasterName)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        runCatching { IncomingCallActivity.launchLive(this, streamId, userId, broadcasterName) }
 
         val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setContentTitle("بث مباشر يونس")
             .setContentText("بدأ ${broadcasterName.ifBlank { "المُبث" }} بثاً مباشراً")
             .setContentIntent(mainIntent)
+            .setFullScreenIntent(mainIntent, true)
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setSilent(false)

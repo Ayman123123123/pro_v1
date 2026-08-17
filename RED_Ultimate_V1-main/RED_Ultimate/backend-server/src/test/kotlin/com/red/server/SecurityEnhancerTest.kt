@@ -1,12 +1,22 @@
 package com.red.server.security
 
+import com.red.server.database.RedisManager
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 class SecurityEnhancerTest {
+
+    private val redisManager: RedisManager = mock()
+    private val rateLimitHits = ConcurrentHashMap<String, AtomicInteger>()
 
     private lateinit var securityEnhancer: SecurityEnhancer
     private lateinit var request: MockHttpServletRequest
@@ -14,7 +24,20 @@ class SecurityEnhancerTest {
 
     @BeforeEach
     fun setup() {
-        securityEnhancer = SecurityEnhancer()
+        rateLimitHits.clear()
+        whenever(redisManager.checkRateLimit(any(), any(), any())).thenAnswer {
+            val key = it.getArgument<String>(0)
+            val max = it.getArgument<Int>(1)
+            val count = rateLimitHits.computeIfAbsent(key) { AtomicInteger(0) }.incrementAndGet()
+            count <= max
+        }
+        doAnswer {
+            val key = it.getArgument<String>(0)
+            rateLimitHits.remove(key)
+            null
+        }.whenever(redisManager).deleteKey(any())
+
+        securityEnhancer = SecurityEnhancer(redisManager = redisManager)
         request = MockHttpServletRequest()
         response = MockHttpServletResponse()
     }
@@ -55,7 +78,7 @@ class SecurityEnhancerTest {
 
     @Test
     fun `untrusted forwarded header cannot evade rate limiting`() {
-        val untrusted = SecurityEnhancer(trustXForwardedFor = false)
+        val untrusted = SecurityEnhancer(trustXForwardedFor = false, redisManager = redisManager)
         repeat(SecurityEnhancer.MAX_REQUESTS_PER_MINUTE + 1) { index ->
             val req = MockHttpServletRequest().apply {
                 setRemoteAddr("203.0.113.10")
@@ -68,7 +91,7 @@ class SecurityEnhancerTest {
 
     @Test
     fun `trusted proxy header identifies distinct clients`() {
-        val trusted = SecurityEnhancer(trustXForwardedFor = true)
+        val trusted = SecurityEnhancer(trustXForwardedFor = true, redisManager = redisManager)
         repeat(SecurityEnhancer.MAX_REQUESTS_PER_MINUTE + 1) { index ->
             val req = MockHttpServletRequest().apply {
                 setRemoteAddr("172.20.0.10")

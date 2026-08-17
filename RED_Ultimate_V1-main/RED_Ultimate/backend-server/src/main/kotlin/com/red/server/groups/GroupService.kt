@@ -168,6 +168,19 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         require(invite.groupId == groupId); invite.revokedAt = Instant.now(); mongo.save(invite)
     }
 
+    fun updateSettings(actorId: UUID, groupId: String, request: UpdateGroupSettingsRequest): GroupResponse {
+        requireManager(groupId, actorId)
+        val current = group(groupId)
+        val newSettings = GroupSettings(
+            onlyAdminsCanSend = request.onlyAdminsCanSend,
+            onlyAdminsCanEditInfo = request.onlyAdminsCanEditInfo,
+            requireJoinApproval = request.requireJoinApproval
+        )
+        val updated = current.copy(settings = newSettings, updatedAt = Instant.now())
+        mongo.save(updated)
+        return response(updated)
+    }
+
     fun count(): Long = mongo.count(Query(), GroupDocument::class.java)
 
     private fun hashToken(token: String) = MessageDigest.getInstance("SHA-256").digest(token.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -178,6 +191,15 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         ?: throw NoSuchElementException("Group membership not found")
     private fun requireManager(groupId: String, userId: UUID) = membership(groupId, userId).also { require(it.role == GroupRole.OWNER || it.role == GroupRole.ADMIN) }
     private fun touch(groupId: String) { group(groupId).also { it.updatedAt = Instant.now(); mongo.save(it) } }
-    private fun response(group: GroupDocument) = GroupResponse(group.id, group.name, group.description, group.ownerRedId, group.avatarMediaKey?.let { "/api/media/$it" }, group.createdAt,
-        mongo.find(Query(Criteria.where("groupId").`is`(group.id)).with(Sort.by(Sort.Direction.ASC, "joinedAt")), GroupMember::class.java))
+    private fun response(group: GroupDocument) = GroupResponse(
+        group.id,
+        group.name,
+        group.description,
+        group.ownerRedId,
+        group.avatarMediaKey?.let { "/api/media/$it" },
+        group.privacy,
+        group.settings,
+        group.createdAt,
+        mongo.find(Query(Criteria.where("groupId").`is`(group.id)).with(Sort.by(Sort.Direction.ASC, "joinedAt")), GroupMember::class.java)
+    )
 }

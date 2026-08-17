@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
+import com.red.sovereign.auth.AuthModels.UserResponse
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
@@ -113,23 +114,64 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** WebRTC-PSTN bridge: connect to Asterisk via WSS, dial through DINSTAR GSM */
+    private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
+
     fun dialPstn(number: String) = viewModelScope.launch {
-        pstnState = PstnState.Dialing
-        pstnState = when (val result = pstn.dial(number)) {
-            is ApiResult.Success -> PstnState.Started(result.value.callId, result.value.usedToday, result.value.dailyLimit)
-            is ApiResult.Error -> PstnState.Error(localize(result.message))
-        }
+        refreshPstnEntitlement()
+        pstnState = PstnState.Bridging
+        val mgr = com.red.sovereign.calls.PstnWebRtcManager(getApplication())
+        pstnWebRtc = mgr
+        mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
+            override fun onConnected() { pstnState = PstnState.Registering }
+            override fun onRinging() { pstnState = PstnState.Ringing }
+            override fun onAnswered(usedToday: Int, dailyLimit: Int) { pstnState = PstnState.Started("webrtc", usedToday, dailyLimit) }
+            override fun onHangup(cause: String?) {
+                pstnState = PstnState.Idle
+                pstnWebRtc?.release()
+                pstnWebRtc = null
+            }
+            override fun onError(message: String) {
+                pstnState = PstnState.Error(localize(message))
+            }
+        })
     }
 
-    /** إنهاء مكالمة PSTN جارية — يحرّر منفذ DINSTAR في موازن الحمولة */
     fun hangupPstn(callId: String) = viewModelScope.launch {
-        when (val result = pstn.hangup(callId)) {
-            is ApiResult.Success -> pstnState = PstnState.Idle
-            is ApiResult.Error -> pstnState = PstnState.Error(localize(result.message))
-        }
+        pstnWebRtc?.hangup()
+        pstnWebRtc?.release()
+        pstnWebRtc = null
+        pstnState = PstnState.Idle
+    }
+
+    /** كتم/إلغاء كتم الميكروفون في مكالمة PSTN النشطة. */
+    fun togglePstnMute(mute: Boolean) {
+        pstnWebRtc?.isMuted = mute
+    }
+
+    /** تبديل مكبر الصوت في مكالمة PSTN النشطة. */
+    fun togglePstnSpeaker(speakerOn: Boolean) {
+        pstnWebRtc?.isSpeaker = speakerOn
     }
 
     fun clearPstnState() { pstnState = PstnState.Idle }
+
+    // 📨 SMS Methods
+    fun sendSms(recipient: String, text: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
+        val result = pstn.sendSms(recipient, text)
+        when (result) {
+            is ApiResult.Success -> onResult(true, "تم الإرسال")
+            is ApiResult.Error -> onResult(false, result.message ?: "فشل الإرسال")
+        }
+    }
+
+    fun loadSmsInbox(onResult: (List<SmsIncomingMessage>) -> Unit = { }) = viewModelScope.launch {
+        val result = pstn.getInbox()
+        when (result) {
+            is ApiResult.Success -> onResult(result.value)
+            is ApiResult.Error -> onResult(emptyList())
+        }
+    }
 
     /** تحديث اسم المستخدم (username) على الخادم ثم محلياً. */
     fun updateUsername(newUsername: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
@@ -227,6 +269,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** يجلب حالة PSTN من الخادم (/api/auth/me) ويحدث الحالة المحلية.
+     * يستدعى عند: استئناف التطبيق، قبل الاتصال، ودورياً أثناء شاشة DINSTAR. */
+    fun refreshPstnEntitlement() = viewModelScope.launch {
+        val result = api.me()
+        if (result is ApiResult.Success) {
+            val user = result.value
+            tokens.store.put("pstn_enabled", user.pstnEnabled.toString())
+            // تحديث AuthState الحالي إن كان مصادقاً
+            state = when (val current = state) {
+                is AuthState.Authenticated -> current.copy(pstnEnabled = user.pstnEnabled)
+                else -> current
+            }
+        }
+    }
+
     private suspend fun <T> withServerDiscoveryRetry(request: suspend () -> ApiResult<T>): ApiResult<T> {
         val first = request()
         if (first !is ApiResult.Error || first.code != null) return first
@@ -314,6 +371,15 @@ sealed interface ServerState {
 sealed interface PstnState {
     data object Idle : PstnState
     data object Dialing : PstnState
-    data class Started(val callId: String, val usedToday: Int, val dailyLimit: Int) : PstnState
+    data object Bridging : PstnState
+    data object Registering : PstnState
+    data object Ringing : PstnState
+    data class Started(
+        val callId: String,
+        val usedToday: Int,
+        val dailyLimit: Int,
+        val answered: Boolean = true,
+        val ringing: Boolean = false
+    ) : PstnState
     data class Error(val message: String) : PstnState
 }

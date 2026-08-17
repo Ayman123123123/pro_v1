@@ -276,9 +276,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                 if (!isOn && GroupCallRuntime.localVideo == null) {
                     // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
                     scope.launch {
-                        val ok = if (sfu != null) {
-                            sfu!!.retryCamera()
-                        } else {
+                        val ok = sfu?.retryCamera() ?: run {
                             // في وضع Mesh: mesh يُرسل فعلياً، engine يُعرض محلياً — نجح أحدهما يكفي
                             val m = mesh?.retryCamera()
                             val e = engine?.retryCamera()
@@ -315,6 +313,22 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             ACTION_STOP_RECORDING -> {
                 scope.launch { recordingManager?.stop(); recordingManager = null }
                 GroupCallRuntime.isRecording = false
+            }
+            ACTION_MUTE_ALL -> {
+                if (isHost) {
+                    GroupCallRuntime.isMuted = true
+                    engine?.setMicrophoneEnabled(false)
+                    mesh?.setMicrophoneEnabled(false)
+                    sfu?.setMicrophoneEnabled(false)
+                    signaling.send(
+                        CallSignal(
+                            callId = groupCallId,
+                            type = "GROUP_CALL_MUTE_ALL",
+                            groupCallId = groupCallId,
+                            mode = if (isVideo) "VIDEO" else "VOICE"
+                        )
+                    )
+                }
             }
         }
         return START_STICKY
@@ -726,7 +740,19 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             Intent(this, GroupCallService::class.java).setAction(ACTION_DECLINE_GROUP_CALL)
                 .putExtra(EXTRA_GROUP_CALL_ID, gId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val fullScreenIntent = PendingIntent.getActivity(this, 22, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val fullScreenIntent = PendingIntent.getActivity(
+            this, 22,
+            Intent(this, IncomingCallActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(IncomingCallActivity.EXTRA_CALL_TYPE, IncomingCallActivity.CALL_TYPE_GROUP)
+                putExtra(EXTRA_GROUP_CALL_ID, gId)
+                putExtra(EXTRA_MY_USER_ID, myUserId)
+                putExtra(EXTRA_HOST_NAME, hostName)
+                putExtra(EXTRA_IS_VIDEO, video)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        runCatching { IncomingCallActivity.launchGroup(this, gId, myUserId, hostName, video) }
         val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle(label).setContentText(body)
@@ -757,6 +783,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         const val ACTION_SWITCH_CAMERA       = "com.red.sovereign.groupcall.SWITCH_CAMERA"
         const val ACTION_START_RECORDING     = "com.red.sovereign.groupcall.START_RECORDING"
         const val ACTION_STOP_RECORDING      = "com.red.sovereign.groupcall.STOP_RECORDING"
+        const val ACTION_MUTE_ALL          = "com.red.sovereign.groupcall.MUTE_ALL"
 
         const val EXTRA_GROUP_CALL_ID = "group_call_id"
         const val EXTRA_MY_USER_ID    = "my_user_id"
@@ -828,6 +855,11 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         fun action(context: Context, act: String) {
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).setAction(act))
+        }
+
+        fun muteAll(context: Context) {
+            ContextCompat.startForegroundService(context,
+                Intent(context, GroupCallService::class.java).setAction(ACTION_MUTE_ALL))
         }
     }
 }

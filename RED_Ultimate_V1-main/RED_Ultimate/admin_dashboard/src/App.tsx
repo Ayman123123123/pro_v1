@@ -22,6 +22,8 @@ import {
   MessageOutlined,
   CloudServerOutlined,
   DatabaseOutlined,
+  PhoneOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -50,6 +52,7 @@ const InfrastructureCenter = lazy(() => import('./pages/InfrastructureCenter'));
 const ModerationCenter = lazy(() => import('./pages/ModerationCenter'));
 const DataOverview = lazy(() => import('./pages/DataOverview'));
 const CallHistory = lazy(() => import('./pages/CallHistory'));
+const PstnManagement = lazy(() => import('./pages/PstnManagement'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -74,7 +77,8 @@ type PageKey =
   | 'monitor'
   | 'diagnostics'
   | 'data-overview'
-  | 'call-history';
+  | 'call-history'
+  | 'pstn-management';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
@@ -88,6 +92,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'moderation', icon: <SafetyCertificateOutlined />, label: 'الإشراف السريع', group: 'main' },
   { key: 'messaging', icon: <MessageOutlined />, label: 'مركز الرسائل', group: 'main' },
   { key: 'call-history', icon: <PhoneOutlined />, label: 'سجل المكالمات', group: 'main' },
+  { key: 'pstn-management', icon: <SwapOutlined />, label: 'إدارة خدمة PSTN', group: 'main' },
   // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات + وسائط + بنية
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
@@ -204,6 +209,7 @@ export default function App() {
       case 'moderation': return <ModerationCenter />;
       case 'messaging': return <MessagingCenter />;
       case 'call-history': return <CallHistory />;
+      case 'pstn-management': return <PstnManagement />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;

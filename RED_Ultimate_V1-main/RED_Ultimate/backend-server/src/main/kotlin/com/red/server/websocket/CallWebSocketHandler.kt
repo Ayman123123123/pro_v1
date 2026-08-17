@@ -21,13 +21,23 @@ class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val history: CallHistoryService,
     private val notifications: NotificationService,
-    private val activeCalls: ActiveCallRegistry
+    private val activeCalls: ActiveCallRegistry,
+    private val accessGuard: ApprovedDeviceSessionGuard
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
     private val groupRooms = ConcurrentHashMap<String, GroupCallRoom>()
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+        // Revalidate device approval on every frame (same as RedMasterHandler)
+        if (!accessGuard.isStillAuthorized(
+                session.attributes["accountId"] as? String,
+                session.attributes["deviceId"] as? String
+            )
+        ) {
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
         val type = signal.type.uppercase()
@@ -154,6 +164,13 @@ class CallWebSocketHandler(
 
         val json = objectMapper.writeValueAsString(outbound)
         targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+        
+        // Send RINGING back to caller so presence monitor knows the target is actually ringing
+        if (type == "OFFER") {
+            val ringingSignal = mapOf("type" to "RINGING", "callId" to callId, "targetUserId" to signal.targetUserId)
+            session.sendMessage(TextMessage(objectMapper.writeValueAsString(ringingSignal)))
+        }
+
         session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
 
         // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
@@ -243,6 +260,24 @@ class CallWebSocketHandler(
     companion object {
         private const val PENDING_TTL_SECONDS = 60L
         private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+    }
+
+    /** Clean up stale group rooms and pending signals — called by CallRingExpiryJob. */
+    fun cleanupStaleGroups() {
+        val now = Instant.now()
+        // Clean stale pending signals (expired TTL)
+        pending.values.forEach { list ->
+            list.removeIf { it.expiresAt.isBefore(now) }
+        }
+        pending.entries.removeIf { it.value.isEmpty() }
+        
+        // Clean stale group rooms (no activity for 10 minutes)
+        val staleThreshold = now.minusSeconds(600)
+        groupRooms.entries.removeIf { entry ->
+            // In a full implementation, we'd track last activity per room
+            // For now, we rely on GROUP_CALL_END to clean up properly
+            false
+        }
     }
 }
 

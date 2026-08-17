@@ -53,6 +53,7 @@ fun YounesLiveStreamOverlay() {
     val remoteVideo = LiveStreamRuntime.remoteVideo
     var chatText by remember { mutableStateOf("") }
     var showRaisedHandsSheet by remember { mutableStateOf(false) }
+    var showGiftsSheet by remember { mutableStateOf(false) }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     if (state is LiveStreamUiState.Incoming) {
@@ -285,7 +286,7 @@ fun YounesLiveStreamOverlay() {
                     } else {
                         // Viewer tools
                         ActionIcon(Icons.Default.CardGiftcard, "هدايا", tint = Color(0xFFFFD700)) {
-                            // TODO: Show gifts panel
+                            showGiftsSheet = true
                         }
                         ActionIcon(Icons.Default.Share, "مشاركة") {
                             val activeStreamId = when (state) {
@@ -310,6 +311,17 @@ fun YounesLiveStreamOverlay() {
                         Icon(Icons.Default.Favorite, contentDescription = "إعجاب", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                 }
+            }
+
+            if (showGiftsSheet) {
+                LiveGiftsSheet(
+                    onDismiss = { showGiftsSheet = false },
+                    onSendGift = { gift ->
+                        LiveStreamService.sendReaction(context, gift.emoji)
+                        LiveStreamService.sendChat(context, "أرسل ${gift.name} ${gift.emoji}", "أنا")
+                        android.widget.Toast.makeText(context, "✨ تم إرسال ${gift.name} ${gift.emoji} للمضيف بنجاح!", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
         }
     }

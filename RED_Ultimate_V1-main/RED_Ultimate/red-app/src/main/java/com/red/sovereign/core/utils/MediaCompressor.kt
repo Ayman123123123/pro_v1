@@ -1,4 +1,4 @@
-package com.red.sovereign.core.utils
+﻿package com.red.sovereign.core.utils
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -13,6 +13,10 @@ import androidx.media3.effect.Presentation
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.Transformer
+import com.red.sovereign.media.VoiceQuality
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -22,7 +26,7 @@ import java.io.FileOutputStream
  */
 object MediaCompressor {
 
-    /** أكبر بُعد للصورة بعد الضغط — ما هو أكبر يُصغَّر بنسبة ثابتة (مثل واتساب). */
+    /** Max image dimension after compression — larger gets downscaled by power-of-two (like WhatsApp). */
     const val DEFAULT_MAX_DIMENSION = 2048
 
     /** JPEG 85% balances readability, quality, and encrypted upload size. */
@@ -35,7 +39,7 @@ object MediaCompressor {
         while (maxOf(width, height) / (sample * 2) >= maxDimension) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         var bitmap = requireNotNull(BitmapFactory.decodeFile(inputPath, options)) { "IMAGE_DECODE_FAILED" }
-        // اتجاه EXIF — بدونها تظهر صور الكاميرا مقلوبة/مدوّرة بعد الضغط
+        // EXIF orientation — without it camera photos appear flipped/rotated after compression
         bitmap = runCatching {
             when (ExifInterface(inputPath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
                 ExifInterface.ORIENTATION_ROTATE_90 -> bitmap.rotated(90f)
@@ -68,13 +72,6 @@ object MediaCompressor {
         }
     }
 
-    private fun Bitmap.rotated(degrees: Float): Bitmap {
-        val matrix = Matrix().apply { postRotate(degrees) }
-        val rotated = Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
-        if (rotated !== this) recycle()
-        return rotated
-    }
-
     /**
      * Transcodes video to H.264 and a 720px height while preserving aspect ratio.
      * Media3 1.11 exports an EditedMediaItem; passing a raw MediaItem would keep
@@ -91,5 +88,80 @@ object MediaCompressor {
             .addListener(listener)
             .build()
         transformer.start(editedMediaItem, outputPath)
+    }
+
+    /**
+     * Compresses/transcodes audio to Opus or AAC at the given quality.
+     * Uses Media3 Transformer for consistent cross-device encoding.
+     * Returns the output file on success.
+     */
+    suspend fun compressAudio(
+        context: Context,
+        inputPath: String,
+        outputPath: String,
+        quality: VoiceQuality = VoiceQuality.STANDARD
+    ): File = withContext(Dispatchers.IO) {
+        File(outputPath).parentFile?.mkdirs()
+
+        val mimeType = when {
+            quality == VoiceQuality.COMPACT -> MimeTypes.AUDIO_OPUS
+            quality == VoiceQuality.ULTRA -> MimeTypes.AUDIO_AAC
+            else -> MimeTypes.AUDIO_OPUS
+        }
+
+        val mediaItem = MediaItem.fromUri(inputPath)
+            .buildUpon()
+            .setMimeType(mimeType)
+            .build()
+
+        val result = CompletableDeferred<java.io.File>()
+        val transformer = Transformer.Builder(context)
+            .addListener(object : Transformer.Listener {
+                override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                    result.complete(java.io.File(outputPath))
+                }
+                override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                    result.completeExceptionally(exportException)
+                }
+            })
+            .build()
+
+        transformer.start(mediaItem, outputPath)
+        result.await()
+    }
+
+    /**
+     * Synchronous version for backward compatibility with Transformer.Listener callback.
+     */
+    fun compressAudio(
+        context: Context,
+        inputPath: String,
+        outputPath: String,
+        quality: VoiceQuality,
+        listener: Transformer.Listener
+    ) {
+        java.io.File(outputPath).parentFile?.mkdirs()
+
+        val mediaItem = MediaItem.fromUri(inputPath)
+            .buildUpon()
+            .setMimeType(when {
+                quality == VoiceQuality.COMPACT -> MimeTypes.AUDIO_OPUS
+                quality == VoiceQuality.ULTRA -> MimeTypes.AUDIO_AAC
+                else -> MimeTypes.AUDIO_OPUS
+            })
+            .build()
+
+        val transformer = Transformer.Builder(context)
+            .addListener(listener)
+            .build()
+
+        transformer.start(mediaItem, outputPath)
+    }
+
+    private fun Bitmap.rotated(degrees: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(this, 0, 0, width, height, matrix, true)
+        if (rotated !== this) recycle()
+        return rotated
     }
 }

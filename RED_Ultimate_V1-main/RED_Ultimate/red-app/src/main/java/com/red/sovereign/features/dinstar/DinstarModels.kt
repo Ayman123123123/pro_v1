@@ -214,3 +214,12 @@ sealed class DinstarCommandResult {
     data class Error(val message: String, val code: Int? = null) : DinstarCommandResult()
     data object Loading : DinstarCommandResult()
 }
+
+data class DinstarSms(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val number: String,
+    val content: String,
+    val direction: String = "OUT",
+    val timestamp: Long = System.currentTimeMillis()
+)
+

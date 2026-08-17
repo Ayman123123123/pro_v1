@@ -15,6 +15,7 @@ kotlinJvmTarget = "21"
 kotlin = "2.3.21"
 android-gradle-plugin = "9.3.0"
 ksp = "2.3.11"
+wireVersion = "5.4.0"
 
 # Other versions
 androidx-appcompat = "1.7.1"
@@ -47,6 +48,7 @@ nanohttpd = "2.3.1"
 navigation-safe-args-gradle-plugin = "2.9.8"
 protobuf-gradle-plugin = "0.10.0"
 ktlint = "14.2.0"
+androidx-benchmark-gradle-plugin = "1.4.1"
 androidx-paging = "3.3.5"
 androidx-work = "2.11.2"
 
@@ -61,6 +63,8 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 kotlinx-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version = "2.52" }
+wire = { id = "com.squareup.wire", version.ref = "wireVersion" }
+androidx-benchmark-gradle-plugin = { id = "androidx.benchmark", version.ref = "androidx-benchmark-gradle-plugin" }
 
 [libraries]
 # Android Plugins
@@ -80,6 +84,7 @@ androidx-compose-material3-adaptive-navigation = { module = "androidx.compose.ma
 androidx-compose-material-icons-extended = "androidx.compose.material:material-icons-extended:1.7.8"
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-tooling-core = { module = "androidx.compose.ui:ui-tooling" }
+androidx-compose-ui-tooling-inspection = { module = "androidx.compose.ui:ui-tooling-inspection" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-compose-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata" }
@@ -106,7 +111,7 @@ androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version
 
 # Accompanist
 accompanist-permissions = { module = "com.google.accompanist:accompanist-permissions", version.ref = "accompanist" }
-accompanist-drawablepainter = "com.google.accompanist:accompanist-drawablepainter:0.37.3"
+accompanist-drawablepainter = { module = "com.google.accompanist:accompanist-drawablepainter", version.ref = "accompanist" }
 
 # Desugaring
 android-tools-desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
@@ -124,15 +129,32 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 ktlint = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlint" }
 ktlint-twitter-compose = "com.twitter.compose.rules:ktlint:0.0.26"
 
+# Wire protocol buffer compiler plugin
+
+
+# Lint API for custom lint rules
+lint-api = { module = "com.android.tools.lint:lint-api", version = "9.3.0" }
+lint-checks = { module = "com.android.tools.lint:lint-checks", version = "9.3.0" }
+lint-tests = { module = "com.android.tools.lint:lint-tests", version = "9.3.0" }
+intellij-core = { module = "com.jetbrains.intellij.core:core", version = "2024.1" }
+kotlin-compiler = { module = "org.jetbrains.kotlin:kotlin-compiler", version = "2.3.21" }
+
 # Android X
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
 androidx-core-ktx = "androidx.core:core-ktx:1.12.0"
+androidx-material-material = "com.google.android.material:material:1.12.0"
+androidx-test-espresso-core = "androidx.test.espresso:espresso-core:3.6.1"
+androidx-test-ext-junit = "androidx.test.ext:junit:1.2.1"
 androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "androidx-fragment" }
 androidx-fragment-testing = { module = "androidx.fragment:fragment-testing", version.ref = "androidx-fragment" }
 androidx-fragment-compose = { module = "androidx.fragment:fragment-compose", version.ref = "androidx-fragment" }
 androidx-annotation = "androidx.annotation:annotation:1.10.0"
 androidx-constraintlayout = "androidx.constraintlayout:constraintlayout:2.2.1"
+androidx-constraintlayout-compose = "androidx.constraintlayout:constraintlayout-compose:1.1.1"
+androidx-core-splashscreen = "androidx.core:core-splashscreen:1.0.1"
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version = "1.1.1" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.1.1" }
 androidx-window-window = { module = "androidx.window:window", version.ref = "androidx-window" }
 androidx-window-java = { module = "androidx.window:window-java", version.ref = "androidx-window" }
 androidx-recyclerview = "androidx.recyclerview:recyclerview:1.4.0"
@@ -222,8 +244,8 @@ signal-ringrtc = "org.signal:ringrtc-android:2.70.0"
 # Third Party
 signal-android-database-sqlcipher = "net.zetetic:sqlcipher-android:4.17.0"
 greenrobot-eventbus = "org.greenrobot:eventbus:3.0.0"
-jackson-core = "com.fasterxml.jackson.core:jackson-databind:2.12.0"
-jackson-module-kotlin = "com.fasterxml.jackson.module:jackson-module-kotlin:2.12.0"
+jackson-core = "com.fasterxml.jackson.core:jackson-databind:2.18.2"
+jackson-module-kotlin = "com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2"
 square-okhttp3 = "com.squareup.okhttp3:okhttp:5.3.2"
 square-okio = "com.squareup.okio:okio:3.17.0"
 square-leakcanary = "com.squareup.leakcanary:leakcanary-android:2.14"

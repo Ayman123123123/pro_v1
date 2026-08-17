@@ -45,7 +45,7 @@ class StickerApi(private val client: AuthorizedApiClient) {
     private suspend fun <T> fetchList(path: String): ApiResult<List<T>> = withContext(Dispatchers.IO) {
         when (val r = client.request("GET", path)) {
             is ApiResult.Success -> runCatching { json.decodeFromString<List<T>>(r.value) }
-                .let { if (it.isSuccess) ApiResult.Success(r.code, it.getOrNull()!!) else ApiResult.Error(r.code, "PARSE_ERROR") }
+                .let { if (it.isSuccess) ApiResult.Success(r.code, it.getOrNull().orEmpty()) else ApiResult.Error(r.code, "PARSE_ERROR") }
             is ApiResult.Error -> r
         }
     }

@@ -12,10 +12,8 @@
 .gradle-cache/
 
 # Nothing below is consumed by backend-server/Dockerfile
-# red-app/
 admin_dashboard/
 media-sfu/
-pstn-asterisk/
 scripts/
 docs/
 *.md

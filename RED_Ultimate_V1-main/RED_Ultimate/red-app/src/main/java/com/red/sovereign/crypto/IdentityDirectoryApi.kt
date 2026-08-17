@@ -40,11 +40,12 @@ class IdentityDirectoryApi(private val client: AuthorizedApiClient) {
         val directoryResult = client.request("GET", "/api/identity/directory/$redId")
         if (directoryResult is ApiResult.Error) return directoryResult
         return runCatching {
-            val authority = (authorityResult as ApiResult.Success).value
-            val directory = json.decodeFromString<IdentityDirectory>((directoryResult as ApiResult.Success).value)
+            val authority = (authorityResult as? ApiResult.Success)?.value
+                ?: return ApiResult.Error(500, "AUTHORITY_FETCH_FAILED")
+            val directory = json.decodeFromString<IdentityDirectory>((directoryResult as? ApiResult.Success)?.value ?: return ApiResult.Error(500, "DIRECTORY_FETCH_FAILED"))
             require(directory.redId == redId)
             directory.devices.forEach { verify(authority, directory.redId, it) }
-            ApiResult.Success(directoryResult.code, directory)
+            ApiResult.Success(200, directory)
         }.getOrElse { ApiResult.Error(498, "IDENTITY_CERTIFICATE_INVALID") }
     }
 
@@ -54,10 +55,10 @@ class IdentityDirectoryApi(private val client: AuthorizedApiClient) {
         val result = client.request("GET", "/api/identity/directory/$redId/$deviceId/prekey")
         if (result is ApiResult.Error) return result
         return runCatching {
-            val device = json.decodeFromString<RemotePreKeyDevice>((result as ApiResult.Success).value)
+            val device = json.decodeFromString<RemotePreKeyDevice>((result as? ApiResult.Success)?.value ?: return ApiResult.Error(500, "PREKEY_FETCH_FAILED"))
             require(device.deviceId == deviceId)
-            verify((authorityResult as ApiResult.Success).value, redId, device)
-            ApiResult.Success(result.code, device)
+            verify((authorityResult as? ApiResult.Success)?.value ?: return ApiResult.Error(500, "AUTHORITY_FETCH_FAILED"), redId, device)
+            ApiResult.Success(200, device)
         }.getOrElse { ApiResult.Error(498, "IDENTITY_CERTIFICATE_INVALID") }
     }
 
@@ -65,9 +66,9 @@ class IdentityDirectoryApi(private val client: AuthorizedApiClient) {
         val result = client.request("GET", "/api/identity/authority")
         if (result is ApiResult.Error) return result
         return runCatching {
-            val authority = json.decodeFromString<AuthorityKey>((result as ApiResult.Success).value)
+            val authority = json.decodeFromString<AuthorityKey>((result as? ApiResult.Success)?.value ?: return ApiResult.Error(500, "AUTHORITY_FETCH_FAILED"))
             require(authority.algorithm == "ECDSA_P256_SHA256" && authority.version == "v1")
-            ApiResult.Success(result.code, authority)
+            ApiResult.Success(200, authority)
         }.getOrElse { ApiResult.Error(498, "IDENTITY_AUTHORITY_INVALID") }
     }
 

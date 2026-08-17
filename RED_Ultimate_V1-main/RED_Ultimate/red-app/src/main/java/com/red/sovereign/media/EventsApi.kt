@@ -140,7 +140,6 @@ class EventsApi(private val client: AuthorizedApiClient) {
     suspend fun rsvp(eventId: String, status: String): ApiResult<String> {
         val body = json.encodeToString(RsvpRequest(status)).toRequestBody()
         return client.requestBody("POST", "/api/admin/content/events/$eventId/rsvp", body)
-            .let { r -> r as ApiResult<String> }
     }
 
     suspend fun checkin(eventId: String): ApiResult<String> =
@@ -149,7 +148,6 @@ class EventsApi(private val client: AuthorizedApiClient) {
     suspend fun cancel(eventId: String, reason: String): ApiResult<String> {
         val body = json.encodeToString(mapOf("reason" to reason)).toRequestBody()
         return client.requestBody("POST", "/api/admin/content/events/$eventId/cancel", body)
-            .let { r -> r as ApiResult<String> }
     }
 
     suspend fun delete(eventId: String): ApiResult<String> =

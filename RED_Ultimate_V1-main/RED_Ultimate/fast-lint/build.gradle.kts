@@ -15,8 +15,8 @@ kotlin {
 }
 
 dependencies {
-  implementation(lintLibs.intellij.core)
-  implementation(lintLibs.kotlin.compiler)
+  implementation("com.jetbrains.intellij.core:core:2024.1")
+  implementation("org.jetbrains.kotlin:kotlin-compiler:2.3.21")
   implementation(libs.google.guava.android)
 
   testImplementation(testLibs.junit.junit)

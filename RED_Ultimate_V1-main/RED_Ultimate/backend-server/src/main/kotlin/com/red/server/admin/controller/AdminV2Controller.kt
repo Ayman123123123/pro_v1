@@ -8,6 +8,8 @@ import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.searchForAdmin
+import com.red.server.auth.UserAccountResponse
+import com.red.server.auth.toResponse
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.data.redis.core.RedisTemplate
@@ -199,8 +201,10 @@ class AdminV2Controller(
 
         val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
 
+        val dtoContent = allUsers.content.map { it.toResponse(emptyList()) }
+
         return ResponseEntity.ok(mapOf(
-            "content" to allUsers.content,
+            "content" to dtoContent,
             "page" to page,
             "size" to size,
             "totalElements" to allUsers.totalElements,
@@ -218,6 +222,84 @@ class AdminV2Controller(
     fun banUser(@PathVariable userId: String, @RequestBody body: Map<String, String>, authentication: Authentication): ResponseEntity<*> {
         val updated = approval.processAction(UUID.fromString(userId), AccountStatus.BANNED, body["reason"], UUID.fromString(authentication.name))
         return ResponseEntity.ok(updated)
+    }
+
+    // ━━━━━━ Audit Log ━━━━━━
+    @GetMapping("/audit")
+    fun getAuditLog(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "50") size: Int,
+        @RequestParam(required = false) adminId: String?,
+        @RequestParam(required = false) action: String?,
+        @RequestParam(required = false) category: String?,
+        @RequestParam(required = false) severity: String?,
+        @RequestParam(required = false) startDate: String?,
+        @RequestParam(required = false) endDate: String?
+    ): ResponseEntity<Map<String, Any>> {
+        val safeSize = size.coerceIn(1, 100)
+        val pageable = PageRequest.of(page, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+
+        val spec = org.springframework.data.jpa.domain.Specification<com.red.server.admin.model.AdminAuditLog> { root, _, cb ->
+            val predicates = mutableListOf<jakarta.persistence.criteria.Predicate>()
+            adminId?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                runCatching { UUID.fromString(it) }.getOrNull()?.let { uid ->
+                    predicates.add(cb.equal(root.get<UUID>("adminId"), uid))
+                }
+            }
+            action?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                predicates.add(cb.equal(root.get<String>("action"), it))
+            }
+            category?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                predicates.add(cb.equal(root.get<String>("category"), it))
+            }
+            severity?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                predicates.add(cb.equal(root.get<String>("severity"), it))
+            }
+            startDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                runCatching { Instant.parse(it) }.getOrNull()?.let { s ->
+                    predicates.add(cb.greaterThanOrEqualTo(root.get<Instant>("createdAt"), s))
+                }
+            }
+            endDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                runCatching { Instant.parse(it) }.getOrNull()?.let { e ->
+                    predicates.add(cb.lessThanOrEqualTo(root.get<Instant>("createdAt"), e))
+                }
+            }
+            if (predicates.isEmpty()) null else cb.and(*predicates.toTypedArray())
+        }
+        val paged = auditLog.findAll(spec, pageable)
+
+        return ResponseEntity.ok(mapOf(
+            "content" to paged.content,
+            "page" to page,
+            "size" to safeSize,
+            "totalElements" to paged.totalElements,
+            "totalPages" to paged.totalPages
+        ))
+    }
+
+    @GetMapping("/security/alerts")
+    fun getSecurityAlerts(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "50") size: Int,
+        @RequestParam(required = false) severity: String?
+    ): ResponseEntity<Map<String, Any>> {
+        val safeSize = size.coerceIn(1, 100)
+        val pageable = PageRequest.of(page, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+
+        val paged = if (severity?.trim()?.isNotEmpty() == true) {
+            auditLog.findBySeverityOrderByCreatedAtDesc(severity, pageable)
+        } else {
+            auditLog.findAll(pageable)
+        }
+
+        return ResponseEntity.ok(mapOf(
+            "content" to paged.content,
+            "page" to page,
+            "size" to safeSize,
+            "totalElements" to paged.totalElements,
+            "totalPages" to paged.totalPages
+        ))
     }
 
     // ━━━━━━ User Reports ━━━━━━

@@ -108,6 +108,10 @@ class RedisManager(private val redis: StringRedisTemplate) {
         redis.opsForSet().remove("red:online", userId)
     }
 
+    fun deleteKey(key: String) {
+        redis.delete(key)
+    }
+
     fun getOnlineUsers(): Set<String> {
         val members = redis.opsForSet().members("red:online") ?: return emptySet()
         if (members.isEmpty()) return emptySet()
@@ -168,10 +172,11 @@ class RedisManager(private val redis: StringRedisTemplate) {
 
     fun checkRateLimit(key: String, maxRequests: Int, windowSeconds: Long): Boolean {
         // INCR + PEXPIRE ذرّية في سكربت واحد — لا نافذة يمكن تجاوزها بطلبين متزامنين
+        // ⚠️ StringRedisTemplate يتطلّب ARGV كـ String — Long يُسبب ClassCastException
         val current = redis.execute(
             rateLimitScript,
             listOf("red:ratelimit:$key"),
-            windowSeconds * 1000
+            (windowSeconds * 1000).toString()
         ) ?: 1L
         return current <= maxRequests
     }

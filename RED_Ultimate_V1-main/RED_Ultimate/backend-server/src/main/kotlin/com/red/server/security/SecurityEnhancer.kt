@@ -1,27 +1,29 @@
 package com.red.server.security
 
+import com.red.server.database.RedisManager
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
-/** Backend security interceptor: response headers, simple in-memory rate limiting and validators. */
+/**
+ * Backend security interceptor: response headers, Redis-backed rate limiting and validators.
+ * Rate limiting is delegated to RedisManager which uses atomic Lua scripts —
+ * survives restarts and works across multiple instances.
+ */
 @Component
 class SecurityEnhancer(
     @Value("\${red.trust-x-forwarded-for:false}")
-    private val trustXForwardedFor: Boolean = false
+    private val trustXForwardedFor: Boolean = false,
+    private val redisManager: RedisManager
 ) : HandlerInterceptor {
-    private val rateLimiter = ConcurrentHashMap<String, RateLimitEntry>()
-
-    data class RateLimitEntry(
-        var count: Int = 0,
-        var lastReset: Long = System.currentTimeMillis()
-    )
+    private val log = LoggerFactory.getLogger(SecurityEnhancer::class.java)
 
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         addSecurityHeaders(response)
@@ -49,26 +51,19 @@ class SecurityEnhancer(
     }
 
     private fun checkRateLimit(request: HttpServletRequest): Boolean {
-        val key = "rate:${getClientIp(request)}"
-        val now = System.currentTimeMillis()
-        val entry = rateLimiter.compute(key) { _, current ->
-            val value = current ?: RateLimitEntry()
-            if (now - value.lastReset >= WINDOW_MS) {
-                value.count = 1
-                value.lastReset = now
-            } else {
-                value.count += 1
-            }
-            value
-        } ?: return true
-        return entry.count <= MAX_REQUESTS_PER_MINUTE
+        val ip = getClientIp(request)
+        return redisManager.checkRateLimit("security:ip:$ip", MAX_REQUESTS_PER_MINUTE, WINDOW_SECONDS)
     }
 
     private fun validateRequest(request: HttpServletRequest) {
         val query = request.queryString.orEmpty().lowercase()
         val suspicious = listOf("<script", "javascript:", "data:", "blob:")
-        if (suspicious.any(query::contains)) {
-            // Hook for structured security audit logging.
+        val matched = suspicious.firstOrNull(query::contains)
+        if (matched != null) {
+            log.warn(
+                "XSS attempt blocked: ip={} uri={} pattern={} time={}",
+                getClientIp(request), request.requestURI, matched, Instant.now()
+            )
         }
     }
 
@@ -89,31 +84,19 @@ class SecurityEnhancer(
     }
 
     fun isIpLockedOut(ip: String): Boolean {
-        val entry = rateLimiter["lockout:$ip"] ?: return false
-        val now = System.currentTimeMillis()
-        if (now - entry.lastReset >= LOCKOUT_DURATION_MS) {
-            rateLimiter.remove("lockout:$ip")
-            return false
-        }
-        return entry.count >= MAX_FAILED_ATTEMPTS
+        // Delegate to Redis-backed rate limiter with lockout window
+        return !redisManager.checkRateLimit("lockout:$ip", MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_SECONDS)
     }
 
     fun recordFailedAttempt(ip: String) {
-        val now = System.currentTimeMillis()
-        rateLimiter.compute("lockout:$ip") { _, current ->
-            val entry = current ?: RateLimitEntry(lastReset = now)
-            if (now - entry.lastReset >= LOCKOUT_DURATION_MS) {
-                entry.count = 1
-                entry.lastReset = now
-            } else {
-                entry.count += 1
-            }
-            entry
-        }
+        // زيادة العدّاد فعلياً — checkRateLimit يزيد + يتحقق في ذرّة واحدة
+        redisManager.checkRateLimit("lockout:$ip", MAX_FAILED_ATTEMPTS, LOCKOUT_DURATION_SECONDS)
+        // تسجيل محاولات فاشلة للتدقيق الأمني
+        log.info("Failed login attempt recorded: ip={} time={}", ip, Instant.now())
     }
 
     fun clearFailedAttempts(ip: String) {
-        rateLimiter.remove("lockout:$ip")
+        redisManager.deleteKey("lockout:$ip")
     }
 
     fun hashData(data: String): String = MessageDigest.getInstance("SHA-256")
@@ -140,7 +123,7 @@ class SecurityEnhancer(
     companion object {
         const val MAX_REQUESTS_PER_MINUTE = 100
         const val MAX_FAILED_ATTEMPTS = 5
-        const val WINDOW_MS = 60_000L
-        const val LOCKOUT_DURATION_MS = 300_000L
+        const val WINDOW_SECONDS = 60L
+        const val LOCKOUT_DURATION_SECONDS = 300L
     }
 }

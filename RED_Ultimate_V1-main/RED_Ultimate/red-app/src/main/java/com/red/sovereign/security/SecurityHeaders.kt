@@ -67,13 +67,19 @@ class LoggingInterceptor(private val isDebug: Boolean = false) : Interceptor {
 
         val duration = System.currentTimeMillis() - startTime
 
-        // Log request
+        // Log request (sanitize sensitive headers)
+        val sanitizedHeaders = request.headers.names()
+            .filter { it.lowercase() !in setOf("authorization", "cookie", "x-access-token") }
+            .associateWith { request.header(it).orEmpty() }
         Log.d(TAG, "→ ${request.method} ${request.url}")
-        Log.d(TAG, "  Headers: ${request.headers}")
+        Log.d(TAG, "  Headers: $sanitizedHeaders")
 
         // Log response
         Log.d(TAG, "← ${response.code} ${response.request?.url} (${duration}ms)")
-        Log.d(TAG, "  Headers: ${response.headers}")
+        val sanitizedRespHeaders = response.headers.names()
+            .filter { it.lowercase() !in setOf("set-cookie", "authorization") }
+            .associateWith { response.header(it).orEmpty() }
+        Log.d(TAG, "  Headers: $sanitizedRespHeaders")
 
         response.body?.string()?.let { body ->
             if (body.length < 5000) {

@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.red.sovereign.ui.theme.SovereignColors
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
@@ -67,6 +70,9 @@ fun YounesConferenceOverlay() {
     var showInCallChat by remember { mutableStateOf(false) }
     var inCallMessageInput by remember { mutableStateOf("") }
     var showRecordConsent by remember { mutableStateOf(false) }
+    var selectedParticipantForAction by remember { mutableStateOf<ConferenceRuntime.Participant?>(null) }
+    var showHostActionMenu by remember { mutableStateOf(false) }
+    var hostActionAnchor by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
 
     val activeRoomId = when (state) {
         is ConferenceUiState.Connecting -> state.roomId
@@ -241,7 +247,19 @@ fun YounesConferenceOverlay() {
                                 // Remote Speakers
                                 items(speakers) { speaker ->
                                     val isSpeaking = speaker.isSpeaking
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    val isHostOrCoHost = ConferenceRuntime.participants.any { it.userId == ConferenceRuntime.myUserId && it.role in setOf("HOST", "CO_HOST") }
+                                    var anchorCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onGloballyPositioned { anchorCoords = it }
+                                        .clickable {
+                                            if (isHostOrCoHost && speaker.userId != ConferenceRuntime.myUserId) {
+                                                selectedParticipantForAction = speaker
+                                                hostActionAnchor = anchorCoords
+                                                showHostActionMenu = true
+                                            }
+                                        }
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(76.dp),
@@ -442,6 +460,64 @@ fun YounesConferenceOverlay() {
         }
     }
 
+    // Host Action Dropdown Menu
+    if (showHostActionMenu && selectedParticipantForAction != null && hostActionAnchor != null) {
+        DropdownMenu(
+            expanded = showHostActionMenu,
+            onDismissRequest = { showHostActionMenu = false; selectedParticipantForAction = null; hostActionAnchor = null },
+            anchor = hostActionAnchor!!,
+            modifier = Modifier.width(200.dp)
+        ) {
+            val target = selectedParticipantForAction!!
+            DropdownMenuItem(
+                text = { Text("منح حق التحدث", color = Color.White) },
+                onClick = {
+                    ConferenceService.sendApproveSpeaker(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("إلغاء حق التحدث", color = Color.White) },
+                onClick = {
+                    ConferenceService.sendDemoteListener(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("منح مضيف مشارك", color = Color.White) },
+                onClick = {
+                    ConferenceService.sendGrantCoHost(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("إلغاء مضيف مشارك", color = Color.White) },
+                onClick = {
+                    ConferenceService.sendRevokeCoHost(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("كتم صوت", color = Color.White) },
+                onClick = {
+                    ConferenceService.sendMuteUser(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("طرد من القاعة", color = Color(0xFFB71C1C)) },
+                onClick = {
+                    ConferenceService.sendKickUser(context, target.userId)
+                    showHostActionMenu = false
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("إلغاء", color = Color.Gray) },
+                onClick = { showHostActionMenu = false }
+            )
+        }
+    }
+
     if (showInCallChat) {
         AlertDialog(
             onDismissRequest = { showInCallChat = false },
@@ -548,15 +624,22 @@ private fun ConferenceInviteSheet(state: ConferenceUiState.Incoming) {
 @Composable
 private fun QualityIndicator(stats: NetworkStats) {
     val color = when (stats.quality) {
-        NetworkStats.Quality.EXCELLENT -> Color(0xFF2DDBA4)
+        NetworkStats.Quality.EXCELLENT -> SovereignColors.EmeraldNeon
         NetworkStats.Quality.GOOD -> Color(0xFF8BC34A)
-        NetworkStats.Quality.FAIR -> Color(0xFFFFC107)
-        NetworkStats.Quality.POOR -> Color(0xFFE53935)
-        NetworkStats.Quality.UNKNOWN -> Color.Gray
+        NetworkStats.Quality.FAIR -> SovereignColors.GoldNeon
+        NetworkStats.Quality.POOR -> SovereignColors.RubyNeon
+        NetworkStats.Quality.UNKNOWN -> SovereignColors.CyanNeon
+    }
+    val label = when (stats.quality) {
+        NetworkStats.Quality.EXCELLENT -> "ممتازة ⚡"
+        NetworkStats.Quality.GOOD -> "جيدة"
+        NetworkStats.Quality.FAIR -> "متوسطة"
+        NetworkStats.Quality.POOR -> "ضعيفة"
+        NetworkStats.Quality.UNKNOWN -> "مستقرة"
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
-        Text(stats.quality.name, color = Color.White, fontSize = 11.sp)
+        Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

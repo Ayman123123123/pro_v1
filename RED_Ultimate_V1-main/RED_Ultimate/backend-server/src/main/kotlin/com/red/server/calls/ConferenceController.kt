@@ -10,7 +10,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Service
 import org.springframework.web.bind.annotation.*
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -35,7 +34,9 @@ data class ConferenceRoomRecord(
 }
 
 @Service
-class ConferenceRoomService {
+class ConferenceRoomService(
+    private val passwordHasher: RoomPasswordHasher
+) {
     companion object { private val log = LoggerFactory.getLogger(ConferenceRoomService::class.java) }
 
     private val roomParticipants = ConcurrentHashMap<String, MutableSet<String>>()
@@ -54,7 +55,7 @@ class ConferenceRoomService {
         if (roomParticipants.containsKey(roomId)) {
             return activeRooms[roomId] ?: ConferenceRoomRecord(roomId, hostId)
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { passwordHasher.hash(it) }
         val record = ConferenceRoomRecord(
             roomId = roomId,
             hostId = hostId,
@@ -76,7 +77,7 @@ class ConferenceRoomService {
         val record = activeRooms[roomId] ?: return false
         if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        return passwordHasher.verify(password, record.passwordHash!!)
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -117,12 +118,6 @@ class ConferenceRoomService {
         activeRooms.remove(roomId)
         if (removed) log.info("Conference room {} closed", roomId)
         return removed
-    }
-
-    private fun hashPassword(password: String): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
     }
 }
 

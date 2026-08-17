@@ -4,9 +4,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 
 plugins {
-  id("com.android.library")
-  id("androidx.benchmark")
-  id("ktlint")
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.androidx.benchmark.gradle.plugin)
+    alias(libs.plugins.ktlint)
 }
 
 android {

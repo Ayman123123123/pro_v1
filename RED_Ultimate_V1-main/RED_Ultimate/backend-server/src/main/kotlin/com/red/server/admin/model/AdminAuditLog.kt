@@ -33,10 +33,10 @@ class AdminAuditLog(
     @Column(columnDefinition = "TEXT")
     var description: String? = null,
 
-    @Column(columnDefinition = "JSONB")
+    @Column(columnDefinition = "TEXT")
     var metadata: String? = null,
 
-    @Column(name = "ip_address", columnDefinition = "INET")
+    @Column(name = "ip_address", columnDefinition = "VARCHAR(45)")
     var ipAddress: String? = null,
 
     @Column(name = "user_agent", columnDefinition = "TEXT")

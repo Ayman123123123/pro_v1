@@ -41,6 +41,9 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
     private val _commandResult = MutableStateFlow<DinstarCommandResult?>(null)
     val commandResult = _commandResult.asStateFlow()
 
+    private val _smsHistory = MutableStateFlow<List<DinstarSms>>(emptyList())
+    val smsHistory = _smsHistory.asStateFlow()
+
     init {
         refreshStatus()
         connectWebSocket()
@@ -132,10 +135,18 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
             _commandResult.value = DinstarCommandResult.Loading
             val body = mapOf("text" to text, "param" to numbers.map { mapOf("number" to it) })
             when (val response = client.request("POST", "/api/admin/dinstar/sms/send", mapper.writeValueAsString(body))) {
-                is ApiResult.Success -> _commandResult.value = DinstarCommandResult.Success("تم إرسال الرسائل بنجاح")
+                is ApiResult.Success -> {
+                    _commandResult.value = DinstarCommandResult.Success("تم إرسال الرسائل بنجاح")
+                    val newItems = numbers.map { DinstarSms(number = it, content = text, direction = "OUT") }
+                    _smsHistory.value = newItems + _smsHistory.value
+                }
                 is ApiResult.Error -> _commandResult.value = DinstarCommandResult.Error(response.message ?: "فشل إرسال الرسائل")
             }
         }
+    }
+
+    fun sendSms(number: String, text: String) {
+        sendSms(text, listOf(number))
     }
 
     private fun connectWebSocket() {
@@ -149,6 +160,55 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
         }
+    }
+
+    fun resetPort(portIndex: Int) {
+        viewModelScope.launch {
+            _commandResult.value = DinstarCommandResult.Loading
+            when (val response = client.request("POST", "/api/admin/dinstar/ports/$portIndex/reset", "{}")) {
+                is ApiResult.Success -> {
+                    _commandResult.value = DinstarCommandResult.Success("تم إعادة تشغيل المنفذ $portIndex بنجاح")
+                    refreshStatus()
+                }
+                is ApiResult.Error -> _commandResult.value = DinstarCommandResult.Error(response.message ?: "فشل إعادة تشغيل المنفذ")
+            }
+        }
+    }
+
+    fun sendUssd(portIndex: Int, code: String) {
+        viewModelScope.launch {
+            _commandResult.value = DinstarCommandResult.Loading
+            val body = mapOf("code" to code)
+            when (val response = client.request("POST", "/api/admin/dinstar/ports/$portIndex/ussd", mapper.writeValueAsString(body))) {
+                is ApiResult.Success -> {
+                    _commandResult.value = DinstarCommandResult.Success("تم إرسال رمز USSD: $code. جاري الاستعلام...")
+                    delay(2500)
+                    pollUssdResult(portIndex)
+                }
+                is ApiResult.Error -> _commandResult.value = DinstarCommandResult.Error(response.message ?: "فشل إرسال كود USSD")
+            }
+        }
+    }
+
+    fun pollUssdResult(portIndex: Int) {
+        viewModelScope.launch {
+            when (val response = client.request("GET", "/api/admin/dinstar/ports/$portIndex/ussd")) {
+                is ApiResult.Success -> {
+                    runCatching {
+                        val root = mapper.readValue(response.value, Map::class.java) as Map<String, Any?>
+                        val text = root["text"]?.toString() ?: root["result"]?.toString() ?: response.value
+                        _commandResult.value = DinstarCommandResult.Success("نتيجة USSD (منفذ $portIndex):\n$text")
+                    }.onFailure {
+                        _commandResult.value = DinstarCommandResult.Success("نتيجة USSD: ${response.value}")
+                    }
+                }
+                is ApiResult.Error -> _commandResult.value = DinstarCommandResult.Error("لم يتم استلام رد USSD بعد")
+            }
+        }
+    }
+
+    fun clearCommandResult() {
+        _commandResult.value = null
     }
 
     private fun queryCdr() {

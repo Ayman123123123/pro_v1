@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor
+import java.time.Instant
 import java.util.UUID
 
 interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecificationExecutor<UserAccount> {
@@ -15,6 +16,8 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByRedId(redId: String): Boolean
     fun findAllByStatusOrderByCreatedAtAsc(status: AccountStatus): List<UserAccount>
+    fun countByStatus(status: AccountStatus): Long
+    fun countByCreatedAtAfter(createdAt: Instant): Long
     fun findAllByOrderByCreatedAtDesc(): List<UserAccount>
 }
 

@@ -1,6 +1,7 @@
 package com.red.server
 
 import com.red.server.calls.LiveStreamService
+import com.red.server.calls.RoomPasswordHasher
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.Test
  */
 class LiveStreamServiceTest {
 
-    private val service = LiveStreamService()
+    private val service = LiveStreamService(RoomPasswordHasher())
 
     @Test
     fun `starting a stream registers broadcaster and returns zero viewers`() {

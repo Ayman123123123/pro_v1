@@ -4,7 +4,7 @@ import android.content.Context
 import com.red.sovereign.core.SecureStore
 
 class TokenStore(val context: Context) {
-    private val store = SecureStore(context, "red_session")
+    val store = SecureStore(context, "red_session")
     val accessToken get() = store.get("access")
     val refreshToken get() = store.get("refresh")
     val deviceId get() = store.get("device_id")

@@ -27,7 +27,7 @@ class AdminSession(
     @Column(length = 100)
     var location: String? = null,
 
-    @Column(name = "device_info", columnDefinition = "JSONB")
+    @Column(name = "device_info", columnDefinition = "TEXT")
     var deviceInfo: String? = null,
 
     @Column(name = "started_at", nullable = false)
@@ -75,7 +75,7 @@ class FeatureFlag(
     @Column(name = "target_groups", columnDefinition = "TEXT[]")
     var targetGroups: String? = null,
 
-    @Column(columnDefinition = "JSONB")
+    @Column(columnDefinition = "TEXT")
     var config: String? = null,
 
     @Column(name = "created_by")
@@ -120,7 +120,7 @@ class UserReport(
     @Column(columnDefinition = "TEXT")
     var reason: String? = null,
 
-    @Column(columnDefinition = "JSONB")
+    @Column(columnDefinition = "TEXT")
     var evidence: String? = null,
 
     @Column(nullable = false, length = 20)

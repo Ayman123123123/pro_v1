@@ -72,6 +72,8 @@ class LocalRepository(context: Context) {
     suspend fun saveCallLog(log: CallLogEntity) = dao.insertCallLog(log)
     suspend fun saveCallLogs(logs: List<CallLogEntity>) = dao.insertCallLogs(logs)
     fun getCallLogs(): Flow<List<CallLogEntity>> = dao.getCallLogs()
+    suspend fun deleteCallLog(id: String) = dao.deleteCallLog(id)
+    suspend fun clearCallLogs() = dao.clearCallLogs()
 
     // --- Stories ---
     suspend fun saveStories(stories: List<StoryEntity>) = dao.insertStories(stories)

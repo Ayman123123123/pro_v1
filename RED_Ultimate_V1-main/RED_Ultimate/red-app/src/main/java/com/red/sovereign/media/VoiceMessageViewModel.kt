@@ -1,4 +1,4 @@
-package com.red.sovereign.media
+﻿package com.red.sovereign.media
 
 import android.app.Application
 import android.Manifest
@@ -21,6 +21,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.async
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -35,29 +38,29 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * 🎙️ YOUNES Sovereign Voice Message ViewModel — يدعم:
+ * ðŸŽ™ï¸ YOUNES Sovereign Voice Message ViewModel â€” ÙŠØ¯Ø¹Ù…:
  *
- *  **التسجيل:**
+ *  **Ø§Ù„ØªØ³Ø¬ÙŠÙ„:**
  *  - MediaRecorder + AAC + 96kbps + 44.1kHz + M4A
  *  - Press-to-record + Release-to-send
- *  - lock-to-record (السحب للأعلى للقفل)
- *  - drag-to-cancel (السحب للأسفل/اليسار)
+ *  - lock-to-record (Ø§Ù„Ø³Ø­Ø¨ Ù„Ù„Ø£Ø¹Ù„Ù‰ Ù„Ù„Ù‚ÙÙ„)
+ *  - drag-to-cancel (Ø§Ù„Ø³Ø­Ø¨ Ù„Ù„Ø£Ø³ÙÙ„/Ø§Ù„ÙŠØ³Ø§Ø±)
  *  - peak detection (live amplitude + waveform)
- *  - auto-silence trim (إزالة الصمت من البداية والنهاية)
+ *  - auto-silence trim (Ø¥Ø²Ø§Ù„Ø© Ø§Ù„ØµÙ…Øª Ù…Ù† Ø§Ù„Ø¨Ø¯Ø§ÙŠØ© ÙˆØ§Ù„Ù†Ù‡Ø§ÙŠØ©)
  *  - quality modes (Standard 96kbps / High 128kbps / Ultra 192kbps)
  *
- *  **المعاينة:**
- *  - preview قبل الإرسال (مع waveform وأزرار)
- *  - playback محلي (اختياري)
- *  - edit waveform (اختياري)
+ *  **Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©:**
+ *  - preview Ù‚Ø¨Ù„ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ (Ù…Ø¹ waveform ÙˆØ£Ø²Ø±Ø§Ø±)
+ *  - playback Ù…Ø­Ù„ÙŠ (Ø§Ø®ØªÙŠØ§Ø±ÙŠ)
+ *  - edit waveform (Ø§Ø®ØªÙŠØ§Ø±ÙŠ)
  *
- *  **التشفير:**
- *  - E2E بـ AES-256-GCM + Key في Android Keystore
+ *  **Ø§Ù„ØªØ´ÙÙŠØ±:**
+ *  - E2E Ø¨Ù€ AES-256-GCM + Key ÙÙŠ Android Keystore
  *  - SHA-256 integrity
- *  - Waveform 96 sample كـ base64
+ *  - Waveform 96 sample ÙƒÙ€ base64
  *
- *  **الإرسال:**
- *  - Multipart upload إلى MinIO
+ *  **Ø§Ù„Ø¥Ø±Ø³Ø§Ù„:**
+ *  - Multipart upload Ø¥Ù„Ù‰ MinIO
  *  - VoiceManifest JSON
  *  - Signal Protocol encryption
  */
@@ -80,14 +83,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     var elapsedSeconds by mutableIntStateOf(0); private set
     var waveform: List<Int> by mutableStateOf(emptyList()); private set
 
-    // للحفظ المؤقت قبل الإرسال (preview)
+    // Ù„Ù„Ø­ÙØ¸ Ø§Ù„Ù…Ø¤Ù‚Øª Ù‚Ø¨Ù„ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ (preview)
     var previewPath: String? by mutableStateOf(null); private set
     var previewDuration: Int by mutableIntStateOf(0); private set
     var previewWaveform: List<Int> by mutableStateOf(emptyList()); private set
 
-    // للحفظ المؤقت في حالة lock-to-record
+    // Ù„Ù„Ø­ÙØ¸ Ø§Ù„Ù…Ø¤Ù‚Øª ÙÙŠ Ø­Ø§Ù„Ø© lock-to-record
     var isLocked: Boolean by mutableStateOf(false); private set
-    // للحفظ المؤقت في حالة drag-to-cancel (نسبة الإلغاء 0..1)
+    // Ù„Ù„Ø­ÙØ¸ Ø§Ù„Ù…Ø¤Ù‚Øª ÙÙŠ Ø­Ø§Ù„Ø© drag-to-cancel (Ù†Ø³Ø¨Ø© Ø§Ù„Ø¥Ù„ØºØ§Ø¡ 0..1)
     var cancelProgress: Float by mutableStateOf(0f); private set
 
     // Quality mode (default: STANDARD)
@@ -108,7 +111,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         startRecorder()
     }
 
-    /** يبدأ تسجيلاً موجهاً لمجموعة (مسار تشفير المجموعة عند الإرسال). */
+    /** ÙŠØ¨Ø¯Ø£ ØªØ³Ø¬ÙŠÙ„Ø§Ù‹ Ù…ÙˆØ¬Ù‡Ø§Ù‹ Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (Ù…Ø³Ø§Ø± ØªØ´ÙÙŠØ± Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¹Ù†Ø¯ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„). */
     fun startForGroup(group: com.red.sovereign.groups.Group) {
         if (recorder != null || state is VoiceMessageState.Sending) return
         pendingTarget = null
@@ -216,7 +219,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * 🔒 تفعيل القفل — يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
+     * ðŸ”’ ØªÙØ¹ÙŠÙ„ Ø§Ù„Ù‚ÙÙ„ â€” ÙŠØ­ÙˆÙ‘Ù„ Ø§Ù„Ù€ Recording Ù…Ù† "Ø§Ø¶ØºØ· Ù…Ø·ÙˆÙ‘Ù„Ø§Ù‹" Ø¥Ù„Ù‰ "ÙŠØ¯ Ø­Ø±Ø©"
      */
     fun lockRecording() {
         if (state is VoiceMessageState.Recording) {
@@ -227,11 +230,11 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * 📤 تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
-     * إذا وصلت إلى CANCEL_THRESHOLD، يتم حذف التسجيل تلقائياً
+     * ðŸ“¤ ØªØ­Ø¯ÙŠØ« Ù†Ø³Ø¨Ø© Ø§Ù„Ø¥Ù„ØºØ§Ø¡ Ø¹Ù†Ø¯ Ø§Ù„Ø³Ø­Ø¨ (0 = Ù„Ø§ Ø¥Ù„ØºØ§Ø¡ØŒ 1 = Ø¥Ù„ØºØ§Ø¡ ÙƒØ§Ù…Ù„)
+     * Ø¥Ø°Ø§ ÙˆØµÙ„Øª Ø¥Ù„Ù‰ CANCEL_THRESHOLDØŒ ÙŠØªÙ… Ø­Ø°Ù Ø§Ù„ØªØ³Ø¬ÙŠÙ„ ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹
      */
     fun updateCancelProgress(progress: Float) {
-        if (isLocked) return // لا إلغاء بعد القفل
+        if (isLocked) return // Ù„Ø§ Ø¥Ù„ØºØ§Ø¡ Ø¨Ø¹Ø¯ Ø§Ù„Ù‚ÙÙ„
         cancelProgress = progress.coerceIn(0f, 1f)
         if (progress >= CANCEL_THRESHOLD && state is VoiceMessageState.Recording) {
             cancel()
@@ -239,8 +242,8 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * 📤 إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
-     * يحفظ الـ target و conversationId للإرسال اللاحق
+     * ðŸ“¤ Ø¥ÙŠÙ‚Ø§Ù Ø§Ù„ØªØ³Ø¬ÙŠÙ„ ÙˆØ§Ù„Ø¯Ø®ÙˆÙ„ ÙÙŠ ÙˆØ¶Ø¹ Ø§Ù„Ù€ preview Ù‚Ø¨Ù„ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„
+     * ÙŠØ­ÙØ¸ Ø§Ù„Ù€ target Ùˆ conversationId Ù„Ù„Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ù„Ø§Ø­Ù‚
      */
     fun stopAndPreview(targetRedId: String? = null, conversationId: String? = null) {
         val file = recordingFile ?: return
@@ -276,7 +279,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         stopAndSendPendingTarget()
     }
 
-    /** يوقف التسجيل ويرسله إلى المجموعة عبر مسار تشفير المجموعة (Sender Keys). */
+    /** ÙŠÙˆÙ‚Ù Ø§Ù„ØªØ³Ø¬ÙŠÙ„ ÙˆÙŠØ±Ø³Ù„Ù‡ Ø¥Ù„Ù‰ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¹Ø¨Ø± Ù…Ø³Ø§Ø± ØªØ´ÙÙŠØ± Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (Sender Keys). */
     fun stopAndSendToGroup(group: com.red.sovereign.groups.Group) {
         pendingTarget = null
         pendingGroup = group
@@ -291,7 +294,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         val file: File
 
         if (state is VoiceMessageState.Preview && previewPath != null) {
-            file = File(previewPath!!)
+            file = File(previewPath)
             duration = previewDuration
             recordedWaveform = previewWaveform
         } else {
@@ -363,7 +366,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * 🗑️ حذف الـ preview والعودة إلى Idle
+     * ðŸ—‘ï¸ Ø­Ø°Ù Ø§Ù„Ù€ preview ÙˆØ§Ù„Ø¹ÙˆØ¯Ø© Ø¥Ù„Ù‰ Idle
      */
     fun discardPreview() {
         previewPath?.let { File(it).delete() }
@@ -401,7 +404,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * 🎚️ Trim silence from start and end of waveform
+     * ðŸŽšï¸ Trim silence from start and end of waveform
      * Removes low-amplitude samples from the edges
      */
     private fun trimSilence(samples: List<Int>): List<Int> {
@@ -440,15 +443,16 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             when (val uploaded = media.uploadEncrypted(encrypted, "voice-note")) {
                 is ApiResult.Error -> uploaded
                 is ApiResult.Success -> {
-                    // منح الوصول لكل مستلم (فرد أو أعضاء المجموعة) — فشل عضو لا يمنع الإرسال
-                    var anyGranted = false
-                    for (grantee in targetRedIds) {
-                        if (grantee.isBlank()) continue
-                        when (media.grant(uploaded.value.objectKey, grantee)) {
-                            is ApiResult.Success -> anyGranted = true
-                            is ApiResult.Error -> Unit
-                        }
+                    // Ù…Ù†Ø­ Ø§Ù„ÙˆØµÙˆÙ„ Ù„ÙƒÙ„ Ù…Ø³ØªÙ„Ù… (ÙØ±Ø¯ Ø£Ùˆ Ø£Ø¹Ø¶Ø§Ø¡ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©) â€” ÙØ´Ù„ Ø¹Ø¶Ùˆ Ù„Ø§ ÙŠÙ…Ù†Ø¹ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„
+                                                            val grantResults = coroutineScope {
+                        targetRedIds.filter { it.isNotBlank() }.map { grantee ->
+                            async {
+                                media.grant(uploaded.value.objectKey, grantee)
+                            }
+                        }.awaitAll()
                     }
+                    val anyGranted = grantResults.any { it is ApiResult.Success }
+                    
                     if (!anyGranted) {
                         media.delete(uploaded.value.url)
                         return ApiResult.Error(null, "VOICE_GRANT_FAILED")
@@ -505,22 +509,22 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
 
     companion object {
         private const val MAX_DURATION_SECONDS = 600
-        const val CANCEL_THRESHOLD = 0.6f  // 60% سحب = إلغاء
+        const val CANCEL_THRESHOLD = 0.6f  // 60% Ø³Ø­Ø¨ = Ø¥Ù„ØºØ§Ø¡
     }
 }
 
 /**
- * 🎚️ Voice Quality Modes
- * - STANDARD: 96kbps / 44.1kHz (افتراضي، توازن بين الحجم والجودة)
- * - HIGH: 128kbps / 44.1kHz (جودة عالية)
- * - ULTRA: 192kbps / 48kHz (جودة استوديو)
- * - COMPACT: 64kbps / 22kHz (موفر للبيانات)
+ * ðŸŽšï¸ Voice Quality Modes
+ * - STANDARD: 96kbps / 44.1kHz (Ø§ÙØªØ±Ø§Ø¶ÙŠØŒ ØªÙˆØ§Ø²Ù† Ø¨ÙŠÙ† Ø§Ù„Ø­Ø¬Ù… ÙˆØ§Ù„Ø¬ÙˆØ¯Ø©)
+ * - HIGH: 128kbps / 44.1kHz (Ø¬ÙˆØ¯Ø© Ø¹Ø§Ù„ÙŠØ©)
+ * - ULTRA: 192kbps / 48kHz (Ø¬ÙˆØ¯Ø© Ø§Ø³ØªÙˆØ¯ÙŠÙˆ)
+ * - COMPACT: 64kbps / 22kHz (Ù…ÙˆÙØ± Ù„Ù„Ø¨ÙŠØ§Ù†Ø§Øª)
  */
 enum class VoiceQuality(val bitrate: Int, val sampleRate: Int, val labelAr: String) {
-    COMPACT(64_000, 22_050, "موفر (64kbps)"),
-    STANDARD(96_000, 44_100, "عادي (96kbps)"),
-    HIGH(128_000, 44_100, "عالي (128kbps)"),
-    ULTRA(192_000, 48_000, "احترافي (192kbps)")
+    COMPACT(64_000, 22_050, "Ù…ÙˆÙØ± (64kbps)"),
+    STANDARD(96_000, 44_100, "Ø¹Ø§Ø¯ÙŠ (96kbps)"),
+    HIGH(128_000, 44_100, "Ø¹Ø§Ù„ÙŠ (128kbps)"),
+    ULTRA(192_000, 48_000, "Ø§Ø­ØªØ±Ø§ÙÙŠ (192kbps)")
 }
 
 @kotlinx.serialization.Serializable
@@ -549,3 +553,11 @@ sealed interface VoiceMessageState {
     data class Sent(val durationSeconds: Int) : VoiceMessageState
     data class Error(val message: String) : VoiceMessageState
 }
+
+
+
+
+
+
+
+

@@ -29,7 +29,9 @@ data class LiveStreamRecord(
 }
 
 @Service
-class LiveStreamService {
+class LiveStreamService(
+    private val passwordHasher: RoomPasswordHasher
+) {
     companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
 
     // In-memory overlay for fast viewer counts
@@ -55,7 +57,7 @@ class LiveStreamService {
             log.info("Stream {} already active for the same broadcaster", streamId)
             return existing
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { passwordHasher.hash(it) }
         val record = LiveStreamRecord(
             streamId = streamId,
             broadcasterId = broadcasterId,
@@ -76,7 +78,7 @@ class LiveStreamService {
         val record = activeStreamRecords[streamId] ?: return false
         if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        return passwordHasher.verify(password, record.passwordHash!!)
     }
 
     fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
@@ -120,12 +122,6 @@ class LiveStreamService {
         activeStreamRecords.remove(streamId)
         if (removed) log.info("Stream {} ended", streamId)
         return removed
-    }
-
-    private fun hashPassword(password: String): String {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
     }
 
 }

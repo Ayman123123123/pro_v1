@@ -89,6 +89,8 @@ services:
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
+      - ASTERISK_WSS_URL=${ASTERISK_WSS_URL:-wss://${TURN_PUBLIC_HOST:-127.0.0.1}/ws/sip}
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-webrtc-secret}
       - BACKUP_ROOT=/backups
       # The backend is reachable externally only through our Nginx service. Nginx
       # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
@@ -181,6 +183,8 @@ services:
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
+      - "443:443/tcp"
+      - "5349:5349/tcp"
       - "45000-45050:45000-45050/udp"
     healthcheck:
       # صورة coturn لا تحوي curl — نفحص منفذ TURN عبر bash /dev/tcp
@@ -208,11 +212,17 @@ services:
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
-      - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
+      - EXTERNAL_MEDIA_ADDRESS=${TURN_PUBLIC_HOST:-}
+      - EXTERNAL_SIGNALING_ADDRESS=${TURN_PUBLIC_HOST:-}
+      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
+      - ASTERISK_WSS_PORT=8089
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-webrtc-secret}
     ports:
       - "5060:5060/udp"
+      # WebSocket SIP للتطبيق: pjsip transport-ws يُسجّل /ws على خادم HTTP المدمج
+      # (bindport=8088 في http.conf) لا على bind الخاص بالـ transport —
+      # لذلك ننشر منفذ HTTP للحاوية على 8089 للمضيف حفاظًا على عنوان WSS الثابت.
+      - "8089:8088"
       - "10000-10100:10000-10100/udp"
     expose: ["5038"]
     healthcheck:
@@ -403,6 +413,39 @@ services:
       retries: 3
     networks: ["red-net"]
 
+  # ━━━━━━━━━━━━ 11. Cloudflare Tunnel — لجعل الخدمات متاحة عبر الإنترنت ━━━━━━━━━━━━
+  # يُنشئ نفقًا آمنًا من الخادم إلى شبكة Cloudflare بدون فتح منافذ.
+  # يُمكّن الوصول عبر الإنترنت لـ API + WebSocket + WSS.
+  #
+  # الإعداد:
+  # 1. أنشئ حساب مجاني على https://dash.cloudflare.com
+  # 2. أضف نطاقك → Zero Trust → Networks → Tunnels → Create a tunnel
+  # 3. أضف Public Hostnames:
+  #    - your-domain.com → http://nginx:80
+  #    - your-domain.com/ws/sip → https://pstn-gateway:8089 (No TLS Verify)
+  # 4. انسخ الـ token وضعه في .env
+  # 5. شغّل: docker compose --profile tunnel up -d cloudflared
+  #
+  # ملاحظة: RTP media (الصوت) لا يمر عبر Tunnel — يحتاج TURN server على cloud VPS
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: red-cloudflared
+    restart: unless-stopped
+    mem_limit: 128m
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
+      # استخدم HTTP/2 بدلاً من QUIC إذا قطع CGNAT في اليمن اتصالات UDP العادية
+      # أزل التعليق إذا لاحظت انقطاعات عشوائية:
+      # - TUNNEL_TRANSPORT_PROTOCOL=http2
+    profiles: ["tunnel"]
+    networks: ["red-net"]
+
   # ━━━━━━━━━━━━ 10. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
   # Host must run chrony/ntpd. Backend health can verify clock skew via /health.
   # so NTP sync is expected at host level, not container runtime download.
@@ -420,3 +463,4 @@ volumes:
 networks:
   red-net:
     driver: bridge
+

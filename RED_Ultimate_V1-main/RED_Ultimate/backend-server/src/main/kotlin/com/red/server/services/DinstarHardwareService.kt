@@ -8,6 +8,10 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator
 import com.burgstaller.okhttp.digest.Credentials
 import com.burgstaller.okhttp.digest.DigestAuthenticator
 import com.fasterxml.jackson.databind.ObjectMapper
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.FormBody
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -33,8 +37,8 @@ import javax.net.ssl.X509TrustManager
 @Service
 class DinstarHardwareService(
     @Value("\${red.dinstar.ip}") private val configuredIp: String,
-    @Value("\${red.dinstar.port:443}") private val configuredPort: Int,
-    @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
+    @Value("\${red.dinstar.port:80}") private val configuredPort: Int,
+    @Value("\${red.dinstar.scheme:http}") private val configuredScheme: String,
     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
     private val mapper: ObjectMapper,
@@ -60,25 +64,25 @@ class DinstarHardwareService(
 
     /**
      * OkHttp client configured with:
-     * 1. HTTP Digest + Basic auth (Dinstar New API ≥1102 uses Digest; older firmware uses Basic)
-     * 2. Auth caching to avoid re-challenging on every request
-     * 3. Trust-all SSL for Dinstar's self-signed certificate on private management network
+     * 1. CookieJar for web UI session (form login → devckie cookie)
+     * 2. Trust-all SSL for Dinstar's self-signed certificate on private management network
      */
     private val client: OkHttpClient by lazy { buildOkHttpClient() }
 
+    /** In-memory cookie store for the web UI session (devckie). */
+    private val cookieStore = ConcurrentHashMap<HttpUrl, List<Cookie>>()
+
     private fun buildOkHttpClient(): OkHttpClient {
-        // --- Digest + Basic authenticator with caching ---
-        val credentials = Credentials(gatewayUsername, gatewayPassword)
-        val digestAuthenticator = DigestAuthenticator(credentials)
-        val basicAuthenticator = BasicAuthenticator(credentials)
+        // --- CookieJar for web UI authentication ---
+        val cookieJar = object : CookieJar {
+            override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+                if (cookies.isNotEmpty()) cookieStore[url] = cookies
+            }
 
-        // DispatchingAuthenticator handles both schemes; registered in lowercase
-        val dispatchingAuthenticator = DispatchingAuthenticator.Builder()
-            .with("digest", digestAuthenticator)
-            .with("basic", basicAuthenticator)
-            .build()
-
-        val authCache = ConcurrentHashMap<String, CachingAuthenticator>()
+            override fun loadForRequest(url: HttpUrl): List<Cookie> {
+                return cookieStore[url] ?: emptyList()
+            }
+        }
 
         // --- SSL: trust all certificates (Dinstar uses self-signed certs on private LAN) ---
         val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
@@ -90,9 +94,23 @@ class DinstarHardwareService(
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, trustAllCerts, SecureRandom())
 
+        // واجهة UC2000 تطالب Digest (الإصدارات الأقدم Basic). كان العميل
+        // يُبنى بلا أي مُصادِق فيرتد كل استدعاء (USSD/SMS/CDR) بـ 401
+        // رغم صحة الاعتماد — يُضاف هنا نفس كومة المصادقة الناجحة
+        // المستخدمة في DinstarConnectionFactory.
+        val credentials = Credentials(gatewayUsername, gatewayPassword)
+        val dispatching = DispatchingAuthenticator.Builder()
+            .with("digest", DigestAuthenticator(credentials))
+            .with("basic", BasicAuthenticator(credentials))
+            .build()
+        val authCache = ConcurrentHashMap<String, CachingAuthenticator>()
+
         return OkHttpClient.Builder()
-            .authenticator(CachingAuthenticatorDecorator(dispatchingAuthenticator, authCache))
+            .cookieJar(cookieJar)
+            .authenticator(CachingAuthenticatorDecorator(dispatching, authCache))
             .addInterceptor(AuthenticationCacheInterceptor(authCache))
+            .followRedirects(false)
+            .followSslRedirects(false)
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }  // Dinstar cert won't match IP hostname
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -146,7 +164,10 @@ class DinstarHardwareService(
     fun getHardwareStatus(): List<Map<String, Any?>> {
         val info = queryPortInfo(activeHost)
         registerGateway(info.size)
-        return info.mapNotNull(::normalizePort).also(::persistPorts)
+        // يُستخدم المعرف الفعلي من الجدول: الأسطول يخزّن البوابة بمعرف
+        // مشتق من الرقم التسلسلي، فالمعرف المحسوب من العنوان هنا قد لا
+        // يوجد في الجدول ويكسر قيد المفتاح الخارجي عند كتابة اللقطات.
+        return info.mapNotNull(::normalizePort).also { persistPorts(it, resolveGatewayId()) }
     }
 
     /**
@@ -240,7 +261,15 @@ class DinstarHardwareService(
         require(text.toByteArray(Charsets.UTF_8).size <= MAX_SMS_TEXT_BYTES) {
             "نص الرسالة يتجاوز $MAX_SMS_TEXT_BYTES بايت"
         }
-        require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
+        // يقبل الترميز بصيغتيه: الداخلية (GSM7BIT/UCS2) وصيغة البوابة
+        // (gsm-7bit/unicode) التي ترسلها الواجهات — كانت الواجهة ترسل
+        // 'unicode' فتُرفض بحجة «Encoding must be GSM7BIT or UCS2».
+        val normalizedEncoding = when (encoding.uppercase()) {
+            "GSM7BIT", "GSM-7BIT" -> "GSM7BIT"
+            "UCS2", "UNICODE" -> "UCS2"
+            else -> throw IllegalArgumentException("Encoding must be GSM7BIT, UCS2, gsm-7bit or unicode")
+        }
+        require(normalizedEncoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
 
         val body = mutableMapOf<String, Any>(
             "text" to text,
@@ -249,7 +278,7 @@ class DinstarHardwareService(
             // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode':
             // رسالة ASCII تُرسَل UCS2 فتهبط سعتها من 160 حرفًا إلى 70
             // وتتضاعف أجزاؤها وتكلفتها.
-            "encoding" to wireEncoding(encoding),
+            "encoding" to wireEncoding(normalizedEncoding),
             "request_status_report" to true
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
@@ -325,10 +354,9 @@ class DinstarHardwareService(
 
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
-        registerGateway(0)
         jdbc.update(
             "INSERT INTO gateway_operations(id,gateway_id,actor_id,operation,target_port,status,details_json,completed_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",
-            UUID.randomUUID(), gatewayId, actorId, operation, port, status, mapper.writeValueAsString(details)
+            UUID.randomUUID(), resolveGatewayId(), actorId, operation, port, status, mapper.writeValueAsString(details)
         )
     }
 
@@ -336,14 +364,71 @@ class DinstarHardwareService(
         queryPortInfo(host, portRange)
 
     private fun queryPortInfo(host: String, ports: IntRange): List<Map<String, Any?>> {
-        val response = getJson(
-            "/api/get_port_info",
-            mapOf("port" to ports.joinToString(","), "info_type" to "type,imei,imsi,iccid,number,reg,slot,callstate,signal,gprs"),
-            host
-        )
-        require(apiSuccess(response)) { "تعذّر استعلام المنافذ: ${apiErrorMessage(response)}" }
-        @Suppress("UNCHECKED_CAST")
-        return response["info"] as? List<Map<String, Any?>> ?: emptyList()
+        // الاكتشاف وفحص الحالة كانا يعتمدان مسار جلسة الويب
+        // (تسجيل دخول النموذج + WebGetPortInfoAll) الذي ترفضه بعض
+        // إصدارات البرنامج الثابت — نستخدم عميل HTTP API الموثّق
+        // (Digest) نفسه الذي يعمل عبر الأسطول.
+        val client = connections.clientFor(host, configuredPort, configuredScheme)
+        return runCatching { client.queryPorts(ports.last + 1).ports }
+            .recoverCatching { client.queryPorts(DinstarModelProfile.UC2000_VE_4G.portRange.last + 1).ports }
+            .getOrElse { throw IllegalStateException("No authenticated UC2000 get_port_info response on $host", it) }
+    }
+
+    /**
+     * Establish web UI session by posting login form to /goform/IADIdentityAuth.
+     * The gateway responds with 302 and sets a devckie cookie.
+     * Subsequent requests to /WebGetPortInfoAll will include this cookie automatically.
+     */
+    private fun ensureWebSession(host: String) {
+        val url = "$configuredScheme://$host:$configuredPort/goform/IADIdentityAuth".toHttpUrl()
+        val formBody = FormBody.Builder()
+            .add("username", gatewayUsername)
+            .add("password", gatewayPassword)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .post(formBody)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful && response.code != 302) {
+                throw IllegalStateException("DINSTAR web login failed: HTTP ${response.code} on $url")
+            }
+            val location = response.headers["Location"] ?: ""
+            if (!location.contains("enFrame", true) && !location.contains("enMain", true)) {
+                log.warn("DINSTAR web login returned {} — session may not be established (Location: {})", response.code, location)
+            }
+        }
+    }
+
+    /** GET /WebGetPortInfoAll — returns raw port array (not wrapped in "info"). */
+    private fun getJsonArray(path: String, host: String): List<Map<String, Any?>> {
+        val builder = baseUrl(host).newBuilder().addPathSegments(path.removePrefix("/"))
+        val request = Request.Builder().url(builder.build()).get()
+            .header("Accept", "application/json")
+            .build()
+
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IllegalStateException("DINSTAR HTTP ${response.code} on ${request.url.encodedPath}")
+            }
+            @Suppress("UNCHECKED_CAST")
+            val body = requireNotNull(response.body) { "DINSTAR returned empty body" }
+            mapper.readValue(body.bytes(), List::class.java) as List<Map<String, Any?>>
+        }
+    }
+
+    private fun parsePortInfoResponse(raw: List<Map<String, Any?>>, ports: IntRange): List<Map<String, Any?>> {
+        return raw.filter { it["port"] != null }
+            .mapNotNull { entry ->
+                val portStr = entry["port"]?.toString() ?: return@mapNotNull null
+                if (portStr == "Total") return@mapNotNull null
+                val portNum = portStr.toIntOrNull() ?: return@mapNotNull null
+                if (portNum !in ports) return@mapNotNull null
+                entry
+            }
     }
 
     /**
@@ -474,6 +559,26 @@ class DinstarHardwareService(
                capabilities_json=EXCLUDED.capabilities_json,last_seen_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP""",
             gatewayId, "YOUNES DINSTAR Sanaa", "DINSTAR", detectedModel.modelId, activeHost, configuredScheme, configuredPort, capabilities
         )
+    }
+
+    /**
+     * المعرف الفعلي للبوابة في جدول telecom_gateways.
+     *
+     * الأسطول يحفظ البوابة بمعرف مشتق من الرقم التسلسلي
+     * (DINSTAR:SN:...) بينما هذا الكائن يحسب معرفًا من العنوان —
+     * فكانت الكتابات به تكسر قيد المفتاح الخارجي. تُقرأ البوابة
+     * بالعنوان المطابق، ويُعاد التسجيل إن غابت ثم تُعاد القراءة.
+     */
+    private fun resolveGatewayId(): UUID {
+        jdbc.queryForObject(
+            "SELECT id FROM telecom_gateways WHERE host = ? AND api_port = ?",
+            UUID::class.java, activeHost, configuredPort
+        )?.let { return it }
+        registerGateway(0)
+        return jdbc.queryForObject(
+            "SELECT id FROM telecom_gateways WHERE host = ? AND api_port = ?",
+            UUID::class.java, activeHost, configuredPort
+        ) ?: gatewayId
     }
 
     private fun persistPorts(ports: List<Map<String, Any?>>, targetGatewayId: UUID = gatewayId) {

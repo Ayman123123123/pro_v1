@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
@@ -16,7 +18,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val handler = ConferenceWebSocketHandler(objectMapper)
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+        whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
+    }
+    private val conferenceRoomService: com.red.server.calls.ConferenceRoomService = mock()
+    private val handler = ConferenceWebSocketHandler(objectMapper, accessGuard, conferenceRoomService)
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()

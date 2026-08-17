@@ -143,11 +143,15 @@ class DinstarLoadBalancer(
      * الاختيار الأمثل عبر الأسطول كله.
      *
      * @param targetNumber رقم الوجهة — يُحسّن الاختيار بمطابقة المشغل.
+     * @param forcedPort منفذ بعينه يطلبه العميل (اختياري). يُحصر الترشيح فيه
+     *        مع بقاء شروط الصلاحية (تسجيل/إشارة/انشغال) مطبقة — طلب منفذ
+     *        ميت يُرجع null لا منفذًا بديلًا، كي لا تخرج المكالمة من شريحة
+     *        غير التي اختارها المستخدم عمدًا.
      * @return المنفذ المختار، أو `null` إذا لم يوجد أي منفذ صالح.
      *         `null` هنا مقصودة: إخبار المتصل بعدم توفر مسار أصدق من
      *         إعادة منفذ عشوائي ستفشل عليه المكالمة.
      */
-    fun selectPort(targetNumber: String? = null): PortSelection? {
+    fun selectPort(targetNumber: String? = null, forcedPort: Int? = null): PortSelection? {
         val gateways = fleet.routableGateways()
         val targetOperator = targetNumber?.let { classifyNumber(it) }
         val rr = nextSlot.getAndIncrement()
@@ -183,13 +187,18 @@ class DinstarLoadBalancer(
 
             for (port in ports) {
                 val index = (port["index"] as? Number)?.toInt() ?: continue
+                // حصر الترشيح على المنفذ المطلوب صراحةً إن وُجد
+                if (forcedPort != null && index != forcedPort) continue
                 val status = port["status"]?.toString()
                 val callState = port["callState"]?.toString()
                 val usable = port["signalUsable"] as? Boolean ?: false
                 val dbm = (port["signalDbm"] as? Number)?.toInt()
 
-                // شرط أول: مسجّلة على الشبكة
-                if (!status.equals("REGISTERED", ignoreCase = true)) {
+                // شرط أول: مسجّلة على الشبكة.
+                // القيمة الخام من الجهاز قد تأتي "REGISTER_OK" (UC2000 عبر
+                // get_port_info) أو "REGISTERED"/"Mobile Registered" (نُسخ
+                // أخرى) — كلها تعني مسجّلًا فيُقبل.
+                if (!status.registeredOnNetwork()) {
                     recordDecision(gw?.id, index, targetNumber, null, 0.0, "not registered", "REJECTED_OFFLINE")
                     continue
                 }
@@ -263,6 +272,21 @@ class DinstarLoadBalancer(
      * إعادة التسمية في 2021، والمقارنة النصية الخام كانت تفوّت ذلك
      * فتُهدر ميزة المكالمة داخل الشبكة.
      */
+    /**
+     * هل حالة المنفذ تعني «مسجّل على الشبكة»؟
+     *
+     * صيغ الحالة تختلف بين إصدارات UC2000:
+     * - "REGISTER_OK" — الصيغة الخام من get_port_info في هذا الجهاز.
+     * - "REGISTERED" / "Mobile Registered" — نُسخ أخرى.
+     * أي منهما يستحق المرور إلى الترشيح.
+     */
+    private fun String?.registeredOnNetwork(): Boolean {
+        val s = this?.trim().orEmpty()
+        return s.equals("REGISTERED", ignoreCase = true) ||
+            s.equals("REGISTER_OK", ignoreCase = true) ||
+            s.equals("Mobile Registered", ignoreCase = true)
+    }
+
     private fun operatorsMatch(portOperator: String?, target: YemenOperatorInfo): Boolean {
         if (portOperator.isNullOrBlank()) return false
         // شبكة غير محمولة لا تُطابَق: لا توجد شريحة عليها في البوابة
@@ -271,8 +295,7 @@ class DinstarLoadBalancer(
         return normalized == target.apiName
     }
 
-    private fun normalizeOperator(name: String): String = when {
-        name.contains("Sabafon", true) || name.contains("سبأفون") -> "Sabafon"
+    private fun normalizeOperator(name: String): String = when {        name.contains("Sabafon", true) || name.contains("سبأفون") -> "Sabafon"
         name.contains("MTN", true) || name.contains("YOU", true) || name.contains("يو") -> "YOU"
         name.contains("Yemen", true) && name.contains("Mobile", true) -> "YemenMobile"
         name.contains("يمن موبايل") -> "YemenMobile"
@@ -281,8 +304,7 @@ class DinstarLoadBalancer(
     }
 
     /** تحرير المنفذ بعد انتهاء المكالمة — بحدّ أدنى صفر. */
-    fun releasePort(gatewayId: UUID?, port: Int) {
-        portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
+    fun releasePort(gatewayId: UUID?, port: Int) {        portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
             // بدون هذا الحدّ كان التحرير المزدوج يدفع العدّاد إلى السالب
             // فتبدو الشريحة أبدًا «الأقل استخدامًا» وتُختار دائمًا.
             if (current > 0) current - 1 else 0

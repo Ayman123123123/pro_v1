@@ -22,8 +22,16 @@ class PstnCallController(
     private val loadBalancer: DinstarLoadBalancer
 ) {
     @PostMapping("/calls")
-    fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<PstnCallResponse> {
-        val result = calls.dial(UUID.fromString(authentication.name), request.number)
+    fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<Any> {
+        val userId = UUID.fromString(authentication.name)
+        val user = calls.getUser(userId)
+        if (!user.pstnEnabled || user.pstnDailyLimit <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PSTN_NOT_ENABLED"))
+        }
+        if (calls.hasActiveCall(userId)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to "ALREADY_IN_PSTN_CALL"))
+        }
+        val result = calls.dial(userId, request.number, request.slotIndex)
         return ResponseEntity.ok(result)
     }
 
@@ -33,12 +41,17 @@ class PstnCallController(
      * ⚠️ الأمان: لا يُحرَّر إلا المنفذ المرتبط فعلياً بمكالمة المستخدم نفسه
      * (يُربط في لحظة النداء). منعاً لأي مستخدم من تحرير منافذ الغير أو
      * إعادة ضبط عدّادات الاستخدام عبر الأسطول.
+     * يتم التحقق من callId لمنع التلاعب.
      */
     @PostMapping("/calls/{callId}/hangup")
     fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?, authentication: Authentication): ResponseEntity<Map<String, Any>> {
         val userId = UUID.fromString(authentication.name)
-        val bound = calls.resolveActivePort(userId)
+        val bound = calls.resolveActiveCall(userId)
             ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "NO_ACTIVE_PSTN_CALL"))
+
+        if (bound.first != callId) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "CALL_ID_MISMATCH"))
+        }
 
         val requestedPort = body?.get("port") ?: -1
         if (requestedPort >= 0 && requestedPort != bound.second) {
@@ -46,18 +59,25 @@ class PstnCallController(
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PORT_MISMATCH"))
         }
 
-        loadBalancer.releasePort(bound.first, bound.second)
+        loadBalancer.releasePort(bound.third, bound.second)
         calls.clearActive(userId)
         return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to bound.second))
     }
 
     /**
-     * حالة المكالمات النشطة عبر PSTN
+     * حالة المكالمات النشطة عبر PSTN للمستخدم الحالي.
+     * يعيد: مفعّل/معطل، الحد اليومي، المستهلك اليوم، مكالمة نشطة أم لا، المسار.
      */
     @GetMapping("/status")
-    fun status(): ResponseEntity<Map<String, Any>> {
-        return ResponseEntity.ok(mapOf("active" to true, "route" to "Asterisk→PJSIP→DINSTAR"))
+    fun status(authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        return ResponseEntity.ok(calls.getPstnStatus(userId))
     }
+
 }
 
-data class PstnCallRequest(val number: String)
+/**
+ * @param slotIndex منفذ/شريحة محددة يطلبها العميل (اختياري).
+ *                 null = الاختيار التلقائي الذكي عبر موزّع الأحمال.
+ */
+data class PstnCallRequest(val number: String, val slotIndex: Int? = null)

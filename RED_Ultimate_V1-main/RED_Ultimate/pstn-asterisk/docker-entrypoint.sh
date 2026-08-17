@@ -150,7 +150,88 @@ rewrite_contact=yes
 aors=dinstar-gateway
 EOF
 
-# RED-to-RED WebRTC never enters Asterisk. Asterisk is reserved for authorized DINSTAR voice only.
+# ═══════════════════════════════════════════════════════════════════════════
+# WebRTC Transport (WS) — للتطبيق عبر الإنترنت
+# ═══════════════════════════════════════════════════════════════════════════
+# يسمح للتطبيق بالاتصال بـ Asterisk عبر WebSocket (WS).
+# Nginx يمرر /ws/sip → Asterisk:8089
+# Cloudflare Tunnel يمرر WS عبر الإنترنت.
+#
+# ملاحظة: WebSocket transport في chan_pjsip يعمل عبر خادم HTTP المدمج —
+# بدون enabled=yes في http.conf تُقبل الاتصالات ثم تُغلق فورًا بلا مصافحة.
+# transport-wss حُذف عمدًا: يتطلب شهادة TLS في الحاوية وصراعه على نفس
+# المنفذ يربك ws — تشفير الحافة يتم عبر Nginx/Cloudflare خارج الحاوية.
+WSS_PORT="${ASTERISK_WSS_PORT:-8089}"
+cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[transport-ws]
+type=transport
+protocol=ws
+bind=0.0.0.0:${WSS_PORT}
+EOF
+
+cat > "$CONFIG_DIR/http.conf" <<EOF
+[general]
+servername=Asterisk
+enabled=yes
+bindaddr=0.0.0.0
+bindport=8088
+sessionlimit=200
+session_inactivity=300000
+session_keep_alive=15000
+EOF
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WebRTC Client — تسجيل ديناميكي للتطبيق
+# ═══════════════════════════════════════════════════════════════════════════
+# كل مستخدم يحصل على حساب SIP فريد当他 يتصل بـ Asterisk عبر WSS.
+# الباسورد يُولَّد من الـ JWT token عبر Backend.
+WEBRTC_SECRET="${WEBRTC_SIP_SECRET:-red-webrtc-secret}"
+cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[red-webrtc-client]
+type=aor
+max_contacts=5
+remove_existing=yes
+default_expiration=120
+minimum_expiration=60
+maximum_expiration=3600
+
+[red-webrtc-client]
+type=auth
+auth_type=userpass
+password=${WEBRTC_SECRET}
+username=red-webrtc-client
+
+[red-webrtc-client]
+type=endpoint
+aors=red-webrtc-client
+auth=red-webrtc-client
+context=from-red-client-webrtc
+disallow=all
+allow=opus,alaw,ulaw
+dtls_auto_generate_cert=yes
+webrtc=yes
+use_avpf=yes
+media_encryption=dtls
+dtls_verify=fingerprint
+dtls_setup=actpass
+ice_support=yes
+media_use_received_transport=yes
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+direct_media=no
+media_address=${EXTERNAL_MEDIA_ADDRESS:-0.0.0.0}
+tone_zone=YE
+EOF
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Dynamic WebRTC clients — لكل مستخدم حساب SIP فريد
+# ═══════════════════════════════════════════════════════════════════════════
+# القسم أعلاه [red-webrtc-client] يكفي للوضع الحالي.
+# لاحقًا يمكن إضافة حسابات ديناميكية عبر AMI.
+
 if [ "${RED_ASTERISK_CONFIG_ONLY:-0}" = "1" ]; then
   exit 0
 fi

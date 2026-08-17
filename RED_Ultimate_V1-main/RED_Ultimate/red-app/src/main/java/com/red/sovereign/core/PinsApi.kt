@@ -36,7 +36,7 @@ class PinsApi(private val client: AuthorizedApiClient) {
     suspend fun listForGroup(groupId: String): ApiResult<List<PinDto>> = withContext(Dispatchers.IO) {
         when (val r = client.request("GET", "/api/messages/pins?groupId=$groupId")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<PinListResponse>(r.value).pins }
-                .let { if (it.isSuccess) ApiResult.Success(r.code, it.getOrNull()!!) else ApiResult.Error(r.code, "PARSE_ERROR") }
+                .let { if (it.isSuccess) ApiResult.Success(r.code, it.getOrNull().orEmpty()) else ApiResult.Error(r.code, "PARSE_ERROR") }
             is ApiResult.Error -> r
         }
     }

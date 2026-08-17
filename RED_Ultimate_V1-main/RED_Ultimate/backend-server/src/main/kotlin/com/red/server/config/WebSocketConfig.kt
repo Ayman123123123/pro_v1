@@ -22,6 +22,7 @@ class WebSocketConfig(
     private val redMasterHandler: com.red.server.websocket.RedMasterHandler,
     private val adminLogHandler: com.red.server.websocket.AdminLogHandler,
     private val callWebSocketHandler: com.red.server.websocket.CallWebSocketHandler,
+    private val dinstarWebSocketHandler: com.red.server.websocket.DinstarWebSocketHandler,
     private val typingHandler: com.red.server.websocket.TypingHandler,
     private val conferenceWebSocketHandler: com.red.server.websocket.ConferenceWebSocketHandler,
     private val liveStreamWebSocketHandler: com.red.server.websocket.LiveStreamWebSocketHandler,
@@ -57,6 +58,11 @@ class WebSocketConfig(
 
         // ─── WebSocket الكتابة — "يكتب الآن" ───
         registry.addHandler(typingHandler, "/ws/typing")
+            .addInterceptors(jwtHandshakeInterceptor)
+            .setAllowedOriginPatterns(*allowedOrigins.toTypedArray())
+
+        // ─── WebSocket DINSTAR — أحداث البوابات (منافذ/CDR/SMS/USSD) ───
+        registry.addHandler(dinstarWebSocketHandler, "/ws/dinstar")
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*allowedOrigins.toTypedArray())
     }

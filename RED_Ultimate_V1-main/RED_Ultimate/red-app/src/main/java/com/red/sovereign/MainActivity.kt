@@ -10,7 +10,10 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -105,15 +108,23 @@ class MainActivity : FragmentActivity() {
                                 // ملاحظة: لا نسجّل YounesConnectionService القديم — TelegramBridge (CallsManager)
                                 // يُسجَّل تلقائياً من YounesCallService.onCreate. تسجيل الاثنين معاً يخلق
                                 // PhoneAccount مزدوجاً → مكالمات نظام عالقة/مكررة على بعض الأجهزة.
-                                runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivity) }
-                                // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
-                                val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
-                                try {
-                                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
-                                } catch (_: Exception) {
-                                    try { startService(routerIntent) } catch (_: Exception) {}
-                                }
-                            } else {
+runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivity) }
+            // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
+            val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
+            } catch (_: Exception) {
+                try { startService(routerIntent) } catch (_: Exception) {}
+            }
+            // تحديث صلاحيات PSTN عند استئناف التطبيق
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) {
+                    if (authViewModel.state is AuthState.Authenticated) {
+                        authViewModel.refreshPstnEntitlement()
+                    }
+                }
+            })
+        } else {
                                 com.red.sovereign.core.RedConnectionService.stop(this@MainActivity)
                                 com.red.sovereign.calls.YounesCallService.stop(this@MainActivity)
                                 stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))

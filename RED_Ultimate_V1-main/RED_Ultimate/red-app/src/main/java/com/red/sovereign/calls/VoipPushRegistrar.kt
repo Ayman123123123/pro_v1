@@ -5,6 +5,7 @@ import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -14,6 +15,8 @@ import org.json.JSONObject
  * token already stored and still POST it when present.
  */
 object VoipPushRegistrar {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     fun rememberToken(context: Context, token: String) {
         if (token.isBlank()) return
         TokenStore(context).saveFcmToken(token)
@@ -25,7 +28,7 @@ object VoipPushRegistrar {
         val stored = tokens.fcmToken?.takeIf { it.isNotBlank() } ?: discoverFirebaseToken() ?: return
         tokens.saveFcmToken(stored)
         if (tokens.accessToken.isNullOrBlank()) return
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             val body = JSONObject()
                 .put("token", stored)
                 .put("platform", "ANDROID")

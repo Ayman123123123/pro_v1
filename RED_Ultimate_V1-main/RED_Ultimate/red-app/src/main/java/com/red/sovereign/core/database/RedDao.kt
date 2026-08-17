@@ -69,6 +69,12 @@ interface RedDao {
     @Query("SELECT * FROM call_logs ORDER BY timestamp DESC")
     fun getCallLogs(): Flow<List<CallLogEntity>>
 
+    @Query("DELETE FROM call_logs WHERE id = :id")
+    suspend fun deleteCallLog(id: String)
+
+    @Query("DELETE FROM call_logs")
+    suspend fun clearCallLogs()
+
     // --- Stories ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStories(stories: List<StoryEntity>)

@@ -15,5 +15,5 @@ RUN sed -i 's/\r$//' /usr/local/bin/red-asterisk-entrypoint /etc/asterisk/extens
     && rm -f /etc/asterisk/manager.conf /etc/asterisk/pjsip.conf \
     && rm -f /etc/asterisk/extensions.ael /etc/asterisk/extensions.lua /etc/asterisk/extensions_minivm.conf
 
-EXPOSE 5060/udp 5038 8088 10000-10100/udp
+EXPOSE 5060/udp 5038 8088 8089 10000-10100/udp
 ENTRYPOINT ["/usr/local/bin/red-asterisk-entrypoint"]

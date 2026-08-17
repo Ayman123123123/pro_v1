@@ -15,11 +15,11 @@ kotlin {
 }
 
 dependencies {
-  compileOnly(lintLibs.lint.api)
-  compileOnly(lintLibs.lint.checks)
+  compileOnly(libs.lint.api)
+  compileOnly(libs.lint.checks)
 
-  testImplementation(lintLibs.lint.tests)
-  testImplementation(lintLibs.lint.api)
+  testImplementation(libs.lint.tests)
+  testImplementation(libs.lint.api)
   testImplementation(testLibs.junit.junit)
 }
 

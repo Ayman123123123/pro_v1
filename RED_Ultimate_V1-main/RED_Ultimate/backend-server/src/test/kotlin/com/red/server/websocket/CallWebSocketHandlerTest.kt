@@ -15,6 +15,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.web.socket.TextMessage
@@ -28,7 +29,10 @@ class CallWebSocketHandlerTest {
     private val history: CallHistoryService = mock()
     private val notifications: NotificationService = mock()
     private val activeCalls: ActiveCallRegistry = mock()
-    private val handler = CallWebSocketHandler(objectMapper, history, notifications, activeCalls)
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+        whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
+    }
+    private val handler = CallWebSocketHandler(objectMapper, history, notifications, activeCalls, accessGuard)
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()

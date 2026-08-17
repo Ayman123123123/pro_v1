@@ -2,6 +2,7 @@ package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
+import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
@@ -19,13 +20,26 @@ import java.util.concurrent.ConcurrentHashMap
  * For larger conferences (>4) the protocol proxies to media-sfu; Android speaks same shape.
  */
 @Component
-class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextWebSocketHandler() {
+class ConferenceWebSocketHandler(
+    private val objectMapper: ObjectMapper,
+    private val accessGuard: ApprovedDeviceSessionGuard,
+    private val conferenceRoomService: com.red.server.calls.ConferenceRoomService
+) : TextWebSocketHandler() {
     private val rooms = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
     private val sessionToRoom = ConcurrentHashMap<String, String>()
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
     private val roomHosts = ConcurrentHashMap<String, String>() // roomId -> host userId
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+        // Revalidate device approval on every frame
+        if (!accessGuard.isStillAuthorized(
+                session.attributes["accountId"] as? String,
+                session.attributes["deviceId"] as? String
+            )
+        ) {
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "roomId is required" }
@@ -43,6 +57,21 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     }
 
     private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
+        // Enforce private room access
+        val record = conferenceRoomService.getRoom(signal.roomId)
+        if (record != null && record.isPrivate) {
+            val providedPassword = signal.payload["password"] as? String
+            if (!conferenceRoomService.verifyPassword(signal.roomId, providedPassword)) {
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                    "type" to "ERROR",
+                    "code" to "FORBIDDEN",
+                    "message" to "Private conference - password required"
+                ))))
+                session.close(CloseStatus.NOT_ACCEPTABLE)
+                return
+            }
+        }
+
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
         val roles = roomRoles.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
         synchronized(room) { room.add(session) }

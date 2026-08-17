@@ -47,7 +47,7 @@ class PstnCallServiceTest {
         assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
-        verify(loadBalancer, never()).selectPort(any())
-        verify(pstn, never()).dialGsm(any(), any())
+        verify(loadBalancer, never()).selectPort(any(), any())
+        verify(pstn, never()).dialGsm(any(), any(), any())
     }
 }

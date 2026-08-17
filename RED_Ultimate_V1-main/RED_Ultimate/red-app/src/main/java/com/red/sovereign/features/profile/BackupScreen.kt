@@ -50,17 +50,18 @@ fun BackupScreen(onBack: () -> Unit = {}) {
 
         if (lastBackup != null) {
             Spacer(modifier = Modifier.height(16.dp))
+            val backup = lastBackup!!
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("آخر نسخة احتياطية", style = MaterialTheme.typography.labelMedium)
                     Text(
-                        "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(lastBackup!!.createdAt))}",
+                        "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(backup.createdAt))}",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("الحجم: ${lastBackup!!.sizeBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
-                    Text("SHA-256: ${lastBackup!!.checksum.take(16)}...", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp)
-                    Text("الملف: ${lastBackup!!.fileName}", style = MaterialTheme.typography.bodySmall)
+                    Text("الحجم: ${backup.sizeBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
+                    Text("SHA-256: ${backup.checksum.take(16)}...", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp)
+                    Text("الملف: ${backup.fileName}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

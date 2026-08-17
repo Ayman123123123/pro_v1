@@ -165,7 +165,7 @@ class LocalServerDiscovery(private val context: Context) {
             val parts = knownHost.split('.').map { it.toIntOrNull() }
             if (parts.size == 4 && parts.take(3).none { it == null } && parts[3] != null) {
                 val prefix = "${parts[0]}.${parts[1]}.${parts[2]}"
-                val hostOctet = parts[3]!!
+                val hostOctet = parts[3] ?: return bases
                 val octets = linkedSetOf(hostOctet, 1, 2, 50, 100, 101, 254)
                 for (delta in -3..3) {
                     val value = hostOctet + delta

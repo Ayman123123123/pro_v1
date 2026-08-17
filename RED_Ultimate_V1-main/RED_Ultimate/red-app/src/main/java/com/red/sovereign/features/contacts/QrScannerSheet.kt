@@ -95,6 +95,8 @@ fun QrScannerSheet(
             if (hasCameraPermission) {
                 var scannedOnce by remember { mutableStateOf(false) }
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+                val executor = remember { Executors.newSingleThreadExecutor() }
+                DisposableEffect(Unit) { onDispose { executor.shutdownNow() } }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -106,7 +108,6 @@ fun QrScannerSheet(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             val previewView = PreviewView(ctx)
-                            val executor = Executors.newSingleThreadExecutor()
                             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                             cameraProviderFuture.addListener({
                                 val cameraProvider = cameraProviderFuture.get()

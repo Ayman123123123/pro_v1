@@ -21,7 +21,10 @@ class IceServerControllerTest {
             tlsPort = tlsPort,
             altPort = altPort,
             secret = secret,
-            ttlSeconds = ttlSeconds
+            ttlSeconds = ttlSeconds,
+            openRelayEnabled = false,
+            openRelayUsername = "",
+            openRelayPassword = ""
         )
 
     private fun auth(userId: String): Authentication =
@@ -81,7 +84,7 @@ class IceServerControllerTest {
     }
 
     @Test fun `short secret is rejected`() {
-        val badController = IceServerController("turn.example.com", 3478, 5349, 443, "short", 3600)
+        val badController = IceServerController("turn.example.com", 3478, 5349, 443, "short", 3600, false, "", "")
         try {
             badController.iceServers(auth("user-1"))
             assertTrue(false) { "should have thrown" }

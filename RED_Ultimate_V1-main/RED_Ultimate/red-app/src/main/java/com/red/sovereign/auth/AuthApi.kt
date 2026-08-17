@@ -6,6 +6,7 @@ import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
+import com.red.sovereign.auth.AuthModels.UserResponse
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -37,6 +38,23 @@ class AuthApi(
                     val body = response.body.string()
                     ApiResult.Error(response.code, runCatching { json.decodeFromString<ErrorResponse>(body).error }.getOrNull() ?: "RECOVERY_FAILED")
                 }
+            }
+        }.getOrElse { ApiResult.Error(null, it.message ?: "NETWORK_ERROR") }
+    }
+
+    suspend fun me(): ApiResult<UserResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            val http = Request.Builder().url(ServerEndpoint.url() + "/api/auth/me")
+                .header("Accept", "application/json").build()
+            client.newCall(http).execute().use { response ->
+                val text = response.body.string()
+                if (text.isBlank()) return@use ApiResult.Error(response.code, "EMPTY_RESPONSE")
+                val value = runCatching { json.decodeFromString<UserResponse>(text) }.getOrElse {
+                    val error = runCatching { json.decodeFromString<ErrorResponse>(text).error }.getOrNull()
+                    return@use ApiResult.Error(response.code, error ?: "INVALID_SERVER_RESPONSE")
+                }
+                if (response.isSuccessful) ApiResult.Success(response.code, value)
+                else ApiResult.Error(response.code, "HTTP_${response.code}")
             }
         }.getOrElse { ApiResult.Error(null, it.message ?: "NETWORK_ERROR") }
     }

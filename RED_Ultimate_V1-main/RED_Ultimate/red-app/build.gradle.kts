@@ -134,6 +134,19 @@ dependencies {
     implementation(libs.androidx.core.telecom)
     implementation(libs.webrtc.android)
     implementation(project(":shared-proto"))
+    // Call System Core dependencies
+    implementation(project(\":core:models\"))
+    implementation(project(\":core:network\"))
+    implementation(project(\":feature:camera\"))
+
+    // DataStore for ScheduledCalls
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.datastore.core)
+
+    // UI dependencies for Overlays and IncomingCallActivity
+    implementation(libs.androidx.constraintlayout.compose)
+    implementation(libs.material.material)
+    implementation(libs.androidx.core.splashscreen)
 
     // ─── خطوط Google (Cairo + Tajawal) ───────────────────────────────────────
     implementation(libs.androidx.compose.ui.text.google.fonts)
@@ -172,3 +185,5 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+

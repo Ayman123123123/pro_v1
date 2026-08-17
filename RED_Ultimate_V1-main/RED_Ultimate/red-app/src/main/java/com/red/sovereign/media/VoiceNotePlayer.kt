@@ -1,6 +1,8 @@
-package com.red.sovereign.media
+﻿package com.red.sovereign.media
 
 import android.net.Uri
+import android.media.AudioManager
+import android.media.AudioFocusRequest
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -40,17 +42,6 @@ import kotlinx.coroutines.delay
 
 import androidx.compose.material3.MaterialTheme
 
-/**
- * 🎙️ YOUNES Sovereign — Professional Voice Note Player
- *
- * مشغّل رسائل صوتية احترافي بالكامل:
- *  - ExoPlayer مع AudioAttributes SPEECH
- *  - شريط تقدم تفاعلي (drag-to-seek)
- *  - Waveform مع playhead ملون
- *  - سرعات تشغيل متعددة (0.5× إلى 2×)
- *  - Play/Pause بأزرار كبيرة وواضحة
- *  - Auto-cleanup للموارد
- */
 @Composable
 fun VoiceNotePlayer(
     uri: Uri,
@@ -62,18 +53,24 @@ fun VoiceNotePlayer(
     val context = LocalContext.current
     val preferredSpeed = SettingsRuntime.current.defaultPlaybackSpeed
 
+    // State - DECLARED ONCE
     var isPlaying by remember(uri) { mutableStateOf(false) }
     var currentPositionMs by remember(uri) { mutableStateOf(0L) }
     var totalDurationMs by remember(uri) { mutableStateOf(durationSeconds * 1000L) }
     var currentSpeed by remember(uri) { mutableStateOf(preferredSpeed) }
     var showSpeedMenu by remember(uri) { mutableStateOf(false) }
 
+    // Colors - DECLARED ONCE (only here, at the top)
     val bubbleBorderColor = if (isOutgoing) VoiceColors.BubbleOutgoingBorder else VoiceColors.BubbleIncomingBorder
     val waveformColor = if (isOutgoing) VoiceColors.WaveformOutgoing else VoiceColors.WaveformIncoming
     val onColor = if (isOutgoing) Color(0xFF001B14) else Color.White
     val surfaceColor = if (isOutgoing) VoiceColors.BubbleOutgoing else VoiceColors.BubbleIncoming
     val primaryColor = waveformColor
 
+    // Audio Manager - DECLARED ONCE
+    val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager
+
+    // Player - created FIRST so it can be referenced in AudioFocusRequest
     val player = remember(uri) {
         val exo = ExoPlayer.Builder(context).build().apply {
             setAudioAttributes(
@@ -105,8 +102,40 @@ fun VoiceNotePlayer(
         exo
     }
 
-    // Update position while playing
+    // Audio Focus - created AFTER player so it can reference player
+    val audioFocusRequest = remember(uri) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener { focusChange ->
+                    when (focusChange) {
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> player.volume = 0.2f
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS -> player.pause()
+                        AudioManager.AUDIOFOCUS_GAIN -> player.volume = 1f
+                    }
+                }
+                .build()
+        } else {
+            null
+        }
+    }
+
+    // Request/abandon audio focus based on playback state
     LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.requestAudioFocus(audioFocusRequest)
+            }
+        } else {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.abandonAudioFocusRequest(audioFocusRequest)
+            }
+        }
         while (isPlaying) {
             currentPositionMs = player.currentPosition
             totalDurationMs = if (player.duration > 0) player.duration else totalDurationMs
@@ -114,8 +143,16 @@ fun VoiceNotePlayer(
         }
     }
 
-    DisposableEffect(player) { onDispose { player.release() } }
+    DisposableEffect(player) {
+        onDispose {
+            player.release()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.abandonAudioFocusRequest(audioFocusRequest)
+            }
+        }
+    }
 
+    // UI State
     val progress = if (totalDurationMs > 0) {
         (currentPositionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
     } else 0f
@@ -125,6 +162,8 @@ fun VoiceNotePlayer(
         animationSpec = tween(150),
         label = "playback_progress"
     )
+
+    // NO duplicate colors here - they are declared at the top
 
     Column(
         modifier = modifier

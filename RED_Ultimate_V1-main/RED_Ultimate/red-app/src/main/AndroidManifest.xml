@@ -107,5 +107,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".calls.IncomingCallActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Younes"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:supportsPictureInPicture="false"
+            android:showForAllUsers="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true" />
+
+        <receiver
+            android:name=".calls.ScheduledCallReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>

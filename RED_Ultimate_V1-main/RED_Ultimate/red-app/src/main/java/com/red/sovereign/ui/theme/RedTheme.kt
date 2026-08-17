@@ -105,6 +105,7 @@ val YounesMutedText    = YounesMuted
 
 // legacy aliases
 val AqyalGold           = YounesAccent
+val YounesImperialGold  = Color(0xFFD4A843)
 val AqyalGoldLight      = YounesAccentSoft
 val AqyalDarkObsidian   = YounesVoid
 val AqyalRoyalBlue      = YounesMidnight

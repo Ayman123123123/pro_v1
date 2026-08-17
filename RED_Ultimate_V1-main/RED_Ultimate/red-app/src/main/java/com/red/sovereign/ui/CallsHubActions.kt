@@ -28,6 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.scale
 import androidx.core.content.ContextCompat
 import com.red.sovereign.contacts.PublicRedProfile
 import com.red.sovereign.ui.theme.*
@@ -44,7 +47,8 @@ fun CallsHubLaunchers(
     onSpace: () -> Unit,
     onLive: () -> Unit,
     onPstn: () -> Unit,
-    onExplore: () -> Unit
+    onExplore: () -> Unit,
+    onScheduledCalls: () -> Unit
 ) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
@@ -124,7 +128,7 @@ fun CallsHubLaunchers(
             )
         }
 
-        // 4. مكالمة جديدة E2EE واستكشاف البثوث
+        // 4. مكالمة جديدة E2EE، مكالمات مجدولة، واستكشاف البثوث
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // مكالمة فردية جديدة
             CallBentoCard(
@@ -137,6 +141,19 @@ fun CallsHubLaunchers(
                 gradientEnd = Color(0xFF00E676).copy(alpha = 0.03f),
                 cornerRadius = 20.dp,
                 onClick = onNewCall
+            )
+
+            // مكالمات مجدولة
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(120.dp),
+                icon = Icons.Rounded.Schedule,
+                title = "مكالمات مجدولة",
+                subtitle = "إعداد مكالمات مستقبلية\nبموعد وتكرار",
+                accentColor = Color(0xFFFFA000),
+                gradientStart = Color(0xFFFFA000).copy(alpha = 0.18f),
+                gradientEnd = Color(0xFFFFA000).copy(alpha = 0.04f),
+                cornerRadius = 20.dp,
+                onClick = onScheduledCalls
             )
 
             // استكشاف البثوث والمساحات
@@ -172,25 +189,66 @@ private fun CallBentoCard(
     onClick: () -> Unit,
     trailing: @Composable (() -> Unit)? = null
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1.0f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "BentoScale"
+    )
+
     Box(
         modifier = modifier
-            .shadow(3.dp, RoundedCornerShape(cornerRadius), ambientColor = accentColor.copy(alpha = 0.2f))
+            .scale(scale)
+            .shadow(6.dp, RoundedCornerShape(cornerRadius), ambientColor = accentColor.copy(alpha = 0.35f), spotColor = accentColor.copy(alpha = 0.35f))
             .clip(RoundedCornerShape(cornerRadius))
-            .background(Brush.linearGradient(listOf(gradientStart, gradientEnd)))
-            .border(1.dp, accentColor.copy(alpha = 0.22f), RoundedCornerShape(cornerRadius))
-            .clickable(onClick = onClick)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        gradientStart.copy(alpha = 0.85f),
+                        SovereignColors.ObsidianDeep.copy(alpha = 0.95f),
+                        gradientEnd.copy(alpha = 0.85f)
+                    )
+                )
+            )
+            .border(
+                width = 1.2.dp,
+                brush = Brush.linearGradient(
+                    listOf(
+                        accentColor.copy(alpha = 0.65f),
+                        accentColor.copy(alpha = 0.15f),
+                        accentColor.copy(alpha = 0.45f)
+                    )
+                ),
+                shape = RoundedCornerShape(cornerRadius)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .padding(14.dp)
     ) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(accentColor.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                    Icon(icon, null, tint = accentColor, modifier = Modifier.size(22.dp))
+                Box(
+                    Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(accentColor.copy(alpha = 0.20f))
+                        .border(0.8.dp, accentColor.copy(alpha = 0.4f), RoundedCornerShape(13.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = accentColor, modifier = Modifier.size(23.dp))
                 }
                 trailing?.invoke()
             }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text(subtitle, color = Color.White.copy(0.58f), fontSize = 11.sp, lineHeight = 15.sp)
+                Text(title, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                Text(subtitle, color = Color.White.copy(0.68f), fontSize = 11.sp, lineHeight = 15.5.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

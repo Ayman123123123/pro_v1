@@ -32,15 +32,17 @@ class SignalSessionManager(context: Context) {
         require(plaintext.isNotEmpty() && plaintext.size <= 256 * 1024)
         val result = directory.get(remoteRedId)
         if (result is ApiResult.Error) return result
-        result as ApiResult.Success
-        if (result.value.devices.isEmpty()) return ApiResult.Error(404, "NO_APPROVED_REMOTE_DEVICE")
+        val directoryValue = (result as? ApiResult.Success)?.value
+            ?: return ApiResult.Error(500, "DIRECTORY_FETCH_FAILED")
+        if (directoryValue.devices.isEmpty()) return ApiResult.Error(404, "NO_APPROVED_REMOTE_DEVICE")
         val envelopes = mutableListOf<EncryptedEnvelope>()
-        for (directoryDevice in result.value.devices) {
+        for (directoryDevice in directoryValue.devices) {
             val remote = SignalProtocolAddress(remoteRedId, directoryDevice.protocolDeviceId)
             if (!store.containsSession(remote)) {
                 val consumed = directory.consumePreKey(remoteRedId, directoryDevice.deviceId)
                 if (consumed is ApiResult.Error) return consumed
-                val device = (consumed as ApiResult.Success).value
+                val device = (consumed as? ApiResult.Success)?.value
+                    ?: return ApiResult.Error(500, "PREKEY_CONSUME_FAILED")
                 val oneTimeKey = device.oneTimePreKey?.let { ECPublicKey(decoder.decode(it)) }
                 val bundle = PreKeyBundle(
                     device.registrationId, device.protocolDeviceId,
@@ -54,7 +56,7 @@ class SignalSessionManager(context: Context) {
             val ciphertext = SessionCipher(store, remote).encrypt(plaintext)
             envelopes += EncryptedEnvelope(directoryDevice.protocolDeviceId, ciphertext.type, ciphertext.serialize())
         }
-        return ApiResult.Success(result.code, envelopes)
+        return ApiResult.Success(200, envelopes)
     }
 
     fun decrypt(senderRedId: String, senderDeviceId: Int, ciphertextType: Int, ciphertext: ByteArray): ByteArray {

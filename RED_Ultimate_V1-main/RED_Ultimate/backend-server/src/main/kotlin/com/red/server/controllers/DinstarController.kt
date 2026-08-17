@@ -12,10 +12,10 @@ import java.util.UUID
 class DinstarController(private val hardware: DinstarHardwareService, private val audit: AuditService) {
 
     @GetMapping("/status")
-    fun status() = hardware.getHardwareStatus()
+    fun status(): List<Map<String, Any?>> = hardware.getHardwareStatus()
 
     @GetMapping("/discover")
-    fun discover() = hardware.discoverGateway()
+    fun discover(): Map<String, Any?> = hardware.discoverGateway()
 
     @GetMapping("/capabilities")
     fun capabilities() = hardware.capabilities()

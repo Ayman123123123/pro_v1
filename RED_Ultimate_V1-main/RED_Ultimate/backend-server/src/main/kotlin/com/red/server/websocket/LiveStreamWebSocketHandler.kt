@@ -2,6 +2,7 @@ package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
+import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.TextWebSocketHandler
@@ -19,7 +20,8 @@ import java.util.concurrent.ConcurrentHashMap
 @Component
 class LiveStreamWebSocketHandler(
     private val objectMapper: ObjectMapper,
-    private val liveStreamService: com.red.server.calls.LiveStreamService
+    private val liveStreamService: com.red.server.calls.LiveStreamService,
+    private val accessGuard: ApprovedDeviceSessionGuard
 ) : TextWebSocketHandler() {
     private val broadcasters = ConcurrentHashMap<String, WebSocketSession>()
     private val viewers = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
@@ -29,6 +31,15 @@ class LiveStreamWebSocketHandler(
     enum class Role { BROADCASTER, VIEWER }
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+        // Revalidate device approval on every frame
+        if (!accessGuard.isStillAuthorized(
+                session.attributes["accountId"] as? String,
+                session.attributes["deviceId"] as? String
+            )
+        ) {
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val accountId = session.attributes["accountId"] as? String
         val redId = session.attributes["redId"] as? String ?: userId
@@ -76,6 +87,20 @@ class LiveStreamWebSocketHandler(
                     broadcasters[signal.roomId] = session
                 } else {
                     // Viewer path — ensure stream exists (allow viewer before broadcaster join for UX?)
+                    val record = liveStreamService.getStreamRecord(signal.roomId)
+                    if (record != null && record.isPrivate) {
+                        val providedPassword = signal.payload["password"] as? String
+                        if (!liveStreamService.verifyPassword(signal.roomId, providedPassword)) {
+                            val err = objectMapper.writeValueAsString(mapOf(
+                                "type" to "ERROR",
+                                "roomId" to signal.roomId,
+                                "payload" to mapOf("code" to "FORBIDDEN", "message" to "Private stream - password required")
+                            ))
+                            runCatching { session.sendMessage(TextMessage(err)) }
+                            runCatching { session.close() }
+                            return
+                        }
+                    }
                     sessionToStream[session.id] = signal.roomId
                     sessionRole[session.id] = Role.VIEWER
                     viewers.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }.add(session)
@@ -154,7 +179,7 @@ class LiveStreamWebSocketHandler(
                     }
                 }
             }
-            "CHAT", "REACTION", "RAISE_HAND" -> {
+            "CHAT", "REACTION", "RAISE_HAND", "LOWER_HAND" -> {
                 // Broadcast to whole stream except sender
                 val allSessions = mutableListOf<WebSocketSession>()
                 broadcasters[signal.roomId]?.let { allSessions.add(it) }

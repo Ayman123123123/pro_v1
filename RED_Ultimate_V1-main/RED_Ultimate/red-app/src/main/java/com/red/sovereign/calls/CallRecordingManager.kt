@@ -54,12 +54,13 @@ class CallRecordingManager(
         outputFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
         val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
         try {
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioEncodingBitRate(128_000)
             recorder.setAudioSamplingRate(48_000)
-            recorder.setOutputFile(outputFile!!.absolutePath)
+            val outPath = outputFile?.absolutePath ?: return false
+            recorder.setOutputFile(outPath)
             recorder.prepare()
             recorder.start()
             mediaRecorder = recorder

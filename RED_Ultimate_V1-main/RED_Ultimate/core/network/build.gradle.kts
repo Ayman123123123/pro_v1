@@ -8,8 +8,8 @@ import org.gradle.api.tasks.SourceSetContainer
 plugins {
   id("java-library")
   id("org.jetbrains.kotlin.jvm")
-  id("ktlint")
-  id("com.squareup.wire")
+  alias(libs.plugins.ktlint)
+  id("com.squareup.wire") version "5.4.0"
 }
 
 java {

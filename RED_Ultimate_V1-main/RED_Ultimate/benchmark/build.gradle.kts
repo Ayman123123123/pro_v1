@@ -43,7 +43,7 @@ android {
         }
     }
 
-    targetProjectPath = ":Signal-Android"
+    targetProjectPath = ":app"
     experimentalProperties["android.experimental.self-instrumenting"] = true
 
     testOptions {

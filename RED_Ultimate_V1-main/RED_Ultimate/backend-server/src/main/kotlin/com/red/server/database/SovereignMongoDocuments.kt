@@ -118,32 +118,8 @@ data class ConversationSequence(
 )
 
 // ════════════════════════════════════════════════════
-// 📞 سجل المكالمات — سريع التغير
+// 📞 أنماط المكالمات المشتركة
 // ════════════════════════════════════════════════════
-
-// ليست وثيقة حية: السجل التشغيلي في com.red.server.calls.CallHistoryDocument.
-data class LegacyCallHistoryDraft(
-    @Id val id: String,
-    @Indexed val initiatorId: String,
-    @Indexed val targetId: String,
-    val targetLabel: String,
-    val type: CallType,
-    val route: CallRoute,
-    var status: CallStatus,
-    // التفاصيل
-    var durationMs: Long = 0,
-    val dinstarPort: Int? = null,
-    var signalStrength: Int? = null,
-    var viewerCount: Int = 0,
-    var isRecorded: Boolean = false,
-    val recordingMediaKey: String? = null,
-    // المشاركون
-    val participants: List<CallParticipant> = emptyList(),
-    // التوقيتات
-    val startedAt: Instant = Instant.now(),
-    var answeredAt: Instant? = null,
-    var endedAt: Instant? = null
-)
 
 data class CallParticipant(
     val userId: String,
@@ -157,106 +133,8 @@ enum class CallRoute { RED, DINSTAR }
 enum class CallStatus { RINGING, CONNECTING, ACTIVE, ON_HOLD, ENDED, MISSED, FAILED }
 
 // ════════════════════════════════════════════════════
-// 📖 القصص — تنتهي صلاحيتها بعد 24 ساعة
-// ════════════════════════════════════════════════════
-
-// ليست وثيقة حية: القصص في com.red.server.stories.StoryDocument.
-data class LegacyStoryDraft(
-    @Id val id: String,
-    @Indexed val ownerId: String,
-    val ownerRedId: String,
-    val ownerUsername: String,
-    val ownerDisplayName: String,
-    val mediaKey: String,
-    @Indexed val mediaType: String, // IMAGE, VIDEO, TEXT, VOICE
-    val caption: String?,
-    val backgroundColor: String?, // للنص: #D32F2F, #1565C0, etc.
-    // الخصوصية
-    @Indexed val visibleTo: String = "EVERYONE", // EVERYONE, CONTACTS, NOBODY
-    val excludedUsers: List<String> = emptyList(),
-    val includedUsers: List<String> = emptyList(),
-    // التوقيتات
-    val createdAt: Instant = Instant.now(),
-    @Indexed(expireAfterSeconds = 86400) val expiresAt: Instant, // TTL index
-    var deletedAt: Instant? = null
-)
-
-data class LegacyStoryViewDraft(
-    @Id val id: String,
-    @Indexed val storyId: String,
-    @Indexed val viewerId: String,
-    val viewedAt: Instant = Instant.now(),
-    val reaction: String? = null // ❤️ 🔥 😢 etc.
-)
-
-data class LegacyStoryReactionDraft(
-    @Id val id: String,
-    @Indexed val storyId: String,
-    @Indexed val userId: String,
-    val emoji: String,
-    val createdAt: Instant = Instant.now()
-)
-
-// ════════════════════════════════════════════════════
-// 📝 المنشورات — مرنة البنية
-// ════════════════════════════════════════════════════
-
-// ليست وثيقة حية: المنشورات في com.red.server.social.PostDocument.
-data class LegacyPostDraft(
-    @Id val id: String,
-    @Indexed val authorId: String,
-    @Indexed val authorRedId: String,
-    val authorUsername: String,
-    val authorDisplayName: String,
-    val text: String,
-    @Indexed val visibility: PostVisibility,
-    val kind: PostKind = PostKind.POST,
-    @Indexed val parentId: String? = null,  // رد
-    val quotePostId: String? = null,        // اقتباس
-    val poll: Poll? = null,
-    val media: List<PostMedia> = emptyList(),
-    // الخصوصية المتقدمة
-    val visibleTo: String = "EVERYONE",
-    val excludedUsers: List<String> = emptyList(),
-    // التفاعل
-    val reactionCounts: Map<String, Long> = emptyMap(),
-    var replyCount: Long = 0,
-    var repostCount: Long = 0,
-    // التوقيتات
-    @Indexed val createdAt: Instant = Instant.now(),
-    val editedAt: Instant? = null,
-    @Indexed val deletedAt: Instant? = null
-)
-
-enum class PostVisibility { PUBLIC, LOCAL_YEMEN, FOLLOWERS, PRIVATE }
-enum class PostKind { POST, POLL }
-data class PostMedia(val objectKey: String, val mimeType: String, val width: Int? = null, val height: Int? = null)
-data class Poll(val options: List<PollOption>, val expiresAt: Instant?, val multiChoice: Boolean = false)
-data class PollOption(val id: String, val text: String, val votes: Long = 0)
-
-data class LegacyPostReactionDraft(@Id val id: String, val postId: String, val userId: String, val type: String, val createdAt: Instant = Instant.now())
-data class LegacyPollVoteDraft(@Id val id: String, val postId: String, val userId: String, val optionId: String, val createdAt: Instant = Instant.now())
-data class LegacyFollowDraft(@Id val id: String, val followerId: String, val followedId: String, val createdAt: Instant = Instant.now())
-
-// ════════════════════════════════════════════════════
 // 📡 البث المباشر والغرف الصوتية
 // ════════════════════════════════════════════════════
-
-// ليست وثيقة حية: البث في com.red.server.calls.LiveStreamRecord.
-data class LegacyLiveStreamDraft(
-    @Id val id: String,
-    @Indexed val hostId: String,
-    val hostRedId: String,
-    val hostUsername: String,
-    val title: String,
-    val category: String? = null,
-    @Indexed var status: String = "LIVE", // LIVE, ENDED
-    var viewerCount: Int = 0,
-    val maxViewers: Int = 0,
-    val mediaKey: String? = null, // تسجيل البث
-    val startedAt: Instant = Instant.now(),
-    var endedAt: Instant? = null
-)
 
 @Document("audio_spaces")
 data class AudioSpaceDocument(

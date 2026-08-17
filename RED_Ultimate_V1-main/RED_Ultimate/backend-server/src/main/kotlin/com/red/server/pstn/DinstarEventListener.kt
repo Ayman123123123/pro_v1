@@ -1,7 +1,9 @@
 package com.red.server.pstn
 
 import com.red.server.calls.CallHistoryService
+import com.red.server.calls.CallRoute
 import com.red.server.calls.CallStatus
+import com.red.server.calls.CallType
 import org.asteriskjava.manager.ManagerEventListener
 import org.asteriskjava.manager.event.*
 import org.slf4j.LoggerFactory
@@ -9,6 +11,8 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import org.springframework.context.ApplicationEventPublisher
+import com.red.server.auth.repository.UserAccountRepository
 
 /**
  * مستمع أحداث Asterisk AMI — يتتبع تغيرات حالة قنوات DINSTAR
@@ -34,7 +38,9 @@ import java.util.concurrent.ConcurrentHashMap
 class DinstarEventListener(
     private val history: CallHistoryService,
     private val loadBalancer: DinstarLoadBalancer,
-    private val redis: StringRedisTemplate
+    private val redis: StringRedisTemplate,
+    private val publisher: ApplicationEventPublisher,
+    private val users: UserAccountRepository
 ) : ManagerEventListener {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarEventListener::class.java)
@@ -131,7 +137,17 @@ class DinstarEventListener(
 
         // ── End call in history ────────────────────────────────────
         val callId = channelToCallId.remove(channel) ?: findCallIdFromRedis(lineNumber)
+        var shouldRetry = false
+        var targetNumber = ""
+        var redId = ""
+        
         if (callId != null) {
+            val callDoc = history.findById(callId)
+            if (isFailed && callDoc?.status == CallStatus.RINGING) {
+                shouldRetry = true
+                targetNumber = callDoc.targetId
+                redId = callDoc.initiatorId
+            }
             runCatching { history.end(callId, failed = isFailed) }
                 .onFailure { log.warn("Could not end call {} in history: {}", callId, it.message) }
         }
@@ -146,6 +162,17 @@ class DinstarEventListener(
         } else {
             log.debug("Could not extract port index from channel: {}", channel)
         }
+        
+        // ── Trigger Auto-Retry ─────────────────────────────────────
+        if (shouldRetry && port != null) {
+            log.info("Triggering Auto-Retry for callId {} to {}", callId, targetNumber)
+            runCatching {
+                val user = users.findByRedId(redId)
+                if (user != null) {
+                    publisher.publishEvent(PstnRetryEvent(callId!!, user.id, redId, targetNumber, port))
+                }
+            }.onFailure { log.warn("Failed to publish PstnRetryEvent: {}", it.message) }
+        }
     }
 
     /**
@@ -159,8 +186,12 @@ class DinstarEventListener(
         val callerNumber = event.callerIdNum?.takeIf { it.isNotBlank() } ?: "unknown"
         val channel = event.channel?.takeIf { it.isNotBlank() } ?: "unknown"
         log.info("Incoming DINSTAR user event — caller={} channel={}", callerNumber, channel)
-        // TODO: Notify WebSocket clients about incoming PSTN call
-        // callWebSocketHandler.deliverPstnIncoming(callerNumber, channel)
+        runCatching {
+            val incomingDoc = history.start("GSM:$callerNumber", "RED_ADMIN", callerNumber, CallType.AUDIO_1V1, CallRoute.DINSTAR)
+            log.info("Recorded incoming DINSTAR call in history: callId={}", incomingDoc.id)
+        }.onFailure {
+            log.warn("Failed to record incoming DINSTAR call in history: {}", it.message)
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────

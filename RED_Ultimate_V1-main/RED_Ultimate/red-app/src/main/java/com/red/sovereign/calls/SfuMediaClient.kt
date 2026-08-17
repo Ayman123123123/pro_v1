@@ -420,10 +420,11 @@ class SfuMediaClient(
             override fun onError(message: String) = events.onError(message)
         })
         eglContext = engine?.eglContext
-        val result = engine!!.create(kind)
+        val eng = engine ?: return ApiResult.Error(500, "ENGINE_NOT_CREATED")
+        val result = eng.create(kind)
         if (result is ApiResult.Success) {
-            localVideo = engine?.localMedia?.videoTrack
-            engine?.offer()
+            localVideo = eng.localMedia?.videoTrack
+            eng.offer()
         }
         return result
     }
@@ -442,7 +443,8 @@ class SfuMediaClient(
             override fun onNetworkStats(stats: NetworkStats) = events.onNetworkStats(stats)
             override fun onError(message: String) = events.onError(message)
         })
-        return recvEngine!!.createReceiverOnly(kind)
+        val recv = recvEngine ?: return ApiResult.Error(500, "RECV_ENGINE_NOT_CREATED")
+        return recv.createReceiverOnly(kind)
     }
 
     private suspend fun waitLocalSdp(): String? {

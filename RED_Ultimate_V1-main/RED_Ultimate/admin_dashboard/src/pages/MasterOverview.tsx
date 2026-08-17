@@ -26,6 +26,11 @@ const SIGNAL_COLOR: Record<string, string> = {
   EXCELLENT: 'green', GOOD: 'cyan', FAIR: 'gold', WEAK: 'orange', UNUSABLE: 'red', NO_SIGNAL: 'default',
 };
 
+/** UC2000 يعيد REGISTER_OK أحيانًا — كل صور التسجيل سواء. */
+function isRegistered(status?: string): boolean {
+  return status === 'REGISTERED' || status === 'REGISTER_OK' || status === 'Mobile Registered';
+}
+
 export default function MasterOverview() {
   const [stats, setStats] = useState<any>({});
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -60,7 +65,7 @@ export default function MasterOverview() {
   usePolling(load, 5000);
 
   const usable = slots.filter((x) => x.signalUsable).length;
-  const registered = slots.filter((x) => x.status === 'REGISTERED').length;
+  const registered = slots.filter((x) => isRegistered(x.status)).length;
   const signals = slots.map((x) => Number(x.signal || 0)).filter(Number.isFinite);
   const signal = signals.length ? Math.round(signals.reduce((a, b) => a + b, 0) / signals.length) : 0;
 
@@ -137,7 +142,7 @@ export default function MasterOverview() {
           locale={{ emptyText: 'لا توجد قراءات منافذ' }}
           columns={[
             { title: 'SIM', dataIndex: 'index', render: (v: number) => `SIM ${(v ?? 0) + 1}` },
-            { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={v === 'REGISTERED' ? 'green' : 'red'}>{v || '—'}</Tag> },
+            { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={isRegistered(v) ? 'green' : 'red'}>{v || '—'}</Tag> },
             { title: 'الإشارة', dataIndex: 'signalLabel', render: (v: string, r: Slot) => <Tag color={SIGNAL_COLOR[v] || 'default'}>{v || '—'}{r.signal != null ? ` · ${r.signal}%` : ''}</Tag> },
             { title: 'المشغل', dataIndex: 'operator', render: (v?: string) => v || '—' },
             { title: 'المكالمة', dataIndex: 'callState', render: (v?: string) => v || '—' },

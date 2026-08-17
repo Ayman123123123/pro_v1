@@ -17,8 +17,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val streams = LiveStreamService()
-    private val handler = LiveStreamWebSocketHandler(objectMapper, streams)
+    private val streams = LiveStreamService(mock())
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+        whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
+    }
+    private val handler = LiveStreamWebSocketHandler(objectMapper, streams, accessGuard)
 
     @BeforeEach
     fun startOwnedStream() {

@@ -214,7 +214,7 @@ private fun GroupCallActivePanel(state: GroupCallUiState.Active, context: androi
                         Text("أدوات المضيف", color = Color(0xFFF5C842), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("كتم الكل", color = Color.White.copy(0.9f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { /* action */ })
+                        Text("كتم الكل", color = Color.White.copy(0.9f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { GroupCallService.muteAll(context) })
                         Text("إنهاء للجميع", color = Color(0xFFE53935), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { GroupCallService.end(context) })
                     }
                 }

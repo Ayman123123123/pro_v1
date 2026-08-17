@@ -71,8 +71,10 @@ class AuthExceptionHandler {
 
     /** ClassCastException — جسم مشوَّه (تحويل غير آمن) → 400 بدل 500 */
     @ExceptionHandler(ClassCastException::class)
-    fun badCast(error: ClassCastException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST_BODY"))
+    fun badCast(error: ClassCastException): ResponseEntity<Map<String, String>> {
+        log.error("ClassCastException while handling request", error)
+        return ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST_BODY"))
+    }
 
     /** NumberFormatException — رقم مشوَّه (مثل toInt() على نص) → 400 بدل 500 */
     @ExceptionHandler(NumberFormatException::class)

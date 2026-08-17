@@ -7,7 +7,7 @@ import {
 import {
   ApiOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
   PlusOutlined, RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled,
-  ToolOutlined,
+  ToolOutlined, PhoneOutlined,
 } from '@ant-design/icons';
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
@@ -42,6 +42,15 @@ type FleetPorts = {
  */
 const SMS_MAX_RECIPIENTS = 128;
 const SMS_MAX_TEXT_BYTES = 1500;
+
+/**
+ * هل حالة المنفذ تعني «مسجّل على الشبكة»؟
+ * القيمة الخام من الجهاز تأتي أحيانًا REGISTER_OK (UC2000 عبر
+ * get_port_info) وأحيانًا REGISTERED/Mobile Registered — كلها سواء.
+ */
+function isRegistered(status?: string): boolean {
+  return status === 'REGISTERED' || status === 'REGISTER_OK' || status === 'Mobile Registered';
+}
 
 type ModelInfo = {
   model: string; portCount: number; simSlots: number; supportsVolte: boolean;
@@ -104,6 +113,11 @@ export default function DinstarControl() {
   const [loading, setLoading] = useState(false);
   const [ussdTarget, setUssdTarget] = useState<number | null>(null);
   const [ussd, setUssd] = useState('');
+  const [dialPort, setDialPort] = useState<number | null>(null);
+  const [dialHost, setDialHost] = useState('');
+  const [dialNumber, setDialNumber] = useState('');
+  const [dialBusy, setDialBusy] = useState(false);
+  const [dialResult, setDialResult] = useState<any>(null);
   const [smsTo, setSmsTo] = useState('');
   const [smsGateway, setSmsGateway] = useState<string | undefined>(undefined);
   const [smsText, setSmsText] = useState('');
@@ -153,7 +167,7 @@ export default function DinstarControl() {
     if (!fleetPorts) return [];
     return fleetPorts.gateways.flatMap(({ gateway, ports }) =>
       ports
-        .filter((p) => p.status === 'REGISTERED' && !p.signalUsable)
+        .filter((p) => isRegistered(p.status) && !p.signalUsable)
         .map((p) => ({ host: gateway.host, index: p.index, raw: p.signalRaw })),
     );
   }, [fleetPorts]);
@@ -181,6 +195,32 @@ export default function DinstarControl() {
       message.success('أُرسل طلب USSD');
       setUssdTarget(null); setUssd('');
     } catch (e: any) { message.error(e.message); }
+  };
+
+  const openDial = (port: number, host: string) => {
+    setDialPort(port); setDialHost(host); setDialNumber(''); setDialResult(null);
+  };
+
+  /**
+   * إجراء مكالمة من منفذ بعينه: Backend → Asterisk → PJSIP → DINSTAR.
+   * slotIndex يثبّت المنفذ في موزّع الأحمال (forcedPort).
+   */
+  const dialPortCall = async () => {
+    if (dialPort == null) return;
+    const number = dialNumber.replace(/\D/g, '');
+    if (!/^[0-9]{6,15}$/.test(number)) {
+      message.error('أدخل رقمًا صحيحًا (أرقام فقط)');
+      return;
+    }
+    setDialBusy(true);
+    try {
+      const b = await json(await apiFetch('/api/pstn/calls', {
+        method: 'POST', body: JSON.stringify({ number, slotIndex: dialPort }),
+      }));
+      setDialResult(b);
+      message.success(`تم إطلاق المكالمة على المنفذ ${(b.slot ?? dialPort) + 1} — ${b.status || 'DIALING'}`);
+    } catch (e: any) { message.error(e.message); setDialResult(null); }
+    finally { setDialBusy(false); }
   };
 
   const loadCdr = async () => {
@@ -324,8 +364,8 @@ export default function DinstarControl() {
           size="small"
           title={`SIM ${port.index + 1}`}
           extra={
-            <Tag color={port.status === 'REGISTERED' ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
-              {port.status === 'REGISTERED' ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
+            <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
+              {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
             </Tag>
           }
         >
@@ -360,6 +400,13 @@ export default function DinstarControl() {
             <Descriptions.Item label="IMSI">{port.imsiMasked || '—'}</Descriptions.Item>
           </Descriptions>
           <Space style={{ marginTop: 6 }}>
+            <Button
+              type="primary" size="small" icon={<PhoneOutlined />}
+              disabled={!isRegistered(port.status) || !port.signalUsable}
+              onClick={() => openDial(port.index, gateway.host)}
+            >
+              اتصال
+            </Button>
             <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget(port.index); setUssd(''); }}>
               USSD
             </Button>
@@ -719,6 +766,25 @@ export default function DinstarControl() {
         <Input value={ussd} onChange={(e) => setUssd(e.target.value)} placeholder="مثال *101#" />
         <Alert style={{ marginTop: 12 }} type="warning"
           message="قد يعرض USSD الرصيد أو معلومات حساسة؛ النتيجة لا تُسجَّل نصًا في سجل التدقيق." />
+      </Modal>
+
+      {/* ── اتصال من منفذ بعينه ── */}
+      <Modal open={dialPort != null} title={`اتصال — SIM ${(dialPort ?? 0) + 1} @ ${dialHost || 'DINSTAR'}`}
+        onCancel={() => { setDialPort(null); setDialResult(null); }}
+        onOk={dialPortCall} confirmLoading={dialBusy}
+        okText="اتصال" cancelText="إغلاق"
+        okButtonProps={{ disabled: dialBusy || !/^[0-9]{6,15}$/.test(dialNumber.replace(/\D/g, '')) }}>
+        <Input
+          value={dialNumber} onChange={(e) => setDialNumber(e.target.value)}
+          placeholder="رقم الهاتف — مثال 781834704" prefix={<PhoneOutlined />}
+          onPressEnter={dialPortCall}
+        />
+        <Alert style={{ marginTop: 12 }} type="info"
+          message="المكالمة تخرج عبر Backend ← Asterisk ← PJSIP ← DINSTAR من هذا المنفذ حصرًا (slotIndex مثبّت في موزّع الأحمال)." />
+        {dialResult && (
+          <Alert style={{ marginTop: 12 }} type="success" showIcon
+            message={`أُطلقت: ${dialResult.status} · المنفذ ${(dialResult.slot ?? 0) + 1} · callId ${dialResult.callId}`} />
+        )}
       </Modal>
     </div>
   );

@@ -235,6 +235,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 CallRuntime.state = newIncoming
                 if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) startRingtone()
                 armRingTimeout(outgoing = false)
+                runCatching {
+                    IncomingCallActivity.launch1to1(
+                        this,
+                        callId = newIncoming.callId,
+                        peer = newIncoming.peer,
+                        mode = newIncoming.mode,
+                        inviter = newIncoming.peer
+                    )
+                }
                 scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
                 promote(
                     if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) incomingNotification(target, mode)
@@ -271,7 +280,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 clearRingTimeout()
                 stopRingtone()
                 if (CallRuntime.state is CallUiState.Incoming) {
-                    val missedPeer = (CallRuntime.state as CallUiState.Incoming).peer
+                    val missedPeer = (CallRuntime.state as? CallUiState.Incoming)?.peer.orEmpty()
                     CallRuntime.state = CallUiState.CallEnded(missedPeer, mode, 0L, callId.orEmpty())
                     updateNotification("مكالمة فائتة من $missedPeer")
                     scheduleCleanupAndReset()
@@ -359,9 +368,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private suspend fun createEngine(video: Boolean): ApiResult<Unit> {
         engine?.release(); engine = WebRtcEngine(this, this); CallRuntime.eglContext = engine?.eglContext
         val kind = if (video) CallMediaKind.VIDEO else CallMediaKind.VOICE
-        val result = engine!!.create(kind)
+        val eng = engine ?: return ApiResult.Error(500, "ENGINE_NOT_CREATED")
+        val result = eng.create(kind)
         if (result is ApiResult.Success) {
-            CallRuntime.localVideo = engine?.localMedia?.videoTrack
+            CallRuntime.localVideo = eng.localMedia?.videoTrack
             if (CallRuntime.localVideo != null) CallRuntime.cameraNotice = false
         }
         return result
@@ -483,6 +493,10 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 )
             }
             updateNotification("انقطع الاتصال — جارٍ إعادة الاتصال…")
+            val activeCallId = (CallRuntime.state as? CallUiState.Reconnecting)?.callId ?: callId.orEmpty()
+            if (activeCallId.isNotBlank() && target.isNotBlank()) {
+                deliveryEngine.retransmitIceCandidates(activeCallId, target)
+            }
             reconnect?.start()
         }
     }
@@ -505,6 +519,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     // ── CallDeliveryEngine.Listener ──────────────────────────────────────
+    override fun onDeliveryProgress(callId: String, path: CallDeliveryEngine.DeliveryPath, attempt: Int) {
+        val label = when (path) {
+            CallDeliveryEngine.DeliveryPath.WEBSOCKET -> "جارٍ الاتصال عبر القناة المباشرة…"
+            CallDeliveryEngine.DeliveryPath.FCM_PUSH -> "جارٍ إيقاظ جهاز المستلم…"
+            CallDeliveryEngine.DeliveryPath.HTTP_WEBHOOK -> "جارٍ محاولة الوصول عبر قناة احتياطية ($attempt)…"
+            CallDeliveryEngine.DeliveryPath.UNKNOWN -> "جارٍ الاتصال…"
+        }
+        if (CallRuntime.state is CallUiState.Connecting) updateNotification(label)
+    }
     override fun onDeliveryConfirmed(callId: String, via: CallDeliveryEngine.DeliveryPath) {
         android.util.Log.d("YounesCallService", "[$callId] Delivery confirmed via $via")
     }
@@ -541,6 +564,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         engine?.setMicrophoneEnabled(false)
         engine?.setCameraEnabled(false)
         CallRuntime.state = current.copy(isHeld = true)
+        CallTelemetry.onHold()
         runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) }
         scope.launch { runCatching { telecom.hold(target) } }
         updateNotification("مكالمة يونس معلّقة")
@@ -603,6 +627,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         val started = recordingManager?.start(consentGranted = true) ?: false
         if (started) {
             CallRuntime.isRecording = true
+            CallTelemetry.onRecordingStart()
             updateNotification("مكالمة يونس نشطة • جارٍ التسجيل")
         }
     }
@@ -614,8 +639,28 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         scope.launch {
             val recording = recordingManager?.stop()
             CallRuntime.isRecording = false
-            recording?.let {
-                updateNotification("مكالمة يونس نشطة • تم حفظ التسجيل")
+            recording?.let { rec ->
+                updateNotification("مكالمة يونس نشطة • تم حفظ التسجيل محلياً. جارٍ الرفع السحابي...")
+                
+                try {
+                    val file = java.io.File(rec.filePath)
+                    if (file.exists()) {
+                        val tokens = com.red.sovereign.auth.TokenStore(this@YounesCallService)
+                        val client = com.red.sovereign.auth.AuthorizedApiClient(tokens)
+                        val mediaApi = com.red.sovereign.media.MediaApi(this@YounesCallService, client)
+                        
+                        val res = mediaApi.uploadEncrypted(file, "record_${rec.callId}")
+                        if (res is com.red.sovereign.auth.ApiResult.Success) {
+                            android.util.Log.d("CallRecording", "Uploaded Encrypted Backup: ${res.value.objectKey}")
+                            updateNotification("مكالمة يونس نشطة • اكتمل النسخ الاحتياطي المشفر")
+                        } else {
+                            android.util.Log.e("CallRecording", "Failed to upload recording backup")
+                            updateNotification("مكالمة يونس نشطة • فشل النسخ الاحتياطي السحابي")
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CallRecording", "Error uploading recording: ${e.message}")
+                }
             }
             recordingManager = null
         }
@@ -768,12 +813,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         scheduleCleanupAndReset()
     }
 
-    private fun handleCallEnded() {
+    private fun handleCallEnded(sendSignal: Boolean = false) {
         val durationMs = (CallRuntime.state as? CallUiState.Active)?.let { System.currentTimeMillis() - it.startedAt } ?: 0L
         val endedPeer = target
         val endedCallId = callId.orEmpty()
         val endedMode = mode
-        endCallCore(sendSignal = false)
+        endCallCore(sendSignal = sendSignal)
         CallRuntime.state = CallUiState.CallEnded(endedPeer, endedMode, durationMs, endedCallId)
         updateNotification("انتهت المكالمة")
         scheduleCleanupAndReset(4000) // Keep the CallEnded screen for 4 seconds
@@ -898,7 +943,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private fun endCall(sendSignal: Boolean) {
         if (CallRuntime.state !is CallUiState.CallEnded && CallRuntime.state !is CallUiState.Idle) {
-            handleCallEnded()
+            handleCallEnded(sendSignal)
         } else {
             endCallCore(sendSignal)
             CallRuntime.state = CallUiState.Idle

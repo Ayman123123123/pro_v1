@@ -5,6 +5,7 @@ import com.red.sovereign.BuildConfig
 import com.red.sovereign.auth.ApiResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.net.URI
 
@@ -35,11 +36,13 @@ object ServerEndpoint {
         onEndpointChangedListener = listener
     }
 
+    private val discoveryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * Triggers smart background auto-discovery when connection to active IP fails.
      */
     fun autoDiscover(context: Context, onComplete: ((Boolean) -> Unit)? = null) {
-        CoroutineScope(Dispatchers.IO).launch {
+        discoveryScope.launch {
             val result = LocalServerDiscovery(context).discover()
             val success = result is ApiResult.Success
             onComplete?.invoke(success)

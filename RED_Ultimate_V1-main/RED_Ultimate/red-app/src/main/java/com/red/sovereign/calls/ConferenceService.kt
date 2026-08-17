@@ -169,11 +169,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (enabling && ConferenceRuntime.localVideo == null) {
                     // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
                     scope.launch {
-                        val ok = if (sfu != null) {
-                            sfu!!.retryCamera()
-                        } else {
-                            mesh?.retryCamera() == true
-                        }
+                        val ok = sfu?.retryCamera() ?: mesh?.retryCamera() == true
                         if (ok) {
                             ConferenceRuntime.localVideo = sfu?.localVideo ?: mesh?.localVideo
                         }
@@ -665,14 +661,26 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
         val rejectPending = PendingIntent.getService(this, 2, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        val mainIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val fullScreen = PendingIntent.getActivity(
+            this, 7402,
+            Intent(this, IncomingCallActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(IncomingCallActivity.EXTRA_CALL_TYPE, IncomingCallActivity.CALL_TYPE_CONFERENCE)
+                putExtra(EXTRA_ROOM_ID, roomId)
+                putExtra(EXTRA_USER_ID, userId)
+                putExtra(EXTRA_INVITER, inviter)
+                putExtra(EXTRA_VIDEO, isVideo)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        runCatching { IncomingCallActivity.launchConference(this, roomId, userId, inviter, isVideo) }
 
         val notif = NotificationCompat.Builder(this, "red_calls_incoming")
             .setSmallIcon(if (isVideo) android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
             .setContentTitle("مكالمة جماعية واردة • " + (if (isVideo) "فيديو" else "صوت"))
             .setContentText("دعوة للانضمام من: ${inviter.ifBlank { "مجموعة يونس" }}")
-            .setContentIntent(mainIntent)
-            .setFullScreenIntent(mainIntent, true)
+            .setContentIntent(fullScreen)
+            .setFullScreenIntent(fullScreen, true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

@@ -55,8 +55,10 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
         if (contactResult is ApiResult.Error) { state = DirectoryState.Error(contactResult.message); return@launch }
         if (requestResult is ApiResult.Error) { state = DirectoryState.Error(requestResult.message); return@launch }
         runCatching {
-            json.decodeFromString<List<PublicRedProfile>>((contactResult as ApiResult.Success).value) to
-                json.decodeFromString<List<ContactRequest>>((requestResult as ApiResult.Success).value)
+            val contactValue = (contactResult as? ApiResult.Success)?.value ?: return@launch
+            val requestValue = (requestResult as? ApiResult.Success)?.value ?: return@launch
+            json.decodeFromString<List<PublicRedProfile>>(contactValue) to
+                json.decodeFromString<List<ContactRequest>>(requestValue)
         }.onSuccess { (people, incoming) ->
             state = DirectoryState.Ready
             repository.saveContacts(people.map { ContactEntity(it.redId, it.username, it.displayName) })
