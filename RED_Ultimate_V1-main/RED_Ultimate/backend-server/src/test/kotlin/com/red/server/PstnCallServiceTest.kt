@@ -1,4 +1,4 @@
-package com.red.server
+﻿package com.red.server
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.model.UserAccount
@@ -10,6 +10,7 @@ import com.red.server.pstn.PstnManager
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -18,6 +19,7 @@ import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.util.Optional
 import java.util.UUID
+import java.util.concurrent.ScheduledExecutorService
 
 class PstnCallServiceTest {
     private val users = mock<UserAccountRepository>()
@@ -26,6 +28,7 @@ class PstnCallServiceTest {
     private val pstn = mock<PstnManager>()
     private val loadBalancer = mock<DinstarLoadBalancer>()
     private val history = mock<CallHistoryService>()
+    private val retryScheduler = mock<ScheduledExecutorService>()
 
     @Test
     fun `daily limit rejection rolls back reservation and never reaches Asterisk`() {
@@ -43,11 +46,11 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(3)
 
-        val service = PstnCallService(users, redis, pstn, loadBalancer, history)
+        val service = PstnCallService(users, redis, pstn, loadBalancer, history, retryScheduler)
         assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
-        verify(loadBalancer, never()).selectPort(any(), any())
+        verify(loadBalancer, never()).selectPort(anyOrNull(), anyOrNull())
         verify(pstn, never()).dialGsm(any(), any(), any())
     }
 }

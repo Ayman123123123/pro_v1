@@ -412,7 +412,7 @@ class WebRtcSipClient(
         ws?.send(msg)
     }
 
-    private fun sendAck() {
+    internal fun sendAck() {
         branch = generateBranch()
         cseq++
         val host = buildSipHost()

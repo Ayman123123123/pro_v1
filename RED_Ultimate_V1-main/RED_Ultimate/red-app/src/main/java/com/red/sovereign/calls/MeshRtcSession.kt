@@ -48,7 +48,9 @@ class MeshRtcSession(
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
         /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — يُعلم المستخدم إن لزم. */
-        fun onCameraUnavailable() {}
+        fun onCameraUnavailable() {
+            android.util.Log.w("MeshRtcSession", "Camera unavailable - continuing audio-only")
+        }
     }
 
     private val egl = EglBase.create()

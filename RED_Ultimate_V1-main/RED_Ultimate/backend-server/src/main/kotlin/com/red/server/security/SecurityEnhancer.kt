@@ -35,7 +35,16 @@ class SecurityEnhancer(
             )
             return false
         }
-        validateRequest(request)
+        validateRequest(request).let { valid ->
+            if (!valid) {
+                response.status = HttpStatus.FORBIDDEN.value()
+                response.contentType = "application/json"
+                response.writer.write(
+                    """{"error":"XSS_DETECTED","message":"Request blocked due to suspicious content."}"""
+                )
+                return false
+            }
+        }
         return true
     }
 
@@ -55,16 +64,20 @@ class SecurityEnhancer(
         return redisManager.checkRateLimit("security:ip:$ip", MAX_REQUESTS_PER_MINUTE, WINDOW_SECONDS)
     }
 
-    private fun validateRequest(request: HttpServletRequest) {
+    private fun validateRequest(request: HttpServletRequest): Boolean {
         val query = request.queryString.orEmpty().lowercase()
-        val suspicious = listOf("<script", "javascript:", "data:", "blob:")
-        val matched = suspicious.firstOrNull(query::contains)
+        val uri = request.requestURI.lowercase()
+        val combined = "$query $uri"
+        val suspicious = listOf("<script", "javascript:", "data:", "blob:", "onerror=", "onload=", "eval(", "expression(")
+        val matched = suspicious.firstOrNull(combined::contains)
         if (matched != null) {
             log.warn(
-                "XSS attempt blocked: ip={} uri={} pattern={} time={}",
+                "XSS attempt BLOCKED: ip={} uri={} pattern={} time={}",
                 getClientIp(request), request.requestURI, matched, Instant.now()
             )
+            return false
         }
+        return true
     }
 
     /**

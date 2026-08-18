@@ -44,7 +44,7 @@ data class BridgeIceServerDto(val urls: List<String>, val username: String? = nu
     val udh: String? = null
 )
 
-class PstnApi(tokens: TokenStore) {
+class PstnApi(private val tokens: TokenStore) {
     private val client = AuthorizedApiClient(tokens)
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -95,6 +95,13 @@ class PstnApi(tokens: TokenStore) {
         return when (val result = client.request("GET", "/api/admin/dinstar/sms/incoming", "")) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsIncomingResponse>(result.value).messages) }
                 .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
+            is ApiResult.Error -> result
+        }
+    }
+
+    suspend fun hangup(callId: String): ApiResult<Boolean> {
+        return when (val result = client.request("POST", "/api/pstn/calls/$callId/hangup", "")) {
+            is ApiResult.Success -> ApiResult.Success(result.code, true)
             is ApiResult.Error -> result
         }
     }

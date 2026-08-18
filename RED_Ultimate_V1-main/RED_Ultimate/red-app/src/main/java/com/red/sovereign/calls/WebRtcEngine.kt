@@ -116,7 +116,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
         /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — المكالمة تستمر صوتياً ويُعلم المستخدم. */
-        fun onCameraUnavailable() {}
+        fun onCameraUnavailable() {
+            android.util.Log.w("WebRtcEngine", "Camera unavailable - call continues in audio-only mode")
+        }
     }
 
     private val egl = EglBase.create()

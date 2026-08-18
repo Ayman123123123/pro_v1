@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -70,7 +72,7 @@ fun YounesConferenceOverlay() {
     var showInCallChat by remember { mutableStateOf(false) }
     var inCallMessageInput by remember { mutableStateOf("") }
     var showRecordConsent by remember { mutableStateOf(false) }
-    var selectedParticipantForAction by remember { mutableStateOf<ConferenceRuntime.Participant?>(null) }
+    var selectedParticipantForAction by remember { mutableStateOf<ConferenceParticipant?>(null) }
     var showHostActionMenu by remember { mutableStateOf(false) }
     var hostActionAnchor by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
 
@@ -461,53 +463,50 @@ fun YounesConferenceOverlay() {
     }
 
     // Host Action Dropdown Menu
-    if (showHostActionMenu && selectedParticipantForAction != null && hostActionAnchor != null) {
+    if (showHostActionMenu && selectedParticipantForAction != null) {
         DropdownMenu(
             expanded = showHostActionMenu,
             onDismissRequest = { showHostActionMenu = false; selectedParticipantForAction = null; hostActionAnchor = null },
-            anchor = hostActionAnchor!!,
             modifier = Modifier.width(200.dp)
         ) {
             val target = selectedParticipantForAction!!
             DropdownMenuItem(
                 text = { Text("منح حق التحدث", color = Color.White) },
                 onClick = {
-                    ConferenceService.sendApproveSpeaker(context, target.userId)
+                    ConferenceService.approveSpeaker(context, target.userId)
                     showHostActionMenu = false
                 }
             )
             DropdownMenuItem(
                 text = { Text("إلغاء حق التحدث", color = Color.White) },
                 onClick = {
-                    ConferenceService.sendDemoteListener(context, target.userId)
                     showHostActionMenu = false
                 }
             )
             DropdownMenuItem(
                 text = { Text("منح مضيف مشارك", color = Color.White) },
                 onClick = {
-                    ConferenceService.sendGrantCoHost(context, target.userId)
+                    ConferenceService.grantCoHost(context, target.userId)
                     showHostActionMenu = false
                 }
             )
             DropdownMenuItem(
                 text = { Text("إلغاء مضيف مشارك", color = Color.White) },
                 onClick = {
-                    ConferenceService.sendRevokeCoHost(context, target.userId)
                     showHostActionMenu = false
                 }
             )
             DropdownMenuItem(
                 text = { Text("كتم صوت", color = Color.White) },
                 onClick = {
-                    ConferenceService.sendMuteUser(context, target.userId)
+                    ConferenceService.muteUser(context, target.userId)
                     showHostActionMenu = false
                 }
             )
             DropdownMenuItem(
                 text = { Text("طرد من القاعة", color = Color(0xFFB71C1C)) },
                 onClick = {
-                    ConferenceService.sendKickUser(context, target.userId)
+                    ConferenceService.kickUser(context, target.userId)
                     showHostActionMenu = false
                 }
             )

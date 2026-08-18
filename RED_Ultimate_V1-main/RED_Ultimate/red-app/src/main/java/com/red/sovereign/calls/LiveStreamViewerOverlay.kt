@@ -281,7 +281,7 @@ fun YounesLiveStreamOverlay() {
                             desc = "صوت",
                             color = if (LiveStreamRuntime.isMuted) Color(0xFFF91850) else Color.White
                         ) {
-                            LiveStreamRuntime.isMuted = !LiveStreamRuntime.isMuted // Mock toggle
+                            LiveStreamService.action(context, LiveStreamService.ACTION_TOGGLE_MIC)
                         }
                     } else {
                         // Viewer tools

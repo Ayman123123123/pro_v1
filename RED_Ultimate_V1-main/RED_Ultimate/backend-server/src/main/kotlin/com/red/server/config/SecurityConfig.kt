@@ -111,6 +111,9 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/admin/content/sticker-packs/*/install").authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/api/admin/content/sticker-packs/*/install").authenticated()
 
+                    // SMS send/incoming accessible to any authenticated user (server checks pstnEnabled)
+                    .requestMatchers(HttpMethod.POST, "/api/admin/dinstar/sms/send").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/admin/dinstar/sms/incoming").authenticated()
                     // Admin endpoints (including the legacy live-stream admin namespace)
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
                     // Social features

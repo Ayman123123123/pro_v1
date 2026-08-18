@@ -256,7 +256,9 @@ class RedMasterController(
         return try {
             val value = redis.opsForValue().get(key)
             value?.toIntOrNull() ?: 0
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            org.slf4j.LoggerFactory.getLogger(RedMasterController::class.java)
+                .warn("Redis daily usage read failed for $userId, returning 0: ${e.message}")
             0
         }
     }

@@ -17,21 +17,16 @@ USER root
 WORKDIR /build
 RUN chown gradle:gradle /build
 
-# Copy root gradle files for version catalog (libs)
-COPY --chown=gradle:gradle gradle/ ./gradle/
-COPY --chown=gradle:gradle settings.gradle.kts ./
-COPY --chown=gradle:gradle build.gradle.kts ./
-
-# Copy only modules needed by backend-server
-COPY --chown=gradle:gradle backend-server/ ./backend-server/
+# Copy backend-server as the Gradle root (it has its own settings.gradle.kts)
 COPY --chown=gradle:gradle shared-proto/ ./shared-proto/
+COPY --chown=gradle:gradle backend-server/ .
 
 USER gradle
 WORKDIR /build
 
 ENV GRADLE_OPTS="-Dorg.gradle.dependency.verification=lenient"
 RUN --mount=type=cache,target=/home/gradle/.gradle,uid=1000,gid=1000,mode=0755,sharing=locked \
-    gradle :backend-server:bootJar --no-daemon -x test --stacktrace
+    gradle :bootJar --no-daemon -x test --stacktrace
 
 FROM ${RUNTIME_BASE} AS runtime
 

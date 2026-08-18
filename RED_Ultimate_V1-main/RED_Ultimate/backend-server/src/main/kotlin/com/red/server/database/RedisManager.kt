@@ -69,7 +69,9 @@ class RedisManager(private val redis: StringRedisTemplate) {
                 }
                 keys
             } ?: emptySet()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            org.slf4j.LoggerFactory.getLogger(RedisManager::class.java)
+                .warn("Redis SCAN failed for pattern '$pattern': ${e.message}")
             emptySet()
         }
     }

@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
-import com.red.sovereign.auth.AuthModels.UserResponse
+import com.red.sovereign.auth.UserResponse
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
@@ -131,6 +131,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 pstnWebRtc?.release()
                 pstnWebRtc = null
             }
+            override fun onIncoming(sdp: String, fromNumber: String) { }
             override fun onError(message: String) {
                 pstnState = PstnState.Error(localize(message))
             }

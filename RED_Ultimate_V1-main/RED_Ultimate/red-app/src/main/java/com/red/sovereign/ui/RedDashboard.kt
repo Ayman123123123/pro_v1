@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,6 +101,8 @@ import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -227,6 +230,7 @@ import com.red.sovereign.media.voice.VoiceLockIndicator
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
+import com.red.sovereign.auth.SmsIncomingMessage
 import com.red.sovereign.social.FeedState
 import com.red.sovereign.social.FeedViewModel
 import com.red.sovereign.social.Post
@@ -250,6 +254,7 @@ import java.util.UUID
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.security.MessageDigest
 
 import com.red.sovereign.features.devices.DevicesScreen
@@ -2510,6 +2515,7 @@ private fun ChatHubScreen(
 @Composable
 private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit, onPstn: (String?) -> Unit = {}) {
     var showStatsScreen by remember { mutableStateOf(false) }
+    var showScheduledCallsScreen by remember { mutableStateOf(false) }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
@@ -2531,6 +2537,13 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         CallStatsScreen(
             viewModel = history,
             onBack = { showStatsScreen = false }
+        )
+        return
+    }
+
+    if (showScheduledCallsScreen) {
+        com.red.sovereign.features.calls.ScheduledCallsScreen(
+            onBack = { showScheduledCallsScreen = false }
         )
         return
     }
@@ -2599,8 +2612,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onPstn = { showDinstarDialog = true },
             onExplore = { onExplore() },
             onScheduledCalls = {
-                val intent = Intent(context, com.red.sovereign.features.calls.ScheduledCallsScreen::class.java)
-                context.startActivity(intent)
+                showScheduledCallsScreen = true
             }
         )
         Spacer(Modifier.height(14.dp))
@@ -3149,7 +3161,7 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
         PrimaryTabRow(tab) {
             listOf(
                 Icons.Default.Dialpad to "الأرقام",
-                Icons.Default.Message to "الرسائل",
+                Icons.AutoMirrored.Filled.Message to "الرسائل",
                 Icons.Default.Star to "المفضلة",
                 Icons.Default.History to "السجل",
                 Icons.Default.Contacts to "جهات الاتصال"
@@ -3260,7 +3272,7 @@ private fun DinstarSmsScreen(viewModel: AuthViewModel, pstnEnabled: Boolean) {
         // Header
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
+                Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
                 Column(Modifier.padding(start = 12.dp)) {
                     Text("رسائل DINSTAR SMS", fontWeight = FontWeight.Bold, color = AqyalGold)
                     Text(if (pstnEnabled) "الشريحة جاهزة للإرسال والاستقبال" else "غير مفعل — يفعله المسؤول من اللوحة", fontSize = 12.sp)
@@ -3411,7 +3423,7 @@ private fun InboxSmsPanel(
                 items(inboxMessages) { item ->
                     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Message, null, tint = AqyalGold, modifier = Modifier.size(28.dp))
+                            Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(28.dp))
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                                 Text("من: ${item.sender}", fontWeight = FontWeight.Bold)
                                 Text(item.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -3433,18 +3445,8 @@ data class SmsItem(
     val port: Int = -1
 )
 
-private suspend fun sendSms(viewModel: AuthViewModel, recipient: String, text: String) {
-    // TODO: استدعاء API الإرسال الفعلي عبر PstnApi
-    // val result = viewModel.pstnApi.sendSms(recipient, text)
-    // for now simulate
-    delay(1000)
-}
-
-private suspend fun loadInbox(viewModel: AuthViewModel) {
-    // TODO: استدعاء API الوارد الفعلي
-    // val result = viewModel.pstnApi.getInbox()
-    delay(1000)
-}
+// SMS actions are handled via AuthViewModel.sendSms() and AuthViewModel.loadSmsInbox()
+// which call the real PstnApi endpoints (sendSms / getInbox) — no stubs needed.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -4366,6 +4368,19 @@ private fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
     val canonical = listOf(first, second).sorted().joinToString("|")
     return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+}
+
+@Composable
+private fun TabButton(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) AqyalGold else Color.Transparent,
+            contentColor = if (selected) Color.Black else AqyalGold
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) { content() }
 }
 
 

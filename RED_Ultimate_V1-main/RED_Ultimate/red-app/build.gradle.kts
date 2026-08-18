@@ -5,9 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// المنفذ إلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما
-// الخادم يستمع على 8088 (بوابة Nginx) — فيفشل كل طلب بـ NETWORK_ERROR بلا
-// سبب ظاهر. البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
+// ╪º┘ä┘à┘å┘ü╪░ ╪Ñ┘ä╪▓╪º┘à┘è ┘ü┘è ╪º┘ä┘é┘è┘à╪⌐ ╪º┘ä╪º┘ü╪¬╪▒╪º╪╢┘è╪⌐: ╪¿╪»┘ê┘å┘ç ┘è┘é╪╡╪» OkHttp ╪º┘ä┘à┘å┘ü╪░ 80 ╪¿┘è┘å┘à╪º
+// ╪º┘ä╪«╪º╪»┘à ┘è╪│╪¬┘à╪╣ ╪╣┘ä┘ë 8088 (╪¿┘ê╪º╪¿╪⌐ Nginx) ΓÇö ┘ü┘è┘ü╪┤┘ä ┘â┘ä ╪╖┘ä╪¿ ╪¿┘Ç NETWORK_ERROR ╪¿┘ä╪º
+// ╪│╪¿╪¿ ╪╕╪º┘ç╪▒. ╪º┘ä╪¿┘å╪º╪í ╪º┘ä╪¡┘é┘è┘é┘è ┘è┘à╪▒┘æ╪▒ -PRED_SERVER_URL=http://SERVER_IP:PORT.
 val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.0.181:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
@@ -51,10 +51,10 @@ android {
             isMinifyEnabled = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Alpha/إصدارات ما قبل الإنتاج تُوقَّع بنفس الهوية المستقرة بين
-            // Docker وWindows حتى تبقى تحديثات APK متوافقة. للتوزيع الرسمي لاحقاً
-            // استبدل بما يلي: قراءة keystore ومعرّفاته من متغيرات بيئة/ملف غير معمول
-            // (لأمان أفضل، لا يُعتمد مفتاح مضمّن في المستودع).
+            // Alpha/╪Ñ╪╡╪»╪º╪▒╪º╪¬ ┘à╪º ┘é╪¿┘ä ╪º┘ä╪Ñ┘å╪¬╪º╪¼ ╪¬┘Å┘ê┘é┘Ä┘æ╪╣ ╪¿┘å┘ü╪│ ╪º┘ä┘ç┘ê┘è╪⌐ ╪º┘ä┘à╪│╪¬┘é╪▒╪⌐ ╪¿┘è┘å
+            // Docker ┘êWindows ╪¡╪¬┘ë ╪¬╪¿┘é┘ë ╪¬╪¡╪»┘è╪½╪º╪¬ APK ┘à╪¬┘ê╪º┘ü┘é╪⌐. ┘ä┘ä╪¬┘ê╪▓┘è╪╣ ╪º┘ä╪▒╪│┘à┘è ┘ä╪º╪¡┘é╪º┘ï
+            // ╪º╪│╪¬╪¿╪»┘ä ╪¿┘à╪º ┘è┘ä┘è: ┘é╪▒╪º╪í╪⌐ keystore ┘ê┘à╪╣╪▒┘æ┘ü╪º╪¬┘ç ┘à┘å ┘à╪¬╪║┘è╪▒╪º╪¬ ╪¿┘è╪ª╪⌐/┘à┘ä┘ü ╪║┘è╪▒ ┘à╪╣┘à┘ê┘ä
+            // (┘ä╪ú┘à╪º┘å ╪ú┘ü╪╢┘ä╪î ┘ä╪º ┘è┘Å╪╣╪¬┘à╪» ┘à┘ü╪¬╪º╪¡ ┘à╪╢┘à┘æ┘å ┘ü┘è ╪º┘ä┘à╪│╪¬┘ê╪»╪╣).
             signingConfig = signingConfigs.getByName("redLocalDebug")
         }
     }
@@ -115,6 +115,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
@@ -134,10 +135,6 @@ dependencies {
     implementation(libs.androidx.core.telecom)
     implementation(libs.webrtc.android)
     implementation(project(":shared-proto"))
-    // Call System Core dependencies
-    implementation(project(\":core:models\"))
-    implementation(project(\":core:network\"))
-    implementation(project(\":feature:camera\"))
 
     // DataStore for ScheduledCalls
     implementation(libs.androidx.datastore.preferences)
@@ -148,27 +145,27 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // ─── خطوط Google (Cairo + Tajawal) ───────────────────────────────────────
+    // ΓöÇΓöÇΓöÇ ╪«╪╖┘ê╪╖ Google (Cairo + Tajawal) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.androidx.compose.ui.text.google.fonts)
 
-    // ─── Coil — تحميل وعرض الصور والفيديو بكفاءة عالية ───────────────────────
+    // ΓöÇΓöÇΓöÇ Coil ΓÇö ╪¬╪¡┘à┘è┘ä ┘ê╪╣╪▒╪╢ ╪º┘ä╪╡┘ê╪▒ ┘ê╪º┘ä┘ü┘è╪»┘è┘ê ╪¿┘â┘ü╪º╪í╪⌐ ╪╣╪º┘ä┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
 
-    // ─── Lottie — أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) ─────────────────
+    // ΓöÇΓöÇΓöÇ Lottie ΓÇö ╪ú┘å┘è┘à┘è╪┤┘å ╪º╪¡╪¬╪▒╪º┘ü┘è (┘à╪ñ╪┤╪▒ ╪º┘ä┘â╪¬╪º╪¿╪⌐╪î ╪▒╪»┘ê╪» ╪º┘ä┘ü╪╣┘ä) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.lottie.compose)
 
-    // ─── emoji2-emojipicker — محدد الإيموجي الرسمي من Google ──────────────────
+    // ΓöÇΓöÇΓöÇ emoji2-emojipicker ΓÇö ┘à╪¡╪»╪» ╪º┘ä╪Ñ┘è┘à┘ê╪¼┘è ╪º┘ä╪▒╪│┘à┘è ┘à┘å Google ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.androidx.emoji2.emojipicker)
 
-    // ─── Paging 3 — تحميل المحادثات والمنشورات بتكاسل ───────────────────────
+    // ΓöÇΓöÇΓöÇ Paging 3 ΓÇö ╪¬╪¡┘à┘è┘ä ╪º┘ä┘à╪¡╪º╪»╪½╪º╪¬ ┘ê╪º┘ä┘à┘å╪┤┘ê╪▒╪º╪¬ ╪¿╪¬┘â╪º╪│┘ä ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // ─── WorkManager — مزامنة في الخلفية ─────────────────────────────────────
+    // ΓöÇΓöÇΓöÇ WorkManager ΓÇö ┘à╪▓╪º┘à┘å╪⌐ ┘ü┘è ╪º┘ä╪«┘ä┘ü┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.androidx.work.runtime.ktx)
 
-    // ─── Room — قاعدة بيانات محلية سيادية ────────────────────────────────────
+    // ΓöÇΓöÇΓöÇ Room ΓÇö ┘é╪º╪╣╪»╪⌐ ╪¿┘è╪º┘å╪º╪¬ ┘à╪¡┘ä┘è╪⌐ ╪│┘è╪º╪»┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
     implementation(libs.androidx.room.runtime)
@@ -176,10 +173,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
-    // ─── Accompanist — أذونات وتسهيلات Compose ─────────────────────────────────
+    // ΓöÇΓöÇΓöÇ Accompanist ΓÇö ╪ú╪░┘ê┘å╪º╪¬ ┘ê╪¬╪│┘ç┘è┘ä╪º╪¬ Compose ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.accompanist.permissions)
 
-    // ─── Biometric — قفل التطبيق بالبصمة/الوجه ────────────────────────────────
+    // ΓöÇΓöÇΓöÇ Biometric ΓÇö ┘é┘ü┘ä ╪º┘ä╪¬╪╖╪¿┘è┘é ╪¿╪º┘ä╪¿╪╡┘à╪⌐/╪º┘ä┘ê╪¼┘ç ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
 

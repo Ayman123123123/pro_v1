@@ -1,9 +1,10 @@
-package com.red.server.pstn
+﻿package com.red.server.pstn
 
 import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
 import com.red.server.services.DinstarSignal
 import org.slf4j.LoggerFactory
+import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.util.UUID
@@ -45,7 +46,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class DinstarLoadBalancer(
     private val hardware: DinstarHardwareService,
     private val fleet: DinstarFleetService,
-    private val jdbc: JdbcTemplate
+    private val jdbc: JdbcTemplate,
+    private val redis: RedisTemplate<String, String>
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarLoadBalancer::class.java)
@@ -351,5 +353,25 @@ class DinstarLoadBalancer(
                 UUID.randomUUID(), gatewayId, port, prefix, operator, score, reason.take(200), outcome
             )
         }.onFailure { log.debug("route decision not recorded: {}", it.message) }
+    }
+
+    /**
+     * Check if a user currently has an active PSTN call bound in Redis.
+     */
+    fun hasActiveCall(userId: UUID): Boolean {
+        return redis.opsForValue().get("red:pstn:active:$userId") != null
+    }
+
+    /**
+     * Resolve the active call binding for a user from the load balancer's
+     * internal tracking. Returns (callId, portIndex, gatewayId) or null.
+     */
+    fun resolveActiveCall(userId: UUID): Triple<String, Int, UUID>? {
+        val raw = redis.opsForValue().get("red:pstn:active:$userId") ?: return null
+        val parts = raw.split(":")
+        if (parts.size != 3) return null
+        return try {
+            Triple(parts[0], parts[1].toInt(), UUID.fromString(parts[2]))
+        } catch (_: Exception) { null }
     }
 }

@@ -9,6 +9,7 @@ import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -171,35 +172,37 @@ class PstnWebRtcManager(private val context: Context) {
             }
             override fun onIncomingInvite(sdp: String, fromNumber: String) {
                 state = PstnCallState.INVITING
+                val remoteSdp = SessionDescription(SessionDescription.Type.OFFER, sdp)
                 pc.setRemoteDescription(object : org.webrtc.SdpObserver {
                     override fun onSetSuccess() {
                         pc.createAnswer(object : org.webrtc.SdpObserver {
-                            override fun onCreateSuccess(sdp: SessionDescription) {
+                            override fun onCreateSuccess(answerSdp: SessionDescription) {
                                 pc.setLocalDescription(object : org.webrtc.SdpObserver {
                                     override fun onSetSuccess() {
                                         sipClient?.sendAck()
                                         state = PstnCallState.ACTIVE
-                                        events.onAnswered()
+                                        events.onAnswered(bridge.usedToday, bridge.dailyLimit)
                                     }
                                     override fun onSetFailure(error: String) {
                                         events.onError("SET_ANSWER_FAILED: $error")
                                     }
                                     override fun onCreateSuccess(sdp: SessionDescription?) = Unit
                                     override fun onCreateFailure(error: String) = Unit
-                                }, sdp)
+                                }, answerSdp)
                             }
                             override fun onCreateFailure(error: String) {
                                 events.onError("CREATE_ANSWER_FAILED: $error")
                             }
                             override fun onSetSuccess() = Unit
                             override fun onSetFailure(error: String) = Unit
-                        }, sdp)
+                        }, MediaConstraints())
                     }
                     override fun onCreateSuccess(sdp: SessionDescription?) = Unit
+                    override fun onCreateFailure(error: String) = Unit
                     override fun onSetFailure(error: String) {
                         events.onError("SET_REMOTE_SDP_FAILED: $error")
                     }
-                }, SessionDescription(SessionDescription.Type.OFFER, sdp))
+                }, remoteSdp)
                 events.onIncoming(sdp, fromNumber)
             }
             override fun onBye(cause: String?) {

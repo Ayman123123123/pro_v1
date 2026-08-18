@@ -1,4 +1,4 @@
-package com.red.server.websocket
+﻿package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -18,7 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
         whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
     }
     private val conferenceRoomService: com.red.server.calls.ConferenceRoomService = mock()

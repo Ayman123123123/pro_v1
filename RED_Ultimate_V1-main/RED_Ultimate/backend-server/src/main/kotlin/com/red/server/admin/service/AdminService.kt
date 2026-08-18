@@ -308,8 +308,16 @@ class AdminService(
             backup?.let {
                 try {
                     val f = java.io.File(it.storageLocation)
-                    if (f.exists()) f.delete()
-                } catch (_: Exception) {}
+                    if (f.exists()) {
+                        if (!f.delete()) {
+                            org.slf4j.LoggerFactory.getLogger(AdminService::class.java)
+                                .warn("Failed to delete backup file: ${it.storageLocation}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    org.slf4j.LoggerFactory.getLogger(AdminService::class.java)
+                        .warn("Error deleting backup file ${it.storageLocation}: ${e.message}")
+                }
             }
             backups.deleteById(backupId); true
         } else false

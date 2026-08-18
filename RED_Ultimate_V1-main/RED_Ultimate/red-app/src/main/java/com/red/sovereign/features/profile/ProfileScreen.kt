@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -61,6 +62,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.util.QrCodeGenerator
 
 /**
  * شاشة البروفايل الكاملة — صورة + اسم معروض + username + بايو + QR للهوية.
@@ -205,14 +207,19 @@ fun ProfileScreen(
 
         // QR للهوية (يظهر عند الطلب)
         if (showQr) {
+            val qrBitmap = remember(redId) { QrCodeGenerator.generate("red-id:$redId") }
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("رمز هويتك", fontWeight = FontWeight.Bold, color = AqyalGold)
                     Spacer(Modifier.height(12.dp))
-                    // QR بسيط بصري — معرّف يونس قابل للمشاركة
                     Surface(shape = RoundedCornerShape(16.dp), color = Color.White, modifier = Modifier.size(200.dp)) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text(redId, color = Color.Black, fontSize = 32.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                            androidx.compose.foundation.Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "QR Code for $redId",
+                                modifier = Modifier.fillMaxSize().padding(8.dp),
+                                contentScale = ContentScale.Fit
+                            )
                         }
                     }
                     Spacer(Modifier.height(12.dp))

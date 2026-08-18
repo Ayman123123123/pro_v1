@@ -1,4 +1,4 @@
-package com.red.server.pstn
+﻿package com.red.server.pstn
 
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
@@ -12,6 +12,10 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -50,6 +54,12 @@ class PstnManager(
     @Volatile private var connection: DefaultManagerConnection? = null
     @Volatile private var consecutiveHeartbeatFailures = 0
     private var reconnectAttempt = 0
+
+    private val reconnectScheduler: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "pstn-ami-reconnect").apply { isDaemon = true }
+        }
+    @Volatile private var reconnectFuture: ScheduledFuture<*>? = null
 
     // ── Startup ────────────────────────────────────────────────────────────
 
@@ -114,14 +124,21 @@ class PstnManager(
         val delay = RECONNECT_DELAYS.getOrElse(reconnectAttempt) { RECONNECT_DELAYS.last() }
         reconnectAttempt++
         log.info("Scheduling AMI reconnect in {}ms (attempt {})", delay, reconnectAttempt)
-        Thread.sleep(delay)
-        try {
-            ensureConnected()
-            consecutiveHeartbeatFailures = 0
-            log.info("AMI reconnected successfully")
-        } catch (e: Exception) {
-            log.error("AMI reconnect attempt {} failed: {}", reconnectAttempt, e.message)
-        }
+        reconnectFuture?.cancel(false)
+        reconnectFuture = reconnectScheduler.schedule(
+            {
+                try {
+                    ensureConnected()
+                    consecutiveHeartbeatFailures = 0
+                    reconnectAttempt = 0
+                    log.info("AMI reconnected successfully")
+                } catch (e: Exception) {
+                    log.error("AMI reconnect attempt {} failed: {}", reconnectAttempt, e.message)
+                }
+            },
+            delay,
+            TimeUnit.MILLISECONDS
+        )
     }
 
     // ── Connection ─────────────────────────────────────────────────────────
@@ -161,10 +178,15 @@ class PstnManager(
      *
      * @param phoneNumber رقم الوجهة — مُتحقَّق منه (أرقام فقط + علامة دولية)
      * @param pjsipEndpoint اسم نظير PJSIP — مُتحقَّق منه ضد الحقن
+     * @param portIndex فهرس المنفذ داخل البوابة الاختيارية — يُستخدم لتوجيه
+     *                  الاتصال إلى شريحة SIM محددة. -1 يعني التلقائي.
      * @return correlationId يُستخدَم كـ callId في قاعدة البيانات
      */
-    @JvmOverloads
-    fun dialGsm(phoneNumber: String, pjsipEndpoint: String = "dinstar-gateway"): String {
+    fun dialGsm(
+        phoneNumber: String,
+        pjsipEndpoint: String = "dinstar-gateway",
+        portIndex: Int = -1
+    ): String {
         require(phoneNumber.matches(Regex("^\\+?[0-9]{6,15}$"))) { "Invalid phone number" }
         require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
 
@@ -177,6 +199,8 @@ class PstnManager(
             callerId = "RED SOVEREIGN"
             // Pass selected gateway to dialplan
             setVariable("RED_GW", pjsipEndpoint)
+            // Expose the selected SIM/port slot for gateway dialplan branching
+            setVariable("RED_PORT_INDEX", portIndex.toString())
             // Expose correlationId for DinstarEventListener binding
             setVariable("RED_CALL_ID", correlationId)
             setAsync(true)
@@ -199,7 +223,15 @@ class PstnManager(
                 lastException = e
                 log.warn("PSTN originate attempt {}/{} failed: {}", attempt + 1, maxRetries, e.message)
                 connectionLock.withLock { connection = null }
-                if (attempt < maxRetries - 1) Thread.sleep(1_000L * (attempt + 1))
+                if (attempt < maxRetries - 1) {
+                    val retryDelayMs = 1_000L * (attempt + 1)
+                    try {
+                        Thread.sleep(retryDelayMs)
+                    } catch (ie: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw IllegalStateException("PSTN originate interrupted during retry backoff", ie)
+                    }
+                }
             }
         }
         throw IllegalStateException(
@@ -215,6 +247,8 @@ class PstnManager(
 
     @PreDestroy
     fun close() {
+        reconnectFuture?.cancel(false)
+        reconnectScheduler.shutdownNow()
         connectionLock.withLock {
             connection?.let { conn ->
                 runCatching { conn.logoff() }.onSuccess { log.info("AMI connection closed") }

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,12 +19,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.util.QrCodeGenerator
 
 /**
  * ════════════════════════════════════════════════════════════════════════
@@ -63,30 +66,21 @@ fun ShareRedIdSheet(
             )
             Spacer(Modifier.height(20.dp))
 
-            // QR Code placeholder
+            // Real QR Code
+            val qrBitmap = remember(redId) { QrCodeGenerator.generate("red-id:$redId") }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(200.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.QrCode2,
-                        null,
-                        tint = Color.Black,
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Text(
-                        redId,
-                        color = Color.Black,
-                        fontSize = 16.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Image(
+                    bitmap = qrBitmap.asImageBitmap(),
+                    contentDescription = "QR Code for $redId",
+                    modifier = Modifier.size(180.dp)
+                )
             }
             Spacer(Modifier.height(20.dp))
 

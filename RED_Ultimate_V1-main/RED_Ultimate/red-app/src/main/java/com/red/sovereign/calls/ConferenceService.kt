@@ -66,6 +66,7 @@ object ConferenceRuntime {
     var pinnedMessage by mutableStateOf("")
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
     var reactions: List<SpaceReaction> by mutableStateOf(emptyList())
+    var myUserId by mutableStateOf("")
 }
 
 class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {

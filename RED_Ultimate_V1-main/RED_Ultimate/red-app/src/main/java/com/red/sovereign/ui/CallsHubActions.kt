@@ -424,7 +424,6 @@ fun ConferenceHubDialog(
                     .clip(RoundedCornerShape(24.dp))
                     .background(Brush.verticalGradient(listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))))
                     .border(1.dp, Color(0xFFA78BFA).copy(0.3f), RoundedCornerShape(24.dp))
-                    .clickable(enabled = false) {}
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -588,7 +587,6 @@ fun LiveStreamHubDialog(
                     .clip(RoundedCornerShape(24.dp))
                     .background(Brush.verticalGradient(listOf(Color(0xFF1E0A14), Color(0xFF0F0A1A))))
                     .border(1.dp, Color(0xFFF91850).copy(0.35f), RoundedCornerShape(24.dp))
-                    .clickable(enabled = false) {}
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

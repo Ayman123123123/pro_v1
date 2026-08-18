@@ -39,6 +39,41 @@ class NotificationService(
         senderName: String? = null,
         threadId: String? = null
     ): NotificationDto {
+        // ── تحقق من تفضيلات الإشعارات ──
+        val prefs = getPreferences(userId)
+        val typeEnabled = when (type.lowercase()) {
+            "message", "messages" -> prefs.messages
+            "call", "calls" -> prefs.calls
+            "group", "groups" -> prefs.groups
+            "story", "stories" -> prefs.stories
+            "live" -> prefs.live
+            "system" -> prefs.system
+            "dinstar" -> prefs.dinstar
+            "security" -> prefs.security
+            else -> true
+        }
+        if (!typeEnabled) {
+            log.debug("Notification suppressed for {} type={}: user preference disabled", userId, type)
+            return NotificationDto("", type, title, body, senderId, senderName, threadId, false, Instant.now())
+        }
+
+        // ── تحقق من ساعات الصمت ──
+        if (prefs.quietHoursEnabled && prefs.quietHoursStart != null && prefs.quietHoursEnd != null) {
+            try {
+                val now = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Aden"))
+                val start = java.time.LocalTime.parse(prefs.quietHoursStart)
+                val end = java.time.LocalTime.parse(prefs.quietHoursEnd)
+                val inQuietHours = if (start.isBefore(end) || start == end) {
+                    now.isAfter(start) && now.isBefore(end)
+                } else {
+                    now.isAfter(start) || now.isBefore(end)
+                }
+                if (inQuietHours) {
+                    log.debug("Notification suppressed for {} during quiet hours ({}-{})", userId, prefs.quietHoursStart, prefs.quietHoursEnd)
+                    return NotificationDto("", type, title, body, senderId, senderName, threadId, false, Instant.now())
+                }
+            } catch (_: Exception) { }
+        }
         val id = UUID.randomUUID().toString()
         val now = Instant.now()
 

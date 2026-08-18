@@ -1,6 +1,7 @@
 package com.red.server.controllers
 
 import com.red.server.audit.AuditService
+import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.services.DinstarHardwareService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -23,7 +24,8 @@ import java.util.UUID
 @RequestMapping("/api/admin/dinstar/sms")
 class DinstarSmsController(
     private val hardware: DinstarHardwareService,
-    private val audit: AuditService
+    private val audit: AuditService,
+    private val users: UserAccountRepository
 ) {
 
     /**
@@ -44,6 +46,10 @@ class DinstarSmsController(
         authentication: Authentication
     ): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
+        val user = users.findById(actor).orElseThrow { NoSuchElementException("User not found") }
+        if (!user.pstnEnabled) {
+            return mapOf("error" to "SMS_NOT_ENABLED", "message" to "SMS is not enabled for your account")
+        }
         val text = body["text"]?.toString() ?: throw IllegalArgumentException("SMS text is required")
         @Suppress("UNCHECKED_CAST")
         val params = (body["param"] as? List<Map<String, Any?>>) ?: throw IllegalArgumentException("param array is required")
@@ -81,7 +87,14 @@ class DinstarSmsController(
 
     /** جلب SMS الواردة */
     @GetMapping("/incoming")
-    fun queryIncomingSms(): Map<String, Any?> = hardware.queryIncomingSms()
+    fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
+        val actor = UUID.fromString(authentication.name)
+        val user = users.findById(actor).orElseThrow { NoSuchElementException("User not found") }
+        if (!user.pstnEnabled) {
+            return mapOf("error" to "SMS_NOT_ENABLED", "messages" to emptyList<Any>())
+        }
+        return hardware.queryIncomingSms()
+    }
 
     /** عدد SMS في الطابور */
     @GetMapping("/queue")

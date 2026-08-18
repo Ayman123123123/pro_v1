@@ -28,6 +28,7 @@ import com.red.sovereign.ui.components.SovereignWaveVisualizer
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.SovereignGradients
 import com.red.sovereign.auth.PstnState
+import com.red.sovereign.auth.AuthViewModel
 
 /**
  * 🇾🇪 DINSTAR GSM & Yemeni PSTN Calling Screen — Ultimate Luxury Experience

@@ -1,4 +1,4 @@
-package com.red.server.websocket
+﻿package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.ActiveCallRegistry
@@ -29,7 +29,7 @@ class CallWebSocketHandlerTest {
     private val history: CallHistoryService = mock()
     private val notifications: NotificationService = mock()
     private val activeCalls: ActiveCallRegistry = mock()
-    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
         whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
     }
     private val handler = CallWebSocketHandler(objectMapper, history, notifications, activeCalls, accessGuard)

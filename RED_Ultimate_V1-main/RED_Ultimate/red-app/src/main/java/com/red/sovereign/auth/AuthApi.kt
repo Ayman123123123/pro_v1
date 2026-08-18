@@ -6,7 +6,7 @@ import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
-import com.red.sovereign.auth.AuthModels.UserResponse
+import com.red.sovereign.auth.UserResponse
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient

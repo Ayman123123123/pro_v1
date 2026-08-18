@@ -1,7 +1,8 @@
-package com.red.server.websocket
+﻿package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.LiveStreamService
+import com.red.server.calls.RoomPasswordHasher
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -17,8 +18,8 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val streams = LiveStreamService(mock())
-    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock().also {
+    private val streams = LiveStreamService(mock<RoomPasswordHasher>())
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
         whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
     }
     private val handler = LiveStreamWebSocketHandler(objectMapper, streams, accessGuard)

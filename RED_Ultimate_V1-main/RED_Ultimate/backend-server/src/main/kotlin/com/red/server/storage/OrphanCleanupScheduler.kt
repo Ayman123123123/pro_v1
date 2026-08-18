@@ -38,10 +38,10 @@ class OrphanCleanupScheduler(
             log.info("Orphan scan — media_files: {} bytes, db_records: {}", stats["media_files"], stats["database_records"])
             val referenced = collectReferencedMediaKeys()
             log.info("Collected {} referenced media keys from MongoDB", referenced.size)
-            // Dry run first — set to false after verification
-            val orphans = media.deleteOrphans(referenced, dryRun = true)
+            // Remove orphaned media objects — dryRun=false after verification
+            val orphans = media.deleteOrphans(referenced, dryRun = false)
             if (orphans.isNotEmpty()) {
-                log.warn("Found {} orphan media keys (dryRun). First 10: {}", orphans.size, orphans.take(10))
+                log.warn("Deleted {} orphan media keys. First 10: {}", orphans.size, orphans.take(10))
             } else {
                 log.info("No orphan media keys found ✓")
             }
