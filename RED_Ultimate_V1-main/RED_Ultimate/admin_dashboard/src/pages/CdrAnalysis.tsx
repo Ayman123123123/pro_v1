@@ -297,9 +297,9 @@ export default function CdrAnalysis() {
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card title="توزيع المشغلين" size="small">
-            {echartsReady && operatorChartOption ? (
-              <echartsForReact option={operatorChartOption} style={{ height: 240 }} />
-            ) : operatorDist.length > 0 ? (
+            {echartsReady && operatorChartOption
+              ? React.createElement(echartsForReact, { option: operatorChartOption, style: { height: 240 } })
+            : operatorDist.length > 0 ? (
               <Table
                 size="small"
                 dataSource={operatorDist}
@@ -315,9 +315,9 @@ export default function CdrAnalysis() {
         </Col>
         <Col xs={24} md={12}>
           <Card title="توزيع البوابات" size="small">
-            {echartsReady && gatewayChartOption ? (
-              <echartsForReact option={gatewayChartOption} style={{ height: 240 }} />
-            ) : gatewayDist.length > 0 ? (
+            {echartsReady && gatewayChartOption
+              ? React.createElement(echartsForReact, { option: gatewayChartOption, style: { height: 240 } })
+            : gatewayDist.length > 0 ? (
               <Table
                 size="small"
                 dataSource={gatewayDist}
