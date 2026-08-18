@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, Tag, theme } from 'antd';
+import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, theme } from 'antd';
 import {
   DashboardOutlined,
   MobileOutlined,
@@ -22,6 +22,7 @@ import {
   MessageOutlined,
   CloudServerOutlined,
   DatabaseOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -255,19 +256,38 @@ export default function App() {
           colorWarning: '#E8B84A',
           colorBgBase: '#050A16',
           borderRadius: 14,
+          fontFamily: "'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif",
+        },
+        components: {
+          Menu: {
+            darkItemBg: 'transparent',
+            darkSubMenuItemBg: 'transparent',
+            darkItemColor: '#8892B0',
+            darkItemHoverBg: 'rgba(0, 201, 140, 0.08)',
+            darkItemHoverColor: '#EDF7FB',
+            darkItemSelectedBg: 'linear-gradient(135deg, rgba(0,201,140,0.22) 0%, rgba(53,203,224,0.12) 100%)' as unknown as string,
+            darkItemSelectedColor: '#00E6A0',
+            itemBorderRadius: 10,
+            itemMarginInline: 10,
+          },
+          Layout: {
+            siderBg: '#0A1628',
+            headerBg: 'rgba(8, 21, 37, 0.85)',
+            headerHeight: 64,
+          },
         },
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#050A16' }}>
-        <Sider theme="dark" collapsible width={240}>
-          <div style={{
-            height: 64, padding: 16, color: '#fff', textAlign: 'center',
-            borderBottom: '1px solid #1A2F4A', marginBottom: 8
-          }}>
-            <strong style={{ fontSize: 16 }}>يونس ماستر</strong>
-            <div style={{ color: '#8A9FB2', fontSize: 11, marginTop: 2 }}>
-              الإدارة السيادية
-            </div>
+        <Sider theme="dark" collapsible width={248} className="yns-sider">
+          <div className="yns-brand">
+            <span className="admin-brand-icon admin-brand-icon--image">
+              <img src="/admin-master-icon.svg" alt="شعار يونس" />
+            </span>
+            <span className="yns-brand-text">
+              <strong>يونس ماستر</strong>
+              <small>الإدارة السيادية</small>
+            </span>
           </div>
           <Menu
             theme="dark"
@@ -275,33 +295,46 @@ export default function App() {
             selectedKeys={[currentPage]}
             items={groupedMenu}
             onClick={({ key }) => setCurrentPage(key as PageKey)}
-            style={{ borderRight: 0 }}
+            style={{ borderRight: 0, background: 'transparent' }}
+            className="yns-menu"
           />
+          <div className="yns-sider-footer">
+            <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
+            {apiUp ? 'النظام يعمل' : 'النظام متوقف'}
+          </div>
         </Sider>
         <Layout>
-          <Header style={{
-            background: '#081525', color: '#F1F7FA',
-            borderBottom: '1px solid #17344A', padding: '0 20px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-          }}>
-            <span style={{ color: '#E8B84A', fontSize: 16, fontWeight: 'bold' }}>
-              {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
-            </span>
-            <Space>
-              <Tag color={apiUp ? 'green' : 'red'}>{apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}</Tag>
+          <Header className="yns-header">
+            <div className="yns-header-titles">
+              <span className="yns-header-group">
+                {groupLabels[menuItems.find(m => m.key === currentPage)?.group || 'main']}
+              </span>
+              <span className="yns-header-page">
+                {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
+              </span>
+            </div>
+            <Space size={12}>
+              <span className={apiUp ? 'yns-status up' : 'yns-status down'}>
+                <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
+                {apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}
+              </span>
               {pendingCount > 0 && (
                 <Badge count={pendingCount} color="#E8B84A">
                   <Button size="small" onClick={() => setCurrentPage('approvals')}>موافقات</Button>
                 </Badge>
               )}
-              {adminUser?.username && <Tag>{adminUser.username}</Tag>}
-              <Button danger onClick={logout}>تسجيل الخروج</Button>
+              {adminUser?.username && (
+                <span className="yns-user-chip">
+                  <span className="yns-user-avatar">
+                    {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0)}
+                  </span>
+                  {adminUser.username}
+                </span>
+              )}
+              <Button danger icon={<LogoutOutlined />} onClick={logout}>تسجيل الخروج</Button>
             </Space>
           </Header>
-          <Content style={{
-            margin: 16, padding: 24, background: '#07111F',
-            border: '1px solid #132B40', borderRadius: 18, overflow: 'auto'
-          }}>
+          <Content className="yns-content">
             {/* حد أخطاء لكل صفحة: عطل في قسم واحد لا يُسقط اللوحة كلها */}
             <ErrorBoundary resetKey={currentPage}>
               <Suspense fallback={
@@ -309,7 +342,9 @@ export default function App() {
                   <Spin size="large" tip="جاري التحميل..." />
                 </div>
               }>
-                {renderPage()}
+                <div className="yns-page" key={currentPage}>
+                  {renderPage()}
+                </div>
               </Suspense>
             </ErrorBoundary>
           </Content>
