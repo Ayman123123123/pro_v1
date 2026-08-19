@@ -186,7 +186,7 @@ class AuthController(
     private fun requireValidCsrf(request: HttpServletRequest) {
         val cookie = request.cookies?.firstOrNull { it.name == ADMIN_CSRF_COOKIE }?.value
         val header = request.getHeader("X-RED-CSRF")
-        require(!cookie.isNullOrBlank() && cookie == header) { "CSRF_VALIDATION_FAILED" }
+        require(CsrfTokenValidator.matches(cookie, header)) { "CSRF_VALIDATION_FAILED" }
     }
 
     /**
