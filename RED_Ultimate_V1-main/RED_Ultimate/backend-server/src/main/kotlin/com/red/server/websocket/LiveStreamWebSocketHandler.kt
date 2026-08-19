@@ -28,7 +28,7 @@ class LiveStreamWebSocketHandler(
 
     enum class Role { BROADCASTER, VIEWER }
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val accountId = session.attributes["accountId"] as? String
         val redId = session.attributes["redId"] as? String ?: userId
