@@ -8,9 +8,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.core.database.LocalRepository
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -23,7 +25,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
+    private val localData = LocalRepository(application)
     private val pstn = PstnApi(tokens)
+    private var accountCleanup: Job? = null
     private val discovery = LocalServerDiscovery(application)
 
     var serverState: ServerState by mutableStateOf(ServerState.Ready(ServerEndpoint.url()))
@@ -83,6 +87,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun showWelcome() { loginUsernameHint = null; loginNotice = null; state = AuthState.Welcome }
 
     fun register(displayName: String, username: String, password: String) = viewModelScope.launch {
+        accountCleanup?.join()
         state = AuthState.Submitting
         val enrollment = runCatching { withContext(Dispatchers.Default) { keys.enrollment() } }
             .getOrElse { state = AuthState.Error("تعذر إنشاء مفاتيح التشفير المحلية"); return@launch }
@@ -97,6 +102,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun login(username: String, password: String) = viewModelScope.launch {
+        accountCleanup?.join()
         loginUsernameHint = null
         loginNotice = null
         state = AuthState.Submitting
@@ -169,12 +175,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        // احتفظ بمعرّف الجهاز الموثوق فقط؛ مسح الجلسة يتم فورًا حتى لو لم تتوفر الشبكة.
+        // نمسح الرموز فورًا ثم كل بيانات الحساب محليًا قبل السماح بدخول جديد.
+        // يبقى معرف الجهاز لأنه جهاز موثوق للحساب نفسه، أما المحادثات وOutbox فلا تحمل ownerId.
         val refreshToken = tokens.refreshToken
         tokens.clearSession()
         state = AuthState.Welcome
-        if (!refreshToken.isNullOrBlank()) {
-            viewModelScope.launch { api.logout(LogoutRequest(refreshToken)) }
+        accountCleanup = viewModelScope.launch {
+            localData.clearAccountData()
+            if (!refreshToken.isNullOrBlank()) api.logout(LogoutRequest(refreshToken))
         }
     }
 
@@ -192,7 +200,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
             }
             is ApiResult.Error -> {
-                if (result.code == 401 || result.code == 403) tokens.clearSession()
+                if (result.code == 401 || result.code == 403) {
+                    tokens.clearSession()
+                    localData.clearAccountData()
+                }
                 state = AuthState.Welcome
                 if (result.code == null) discoverInBackground(LocalServerDiscovery.Mode.FAST)
             }

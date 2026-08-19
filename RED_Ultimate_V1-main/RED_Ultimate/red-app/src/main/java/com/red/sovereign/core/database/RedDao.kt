@@ -176,4 +176,54 @@ interface RedDao {
 
     @Query("SELECT * FROM local_history WHERE encryptedPlaintext LIKE :query ORDER BY createdAt DESC")
     suspend fun searchAllMessages(query: String): List<LocalHistoryEntity>
+
+    // --- Account boundary ---
+    // لا تحمل الجداول ownerId؛ لذا لا يجوز إبقاؤها عند تبديل الحساب على الجهاز نفسه.
+    @Query("DELETE FROM outbox_envelopes")
+    suspend fun clearOutboxEnvelopes()
+
+    @Query("DELETE FROM outbox")
+    suspend fun clearOutbox()
+
+    @Query("DELETE FROM message_reactions")
+    suspend fun clearReactions()
+
+    @Query("DELETE FROM drafts")
+    suspend fun clearDrafts()
+
+    @Query("DELETE FROM local_history")
+    suspend fun clearLocalHistory()
+
+    @Query("DELETE FROM messages")
+    suspend fun clearMessages()
+
+    @Query("DELETE FROM conversations")
+    suspend fun clearConversations()
+
+    @Query("DELETE FROM contacts")
+    suspend fun clearAllContacts()
+
+    @Query("DELETE FROM groups")
+    suspend fun clearGroups()
+
+    @Query("DELETE FROM call_logs")
+    suspend fun clearCallLogs()
+
+    @Query("DELETE FROM stories")
+    suspend fun clearStories()
+
+    @Transaction
+    suspend fun clearAccountData() {
+        clearOutboxEnvelopes()
+        clearOutbox()
+        clearReactions()
+        clearDrafts()
+        clearLocalHistory()
+        clearMessages()
+        clearConversations()
+        clearAllContacts()
+        clearGroups()
+        clearCallLogs()
+        clearStories()
+    }
 }

@@ -90,6 +90,9 @@ class LocalRepository(context: Context) {
     }
     fun getFriends(): Flow<List<ContactEntity>> = dao.getFriends()
 
+    /** يمسح بيانات حساب واحد قبل دخول حساب آخر على الجهاز نفسه. */
+    suspend fun clearAccountData() = dao.clearAccountData()
+
     // --- Groups ---
     suspend fun saveGroups(groups: List<GroupEntity>) = dao.insertGroups(groups)
     fun getGroups(): Flow<List<GroupEntity>> = dao.getGroups()
