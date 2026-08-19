@@ -2,22 +2,22 @@ package com.red.server.controllers
 
 import com.red.server.audit.AuditService
 import com.red.server.services.DinstarHardwareService
-import org.springframework.http.ResponseEntity
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 import org.springframework.security.core.Authentication
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
 
 /**
- * Dinstar SMS Controller — إرسال واستقبال SMS عبر UC2000-VE-8G
- * 
- * Endpoints المعرّفة حسب وثائق Dinstar الرسمية:
- * 
- * POST /api/admin/dinstar/sms/send     → إرسال SMS (فردي/مجمّع)
- * POST /api/admin/dinstar/sms/result   → جلب نتائج الإرسال
- * GET  /api/admin/dinstar/sms/incoming → جلب SMS الواردة
- * GET  /api/admin/dinstar/sms/queue    → عدد SMS في الطابور
- * POST /api/admin/dinstar/sms/stop     → إيقاف مهمة إرسال
- * POST /api/admin/dinstar/sms/deliver  → جلب حالة التسليم
+ * Dinstar SMS Controller — إرسال واستقبال SMS عبر بوابة DINSTAR.
+ * جميع المسارات محمية بدور ADMIN في SecurityConfig.
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/sms")
@@ -25,44 +25,28 @@ class DinstarSmsController(
     private val hardware: DinstarHardwareService,
     private val audit: AuditService
 ) {
-
     /**
-     * إرسال SMS عبر Dinstar
-     * 
-     * الجسم (JSON):
-     * {
-     *   "text": "محتوى الرسالة",
-     *   "param": [{"number": "777123456", "user_id": 1}],
-     *   "port": [0, 1],        // اختياري: منافذ محددة
-     *   "encoding": "GSM7BIT", // اختياري: GSM7BIT أو UCS2
-     *   "request_status_report": true
-     * }
+     * يحافظ العقد على صيغة Dinstar (`param`, و`user_id`) لكنه يرفض الدفعات
+     * الفارغة أو الأرقام غير الصالحة قبل الاتصال بالعتاد. حد البايتات لنص
+     * العربية يظل في DinstarHardwareService لأنه قاعدة بروتوكول الجهاز.
      */
     @PostMapping("/send")
     fun sendSms(
-        @RequestBody body: Map<String, Any?>,
+        @Valid @RequestBody request: SendSmsRequest,
         authentication: Authentication
     ): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
-        val text = body["text"]?.toString() ?: throw IllegalArgumentException("SMS text is required")
-        @Suppress("UNCHECKED_CAST")
-        val params = (body["param"] as? List<Map<String, Any?>>) ?: throw IllegalArgumentException("param array is required")
-        
-        val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
-        val encoding = body["encoding"]?.toString() ?: "GSM7BIT"
-        // اختياري: بوابة بعينها من الأسطول. الخدمة تتحقق من أنه عنوان خاص.
-        val gatewayHost = body["gatewayHost"]?.toString()
-
-        audit.record(actor, "DINSTAR_SMS_SEND", text.length.toString(), mapOf(
-            "recipientCount" to params.size, "encoding" to encoding,
-            "ports" to (portList?.toString() ?: "all"),
-            "gateway" to (gatewayHost ?: "active")
+        val params = request.toHardwareParams()
+        audit.record(actor, "DINSTAR_SMS_SEND", request.text.length.toString(), mapOf(
+            "recipientCount" to params.size,
+            "encoding" to request.encoding,
+            "ports" to (request.port?.toString() ?: "all"),
+            "gateway" to (request.gatewayHost ?: "active")
         ))
-
-        return hardware.sendSms(text, params, portList, encoding, gatewayHost)
+        return hardware.sendSms(request.text, params, request.port, request.encoding, request.gatewayHost)
     }
 
-    /** جلب نتائج إرسال SMS */
+    /** جلب نتائج إرسال SMS. */
     @PostMapping("/result")
     fun querySmsResult(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val userIds = (body["user_id"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
@@ -70,7 +54,7 @@ class DinstarSmsController(
         return hardware.querySmsResult(userIds, numbers)
     }
 
-    /** جلب حالة تسليم SMS */
+    /** جلب حالة تسليم SMS. */
     @PostMapping("/deliver")
     fun querySmsDeliveryStatus(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val numbers = (body["number"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
@@ -79,15 +63,15 @@ class DinstarSmsController(
         return hardware.querySmsDeliveryStatus(numbers, timeAfter, timeBefore)
     }
 
-    /** جلب SMS الواردة */
+    /** جلب SMS الواردة. */
     @GetMapping("/incoming")
     fun queryIncomingSms(): Map<String, Any?> = hardware.queryIncomingSms()
 
-    /** عدد SMS في الطابور */
+    /** عدد SMS في الطابور. */
     @GetMapping("/queue")
     fun querySmsQueueCount(): Map<String, Any?> = hardware.querySmsQueueCount()
 
-    /** إيقاف مهمة إرسال SMS */
+    /** إيقاف مهمة إرسال SMS. */
     @PostMapping("/stop")
     fun stopSmsTask(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val taskId = (body["task_id"] as? Number)?.toInt()
@@ -95,3 +79,33 @@ class DinstarSmsController(
         return hardware.stopSmsTask(taskId)
     }
 }
+
+data class SendSmsRequest(
+    @field:NotBlank
+    @field:Size(max = DinstarHardwareService.MAX_SMS_TEXT_BYTES)
+    val text: String,
+    @field:Size(min = 1, max = DinstarHardwareService.MAX_SMS_RECIPIENTS)
+    @field:Valid
+    val param: List<SmsRecipient>,
+    @field:Size(max = DinstarHardwareService.MAX_SMS_RECIPIENTS)
+    val port: List<@Min(0) Int>? = null,
+    @field:Pattern(regexp = "GSM7BIT|UCS2")
+    val encoding: String = "GSM7BIT",
+    @field:Size(max = 255)
+    val gatewayHost: String? = null
+) {
+    fun toHardwareParams(): List<Map<String, Any?>> = param.map { recipient ->
+        buildMap {
+            put("number", recipient.number)
+            recipient.user_id?.let { put("user_id", it) }
+        }
+    }
+}
+
+data class SmsRecipient(
+    @field:NotBlank
+    @field:Pattern(regexp = "\\+?[0-9]{6,20}")
+    val number: String,
+    @field:Min(0)
+    val user_id: Int? = null
+)
