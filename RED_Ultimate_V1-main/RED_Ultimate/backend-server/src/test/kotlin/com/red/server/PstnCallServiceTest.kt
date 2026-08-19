@@ -46,11 +46,20 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(3)
 
-        val service = PstnCallService(users, redis, jdbc, pstn, loadBalancer, history)
+        val service = PstnCallService(users, redis, jdbc, pstn, loadBalancer, history, dinstarEnabled = true)
         assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
         verify(loadBalancer, never()).selectPort(any())
         verifyNoInteractions(pstn)
+    }
+
+    @Test
+    fun `hardware-disabled PSTN rejects before any external dependency`() {
+        val service = PstnCallService(users, redis, jdbc, pstn, loadBalancer, history, dinstarEnabled = false)
+
+        assertThrows(IllegalArgumentException::class.java) { service.dial(UUID.randomUUID(), "+967771234567") }
+
+        verifyNoInteractions(users, redis, jdbc, pstn, loadBalancer, history)
     }
 }

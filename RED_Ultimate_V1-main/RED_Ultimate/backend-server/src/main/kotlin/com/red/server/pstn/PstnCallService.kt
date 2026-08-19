@@ -6,6 +6,7 @@ import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
@@ -21,7 +22,8 @@ class PstnCallService(
     private val jdbc: JdbcTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
-    private val history: CallHistoryService
+    private val history: CallHistoryService,
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean = false
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
@@ -32,6 +34,7 @@ class PstnCallService(
     }
 
     fun dial(userId: UUID, suppliedNumber: String): PstnCallResponse {
+        require(dinstarEnabled) { "PSTN_HARDWARE_DISABLED" }
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED) { "Account is not approved" }
         require(user.pstnEnabled && user.pstnDailyLimit > 0) { "PSTN access is not enabled for this account" }

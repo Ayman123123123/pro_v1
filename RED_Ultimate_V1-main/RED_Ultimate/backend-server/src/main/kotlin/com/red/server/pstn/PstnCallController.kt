@@ -1,6 +1,7 @@
 package com.red.server.pstn
 
 import com.red.server.calls.CallHistoryController
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -17,7 +18,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/pstn")
 class PstnCallController(
-    private val calls: PstnCallService
+    private val calls: PstnCallService,
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean = false
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<PstnCallResponse> {
@@ -37,9 +39,13 @@ class PstnCallController(
      * حالة المكالمات النشطة عبر PSTN
      */
     @GetMapping("/status")
-    fun status(): ResponseEntity<Map<String, Any>> {
-        return ResponseEntity.ok(mapOf("active" to true, "route" to "Asterisk→PJSIP→DINSTAR"))
-    }
+    fun status(): ResponseEntity<Map<String, Any>> = ResponseEntity.ok(
+        mapOf(
+            "active" to dinstarEnabled,
+            "status" to if (dinstarEnabled) "CONFIGURED" else "HARDWARE_DISABLED",
+            "route" to "Asterisk→PJSIP→DINSTAR"
+        )
+    )
 }
 
 data class PstnCallRequest(val number: String)
