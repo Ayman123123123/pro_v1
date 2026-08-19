@@ -57,6 +57,10 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
     private val _routingPreview = MutableStateFlow<Map<String, Any?>?>(null)
     val routingPreview = _routingPreview.asStateFlow()
 
+    /** قياسات عتاد البوابة (CPU/ذاكرة/حرارة/uptime) — منفصلة عن حالة المنافذ. */
+    private val _deviceStatus = MutableStateFlow(DinstarDeviceStatus())
+    val deviceStatus = _deviceStatus.asStateFlow()
+
     init {
         refreshStatus()
         connectWebSocket()
@@ -362,6 +366,49 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
                     _capabilities.value = mapper.readValue(response.value, Map::class.java) as Map<String, Any?>
                 }.onFailure { Log.w(TAG, "تعذّر تحليل قدرات الجهاز", it) }
                 is ApiResult.Error -> Log.w(TAG, "فشل جلب القدرات: ${response.message}")
+            }
+        }
+    }
+
+    /**
+     * قياسات عتاد البوابة — GET /device-status
+     *
+     * منفصلة عن [refreshStatus] عمدًا: تلك تجلب المنافذ من `/fleet/ports`
+     * وتُستدعى دوريًا، وهذه تستعلم عتاد الجهاز نفسه. الخادم يستدعي
+     * `/api/get_status` على البوابة ويحفظ الناتج، فلا يُستدعى بكثافة.
+     *
+     * الخادم يُرجع `{"error": "..."}` بدل رمي استثناء حين تكون البوابة
+     * غائبة، لذا نفحص المفتاح صراحةً قبل التحليل.
+     */
+    fun refreshDeviceStatus() {
+        viewModelScope.launch {
+            when (val response = client.request("GET", "/api/admin/dinstar/device-status")) {
+                is ApiResult.Success -> runCatching {
+                    @Suppress("UNCHECKED_CAST")
+                    val raw = mapper.readValue(response.value, Map::class.java) as Map<String, Any?>
+                    val error = raw["error"]?.toString()
+                    if (!error.isNullOrBlank()) {
+                        Log.w(TAG, "البوابة لم تُرجع حالة عتاد: $error")
+                        _deviceStatus.value = DinstarDeviceStatus()
+                        return@runCatching
+                    }
+                    // القيم تصل بوحدات مُلحقة ("45%", "47C") — تُحفظ نصًّا كما هي.
+                    fun str(vararg keys: String): String? =
+                        keys.firstNotNullOfOrNull { raw[it]?.toString()?.takeIf(String::isNotBlank) }
+
+                    _deviceStatus.value = DinstarDeviceStatus(
+                        cpuUsed = str("cpu_used", "cpuUsed"),
+                        memoryTotal = str("memory_total", "memoryTotal"),
+                        memoryUsed = str("memory_used", "memoryUsed"),
+                        memoryFree = str("memory_free", "memoryFree"),
+                        flashTotal = str("flash_total", "flashTotal"),
+                        flashUsed = str("flash_used", "flashUsed"),
+                        flashFree = str("flash_free", "flashFree"),
+                        temperature = str("temperature"),
+                        uptime = str("uptime")
+                    )
+                }.onFailure { Log.w(TAG, "تعذّر تحليل حالة عتاد البوابة", it) }
+                is ApiResult.Error -> Log.w(TAG, "فشل جلب حالة العتاد: ${response.message}")
             }
         }
     }
