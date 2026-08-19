@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.clip
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -281,7 +281,7 @@ private fun SettingsContent(
             SettingsItem(
                 title = "Data Export & Deletion",
                 subtitle = "Export all data or delete account",
-                icon = Icons.Filled.DeleteForever,
+                icon = Icons.Filled.Delete,
                 isDestructive = true,
                 onClick = { /* navigate to data management */ }
             )
@@ -348,13 +348,13 @@ private fun SettingsContent(
         // Appearance
         SettingsSection(
             title = "Appearance",
-            icon = Icons.Filled.Brightness6,
+            icon = Icons.Filled.BrightnessAuto,
             color = Color(0xFF00BCD4)
         ) {
             SettingsItem(
                 title = "Theme",
                 subtitle = "System / Light / Dark / AMOLED / Custom",
-                icon = Icons.Filled.Brightness6,
+                icon = Icons.Filled.BrightnessAuto,
                 onClick = { /* navigate to theme */ }
             )
             SettingsItem(
@@ -425,7 +425,7 @@ private fun SettingsContent(
         // Advanced / Developer
         SettingsSection(
             title = "Advanced",
-            icon = Icons.Filled.Build,
+            icon = Icons.Filled.Construction,
             color = Color(0xFF795548)
         ) {
             SettingsItem(
@@ -533,7 +533,7 @@ fun SettingsItem(
     icon: ImageVector,
     isReadOnly: Boolean = false,
     isDestructive: Boolean = false,
-    trailingIcon: ImageVector = Icons.Default.ArrowForward,
+    trailingIcon: ImageVector = Icons.Filled.ArrowForward,
     onClick: () -> Unit = {}
 ) {
     val titleColor = if (isDestructive) Color(0xFFF44336) else MaterialTheme.colorScheme.onBackground
