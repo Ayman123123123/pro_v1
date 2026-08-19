@@ -27,7 +27,22 @@ data class Post(
     val isHidden: Boolean = false,
     val isMuted: Boolean = false
 )
-@Serializable data class PostMedia(val url: String, val mimeType: String, val width: Int? = null, val height: Int? = null)
+/**
+ * وسائط منشور. الحقل `objectKey` — لا `url` — لأنه اسم الحقل في
+ * `PostMedia` بالخادم، وهو ما يُخزَّن ويُعاد كما هو. الرابط القابل
+ * للتحميل يُبنى منه بـ`/api/media/$objectKey` عبر MediaApi (وهي
+ * تتطلّب المصادقة، فالرابط ليس عامًّا).
+ *
+ * كان الاسم `url` فكان الحقل لا يُملأ أبدًا عند فكّ ترميز الردّ.
+ */
+@Serializable data class PostMedia(
+    val objectKey: String,
+    val mimeType: String,
+    val width: Int? = null,
+    val height: Int? = null,
+    val durationMs: Long? = null,
+    val voiceWaveform: List<Int> = emptyList()
+)
 @Serializable data class LinkCard(val url: String, val title: String? = null, val description: String? = null, val imageUrl: String? = null)
 @Serializable data class EditEntry(val text: String, val editedAt: String)
 @Serializable data class Poll(val options: List<PollOption>, val expiresAt: String? = null)
@@ -40,7 +55,12 @@ data class Post(
     val quotePostId: String? = null, 
     val pollOptions: List<String> = emptyList(), 
     val pollDurationHours: Int? = null,
-    val mediaKeys: List<String> = emptyList(),
+    /**
+     * الخادم يقرأ `media: List<PostMedia>` لا `mediaKeys: List<String>`.
+     * كان الاسم الخاطئ يعني رفض الطلب بـ400 فور إرفاق أي وسيط
+     * (FAIL_ON_UNKNOWN_PROPERTIES مفعَّل افتراضيًّا في Jackson).
+     */
+    val media: List<PostMedia> = emptyList(),
     val hashtags: List<String> = emptyList(),
     val mentions: List<String> = emptyList()
 )
