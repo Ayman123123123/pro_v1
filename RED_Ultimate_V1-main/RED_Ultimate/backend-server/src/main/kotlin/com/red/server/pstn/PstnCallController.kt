@@ -17,9 +17,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/pstn")
 class PstnCallController(
-    private val calls: PstnCallService,
-    private val loadBalancer: DinstarLoadBalancer,
-    private val progress: PstnCallProgressTracker
+    private val calls: PstnCallService
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<PstnCallResponse> {
@@ -28,21 +26,17 @@ class PstnCallController(
     }
 
     /**
-     * إنهاء مكالمة — يُحرّر المنفذ في Load Balancer
+     * إنهاء مكالمة هاتف يمني — لا يقبل منفذًا من العميل.
+     *
+     * كان المنفذ يُقرأ من جسم الطلب — أي يختاره العميل — ويُحرَّر بلا
+     * تحديد بوابة، فيُحرِّر منفذًا يحمل الرقم نفسه في بوابة أخرى؛ ولم
+     * يكن هناك تحقق من الهوية أصلًا. الآن يحتفظ الخادم بالبوابة
+     * والمنفذ اللذين خصصهما، وتتحقق الخدمة من ملكية سجل المكالمة قبل
+     * التحرير، وتُنهي قيد المتتبِّع في الوقت نفسه.
      */
     @PostMapping("/calls/{callId}/hangup")
-    fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?): ResponseEntity<Map<String, Any>> {
-        // عدد المنافذ يعتمد على طراز البوابة (4 أو 8) وقد تتعدد الأجهزة،
-        // فلم يعد المدى 0..7 صالحًا كحارس.
-        val port = body?.get("port") ?: -1
-        if (port >= 0) {
-            loadBalancer.releasePort(gatewayId = null, port = port)
-        }
-        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛
-        // بدون هذا التحرير يبقى القيد حتى تنتهي مهلته.
-        progress.finishByCallId(callId)
-        return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to port))
-    }
+    fun hangup(@PathVariable callId: String, authentication: Authentication): ResponseEntity<PstnHangupResponse> =
+        ResponseEntity.ok(calls.hangup(UUID.fromString(authentication.name), callId))
 
     /**
      * حالة المكالمات النشطة عبر PSTN

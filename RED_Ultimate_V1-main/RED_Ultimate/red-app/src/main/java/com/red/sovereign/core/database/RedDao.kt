@@ -60,6 +60,9 @@ interface RedDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContacts(contacts: List<ContactEntity>)
 
+    @Query("DELETE FROM contacts")
+    suspend fun clearContacts()
+
     @Query("SELECT * FROM contacts WHERE isFriend = 1")
     fun getFriends(): Flow<List<ContactEntity>>
 

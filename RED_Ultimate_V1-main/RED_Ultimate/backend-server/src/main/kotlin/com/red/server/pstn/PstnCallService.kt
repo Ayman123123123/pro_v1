@@ -12,6 +12,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class PstnCallService(
@@ -22,6 +23,8 @@ class PstnCallService(
     private val history: CallHistoryService,
     private val progress: PstnCallProgressTracker
 ) {
+    private val activeCalls = ConcurrentHashMap<String, ActivePstnCall>()
+
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
 
@@ -52,12 +55,15 @@ class PstnCallService(
             throw IllegalArgumentException("Daily PSTN call limit reached ($used/${user.pstnDailyLimit})")
         }
 
-        return runCatching {
-            // الاختيار يشمل الأسطول كله ويستبعد المنافذ بلا إشارة صالحة.
-            // `null` تعني عدم توفر أي مسار — نُبلّغ بذلك بدل محاولة اتصال
-            // فاشلة على منفذ ميت.
-            val selection = loadBalancer.selectPort(number)
-                ?: throw IllegalStateException("No DINSTAR port with a usable signal is available")
+        // الاختيار يشمل الأسطول كله ويستبعد المنافذ بلا إشارة صالحة.
+        // `null` تعني عدم توفر أي مسار — نُبلّغ بذلك بدل محاولة اتصال
+        // فاشلة على منفذ ميت.
+        val selection = loadBalancer.selectPort(number)
+            ?: run {
+                redis.opsForValue().decrement(key)
+                throw IllegalStateException("No DINSTAR port with a usable signal is available")
+            }
+        return try {
             log.info("PSTN dial: user={} number={} gateway={} port={}",
                 user.redId, number, selection.gatewayHost, selection.portIndex)
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
@@ -65,11 +71,34 @@ class PstnCallService(
             // يجب أن يسبق التسجيلُ وصولَ أحداث AMI، وإلا تعذّر ربط
             // القناة بصاحبها وضاعت كل مراحل المكالمة.
             progress.register(actionId, user.redId, number)
+            // والسجل الثاني لملكية المنفذ: يتحقق منه hangup قبل التحرير
+            // فلا يُحرِّر مستخدمٌ منفذَ مكالمة غيره. السجلّان يخدمان
+            // غرضين مختلفين — تتبّع المراحل مقابل حراسة المورد.
+            activeCalls[actionId] = ActivePstnCall(user.redId, selection.gatewayId, selection.portIndex)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
-        }.getOrElse {
+        } catch (error: Exception) {
+            // لا يبقى المنفذ محسوبًا مشغولًا عندما يرفض Asterisk طلب البداية.
+            loadBalancer.releasePort(selection.gatewayId, selection.portIndex)
             redis.opsForValue().decrement(key)
-            throw IllegalStateException("Asterisk rejected the PSTN call", it)
+            throw IllegalStateException("Asterisk rejected the PSTN call", error)
         }
+    }
+
+    fun hangup(userId: UUID, callId: String): PstnHangupResponse {
+        val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
+        // سجل المكالمات هو مصدر الصلاحية، فلا يستطيع مستخدم تحرير اتصال غيره.
+        history.end(callId, user.redId)
+        val active = activeCalls.remove(callId)
+        if (active != null) {
+            require(active.ownerRedId == user.redId) { "Only the call initiator can release this PSTN route" }
+            loadBalancer.releasePort(active.gatewayId, active.port)
+        }
+        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛ بدون
+        // هذا التحرير يبقى قيد المتتبِّع حتى تنتهي مهلته. كان هذا السطر
+        // في المتحكّم قبل الدمج، ونُقل إلى هنا لأن المتحكّم صار يفوّض
+        // الإنهاء كاملًا إلى الخدمة بعد التحقق من الهوية والملكية.
+        progress.finishByCallId(callId)
+        return PstnHangupResponse(callId, active?.port ?: -1, active != null)
     }
 
     /**
@@ -104,6 +133,9 @@ class PstnCallService(
         return local
     }
 }
+
+private data class ActivePstnCall(val ownerRedId: String, val gatewayId: UUID?, val port: Int)
+data class PstnHangupResponse(val callId: String, val port: Int, val released: Boolean)
 
 data class PstnCallResponse(
     val callId: String,
