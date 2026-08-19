@@ -52,7 +52,7 @@ RUN npm ci --no-audit --no-fund
 COPY RED_Ultimate/admin_dashboard/ ./
 RUN npm run build
 
-FROM node:22-bookworm AS sfu-check
+FROM node:24-bookworm AS sfu-check
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
