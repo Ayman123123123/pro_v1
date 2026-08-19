@@ -23,14 +23,38 @@ class StoryService(
 ) {
     fun create(userId: UUID, request: CreateStoryRequest): StoryResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
-        require(request.mediaKey.startsWith("users/$userId/")) { "Story media must belong to the account" }
-        require(media.exists(request.mediaKey)) { "Media object not found" }
-        val metadata = media.metadata(request.mediaKey)
-        require(metadata.mimeType.startsWith("image/") || metadata.mimeType.startsWith("video/")) { "Stories support images and videos only" }
         val caption = request.caption?.trim()?.takeIf(String::isNotEmpty)
         require(caption == null || caption.length <= 500) { "Story caption is too long" }
-        val story = mongo.save(StoryDocument(UuidV7.next(), user.id.toString(), user.redId, user.username, user.displayName,
-            request.mediaKey, metadata.mimeType, caption, request.visibility, request.allowedUserIds, expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)))
+        require(request.allowedUserIds.size <= 100) { "A selected audience may contain at most 100 accounts" }
+        require(request.visibility != StoryVisibility.SELECTED || request.allowedUserIds.isNotEmpty()) { "A selected audience must contain at least one account" }
+        request.allowedUserIds.forEach { UUID.fromString(it) }
+
+        val requestedType = request.mediaType?.uppercase()
+        val isText = requestedType == "TEXT"
+        val mediaType = if (isText) {
+            require(!caption.isNullOrBlank()) { "Text stories require content" }
+            "TEXT"
+        } else {
+            require(request.mediaKey.startsWith("users/$userId/")) { "Story media must belong to the account" }
+            require(media.exists(request.mediaKey)) { "Media object not found" }
+            val mimeType = media.metadata(request.mediaKey).mimeType
+            require(mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType.startsWith("audio/")) {
+                "Stories support images, videos, and voice media only"
+            }
+            if (requestedType == "VOICE") "VOICE" else mimeType
+        }
+        require(request.backgroundColor == null || isText && request.backgroundColor.matches(Regex("#[0-9A-Fa-f]{6}"))) {
+            "Text-story background must be a hexadecimal colour"
+        }
+        require(request.durationMs == null || request.durationMs in 1..(5 * 60 * 1000L)) { "Story duration must be between 1 ms and 5 minutes" }
+        require(request.waveform.size <= 512 && request.waveform.all { it in 0..100 }) { "Story waveform is invalid" }
+        val audience = if (request.visibility == StoryVisibility.SELECTED) request.allowedUserIds else emptySet()
+        val story = mongo.save(StoryDocument(
+            id = UuidV7.next(), ownerId = user.id.toString(), ownerRedId = user.redId, ownerUsername = user.username,
+            ownerDisplayName = user.displayName, mediaKey = request.mediaKey, mediaType = mediaType, caption = caption,
+            visibility = request.visibility, allowedUserIds = audience, backgroundColor = request.backgroundColor,
+            durationMs = request.durationMs, waveform = request.waveform, expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)
+        ))
         return response(story, 0)
     }
 
@@ -98,6 +122,12 @@ class StoryService(
         return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
     }
 
-    private fun response(story: StoryDocument, views: Long) = StoryResponse(story.id, story.ownerRedId, story.ownerUsername,
-        story.ownerDisplayName, "/api/media/${story.mediaKey}", story.mediaType, story.caption, story.createdAt, story.expiresAt, views)
+    private fun response(story: StoryDocument, views: Long) = StoryResponse(
+        id = story.id, ownerRedId = story.ownerRedId, ownerUsername = story.ownerUsername,
+        ownerDisplayName = story.ownerDisplayName,
+        mediaUrl = if (story.mediaType == "TEXT") "" else "/api/media/${story.mediaKey}",
+        mediaType = story.mediaType, caption = story.caption, createdAt = story.createdAt, expiresAt = story.expiresAt,
+        viewCount = views, visibility = story.visibility, allowedUserIds = story.allowedUserIds,
+        backgroundColor = story.backgroundColor, durationMs = story.durationMs, waveform = story.waveform
+    )
 }

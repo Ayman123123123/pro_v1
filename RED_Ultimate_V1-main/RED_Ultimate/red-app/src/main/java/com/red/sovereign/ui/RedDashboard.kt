@@ -579,9 +579,13 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     var editText by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
+    var showStoryAudience by remember { mutableStateOf(false) }
+    var storyVisibility by remember { mutableStateOf("CONTACTS") }
     val layout = WindowLayout.current()
     val page = layout.pagePadding
-    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
+    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { stories.upload(it, visibility = storyVisibility) }
+    }
     val refreshing = feed.state == FeedState.Loading && feed.posts.isNotEmpty()
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { feed.refresh() }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -591,7 +595,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     ) {
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
+                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { showStoryAudience = true } }
                 items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
@@ -627,6 +631,34 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
+    }
+    if (showStoryAudience) {
+        AlertDialog(
+            onDismissRequest = { showStoryAudience = false },
+            title = { Text("جمهور الحالة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("تُعرض الحالة لمدة 24 ساعة. اختر من يمكنه مشاهدتها قبل اختيار الوسيط.")
+                    listOf(
+                        "CONTACTS" to "جهات اتصالي",
+                        "EVERYONE" to "الجميع"
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = storyVisibility == value,
+                            onClick = { storyVisibility = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showStoryAudience = false
+                    storyPicker.launch(arrayOf("image/*", "video/*"))
+                }) { Text("اختيار صورة أو فيديو") }
+            },
+            dismissButton = { TextButton(onClick = { showStoryAudience = false }) { Text("إلغاء") } }
+        )
     }
     threadPost?.let { root ->
         AlertDialog(
