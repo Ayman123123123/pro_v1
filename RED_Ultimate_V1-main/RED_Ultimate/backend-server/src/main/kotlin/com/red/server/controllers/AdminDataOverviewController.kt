@@ -1,5 +1,6 @@
 package com.red.server.controllers
 
+import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
@@ -22,66 +23,113 @@ class AdminDataOverviewController(
     private val mongo: MongoTemplate,
     private val redis: StringRedisTemplate
 ) {
+    private val log = LoggerFactory.getLogger(AdminDataOverviewController::class.java)
+
     @GetMapping("/overview")
-    fun overview(): Map<String, Any> {
+    fun overview(): Map<String, Any?> {
+        val observedAt = Instant.now()
+        val postgresql = SourceProbe("postgresql", observedAt)
+        val mongodb = SourceProbe("mongodb", observedAt)
+        val redisSource = SourceProbe("redis", observedAt)
         val cutoff = System.currentTimeMillis() - PRESENCE_WINDOW_MS
-        runCatching { redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble()) }
-        val online = runCatching { redis.opsForZSet().zCard("red:presence:index") ?: 0L }.getOrDefault(0L)
+
+        redisSource.read {
+            redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff.toDouble())
+            Unit
+        }
+        val online = redisSource.read { redis.opsForZSet().zCard("red:presence:index") ?: 0L }
+        val activeCalls = redisSource.read { redis.opsForSet().size("red:calls:active") ?: 0L }
+
         return mapOf(
-            "generatedAt" to Instant.now().toString(),
+            "generatedAt" to observedAt.toString(),
             "users" to mapOf(
-                "total" to sqlCount("users"),
-                "approved" to sqlCount("users", "status='APPROVED'"),
-                "pending" to sqlCount("users", "status='PENDING'"),
-                "banned" to sqlCount("users", "status='BANNED'"),
-                "administrators" to sqlCount("users", "role='ADMIN'"),
+                "total" to sqlCount(postgresql, "users"),
+                "approved" to sqlCount(postgresql, "users", "status='APPROVED'"),
+                "pending" to sqlCount(postgresql, "users", "status='PENDING'"),
+                "banned" to sqlCount(postgresql, "users", "status='BANNED'"),
+                "administrators" to sqlCount(postgresql, "users", "role='ADMIN'"),
                 "online" to online
             ),
             "devices" to mapOf(
-                "total" to sqlCount("user_devices"),
-                "approved" to sqlCount("user_devices", "status='APPROVED'"),
-                "pending" to sqlCount("user_devices", "status='PENDING'"),
-                "revoked" to sqlCount("user_devices", "status='REVOKED'"),
-                "activeRefreshSessions" to sqlCount("refresh_sessions", "revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP")
+                "total" to sqlCount(postgresql, "user_devices"),
+                "approved" to sqlCount(postgresql, "user_devices", "status='APPROVED'"),
+                "pending" to sqlCount(postgresql, "user_devices", "status='PENDING'"),
+                "revoked" to sqlCount(postgresql, "user_devices", "status='REVOKED'"),
+                "activeRefreshSessions" to sqlCount(postgresql, "refresh_sessions", "revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP")
             ),
             "moderation" to mapOf(
-                "openReports" to sqlCount("user_reports", "status IN ('OPEN','PENDING','REVIEWING')"),
-                "securityAlerts24h" to sqlCount("admin_audit_log", "severity IN ('WARNING','CRITICAL') AND created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'"),
-                "auditEvents24h" to sqlCount("admin_audit_log", "created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'")
+                "openReports" to sqlCount(postgresql, "user_reports", "status IN ('OPEN','PENDING','REVIEWING')"),
+                "securityAlerts24h" to sqlCount(postgresql, "admin_audit_log", "severity IN ('WARNING','CRITICAL') AND created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'"),
+                "auditEvents24h" to sqlCount(postgresql, "admin_audit_log", "created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'")
             ),
             "content" to mapOf(
-                "groups" to mongoCount("group_documents", "groups"),
-                "messages" to mongoCount("message_documents", "messages"),
-                "stories" to mongoCount("story_documents", "stories"),
-                "posts" to mongoCount("post_documents", "posts"),
-                "channels" to sqlCount("channels"),
-                "polls" to sqlCount("polls"),
-                "events" to sqlCount("events"),
-                "stickerPacks" to sqlCount("sticker_packs")
+                "groups" to mongoCount(mongodb, "group_documents", "groups"),
+                "messages" to mongoCount(mongodb, "message_documents", "messages"),
+                "stories" to mongoCount(mongodb, "story_documents", "stories"),
+                "posts" to mongoCount(mongodb, "post_documents", "posts"),
+                "channels" to sqlCount(postgresql, "channels"),
+                "polls" to sqlCount(postgresql, "polls"),
+                "events" to sqlCount(postgresql, "events"),
+                "stickerPacks" to sqlCount(postgresql, "sticker_packs")
             ),
             "communications" to mapOf(
-                "callHistory" to sqlCount("call_history"),
-                "activeCalls" to runCatching { redis.opsForSet().size("red:calls:active") ?: 0L }.getOrDefault(0L),
-                "dinstarCdr" to sqlCount("dinstar_cdr"),
-                "gateways" to sqlCount("telecom_gateways"),
-                "gatewayPorts" to sqlCount("gateway_port_snapshots")
+                "callHistory" to sqlCount(postgresql, "call_history"),
+                "activeCalls" to activeCalls,
+                "dinstarCdr" to sqlCount(postgresql, "dinstar_cdr"),
+                "gateways" to sqlCount(postgresql, "telecom_gateways"),
+                "gatewayPorts" to sqlCount(postgresql, "gateway_port_snapshots")
             ),
             "storage" to mapOf(
-                "mediaGrants" to sqlCount("media_grants"),
-                "backups" to sqlCount("backup_history"),
-                "notifications" to sqlCount("user_notifications")
+                "mediaGrants" to sqlCount(postgresql, "media_grants"),
+                "backups" to sqlCount(postgresql, "backup_history"),
+                "notifications" to sqlCount(postgresql, "user_notifications")
+            ),
+            "dataSources" to mapOf(
+                "postgresql" to postgresql.snapshot(),
+                "mongodb" to mongodb.snapshot(),
+                "redis" to redisSource.snapshot()
             )
         )
     }
 
-    private fun sqlCount(table: String, predicate: String? = null): Long = runCatching {
-        postgres.queryForObject("SELECT COUNT(*) FROM $table${predicate?.let { " WHERE $it" } ?: ""}", Long::class.java) ?: 0L
-    }.getOrDefault(0L)
+    private fun sqlCount(source: SourceProbe, table: String, predicate: String? = null): Long? =
+        source.read {
+            postgres.queryForObject(
+                "SELECT COUNT(*) FROM $table${predicate?.let { " WHERE $it" } ?: ""}",
+                Long::class.java
+            ) ?: 0L
+        }
 
-    private fun mongoCount(vararg collections: String): Long = collections
-        .asSequence()
-        .map { collection -> runCatching { mongo.getCollection(collection).countDocuments() }.getOrDefault(0L) }
-        .firstOrNull { it > 0L } ?: 0L
+    private fun mongoCount(source: SourceProbe, vararg collections: String): Long? {
+        collections.forEach { collection ->
+            val count = source.read { mongo.getCollection(collection).countDocuments() } ?: return null
+            if (count > 0L) return count
+        }
+        return 0L
+    }
+
+    private inner class SourceProbe(
+        private val source: String,
+        private val observedAt: Instant,
+        private var failure: Throwable? = null
+    ) {
+        fun <T> read(operation: () -> T): T? {
+            if (failure != null) return null
+            return try {
+                operation()
+            } catch (error: Exception) {
+                failure = error
+                log.warn("Operational overview source '{}' failed: {}", source, error.message, error)
+                null
+            }
+        }
+
+        fun snapshot(): Map<String, Any?> = mapOf(
+            "available" to (failure == null),
+            "error" to failure?.let { "UNAVAILABLE" },
+            "observedAt" to observedAt.toString()
+        )
+    }
 
     private companion object { const val PRESENCE_WINDOW_MS = 5 * 60_000L }
 }

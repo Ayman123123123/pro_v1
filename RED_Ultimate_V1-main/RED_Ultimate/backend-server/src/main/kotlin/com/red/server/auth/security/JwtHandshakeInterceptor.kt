@@ -34,6 +34,9 @@ class JwtHandshakeInterceptor(
         val authenticated = if (!headerToken.isNullOrBlank()) authenticateBearer(headerToken)
         else authenticateAdminTicket(request)
         val (user, deviceId, device) = authenticated ?: return reject(response)
+        if (request.uri.path in ADMIN_ONLY_PATHS && user.role != AccountRole.ADMIN) {
+            return rejectForbidden(response)
+        }
 
         attributes["userId"] = user.redId
         attributes["accountId"] = user.id.toString()
@@ -70,6 +73,16 @@ class JwtHandshakeInterceptor(
     private fun reject(response: ServerHttpResponse): Boolean {
         response.setStatusCode(HttpStatus.UNAUTHORIZED)
         return false
+    }
+
+    private fun rejectForbidden(response: ServerHttpResponse): Boolean {
+        response.setStatusCode(HttpStatus.FORBIDDEN)
+        return false
+    }
+
+    private companion object {
+        /** قنوات تعرض سجلات العتاد أو أحداث الإدارة لا يجوز فتحها بحساب مستخدم عادي. */
+        val ADMIN_ONLY_PATHS = setOf("/ws/dinstar", "/ws/admin/logs")
     }
 
     override fun afterHandshake(

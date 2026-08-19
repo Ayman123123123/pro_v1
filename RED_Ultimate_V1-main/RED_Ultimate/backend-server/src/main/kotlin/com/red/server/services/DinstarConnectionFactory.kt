@@ -46,8 +46,9 @@ import javax.net.ssl.X509TrustManager
  */
 @Component
 class DinstarConnectionFactory(
-    @Value("\${red.dinstar.username:admin}") private val username: String,
-    @Value("\${red.dinstar.password:admin}") private val password: String,
+    @Value("\${red.dinstar.enabled:false}") private val enabled: Boolean,
+    @Value("\${red.dinstar.username:}") private val username: String,
+    @Value("\${red.dinstar.password:}") private val password: String,
     @Value("\${red.dinstar.connect-timeout-seconds:5}") private val connectTimeout: Long,
     @Value("\${red.dinstar.read-timeout-seconds:10}") private val readTimeout: Long,
     @Value("\${red.dinstar.probe-timeout-seconds:2}") private val probeTimeout: Long,
@@ -59,6 +60,17 @@ class DinstarConnectionFactory(
     }
 
     private val clients = ConcurrentHashMap<String, DinstarClient>()
+
+    init {
+        if (enabled) {
+            require(username.isNotBlank() && password.isNotBlank()) {
+                "DINSTAR_ENABLED requires DINSTAR_USERNAME and DINSTAR_PASSWORD"
+            }
+            require(!(username == "admin" && password == "admin")) {
+                "DINSTAR_ENABLED refuses the known default DINSTAR credentials"
+            }
+        }
+    }
 
     fun clientFor(host: String, apiPort: Int, scheme: String): DinstarClient =
         clients.computeIfAbsent("$scheme://$host:$apiPort") {

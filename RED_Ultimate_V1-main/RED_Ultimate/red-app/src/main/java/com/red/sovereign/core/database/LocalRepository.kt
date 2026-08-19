@@ -13,6 +13,24 @@ class LocalRepository(context: Context) {
     suspend fun updateMessageStatus(id: String, status: String) = dao.updateMessageStatus(id, status)
     suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
+    // --- Durable outbound queue ---
+    suspend fun enqueueOutbox(item: OutboxEntity) = dao.upsertOutbox(item)
+    suspend fun pendingOutbox(limit: Int = 100) = dao.pendingOutbox(limit)
+    suspend fun outboxEnvelopes(outboxId: String) = dao.outboxEnvelopes(outboxId)
+    suspend fun saveOutboxEnvelopes(items: List<OutboxEnvelopeEntity>) = dao.insertOutboxEnvelopes(items)
+    suspend fun markOutboxAttempt(outboxId: String, at: Long = System.currentTimeMillis()) = dao.markOutboxAttempt(outboxId, at)
+    suspend fun linkOutboxLocalMessage(outboxId: String, messageId: String) = dao.setOutboxLocalMessageId(outboxId, messageId)
+    suspend fun discardOutbox(outboxId: String) = dao.deleteOutbox(outboxId)
+
+    /** يحذف الحامل المعترف به، ثم يحذف نية الإرسال بعد آخر ACK فقط. */
+    suspend fun acknowledgeOutbox(messageId: String): OutboxEntity? {
+        val envelope = dao.getOutboxEnvelope(messageId) ?: return null
+        val item = dao.getOutbox(envelope.outboxId)
+        dao.deleteOutboxEnvelope(messageId)
+        if (dao.outboxEnvelopeCount(envelope.outboxId) == 0) dao.deleteOutbox(envelope.outboxId)
+        return item
+    }
+
     suspend fun saveIncomingMessage(message: com.red.sovereign.proto.RedProtos.ChatMessage, outgoing: Boolean = false) {
         val entity = MessageEntity(
             id = message.id,

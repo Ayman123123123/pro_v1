@@ -19,12 +19,10 @@ class TokenStore(val context: Context) {
     fun rememberDevice(value: String) = store.put("device_id", value)
     fun saveFcmToken(value: String) = store.put("fcm_token", value)
     fun saveUsername(value: String) = store.put("username", value)
-    fun rememberPendingLogin(username: String, password: String) {
-        store.put("pending_username", username)
-        store.put("pending_password", password)
-    }
+    /** اسم الحساب غير حساس؛ لا نخزن كلمة المرور لاستئناف موافقة الحساب. */
+    fun rememberPendingLogin(username: String) = store.put("pending_username", username)
     fun pendingUsername(): String? = store.get("pending_username")
-    fun pendingPassword(): String? = store.get("pending_password")
+    /** يمحو أيضًا الاسم القديم الموروث لكلمة المرور من أي إصدار سابق. */
     fun clearPendingLogin() = store.remove("pending_username", "pending_password")
     fun save(response: AuthResponse) {
         store.put("access", response.accessToken); store.put("refresh", response.refreshToken)

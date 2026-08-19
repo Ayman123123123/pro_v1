@@ -70,6 +70,23 @@ RED_Ultimate/
 
 ## 🚀 التشغيل السريع
 
+### التشغيل المحلي الكامل
+
+يشغّل المسار المحلي الأساسي **الخادم وقواعد البيانات وRedis وMinIO ولوحة الإدارة وMediaSFU وTURN وNginx**. يحتاج Docker Compose v2 وذاكرة متاحة لا تقل عن 6 GiB، ويفضل 8 GiB. يولد السكربت ملف `.env` محليًا بأسرار عشوائية ومفاتيح هوية للتطوير؛ لا ترفعه إلى Git.
+
+```bash
+cd RED_Ultimate
+# Linux/macOS
+./scripts/local-first-run.sh --server-ip 192.168.1.50
+
+# Windows PowerShell
+.\scripts\local-first-run.ps1 -ServerIp 192.168.1.50
+```
+
+بعد اجتياز فحوص الجاهزية تكون لوحة الإدارة والخادم متاحين على `http://<LAN-IP>:8088/` و`/health`. لبناء APK موجه للخادم المحلي أضف `--build-android` في Linux/macOS أو `-BuildAndroid` في PowerShell.
+
+> PSTN وDINSTAR لا يبدأان افتراضيًا، لأنهما يحتاجان بوابة حقيقية على شبكة إدارة معزولة وأسرارًا فريدة. بعد إعدادها فقط استخدم `./scripts/local-first-run.sh --server-ip <IP> --enable-telephony` أو `.\scripts\local-first-run.ps1 -ServerIp <IP> -EnableTelephony`. لا تستخدم بيانات اعتماد المصنع أو تضع أسرار العتاد في Git.
+
 ### Backend
 
 ```bash
@@ -209,9 +226,10 @@ cd RED_Ultimate/red-app
 ## 🌐 الـ Deployment
 
 ```bash
-# Docker Compose
+# Docker Compose (بعد إنشاء .env ومفاتيح الهوية محليًا)
 cd RED_Ultimate
-docker-compose up -d
+docker compose up -d
+# أضف --profile telephony فقط عند وجود DINSTAR/Asterisk مصرح بهما.
 
 # أو يدوياً:
 # 1. PostgreSQL + MongoDB + Redis

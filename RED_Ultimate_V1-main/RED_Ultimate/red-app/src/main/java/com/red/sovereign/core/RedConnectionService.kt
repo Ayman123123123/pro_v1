@@ -15,6 +15,9 @@ import com.red.sovereign.auth.DeviceKeyManager
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.database.LocalHistoryEntity
 import com.red.sovereign.core.database.LocalRepository
+import com.red.sovereign.core.database.OutboxEntity
+import com.red.sovereign.core.database.OutboxEnvelopeEntity
+import com.red.sovereign.core.outbox.OutboxRetryWorker
 import com.red.sovereign.crypto.DecryptedMessage
 import com.red.sovereign.crypto.DecryptedMessageBus
 import com.red.sovereign.crypto.SignalSessionManager
@@ -35,7 +38,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -63,8 +66,6 @@ class RedConnectionService : Service() {
     private var reconnectTask: ScheduledFuture<*>? = null
     private var attempts = 0
     @Volatile private var connected = false
-    private val pendingSends = ConcurrentLinkedQueue<PendingSend>()
-    private val pendingGroupSends = ConcurrentLinkedQueue<PendingGroupSend>()
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var tokenStore: TokenStore
@@ -103,16 +104,31 @@ class RedConnectionService : Service() {
             val type = intent.getStringExtra(EXTRA_TYPE)?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: return START_STICKY
             val payload = intent.getByteArrayExtra(EXTRA_PAYLOAD)?.takeIf { it.isNotEmpty() && it.size <= 256 * 1024 } ?: return START_STICKY
             val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)
-            pendingSends.add(PendingSend(target, conversation, type, payload, clientId))
-            if (connected) drainSends() else socket.connect()
+            scope.launch {
+                repository.enqueueOutbox(
+                    OutboxEntity(
+                        id = UUID.randomUUID().toString(), kind = OUTBOX_DIRECT, clientId = clientId,
+                        targetRedId = target, conversationId = conversation, messageType = type, payload = payload, groupJson = null
+                    )
+                )
+                drainOutboxOrConnect()
+            }
         } else if (intent?.action == ACTION_SEND_GROUP_TEXT) {
             val encodedGroup = intent.getStringExtra(EXTRA_GROUP) ?: return START_STICKY
             val text = intent.getStringExtra(EXTRA_TEXT)?.takeIf(String::isNotBlank) ?: return START_STICKY
             val isRich = intent.getBooleanExtra(EXTRA_GROUP_RICH, false)
             val groupType = intent.getStringExtra(EXTRA_GROUP_TYPE)
             val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)
-            pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich, groupType, clientId))
-            if (connected) drainGroupSends() else socket.connect()
+            scope.launch {
+                repository.enqueueOutbox(
+                    OutboxEntity(
+                        id = UUID.randomUUID().toString(), kind = OUTBOX_GROUP, clientId = clientId,
+                        targetRedId = null, conversationId = extractGroupId(encodedGroup), messageType = groupType,
+                        payload = text.toByteArray(Charsets.UTF_8), groupJson = encodedGroup, isRich = isRich
+                    )
+                )
+                drainOutboxOrConnect()
+            }
         } else if (intent?.action == ACTION_SEND_TYPING) {
             val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
@@ -122,93 +138,169 @@ class RedConnectionService : Service() {
         return START_STICKY
     }
 
-    private fun drainSends() {
-        while (connected) {
-            val pending = pendingSends.poll() ?: break
-            sendEncryptedPayload(pending)
+    private fun drainOutboxOrConnect() {
+        if (connected) {
+            drainOutbox()
+        } else {
+            OutboxRetryWorker.schedule(applicationContext)
+            socket.connect()
         }
     }
 
-    private fun drainGroupSends() {
-        while (connected) {
-            val pending = pendingGroupSends.poll() ?: break
-            val group = runCatching { json.decodeFromString<Group>(pending.groupJson) }.getOrNull()
-            if (group == null) {
-                failOutgoing(pending.clientId, conversationId = "", error = "INVALID_GROUP")
-                continue
-            }
-            scope.launch {
-                when (val prepared = groupCrypto.prepare(group, pending.text.toByteArray(Charsets.UTF_8))) {
-                    is ApiResult.Error -> {
-                        notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
-                        failOutgoing(pending.clientId, group.id, prepared.message)
-                    }
-                    is ApiResult.Success -> {
-                        prepared.value.distributions.forEach { distribution ->
-                            socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
-                        }
-                        val sendType = pending.type?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: if (pending.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
-                        // تفاعل الإيموجي الجماعي: يُطبّق محلياً ولا يُحفظ كرسالة
-                        val outgoingRich = if (pending.isRich) com.red.sovereign.core.RichMessage.decode(pending.text.toByteArray(Charsets.UTF_8)) else null
-                        if (outgoingRich?.action == "REACTION" || outgoingRich?.action == "REACTION_REMOVE") {
-                            applyOutgoingReactionLocally(outgoingRich, group.id, tokenStore.redId.orEmpty())
-                            return@launch
-                        }
-                        var firstId: String? = null
-                        prepared.value.recipients.forEach { recipient ->
-                            val envelope = prepared.value.groupCiphertext.copy(receiverDeviceId = recipient.protocolDeviceId)
-                            val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope)
-                            if (firstId == null) firstId = id
-                        }
-                        firstId?.let {
-                            val bytes = pending.text.toByteArray(Charsets.UTF_8); val timestamp = System.currentTimeMillis()
-                            repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), bytes, sendType, timestamp, true))
-                            DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, timestamp, 0, type = sendType, outgoing = true))
-                            succeedOutgoing(pending.clientId, group.id, it)
-                        } ?: failOutgoing(pending.clientId, group.id, "NO_RECIPIENT")
-                    }
-                }
-            }
-        }
-    }
-
-    private fun sendEncryptedPayload(pending: PendingSend) {
+    /** يستنزف سجلات Room بترتيب إنشائها؛ لا تحذف النية قبل ACK من الخادم. */
+    private fun drainOutbox() {
         scope.launch {
-            when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
-                is ApiResult.Error -> {
-                    notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
-                    failOutgoing(pending.clientId, pending.conversation, encrypted.message)
-                }
-                is ApiResult.Success -> {
-                    var firstId: String? = null
-                    runCatching {
-                        encrypted.value.forEach { envelope ->
-                            val id = socket.sendEncrypted(pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope)
-                            if (firstId == null) firstId = id
-                        }
-                    }.onFailure { error ->
-                        failOutgoing(pending.clientId, pending.conversation, error.message ?: "NOT_CONNECTED")
-                        return@launch
+            repository.pendingOutbox().forEach { item ->
+                runCatching { sendOutbox(item) }
+                    .onFailure { error ->
+                        repository.markOutboxAttempt(item.id)
+                        OutboxRetryWorker.schedule(applicationContext)
+                        android.util.Log.w("RedConnectionService", "outbox send failed for ${item.id}: ${error.message}")
                     }
-                    firstId?.let {
-                        // تفاعل الإيموجي: يُطبّق محلياً ولا يُحفظ كرسالة
-                        val rich = com.red.sovereign.core.RichMessage.decode(pending.payload)
-                        if (rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE") {
-                            applyOutgoingReactionLocally(rich, pending.conversation, tokenStore.redId.orEmpty())
-                            succeedOutgoing(pending.clientId, pending.conversation, it)
-                            return@launch
-                        }
-                        val timestamp = System.currentTimeMillis()
-                        repository.saveLocalHistory(LocalHistoryEntity(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, pending.type, timestamp, true))
-                        DecryptedMessageBus.publish(DecryptedMessage(it, pending.conversation, tokenStore.redId.orEmpty(), pending.payload, timestamp, sequence = 0, type = pending.type, outgoing = true))
-                        // تحديث/إنشاء صف المحادثة لتظهر في قائمة الدردشات
-                        runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
-                        succeedOutgoing(pending.clientId, pending.conversation, it)
-                    } ?: failOutgoing(pending.clientId, pending.conversation, "NO_RECIPIENT")
-                }
             }
         }
     }
+
+    private suspend fun sendOutbox(item: OutboxEntity) {
+        var envelopes = repository.outboxEnvelopes(item.id)
+        if (envelopes.isEmpty()) {
+            envelopes = when (item.kind) {
+                OUTBOX_DIRECT -> prepareDirectOutbox(item)
+                OUTBOX_GROUP -> prepareGroupOutbox(item)
+                else -> {
+                    failOutgoing(item.clientId, item.conversationId, "INVALID_OUTBOX_KIND")
+                    repository.discardOutbox(item.id)
+                    emptyList()
+                }
+            }
+        }
+        if (envelopes.isEmpty()) return
+        envelopes.forEach { envelope ->
+            socket.sendEncrypted(
+                receiverRedId = envelope.receiverRedId,
+                conversationId = envelope.conversationId,
+                messageType = envelope.messageType,
+                senderDeviceId = keyManager.protocolDeviceId(),
+                encrypted = com.red.sovereign.crypto.EncryptedEnvelope(
+                    envelope.receiverDeviceId,
+                    envelope.ciphertextType,
+                    envelope.encryptedPayload
+                ),
+                messageId = envelope.messageId
+            )
+        }
+        repository.markOutboxAttempt(item.id)
+    }
+
+    private suspend fun prepareDirectOutbox(item: OutboxEntity): List<OutboxEnvelopeEntity> {
+        val target = item.targetRedId ?: run {
+            failOutgoing(item.clientId, item.conversationId, "INVALID_TARGET")
+            repository.discardOutbox(item.id)
+            return emptyList()
+        }
+        val type = item.messageType ?: run {
+            failOutgoing(item.clientId, item.conversationId, "INVALID_MESSAGE_TYPE")
+            repository.discardOutbox(item.id)
+            return emptyList()
+        }
+        return when (val encrypted = signal.encrypt(target, item.payload)) {
+            is ApiResult.Error -> {
+                notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
+                repository.markOutboxAttempt(item.id)
+                OutboxRetryWorker.schedule(applicationContext)
+                emptyList()
+            }
+            is ApiResult.Success -> {
+                val envelopes = encrypted.value.map { envelope ->
+                    OutboxEnvelopeEntity(
+                        messageId = UuidV7.next(), outboxId = item.id, receiverRedId = target,
+                        conversationId = item.conversationId, messageType = type, encryptedPayload = envelope.bytes,
+                        receiverDeviceId = envelope.receiverDeviceId, ciphertextType = envelope.ciphertextType
+                    )
+                }
+                repository.saveOutboxEnvelopes(envelopes)
+                presentDirectOutbox(item, envelopes.firstOrNull()?.messageId, type)
+                envelopes
+            }
+        }
+    }
+
+    private suspend fun prepareGroupOutbox(item: OutboxEntity): List<OutboxEnvelopeEntity> {
+        val group = item.groupJson?.let { runCatching { json.decodeFromString<Group>(it) }.getOrNull() }
+            ?: run {
+                failOutgoing(item.clientId, item.conversationId, "INVALID_GROUP")
+                repository.discardOutbox(item.id)
+                return emptyList()
+            }
+        val type = item.messageType?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: if (item.isRich) "RICH_TEXT" else "GROUP_MESSAGE"
+        return when (val prepared = groupCrypto.prepare(group, item.payload)) {
+            is ApiResult.Error -> {
+                notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
+                repository.markOutboxAttempt(item.id)
+                OutboxRetryWorker.schedule(applicationContext)
+                emptyList()
+            }
+            is ApiResult.Success -> {
+                val distributions = prepared.value.distributions.map { distribution ->
+                    OutboxEnvelopeEntity(
+                        messageId = UuidV7.next(), outboxId = item.id, receiverRedId = distribution.receiverRedId,
+                        conversationId = group.id, messageType = "GROUP_KEY_DISTRIBUTION", encryptedPayload = distribution.encrypted.bytes,
+                        receiverDeviceId = distribution.encrypted.receiverDeviceId, ciphertextType = distribution.encrypted.ciphertextType
+                    )
+                }
+                val messages = prepared.value.recipients.map { recipient ->
+                    OutboxEnvelopeEntity(
+                        messageId = UuidV7.next(), outboxId = item.id, receiverRedId = recipient.redId,
+                        conversationId = group.id, messageType = type, encryptedPayload = prepared.value.groupCiphertext.bytes,
+                        receiverDeviceId = recipient.protocolDeviceId, ciphertextType = prepared.value.groupCiphertext.ciphertextType
+                    )
+                }
+                val envelopes = distributions + messages
+                if (envelopes.isEmpty()) {
+                    failOutgoing(item.clientId, group.id, "NO_RECIPIENT")
+                    repository.discardOutbox(item.id)
+                    return emptyList()
+                }
+                repository.saveOutboxEnvelopes(envelopes)
+                presentGroupOutbox(item, group.id, messages.firstOrNull()?.messageId, type)
+                envelopes
+            }
+        }
+    }
+
+    private suspend fun presentDirectOutbox(item: OutboxEntity, messageId: String?, type: String) {
+        val id = messageId ?: return
+        val rich = RichMessage.decode(item.payload)
+        if (rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE") {
+            applyOutgoingReactionLocally(rich, item.conversationId, tokenStore.redId.orEmpty())
+            succeedOutgoing(item.clientId, item.conversationId, id)
+            return
+        }
+        val timestamp = System.currentTimeMillis()
+        repository.saveLocalHistory(LocalHistoryEntity(id, item.conversationId, tokenStore.redId.orEmpty(), item.payload, type, timestamp, true))
+        repository.linkOutboxLocalMessage(item.id, id)
+        DecryptedMessageBus.publish(DecryptedMessage(id, item.conversationId, tokenStore.redId.orEmpty(), item.payload, timestamp, 0, type = type, outgoing = true))
+        runCatching { repository.onMessageStored(item.conversationId, item.targetRedId.orEmpty(), decodeMessagePreview(item.payload).orEmpty(), timestamp, isIncoming = false) }
+        succeedOutgoing(item.clientId, item.conversationId, id)
+    }
+
+    private suspend fun presentGroupOutbox(item: OutboxEntity, groupId: String, messageId: String?, type: String) {
+        val id = messageId ?: return
+        val rich = if (item.isRich) RichMessage.decode(item.payload) else null
+        if (rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE") {
+            applyOutgoingReactionLocally(rich, groupId, tokenStore.redId.orEmpty())
+            succeedOutgoing(item.clientId, groupId, id)
+            return
+        }
+        val timestamp = System.currentTimeMillis()
+        repository.saveLocalHistory(LocalHistoryEntity(id, groupId, tokenStore.redId.orEmpty(), item.payload, type, timestamp, true))
+        repository.linkOutboxLocalMessage(item.id, id)
+        DecryptedMessageBus.publish(DecryptedMessage(id, groupId, tokenStore.redId.orEmpty(), item.payload, timestamp, 0, type = type, outgoing = true))
+        succeedOutgoing(item.clientId, groupId, id)
+    }
+
+    private fun extractGroupId(groupJson: String): String =
+        runCatching { json.decodeFromString<Group>(groupJson).id }.getOrDefault("")
 
     /** يُطبّق تفاعلاً صادراً محلياً (في جدول التفاعلات) ويُبَثه للواجهة دون حفظه كرسالة. */
     private fun applyOutgoingReactionLocally(rich: com.red.sovereign.core.RichMessage, conversationId: String, myRedId: String) {
@@ -239,11 +331,14 @@ class RedConnectionService : Service() {
                         is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_session_keys_error))
                     }
                 }
-                drainSends()
-                drainGroupSends()
+                drainOutbox()
             }
             ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
-            ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
+            ConnectionState.DISCONNECTED -> {
+                connected = false
+                OutboxRetryWorker.schedule(applicationContext)
+                scheduleReconnect()
+            }
             ConnectionState.UNAUTHORIZED -> { connected = false; refreshAndReconnect() }
         }
     }
@@ -337,8 +432,12 @@ class RedConnectionService : Service() {
                 }
             }
             RedProtos.RedRED.SignalCase.ACK -> scope.launch {
-                repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
-                com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
+                val ack = envelope.ack
+                repository.updateMessageStatus(ack.messageId, ack.status)
+                // ACK الحالة SENT من الخادم يؤكد قبوله للمعرف نفسه؛ تحذف الحوامل
+                // واحدةً واحدة، ولا يحذف سجل Outbox الأب إلا بعد آخر جهاز مستهدف.
+                repository.acknowledgeOutbox(ack.messageId)
+                com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(ack.messageId, ack.status))
             }
             RedProtos.RedRED.SignalCase.DELETE -> scope.launch {
                 val delete = envelope.delete
@@ -490,6 +589,8 @@ class RedConnectionService : Service() {
         private const val EXTRA_GROUP_RICH = "groupRich"
         private const val EXTRA_GROUP_TYPE = "groupType"
         private const val EXTRA_CLIENT_ID = "clientId"
+        private const val OUTBOX_DIRECT = "DIRECT"
+        private const val OUTBOX_GROUP = "GROUP"
         private val ALLOWED_MESSAGE_TYPES = setOf("TEXT", "RICH_TEXT", "FILE", "VOICE", "IMAGE", "VIDEO", "AUDIO", "STICKER")
 
         fun start(context: Context) = context.startForegroundService(Intent(context, RedConnectionService::class.java))
@@ -580,6 +681,3 @@ class RedConnectionService : Service() {
         fun stop(context: Context) = context.stopService(Intent(context, RedConnectionService::class.java))
     }
 }
-
-private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray, val clientId: String? = null)
-private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false, val type: String? = null, val clientId: String? = null)

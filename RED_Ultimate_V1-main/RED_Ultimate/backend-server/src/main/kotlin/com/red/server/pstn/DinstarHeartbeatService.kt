@@ -23,12 +23,11 @@ class DinstarHeartbeatService(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService,
     private val loadBalancer: DinstarLoadBalancer,
-    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean,
     private val wsBroadcaster: org.springframework.beans.factory.ObjectProvider<com.red.server.websocket.DinstarWebSocketHandler>
 ) {
     companion object { private val log = LoggerFactory.getLogger(DinstarHeartbeatService::class.java) }
 
-    private val activeCalls = ConcurrentHashMap<String, Instant>()
     private val lastWarnAt = ConcurrentHashMap<String, Instant>()
     private val lastReachable = ConcurrentHashMap<String, Boolean>()
 
@@ -51,20 +50,10 @@ class DinstarHeartbeatService(
                 for (port in ports) {
                     val idx = (port["index"] as? Number)?.toInt() ?: continue
                     val callState = port["callState"]?.toString()
-                    val key = "${gw.id}#$idx"
-                    if (callState.equals("ACTIVE", true)) {
-                        activeCalls.putIfAbsent(key, Instant.now())
-                        val started = activeCalls[key] ?: Instant.now()
-                        if (Duration.between(started, Instant.now()).toMinutes() > 10) {
-                            log.warn("DINSTAR port {} on gateway {} stuck ACTIVE >10min — force releasing", idx, gw.host)
-                            loadBalancer.releasePort(gw.id, idx)
-                            activeCalls.remove(key)
-                        }
-                    } else {
-                        activeCalls.remove(key)
-                        if (callState.equals("IDLE", true) || callState.equals("REGISTERED", true)) {
-                            loadBalancer.releasePort(gw.id, idx)
-                        }
+                    // حالة المكالمة الحالية في العتاد هي مصدر التحرير المباشر؛
+                    // أما انتهاء صلاحية الحجز في PostgreSQL فيعالجه cleanupStaleCalls.
+                    if (callState.equals("IDLE", true) || callState.equals("REGISTERED", true)) {
+                        loadBalancer.releasePort(gw.id, idx)
                     }
                 }
                 val recovered = lastReachable.put(gw.host, true) == false
@@ -94,22 +83,7 @@ class DinstarHeartbeatService(
     @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     fun cleanupStaleCalls() {
         if (!dinstarEnabled) return
-        val now = Instant.now()
-        val stale = activeCalls.filter { Duration.between(it.value, now).toMinutes() > 15 }
-        for ((key, _) in stale) {
-            log.warn("DINSTAR cleanup: releasing stale call {}", key)
-            val parts = key.split("#")
-            if (parts.size == 2) {
-                try {
-                    val gwId = java.util.UUID.fromString(parts[0])
-                    val port = parts[1].toIntOrNull()
-                    if (port != null) loadBalancer.releasePort(gwId, port)
-                } catch (_: Exception) {
-                    val port = parts[1].toIntOrNull()
-                    if (port != null) loadBalancer.releasePort(null, port)
-                }
-            }
-            activeCalls.remove(key)
-        }
+        val released = loadBalancer.releaseExpiredReservations()
+        if (released > 0) log.warn("DINSTAR cleanup released {} expired port reservation(s)", released)
     }
 }

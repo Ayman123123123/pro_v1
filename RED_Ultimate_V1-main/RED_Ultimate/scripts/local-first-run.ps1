@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ServerIp,
     [ValidateRange(1024, 65535)][int]$HttpPort = 8088,
-    [switch]$BuildAndroid
+    [switch]$BuildAndroid,
+    [switch]$EnableTelephony
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
@@ -74,7 +75,6 @@ if (-not (Test-Path $EnvFile)) {
         "replace_with_a_long_random_turn_secret" = (New-Hex 32)
         "replace_with_at_least_32_random_characters" = (New-Hex 48)
         "replace_with_at_least_14_random_characters" = (New-Hex 20)
-        "replace_with_the_gateway_password" = (New-Hex 24)
         "192.168.1.50" = $ServerIp
     }
     foreach ($entry in $replacements.GetEnumerator()) { $text = $text.Replace($entry.Key, $entry.Value) }
@@ -132,7 +132,10 @@ try {
     Write-Host "Docker Compose configuration: PASS"
     & docker compose --env-file $EnvFile build
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose build failed" }
-    & docker compose --env-file $EnvFile up -d
+    $upArgs = @("compose", "--env-file", $EnvFile)
+    if ($EnableTelephony) { $upArgs += @("--profile", "telephony") }
+    $upArgs += @("up", "-d")
+    & docker @upArgs
     if ($LASTEXITCODE -ne 0) { throw "Docker Compose startup failed" }
     # Nginx 1.27 tracks replaced upstream containers through Docker DNS dynamically.
     Start-Sleep -Seconds 3
@@ -169,7 +172,11 @@ try {
     }
     Write-Host " PASS"
     Wait-ContainerReady "red-admin-ui"
-    Wait-ContainerReady "red-pstn-gateway"
+    if ($EnableTelephony) {
+        Wait-ContainerReady "red-pstn-gateway"
+    } else {
+        Write-Host "PSTN/DINSTAR profile: skipped (use -EnableTelephony with configured gateway secrets)."
+    }
 } finally { Pop-Location }
 
 if ($BuildAndroid) {
@@ -190,5 +197,6 @@ if ($BuildAndroid) {
 
 Write-Host ""
 Write-Host "RED local first run is ready: http://${ServerIp}:$HttpPort/"
+if (-not $EnableTelephony) { Write-Host "PSTN/DINSTAR is intentionally disabled for this local run." }
 Write-Host "Health endpoint: http://${ServerIp}:$HttpPort/health"
 Write-Host "Admin credentials remain only in RED_Ultimate/.env."

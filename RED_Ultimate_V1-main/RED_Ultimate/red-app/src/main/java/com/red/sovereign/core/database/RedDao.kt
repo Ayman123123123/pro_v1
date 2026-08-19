@@ -22,6 +22,40 @@ interface RedDao {
     @Query("UPDATE local_history SET encryptedPlaintext = :plaintext WHERE id = :id")
     suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray)
 
+    // --- Durable outbound queue ---
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertOutbox(item: OutboxEntity)
+
+    @Query("SELECT * FROM outbox ORDER BY createdAt ASC LIMIT :limit")
+    suspend fun pendingOutbox(limit: Int = 100): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox WHERE id = :outboxId")
+    suspend fun getOutbox(outboxId: String): OutboxEntity?
+
+    @Query("UPDATE outbox SET localMessageId = :messageId WHERE id = :outboxId")
+    suspend fun setOutboxLocalMessageId(outboxId: String, messageId: String)
+
+    @Query("UPDATE outbox SET lastAttemptAt = :attemptAt, attemptCount = attemptCount + 1 WHERE id = :outboxId")
+    suspend fun markOutboxAttempt(outboxId: String, attemptAt: Long)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOutboxEnvelopes(items: List<OutboxEnvelopeEntity>)
+
+    @Query("SELECT * FROM outbox_envelopes WHERE outboxId = :outboxId ORDER BY createdAt ASC")
+    suspend fun outboxEnvelopes(outboxId: String): List<OutboxEnvelopeEntity>
+
+    @Query("SELECT * FROM outbox_envelopes WHERE messageId = :messageId")
+    suspend fun getOutboxEnvelope(messageId: String): OutboxEnvelopeEntity?
+
+    @Query("DELETE FROM outbox_envelopes WHERE messageId = :messageId")
+    suspend fun deleteOutboxEnvelope(messageId: String)
+
+    @Query("SELECT COUNT(*) FROM outbox_envelopes WHERE outboxId = :outboxId")
+    suspend fun outboxEnvelopeCount(outboxId: String): Int
+
+    @Query("DELETE FROM outbox WHERE id = :outboxId")
+    suspend fun deleteOutbox(outboxId: String)
+
     // --- Conversations ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConversation(conversation: ConversationEntity)

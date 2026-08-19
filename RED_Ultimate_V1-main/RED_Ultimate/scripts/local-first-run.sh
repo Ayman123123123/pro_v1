@@ -6,12 +6,13 @@ REPO_ROOT="$(dirname "$ROOT")"
 ENV_FILE="$ROOT/.env"
 SERVER_IP=""
 BUILD_ANDROID="${BUILD_ANDROID:-0}"
+ENABLE_TELEPHONY="${ENABLE_TELEPHONY:-0}"
 HTTP_PORT="${RED_HTTP_PORT:-}"
 
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "$1 is required"; }
 usage() {
-  printf 'Usage: %s [IPv4 | --server-ip IPv4] [--build-android]\n' "$0"
+  printf 'Usage: %s [IPv4 | --server-ip IPv4] [--build-android] [--enable-telephony]\n' "$0"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -22,6 +23,9 @@ while [ "$#" -gt 0 ]; do
       ;;
     --build-android)
       BUILD_ANDROID=1; shift
+      ;;
+    --enable-telephony)
+      ENABLE_TELEPHONY=1; shift
       ;;
     -h|--help)
       usage; exit 0
@@ -81,7 +85,6 @@ if [ ! -f "$ENV_FILE" ]; then
     -e "s|replace_with_a_long_random_turn_secret|$(rand_hex 32)|" \
     -e "s|replace_with_at_least_32_random_characters|$(rand_hex 48)|" \
     -e "s|replace_with_at_least_14_random_characters|$(rand_hex 20)|" \
-    -e "s|replace_with_the_gateway_password|$(rand_hex 24)|" \
     -e "s|192\.168\.1\.50|$SERVER_IP|g" \
     "$ROOT/.env.example" > "$ENV_FILE"
   chmod 600 "$ENV_FILE"
@@ -120,8 +123,13 @@ cd "$ROOT"
 docker compose --env-file "$ENV_FILE" config --quiet
 printf 'Docker Compose configuration: PASS\n'
 
-docker compose --env-file "$ENV_FILE" build
-docker compose --env-file "$ENV_FILE" up -d
+if [ "$ENABLE_TELEPHONY" = "1" ]; then
+  docker compose --env-file "$ENV_FILE" --profile telephony build
+  docker compose --env-file "$ENV_FILE" --profile telephony up -d
+else
+  docker compose --env-file "$ENV_FILE" build
+  docker compose --env-file "$ENV_FILE" up -d
+fi
 # Nginx 1.27 resolves upstream replacements through Docker DNS dynamically.
 sleep 3
 
@@ -153,7 +161,11 @@ until curl -fsS "http://127.0.0.1:$HTTP_PORT/sfu-health" >/dev/null 2>&1; do
 done
 printf ' PASS\n'
 wait_container_ready red-admin-ui
-wait_container_ready red-pstn-gateway
+if [ "$ENABLE_TELEPHONY" = "1" ]; then
+  wait_container_ready red-pstn-gateway
+else
+  printf 'PSTN/DINSTAR profile: skipped. Use --enable-telephony only with configured gateway secrets.\n'
+fi
 
 if [ "$BUILD_ANDROID" = "1" ]; then
   printf 'Building verified backend + Android artifact image (this downloads the Android SDK image)...\n'
@@ -172,4 +184,5 @@ printf '\nRED local first run is ready.\n'
 printf 'Admin dashboard: http://%s:%s/\n' "$SERVER_IP" "$HTTP_PORT"
 printf 'Health:          http://%s:%s/health\n' "$SERVER_IP" "$HTTP_PORT"
 printf 'The generated admin password remains only in RED_Ultimate/.env.\n'
+if [ "$ENABLE_TELEPHONY" != "1" ]; then printf 'PSTN/DINSTAR is intentionally disabled for this local run.\n'; fi
 printf 'Install local-artifacts/red-app-debug.apk only when BUILD_ANDROID=1 was used.\n'

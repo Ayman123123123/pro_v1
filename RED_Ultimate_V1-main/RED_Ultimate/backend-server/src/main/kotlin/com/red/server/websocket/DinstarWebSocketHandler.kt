@@ -1,17 +1,12 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.red.server.services.DinstarFleetService
-import com.red.server.services.DinstarHardwareService
+import com.red.server.services.DinstarStatusSnapshotService
 import org.slf4j.LoggerFactory
-import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.*
 import org.springframework.web.socket.handler.TextWebSocketHandler
-import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * معالج WebSocket لأحداث DINSTAR الحية.
@@ -28,41 +23,33 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @Component
 class DinstarWebSocketHandler(
-    private val hardware: DinstarHardwareService,
-    private val fleet: DinstarFleetService,
-    private val mapper: ObjectMapper,
-    private val taskScheduler: TaskScheduler
+    private val snapshots: DinstarStatusSnapshotService,
+    private val mapper: ObjectMapper
 ) : TextWebSocketHandler() {
 
     companion object {
         private val log = LoggerFactory.getLogger(DinstarWebSocketHandler::class.java)
-        private const val STATUS_UPDATE_INTERVAL_MS = 5000L
     }
 
     private val sessions = ConcurrentHashMap<String, WebSocketSession>()
-    private val scheduledTasks = ConcurrentHashMap<String, ScheduledFuture<*>>()
-    private val portStatusCounter = AtomicInteger(0)
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
+        if (session.attributes["role"] != "ADMIN") {
+            log.warn("Rejected non-admin DINSTAR WebSocket session: {}", session.id)
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val sessionId = session.id
         sessions[sessionId] = session
         log.info("DINSTAR WebSocket connected: {} (total: {})", sessionId, sessions.size)
 
-        // بدء تحديثات حالة المنافذ الدورية
-        val task = taskScheduler.scheduleAtFixedRate(
-            { sendPortStatusUpdate(session) },
-            Duration.ofMillis(STATUS_UPDATE_INTERVAL_MS)
-        )
-        scheduledTasks[sessionId] = task
-
-        // إرسال حالة أولية فورية
+        // إرسال اللقطة المركزية الحالية فورًا؛ لا يبدأ اتصال المدير استطلاع عتاد جديدًا.
         sendPortStatusUpdate(session)
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
         val sessionId = session.id
         sessions.remove(sessionId)
-        scheduledTasks.remove(sessionId)?.cancel(false)
         log.info("DINSTAR WebSocket disconnected: {} ({})", sessionId, status)
     }
 
@@ -74,7 +61,6 @@ class DinstarWebSocketHandler(
     override fun handleTransportError(session: WebSocketSession, exception: Throwable) {
         log.error("DINSTAR WebSocket transport error for {}: {}", session.id, exception.message)
         sessions.remove(session.id)
-        scheduledTasks.remove(session.id)?.cancel(false)
         session.close(CloseStatus.SERVER_ERROR)
     }
 
@@ -85,7 +71,7 @@ class DinstarWebSocketHandler(
         if (sessions.isEmpty()) return
 
         try {
-            val statusData = buildPortStatusPayload()
+            val statusData = snapshots.payload()
             val json = mapper.writeValueAsString(statusData)
             val message = TextMessage(json)
 
@@ -98,8 +84,6 @@ class DinstarWebSocketHandler(
                     log.warn("Failed to send to session {}: {}", session.id, e.message)
                 }
             }
-
-            portStatusCounter.incrementAndGet()
         } catch (e: Exception) {
             log.error("Failed to broadcast port status: {}", e.message, e)
         }
@@ -168,49 +152,13 @@ class DinstarWebSocketHandler(
     private fun sendPortStatusUpdate(session: WebSocketSession) {
         try {
             if (session.isOpen) {
-                val payload = buildPortStatusPayload()
+                val payload = snapshots.payload()
                 val json = mapper.writeValueAsString(payload)
                 session.sendMessage(TextMessage(json))
             }
         } catch (e: Exception) {
             log.warn("Failed to send port status to session {}: {}", session.id, e.message)
         }
-    }
-
-    private fun buildPortStatusPayload(): Map<String, Any?> {
-        val gateways = fleet.listGateways(onlyEnabled = true)
-        val allPorts = mutableListOf<Map<String, Any?>>()
-
-        gateways.forEach { gateway ->
-            try {
-                val ports = hardware.getHardwareStatus(gateway)
-                fleet.markHealthy(gateway.id)
-                ports.forEach { port ->
-                    allPorts.add(port + mapOf(
-                        "gatewayHost" to gateway.host,
-                        "gatewayName" to gateway.name,
-                        "gatewayModel" to gateway.model
-                    ))
-                }
-            } catch (e: Exception) {
-                fleet.markFailure(gateway.id, e.message ?: "WebSocket status query failed")
-                log.warn("Failed to get status for gateway {}: {}", gateway.host, e.message)
-            }
-        }
-
-        return mapOf(
-            "type" to "DINSTAR_PORT_STATUS",
-            "timestamp" to System.currentTimeMillis(),
-            "data" to mapOf(
-                "ports" to allPorts,
-                "totalGateways" to gateways.size,
-                "totalPorts" to allPorts.size,
-                "registered" to allPorts.count { 
-                    (it["status"]?.toString() ?: "").equals("REGISTERED", ignoreCase = true) 
-                },
-                "usable" to allPorts.count { it["signalUsable"] == true }
-            )
-        )
     }
 
     private fun broadcastEvent(eventType: String, data: Map<String, Any?>) {

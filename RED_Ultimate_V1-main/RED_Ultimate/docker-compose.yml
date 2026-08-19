@@ -72,8 +72,9 @@ services:
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
       - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
-      - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
-      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
+      # عند تعطيل العتاد لا يُطلب أي سر DINSTAR؛ الخدمة نفسها ترفض القيم الفارغة عند التفعيل.
+      - DINSTAR_USERNAME=${DINSTAR_USERNAME:-}
+      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:-}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
       - DINSTAR_PORT=${DINSTAR_PORT:-443}
       - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
@@ -191,6 +192,9 @@ services:
 
   # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
   pstn-gateway:
+    # لا يحتاج الإقلاع المحلي الأساسي جهاز PSTN. شغّله صراحةً عبر --profile telephony
+    # بعد توفير بوابة DINSTAR وشبكة الإدارة المصرح بها.
+    profiles: ["telephony"]
     build: ./pstn-asterisk
     image: red-pstn-gateway:local
     container_name: red-pstn-gateway
@@ -204,8 +208,9 @@ services:
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
-      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
-      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      # الإعداد الحالي يعتمد تعريف IP ولا يستهلك هذين المتغيرين؛ يبقيان متاحين لتوسع SIP المسجّل.
+      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:-}
+      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:-}
       - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
       - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
       - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}

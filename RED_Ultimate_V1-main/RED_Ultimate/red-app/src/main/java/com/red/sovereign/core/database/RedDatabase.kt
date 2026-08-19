@@ -17,9 +17,11 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         CallLogEntity::class,
         StoryEntity::class,
         DraftEntity::class,
-        MessageReactionEntity::class
+        MessageReactionEntity::class,
+        OutboxEntity::class,
+        OutboxEnvelopeEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
@@ -53,7 +55,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2)
+                .addMigrations(REACTION_MIGRATION_1_2, OUTBOX_MIGRATION_2_3)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -117,5 +119,46 @@ private val REACTION_MIGRATION_1_2 = object : androidx.room.migration.Migration(
         )
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_conversationId` ON `message_reactions` (`conversationId`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_message_reactions_messageId` ON `message_reactions` (`messageId`)")
+    }
+}
+
+/** رسائل صادرة دائمة: نية الإرسال والحوامل المشفرة الثابتة لإعادة المحاولة الآمنة. */
+private val OUTBOX_MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `outbox` (
+                `id` TEXT NOT NULL,
+                `kind` TEXT NOT NULL,
+                `clientId` TEXT,
+                `targetRedId` TEXT,
+                `conversationId` TEXT NOT NULL,
+                `messageType` TEXT,
+                `payload` BLOB NOT NULL,
+                `groupJson` TEXT,
+                `isRich` INTEGER NOT NULL,
+                `localMessageId` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `lastAttemptAt` INTEGER NOT NULL,
+                `attemptCount` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_createdAt` ON `outbox` (`createdAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_conversationId` ON `outbox` (`conversationId`)")
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `outbox_envelopes` (
+                `messageId` TEXT NOT NULL,
+                `outboxId` TEXT NOT NULL,
+                `receiverRedId` TEXT NOT NULL,
+                `conversationId` TEXT NOT NULL,
+                `messageType` TEXT NOT NULL,
+                `encryptedPayload` BLOB NOT NULL,
+                `receiverDeviceId` INTEGER NOT NULL,
+                `ciphertextType` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                PRIMARY KEY(`messageId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_envelopes_outboxId` ON `outbox_envelopes` (`outboxId`)")
     }
 }

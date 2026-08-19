@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component
 @Component
 class DinstarFleetBootstrap(
     private val fleet: DinstarFleetService,
-    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean
 ) {
     private val log = LoggerFactory.getLogger(DinstarFleetBootstrap::class.java)
 

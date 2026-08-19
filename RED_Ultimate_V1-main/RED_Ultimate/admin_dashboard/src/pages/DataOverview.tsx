@@ -4,9 +4,17 @@ import { DatabaseOutlined, ReloadOutlined } from '@ant-design/icons';
 import { getOperationsOverview } from '../api';
 import { usePolling } from '../hooks/usePolling';
 
-type Section = Record<string, number>;
+type MetricValue = number | null;
+type Section = Record<string, MetricValue>;
+type SourceHealth = {
+  available: boolean;
+  error: string | null;
+  observedAt: string;
+};
+type SectionKey = 'users' | 'devices' | 'moderation' | 'content' | 'communications' | 'storage';
 type Overview = {
   generatedAt: string;
+  dataSources?: Record<string, SourceHealth>;
   users: Section;
   devices: Section;
   moderation: Section;
@@ -24,7 +32,7 @@ const labels: Record<string, string> = {
   mediaGrants: 'تصاريح وسائط', backups: 'سجلات نسخ', notifications: 'إشعارات'
 };
 
-const sectionTitles: Array<[keyof Omit<Overview, 'generatedAt'>, string]> = [
+const sectionTitles: Array<[SectionKey, string]> = [
   ['users', 'المستخدمون والحضور'], ['devices', 'الأجهزة والجلسات'], ['moderation', 'الأمان والإشراف'],
   ['content', 'المحتوى'], ['communications', 'الاتصالات والبوابات'], ['storage', 'التخزين والعمليات']
 ];
@@ -47,8 +55,11 @@ export default function DataOverview() {
   usePolling(load, 30_000);
 
   const rows = data ? sectionTitles.flatMap(([key, title]) =>
-    Object.entries(data[key] || {}).map(([metric, value]) => ({ key: `${key}.${metric}`, section: title, metric, value }))
+    Object.entries(data[key] || {}).map(([metric, value]) => ({ key: `${key}.${metric}`, section: title, metric, value: value as MetricValue }))
   ) : [];
+  const unavailableSources = data ? Object.entries(data.dataSources || {})
+    .filter(([, status]) => !status.available)
+    .map(([source]) => source) : [];
 
   return <div>
     <Typography.Title level={2} style={{ color: '#14D89B', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
@@ -58,6 +69,9 @@ export default function DataOverview() {
     <Alert type="info" showIcon style={{ marginBottom: 16 }} message="الخصوصية محفوظة" description="هذا القسم يعرض أعداداً وحالة تشغيلية فقط؛ لا يُستخدم لتصفح محتوى المستخدمين الخاص." />
     {error && <Alert type="error" showIcon closable message="فشل التحميل" description={error} style={{ marginBottom: 16 }}
       action={<Button size="small" onClick={() => void load()}>إعادة المحاولة</Button>} />}
+    {unavailableSources.length > 0 && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+      message="بعض مصادر البيانات غير متاحة"
+      description={`لا تعني القيم غير المتاحة صفراً. تعذر قراءة: ${unavailableSources.join('، ')}.`} />}
     <Card extra={<Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>تحديث</Button>}
       title={data?.generatedAt ? `آخر تحديث: ${new Date(data.generatedAt).toLocaleString('ar')}` : (error ? 'تعذر تحميل الجرد' : 'جاري تحميل الجرد')}>
       <Spin spinning={loading && !data}>
@@ -67,7 +81,9 @@ export default function DataOverview() {
               <Card size="small" title={title} bordered>
                 <Descriptions size="small" column={1}>
                   {Object.entries(data[key] || {}).map(([metric, value]) => <Descriptions.Item key={metric} label={labels[metric] || metric}>
-                    <Tag color={Number(value) > 0 ? 'cyan' : 'default'}>{Number(value).toLocaleString('ar')}</Tag>
+                    {value === null
+                      ? <Tag color="warning">غير متاح</Tag>
+                      : <Tag color={value > 0 ? 'cyan' : 'default'}>{value.toLocaleString('ar')}</Tag>}
                   </Descriptions.Item>)}
                 </Descriptions>
               </Card>
@@ -77,7 +93,9 @@ export default function DataOverview() {
             <Table size="small" rowKey="key" dataSource={rows} pagination={{ pageSize: 20 }} columns={[
               { title: 'القسم', dataIndex: 'section', filters: sectionTitles.map(([, title]) => ({ text: title, value: title })), onFilter: (v, r: any) => r.section === v },
               { title: 'المقياس', dataIndex: 'metric', render: (v: string) => labels[v] || v },
-              { title: 'القيمة', dataIndex: 'value', render: (v: number) => <Statistic value={v} valueStyle={{ fontSize: 16 }} /> }
+              { title: 'القيمة', dataIndex: 'value', render: (v: MetricValue) => v === null
+                ? <Tag color="warning">غير متاح</Tag>
+                : <Statistic value={v} valueStyle={{ fontSize: 16 }} /> }
             ]} />
           </Card>
         </>}
