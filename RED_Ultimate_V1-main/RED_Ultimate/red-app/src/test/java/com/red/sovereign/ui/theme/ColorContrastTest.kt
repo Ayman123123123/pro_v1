@@ -142,4 +142,16 @@ class ColorContrastTest {
             }
         }
     }
+    /**
+     * ألوان مشغّلي الشبكة تُعرض نصًّا/شارةً على خلفية التطبيق، فتخضع
+     * لحدّ AA نفسه. الأربعة الأولى ألوان علامات تجارية تبقى كما هي،
+     * أما `UNKNOWN` فليس مشغّلًا بل غياب تعرُّف، فلا هوية تلزمه:
+     * كان `757575` بـ4.15:1 — راسبًا — فصار لون النص الثانوي نفسه.
+     */
+    @Test
+    fun `الوان مشغلي الشبكة تبلغ حد AA على خلفية التطبيق`() {
+        com.red.sovereign.features.dinstar.YemenOperator.entries.forEach { operator ->
+            assertAA(operator.color, YounesMidnight, "لون ${operator.arabicName}")
+        }
+    }
 }

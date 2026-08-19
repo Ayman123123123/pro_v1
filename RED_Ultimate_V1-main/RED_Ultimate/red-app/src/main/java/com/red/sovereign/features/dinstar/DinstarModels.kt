@@ -111,7 +111,14 @@ enum class YemenOperator(
     YOU("يو", "YOU", setOf("73"), Color(0xFFFFB300)),
     YEMEN_MOBILE("يمن موبايل", "YemenMobile", setOf("77", "78"), Color(0xFF43A047)),
     Y_TELECOM("واي", "YTelecom", setOf("70"), Color(0xFF1E88E5)),
-    UNKNOWN("غير معروف", "Unknown", setOf(), Color(0xFF757575));
+    /**
+     * ليس مشغّلًا بل غياب تعرُّف، فلونه محايد لا هوية تجارية له.
+     * `9AAEBB` هو لون النص الثانوي في لوحة التطبيق (`RedTheme.kt`):
+     * الرمادي السابق `757575` كان يبلغ 4.15:1 على الخلفية — دون حدّ
+     * AA — بينما هذا يبلغ 8.34:1. وألوان المشغّلين الأربعة أعلاه
+     * ألوان علامات تجارية فتبقى كما هي، وكلها تتجاوز 4.5:1.
+     */
+    UNKNOWN("غير معروف", "Unknown", setOf(), Color(0xFF9AAEBB));
 
     companion object {
         fun fromPrefix(prefix: String): YemenOperator =
