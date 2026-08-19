@@ -2,6 +2,7 @@ package com.red.sovereign.security
 
 import android.util.Log
 import com.red.sovereign.BuildConfig
+import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.Response
 
@@ -53,7 +54,10 @@ class SecurityHeadersInterceptor : Interceptor {
 /**
  * Interceptor to log requests for debugging (disabled in release).
  */
-class LoggingInterceptor(private val isDebug: Boolean = false) : Interceptor {
+class LoggingInterceptor(
+    private val isDebug: Boolean = false,
+    private val logger: (String) -> Unit = { message -> Log.d(TAG, message) }
+) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         if (!isDebug) {
@@ -63,30 +67,33 @@ class LoggingInterceptor(private val isDebug: Boolean = false) : Interceptor {
         val request = chain.request()
         val startTime = System.currentTimeMillis()
 
-        val response = chain.proceed(request)
+        // لا نسجل الجسم أو رابط الاستعلام: قد يتضمنان رسائل مشفرة، رموز جلسة أو مرفقات.
+        logger("→ ${request.method} ${request.url.newBuilder().query(null).build()}")
+        logger("  Headers: ${redactHeaders(request.headers)}")
 
+        val response = chain.proceed(request)
         val duration = System.currentTimeMillis() - startTime
 
-        // Log request
-        Log.d(TAG, "→ ${request.method} ${request.url}")
-        Log.d(TAG, "  Headers: ${request.headers}")
-
-        // Log response
-        Log.d(TAG, "← ${response.code} ${response.request?.url} (${duration}ms)")
-        Log.d(TAG, "  Headers: ${response.headers}")
-
-        response.body?.string()?.let { body ->
-            if (body.length < 5000) {
-                Log.d(TAG, "  Body: $body")
-            } else {
-                Log.d(TAG, "  Body: [${body.length} bytes - truncated]")
-            }
-        }
+        // لا تستدعِ ResponseBody.string(): هي قراءة مدمرة تمنع طبقة العميل من فك الاستجابة.
+        logger("← ${response.code} ${response.request.url.newBuilder().query(null).build()} (${duration}ms)")
+        logger("  Headers: ${redactHeaders(response.headers)}")
+        logger("  Body: [omitted; ${response.body?.contentLength() ?: -1} bytes]")
 
         return response
     }
 
+    private fun redactHeaders(headers: Headers): String = headers.names()
+        .sorted()
+        .joinToString(prefix = "{", postfix = "}") { name ->
+            val value = if (name.lowercase() in SENSITIVE_HEADERS) "██REDACTED██" else headers[name] ?: ""
+            "$name=$value"
+        }
+
     private companion object {
         const val TAG = "LoggingInterceptor"
+        val SENSITIVE_HEADERS = setOf(
+            "authorization", "proxy-authorization", "cookie", "set-cookie",
+            "x-device-token", "x-fcm-token", "x-api-key"
+        )
     }
 }
