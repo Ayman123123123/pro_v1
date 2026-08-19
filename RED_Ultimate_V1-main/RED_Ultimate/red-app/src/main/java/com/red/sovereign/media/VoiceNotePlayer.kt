@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -241,11 +242,13 @@ fun VoiceNotePlayer(
                             }
                         )
                     }
-                    .clickable { offset ->
-                        val newProgress = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                        val newPosition = (newProgress * totalDurationMs).toLong()
-                        player.seekTo(newPosition)
-                        currentPositionMs = newPosition
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val newProgress = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            val newPosition = (newProgress * totalDurationMs).toLong()
+                            player.seekTo(newPosition)
+                            currentPositionMs = newPosition
+                        }
                     },
                 playheadProgress = animatedProgress,
                 isActive = isPlaying

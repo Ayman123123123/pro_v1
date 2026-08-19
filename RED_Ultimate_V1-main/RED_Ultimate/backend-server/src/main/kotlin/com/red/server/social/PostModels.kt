@@ -32,8 +32,8 @@ data class PostDocument(
     val repostCount: Long = 0
 )
 
-enum class PostVisibility { PUBLIC, LOCAL_YEMEN }
-enum class FeedScope { ALL, FOLLOWING, YEMEN }
+enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN }
+enum class FeedScope { ALL, PUBLIC, FRIENDS, FOLLOWING, YEMEN }
 enum class PostKind { POST, POLL }
 data class PostMedia(
     val objectKey: String,
@@ -98,7 +98,7 @@ data class PostReport(@Id val id: String, @Indexed val postId: String, @Indexed 
 
 data class CreatePostRequest(
     val text: String,
-    val visibility: PostVisibility = PostVisibility.LOCAL_YEMEN,
+    val visibility: PostVisibility = PostVisibility.PUBLIC,
     val parentId: String? = null,
     val quotePostId: String? = null,
     val pollOptions: List<String> = emptyList(),

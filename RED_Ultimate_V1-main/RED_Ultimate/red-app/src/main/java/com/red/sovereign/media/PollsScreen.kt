@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.ApiResult
@@ -216,14 +218,14 @@ fun PollsScreen(
     val context = LocalContext.current
     val client = remember(tokens) { AuthorizedApiClient(tokens) }
     val api = remember(client) { PollsApi(client) }
-    val vm: PollsViewModel = viewModel(factory = androidx.lifecycle.viewmodel.initializer {
-        PollsViewModel(api)
-    }.let { factory ->
-        object : androidx.lifecycle.ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = PollsViewModel(api) as T
+    val vm: PollsViewModel = viewModel(
+        factory = remember(api) {
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T = PollsViewModel(api) as T
+            }
         }
-    })
+    )
     val state by vm.state.collectAsState()
 
     Scaffold(
@@ -772,5 +774,3 @@ private fun formatDate(iso: String?): String {
     }
 }
 
-private fun Modifier.horizontalScroll(state: androidx.compose.foundation.ScrollState) =
-    this.then(androidx.compose.foundation.horizontalScroll(state))

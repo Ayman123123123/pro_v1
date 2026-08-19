@@ -65,7 +65,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         )
 
         val notification = NotificationCompat.Builder(context, PSTN_CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_notify_phone_call)
+            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle("مكالمة هاتفية واردة")
             .setContentText("PSTN: $displayNumber — رُد من تطبيق الهاتف")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

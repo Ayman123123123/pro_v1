@@ -157,7 +157,7 @@ private fun ContactActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
 private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, onChat: () -> Unit, onCall: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onChat).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.BottomEnd) {
-            Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF0F172A), contentAlignment = Alignment.Center)) { Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+            Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) { Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
             if (isOnline) Box(Modifier.size(14.dp).clip(CircleShape).background(Color(0xFF00C98C)).padding(2.dp).background(Color(0xFF0F172A), CircleShape).padding(1.dp).background(Color(0xFF00C98C), CircleShape)) {}
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {

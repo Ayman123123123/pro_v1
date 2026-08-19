@@ -186,9 +186,9 @@ class LocalServerDiscovery(private val context: Context) {
         try {
             nsdManager.discoverServices("_younes._tcp.", NsdManager.PROTOCOL_DNS_SD, listener)
             latch.await(MDNS_BUDGET_MS, TimeUnit.MILLISECONDS)
-            nsdManager.stopDiscovery(listener)
+            nsdManager.stopServiceDiscovery(listener)
         } catch (_: Exception) {
-            runCatching { nsdManager.stopDiscovery(listener) }
+            runCatching { nsdManager.stopServiceDiscovery(listener) }
         }
         return discoveredHost
     }

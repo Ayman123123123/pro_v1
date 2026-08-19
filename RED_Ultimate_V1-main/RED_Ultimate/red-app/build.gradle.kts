@@ -119,6 +119,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.jackson.core)
     implementation(libs.square.okhttp3)
     implementation(libs.libsignal.android)
     implementation(libs.google.zxing.core)

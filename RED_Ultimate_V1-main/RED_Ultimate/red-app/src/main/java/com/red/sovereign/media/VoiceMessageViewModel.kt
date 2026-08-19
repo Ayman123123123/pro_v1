@@ -95,7 +95,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     // Whether recording is silent
     var isSilent by mutableStateOf(false); private set
 
-    fun setQualityMode(mode: VoiceQuality) {
+    fun changeQualityMode(mode: VoiceQuality) {
         if (state is VoiceMessageState.Recording) return
         qualityMode = mode
     }

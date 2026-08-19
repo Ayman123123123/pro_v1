@@ -98,7 +98,7 @@ class PollsApi(private val client: AuthorizedApiClient) {
                 val list = json.decodeFromString<List<PollDto>>(raw)
                 ApiResult.Success(200, PageResponsePoll(content = list, totalElements = list.size.toLong()))
             } catch (_: Exception) {
-                ApiResult.Error(500, e.message)
+                ApiResult.Error(500, e.message.orEmpty())
             }
         }
     }
@@ -112,7 +112,7 @@ class PollsApi(private val client: AuthorizedApiClient) {
             val list = json.decodeFromString<List<PollDto>>(raw)
             ApiResult.Success(200, list)
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -124,7 +124,7 @@ class PollsApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<PollDetailDto>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -137,7 +137,7 @@ class PollsApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<PollDto>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
