@@ -66,6 +66,10 @@ class LocalRepository(context: Context) {
 
     // --- Contacts ---
     suspend fun saveContacts(contacts: List<ContactEntity>) = dao.insertContacts(contacts)
+    suspend fun replaceContacts(contacts: List<ContactEntity>) {
+        dao.clearContacts()
+        if (contacts.isNotEmpty()) dao.insertContacts(contacts)
+    }
     fun getFriends(): Flow<List<ContactEntity>> = dao.getFriends()
 
     // --- Groups ---

@@ -16,6 +16,11 @@ data class ContactRequestResponse(
     val requester: PublicRedProfile,
     val createdAt: Instant
 )
+data class OutgoingContactRequestResponse(
+    val id: UUID,
+    val recipient: PublicRedProfile,
+    val createdAt: Instant
+)
 data class ReportRequest(val redId: String, val category: String, val details: String? = null)
 data class ReportResponse(val id: UUID, val status: String)
 
@@ -42,6 +47,14 @@ class ContactService(
            ORDER BY r.created_at""",
         { rs, _ -> ContactRequestResponse(rs.getObject("id", UUID::class.java), profileRow(rs, 0), rs.getTimestamp("created_at").toInstant()) },
         recipientId
+    )
+
+    fun outgoing(requesterId: UUID): List<OutgoingContactRequestResponse> = jdbc.query(
+        """SELECT r.id,r.created_at,u.red_id,u.username,u.full_name,u.avatar_url FROM contact_requests r
+           JOIN users u ON u.id=r.recipient_id WHERE r.requester_id=? AND r.status='PENDING'
+           ORDER BY r.created_at""",
+        { rs, _ -> OutgoingContactRequestResponse(rs.getObject("id", UUID::class.java), profileRow(rs, 0), rs.getTimestamp("created_at").toInstant()) },
+        requesterId
     )
 
     /** Presence is limited to established contacts and stale websocket entries are offline. */
@@ -78,7 +91,7 @@ class ContactService(
     }
 
     @Transactional
-    fun request(requesterId: UUID, redId: String): ContactRequestResponse {
+    fun request(requesterId: UUID, redId: String): OutgoingContactRequestResponse {
         val target = approved(redId)
         require(target.id != requesterId) { "Cannot add yourself" }
         require(!blockedEitherDirection(requesterId, target.id)) { "Contact is blocked" }
@@ -96,7 +109,7 @@ class ContactService(
             "SELECT id FROM contact_requests WHERE requester_id=? AND recipient_id=?",
             UUID::class.java, requesterId, target.id
         ) ?: id
-        return ContactRequestResponse(actualId, PublicRedProfile(target.redId, target.username, target.displayName), Instant.now())
+        return OutgoingContactRequestResponse(actualId, PublicRedProfile(target.redId, target.username, target.displayName), Instant.now())
     }
 
     @Transactional
@@ -110,6 +123,8 @@ class ContactService(
         jdbc.update("UPDATE contact_requests SET status=?,resolved_at=CURRENT_TIMESTAMP WHERE id=?", status, requestId)
         if (accept) {
             require(!blockedEitherDirection(row.first, row.second)) { "Contact is blocked" }
+            // إن أُرسل طلب متبادل بالتزامن، لا يبقى طلب معلق بعد تحقق الصداقة.
+            jdbc.update("UPDATE contact_requests SET status='CANCELED',resolved_at=CURRENT_TIMESTAMP WHERE requester_id=? AND recipient_id=? AND status='PENDING'", row.second, row.first)
             jdbc.update("INSERT INTO red_contacts(owner_id,contact_id) VALUES (?,?) ON CONFLICT DO NOTHING", row.first, row.second)
             jdbc.update("INSERT INTO red_contacts(owner_id,contact_id) VALUES (?,?) ON CONFLICT DO NOTHING", row.second, row.first)
             val requester = users.findById(row.first).orElse(null)
@@ -119,6 +134,18 @@ class ContactService(
                 presence.addContact(recipient.redId, requester.redId)
             }
         }
+    }
+
+    @Transactional
+    fun cancel(requesterId: UUID, requestId: UUID) {
+        val row = jdbc.query(
+            "SELECT requester_id,status FROM contact_requests WHERE id=? FOR UPDATE",
+            { rs, _ -> rs.getObject("requester_id", UUID::class.java) to rs.getString("status") },
+            requestId
+        ).singleOrNull() ?: throw NoSuchElementException("Contact request not found")
+        require(row.first == requesterId) { "Only the requester can cancel this contact request" }
+        require(row.second == "PENDING") { "Only pending contact requests can be cancelled" }
+        jdbc.update("UPDATE contact_requests SET status='CANCELED',resolved_at=CURRENT_TIMESTAMP WHERE id=?", requestId)
     }
 
     @Transactional
