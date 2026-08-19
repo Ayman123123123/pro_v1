@@ -1,6 +1,7 @@
 package com.red.server.calls
 
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.auth.ContactService
 import com.red.server.services.NotificationService
 import org.slf4j.LoggerFactory
 import org.springframework.data.annotation.Id
@@ -74,11 +75,18 @@ class ConferenceRoomService {
 
     fun verifyPassword(roomId: String, password: String?): Boolean {
         val record = activeRooms[roomId] ?: return false
-        if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
+        if (!record.isPrivate) return true
+        val expectedHash = record.passwordHash?.takeIf(String::isNotBlank) ?: return false
         if (password.isNullOrBlank()) return false
-        // PBKDF2 (210k) للكلمات الجديدة، مع قبول تجزئات SHA-256 القديمة للتوافق الرجعي
-        return RoomPasswordHasher.verify(password, record.passwordHash) ||
-            legacySha256(password) == record.passwordHash
+        // PBKDF2 (210k تكرار) للكلمات الجديدة، مع قبول تجزئات SHA-256
+        // القديمة للتوافق الرجعي مع الغرف المنشأة قبل الترقية.
+        //
+        // نسخة origin/main هنا كانت `hashPassword(password) == expectedHash`،
+        // ولها عيبان: `hashPassword` لم يعد له وجود بعد استخراج التجزئة إلى
+        // `RoomPasswordHasher` (فلا تُترجم أصلًا)، وهي تجزئة عارية بلا ملح
+        // ولا تكرار — أضعف مما تستحقه كلمة مرور غرفة خاصة.
+        return RoomPasswordHasher.verify(password, expectedHash) ||
+            legacySha256(password) == expectedHash
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -134,6 +142,7 @@ class ConferenceRoomService {
 class ConferenceController(
     private val roomService: ConferenceRoomService,
     private val users: UserAccountRepository,
+    private val contacts: ContactService,
     private val notifications: NotificationService,
     private val history: CallHistoryService,
     private val callSignaling: com.red.server.websocket.CallWebSocketHandler
@@ -147,6 +156,9 @@ class ConferenceController(
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val roomId = request.roomId.trim().ifBlank { "room_${UUID.randomUUID().toString().take(12)}" }
+        require(roomId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) { "INVALID_ROOM_ID" }
+        require(!request.isPrivate || request.password?.length in 8..128) { "PRIVATE_ROOM_PASSWORD_MUST_BE_8_TO_128_CHARACTERS" }
+        require(request.isPrivate || request.password.isNullOrBlank()) { "PUBLIC_ROOM_MUST_NOT_ACCEPT_A_PASSWORD" }
         val record = roomService.createRoom(
             roomId = roomId,
             hostId = user.id.toString(),
@@ -255,9 +267,15 @@ class ConferenceController(
         val record = roomService.getRoom(roomId)
             ?: throw NoSuchElementException("Room not found")
         val accountId = UUID.fromString(authentication.name)
+        require(record.hostId == accountId.toString()) { "ONLY_HOST_CAN_INVITE" }
+        require(request.memberIds.size <= 100) { "AT_MOST_100_FRIENDS_CAN_BE_INVITED" }
         val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val requested = request.memberIds.asSequence().map(String::trim).filter(String::isNotBlank)
+            .filter { it != inviter.redId }.map(String::uppercase).toSet()
+        val allowed = contacts.contacts(accountId).asSequence().map { it.redId.uppercase() }.toSet()
+        require(requested.all(allowed::contains)) { "ROOM_INVITES_ARE_LIMITED_TO_MUTUAL_FRIENDS" }
         val mode = if (record.isSpace) "SPACE" else "CONFERENCE"
-        request.memberIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { memberId ->
+        requested.forEach { memberId ->
             notifications.sendVoipPushNotification(memberId, inviter.redId, roomId, mode)
             callSignaling.deliverInvite(
                 targetRedId = memberId,
@@ -272,7 +290,7 @@ class ConferenceController(
                 )
             )
         }
-        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.memberIds.size, "roomId" to roomId))
+        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to requested.size, "roomId" to roomId))
     }
 }
 

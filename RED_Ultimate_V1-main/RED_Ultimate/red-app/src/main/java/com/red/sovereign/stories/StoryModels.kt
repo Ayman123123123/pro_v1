@@ -48,7 +48,9 @@ data class CreateStoryRequest(
     val allowedUserIds: List<String> = emptyList(),
     val mediaType: String = "image/jpeg",
     val backgroundColor: String? = null, // للقصص النصّية: ‎#D32F2F, #1565C0
-    val durationMs: Long? = null // للصوت والفيديو
+    val durationMs: Long? = null, // للصوت والفيديو
+    /** موجة الصوت للقصص الصوتية — أضافها الخادم في 9076487. */
+    val waveform: List<Int> = emptyList()
 )
 
 /**
@@ -79,6 +81,7 @@ data class Story(
     val durationMs: Long? = null,
     val waveform: List<Int> = emptyList()
 )
+
 
 @Serializable
 data class StoryView(val storyId: String, val viewerRedId: String, val reaction: String? = null)

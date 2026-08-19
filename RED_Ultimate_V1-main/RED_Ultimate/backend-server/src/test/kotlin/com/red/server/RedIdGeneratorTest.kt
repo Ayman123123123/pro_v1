@@ -41,10 +41,14 @@ class RedIdGeneratorTest {
     }
 
     @Test
-    fun `ids are unique across many generations`() {
-        whenever(repository.existsByRedId(org.mockito.kotlin.any())).thenReturn(false)
-        val ids = (1..500).map { generator.next() }.toSet()
-        assertEquals(500, ids.size)
+    fun `ids are unique across many persisted generations`() {
+        val issued = linkedSetOf<String>()
+        whenever(repository.existsByRedId(org.mockito.kotlin.any())).thenAnswer { invocation ->
+            issued.contains(invocation.getArgument<String>(0))
+        }
+
+        repeat(500) { issued += generator.next() }
+        assertEquals(500, issued.size)
     }
 
     @Test

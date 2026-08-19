@@ -91,6 +91,7 @@ import com.red.sovereign.social.Post
 import com.red.sovereign.social.ThreadState
 import com.red.sovereign.stories.Story
 import com.red.sovereign.stories.StoryState
+import com.red.sovereign.stories.StoryVisibility
 import com.red.sovereign.stories.StoryViewModel
 import com.red.sovereign.stories.StoryViewerState
 import com.red.sovereign.ui.theme.AqyalCyanGlow
@@ -132,9 +133,15 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
     var editText by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
+    // جمهور الحالة يُختار *قبل* منتقي الوسيط: بعد اختيار الصورة يبدأ
+    // الرفع فورًا، فلا تبقى فرصة للسؤال عن الجمهور دون رفعٍ يُلغى.
+    var showStoryAudience by remember { mutableStateOf(false) }
+    var storyVisibility by remember { mutableStateOf(StoryVisibility.CONTACTS) }
     val layout = WindowLayout.current()
     val page = layout.pagePadding
-    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
+    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { stories.upload(it, visibility = storyVisibility) }
+    }
     val refreshing = feed.state == FeedState.Loading && feed.posts.isNotEmpty()
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { feed.refresh() }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -144,7 +151,7 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
     ) {
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
+                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { showStoryAudience = true } }
                 items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
@@ -182,6 +189,37 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
+    }
+    if (showStoryAudience) {
+        AlertDialog(
+            onDismissRequest = { showStoryAudience = false },
+            title = { Text("جمهور الحالة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("تُعرض الحالة لمدة 24 ساعة. اختر من يمكنه مشاهدتها قبل اختيار الوسيط.")
+                    // الثوابت من StoryVisibility لا نصوص حرفية: الخادم
+                    // يرفض أي قيمة خارج التعداد، وخطأ حرفٍ هنا لا يكشفه
+                    // مترجم بل يظهر 400 وقت الرفع.
+                    listOf(
+                        StoryVisibility.CONTACTS to "جهات اتصالي",
+                        StoryVisibility.EVERYONE to "الجميع"
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = storyVisibility == value,
+                            onClick = { storyVisibility = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showStoryAudience = false
+                    storyPicker.launch(arrayOf("image/*", "video/*"))
+                }) { Text("اختيار صورة أو فيديو") }
+            },
+            dismissButton = { TextButton(onClick = { showStoryAudience = false }) { Text("إلغاء") } }
+        )
     }
     threadPost?.let { root ->
         AlertDialog(

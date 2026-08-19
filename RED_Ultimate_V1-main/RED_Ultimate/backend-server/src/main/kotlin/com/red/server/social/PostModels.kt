@@ -32,19 +32,23 @@ data class PostDocument(
     val repostCount: Long = 0
 )
 
-enum class PostVisibility { PUBLIC, LOCAL_YEMEN }
+/**
+ * خصوصية المنشور. `FRIENDS` أضافها main ويستعملها `FeedService` فعلًا
+ * في ترشيح الفيد، ولذلك بقيت.
+ */
+enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN }
 
 /**
  * نطاق الفيد المطلوب.
  *
  * `FRIENDS` حلّ محلّ `FOLLOWING`، و`PUBLIC` حلّ محلّ `YEMEN`.
  * والفرق ليس تسمية فقط: «المتابَعة» علاقة أحادية الاتجاه (أتابعك دون
- * أن تتابعني)، أما «الأصدقاء» فعلاقة متبادلة يلزم فيها أن يتابع كلٌّ
- * منّا الآخر — وهذا ما يطبّقه `FeedService`.
+ * أن تتابعني)، أما «الأصدقاء» فعلاقة متبادلة يلزم فيها أن يكون كلٌّ
+ * منّا في جهات اتصال الآخر — وهذا ما يطبّقه `FeedService`.
  *
  * `FOLLOWING` و`YEMEN` مُبقاتان مهجورتين لا تُعرضان في الواجهة: نسخ
  * التطبيق المثبَّتة على الأجهزة ما زالت ترسلهما، وحذفهما يجعل Spring
- * يردّ 400 على كل طلب منها. تُطابَقان في الخدمة إلى البديل الجديد.
+ * يردّ 400 على كل طلب منها.
  */
 enum class FeedScope {
     ALL,
@@ -128,7 +132,7 @@ data class PostReport(@Id val id: String, @Indexed val postId: String, @Indexed 
 
 data class CreatePostRequest(
     val text: String,
-    val visibility: PostVisibility = PostVisibility.LOCAL_YEMEN,
+    val visibility: PostVisibility = PostVisibility.PUBLIC,
     val parentId: String? = null,
     val quotePostId: String? = null,
     val pollOptions: List<String> = emptyList(),

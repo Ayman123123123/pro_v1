@@ -214,11 +214,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (response.status) {
             "APPROVED" -> {
                 tokens.save(response)
-                pendingCredentials = null
+                tokens.clearPendingLogin()
                 state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
             }
             "PENDING" -> {
-                pendingCredentials = username to password
+                tokens.rememberPendingLogin(username, password)
                 state = AuthState.Pending(response.user.redId, response.user.username, emptyList())
             }
             "REJECTED" -> state = AuthState.Rejected(response.user.rejectionReason)

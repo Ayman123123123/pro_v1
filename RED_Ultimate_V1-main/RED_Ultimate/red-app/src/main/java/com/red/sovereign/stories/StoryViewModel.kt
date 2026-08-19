@@ -120,7 +120,7 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         state = StoryState.Uploading
         when (val uploaded = media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
-            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, null, visibility, allowedUserIds, mediaType = "VOICE", durationMs = durationMs)))) {
+            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, null, visibility, allowedUserIds, mediaType = "VOICE", durationMs = durationMs, waveform = waveform)))) {
                 is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess { stories.add(0, it); state = StoryState.Idle }
                 is ApiResult.Error -> state = StoryState.Error(created.message)
             }

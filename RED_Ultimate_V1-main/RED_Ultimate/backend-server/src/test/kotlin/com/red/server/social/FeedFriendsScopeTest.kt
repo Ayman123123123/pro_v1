@@ -5,93 +5,44 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.whenever
 import org.springframework.data.mongodb.core.MongoTemplate
-import org.springframework.data.mongodb.core.query.Query
-import java.util.UUID
+import org.springframework.jdbc.core.JdbcTemplate
 
 /**
  * حارس دلالة تبويب «الأصدقاء» في فيد المنشورات.
  *
  * البند العاشر طلب استبدال «المتابَعة» بـ«الأصدقاء» و«عام». والاستبدال
- * ليس تغيير عنوانٍ فقط: «المتابَعة» علاقة أحادية الاتجاه، أما «الأصدقاء»
- * فمتبادلة. هذه الاختبارات تثبّت الفرق حتى لا يعود أحدٌ فيُبسّطها إلى
- * «من أتابعهم» ويُسرّب منشورات أشخاص لا يتابعون المستخدم.
+ * ليس تغيير عنوانٍ فقط: «المتابَعة» علاقة أحادية الاتجاه، أما
+ * «الأصدقاء» فمتبادلة.
+ *
+ * ## تحديث بعد الدمج مع origin/main
+ *
+ * كانت النسخة السابقة من هذا الاختبار تحرس `FeedService.friendIds`
+ * المبنية على `FollowDocument` في Mongo. وقد حُسم عند الدمج أن مصدر
+ * الصداقة الصحيح هو جدول `red_contacts`، لأن `ContactService` يُدرج
+ * **صفَّين — واحدًا لكل اتجاه — عند قبول طلب الاتصال**، فهو السجلّ
+ * الحقيقي للعلاقة المتبادلة. أما `FollowDocument` فيكتبه `follow()`
+ * وحده بعلاقة أحادية، فلا يصلح أساسًا للصداقة.
+ *
+ * ولمّا صار الترشيح داخل SQL (`EXISTS` متماثلة) لا في الذاكرة، لم يعد
+ * ممكنًا اختبارُه بمحاكاة Mongo. فالمحروس هنا ما يبقى منطقًا خالصًا
+ * في Kotlin: **مُطابِق `canonical()`**، وهو الذي يمنع تسرُّب دلالة
+ * «المتابَعة» الأحادية إلى تبويب «الأصدقاء».
+ *
+ * التبادل نفسه تحرسه صياغة `EXISTS` في `mutualFriendIds`، ويلزمه
+ * اختبار تكامل بقاعدة بيانات حقيقية — وهو خارج نطاق اختبار الوحدة.
  */
 class FeedFriendsScopeTest {
 
-    private val alice = UUID.randomUUID()
-    private val bob = UUID.randomUUID()
-    private val carol = UUID.randomUUID()
-    private val dave = UUID.randomUUID()
-
-    /**
-     * يبني خدمةً على Mongo وهمي: الاستعلام عن `followerId` يعيد من
-     * يتابعهم أليس، والاستعلام عن `followedId` يعيد من يتابعونها.
-     */
-    private fun serviceWith(iFollow: List<UUID>, followMe: List<UUID>): FeedService {
-        val mongo = mock<MongoTemplate>()
-        val me = alice.toString()
-        whenever(mongo.find(any<Query>(), eq(FollowDocument::class.java))).thenAnswer { invocation ->
-            // toString() بدل toJson(): لا يعتمد على واجهة BSON بعينها.
-            // ملاحظة: تمثيل Document هو {{followerId=...}} بلا علامات
-            // اقتباس حول اسم الحقل، فالمطابقة تكون على الاسم مجرّدًا.
-            // و"followerId" و"followedId" لا يحتوي أحدهما الآخر.
-            val query = invocation.getArgument<Query>(0).queryObject.toString()
-            when {
-                query.contains("followerId") && query.contains(me) ->
-                    iFollow.map { FollowDocument("$me:$it", me, it.toString()) }
-                query.contains("followedId") && query.contains(me) ->
-                    followMe.map { FollowDocument("$it:$me", it.toString(), me) }
-                else -> emptyList()
-            }
-        }
-        return FeedService(mongo, mock<UserAccountRepository>())
-    }
-
-    @Test
-    fun `الصديق من تتبادل معه المتابعة في الاتجاهين`() {
-        // أليس تتابع بوب وكارول؛ بوب وديف يتابعونها.
-        // الصديق الوحيد هو بوب (تبادُل)، وكارول تُستبعد لأنها لا تتابع أليس.
-        val service = serviceWith(iFollow = listOf(bob, carol), followMe = listOf(bob, dave))
-        val friends = service.friendIds(alice)
-
-        // مقارنة كمجموعة لا كقائمة: الناتج من تقاطُع مجموعتين فترتيبه
-        // غير مضمون، والتأكيد على الترتيب يجعل الاختبار هشًّا بلا فائدة.
-        assertEquals(setOf(bob.toString()), friends.toSet())
-        assertFalse(friends.contains(carol.toString()), "من أتابعه ولا يتابعني ليس صديقًا")
-        assertFalse(friends.contains(dave.toString()), "من يتابعني ولا أتابعه ليس صديقًا")
-    }
-
-    @Test
-    fun `لا أصدقاء عند غياب التبادل رغم وجود متابعات`() {
-        // حالة تكشف الخطأ الشائع: لو رُدَّت «من أتابعهم» لظهرت كارول.
-        val service = serviceWith(iFollow = listOf(carol), followMe = listOf(dave))
-        assertTrue(service.friendIds(alice).isEmpty())
-    }
-
-    @Test
-    fun `قائمة فارغة عندما لا يتابع المستخدم أحدًا`() {
-        val service = serviceWith(iFollow = emptyList(), followMe = listOf(bob, carol))
-        assertTrue(service.friendIds(alice).isEmpty())
-    }
-
-    @Test
-    fun `التبادل الكامل يعيد الجميع دون تكرار`() {
-        val service = serviceWith(iFollow = listOf(bob, carol), followMe = listOf(bob, carol))
-        val friends = service.friendIds(alice)
-        assertEquals(2, friends.size)
-        assertEquals(friends.size, friends.toSet().size, "لا تكرار في قائمة الأصدقاء")
-        assertTrue(friends.containsAll(listOf(bob.toString(), carol.toString())))
-    }
+    private fun service(): FeedService = FeedService(
+        mock<MongoTemplate>(),
+        mock<UserAccountRepository>(),
+        mock<JdbcTemplate>()
+    )
 
     @Test
     fun `القيم المهجورة تُطابَق إلى البديل الجديد`() {
-        // نسخ التطبيق المثبَّتة ما زالت ترسل FOLLOWING و YEMEN؛ لو حُذفتا
-        // من التعداد لردّ الخادم 400 على كل طلب منها.
         @Suppress("DEPRECATION")
         assertEquals(FeedScope.FRIENDS, FeedScope.FOLLOWING.canonical())
         @Suppress("DEPRECATION")
@@ -107,14 +58,46 @@ class FeedFriendsScopeTest {
 
     @Test
     fun `كل قيم التعداد لها مُطابِق لا يُرجع قيمة مهجورة`() {
-        // يمنع إضافة قيمة جديدة دون تحديث canonical().
+        // لو أُضيفت قيمة جديدة ونُسي تطابقها، يفشل هذا الاختبار بدل أن
+        // يسقط نطاقٌ صامتًا في فرع `else` فيعرض منشورات لا ينبغي عرضها.
         @Suppress("DEPRECATION")
         val deprecated = setOf(FeedScope.FOLLOWING, FeedScope.YEMEN)
         FeedScope.entries.forEach { scope ->
             assertFalse(
                 scope.canonical() in deprecated,
-                "canonical() أرجع قيمة مهجورة لـ $scope",
+                "canonical() أرجع قيمة مهجورة من $scope"
             )
         }
+    }
+
+    @Test
+    fun `المطابق مستقر عند اعادة تطبيقه`() {
+        // يُستدعى في `feed()` مرّة، لكن ثباتَه يضمن أن أي استدعاء لاحق
+        // لا يغيّر النتيجة.
+        FeedScope.entries.forEach { scope ->
+            assertEquals(scope.canonical(), scope.canonical().canonical())
+        }
+    }
+
+    @Test
+    fun `تعداد الخصوصية يطابق ما يرشّح به FeedService`() {
+        // FeedService يرشّح بـPUBLIC وFRIENDS وLOCAL_YEMEN؛ حذف أيٍّ
+        // منها يكسر الترشيح، وإضافة قيمة بلا فرع تُسقطها صامتة.
+        assertEquals(
+            setOf(
+                PostVisibility.PUBLIC,
+                PostVisibility.FRIENDS,
+                PostVisibility.LOCAL_YEMEN
+            ),
+            PostVisibility.entries.toSet()
+        )
+    }
+
+    @Test
+    fun `الخدمة تُبنى بثلاث تبعيات بينها JdbcTemplate`() {
+        // مصدر الصداقة صار red_contacts عبر JdbcTemplate. لو أُعيدت
+        // التبعية إلى Mongo وحدها، يفشل البناء هنا بدل أن يتغيّر معنى
+        // «الأصدقاء» في الإنتاج دون أن ينتبه أحد.
+        assertTrue(service() is FeedService)
     }
 }

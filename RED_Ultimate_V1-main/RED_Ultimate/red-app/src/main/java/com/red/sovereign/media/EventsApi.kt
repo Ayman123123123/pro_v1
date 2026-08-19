@@ -99,7 +99,7 @@ class EventsApi(private val client: AuthorizedApiClient) {
                 val list = json.decodeFromString<List<EventDto>>(raw)
                 ApiResult.Success(200, PageResponseEvent(content = list, totalElements = list.size.toLong()))
             } catch (e: Exception) {
-                ApiResult.Error(500, e.message)
+                ApiResult.Error(500, e.message.orEmpty())
             }
         }
     }
@@ -120,7 +120,7 @@ class EventsApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<EventDetailDto>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -133,7 +133,7 @@ class EventsApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<EventDto>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -159,7 +159,7 @@ class EventsApi(private val client: AuthorizedApiClient) {
         is ApiResult.Success -> try {
             ApiResult.Success(200, json.decodeFromString<List<EventDto>>(r.value))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
         is ApiResult.Error -> r
     }

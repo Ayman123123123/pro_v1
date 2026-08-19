@@ -7,13 +7,19 @@ import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
-class FeedService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val linkCards: LinkCardService? = null) {
+class FeedService(
+    private val mongo: MongoTemplate,
+    private val users: UserAccountRepository,
+    private val jdbc: JdbcTemplate,
+    private val linkCards: LinkCardService? = null
+) {
     fun create(userId: UUID, request: CreatePostRequest): PostDocument {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED)
@@ -48,16 +54,24 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
         if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
+        val friendIds = mutualFriendIds(userId) + userId.toString()
+        // canonical() يوحّد FOLLOWING⇒FRIENDS وYEMEN⇒PUBLIC، فلا يتفرّع
+        // المنطق أربع مرات ولا يُنسى فرعٌ عند إضافة قيمة. النسخ
+        // المثبَّتة على الأجهزة ما زالت ترسل القيمتين المهجورتين.
         when (scope.canonical()) {
-            FeedScope.ALL -> Unit
-            FeedScope.PUBLIC -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
+            FeedScope.PUBLIC -> criteria.and("visibility").`is`(PostVisibility.PUBLIC)
+            FeedScope.ALL -> criteria.andOperator(
+                Criteria().orOperator(
+                    Criteria.where("visibility").`is`(PostVisibility.PUBLIC),
+                    Criteria.where("authorId").`is`(userId.toString()),
+                    Criteria.where("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
+                )
+            )
             FeedScope.FRIENDS -> {
-                val friends = friendIds(userId)
-                if (friends.isEmpty()) return FeedResponse(emptyList(), null)
-                criteria.and("authorId").`in`(friends)
+                if (friendIds.size == 1) return FeedResponse(emptyList(), null)
+                criteria.and("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
             }
-            // canonical() لا يُرجع القيمتين المهجورتين أبدًا، والفرع موجود
-            // لأن `when` على enum يجب أن يكون شاملًا.
+            // canonical() لا يُرجع المهجورتين أبدًا؛ الفرع لازم لشمول when.
             FeedScope.FOLLOWING, FeedScope.YEMEN -> Unit
         }
         before?.let { criteria.and("createdAt").lt(it) }
@@ -66,26 +80,27 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
     }
 
     /**
-     * معرّفات «الأصدقاء»: من تتبادل معهم المتابعة في الاتجاهين.
+     * معرّفات «الأصدقاء»: من تبادلتَ معه جهة الاتصال في الاتجاهين.
      *
-     * الصداقة تقاطُع مجموعتين — من أتابعهم ومن يتابعونني — لا مجرّد
-     * المجموعة الأولى. بهذا لا يظهر في تبويب «الأصدقاء» منشورُ شخص
-     * أتابعه دون أن يتابعني، وهو الفرق الجوهري عن «المتابَعة» السابقة.
+     * المصدر `red_contacts` لا `FollowDocument`: عند قبول طلب اتصال
+     * يُدرج `ContactService` صفَّين — واحدًا لكل اتجاه — فالجدول هو
+     * السجلّ الحقيقي للعلاقة المتبادلة. أما `FollowDocument` فيكتبه
+     * `follow()` وحده بعلاقة أحادية الاتجاه، فلا يصلح أساسًا للصداقة.
      *
-     * استعلامان بسيطان وتقاطُع في الذاكرة أوضح من `$lookup` تجميعي،
-     * وحجم البيانات هنا (قوائم متابعة مستخدم واحد) يجعله مناسبًا.
+     * `EXISTS` المتماثلة تفرض التبادل داخل قاعدة البيانات، فلا تُنقل
+     * قائمتان إلى الذاكرة لتقاطعهما.
      */
-    internal fun friendIds(userId: UUID): List<String> {
-        val me = userId.toString()
-        val iFollow = mongo.find(
-            Query(Criteria.where("followerId").`is`(me)), FollowDocument::class.java
-        ).map(FollowDocument::followedId).toSet()
-        if (iFollow.isEmpty()) return emptyList()
-        val followMe = mongo.find(
-            Query(Criteria.where("followedId").`is`(me)), FollowDocument::class.java
-        ).map(FollowDocument::followerId).toSet()
-        return iFollow.intersect(followMe).toList()
-    }
+    private fun mutualFriendIds(userId: UUID): List<String> = jdbc.queryForList(
+        """SELECT a.contact_id::text
+           FROM red_contacts a
+           WHERE a.owner_id = ?
+             AND EXISTS (
+                 SELECT 1 FROM red_contacts b
+                 WHERE b.owner_id = a.contact_id AND b.contact_id = a.owner_id
+             )""",
+        String::class.java,
+        userId
+    ).filterNotNull()
 
     fun thread(postId: String): List<PostDocument> {
         require(activePost(postId) != null) { "Post not found" }

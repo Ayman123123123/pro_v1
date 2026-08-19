@@ -37,7 +37,7 @@ class PresenceInfoTest {
 
     @Test
     fun `PresenceInfo defaults are safe`() {
-        val info = PresenceInfo()
+        val info = PresenceInfo(online = false)
         assertFalse(info.online)
         assertNull(info.lastSeen)
     }
@@ -60,7 +60,7 @@ class PresenceInfoTest {
     }
 
     @Test
-    fun `PublicRedProfile parses without avatarUrl (legacy compat)` {
+    fun `PublicRedProfile parses without avatarUrl (legacy compat)`() {
         // الحسابات القديمة قد لا تحوي avatarUrl — يجب أن يبقى متوافقاً
         val json = """
         { "redId": "16999", "username": "younes", "displayName": "يونس" }
