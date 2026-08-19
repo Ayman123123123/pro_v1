@@ -102,6 +102,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
                 micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
             )
+            // قبول المكالمة الواردة بالفيديو مباشرةً — الكاميرا مفروضة بغضّ النظر
+            // عن EXTRA_CAMERA، لأن نيّة المستخدم صريحة عند ضغط زر «فيديو».
+            ACTION_ACCEPT_VIDEO -> acceptIncoming(
+                cameraOn = true,
+                micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
+            )
             ACTION_REJECT -> rejectIncoming()
             ACTION_END -> endCall(sendSignal = true)
             ACTION_MIC -> engine?.setMicrophoneEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
@@ -638,7 +644,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     companion object {
         private const val CHANNEL = "red_calls"; private const val NOTIFICATION_ID = 7401
         const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
-        const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
+        const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_ACCEPT_VIDEO = "com.red.sovereign.call.ACCEPT_VIDEO"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"
         const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
         const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
@@ -652,6 +658,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         fun accept(context: Context, cameraOn: Boolean = true, micOn: Boolean = true) = ContextCompat.startForegroundService(
             context,
             Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT).putExtra(EXTRA_CAMERA, cameraOn).putExtra(EXTRA_ENABLED, micOn)
+        )
+        /** قبول المكالمة الواردة بالفيديو — يقابل زر «فيديو» في شاشة الاتصال الوارد. */
+        fun acceptVideo(context: Context, micOn: Boolean = true) = ContextCompat.startForegroundService(
+            context,
+            Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT_VIDEO).putExtra(EXTRA_ENABLED, micOn)
         )
         fun action(context: Context, action: String, enabled: Boolean = true) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
