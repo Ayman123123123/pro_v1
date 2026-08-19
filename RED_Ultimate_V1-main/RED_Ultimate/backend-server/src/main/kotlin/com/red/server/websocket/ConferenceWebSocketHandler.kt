@@ -25,7 +25,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
     private val roomHosts = ConcurrentHashMap<String, String>() // roomId -> host userId
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
         require(signal.roomId.isNotBlank()) { "roomId is required" }

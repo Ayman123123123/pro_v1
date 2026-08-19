@@ -140,7 +140,7 @@ class SmsTemplatesController(
             mapOf(
                 "id" to rs.getString("id"),
                 "templateId" to rs.getString("template_id"),
-                "templateName" to rs.getString("template_name") ?: "—",
+                "templateName" to (rs.getString("template_name") ?: "—"),
                 "recipients" to (rs.getString("recipients_json")?.split(",") ?: emptyList()),
                 "gatewayHost" to rs.getString("gateway_host"),
                 "scheduledAt" to rs.getTimestamp("scheduled_at")?.toInstant()?.toString(),
