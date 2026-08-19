@@ -17,6 +17,7 @@ import {
   BarChartOutlined,
   BellOutlined,
   FileSearchOutlined,
+  FileTextOutlined,
   KeyOutlined,
   VideoCameraOutlined,
   MessageOutlined,
@@ -54,6 +55,8 @@ const SimInventory = lazy(() => import('./pages/SimInventory'));
 const CdrAnalysis = lazy(() => import('./pages/CdrAnalysis'));
 const SmsTemplates = lazy(() => import('./pages/SmsTemplates'));
 const PortControl = lazy(() => import('./pages/PortControl'));
+const GroupsManagement = lazy(() => import('./pages/GroupsManagement'));
+const PostsManagement = lazy(() => import('./pages/PostsManagement'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -81,7 +84,9 @@ type PageKey =
   | 'dinstar-port-control'
   | 'monitor'
   | 'diagnostics'
-  | 'data-overview';
+  | 'data-overview'
+  | 'groups'
+  | 'posts';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
@@ -94,6 +99,8 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'audit', icon: <AuditOutlined />, label: 'سجل التدقيق', group: 'main' },
   { key: 'moderation', icon: <SafetyCertificateOutlined />, label: 'الإشراف السريع', group: 'main' },
   { key: 'messaging', icon: <MessageOutlined />, label: 'مركز الرسائل', group: 'main' },
+  { key: 'groups', icon: <TeamOutlined />, label: 'إدارة المجموعات', group: 'main' },
+  { key: 'posts', icon: <FileTextOutlined />, label: 'المنشورات والتغريدات', group: 'main' },
   // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات + وسائط + بنية
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
@@ -213,6 +220,8 @@ export default function App() {
       case 'audit': return <AuditLog />;
       case 'moderation': return <ModerationCenter />;
       case 'messaging': return <MessagingCenter />;
+      case 'groups': return <GroupsManagement />;
+      case 'posts': return <PostsManagement />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;
