@@ -7,23 +7,22 @@ import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 @Service
 class PstnCallService(
     private val users: UserAccountRepository,
     private val redis: StringRedisTemplate,
+    private val jdbc: JdbcTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
     private val history: CallHistoryService
 ) {
-    private val activeCalls = ConcurrentHashMap<String, ActivePstnCall>()
-
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
         /** Valid Yemeni mobile prefixes after +967 or 967 */
@@ -58,15 +57,19 @@ class PstnCallService(
                 redis.opsForValue().decrement(key)
                 throw IllegalStateException("No DINSTAR port with a usable signal is available")
             }
+        val actionId = UUID.randomUUID().toString()
         return try {
+            // نكتب العلاقة قبل originate: إذا أعيد تشغيل الخادم فور قبول AMI
+            // تبقى ملكية المنفذ ومسار hangup قابلة للاسترجاع.
+            persistActiveCall(actionId, user.redId, selection.gatewayId, selection.portIndex)
             log.info("PSTN dial: user={} number={} gateway={} port={}",
                 user.redId, number, selection.gatewayHost, selection.portIndex)
-            val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
+            pstn.dialGsm(number, selection.pjsipEndpoint, actionId)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
-            activeCalls[actionId] = ActivePstnCall(user.redId, selection.gatewayId, selection.portIndex)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
         } catch (error: Exception) {
-            // لا يبقى المنفذ محسوبًا مشغولًا عندما يرفض Asterisk طلب البداية.
+            // لا يبقى منفذ أو علاقة عالقة عندما يرفض Asterisk طلب البداية.
+            deleteActiveCall(actionId)
             loadBalancer.releasePort(selection.gatewayId, selection.portIndex)
             redis.opsForValue().decrement(key)
             throw IllegalStateException("Asterisk rejected the PSTN call", error)
@@ -75,14 +78,43 @@ class PstnCallService(
 
     fun hangup(userId: UUID, callId: String): PstnHangupResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
-        // سجل المكالمات هو مصدر الصلاحية، فلا يستطيع مستخدم تحرير اتصال غيره.
+        // نتحقق من المالك قبل أي تغيير في السجل أو الحجز؛ هذه العلاقة تبقى بعد restart.
+        val active = findActiveCall(callId)
+        require(active == null || active.ownerRedId == user.redId) { "Only the call initiator can release this PSTN route" }
         history.end(callId, user.redId)
-        val active = activeCalls.remove(callId)
         if (active != null) {
-            require(active.ownerRedId == user.redId) { "Only the call initiator can release this PSTN route" }
+            deleteActiveCall(callId)
             loadBalancer.releasePort(active.gatewayId, active.port)
         }
         return PstnHangupResponse(callId, active?.port ?: -1, active != null)
+    }
+
+    private fun gatewayKey(gatewayId: UUID?) = gatewayId?.toString() ?: "legacy-single-gateway"
+
+    private fun persistActiveCall(callId: String, ownerRedId: String, gatewayId: UUID?, port: Int) {
+        check(jdbc.update(
+            """INSERT INTO pstn_active_calls
+               (call_id, owner_red_id, gateway_key, port_index, created_at, expires_at)
+               VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '24 hours')""",
+            callId, ownerRedId, gatewayKey(gatewayId), port
+        ) == 1) { "Unable to persist PSTN call allocation" }
+    }
+
+    private fun findActiveCall(callId: String): ActivePstnCall? = jdbc.query(
+        """SELECT owner_red_id, gateway_key, port_index FROM pstn_active_calls
+           WHERE call_id = ? AND expires_at > CURRENT_TIMESTAMP""",
+        { rs, _ ->
+            ActivePstnCall(
+                ownerRedId = rs.getString("owner_red_id"),
+                gatewayId = rs.getString("gateway_key").takeUnless { it == "legacy-single-gateway" }?.let(UUID::fromString),
+                port = rs.getInt("port_index")
+            )
+        },
+        callId
+    ).firstOrNull()
+
+    private fun deleteActiveCall(callId: String) {
+        jdbc.update("DELETE FROM pstn_active_calls WHERE call_id = ?", callId)
     }
 
     /**

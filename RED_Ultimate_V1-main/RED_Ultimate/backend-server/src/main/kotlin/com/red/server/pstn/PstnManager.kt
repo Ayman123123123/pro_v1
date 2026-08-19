@@ -60,12 +60,16 @@ class PstnManager(
      *   فيخرج الاتصال من الجهاز الذي اختاره الموزّع فعلًا.
      */
     @JvmOverloads
-    fun dialGsm(phoneNumber: String, pjsipEndpoint: String = "dinstar-gateway"): String {
+    fun dialGsm(
+        phoneNumber: String,
+        pjsipEndpoint: String = "dinstar-gateway",
+        correlationId: String = UUID.randomUUID().toString()
+    ): String {
         require(phoneNumber.matches(Regex("^\\+?[0-9]{6,15}$"))) { "Invalid phone number" }
         // اسم النظير يدخل سلسلة قناة Asterisk، فيجب ألا يحمل فواصل أو
         // محارف تحكم تسمح بحقن وجهة أخرى.
         require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
-        val correlationId = UUID.randomUUID().toString()
+        require(runCatching { UUID.fromString(correlationId) }.isSuccess) { "Invalid PSTN correlation ID" }
         val action = OriginateAction().apply {
             actionId = correlationId
             channel = "Local/$phoneNumber@from-red-backend"

@@ -13,9 +13,11 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
+import org.springframework.jdbc.core.JdbcTemplate
 import java.util.Optional
 import java.util.UUID
 
@@ -23,6 +25,7 @@ class PstnCallServiceTest {
     private val users = mock<UserAccountRepository>()
     private val redis = mock<StringRedisTemplate>()
     private val values = mock<ValueOperations<String, String>>()
+    private val jdbc = mock<JdbcTemplate>()
     private val pstn = mock<PstnManager>()
     private val loadBalancer = mock<DinstarLoadBalancer>()
     private val history = mock<CallHistoryService>()
@@ -43,11 +46,11 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(3)
 
-        val service = PstnCallService(users, redis, pstn, loadBalancer, history)
+        val service = PstnCallService(users, redis, jdbc, pstn, loadBalancer, history)
         assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
         verify(loadBalancer, never()).selectPort(any())
-        verify(pstn, never()).dialGsm(any(), any())
+        verifyNoInteractions(pstn)
     }
 }
