@@ -536,22 +536,36 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
 }
 
 @Composable
-private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
-    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    Image(
-        painterResource(R.drawable.younes_icon_master),
-        contentDescription = "يونس",
-        modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
-        contentScale = ContentScale.Crop
-    )
-    Column(Modifier.weight(1f).padding(start = 8.dp)) {
-        Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painterResource(R.drawable.younes_icon_master),
+                contentDescription = "يونس",
+                modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text("يونس • @$username", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(redId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            Spacer(Modifier.width(6.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
-    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
-    IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
