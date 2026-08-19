@@ -20,12 +20,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.Construction
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Fingerprint
@@ -62,10 +67,11 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.SettingsInputComponent
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -77,6 +83,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -126,32 +133,18 @@ fun DeviceSettingsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        SettingsContent(
-            modifier = Modifier.padding(padding),
-            tokenStore = tokenStore,
-            snackbarHostState = snackbarHostState
-        )
-    }
-}
-
-@Composable
-private fun SettingsContent(
-    modifier: Modifier,
-    tokenStore: TokenStore,
-    snackbarHostState: SnackbarHostState
-) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Account & Identity
-        SettingsSection(
-            title = "Account & Identity",
-            icon = Icons.Filled.Person,
-            color = AqyalGold
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Account & Identity
+            SettingsSectionItem(
+                title = "Account & Identity",
+                icon = Icons.Filled.Person,
+                color = AqyalGold
+            )
             SettingsItem(
                 title = "Profile & Identity",
                 subtitle = "Manage your Yunus ID, display name, avatar",
@@ -176,14 +169,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.MoreVert,
                 onClick = { /* navigate to sessions */ }
             )
-        }
 
-        // PSTN / DINSTAR
-        SettingsSection(
-            title = "PSTN / DINSTAR",
-            icon = Icons.Filled.Call,
-            color = YounesEmerald
-        ) {
+            // PSTN / DINSTAR
+            SettingsSectionItem(
+                title = "PSTN / DINSTAR",
+                icon = Icons.Filled.Call,
+                color = YounesEmerald
+            )
             SettingsItem(
                 title = "PSTN Configuration",
                 subtitle = "DINSTAR gateway, SIM status, port mapping",
@@ -208,14 +200,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.CallReceived,
                 onClick = { /* navigate to forwarding */ }
             )
-        }
 
-        // Network & Connectivity
-        SettingsSection(
-            title = "Network & Connectivity",
-            icon = Icons.Filled.Wifi,
-            color = AqyalGold
-        ) {
+            // Network & Connectivity
+            SettingsSectionItem(
+                title = "Network & Connectivity",
+                icon = Icons.Filled.Wifi,
+                color = AqyalGold
+            )
             SettingsItem(
                 title = "Server Endpoint",
                 subtitle = ServerEndpoint.url(),
@@ -240,14 +231,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.Sync,
                 onClick = { /* navigate to offline queue */ }
             )
-        }
 
-        // Security & Privacy
-        SettingsSection(
-            title = "Security & Privacy",
-            icon = Icons.Filled.Security,
-            color = Color(0xFFF44336)
-        ) {
+            // Security & Privacy
+            SettingsSectionItem(
+                title = "Security & Privacy",
+                icon = Icons.Filled.Security,
+                color = Color(0xFFF44336)
+            )
             SettingsItem(
                 title = "Encryption Keys",
                 subtitle = "Manage device encryption keys, key rotation",
@@ -285,14 +275,13 @@ private fun SettingsContent(
                 isDestructive = true,
                 onClick = { /* navigate to data management */ }
             )
-        }
 
-        // Media & Storage
-        SettingsSection(
-            title = "Media & Storage",
-            icon = Icons.Filled.Storage,
-            color = Color(0xFF9C27B0)
-        ) {
+            // Media & Storage
+            SettingsSectionItem(
+                title = "Media & Storage",
+                icon = Icons.Filled.Storage,
+                color = Color(0xFF9C27B0)
+            )
             SettingsItem(
                 title = "Media Auto-Download",
                 subtitle = "Photos, videos, documents - WiFi / Mobile / Never",
@@ -311,14 +300,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.Image,
                 onClick = { /* navigate to media quality */ }
             )
-        }
 
-        // Notifications
-        SettingsSection(
-            title = "Notifications",
-            icon = Icons.Filled.Notifications,
-            color = Color(0xFF673AB7)
-        ) {
+            // Notifications
+            SettingsSectionItem(
+                title = "Notifications",
+                icon = Icons.Filled.Notifications,
+                color = Color(0xFF673AB7)
+            )
             SettingsItem(
                 title = "Message Notifications",
                 subtitle = "Sound, vibration, LED, priority, categories",
@@ -343,14 +331,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.DoNotDisturb,
                 onClick = { /* navigate to DND */ }
             )
-        }
 
-        // Appearance
-        SettingsSection(
-            title = "Appearance",
-            icon = Icons.Filled.BrightnessAuto,
-            color = Color(0xFF00BCD4)
-        ) {
+            // Appearance
+            SettingsSectionItem(
+                title = "Appearance",
+                icon = Icons.Filled.BrightnessAuto,
+                color = Color(0xFF00BCD4)
+            )
             SettingsItem(
                 title = "Theme",
                 subtitle = "System / Light / Dark / AMOLED / Custom",
@@ -381,14 +368,13 @@ private fun SettingsContent(
                 icon = Icons.Filled.Animation,
                 onClick = { /* navigate to animations */ }
             )
-        }
 
-        // Call Settings
-        SettingsSection(
-            title = "Call Settings",
-            icon = Icons.Filled.Call,
-            color = YounesEmerald
-        ) {
+            // Call Settings
+            SettingsSectionItem(
+                title = "Call Settings",
+                icon = Icons.Filled.Call,
+                color = YounesEmerald
+            )
             SettingsItem(
                 title = "Ringtone & Vibration",
                 subtitle = "Incoming call ringtone, vibration pattern",
@@ -420,14 +406,13 @@ private fun SettingsContent(
                 isDestructive = true,
                 onClick = { /* navigate to SOS */ }
             )
-        }
 
-        // Advanced / Developer
-        SettingsSection(
-            title = "Advanced",
-            icon = Icons.Filled.Construction,
-            color = Color(0xFF795548)
-        ) {
+            // Advanced / Developer
+            SettingsSectionItem(
+                title = "Advanced",
+                icon = Icons.Filled.Construction,
+                color = Color(0xFF795548)
+            )
             SettingsItem(
                 title = "Debug Logging",
                 subtitle = "Enable verbose logs, logcat export",
@@ -469,60 +454,38 @@ private fun SettingsContent(
 }
 
 @Composable
-fun SettingsSection(
+fun SettingsSectionItem(
     title: String,
     icon: ImageVector,
-    color: Color,
-    content: @Composable () -> Unit
+    color: Color
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Section header
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(color.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(color.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = color
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = color
             )
         }
-
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = SovereignColors.SurfaceCard
-            ),
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                content()
-            }
-        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
     }
 }
 

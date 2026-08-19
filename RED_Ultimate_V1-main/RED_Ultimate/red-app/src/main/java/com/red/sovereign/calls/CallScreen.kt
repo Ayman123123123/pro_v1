@@ -1,10 +1,10 @@
 package com.red.sovereign.calls
 
 import android.content.Context
-import androidx.compose.animation.animateFloatAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.CallMade
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.SignalCellular4Bar
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Add
@@ -42,10 +49,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +74,16 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/** مراحل اتصال PSTN المعروضة للمستخدم في شاشة المكالمة */
+enum class ConnectionStage(val label: String, val description: String, val icon: ImageVector, val color: Color) {
+    BRIDGING("Connecting to SIP Server", "Establishing WebSocket SIP connection to Asterisk", Icons.Filled.CloudQueue, AqyalGold),
+    REGISTERING("Registering SIP Account", "Authenticating with SIP credentials", Icons.Filled.VerifiedUser, AqyalGold),
+    INVITING("Placing Call", "Sending SIP INVITE via Asterisk", Icons.Filled.CallMade, AqyalGold),
+    TURN_CONNECTING("Connecting TURN Server", "Establishing media relay via TURN/STUN", Icons.Filled.Router, YounesEmerald),
+    RINGING("Ringing", "Call is ringing on remote side", Icons.Filled.PhoneInTalk, AqyalGold),
+    CONNECTED("Connected", "Media path established - call active", Icons.Filled.Call, YounesEmerald)
+}
 
 /**
  * Material 3 Expressive PSTN Call Screen
@@ -96,16 +114,6 @@ fun Material3ExpressivePstnCallScreen(
     var connectionStage by remember { mutableStateOf(ConnectionStage.BRIDGING) }
     var animatedProgress by remember { mutableStateOf(0f) }
     var pulseAnimation by remember { mutableStateOf(1f) }
-
-    // Connection stages with clear labels
-    enum class ConnectionStage(val label: String, val description: String, val icon: ImageVector, val color: Color) {
-        BRIDGING("Connecting to SIP Server", "Establishing WebSocket SIP connection to Asterisk", Icons.Filled.CloudQueue, AqyalGold),
-        REGISTERING("Registering SIP Account", "Authenticating with SIP credentials", Icons.Filled.VerifiedUser, AqyalGold),
-        INVITING("Placing Call", "Sending SIP INVITE via Asterisk", Icons.Filled.CallMade, AqyalGold),
-        TURN_CONNECTING("Connecting TURN Server", "Establishing media relay via TURN/STUN", Icons.Filled.Router, YounesEmerald),
-        RINGING("Ringing", "Call is ringing on remote side", Icons.Filled.PhoneInTalk, AqyalGold),
-        CONNECTED("Connected", "Media path established - call active", Icons.Filled.Call, YounesEmerald)
-    }
 
     // Determine current stage from status
     val currentStage = when (status) {
@@ -272,7 +280,7 @@ fun Material3ExpressivePstnCallScreen(
 
 @Composable
 private fun ConnectionStageHeader(
-    stage: Material3ExpressivePstnCallScreen.ConnectionStage,
+    stage: ConnectionStage,
     pulseAnimation: Float
 ) {
     Row(
