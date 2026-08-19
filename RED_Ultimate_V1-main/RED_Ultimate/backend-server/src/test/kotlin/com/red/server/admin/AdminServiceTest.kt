@@ -183,6 +183,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val report = UserReport(id = reportId, status = "PENDING")
         whenever(userReports.findById(reportId)).thenReturn(Optional.of(report))
+        whenever(userReports.save(any<UserReport>())).thenAnswer { it.arguments[0] as UserReport }
 
         val result = service.resolveReport(reportId, adminId, "WARNING_ISSUED", "Test note")
         assertNotNull(result)
@@ -198,6 +199,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val report = UserReport(id = reportId, status = "PENDING")
         whenever(userReports.findById(reportId)).thenReturn(Optional.of(report))
+        whenever(userReports.save(any<UserReport>())).thenAnswer { it.arguments[0] as UserReport }
 
         val result = service.dismissReport(reportId, adminId, "False alarm")
         assertNotNull(result)
@@ -232,6 +234,7 @@ class AdminServiceTest {
         val adminId = UUID.randomUUID()
         val ann = SystemAnnouncement(id = id, title = "Test")
         whenever(announcements.findById(id)).thenReturn(Optional.of(ann))
+        whenever(announcements.save(any<SystemAnnouncement>())).thenAnswer { it.arguments[0] as SystemAnnouncement }
 
         val result = service.publishAnnouncement(id, adminId)
         assertNotNull(result)
