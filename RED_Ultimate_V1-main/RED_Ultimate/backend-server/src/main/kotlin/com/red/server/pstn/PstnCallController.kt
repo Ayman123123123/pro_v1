@@ -17,8 +17,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/pstn")
 class PstnCallController(
-    private val calls: PstnCallService,
-    private val loadBalancer: DinstarLoadBalancer
+    private val calls: PstnCallService
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<PstnCallResponse> {
@@ -27,18 +26,12 @@ class PstnCallController(
     }
 
     /**
-     * إنهاء مكالمة — يُحرّر المنفذ في Load Balancer
+     * إنهاء مكالمة — لا يقبل منفذًا من العميل؛ الخادم يحتفظ بالبوابة والمنفذ
+     * اللذين خصصهما للمكالمة ويتحقق من صاحبها قبل التحرير.
      */
     @PostMapping("/calls/{callId}/hangup")
-    fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?): ResponseEntity<Map<String, Any>> {
-        // عدد المنافذ يعتمد على طراز البوابة (4 أو 8) وقد تتعدد الأجهزة،
-        // فلم يعد المدى 0..7 صالحًا كحارس.
-        val port = body?.get("port") ?: -1
-        if (port >= 0) {
-            loadBalancer.releasePort(gatewayId = null, port = port)
-        }
-        return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to port))
-    }
+    fun hangup(@PathVariable callId: String, authentication: Authentication): ResponseEntity<PstnHangupResponse> =
+        ResponseEntity.ok(calls.hangup(UUID.fromString(authentication.name), callId))
 
     /**
      * حالة المكالمات النشطة عبر PSTN
