@@ -1,31 +1,55 @@
 package com.red.sovereign.features
 
 import com.red.sovereign.features.communities.Community
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CommunitiesTest {
+    private fun community(
+        id: String,
+        name: String,
+        description: String,
+        memberCount: Long = 0L,
+        isJoined: Boolean = false,
+    ) = Community(
+        id = id,
+        name = name,
+        description = description,
+        createdBy = "red-admin",
+        createdByUsername = "admin",
+        memberCount = memberCount,
+        isJoined = isJoined,
+        createdAt = "2026-08-19T00:00:00Z",
+        updatedAt = "2026-08-19T00:00:00Z",
+    )
+
     @Test
     fun `community join toggles correctly`() {
-        val c = Community("1", "يمنيون", "مجتمع", 100, false)
-        val joined = c.copy(isJoined = true, members = c.members + 1)
+        val original = community("1", "يمنيون", "مجتمع", memberCount = 100)
+        val joined = original.copy(isJoined = true, memberCount = original.memberCount + 1)
+
         assertTrue(joined.isJoined)
-        assertEquals(101, joined.members)
+        assertEquals(101L, joined.memberCount)
     }
+
     @Test
     fun `search filters correctly`() {
-        val list = listOf(
-            Community("1", "يمنيون", "مجتمع اليمن", 100, false),
-            Community("2", "تقنية", "أخبار", 50, false)
+        val communities = listOf(
+            community("1", "يمنيون", "مجتمع اليمن", memberCount = 100),
+            community("2", "تقنية", "أخبار", memberCount = 50),
         )
-        val filtered = list.filter { it.name.contains("يمن", ignoreCase = true) }
+
+        val filtered = communities.filter { it.name.contains("يمن", ignoreCase = true) }
         assertEquals(1, filtered.size)
-        assertEquals("يمنيون", filtered[0].name)
+        assertEquals("يمنيون", filtered.single().name)
     }
+
     @Test
-    fun `communities are public not E2EE`() {
-        // Communities are public, unlike groups which are E2EE
-        val c = Community("1", "Test", "Public", 10, false)
-        assertFalse(c.isJoined) // not encrypted, just joined flag
+    fun `communities are public unless access policy says otherwise`() {
+        val community = community("1", "Test", "Public")
+        assertTrue(community.isPublic)
+        assertFalse(community.isJoined)
     }
 }
