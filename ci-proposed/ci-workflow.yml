@@ -30,6 +30,9 @@ jobs:
       - name: فحص بنيوي
         working-directory: RED_Ultimate_V1-main/RED_Ultimate
         run: python3 scripts/check-kotlin-structure.py
+      - name: عقود JSON بين العميل والخادم
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: python3 scripts/check-api-contracts.py
 
   # لوحة الإدارة — الطبقة الوحيدة القابلة للترجمة والاختبار كاملةً.
   admin-dashboard:
