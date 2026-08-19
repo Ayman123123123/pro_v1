@@ -33,7 +33,37 @@ data class PostDocument(
 )
 
 enum class PostVisibility { PUBLIC, LOCAL_YEMEN }
-enum class FeedScope { ALL, FOLLOWING, YEMEN }
+
+/**
+ * نطاق الفيد المطلوب.
+ *
+ * `FRIENDS` حلّ محلّ `FOLLOWING`، و`PUBLIC` حلّ محلّ `YEMEN`.
+ * والفرق ليس تسمية فقط: «المتابَعة» علاقة أحادية الاتجاه (أتابعك دون
+ * أن تتابعني)، أما «الأصدقاء» فعلاقة متبادلة يلزم فيها أن يتابع كلٌّ
+ * منّا الآخر — وهذا ما يطبّقه `FeedService`.
+ *
+ * `FOLLOWING` و`YEMEN` مُبقاتان مهجورتين لا تُعرضان في الواجهة: نسخ
+ * التطبيق المثبَّتة على الأجهزة ما زالت ترسلهما، وحذفهما يجعل Spring
+ * يردّ 400 على كل طلب منها. تُطابَقان في الخدمة إلى البديل الجديد.
+ */
+enum class FeedScope {
+    ALL,
+    FRIENDS,
+    PUBLIC,
+
+    @Deprecated("استعمل FRIENDS — أُبقيت لتوافق النسخ المثبَّتة", ReplaceWith("FRIENDS"))
+    FOLLOWING,
+
+    @Deprecated("استعمل PUBLIC — أُبقيت لتوافق النسخ المثبَّتة", ReplaceWith("PUBLIC"))
+    YEMEN;
+
+    /** يوحّد القيم المهجورة إلى ما يقابلها، فيبقى منطق الفيد فرعين لا أربعة. */
+    fun canonical(): FeedScope = when (this) {
+        FOLLOWING -> FRIENDS
+        YEMEN -> PUBLIC
+        else -> this
+    }
+}
 enum class PostKind { POST, POLL }
 data class PostMedia(
     val objectKey: String,
