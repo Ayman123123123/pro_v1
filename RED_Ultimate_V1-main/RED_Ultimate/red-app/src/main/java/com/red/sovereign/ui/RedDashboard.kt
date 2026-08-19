@@ -49,12 +49,12 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Copy
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forward
-import androidx.compose.material.icons.filled.QuickReply
+import androidx.compose.material.icons.filled.Quickreply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
@@ -537,6 +537,7 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: StoryViewModel, onCreate: () -> Unit) {
+    val context = LocalContext.current
     var filter by remember { mutableIntStateOf(0) }
     var threadPost by remember { mutableStateOf<Post?>(null) }
     var quotePost by remember { mutableStateOf<Post?>(null) }
@@ -824,7 +825,7 @@ private fun PostCard(
     else Avatar(group.name.take(1))
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatHubScreen(
     account: AuthState.Authenticated,
@@ -855,7 +856,6 @@ private fun ChatHubScreen(
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
-    var messageText by remembr { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var selectedChatMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
@@ -1334,11 +1334,9 @@ private fun ChatHubScreen(
                     // فاصل تاريخ بين الأيام (مثل واتساب)
                     val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1729,11 +1727,9 @@ private fun ChatHubScreen(
                 itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
                     val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1972,7 +1968,7 @@ private fun ChatHubScreen(
                     selectedChatMessage = null
                 })
 
-                MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
+                MessageActionRow(Icons.Default.Quickreply, "الرد", "رد على هذه الرسالة") {
                     replyToMessage = message; selectedChatMessage = null
                 }
                 MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
@@ -1984,9 +1980,8 @@ private fun ChatHubScreen(
                     }
                 }
                 if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
-                    MessageActionRow(Icons.Default.Copy, "نسخ", "انسخ النص") {
-                        val ctx = LocalContext.current
-                        val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    MessageActionRow(Icons.Default.ContentCopy, "نسخ", "انسخ النص") {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", payload.text))
                         selectedChatMessage = null
                     }
@@ -2252,7 +2247,7 @@ private fun ChatHubScreen(
                                         if (forward != null) {
                                             RedConnectionService.sendRichText(context, person.redId, conversationId(account.redId, person.redId), RichMessage(text = messageDisplayText(forward), forwardOf = forward.id))
                                             pendingForwardMessage = null
-                                        } else openPrivateChat(person.redId)
+                                        } else target = person.redId
                                         showDirectory = false; directory.clear()
                                     }) { Text(if (pendingForwardMessage != null) "توجيه" else "محادثة") }
                                     Button({ directory.request(person) }) { Text("إضافة") }
@@ -3285,9 +3280,6 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
                 StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.Center).size(52.dp),
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.55f),
                     onClick = {
                         val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
@@ -3295,7 +3287,10 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         runCatching { context.startActivity(intent) }
-                    }
+                    },
+                    modifier = Modifier.align(Alignment.Center).size(52.dp),
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f)
                 ) {
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
                 }
@@ -3342,7 +3337,10 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
-                VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
+                VoiceNotePlayer(
+                    uri = android.net.Uri.fromFile(java.io.File(downloaded.first)),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     } else {
@@ -3579,11 +3577,11 @@ private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
 // نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @12345)
 private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // الهاشتاجات العربية/اللاتينية
-private val HASHTAG_PARTIAL = Regex("#[\w\u0600-\u06FF]{2,30}")
+private val HASHTAG_PARTIAL = Regex("""#[\w\u0600-\u06FF]{2,30}""")
 // اسم المستخدم للـ @ autocomplete
 private val USERNAME_PARTIAL = Regex("@([A-Za-z0-9_.]{1,20})$")
 // الهاشتاج لـ # autocomplete
-private val HASHTAG_AUTOCOMPLETE = Regex("#([\w\u0600-\u06FF]{1,20})$")
+private val HASHTAG_AUTOCOMPLETE = Regex("""#([\w\u0600-\u06FF]{1,20})$""")
 private val EMOJI_CATEGORIES = listOf(
     "سريعة" to listOf("😀", "😂", "😍", "👍", "❤️", "🔥", "👏", "🙏", "🎉", "😢", "😮", "✅"),
     "الوجوه" to listOf("😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),

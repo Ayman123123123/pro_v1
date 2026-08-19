@@ -127,11 +127,25 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      * - We disable HW AEC + NS to use WebRTC's software implementation.
      * This is the production-recommended setup per WebRTC maintainers.
      */
+    private val audioRecordErrors = object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+        override fun onWebRtcAudioRecordInitError(errorMessage: String) = events.onError("AUDIO_RECORD_INIT_ERROR: $errorMessage")
+        override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode, errorMessage: String) =
+            events.onError("AUDIO_RECORD_START_ERROR[$errorCode]: $errorMessage")
+        override fun onWebRtcAudioRecordError(errorMessage: String) = events.onError("AUDIO_RECORD_ERROR: $errorMessage")
+    }
+
+    private val audioTrackErrors = object : JavaAudioDeviceModule.AudioTrackErrorCallback {
+        override fun onWebRtcAudioTrackInitError(errorMessage: String) = events.onError("AUDIO_TRACK_INIT_ERROR: $errorMessage")
+        override fun onWebRtcAudioTrackStartError(errorCode: JavaAudioDeviceModule.AudioTrackStartErrorCode, errorMessage: String) =
+            events.onError("AUDIO_TRACK_START_ERROR[$errorCode]: $errorMessage")
+        override fun onWebRtcAudioTrackError(errorMessage: String) = events.onError("AUDIO_TRACK_ERROR: $errorMessage")
+    }
+
     private val audioDevice = JavaAudioDeviceModule.builder(context)
         .setUseHardwareAcousticEchoCanceler(false)
         .setUseHardwareNoiseSuppressor(false)
-        .setAudioRecordErrorCallback { error -> events.onError("AUDIO_RECORD_ERROR: $error") }
-        .setAudioTrackErrorCallback { error -> events.onError("AUDIO_TRACK_ERROR: $error") }
+        .setAudioRecordErrorCallback(audioRecordErrors)
+        .setAudioTrackErrorCallback(audioTrackErrors)
         .createAudioDeviceModule()
 
     private val factory: PeerConnectionFactory
@@ -294,7 +308,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                 videoEncoding("l", 100_000, 15, 4.0, 1)
             )
         }
-        params.encodings = encodings
+        params.encodings.clear()
+        params.encodings.addAll(encodings)
         runCatching { s.parameters = params }
     }
 
@@ -407,7 +422,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         audioSource?.dispose(); videoSource?.dispose()
         peer?.close(); peer?.dispose()
         factory.dispose()
-        audioDevice.release(); audioDevice.cleanup()
+        audioDevice.release()
         egl.release()
         peer = null; localMedia = null
     }

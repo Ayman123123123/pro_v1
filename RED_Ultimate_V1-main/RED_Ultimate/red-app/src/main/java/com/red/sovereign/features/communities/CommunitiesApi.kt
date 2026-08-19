@@ -63,7 +63,7 @@ class CommunitiesApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<List<Community>>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -76,7 +76,7 @@ class CommunitiesApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<Community>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -98,7 +98,7 @@ class CommunitiesApi(private val client: AuthorizedApiClient) {
         return try {
             ApiResult.Success(200, json.decodeFromString<Community>(raw))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
     }
 
@@ -106,7 +106,7 @@ class CommunitiesApi(private val client: AuthorizedApiClient) {
         is ApiResult.Success -> try {
             ApiResult.Success(200, json.decodeFromString<Community>(r.value))
         } catch (e: Exception) {
-            ApiResult.Error(500, e.message)
+            ApiResult.Error(500, e.message.orEmpty())
         }
         is ApiResult.Error -> r
     }
