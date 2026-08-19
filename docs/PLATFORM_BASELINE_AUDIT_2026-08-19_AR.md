@@ -299,6 +299,8 @@
 | MediaSFU | `npm run check` | فحص الصياغة وعقد الأخطاء ناجحان؛ لا اختبار ICE/DTLS حي |
 | Flyway | `scripts/check-flyway-migrations.sh` | 34 هجرة versioned صحيحة بلا تكرار |
 
+**إعادة تحقق نهائية:** أعيد تشغيل بوابات الخادم وAndroid ولوحة الإدارة وMediaSFU وFlyway بنجاح، وأعيد بناء APK debug موجّهًا إلى `http://10.42.0.10:8088`. يتطلب مسار Android ضبط `ANDROID_HOME=/home/ubuntu/android-sdk` (أو `sdk.dir` صالحًا محليًا). ظهرت تحذيرات Kotlin غير حاجبة فقط عن استدعاءات آمنة زائدة وواجهة `NsdManager` مهملة في `LocalServerDiscovery`، ولم تمنع الاختبارات أو بناء APK.
+
 > لم يجر تشغيل Compose كامل أو اختبار WebRTC وDINSTAR/Asterisk/SMS الحي في بيئة التدقيق، لأن Docker غير متاح والذاكرة الفعلية 3.8 GiB. لذلك لا تُستبدل هذه النتائج باختبار تكامل على شبكة وعتاد مصرح بهما.
 
 ## دفعة جودة البيانات: فحص أسماء هجرات Flyway — 19 أغسطس 2026
