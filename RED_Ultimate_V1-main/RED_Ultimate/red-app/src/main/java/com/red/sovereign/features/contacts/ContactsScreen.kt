@@ -21,6 +21,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
@@ -42,11 +45,21 @@ fun ContactsScreen(
     onCreateGroup: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val tokens = remember { TokenStore(context.applicationContext) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) directory.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val myRedId = tokens.redId.orEmpty()
     val myUsername = tokens.username.orEmpty()
     var query by remember { mutableStateOf("") }
     var showQrScanner by remember { mutableStateOf(false) }
+    var showAddContact by remember { mutableStateOf(false) }
+    var contactRedId by remember { mutableStateOf("") }
     var showShareSheet by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(false) }
     val filtered = directory.contacts.filter {
@@ -69,7 +82,7 @@ fun ContactsScreen(
             item {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     ContactActionRow(Icons.Rounded.GroupAdd, AqyalGold, "مجموعة جديدة", "أنشئ مجموعة مشفرة") { onCreateGroup() }
-                    ContactActionRow(Icons.Rounded.PersonAdd, YounesEmerald, "جهة اتصال جديدة", "أضف عبر RED ID أو username") { showQrScanner = true }
+                    ContactActionRow(Icons.Rounded.PersonAdd, YounesEmerald, "جهة اتصال جديدة", "أضف عبر RED ID أو username") { showAddContact = true }
                     ContactActionRow(
                         Icons.Default.Share, AqyalCyanGlow, "دعوة عبر RED ID",
                         if (myRedId.isNotBlank()) "شارك $myRedId" else "هويتك غير متاحة — سجّل الدخول أولًا"
@@ -88,7 +101,7 @@ fun ContactsScreen(
             }
             if (directory.requests.isNotEmpty()) {
                 item {
-                    Text("طلبات معلقة • ${directory.requests.size}", color = AqyalGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    Text("طلبات واردة • ${directory.requests.size}", color = AqyalGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
                     directory.requests.forEach { req ->
                         Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -101,7 +114,48 @@ fun ContactsScreen(
                     }
                 }
             }
+            if (directory.outgoingRequests.isNotEmpty()) {
+                item {
+                    Text("طلبات مرسلة • ${directory.outgoingRequests.size}", color = AqyalCyanGlow, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                    directory.outgoingRequests.forEach { req ->
+                        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF162534))) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalCyanGlow), contentAlignment = Alignment.Center) { Text(req.recipient.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                    Text(req.recipient.displayName, color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text("بانتظار قبول @${req.recipient.username}", color = Color.Gray, fontSize = 12.sp)
+                                }
+                                TextButton({ directory.cancel(req) }) { Text("إلغاء") }
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showAddContact) {
+        AlertDialog(
+            onDismissRequest = { showAddContact = false },
+            title = { Text("إضافة جهة اتصال") },
+            text = {
+                OutlinedTextField(
+                    value = contactRedId,
+                    onValueChange = { contactRedId = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("RED ID أو اسم المستخدم") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    directory.requestByRedId(contactRedId)
+                    contactRedId = ""
+                    showAddContact = false
+                }, enabled = contactRedId.isNotBlank()) { Text("إرسال الطلب") }
+            },
+            dismissButton = { TextButton(onClick = { showAddContact = false }) { Text("إلغاء") } }
+        )
     }
 
     // QR Scanner Sheet
@@ -113,7 +167,7 @@ fun ContactsScreen(
                 // Try to find user in contacts; if found, open chat
                 val found = directory.contacts.firstOrNull { it.redId.equals(redId, ignoreCase = true) }
                 if (found != null) onChat(found)
-                // else could trigger an add-contact flow
+                else directory.requestByRedId(redId)
             }
         )
     }

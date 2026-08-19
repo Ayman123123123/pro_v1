@@ -22,6 +22,7 @@ import java.net.URLEncoder
 
 @Serializable data class PublicRedProfile(val redId: String, val username: String, val displayName: String, val avatarUrl: String? = null)
 @Serializable data class ContactRequest(val id: String, val requester: PublicRedProfile, val createdAt: String)
+@Serializable data class OutgoingContactRequest(val id: String, val recipient: PublicRedProfile, val createdAt: String)
 @Serializable data class ReportRequest(val redId: String, val category: String, val details: String? = null)
 @Serializable data class PresenceInfo(val online: Boolean, val lastSeen: Long? = null)
 
@@ -33,6 +34,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     val contacts = mutableStateListOf<PublicRedProfile>()
     val blocked = mutableStateListOf<String>()
     val requests = mutableStateListOf<ContactRequest>()
+    val outgoingRequests = mutableStateListOf<OutgoingContactRequest>()
     val onlineIds = mutableStateListOf<String>()
     /** آخر ظهور لكل جهة اتصال — redId -> epoch ms. يُستخدم لعرض "آخر ظهور". */
     val lastSeenByContact = mutableStateMapOf<String, Long>()
@@ -52,15 +54,21 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
         state = DirectoryState.Loading
         val contactResult = client.request("GET", "/api/contacts")
         val requestResult = client.request("GET", "/api/contacts/requests")
+        val outgoingResult = client.request("GET", "/api/contacts/requests/outgoing")
         if (contactResult is ApiResult.Error) { state = DirectoryState.Error(contactResult.message); return@launch }
         if (requestResult is ApiResult.Error) { state = DirectoryState.Error(requestResult.message); return@launch }
+        if (outgoingResult is ApiResult.Error) { state = DirectoryState.Error(outgoingResult.message); return@launch }
         runCatching {
-            json.decodeFromString<List<PublicRedProfile>>((contactResult as ApiResult.Success).value) to
-                json.decodeFromString<List<ContactRequest>>((requestResult as ApiResult.Success).value)
-        }.onSuccess { (people, incoming) ->
+            Triple(
+                json.decodeFromString<List<PublicRedProfile>>((contactResult as ApiResult.Success).value),
+                json.decodeFromString<List<ContactRequest>>((requestResult as ApiResult.Success).value),
+                json.decodeFromString<List<OutgoingContactRequest>>((outgoingResult as ApiResult.Success).value)
+            )
+        }.onSuccess { (people, incoming, outgoing) ->
             state = DirectoryState.Ready
-            repository.saveContacts(people.map { ContactEntity(it.redId, it.username, it.displayName) })
+            repository.replaceContacts(people.map { ContactEntity(it.redId, it.username, it.displayName) })
             requests.clear(); requests.addAll(incoming)
+            outgoingRequests.clear(); outgoingRequests.addAll(outgoing)
             refreshPresence(people)
         }
             .onFailure { state = DirectoryState.Error("INVALID_CONTACT_RESPONSE") }
@@ -121,9 +129,19 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun request(profile: PublicRedProfile) = viewModelScope.launch {
-        when (val response = client.request("POST", "/api/contacts/requests/${profile.redId}")) {
-            is ApiResult.Success -> state = DirectoryState.Message("تم إرسال طلب صداقة إلى @${profile.username}")
+    fun request(profile: PublicRedProfile) = requestByRedId(profile.redId, profile.username)
+
+    fun requestByRedId(redId: String, knownUsername: String? = null) = viewModelScope.launch {
+        val target = redId.trim()
+        if (target.isBlank()) { state = DirectoryState.Error("أدخل معرف يونس الصحيح"); return@launch }
+        when (val response = client.request("POST", "/api/contacts/requests/$target")) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<OutgoingContactRequest>(response.value) }
+                .onSuccess { sent ->
+                    outgoingRequests.removeAll { it.id == sent.id || it.recipient.redId.equals(sent.recipient.redId, true) }
+                    outgoingRequests.add(0, sent)
+                    state = DirectoryState.Message("تم إرسال طلب صداقة إلى @${sent.recipient.username}")
+                }
+                .onFailure { state = DirectoryState.Message("تم إرسال طلب الصداقة${knownUsername?.let { " إلى @$it" }.orEmpty()}") }
             is ApiResult.Error -> state = DirectoryState.Error(response.message)
         }
     }
@@ -132,6 +150,16 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
         val action = if (accept) "accept" else "reject"
         when (val response = client.request("POST", "/api/contacts/requests/${request.id}/$action")) {
             is ApiResult.Success -> refresh()
+            is ApiResult.Error -> state = DirectoryState.Error(response.message)
+        }
+    }
+
+    fun cancel(request: OutgoingContactRequest) = viewModelScope.launch {
+        when (val response = client.request("DELETE", "/api/contacts/requests/${request.id}")) {
+            is ApiResult.Success -> {
+                outgoingRequests.removeAll { it.id == request.id }
+                state = DirectoryState.Message("تم إلغاء طلب الصداقة")
+            }
             is ApiResult.Error -> state = DirectoryState.Error(response.message)
         }
     }

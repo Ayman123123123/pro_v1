@@ -109,10 +109,10 @@ class RegistrationService(
 
     private fun resolveApprovedDevice(user: UserAccount, deviceId: java.util.UUID?): UserDevice? {
         if (user.role == AccountRole.ADMIN && deviceId == null) return null
-        requireNotNull(deviceId) { "deviceId is required" }
+        requireNotNull(deviceId) { "DEVICE_ID_REQUIRED" }
         val device = devices.findByIdAndUserId(deviceId, user.id)
-            ?: throw InvalidCredentialsException()
-        require(device.status == DeviceStatus.APPROVED) { "Device is not approved" }
+            ?: throw IllegalArgumentException("DEVICE_NOT_RECOGNIZED")
+        require(device.status == DeviceStatus.APPROVED) { "DEVICE_NOT_APPROVED" }
         return device
     }
 
