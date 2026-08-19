@@ -107,11 +107,13 @@ class MediaSecurityScanner {
             header[10] == 0x79.toByte() && header[11] == 0x70.toByte()) {
             return true
         }
-        // fallback: box type في أي موضع ضمن أول 12 بايت (بعض الـ fragmented MP4)
-        // ByteArray.indexOf يقبل عنصراً واحداً فقط — نبحث يدوياً عن التسلسل f,t,y,p
+        // fallback: box type في أي موضع ضمن أول 16 بايتًا (بعض الملفات
+        // تبدأ بـ box مثل "free" قبل ftyp — البحث السابق توقف عند 8
+        // فأفوت ftyp في offset 12)
         val f = 0x66.toByte(); val t = 0x74.toByte(); val y = 0x79.toByte(); val p = 0x70.toByte()
-        for (i in 4..8) {
-            if (i + 3 < header.size && header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
+        val limit = minOf(bytesRead, header.size, 16) - 4
+        for (i in 4..limit) {
+            if (header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
                 return true
             }
         }
@@ -143,10 +145,10 @@ class MediaSecurityScanner {
             val second = header[1].toInt() and 0xFF
             // MPEG audio: bits 5,6 = layer (01=III, 10=II, 11=I)
             val layer = (second shr 5) and 0x03
-            // bits 7,8 = version (00=2.5, 10=2, 11=1)
-            // bits 9,10 = not used
-            // Accept any valid combination
-            return layer in 1..3 && (second and 0x18) != 0x18
+            // bits 3,4 = version (11=MPEG-1، 10=MPEG-2، 00=MPEG-2.5،
+            // 01=محجوز/غير صالح). كان الشرط يرفض 0x18 (MPEG-1) — أي
+            // يرفض 0xFB أكثر صيغ MP3 شيوعًا — بدل رفض المحجوزة 0x08.
+            return layer in 1..3 && (second and 0x18) != 0x08
         }
         return false
     }

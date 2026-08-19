@@ -15,12 +15,11 @@ class MessageServiceTest {
 
     @Test
     fun `message validation rejects invalid UUID`() {
-        // UUID v4 يجب أن يُرفض - فقط v7 مقبول
-        assertThrows(IllegalArgumentException::class.java) {
-            // سنختبر أن Regex يرفض UUID عادي
-            val badId = "550e8400-e29b-41d4-a716-446655440000" // v4
-            assertNotEquals(7, java.util.UUID.fromString(badId).version())
-        }
+        // UUID v4 يجب أن يُرفض - فقط v7 مقبول: الإصدار يُقرأ من البتات
+        // نفسها، فيكشف التحقق الصيغَ القديمة مهما بدت صالحة نحويًا.
+        val v4 = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+        assertNotEquals(7, v4.version())
+        assertEquals(4, v4.version())
     }
 
     @Test

@@ -39,7 +39,7 @@ class CdrAnalysisController(
                 "duration" to 0, // CDR الفعلي يُجلب من البوابة
                 "status" to mapOutcomeToStatus(rs.getString("outcome")),
                 "operator" to (rs.getString("matched_operator") ?: "—"),
-                "score" to (rs.getObject("score") as? Double) ?: 0.0
+                "score" to ((rs.getObject("score") as? Double) ?: 0.0)
             )
         }
     }

@@ -66,7 +66,7 @@ class DinstarWebSocketHandler(
         log.info("DINSTAR WebSocket disconnected: {} ({})", sessionId, status)
     }
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         // لا نعالج رسائل من العميل حاليًا — الاتصالunidirectional للعرض فقط
         log.debug("DINSTAR WebSocket received message from {}: {}", session.id, message.payload)
     }
