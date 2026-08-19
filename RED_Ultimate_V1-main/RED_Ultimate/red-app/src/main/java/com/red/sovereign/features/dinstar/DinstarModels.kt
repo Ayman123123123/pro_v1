@@ -3,7 +3,23 @@ package com.red.sovereign.features.dinstar
 import androidx.compose.ui.graphics.Color
 
 /**
- * 🏛️ YOUNES Dinstar UC2000-VE-8G — Data Models
+ * نماذج بوابة Dinstar UC2000-VE.
+ *
+ * ⚠️ حالة الاستعمال (تحقّق 2026-08-19): المستعمَل حيًّا من هذا الملف هو
+ * [YemenOperator] وحده — يعتمد عليه `calls/YemeniOperatorDetector.kt`
+ * و`ui/components/SovereignUiComponents.kt` في 19 موضعًا.
+ *
+ * أما بقيّة النماذج ([DinstarPort]، [DinstarGatewayStatus]،
+ * [DinstarFleetStatus]، [DinstarCdr]، [DinstarStatistics]،
+ * [DinstarIncomingSms]، [DinstarDeviceStatus]، [DinstarCommandResult])
+ * فكان مستهلكها الوحيد `DinstarViewModel`، وقد أُرشف: كان يستدعي أحد
+ * عشر مسارًا تحت `/api/admin/**` من تطبيق المستخدم العادي، وكلها
+ * تتطلب دور ADMIN في `SecurityConfig` فتردّ 403. إدارة أسطول البوابات
+ * مكانها لوحة الإدارة لا جهاز المستخدم.
+ *
+ * أُبقيت هذه النماذج لأنها تصف عقد API البوابة الفعلي كما وثّقته
+ * «Dinstar GSM Gateway HTTP API»، فهي مرجع صحيح لأي وصلٍ قادم ولا
+ * تُدخل سلوكًا في التطبيق ما دامت غير مستدعاة.
  */
 
 data class DinstarPort(

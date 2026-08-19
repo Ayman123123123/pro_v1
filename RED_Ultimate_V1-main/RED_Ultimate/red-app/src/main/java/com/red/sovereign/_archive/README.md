@@ -85,3 +85,29 @@ _آخر تدقيق: 2026-08-19 — طُوبق المحتوى مع الملفات
   `calls/PstnCallModels.kt`. حذف الملف دونها كان سيُسقط سلسلة PSTN كلها.
 - **تحقق 2026-08-19:** البديل موصول، و30/30 مرجعًا لـ `PstnCallStatus`
   ما زالت تعمل ✅
+
+---
+
+### `DinstarViewModel.kt.archived` و `DinstarWebSocketBridge.kt.archived`
+- **المساران الأصليان:** `features/dinstar/DinstarViewModel.kt` (28 كB)
+  و`features/dinstar/DinstarWebSocketBridge.kt` (13.6 كB)
+- **تاريخ الأرشفة:** 2026-08-19
+- **السبب:** لوحة إدارة أسطول بوابات كاملة داخل **تطبيق المستخدم
+  العادي**. لا يستدعي `DinstarViewModel` أيُّ ملف في التطبيق (صفر
+  مراجع)، ومستهلك `DinstarWebSocketBridge` الوحيد كان هو — أي عنقود
+  ميت مغلق.
+- **وهو ليس ميتًا فحسب:** كان يستدعي أحد عشر مسارًا تحت
+  `/api/admin/dinstar/**` (اكتشاف الأجهزة، تشغيل/إطفاء المنافذ،
+  إعادة الضبط، تحويل المكالمات، USSD، طوابير SMS). كلها تتطلب دور
+  ADMIN في `SecurityConfig`، فكانت سترد 403 لكل مستخدم عادي. رصده
+  حارس المستودع `admin_dashboard/scripts/check-app-roles.mjs`
+  وكان يفشل بـ«11 مسار إداري بلا استثناء معلن»؛ بعد الأرشفة يمرّ
+  الحارس نظيفًا (تحقّق فعلي بتشغيله).
+- **البديل النشط:** إدارة الأسطول مكانها لوحة الإدارة
+  (`admin_dashboard`) التي تعمل بحساب ADMIN. أما شاشة الاتصال في
+  التطبيق فهي `DinstarPhoneScreen` في `ui/CallsScreens.kt` وتعمل عبر
+  `AuthViewModel` ومسارات `/api/pstn/**` المسموحة للمستخدم.
+- **ما لم يُؤرشف:** `features/dinstar/DinstarModels.kt` باقٍ لأن
+  `YemenOperator` فيه مستعمَل في 19 موضعًا حيًّا (كاشف المشغّل وشارة
+  الواجهة). وُثّقت حالة بقيّة نماذجه داخل الملف نفسه.
+- **تحقق 2026-08-19:** `npm run check:roles` ✅ · `YemenOperator` سليمة ✅
