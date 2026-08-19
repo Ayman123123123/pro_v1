@@ -62,7 +62,12 @@ data class NetworkStats(
          * للجودة الممتازة / الجيدة / المقبولة / السيئة.
          */
         fun classify(rttMs: Long, lossPct: Double, availableKbps: Long = 0): Quality {
-            if (rttMs == 0L && availableKbps == 0L) return Quality.UNKNOWN
+            // Bandwidth alone is not a quality signal; wait for an actual RTT sample
+            // before escalating video quality or showing a quality badge.
+            if (rttMs <= 0L) return Quality.UNKNOWN
+            // A half-second round trip is materially disruptive for live conversation,
+            // even when a short sampling window still reports usable throughput.
+            if (rttMs >= 450L || lossPct >= 10.0) return Quality.POOR
             return when (SdpMediaOptimizer.mos(rttMs, lossPct)) {
                 in 4.0..5.0 -> Quality.EXCELLENT
                 in 3.6..4.0 -> Quality.GOOD
@@ -127,11 +132,25 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      * - We disable HW AEC + NS to use WebRTC's software implementation.
      * This is the production-recommended setup per WebRTC maintainers.
      */
+    private val audioRecordErrors = object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+        override fun onWebRtcAudioRecordInitError(errorMessage: String) = events.onError("AUDIO_RECORD_INIT_ERROR: $errorMessage")
+        override fun onWebRtcAudioRecordStartError(errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode, errorMessage: String) =
+            events.onError("AUDIO_RECORD_START_ERROR[$errorCode]: $errorMessage")
+        override fun onWebRtcAudioRecordError(errorMessage: String) = events.onError("AUDIO_RECORD_ERROR: $errorMessage")
+    }
+
+    private val audioTrackErrors = object : JavaAudioDeviceModule.AudioTrackErrorCallback {
+        override fun onWebRtcAudioTrackInitError(errorMessage: String) = events.onError("AUDIO_TRACK_INIT_ERROR: $errorMessage")
+        override fun onWebRtcAudioTrackStartError(errorCode: JavaAudioDeviceModule.AudioTrackStartErrorCode, errorMessage: String) =
+            events.onError("AUDIO_TRACK_START_ERROR[$errorCode]: $errorMessage")
+        override fun onWebRtcAudioTrackError(errorMessage: String) = events.onError("AUDIO_TRACK_ERROR: $errorMessage")
+    }
+
     private val audioDevice = JavaAudioDeviceModule.builder(context)
         .setUseHardwareAcousticEchoCanceler(false)
         .setUseHardwareNoiseSuppressor(false)
-        .setAudioRecordErrorCallback { error -> events.onError("AUDIO_RECORD_ERROR: $error") }
-        .setAudioTrackErrorCallback { error -> events.onError("AUDIO_TRACK_ERROR: $error") }
+        .setAudioRecordErrorCallback(audioRecordErrors)
+        .setAudioTrackErrorCallback(audioTrackErrors)
         .createAudioDeviceModule()
 
     private val factory: PeerConnectionFactory
@@ -294,7 +313,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                 videoEncoding("l", 100_000, 15, 4.0, 1)
             )
         }
-        params.encodings = encodings
+        params.encodings.clear()
+        params.encodings.addAll(encodings)
         runCatching { s.parameters = params }
     }
 
@@ -407,7 +427,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         audioSource?.dispose(); videoSource?.dispose()
         peer?.close(); peer?.dispose()
         factory.dispose()
-        audioDevice.release(); audioDevice.cleanup()
+        audioDevice.release()
         egl.release()
         peer = null; localMedia = null
     }

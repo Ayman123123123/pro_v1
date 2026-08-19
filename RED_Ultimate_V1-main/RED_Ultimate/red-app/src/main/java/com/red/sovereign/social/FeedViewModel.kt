@@ -42,15 +42,15 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun create(text: String, done: () -> Unit) = viewModelScope.launch {
+    fun create(text: String, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         state = FeedState.Publishing
-        when (val result = api.create(text)) {
+        when (val result = api.create(text, visibility)) {
             is ApiResult.Success -> { posts.add(0, result.value); state = FeedState.Ready; done() }
             is ApiResult.Error -> state = FeedState.Error(result.message)
         }
     }
 
-    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, done: () -> Unit) = viewModelScope.launch {
+    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         val cleanOptions = options.map(String::trim).filter { it.length >= 2 }.distinct().take(6)
         if (question.isBlank() || cleanOptions.size < 2) {
             state = FeedState.Error("اكتب سؤالاً واضحاً وخيارين على الأقل")
@@ -59,11 +59,12 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         state = FeedState.Publishing
         val request = CreatePostRequest(
             text = question.trim(),
-            // نطاق العرض ≠ نطاق النشر. كان يُمرَّر `scope` (مُرشِّح الفيد)
-            // مكان `visibility` (مدى ظهور المنشور)، وهما تعدادان مختلفان
-            // في الخادم: FeedScope ضدّ PostVisibility. فكان تبويب مثل
-            // FRIENDS يُرسَل قيمةَ visibility غير موجودة أصلًا فيردّ 400.
-            visibility = DEFAULT_POST_VISIBILITY,
+            // `visibility` هنا قيمة PostVisibility ("PUBLIC" أو "FRIENDS")
+            // يختارها المستخدم من PostVisibilityPicker، لا قيمة FeedScope.
+            // كان الفرع السابق يثبّتها على DEFAULT_POST_VISIBILITY تفاديًا
+            // لعطبٍ قديم يُمرَّر فيه `scope` مكان `visibility`؛ وقد زال
+            // العطب بإضافة المنتقي، فالتثبيت الآن يُلغي اختيار المستخدم.
+            visibility = visibility,
             pollOptions = cleanOptions,
             pollDurationHours = durationHours.coerceIn(1, 168)
         )

@@ -194,11 +194,13 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
             _state.update { it.copy(loading = false, error = spaces.message) }
             return@launch
         }
+        val streamItems = (streams as ApiResult.Success).value
+        val spaceItems = (spaces as ApiResult.Success).value
         _state.update {
             it.copy(
                 loading = false,
-                streams = streams.value,
-                spaces = spaces.value,
+                streams = streamItems,
+                spaces = spaceItems,
                 error = null
             )
         }

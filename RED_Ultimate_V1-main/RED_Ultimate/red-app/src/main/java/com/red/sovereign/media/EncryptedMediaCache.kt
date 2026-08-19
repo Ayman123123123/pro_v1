@@ -22,8 +22,8 @@ class EncryptedMediaCache(context: Context) {
     private val alias = "red.media.cache.v1"
     private val key: SecretKey by lazy { loadOrCreateKey() }
 
-    fun put(key: String, plaintext: ByteArray): File {
-        val file = fileFor(key)
+    fun put(cacheKey: String, plaintext: ByteArray): File {
+        val file = fileFor(cacheKey)
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
         val encrypted = cipher.iv + cipher.doFinal(plaintext)
@@ -31,8 +31,8 @@ class EncryptedMediaCache(context: Context) {
         return file
     }
 
-    fun get(key: String): ByteArray? {
-        val file = fileFor(key)
+    fun get(cacheKey: String): ByteArray? {
+        val file = fileFor(cacheKey)
         if (!file.exists()) return null
         return try {
             val data = file.readBytes()

@@ -50,7 +50,7 @@ data class Post(
 @Serializable data class FeedResponse(val posts: List<Post>, val nextCursor: String? = null)
 @Serializable data class CreatePostRequest(
     val text: String, 
-    val visibility: String = "LOCAL_YEMEN", 
+    val visibility: String = "PUBLIC", 
     val parentId: String? = null, 
     val quotePostId: String? = null, 
     val pollOptions: List<String> = emptyList(), 

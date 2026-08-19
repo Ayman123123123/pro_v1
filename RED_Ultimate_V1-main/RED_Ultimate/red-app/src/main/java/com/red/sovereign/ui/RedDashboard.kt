@@ -49,12 +49,12 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Copy
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forward
-import androidx.compose.material.icons.filled.QuickReply
+import androidx.compose.material.icons.filled.Quickreply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
@@ -123,6 +123,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetDefaults
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
@@ -263,9 +264,9 @@ import com.red.sovereign.media.PollsScreen
 // عام (لا private) لأن SovereignBottomBar في حزمة ui.components يستورده.
 enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
-    GROUPS("المجموعات", Icons.Default.Groups),
-    CALLS("المكالمات", Icons.Default.Call),
     HOME("الرئيسية", Icons.Default.Home),
+    CALLS("المكالمات", Icons.Default.Call),
+    GROUPS("المجموعات", Icons.Default.Groups),
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
@@ -411,8 +412,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
-                // remember lambdas per item لتفادي إعادة التوليد كل recompose
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
+                tonalElevation = 0.dp,
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+            ) {
+                // الترتيب يعكس أهم مسارات اليوم: الرسائل، المحتوى، المكالمات، المجموعات، ثم الأدوات.
                 MainSection.entries.forEach { item ->
                     val itemLabel = item.label
                     val isSelected = section == item
@@ -420,8 +425,23 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     NavigationBarItem(
                         selected = isSelected,
                         onClick = onClick,
+                        alwaysShowLabel = true,
                         icon = { Icon(item.icon, itemLabel) },
-                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+                        label = {
+                            Text(
+                                itemLabel,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .22f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     )
                 }
             }
@@ -457,8 +477,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showCreate) CreateSheet(
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
-        onPost = { text -> feed.create(text) { feed.discardDraft(); showCreate = false } },
-        onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
+        onPost = { text, visibility -> feed.create(text, visibility) { feed.discardDraft(); showCreate = false } },
+        onPoll = { question, options, hours, visibility -> feed.createPoll(question, options, hours, visibility) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE },
@@ -517,22 +537,36 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
 }
 
 @Composable
-private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
-    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    Image(
-        painterResource(R.drawable.younes_icon_master),
-        contentDescription = "يونس",
-        modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
-        contentScale = ContentScale.Crop
-    )
-    Column(Modifier.weight(1f).padding(start = 8.dp)) {
-        Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painterResource(R.drawable.younes_icon_master),
+                contentDescription = "يونس",
+                modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text("يونس • @$username", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(redId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            Spacer(Modifier.width(6.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
-    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
-    IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1044,11 +1078,9 @@ private fun ChatHubScreen(
                     // فاصل تاريخ بين الأيام (مثل واتساب)
                     val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1439,11 +1471,9 @@ private fun ChatHubScreen(
                 itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
                     val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1656,7 +1686,7 @@ private fun ChatHubScreen(
                     selectedChatMessage = null
                 })
 
-                MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
+                MessageActionRow(Icons.Default.Quickreply, "الرد", "رد على هذه الرسالة") {
                     replyToMessage = message; selectedChatMessage = null
                 }
                 MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
@@ -1668,9 +1698,8 @@ private fun ChatHubScreen(
                     }
                 }
                 if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
-                    MessageActionRow(Icons.Default.Copy, "نسخ", "انسخ النص") {
-                        val ctx = LocalContext.current
-                        val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    MessageActionRow(Icons.Default.ContentCopy, "نسخ", "انسخ النص") {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", payload.text))
                         selectedChatMessage = null
                     }
@@ -1936,7 +1965,7 @@ private fun ChatHubScreen(
                                         if (forward != null) {
                                             RedConnectionService.sendRichText(context, person.redId, conversationId(account.redId, person.redId), RichMessage(text = messageDisplayText(forward), forwardOf = forward.id))
                                             pendingForwardMessage = null
-                                        } else openPrivateChat(person.redId)
+                                        } else target = person.redId
                                         showDirectory = false; directory.clear()
                                     }) { Text(if (pendingForwardMessage != null) "توجيه" else "محادثة") }
                                     Button({ directory.request(person) }) { Text("إضافة") }
@@ -2060,8 +2089,8 @@ private fun MoreOption(icon: ImageVector, title: String, detail: String, color: 
 private fun CreateSheet(
     publishing: Boolean,
     onDismiss: () -> Unit,
-    onPost: (String) -> Unit,
-    onPoll: (String, List<String>, Int) -> Unit,
+    onPost: (String, String) -> Unit,
+    onPoll: (String, List<String>, Int, String) -> Unit,
     onStory: () -> Unit,
     onLive: () -> Unit,
     onExplore: () -> Unit,
@@ -2076,6 +2105,7 @@ private fun CreateSheet(
     }
     var pollQuestion by remember { mutableStateOf("") }
     var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
+    var postVisibility by remember { mutableStateOf("PUBLIC") }
     var pollHours by remember { mutableIntStateOf(24) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2085,9 +2115,10 @@ private fun CreateSheet(
             }
             when (mode) {
                 "post" -> {
-                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، فكرة طويلة، أو إعلاناً محلياً…") }, maxLines = 7)
+                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً أو سلسلة أو فكرة تستحق المشاركة…") }, maxLines = 7)
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
+                    Button({ if (text.isNotBlank()) onPost(text.trim(), postVisibility) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر للأصدقاء" else "نشر للعامة") }
                 }
                 "poll" -> {
                     OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
@@ -2109,8 +2140,9 @@ private fun CreateSheet(
                         OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
                         OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
                     }
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
-                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر الاستطلاع") }
+                    Button({ onPoll(pollQuestion, pollOptions, pollHours, postVisibility) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر الاستطلاع للأصدقاء" else "نشر الاستطلاع للعامة") }
                 }
                 else -> {
                     CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
@@ -2121,6 +2153,17 @@ private fun CreateSheet(
                 }
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun PostVisibilityPicker(selected: String, onSelected: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("من يمكنه رؤية هذا المحتوى؟", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = selected == "PUBLIC", onClick = { onSelected("PUBLIC") }, label = { Text("العام") }, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(16.dp)) })
+            FilterChip(selected = selected == "FRIENDS", onClick = { onSelected("FRIENDS") }, label = { Text("الأصدقاء") }, leadingIcon = { Icon(Icons.Default.Groups, null, Modifier.size(16.dp)) })
         }
     }
 }
@@ -2162,9 +2205,16 @@ private fun relativeTime(timestamp: Long): String {
 private fun formatClockTime(timestamp: Long): String =
     java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(timestamp))
 
-@Composable
+// مصدر الحقيقة الوحيد: core/YounesId.kt. النمط كان مكرّرًا هنا وفي
+// QrScannerSheet وSafetyViewModel بصياغات متباينة، فكان معرّف يقبله
+// أحدها وترفضه الشاشة التالية.
+//
+// ملاحظة: كان فوق هذا التعريف `@Composable` شاردة خلّفها تقسيم
+// الواجهة حين نُقلت الدالة التي كانت تعنيها؛ والتعليق الذي يليها كان
+// يصف `RED_ID_PARTIAL` المنقولة هي الأخرى. التوصيف على `val` لا
+// يُترجم أصلًا، فأُزيل مع تعليقه اليتيم.
 internal val RED_ID_PATTERN = Regex(YounesId.PATTERN)
-// نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @12345)
+
 internal fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
     val canonical = listOf(first, second).sorted().joinToString("|")

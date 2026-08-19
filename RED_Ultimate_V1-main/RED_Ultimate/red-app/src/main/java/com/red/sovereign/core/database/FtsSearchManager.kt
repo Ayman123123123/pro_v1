@@ -118,7 +118,10 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
         val cursor = db.query(
             "SELECT messageId, conversationId, senderId, content, rank FROM messages_fts " +
                 "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
-            arrayOf(match, limit)
+            // arrayOf<Any?> صراحةً: الوسيطان String وInt، فيستنتج arrayOf
+            // النوع Array<Any> ولا يقبله توقيع query(String, Array<out Any?>).
+            // أصلحها main في 8c36908 وهي لازمة للترجمة.
+            arrayOf<Any?>(match, limit)
         )
         val results = mutableListOf<FtsResult>()
         cursor.use {
