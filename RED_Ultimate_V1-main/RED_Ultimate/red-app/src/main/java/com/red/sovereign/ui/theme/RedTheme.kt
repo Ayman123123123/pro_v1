@@ -96,7 +96,32 @@ val YounesDeep         = Color(0xFF121A20)  // شريط الملاحة والق�
 val YounesSurface1     = Color(0xFF121A20)  // البطاقات
 val YounesSurface2     = Color(0xFF1A242C)  // العناصر النشطة
 val YounesSurface3     = Color(0xFF223038)  // الحوارات وBottomSheet
-val YounesBorder       = Color(0xFF2C3D47)  // الفواصل
+/**
+ * فاصل **زخرفي** بحت: خطوط التقسيم بين العناصر.
+ *
+ * تباينه 1.70:1 على الخلفية — دون 3:1 — وهذا مقبول هنا وحده، لأن
+ * معيار WCAG 1.4.11 يستثني ما هو زخرفي صِرف: حذف الفاصل لا يُفقِد
+ * المستخدم أي معلومة ولا يمنعه من إدراك حدود عنصر فعّال.
+ *
+ * ⚠️ لا يصلح حدًّا لعنصر تفاعلي — استعمل [YounesOutline] هناك.
+ */
+val YounesBorder       = Color(0xFF2C3D47)  // فواصل زخرفية فقط
+
+/**
+ * حدّ **العناصر الفعّالة**: إطار حقول الإدخال غير المركَّزة أساسًا.
+ *
+ * لونٌ واحد لا يكفي لدورين متناقضين في التباين، وهو العطب نفسه الذي
+ * عولج سابقًا في `*Container`/`*Accent`. كان `YounesBorder` يخدم
+ * `outline` و`outlineVariant` معًا، فيرث 79 `OutlinedTextField`
+ * تباينًا قدره 1.56:1 على البطاقة — والحدّ هو الشيء الوحيد الذي
+ * يُظهر حدود الحقل، فغيابه البصري يعني حقلًا غير مرئي لضعيف البصر.
+ * وهذا ما يوجب WCAG 1.4.11 (تباين غير النصّ) فيه 3:1.
+ *
+ * `627A8C` أدنى قيمة في هذا التدرّج تحقق 3:1 على **كل** الأسطح
+ * الأربعة: الخلفية 4.27 · البطاقة 3.92 · النشط 3.51 · الحوار 3.02.
+ * ولم يُختَر أفتح منه إبقاءً على الطابع الهادئ.
+ */
+val YounesOutline      = Color(0xFF627A8C)  // حدود العناصر الفعّالة — ≥3:1
 val YounesMuted        = Color(0xFF9AAEBB)  // نص ثانوي — 8.34:1 على الخلفية
 
 // ─── فقاعات المحادثة ─────────────────────────────────────────────────────────
@@ -240,8 +265,10 @@ private val redColorScheme = darkColorScheme(
     surfaceContainerHighest   = YounesSurface3,
 
     // الحدود
-    outline               = YounesBorder,
-    outlineVariant        = YounesBorder.copy(alpha = 0.5f),
+    // outline يُرسم به حدّ الحقول غير المركَّزة في Material 3، فيلزمه
+    // 3:1. أما outlineVariant فللفواصل الزخرفية، ويبقى خافتًا.
+    outline               = YounesOutline,
+    outlineVariant        = YounesBorder,
 
     // الخطأ والتحذير
     error                 = YounesRose,
