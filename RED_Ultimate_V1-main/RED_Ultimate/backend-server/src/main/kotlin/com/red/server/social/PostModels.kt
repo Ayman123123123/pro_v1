@@ -108,10 +108,24 @@ data class VoiceMetadata(
 )
 
 @Document("post_reactions")
-data class PostReaction(@Id val id: String, val postId: String, val userId: String, val type: String, val createdAt: Instant = Instant.now())
+/**
+ * تفاعل على منشور. المعرّف مركّب `postId:userId:type` فبحث التبديل
+ * الحالي يمرّ على `_id` ولا يمسح المجموعة.
+ *
+ * ومع ذلك `postId` و`userId` مُفهرسان: أي استعلام مستقبلي بمعنى
+ * «كل تفاعلات هذا المنشور» أو «كل ما تفاعل معه هذا المستخدم» —
+ * وهو استعلام طبيعي جدًّا لشاشة تفاعلات أو لحذف حساب — سيمسح
+ * المجموعة كاملة بلا هذين الفهرسين، ولن يظهر العطب إلا بعد أن
+ * تكبر البيانات في الإنتاج.
+ */
+data class PostReaction(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val type: String, val createdAt: Instant = Instant.now())
 
 @Document("poll_votes")
-data class PollVote(@Id val id: String, val postId: String, val userId: String, val optionId: String, val createdAt: Instant = Instant.now())
+/**
+ * صوت في استطلاع. المعرّف `postId:userId` يمنع التصويت مرّتين.
+ * الفهارس لاستعلامات النتائج التفصيلية وحذف بيانات المستخدم.
+ */
+data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, @Indexed val optionId: String, val createdAt: Instant = Instant.now())
 
 @Document("follows")
 data class FollowDocument(

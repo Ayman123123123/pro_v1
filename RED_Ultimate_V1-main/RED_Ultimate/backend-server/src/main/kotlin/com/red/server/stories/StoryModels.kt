@@ -30,7 +30,12 @@ data class StoryDocument(
 data class StoryView(@Id val id: String, val storyId: String, val viewerId: String, val viewedAt: Instant = Instant.now())
 
 @Document("story_reactions")
-data class StoryReaction(@Id val id: String, val storyId: String, val userId: String, val emoji: String, val createdAt: Instant = Instant.now())
+/**
+ * تفاعل على حالة. `storyId` و`userId` مُفهرسان لاستعلام «من تفاعل مع
+ * هذه الحالة» ولحذف بيانات المستخدم عند إغلاق حسابه — كلاهما يمسح
+ * المجموعة بلا فهرس.
+ */
+data class StoryReaction(@Id val id: String, @Indexed val storyId: String, @Indexed val userId: String, val emoji: String, val createdAt: Instant = Instant.now())
 
 enum class StoryVisibility { CONTACTS, EVERYONE, SELECTED }
 data class StoryReactionRequest(val emoji: String)
