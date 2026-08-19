@@ -57,28 +57,28 @@ val TajawalFamily = FontFamily(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── الألوان الأساسية — أسلوب منظم وأنيق مثل تلجرام وواتساب ───────────────
-val YounesPrimary      = Color(0xFF00A884)  // أخضر زمردي هادئ نقي (WhatsApp / Telegram Clean Accent)
-val YounesPrimaryGlow  = Color(0xFF25D366)  // أخضر فاتح للتنبيهات
-val YounesAccent       = Color(0xFF2AABEE)  // أزرق تلجرام الأنيق للروابط والشارات
-val YounesAccentSoft   = Color(0xFF64B5F6)  // أزرق أفتح للحدود
-val YounesCobalt       = Color(0xFF2AABEE)  // أزرق نقي
-val YounesPurple       = Color(0xFF388E3C)  // أخضر إضافي
+val YounesPrimary      = Color(0xFF0E7C66)  // زمرد رسمي واضح للعمليات الأساسية
+val YounesPrimaryGlow  = Color(0xFF31B993)  // زمرد مضيء للحالة الإيجابية والتنبيهات
+val YounesAccent       = Color(0xFF3972C6)  // أزرق ملكي للروابط والهوية الثانوية
+val YounesAccentSoft   = Color(0xFF93B5F7)  // أزرق ناعم للحالات الثانوية
+val YounesCobalt       = Color(0xFF3972C6)  // مرجع التوافق للأزرق الرسمي
+val YounesPurple       = Color(0xFF7C5CE7)  // مساحة/غرف صوتية مستقلة بتمييز حقيقي
 val YounesRose         = Color(0xFFE53935)  // أحمر تحذيري خفيف للإنهاء والبث
 
 // ─── ألوان الخلفية — داكنة فائقة التباين والوضوح (Telegram Dark Theme) ──────
-val YounesVoid         = Color(0xFF0E1621)  // داكن تلجرام الرئيسي — مريح وبلا تشويش
-val YounesMidnight     = Color(0xFF0E1621)  // خلفية الشاشة والشات
-val YounesDeep         = Color(0xFF17212B)  // أسطح القوائم وشريط الملاحة
-val YounesSurface1     = Color(0xFF17212B)  // كروت القوائم
-val YounesSurface2     = Color(0xFF202B36)  // أسطح العناصر النشطة
-val YounesSurface3     = Color(0xFF242F3D)  // الحوارات والـ BottomSheet
-val YounesBorder       = Color(0xFF2A394A)  // فواصل حدودية واضحة
-val YounesMuted        = Color(0xFF8E9DAE)  // نص ثانوي عالي التباين وسهل القراءة
+val YounesVoid         = Color(0xFF0B121A)  // خلفية فحمية رسمية مريحة للقراءة الطويلة
+val YounesMidnight     = Color(0xFF0B121A)  // خلفية الشاشة والمحادثة
+val YounesDeep         = Color(0xFF101C28)  // شريط التنقل والأسطح البنيوية
+val YounesSurface1     = Color(0xFF162534)  // بطاقات وقوائم رئيسية
+val YounesSurface2     = Color(0xFF1D3144)  // حالة نشطة وطبقة سطحية أعلى
+val YounesSurface3     = Color(0xFF263B50)  // حوارات وأوراق سفلية
+val YounesBorder       = Color(0xFF345067)  // فواصل واضحة غير صاخبة
+val YounesMuted        = Color(0xFFA3B4C3)  // نص ثانوي واضح على الخلفية الداكنة
 
 // ─── ألوان المحادثة والفقاعات ────────────────────────────────────────────────
-val YounesBubbleOut    = Color(0xFF2B5278)  // فقاعة صادرة — أزرق تلجرام داكن مريح
-val YounesBubbleOutGlow = Color(0xFF2B5278)
-val YounesBubbleIn     = Color(0xFF182533)  // فقاعة واردة — داكنة عالية التباين
+val YounesBubbleOut    = Color(0xFF1F5A58)  // فقاعة صادرة زمردية متزنة
+val YounesBubbleOutGlow = Color(0xFF1F5A58)
+val YounesBubbleIn     = Color(0xFF162534)  // فقاعة واردة — داكنة عالية التباين
 val YounesReadTick     = Color(0xFF2AABEE)  // ✓✓ مقروء — أزرق
 
 // ─── ألوان النصوص والتباين المرتفع (WCAG AAA Standard) ───────────────────────

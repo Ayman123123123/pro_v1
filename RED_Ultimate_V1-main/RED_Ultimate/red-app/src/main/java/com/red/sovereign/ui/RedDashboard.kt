@@ -123,6 +123,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetDefaults
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
@@ -262,9 +263,9 @@ import com.red.sovereign.media.PollsScreen
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
-    GROUPS("المجموعات", Icons.Default.Groups),
-    CALLS("المكالمات", Icons.Default.Call),
     HOME("الرئيسية", Icons.Default.Home),
+    CALLS("المكالمات", Icons.Default.Call),
+    GROUPS("المجموعات", Icons.Default.Groups),
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
@@ -410,8 +411,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
-                // remember lambdas per item لتفادي إعادة التوليد كل recompose
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
+                tonalElevation = 0.dp,
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+            ) {
+                // الترتيب يعكس أهم مسارات اليوم: الرسائل، المحتوى، المكالمات، المجموعات، ثم الأدوات.
                 MainSection.entries.forEach { item ->
                     val itemLabel = item.label
                     val isSelected = section == item
@@ -419,8 +424,23 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     NavigationBarItem(
                         selected = isSelected,
                         onClick = onClick,
+                        alwaysShowLabel = true,
                         icon = { Icon(item.icon, itemLabel) },
-                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+                        label = {
+                            Text(
+                                itemLabel,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .22f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     )
                 }
             }
