@@ -45,10 +45,25 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 /**
- * مراحل مكالمة PSTN كما تصل من الخادم عبر مسار SIP.
+ * مراحل مكالمة PSTN كما تصل من الخادم عبر إشارة `PSTN_PROGRESS`.
  *
- * الترتيب يعكس التدفق الفعلي: تسجيل الحساب على Asterisk، ثم جسر
- * الوسائط، ثم INVITE، ثم الرنين، ثم الاتصال النشط.
+ * كل مرحلة هنا **تُشتقّ من حدث Asterisk فعلي** يلتقطه
+ * `DinstarEventListener` ويوجّهه `PstnCallProgressTracker` إلى صاحب
+ * المكالمة وحده:
+ *
+ * | المرحلة | حدث AMI المُنتِج |
+ * |---|---|
+ * | [INVITING] | `OriginateResponseEvent` (يربط القناة بالمكالمة) |
+ * | [RINGING] | `NewStateEvent` بحالة `Ringing` |
+ * | [BRIDGING] | `BridgeEvent` |
+ * | [ACTIVE] | `NewStateEvent` بحالة `Up` |
+ * | [ENDED] | `HangupEvent` |
+ *
+ * [REGISTERING] و[ERROR] لا يبثّهما الخادم حالياً: الأولى تخصّ تسجيل
+ * البوابة على Asterisk وهو إجراء بدء تشغيل لا يخصّ مكالمة بعينها،
+ * والثانية تُعالَج كخطأ REST متزامن من `dialPstn`. تُركتا في التعداد
+ * لأن الشاشات تعرضهما بشكل صحيح إن وُجدتا مستقبلاً، ولا يعتمد أي كود
+ * على ترتيب العناصر.
  */
 enum class PstnCallStatus {
     IDLE,

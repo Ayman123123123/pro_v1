@@ -253,6 +253,20 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     endCall(sendSignal = false)
                 }
             }
+            // مرحلة مكالمة عبر بوابة DINSTAR — لا تمسّ آلة حالة WebRTC
+            "PSTN_PROGRESS" -> {
+                val stage = signal.payload["stage"].orEmpty()
+                CallRuntime.pstnNumber = signal.payload["number"].orEmpty()
+                signal.callId?.takeIf { it.isNotBlank() }?.let { CallRuntime.pstnCallId = it }
+                CallRuntime.pstnStatus = when (stage) {
+                    "INVITING" -> PstnCallStatus.INVITING
+                    "RINGING" -> PstnCallStatus.RINGING
+                    "BRIDGING" -> PstnCallStatus.BRIDGING
+                    "ACTIVE" -> PstnCallStatus.ACTIVE
+                    "ENDED" -> PstnCallStatus.ENDED
+                    else -> CallRuntime.pstnStatus
+                }
+            }
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
             "CONFERENCE_INVITE" -> {
                 val myId = TokenStore(this).redId.orEmpty()
@@ -887,4 +901,27 @@ object CallRuntime {
     var remoteVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
     var speaker by androidx.compose.runtime.mutableStateOf(false)
     var networkStats: NetworkStats by androidx.compose.runtime.mutableStateOf(NetworkStats())
+
+    /**
+     * مرحلة مكالمة PSTN الجارية، مصدرها إشارة `PSTN_PROGRESS` القادمة
+     * من الخادم والمشتقّة من أحداث Asterisk الفعلية.
+     *
+     * منفصلة عن [state] لأن مكالمة البوابة لا تمرّ بمحرّك WebRTC ولا
+     * تملك مساراً صوتياً داخل التطبيق؛ خلطهما كان سيُدخل آلة حالة
+     * المكالمة المشفَّرة في حالات لا تنطبق عليها.
+     */
+    var pstnStatus: PstnCallStatus by androidx.compose.runtime.mutableStateOf(PstnCallStatus.IDLE)
+
+    /** رقم مكالمة PSTN الجارية، لعرضه في الشاشة. */
+    var pstnNumber: String by androidx.compose.runtime.mutableStateOf("")
+
+    /** معرّف مكالمة PSTN الجارية — يلزم لإنهائها عبر REST. */
+    var pstnCallId: String by androidx.compose.runtime.mutableStateOf("")
+
+    /** يُصفّر حالة مكالمة البوابة بعد انتهائها أو إنهائها يدوياً. */
+    fun clearPstn() {
+        pstnStatus = PstnCallStatus.IDLE
+        pstnNumber = ""
+        pstnCallId = ""
+    }
 }

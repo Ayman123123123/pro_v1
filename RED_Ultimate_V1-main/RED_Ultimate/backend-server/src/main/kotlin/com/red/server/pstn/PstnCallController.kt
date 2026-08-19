@@ -18,7 +18,8 @@ import java.util.UUID
 @RequestMapping("/api/pstn")
 class PstnCallController(
     private val calls: PstnCallService,
-    private val loadBalancer: DinstarLoadBalancer
+    private val loadBalancer: DinstarLoadBalancer,
+    private val progress: PstnCallProgressTracker
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<PstnCallResponse> {
@@ -37,6 +38,9 @@ class PstnCallController(
         if (port >= 0) {
             loadBalancer.releasePort(gatewayId = null, port = port)
         }
+        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛
+        // بدون هذا التحرير يبقى القيد حتى تنتهي مهلته.
+        progress.finishByCallId(callId)
         return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to port))
     }
 

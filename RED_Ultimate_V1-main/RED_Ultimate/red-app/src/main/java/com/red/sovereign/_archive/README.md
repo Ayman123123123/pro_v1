@@ -46,3 +46,19 @@ _آخر تدقيق: 2026-08-19 — طُوبق المحتوى مع الملفات
   حتى لا تدخل الـ build.
 - **عند حذف ملف من الأرشيف نهائياً:** انقل سطره إلى جدول
   "حُذفت نهائياً" أعلاه بدل إزالته من التوثيق.
+
+---
+
+### `SovereignCallSystem.kt.archived`
+- **المسار الأصلي:** `com.red.sovereign.features.calls` (`features/calls/SovereignCallSystem.kt`)
+- **تاريخ الأرشفة:** 2026-08-19
+- **الحجم:** 128 سطراً
+- **السبب:** شاشة مكالمة نشطة (`SovereignActiveCallScreen`) **لا يستدعيها أي كود**،
+  وتعمل على نموذج بيانات خاص بها (`SovereignCall`) منفصل تماماً عن آلة الحالة
+  الحقيقية `CallUiState`. فهي لا تعرف الحالات النهائية الخمس
+  (`Declined`/`Busy`/`NoAnswer`/`CallEnded`/`Reconnecting`) ولا الحجب/الانتظار،
+  ونموذجها المكرَّر كان سيتطلّب مزامنة يدوية دائمة مع الحالة الفعلية.
+- **البديل النشط:** `calls/CallOverlay.kt` → `YounesCallOverlay` — موصول عبر
+  `UnifiedCallOverlays` من `RedDashboard`، ويقرأ `CallRuntime.state` مباشرةً
+  فيعرض كل الحالات بما فيها الخمس الجديدة.
+- **ملاحظة:** حُذف مجلد `features/calls/` لأنه صار فارغاً بعد النقل.
