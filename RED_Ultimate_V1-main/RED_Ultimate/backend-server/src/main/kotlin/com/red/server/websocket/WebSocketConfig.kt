@@ -8,31 +8,25 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 
 /**
- * 🌐 YOUNES WebSocket Configuration
- * كل مسارات WebSocket مع مصادقة JWT إجبارية.
+ * 🌐 إعدادات WebSocket — التسجيل الموحّد لكل معالجات الوقت الحقيقي.
  *
- * ⚠️  CORS: النطاقات المسموحة تُضبط عبر `red.security.allowed-origins`.
- * كل نقاط WebSocket تتطلب JWT عبر JwtHandshakeInterceptor.
- * لتطبيقات الجوال (بلا origin ثابت) يُسمح بنمط "app://".
+ * ⚠️ إصلاح حرج: بعد حذف `config/WebSocketConfig` المكرر (التزام 6d3a140)، بقي
+ * هذا الملف يسجّل `/ws/dinstar` وحده، فأصبحت كل مسارات التطبيق التي يتصل بها
+ * عميل الأندرويد غير مسجّلة وتُرجع 404 عند المصافحة:
+ *   - /ws/master      الرسائل، ACK، الكتابة، المزامنة، الحذف — RedMasterHandler
+ *   - /ws/calls       إشارات مكالمات 1:1 — CallWebSocketHandler
+ *   - /ws/conference  المؤتمرات والمساحات الصوتية — ConferenceWebSocketHandler
+ *   - /ws/livestream  البث المباشر — LiveStreamWebSocketHandler
+ *   - /ws/typing      مؤشر الكتابة — TypingHandler
+ *   - /ws/admin/logs  سجلات الإدارة الحية — AdminLogHandler
  *
- * ملاحظة استعادة (2026-08-19):
- *   كان هذا الملف يسجّل مساراً واحداً فقط هو /ws/dinstar، بلا JWT
- *   وبـ setAllowedOrigins("*") المفتوح. النسخة الكاملة (7 مسارات + JWT
- *   + قيود CORS) كانت في com.red.server.config.WebSocketConfig وفُقدت
- *   أثناء توحيد الحزم (التزام 6d3a140). أُعيد دمجها هنا مع الإبقاء على
- *   /ws/dinstar. المرجع: الفرعان arena/019fe9e3-pro-v1 و
- *   fix/restore-websocket-registrations.
+ * كل المسارات تمرّ عبر JwtHandshakeInterceptor (Bearer JWT، أو تذكرة إدارية
+ * قصيرة العمر لمسار /ws/admin/logs)، بما فيها `/ws/dinstar` الذي كان مفتوحًا
+ * بلا مصادقة وبـ setAllowedOrigins("*")، فيُسرّب حالات المنافذ والرسائل
+ * القصيرة وسجلات المكالمات لأي متصل.
  *
- *   المسارات الستة التي كانت تُرجع 404 عند المصافحة قبل الإصلاح:
- *     - /ws/master      الرسائل، ACK، الكتابة، المزامنة، الحذف — RedMasterHandler
- *     - /ws/calls       إشارات مكالمات 1:1 — CallWebSocketHandler
- *     - /ws/conference  المؤتمرات والمساحات الصوتية — ConferenceWebSocketHandler
- *     - /ws/livestream  البث المباشر — LiveStreamWebSocketHandler
- *     - /ws/typing      مؤشر الكتابة — TypingHandler
- *     - /ws/admin/logs  سجلات الإدارة الحية — AdminLogHandler
- *
- *   و/ws/dinstar كان مفتوحاً بلا مصادقة ويُسرّب حالات المنافذ والرسائل
- *   القصيرة وسجلات المكالمات لأي متصل؛ صار خلف JwtHandshakeInterceptor.
+ * CORS: الأنماط المسموحة من `red.security.allowed-origins`؛ عملاء الجوال لا
+ * يرسلون Origin أصلًا فيُقبلون، و"app://" يغطي من يرسله.
  *
  * ROUTES تعكس بدقة ما يُسجَّل أدناه، ويتحقق منها WebSocketRouteContractTest.
  */
@@ -72,7 +66,7 @@ class WebSocketConfig(
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*origins)
 
-        // ─── WebSocket الإدارة — سجلات حية ───
+        // ─── WebSocket الإدارة — سجلات حية (تذكرة إدارية قصيرة العمر) ───
         registry.addHandler(adminLogHandler, "/ws/admin/logs")
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*origins)
@@ -82,7 +76,7 @@ class WebSocketConfig(
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*origins)
 
-        // ─── WebSocket المؤتمرات — إشارات WebRTC (جماعية) ───
+        // ─── WebSocket المؤتمرات — إشارات WebRTC (جماعية + مساحات صوتية) ───
         registry.addHandler(conferenceWebSocketHandler, "/ws/conference")
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*origins)
