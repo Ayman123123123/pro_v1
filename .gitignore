@@ -1,4 +1,4 @@
-﻿# Build outputs
+# Build outputs
 **/build/
 .gradle/
 local.properties
@@ -22,3 +22,27 @@ pro-backup-before-sync/
 # AI Studio export scratch
 aistudio-export/node_modules/
 aistudio-export/dist/
+
+# ─────────────────────────────────────────────────────────────
+# أسرار — لا تُرفع أبداً
+#
+# الفرع arena/019fe9e3-pro-v1 يحوي بالفعل ملف .env في الجذر
+# (بقيم تطويرية افتراضية، لكن بالبنية الكاملة لأسرار الإنتاج:
+# JWT_SECRET وTURN_SECRET وكلمات مرور قواعد البيانات). القواعد
+# التالية تمنع تكرار ذلك عند رفع أي عمل محلي.
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.template
+**/keystore.properties
+*.jks
+*.keystore
+cookies.txt
+secrets.properties
+
+# ضجيج تصحيح الأخطاء المحلي
+build_errors*.txt
+logcat.txt
+recovered.txt
+test_results.txt
