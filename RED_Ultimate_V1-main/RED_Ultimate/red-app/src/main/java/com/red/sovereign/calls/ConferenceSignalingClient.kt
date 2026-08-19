@@ -119,7 +119,12 @@ class ConferenceSignalingClient(
                                             role = role,
                                             hasAudio = signal.payload["${entry.value}_audio"] == "true",
                                             hasVideo = signal.payload["${entry.value}_video"] == "true",
-                                            isHost = signal.payload["host"] == entry.value || role == "HOST"
+                                            isHost = signal.payload["host"] == entry.value || role == "HOST",
+                                            // الكتم واليد المرفوعة يصلان الآن ضمن ROOM_STATE،
+                                            // فيرى المنضمّ الجديد الغرفة كما هي فعلًا: كان
+                                            // يفقد كل كتم سابق وكل طلب تحدّث معلّق.
+                                            isMuted = signal.payload["${entry.value}_muted"] == "true",
+                                            raisedHand = signal.payload["${entry.value}_hand"] == "true"
                                         )
                                     }
                                 val selfRole = signal.payload["self_role"] ?: "LISTENER"
@@ -217,11 +222,16 @@ class ConferenceSignalingClient(
         )
     )
 
-    fun raiseHand(roomId: String, userId: String) = send(
+    /**
+     * رفع اليد أو خفضها. الخادم يحفظ الحالة ويبثّها للجميع — بما فيهم
+     * المرسِل — فتتطابق واجهة الطالب مع قائمة المضيف.
+     */
+    fun raiseHand(roomId: String, userId: String, lowered: Boolean = false) = send(
         ConferenceSignal(
             type = "RAISE_HAND",
             roomId = roomId,
-            userId = userId
+            userId = userId,
+            payload = mapOf("lowered" to lowered.toString())
         )
     )
 
