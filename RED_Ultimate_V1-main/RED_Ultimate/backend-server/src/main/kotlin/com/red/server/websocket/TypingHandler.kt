@@ -17,7 +17,7 @@ class TypingHandler(private val redis: StringRedisTemplate) : TextWebSocketHandl
         redis.convertAndSend("chat:typing:$conversationId", "$userId:$payload")
     }
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         // يمكن التعامل مع رسائل الكتابة الواردة هنا إذا لزم الأمر
     }
 }
