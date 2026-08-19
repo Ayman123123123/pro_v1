@@ -106,7 +106,25 @@ interface RedDao {
     suspend fun deleteDraft(convId: String)
 
     // --- Search ---
-    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND encryptedPlaintext LIKE :query")
+    /**
+     * بحث احتياطي داخل محادثة واحدة.
+     *
+     * **`CAST` ليس زخرفًا.** العمود `encryptedPlaintext` من نوع
+     * `ByteArray` ⇒ `BLOB` في SQLite، و`LIKE` على BLOB **لا يطابق
+     * شيئًا أبدًا** — لا يخطئ بل يرجع صفر صفوف صامتًا. فكان هذا
+     * الاستعلام يرجع قائمة فارغة دائمًا مهما كان النص (مقيس: أربع
+     * عبارات موجودة فعلًا في البيانات، صفر نتيجة).
+     *
+     * **والأفضل منه [FtsSearchManager]**: هذا مسحٌ كامل للجدول بلا
+     * فهرس، ولا يطبّع الحركات فلا تطابق «السلام» كلمة «السَّلام»،
+     * ويفشل مع حمولات `RICH_TEXT` لأنها protobuf لا نصّ خام. يبقى هنا
+     * للاحتياط حين يتعذّر بناء فهرس FTS.
+     */
+    @Query(
+        "SELECT * FROM local_history WHERE conversationId = :convId " +
+            "AND CAST(encryptedPlaintext AS TEXT) LIKE :query ESCAPE '\\' " +
+            "ORDER BY createdAt DESC"
+    )
     suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
 
     /** وسائط محادثة (صور/فيديو/ملفات/صوت) — مرتبة بالأحدث أولاً. أساس معرض الوسائط. */
