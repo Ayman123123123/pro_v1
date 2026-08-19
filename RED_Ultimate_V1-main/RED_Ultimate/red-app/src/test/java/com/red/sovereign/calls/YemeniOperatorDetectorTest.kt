@@ -106,10 +106,32 @@ class YemeniOperatorDetectorTest {
         assertEquals("يمن موبايل", YemeniOperatorDetector.getOperatorInfo("771234567")!!.name)
     }
 
+    // ─── سبأفون عدن 4G: النطاق 722 ───
+
+    @Test fun `النطاق 722 سبأفون عدن فورجي لا هاتف ثابت`() {
+        // 722 نطاق مستقل أُطلق مع VoLTE في عدن. قراءة رقمين فقط تعطي 72
+        // فيسقط الرقم إلى فرع الهاتف الثابت خطأً، أو يُرفض قبل الطلب.
+        val info = YemeniOperatorDetector.getOperatorInfo("722012919")
+        assertNotNull(info)
+        assertEquals("سبأفون", info!!.name)
+        assertTrue(info.isMobile)
+    }
+
+    @Test fun `722 يُصنَّف في كل الصيغ الدولية والمحلية`() {
+        listOf("722012919", "+967722012919", "00967722012919", "0722012919", "967722012919")
+            .forEach { assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo(it)?.name, "فشل عند: $it") }
+    }
+
+    @Test fun `النطاق 718 سبأفون عدن القديم يطابق 71`() {
+        assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo("718740712")?.name)
+    }
+
     // ─── الحالات الحدّية ───
 
     @Test fun `بادئة محمول غير مخصصة ترجع null`() {
+        // 721 و723… غير مخصَّصة: 722 وحده هو المخصَّص من نطاق 72
         assertNull(YemeniOperatorDetector.getOperatorInfo("721234567"))
+        assertNull(YemeniOperatorDetector.getOperatorInfo("723456789"))
         assertNull(YemeniOperatorDetector.getOperatorInfo("741234567"))
         assertNull(YemeniOperatorDetector.getOperatorInfo("791234567"))
     }

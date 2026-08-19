@@ -61,6 +61,14 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
     private val _deviceStatus = MutableStateFlow(DinstarDeviceStatus())
     val deviceStatus = _deviceStatus.asStateFlow()
 
+    /**
+     * حالة القناة الحية، مُمرَّرة من الجسر مباشرة.
+     *
+     * تُعرض للمشغّل حتى لا يظن لوحةً جامدة أنها لوحة مستقرّة: بلا هذا
+     * المؤشر يبدو انقطاع WebSocket كأنّ لا شيء يحدث على البوابة.
+     */
+    val wsConnectionState = wsBridge.connectionState
+
     init {
         refreshStatus()
         connectWebSocket()
