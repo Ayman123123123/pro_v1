@@ -44,7 +44,7 @@ class AuthorizedApiClient(
             is ApiResult.Error -> result
             is ApiResult.Success -> {
                 result.value.use { response ->
-                    if (!response.isSuccessful) return@withContext ApiResult.Error(response.code, response.body?.string())
+                    if (!response.isSuccessful) return@withContext ApiResult.Error(response.code, response.body?.string().orEmpty())
                     target.parentFile?.mkdirs()
                     response.body?.byteStream()?.use { input -> FileOutputStream(target).use { input.copyTo(it) } }
                     ApiResult.Success(200, target)
@@ -59,7 +59,7 @@ class AuthorizedApiClient(
                 is ApiResult.Error -> result
                 is ApiResult.Success -> result.value.use { response ->
                     if (response.isSuccessful) ApiResult.Success(response.code, response.body?.string().orEmpty())
-                    else ApiResult.Error(response.code, response.body?.string())
+                    else ApiResult.Error(response.code, response.body?.string().orEmpty())
                 }
             }
         }
