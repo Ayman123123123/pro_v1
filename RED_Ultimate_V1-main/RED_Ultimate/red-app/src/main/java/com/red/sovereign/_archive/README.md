@@ -62,3 +62,26 @@ _آخر تدقيق: 2026-08-19 — طُوبق المحتوى مع الملفات
   `UnifiedCallOverlays` من `RedDashboard`، ويقرأ `CallRuntime.state` مباشرةً
   فيعرض كل الحالات بما فيها الخمس الجديدة.
 - **ملاحظة:** حُذف مجلد `features/calls/` لأنه صار فارغاً بعد النقل.
+
+---
+
+### `PstnCallScreen.calls.kt.archived` و `PstnCallScreen.features.kt.archived`
+- **المساران الأصليان:** `calls/PstnCallScreen.kt` (389س) و
+  `features/pstn/PstnCallScreen.kt` (312س)
+- **تاريخ الأرشفة:** 2026-08-19
+- **السبب:** ثلاث شاشات لمكالمة البوابة كانت موجودة معًا، اثنتان منها
+  **لا يستدعيهما أحد**، وتحملان الاسم `PstnCallScreen` نفسه في حزمتين
+  مختلفتين. الملف الأول يعترف في توثيقه بوجود «نسخة فاخرة» تسبقه.
+- **البديل النشط:** `calls/PstnCallOverlay.kt` →
+  `Material3ExpressivePstnCallScreen` في `CallScreen.kt`، موصولة عبر
+  `UnifiedCallOverlays` وتُنهي المكالمة على الخادم فعليًّا
+  (`POST /api/pstn/calls/{id}/hangup`) فتحرّر منفذ GSM.
+- **لماذا لا تُوصَل بدل أرشفتها:** كلتاهما تعرض زرَّي كتم ومكبّر صوت
+  بمعالِجات فارغة `{}`. صوت مكالمة البوابة يمرّ عبر شبكة المشغّل لا
+  عبر محرّك WebRTC، فلا يملك التطبيق مقبضًا يكتمه. وصلهما كان
+  سيُنتج أزرارًا تتبدّل صورتها ولا تفعل شيئًا — وهو أسوأ من غيابها.
+- **ما استُخرج قبل الأرشفة:** `PstnCallStatus` (يعتمد عليها 30 موضعًا)
+  و`CallMetrics` و`formatPstnDuration` نُقلت إلى
+  `calls/PstnCallModels.kt`. حذف الملف دونها كان سيُسقط سلسلة PSTN كلها.
+- **تحقق 2026-08-19:** البديل موصول، و30/30 مرجعًا لـ `PstnCallStatus`
+  ما زالت تعمل ✅
