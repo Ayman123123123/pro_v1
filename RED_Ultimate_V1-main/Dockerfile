@@ -4,10 +4,13 @@ FROM gradle:8.12-jdk21 AS builder
 WORKDIR /build
 COPY RED_Ultimate/backend-server/ backend-server/
 COPY RED_Ultimate/shared-proto/ shared-proto/
+COPY RED_Ultimate/scripts/check-flyway-migrations.sh /usr/local/bin/check-flyway-migrations
 WORKDIR /build/backend-server
 RUN --mount=type=cache,target=/home/gradle/.gradle/caches,sharing=locked \
     --mount=type=cache,target=/home/gradle/.gradle/wrapper,sharing=locked \
-    gradle clean build --no-daemon > /tmp/gradle-build.log 2>&1 \
+    chmod +x /usr/local/bin/check-flyway-migrations \
+    && /usr/local/bin/check-flyway-migrations /build/backend-server/src/main/resources/db/migration \
+    && gradle clean build --no-daemon > /tmp/gradle-build.log 2>&1 \
     || (echo '=== RED_BACKEND_GRADLE_FAILURE ==='; tail -n 120 /tmp/gradle-build.log; exit 1)
 
 FROM ghcr.io/cirruslabs/android-sdk:36@sha256:f9b3ea9ed2b5fc9522adae82c7b4622ab7aa54207ef532c8e615a347dca08f31 AS android-builder
