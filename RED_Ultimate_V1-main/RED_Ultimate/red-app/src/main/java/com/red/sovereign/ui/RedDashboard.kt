@@ -260,7 +260,8 @@ import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.media.EventsScreen
 import com.red.sovereign.media.PollsScreen
 
-private enum class MainSection(val label: String, val icon: ImageVector) {
+// عام (لا private) لأن SovereignBottomBar في حزمة ui.components يستورده.
+enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
     GROUPS("المجموعات", Icons.Default.Groups),
     CALLS("المكالمات", Icons.Default.Call),
