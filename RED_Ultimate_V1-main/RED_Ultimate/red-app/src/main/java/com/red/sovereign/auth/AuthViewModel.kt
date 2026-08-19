@@ -161,8 +161,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
+        // احتفظ بمعرّف الجهاز الموثوق فقط؛ مسح الجلسة يتم فورًا حتى لو لم تتوفر الشبكة.
+        val refreshToken = tokens.refreshToken
         tokens.clearSession()
         state = AuthState.Welcome
+        if (!refreshToken.isNullOrBlank()) {
+            viewModelScope.launch { api.logout(LogoutRequest(refreshToken)) }
+        }
     }
 
     private fun restore() = viewModelScope.launch {
@@ -234,6 +239,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun localize(value: String) = when {
+        value.contains("DEVICE_ID_REQUIRED", ignoreCase = true) ->
+            "هذا الحساب يتطلب جهازًا موثوقًا. افتح التطبيق من الجهاز الذي سجلت منه أولًا أو اطلب من الإدارة اعتماد جهازك الجديد."
+        value.contains("DEVICE_NOT_RECOGNIZED", ignoreCase = true) ->
+            "معرّف الجهاز لم يعد مرتبطًا بهذا الحساب. أعد التسجيل من الجهاز الموثوق أو اطلب اعتماد الجهاز الجديد."
+        value.contains("DEVICE_NOT_APPROVED", ignoreCase = true) ->
+            "هذا الجهاز بانتظار اعتماد الإدارة؛ لا يمكن تسجيل الدخول منه بعد."
         value.contains("INVALID_CREDENTIALS", ignoreCase = true) || value.contains("401", ignoreCase = true) ->
             "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من البيانات والمحاولة مجدداً."
         value.contains("NETWORK_ERROR", ignoreCase = true) || value.contains("Connection refused", ignoreCase = true) ->
