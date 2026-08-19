@@ -8,6 +8,7 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator
 import com.burgstaller.okhttp.digest.Credentials
 import com.burgstaller.okhttp.digest.DigestAuthenticator
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.pstn.DinstarLoadBalancer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -486,38 +487,20 @@ class DinstarHardwareService(
     }
 
     /**
-     * Yemen mobile operator prefixes — CORRECTED per Wikipedia + ITU E.164
-     * | Prefix | Operator                        |
-     * |--------|---------------------------------|
-     * | 71     | سبأفون (Sabafon)               |
-     * | 73     | يو / YOU (formerly MTN Yemen)   |
-     * | 77, 78 | يمن موبايل (Yemen Mobile)      |
-     * | 70     | واي (Y Telecom)                |
-     * | 10     | يمن 4G (Yemen 4G)              |
+     * تحديد اسم المشغّل، مع تصحيح الأسماء القديمة أو الخاطئة التي تُرجعها
+     * البوابة (MTN ← YOU بعد 2021، HiTel ← YTelecom).
+     *
+     * جدول البادئات **ليس هنا**: المصدر الوحيد للحقيقة هو
+     * [DinstarLoadBalancer.classifyNumber]. كان هذا الملف يحمل نسخته
+     * الخاصة `YEMEN_OPERATOR_PREFIXES` تطابق بخانتين ثابتتين، فتقرأ
+     * شريحة سبأفون عدن `722…` على أنها `72` وتُسقطها في «غير معروف»؛
+     * فتفشل مطابقة «داخل الشبكة» وتُوجَّه المكالمة عبر شريحة مشغّل آخر
+     * بتعرفة أعلى. التفويض أدناه يمنع تكرار هذا الانحراف.
      */
-    private val YEMEN_OPERATOR_PREFIXES: Map<String, String> = mapOf(
-        "71" to "Sabafon",
-        "73" to "YOU",
-        "77" to "YemenMobile",
-        "78" to "YemenMobile",
-        "70" to "YTelecom",
-        "10" to "Yemen4G"
-    )
-
-    /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
     private fun resolveOperatorName(apiName: String?, simNumber: String?): String {
-        // First try: use SIM number prefix (most reliable)
+        // الأوثق: بادئة رقم الشريحة نفسها (تطابق الأطول أولًا: 722 قبل 72)
         if (!simNumber.isNullOrBlank()) {
-            val digits = simNumber.filter { it.isDigit() }
-            val local = when {
-                digits.startsWith("967") -> digits.removePrefix("967")
-                digits.startsWith("0") -> digits.removePrefix("0")
-                else -> digits
-            }
-            if (local.length >= 2) {
-                val prefix = local.substring(0, 2)
-                YEMEN_OPERATOR_PREFIXES[prefix]?.let { return it }
-            }
+            DinstarLoadBalancer.classifyNumber(simNumber)?.let { return it.apiName }
         }
         // Second try: match API operator name with corrections
         if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
