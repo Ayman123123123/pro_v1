@@ -80,6 +80,7 @@ class ContentServiceTest {
 
         whenever(polls.findById(pollId)).thenReturn(Optional.of(poll))
         whenever(pollVotes.countByPollIdAndUserId(pollId, userId)).thenReturn(0L)
+        whenever(pollOptions.findByPollId(pollId)).thenReturn(listOf(option))
         whenever(pollOptions.findById(optionId)).thenReturn(Optional.of(option))
 
         service.vote(pollId, userId, listOf(optionId))
