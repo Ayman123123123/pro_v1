@@ -132,9 +132,10 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
     fun request(profile: PublicRedProfile) = requestByRedId(profile.redId, profile.username)
 
     fun requestByRedId(redId: String, knownUsername: String? = null) = viewModelScope.launch {
-        val target = redId.trim()
-        if (target.isBlank()) { state = DirectoryState.Error("أدخل معرف يونس الصحيح"); return@launch }
-        when (val response = client.request("POST", "/api/contacts/requests/$target")) {
+        val target = redId.trim().removePrefix("@")
+        if (target.isBlank()) { state = DirectoryState.Error("أدخل معرف يونس أو اسم المستخدم الصحيح"); return@launch }
+        val encodedTarget = android.net.Uri.encode(target)
+        when (val response = client.request("POST", "/api/contacts/requests/$encodedTarget")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<OutgoingContactRequest>(response.value) }
                 .onSuccess { sent ->
                     outgoingRequests.removeAll { it.id == sent.id || it.recipient.redId.equals(sent.recipient.redId, true) }

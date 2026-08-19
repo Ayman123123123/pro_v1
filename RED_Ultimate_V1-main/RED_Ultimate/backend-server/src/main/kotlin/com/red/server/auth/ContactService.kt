@@ -194,8 +194,13 @@ class ContactService(
         return ReportResponse(id, "OPEN")
     }
 
-    private fun approved(redId: String) = users.findByRedId(redId.trim().uppercase())
-        ?.takeIf { it.status == AccountStatus.APPROVED }
+    /**
+     * تقبل واجهة الإضافة RED ID أو username؛ لا يجوز أن تعرض أحدهما ثم
+     * تبحث في الآخر فقط. يظل المسار مقيدًا بالحسابات المعتمدة.
+     */
+    private fun approved(identifier: String) = identifier.trim().removePrefix("@").let { value ->
+        users.findByRedId(value.uppercase()) ?: users.findByUsernameIgnoreCase(value)
+    }?.takeIf { it.status == AccountStatus.APPROVED }
         ?: throw NoSuchElementException("Approved RED identity not found")
 
     private fun blockedEitherDirection(first: UUID, second: UUID): Boolean =

@@ -15,6 +15,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.jdbc.core.JdbcTemplate
+import java.util.Optional
 import java.util.UUID
 
 class ContactBlockMediaGrantTest {
@@ -35,5 +36,24 @@ class ContactBlockMediaGrantTest {
         val sql = argumentCaptor<String>()
         verify(jdbc, atLeastOnce()).update(sql.capture(), any(), any(), any(), any())
         assertTrue(sql.allValues.any { it.contains("DELETE FROM media_grants") })
+    }
+
+    @Test
+    fun `contact lookup accepts username with at sign`() {
+        val owner = UUID.randomUUID()
+        val target = UserAccount(
+            id = UUID.randomUUID(),
+            redId = "58414",
+            username = "mona",
+            displayName = "Mona",
+            status = AccountStatus.APPROVED
+        )
+        whenever(users.findByRedId("MONA")).thenReturn(null)
+        whenever(users.findByUsernameIgnoreCase("mona")).thenReturn(target)
+        whenever(users.findById(owner)).thenReturn(Optional.empty())
+
+        contacts.block(owner, "@mona")
+
+        verify(users).findByUsernameIgnoreCase("mona")
     }
 }
