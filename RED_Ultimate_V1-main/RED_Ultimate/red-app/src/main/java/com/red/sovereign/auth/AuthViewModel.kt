@@ -35,6 +35,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     var state: AuthState by mutableStateOf(AuthState.Loading)
         private set
 
+    /** تلميح عابر لاسم حساب وافق عليه الخادم؛ لا يحتوي أو يسترجع كلمة مرور. */
+    var loginUsernameHint: String? by mutableStateOf(null)
+        private set
+    var loginNotice: String? by mutableStateOf(null)
+        private set
+
     init {
         ServerEndpoint.initialize(application)
         serverState = ServerState.Ready(ServerEndpoint.url())
@@ -71,10 +77,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun showRegister() { state = AuthState.Register }
-    fun showLogin() { state = AuthState.Login }
+    fun showRegister() { loginUsernameHint = null; loginNotice = null; state = AuthState.Register }
+    fun showLogin() { loginUsernameHint = null; loginNotice = null; state = AuthState.Login }
     fun showRecovery() { state = AuthState.Recovery }
-    fun showWelcome() { state = AuthState.Welcome }
+    fun showWelcome() { loginUsernameHint = null; loginNotice = null; state = AuthState.Welcome }
 
     fun register(displayName: String, username: String, password: String) = viewModelScope.launch {
         state = AuthState.Submitting
@@ -83,7 +89,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (val result = withServerDiscoveryRetry { api.register(RegisterRequest(username.trim(), password, displayName.trim(), enrollment)) }) {
             is ApiResult.Success -> {
                 result.value.deviceId?.let(tokens::rememberDevice)
-                tokens.rememberPendingLogin(username.trim(), password)
+                tokens.rememberPendingLogin(username.trim())
                 state = AuthState.Pending(result.value.user.redId, result.value.user.username, result.value.recoveryCodes.orEmpty())
             }
             is ApiResult.Error -> state = AuthState.Error(localize(result.message))
@@ -91,18 +97,20 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun login(username: String, password: String) = viewModelScope.launch {
+        loginUsernameHint = null
+        loginNotice = null
         state = AuthState.Submitting
         when (val result = withServerDiscoveryRetry { api.login(LoginRequest(username.trim(), password, tokens.deviceId)) }) {
             is ApiResult.Error -> state = AuthState.Error(localize(result.message))
-            is ApiResult.Success -> applyAuth(result.value, username, password)
+            is ApiResult.Success -> applyAuth(result.value, username)
         }
     }
 
     fun checkApproval() {
-        val username = tokens.pendingUsername()
-        val password = tokens.pendingPassword()
-        if (username.isNullOrBlank() || password.isNullOrBlank()) state = AuthState.Login
-        else login(username, password)
+        loginUsernameHint = tokens.pendingUsername()
+        loginNotice = "أدخل كلمة المرور للتحقق من اعتماد الحساب. لا تُحفظ كلمة المرور على هذا الجهاز."
+        tokens.clearPendingLogin()
+        state = AuthState.Login
     }
 
     fun recover(redId: String, code: String, newPassword: String) = viewModelScope.launch {
@@ -204,7 +212,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun applyAuth(response: AuthResponse, username: String, password: String) {
+    private fun applyAuth(response: AuthResponse, username: String) {
         when (response.status) {
             "APPROVED" -> {
                 tokens.save(response)
@@ -212,7 +220,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
             }
             "PENDING" -> {
-                tokens.rememberPendingLogin(username, password)
+                tokens.rememberPendingLogin(username)
                 state = AuthState.Pending(response.user.redId, response.user.username, emptyList())
             }
             "REJECTED" -> state = AuthState.Rejected(response.user.rejectionReason)

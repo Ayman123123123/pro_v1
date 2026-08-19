@@ -92,7 +92,14 @@ fun AuthFlow(viewModel: AuthViewModel) {
         AuthState.Loading, AuthState.Submitting -> LoadingScreen()
         AuthState.Welcome -> WelcomeScreen(viewModel.serverState, viewModel::discoverServer, viewModel::showRegister, viewModel::showLogin, viewModel::setServerUrl)
         AuthState.Register -> RegisterTabScreen(viewModel::register, viewModel::showLogin, viewModel::showWelcome)
-        AuthState.Login -> LoginTabScreen(viewModel::login, viewModel::showRegister, viewModel::showRecovery, viewModel::showWelcome)
+        AuthState.Login -> LoginTabScreen(
+            viewModel::login,
+            viewModel::showRegister,
+            viewModel::showRecovery,
+            viewModel::showWelcome,
+            initialUsername = viewModel.loginUsernameHint,
+            notice = viewModel.loginNotice
+        )
         AuthState.Recovery -> RecoveryScreen(viewModel::recover, viewModel::showLogin)
         AuthState.RecoveryComplete -> StatusScreen("تم تغيير كلمة المرور 🔐", "أُلغيت كل الجلسات القديمة بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.", viewModel::showLogin)
         is AuthState.Pending -> PendingScreen(state, viewModel::checkApproval, viewModel::showLogin)
@@ -297,9 +304,11 @@ private fun LoginTabScreen(
     submitLogin: (String, String) -> Unit,
     switchToRegister: () -> Unit,
     showRecovery: () -> Unit,
-    back: () -> Unit
+    back: () -> Unit,
+    initialUsername: String? = null,
+    notice: String? = null
 ) {
-    var username by remember { mutableStateOf("") }
+    var username by remember(initialUsername) { mutableStateOf(initialUsername.orEmpty()) }
     var password by remember { mutableStateOf("") }
 
     FormColumn("تسجيل الدخول للحساب") {
@@ -307,6 +316,11 @@ private fun LoginTabScreen(
         AuthTabSelector(selectedTab = 1, onSelectTab = { if (it == 0) switchToRegister() })
 
         Spacer(Modifier.height(14.dp))
+
+        if (!notice.isNullOrBlank()) {
+            Text(notice, color = TextSilver, fontSize = 13.sp, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(10.dp))
+        }
 
         Field(username, { username = it }, "اسم المستخدم المعرّف", leading = { Icon(Icons.Default.Person, null, tint = CleanAccentBlue) })
         
