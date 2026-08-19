@@ -62,7 +62,8 @@ class MainActivity : FragmentActivity() {
         // Private messages, recovery codes and device identity must not leak through screenshots
         // or the Android recent-apps thumbnail. A user-controlled exception can be added for public feed export later.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        SettingsRuntime.initialize(application)
+        // التهيئة تجري في YounesApplication.onCreate قبل أي شاشة، فلا
+        // حاجة لتكرارها هنا عند كل إنشاء للنشاط (تدوير الشاشة مثلاً).
         enableEdgeToEdge()
         setContent {
             val preferences = SettingsRuntime.current

@@ -1,14 +1,146 @@
 package com.red.sovereign.settings
 
 import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import java.io.File
 
+/**
+ * تخزين إعدادات المستخدم — **مصدر الحقيقة الوحيد** لأسماء المفاتيح
+ * وقيمها الافتراضية.
+ *
+ * قبل هذا التوحيد كانت خريطة الـ27 مفتاحًا مكرّرة حرفيًّا ثلاث مرات
+ * (قراءة في `load()`، وقراءة ثانية في `SettingsRuntime.initialize`،
+ * وكتابة في `update()`) — أي 81 سلسلة نصّية تُصان يدويًّا. إضافة إعداد
+ * واحد كانت تتطلّب تعديل ثلاثة مواضع، ونسيان أحدها يُنتج عيبًا صامتًا:
+ * إعداد يُحفظ ولا يُقرأ، أو يُقرأ بقيمة افتراضية مخالفة عند الإقلاع.
+ *
+ * صار التعريف الآن في [Keys] وحدها، وتشتقّ منه القراءة والكتابة معًا،
+ * فاستحال أن تتباعد النسخ.
+ */
+private const val PREFS_NAME = "younes_user_preferences"
+
+/**
+ * تعريف كل إعداد: مفتاح التخزين، وكيف يُقرأ، وكيف يُكتب.
+ *
+ * الاحتفاظ بالثلاثة في مكان واحد هو ما يمنع التباعد بنيويًّا بدل
+ * الاعتماد على الانضباط اليدوي.
+ */
+private object Keys {
+    const val FONT_SCALE = "font_scale"
+    const val HIGH_CONTRAST = "high_contrast"
+    const val COMPACT_MODE = "compact_mode"
+    const val REDUCE_MOTION = "reduce_motion"
+    const val READ_RECEIPTS = "read_receipts"
+    const val TYPING_INDICATORS = "typing_indicators"
+    const val LINK_PREVIEWS = "link_previews"
+    const val AUTO_DOWNLOAD_WIFI = "auto_download_wifi"
+    const val AUTO_DOWNLOAD_MOBILE = "auto_download_mobile"
+    const val AUTO_DOWNLOAD_LIMIT_MB = "auto_download_limit_mb"
+    const val NOTIFICATION_PREVIEW = "notification_preview"
+    const val MESSAGE_NOTIFICATIONS = "message_notifications"
+    const val CALL_NOTIFICATIONS = "call_notifications"
+    const val DATA_SAVER_CALLS = "data_saver_calls"
+    const val PLAYBACK_SPEED = "playback_speed"
+    const val APP_LOCK_ENABLED = "app_lock_enabled"
+    const val HIDE_LAST_SEEN = "hide_last_seen"
+    const val LAST_SEEN_VISIBILITY = "last_seen_visibility"
+    const val PROFILE_PHOTO_VISIBILITY = "profile_photo_visibility"
+    const val ABOUT_VISIBILITY = "about_visibility"
+    const val WHO_CAN_ADD_GROUPS = "who_can_add_groups"
+    const val WHO_CAN_CALL = "who_can_call"
+    const val ENTER_TO_SEND = "enter_to_send"
+    const val SAVE_MEDIA_GALLERY = "save_media_gallery"
+    const val AUTO_ARCHIVE_MUTED = "auto_archive_muted"
+    const val GROUP_NOTIFICATIONS = "group_notifications"
+    const val LOCK_TIMEOUT_SECONDS = "lock_timeout_seconds"
+}
+
+/**
+ * يقرأ الإعدادات المحفوظة. تعريف واحد يستعمله الـViewModel
+ * و[SettingsRuntime] معًا، فلا تختلف القيم بين الإقلاع والتحرير.
+ */
+internal fun SharedPreferences.readSettings(): YounesSettings {
+    val defaults = YounesSettings()
+    val hideLastSeen = getBoolean(Keys.HIDE_LAST_SEEN, defaults.hideLastSeen)
+    return YounesSettings(
+        fontScale = getFloat(Keys.FONT_SCALE, defaults.fontScale),
+        highContrast = getBoolean(Keys.HIGH_CONTRAST, defaults.highContrast),
+        compactMode = getBoolean(Keys.COMPACT_MODE, defaults.compactMode),
+        reduceMotion = getBoolean(Keys.REDUCE_MOTION, defaults.reduceMotion),
+        readReceipts = getBoolean(Keys.READ_RECEIPTS, defaults.readReceipts),
+        typingIndicators = getBoolean(Keys.TYPING_INDICATORS, defaults.typingIndicators),
+        linkPreviews = getBoolean(Keys.LINK_PREVIEWS, defaults.linkPreviews),
+        autoDownloadWifi = getBoolean(Keys.AUTO_DOWNLOAD_WIFI, defaults.autoDownloadWifi),
+        autoDownloadMobile = getBoolean(Keys.AUTO_DOWNLOAD_MOBILE, defaults.autoDownloadMobile),
+        autoDownloadLimitMb = getInt(Keys.AUTO_DOWNLOAD_LIMIT_MB, defaults.autoDownloadLimitMb),
+        notificationPreview = getBoolean(Keys.NOTIFICATION_PREVIEW, defaults.notificationPreview),
+        messageNotifications = getBoolean(Keys.MESSAGE_NOTIFICATIONS, defaults.messageNotifications),
+        callNotifications = getBoolean(Keys.CALL_NOTIFICATIONS, defaults.callNotifications),
+        dataSaverCalls = getBoolean(Keys.DATA_SAVER_CALLS, defaults.dataSaverCalls),
+        defaultPlaybackSpeed = getFloat(Keys.PLAYBACK_SPEED, defaults.defaultPlaybackSpeed),
+        appLockEnabled = getBoolean(Keys.APP_LOCK_ENABLED, defaults.appLockEnabled),
+        hideLastSeen = hideLastSeen,
+        // التوافق الرجعي: النسخ القديمة حفظت `hide_last_seen` فقط، فتُشتقّ
+        // منها الرؤية حين لا يكون المفتاح الأحدث موجودًا.
+        lastSeenVisibility = getString(
+            Keys.LAST_SEEN_VISIBILITY,
+            if (hideLastSeen) "NOBODY" else "EVERYONE"
+        ) ?: "EVERYONE",
+        profilePhotoVisibility = getString(Keys.PROFILE_PHOTO_VISIBILITY, defaults.profilePhotoVisibility)
+            ?: defaults.profilePhotoVisibility,
+        aboutVisibility = getString(Keys.ABOUT_VISIBILITY, defaults.aboutVisibility)
+            ?: defaults.aboutVisibility,
+        whoCanAddToGroups = getString(Keys.WHO_CAN_ADD_GROUPS, defaults.whoCanAddToGroups)
+            ?: defaults.whoCanAddToGroups,
+        whoCanCall = getString(Keys.WHO_CAN_CALL, defaults.whoCanCall) ?: defaults.whoCanCall,
+        enterToSend = getBoolean(Keys.ENTER_TO_SEND, defaults.enterToSend),
+        saveMediaToGallery = getBoolean(Keys.SAVE_MEDIA_GALLERY, defaults.saveMediaToGallery),
+        autoArchiveMuted = getBoolean(Keys.AUTO_ARCHIVE_MUTED, defaults.autoArchiveMuted),
+        groupNotifications = getBoolean(Keys.GROUP_NOTIFICATIONS, defaults.groupNotifications),
+        lockTimeoutSeconds = getInt(Keys.LOCK_TIMEOUT_SECONDS, defaults.lockTimeoutSeconds)
+    )
+}
+
+/** يكتب الإعدادات. يقابل [readSettings] مفتاحًا بمفتاح. */
+internal fun SharedPreferences.writeSettings(value: YounesSettings) {
+    edit()
+        .putFloat(Keys.FONT_SCALE, value.fontScale)
+        .putBoolean(Keys.HIGH_CONTRAST, value.highContrast)
+        .putBoolean(Keys.COMPACT_MODE, value.compactMode)
+        .putBoolean(Keys.REDUCE_MOTION, value.reduceMotion)
+        .putBoolean(Keys.READ_RECEIPTS, value.readReceipts)
+        .putBoolean(Keys.TYPING_INDICATORS, value.typingIndicators)
+        .putBoolean(Keys.LINK_PREVIEWS, value.linkPreviews)
+        .putBoolean(Keys.AUTO_DOWNLOAD_WIFI, value.autoDownloadWifi)
+        .putBoolean(Keys.AUTO_DOWNLOAD_MOBILE, value.autoDownloadMobile)
+        .putInt(Keys.AUTO_DOWNLOAD_LIMIT_MB, value.autoDownloadLimitMb)
+        .putBoolean(Keys.NOTIFICATION_PREVIEW, value.notificationPreview)
+        .putBoolean(Keys.MESSAGE_NOTIFICATIONS, value.messageNotifications)
+        .putBoolean(Keys.CALL_NOTIFICATIONS, value.callNotifications)
+        .putBoolean(Keys.DATA_SAVER_CALLS, value.dataSaverCalls)
+        .putFloat(Keys.PLAYBACK_SPEED, value.defaultPlaybackSpeed)
+        .putBoolean(Keys.APP_LOCK_ENABLED, value.appLockEnabled)
+        .putBoolean(Keys.HIDE_LAST_SEEN, value.hideLastSeen)
+        .putString(Keys.LAST_SEEN_VISIBILITY, value.lastSeenVisibility)
+        .putString(Keys.PROFILE_PHOTO_VISIBILITY, value.profilePhotoVisibility)
+        .putString(Keys.ABOUT_VISIBILITY, value.aboutVisibility)
+        .putString(Keys.WHO_CAN_ADD_GROUPS, value.whoCanAddToGroups)
+        .putString(Keys.WHO_CAN_CALL, value.whoCanCall)
+        .putBoolean(Keys.ENTER_TO_SEND, value.enterToSend)
+        .putBoolean(Keys.SAVE_MEDIA_GALLERY, value.saveMediaToGallery)
+        .putBoolean(Keys.AUTO_ARCHIVE_MUTED, value.autoArchiveMuted)
+        .putBoolean(Keys.GROUP_NOTIFICATIONS, value.groupNotifications)
+        .putInt(Keys.LOCK_TIMEOUT_SECONDS, value.lockTimeoutSeconds)
+        .apply()
+}
+
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val preferences = application.getSharedPreferences("younes_user_preferences", 0)
+    private val preferences = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     var state: YounesSettings by mutableStateOf(load()); private set
     var cacheBytes: Long by mutableStateOf(cacheSize(application.cacheDir)); private set
 
@@ -49,67 +181,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private fun update(value: YounesSettings) {
         state = value
-        preferences.edit()
-            .putFloat("font_scale", value.fontScale)
-            .putBoolean("high_contrast", value.highContrast)
-            .putBoolean("compact_mode", value.compactMode)
-            .putBoolean("reduce_motion", value.reduceMotion)
-            .putBoolean("read_receipts", value.readReceipts)
-            .putBoolean("typing_indicators", value.typingIndicators)
-            .putBoolean("link_previews", value.linkPreviews)
-            .putBoolean("auto_download_wifi", value.autoDownloadWifi)
-            .putBoolean("auto_download_mobile", value.autoDownloadMobile)
-            .putInt("auto_download_limit_mb", value.autoDownloadLimitMb)
-            .putBoolean("notification_preview", value.notificationPreview)
-            .putBoolean("message_notifications", value.messageNotifications)
-            .putBoolean("call_notifications", value.callNotifications)
-            .putBoolean("data_saver_calls", value.dataSaverCalls)
-            .putFloat("playback_speed", value.defaultPlaybackSpeed)
-            .putBoolean("app_lock_enabled", value.appLockEnabled)
-            .putBoolean("hide_last_seen", value.hideLastSeen)
-            .putString("last_seen_visibility", value.lastSeenVisibility)
-            .putString("profile_photo_visibility", value.profilePhotoVisibility)
-            .putString("about_visibility", value.aboutVisibility)
-            .putString("who_can_add_groups", value.whoCanAddToGroups)
-            .putString("who_can_call", value.whoCanCall)
-            .putBoolean("enter_to_send", value.enterToSend)
-            .putBoolean("save_media_gallery", value.saveMediaToGallery)
-            .putBoolean("auto_archive_muted", value.autoArchiveMuted)
-            .putBoolean("group_notifications", value.groupNotifications)
-            .putInt("lock_timeout_seconds", value.lockTimeoutSeconds)
-            .apply()
+        preferences.writeSettings(value)
         SettingsRuntime.update(value)
     }
 
-    private fun load() = YounesSettings(
-        fontScale = preferences.getFloat("font_scale", 1f),
-        highContrast = preferences.getBoolean("high_contrast", false),
-        compactMode = preferences.getBoolean("compact_mode", false),
-        reduceMotion = preferences.getBoolean("reduce_motion", true),
-        readReceipts = preferences.getBoolean("read_receipts", true),
-        typingIndicators = preferences.getBoolean("typing_indicators", true),
-        linkPreviews = preferences.getBoolean("link_previews", false),
-        autoDownloadWifi = preferences.getBoolean("auto_download_wifi", true),
-        autoDownloadMobile = preferences.getBoolean("auto_download_mobile", false),
-        autoDownloadLimitMb = preferences.getInt("auto_download_limit_mb", 25),
-        notificationPreview = preferences.getBoolean("notification_preview", false),
-        messageNotifications = preferences.getBoolean("message_notifications", true),
-        callNotifications = preferences.getBoolean("call_notifications", true),
-        dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
-        defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
-        appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
-        hideLastSeen = preferences.getBoolean("hide_last_seen", false),
-        lastSeenVisibility = preferences.getString("last_seen_visibility", if (preferences.getBoolean("hide_last_seen", false)) "NOBODY" else "EVERYONE") ?: "EVERYONE",
-        profilePhotoVisibility = preferences.getString("profile_photo_visibility", "EVERYONE") ?: "EVERYONE",
-        aboutVisibility = preferences.getString("about_visibility", "EVERYONE") ?: "EVERYONE",
-        whoCanAddToGroups = preferences.getString("who_can_add_groups", "CONTACTS") ?: "CONTACTS",
-        whoCanCall = preferences.getString("who_can_call", "CONTACTS") ?: "CONTACTS",
-        enterToSend = preferences.getBoolean("enter_to_send", false),
-        saveMediaToGallery = preferences.getBoolean("save_media_gallery", false),
-        autoArchiveMuted = preferences.getBoolean("auto_archive_muted", false),
-        groupNotifications = preferences.getBoolean("group_notifications", true),
-        lockTimeoutSeconds = preferences.getInt("lock_timeout_seconds", 15)
-    ).also(SettingsRuntime::update)
+    private fun load() = preferences.readSettings().also(SettingsRuntime::update)
 
     private fun cacheSize(root: File): Long = root.walkBottomUp().filter(File::isFile).sumOf(File::length)
     private fun deleteRecursivelySafe(file: File) { runCatching { file.deleteRecursively() } }
@@ -147,40 +223,22 @@ data class YounesSettings(
     val notificationEnabled: Boolean get() = messageNotifications
 }
 
+/**
+ * الإعدادات الحاليّة كما يقرأها بقيّة التطبيق (12 ملفًا) خارج شاشة
+ * الإعدادات — الإشعارات، جودة المكالمة، التنزيل التلقائي، القفل.
+ *
+ * حالة عامة للقراءة فقط من الخارج: التحديث يمرّ حصرًا عبر
+ * [SettingsViewModel] فلا يكتب أحد قيمةً لا تُحفظ.
+ */
 object SettingsRuntime {
     var current by mutableStateOf(YounesSettings()); private set
 
+    /**
+     * تُستدعى مرّة عند إقلاع التطبيق. آمنة للاستدعاء المتكرّر: تعيد
+     * القراءة من التخزين نفسه فتصل إلى الحالة ذاتها.
+     */
     fun initialize(application: Application) {
-        val preferences = application.getSharedPreferences("younes_user_preferences", 0)
-        update(YounesSettings(
-            fontScale = preferences.getFloat("font_scale", 1f),
-            highContrast = preferences.getBoolean("high_contrast", false),
-            compactMode = preferences.getBoolean("compact_mode", false),
-            reduceMotion = preferences.getBoolean("reduce_motion", true),
-            readReceipts = preferences.getBoolean("read_receipts", true),
-            typingIndicators = preferences.getBoolean("typing_indicators", true),
-            linkPreviews = preferences.getBoolean("link_previews", false),
-            autoDownloadWifi = preferences.getBoolean("auto_download_wifi", true),
-            autoDownloadMobile = preferences.getBoolean("auto_download_mobile", false),
-            autoDownloadLimitMb = preferences.getInt("auto_download_limit_mb", 25),
-            notificationPreview = preferences.getBoolean("notification_preview", false),
-            messageNotifications = preferences.getBoolean("message_notifications", true),
-            callNotifications = preferences.getBoolean("call_notifications", true),
-            dataSaverCalls = preferences.getBoolean("data_saver_calls", true),
-            defaultPlaybackSpeed = preferences.getFloat("playback_speed", 1f),
-            appLockEnabled = preferences.getBoolean("app_lock_enabled", false),
-            hideLastSeen = preferences.getBoolean("hide_last_seen", false),
-            lastSeenVisibility = preferences.getString("last_seen_visibility", if (preferences.getBoolean("hide_last_seen", false)) "NOBODY" else "EVERYONE") ?: "EVERYONE",
-            profilePhotoVisibility = preferences.getString("profile_photo_visibility", "EVERYONE") ?: "EVERYONE",
-            aboutVisibility = preferences.getString("about_visibility", "EVERYONE") ?: "EVERYONE",
-            whoCanAddToGroups = preferences.getString("who_can_add_groups", "CONTACTS") ?: "CONTACTS",
-            whoCanCall = preferences.getString("who_can_call", "CONTACTS") ?: "CONTACTS",
-            enterToSend = preferences.getBoolean("enter_to_send", false),
-            saveMediaToGallery = preferences.getBoolean("save_media_gallery", false),
-            autoArchiveMuted = preferences.getBoolean("auto_archive_muted", false),
-            groupNotifications = preferences.getBoolean("group_notifications", true),
-            lockTimeoutSeconds = preferences.getInt("lock_timeout_seconds", 15)
-        ))
+        update(application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).readSettings())
     }
 
     fun update(value: YounesSettings) { current = value }
