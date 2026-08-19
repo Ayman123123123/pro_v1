@@ -134,15 +134,17 @@ class GroupService(private val mongo: MongoTemplate, private val users: UserAcco
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         val memberId = "${invite.groupId}:$userId"
         require(!mongo.exists(Query(Criteria.where("id").`is`(memberId)), GroupMember::class.java)) { "User is already a member" }
+        if (invite.requireApproval) {
+            mongo.findById(memberId, GroupJoinRequestDocument::class.java)
+                ?.takeIf { it.status == "PENDING" }
+                ?.let { return it.response() }
+        }
         invite.uses += 1; mongo.save(invite)
         if (!invite.requireApproval) {
             mongo.save(GroupMember(memberId, invite.groupId, user.id.toString(), user.redId, user.username, GroupRole.MEMBER)); touch(invite.groupId)
             return GroupJoinRequestResponse("joined:$memberId", invite.groupId, user.redId, user.username, "APPROVED", Instant.now())
         }
-        val id = "${invite.groupId}:$userId"
-        val pending = mongo.findById(id, GroupJoinRequestDocument::class.java)?.takeIf { it.status == "PENDING" }
-            ?: mongo.save(GroupJoinRequestDocument(id, invite.groupId, user.id.toString(), user.redId, user.username))
-        return pending.response()
+        return mongo.save(GroupJoinRequestDocument(memberId, invite.groupId, user.id.toString(), user.redId, user.username)).response()
     }
 
     fun joinRequests(actorId: UUID, groupId: String): List<GroupJoinRequestResponse> {
