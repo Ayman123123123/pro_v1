@@ -566,7 +566,6 @@ private fun ChatHubScreen(
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
-    var messageText by remembr { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var selectedChatMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
