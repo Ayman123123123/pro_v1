@@ -21,6 +21,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
@@ -42,7 +45,15 @@ fun ContactsScreen(
     onCreateGroup: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val tokens = remember { TokenStore(context.applicationContext) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) directory.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val myRedId = tokens.redId.orEmpty()
     val myUsername = tokens.username.orEmpty()
     var query by remember { mutableStateOf("") }
