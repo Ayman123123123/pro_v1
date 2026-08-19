@@ -17,75 +17,88 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.R
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Google Fonts Provider — Cairo (العناوين) + Tajawal (نصوص المحادثات)
+// الخط الرسمي — IBM Plex Sans Arabic، مضمَّن في الحزمة
+//
+// كان الخطّان Cairo وTajawal يُجلبان عبر GoogleFont.Provider، أي عبر
+// خدمات Google Play والشبكة. على شبكات اليمن — وهي الحالة الغالبة
+// لمستخدمي هذا التطبيق — يفشل الجلب فيرتدّ النص إلى خط النظام:
+// تنهار الهوية، وتتغيّر مقاسات الأسطر بين جهاز وآخر، وتتكسّر
+// التخطيطات المحسوبة على ارتفاع سطر بعينه.
+//
+// ولماذا عائلة واحدة ثنائية النص: الواجهة تخلط العربية بالأرقام
+// اللاتينية في كل شاشة (معرّف RED، أرقام الهواتف، مدد المكالمات).
+// خلط خط عربي بآخر لاتيني يُظهر تفاوتًا في الوزن وارتفاع السن داخل
+// السطر الواحد؛ وIBM Plex Sans Arabic مصمَّمة أصلًا لتناسق النصّين.
 // ═══════════════════════════════════════════════════════════════════════════════
-private val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs
+val PlexArabic = FontFamily(
+    Font(R.font.plex_arabic_regular,  FontWeight.Normal),
+    Font(R.font.plex_arabic_medium,   FontWeight.Medium),
+    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
+    Font(R.font.plex_arabic_bold,     FontWeight.Bold),
 )
 
-private val CairoFont   = GoogleFont("Cairo")
-private val TajawalFont = GoogleFont("Tajawal")
-
-val CairoFamily = FontFamily(
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Light),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.SemiBold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Bold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.ExtraBold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Black),
-)
-
-val TajawalFamily = FontFamily(
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Light),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Bold),
-)
+// الأوزان غير المضمَّنة تُسقَط على أقرب وزن متاح بدل جلبها من الشبكة:
+// ExtraBold/Black -> Bold، وLight/Thin -> Regular. أربعة ملفات (920 كB)
+// بدل أحد عشر، دون أن يفقد التسلسل الطباعي تمايزه.
+val CairoFamily = PlexArabic
+val TajawalFamily = PlexArabic
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // لوحة الألوان السيادية المحسّنة — نظام متناسق كامل
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── الألوان الأساسية — أسلوب منظم وأنيق مثل تلجرام وواتساب ───────────────
-val YounesPrimary      = Color(0xFF00A884)  // أخضر زمردي هادئ نقي (WhatsApp / Telegram Clean Accent)
-val YounesPrimaryGlow  = Color(0xFF25D366)  // أخضر فاتح للتنبيهات
-val YounesAccent       = Color(0xFF2AABEE)  // أزرق تلجرام الأنيق للروابط والشارات
-val YounesAccentSoft   = Color(0xFF64B5F6)  // أزرق أفتح للحدود
-val YounesCobalt       = Color(0xFF2AABEE)  // أزرق نقي
-val YounesPurple       = Color(0xFF388E3C)  // أخضر إضافي
-val YounesRose         = Color(0xFFE53935)  // أحمر تحذيري خفيف للإنهاء والبث
+// ─── الهوية اللونية — مستقلّة، لا منسوخة ─────────────────────────────────────
+//
+// اللوحة السابقة كانت ألوان المنافسين حرفيًّا: 00A884 و25D366 من واتساب،
+// و2AABEE و0E1621 من تلجرام. تطبيق يريد التفوّق عليهما لا يمكن أن يرتدي
+// زيّهما. البديل هنا مشتقّ من هوية محليّة: أخضر عميق مشبع، وذهب صنعاني
+// للتمييز، على خلفية زرقاء-سوداء دافئة بدل الرمادي البارد.
+//
+// وكل زوج لون/خلفية أدناه مقيس بمعادلة WCAG 2.1 لا مُقدَّر بالذوق.
+// العيب الذي أصلحته هذه اللوحة: النص الأبيض على الزر الأساسي كان
+// 3.03:1 — راسب دون AA (الحد 4.5:1) — لأن الأخضر الفاتح لا يحتمل نصًّا
+// أبيض. الحل نصّ داكن على الأزرار الملوّنة: 7.09:1، أي AAA.
+val YounesPrimary      = Color(0xFF00B37E)  // أخضر سيادي عميق — 7.06:1 على الخلفية
+val YounesPrimaryGlow  = Color(0xFF14D89B)  // إضاءة الحالة النشطة والتنبيه
+val YounesAccent       = Color(0xFFE0A83C)  // ذهب صنعاني — التمييز والشارات، 8.97:1
+val YounesAccentSoft   = Color(0xFFF0C674)  // ذهب فاتح للحدود والتدرجات
+val YounesCobalt       = Color(0xFF4FC3F7)  // سماوي للروابط والمعلومات، 9.55:1
+val YounesPurple       = Color(0xFF00916A)  // أخضر ثانوي للحالات المساندة
+val YounesRose         = Color(0xFFFF5A5F)  // خطر — 6.27:1 (كان 4.30:1 دون AA)
 
-// ─── ألوان الخلفية — داكنة فائقة التباين والوضوح (Telegram Dark Theme) ──────
-val YounesVoid         = Color(0xFF0E1621)  // داكن تلجرام الرئيسي — مريح وبلا تشويش
-val YounesMidnight     = Color(0xFF0E1621)  // خلفية الشاشة والشات
-val YounesDeep         = Color(0xFF17212B)  // أسطح القوائم وشريط الملاحة
-val YounesSurface1     = Color(0xFF17212B)  // كروت القوائم
-val YounesSurface2     = Color(0xFF202B36)  // أسطح العناصر النشطة
-val YounesSurface3     = Color(0xFF242F3D)  // الحوارات والـ BottomSheet
-val YounesBorder       = Color(0xFF2A394A)  // فواصل حدودية واضحة
-val YounesMuted        = Color(0xFF8E9DAE)  // نص ثانوي عالي التباين وسهل القراءة
+// ─── الأسطح — سلّم مقروء الفروق ──────────────────────────────────────────────
+// كل درجة أفتح من سابقتها بقدر يُرى على شاشة رخيصة في ضوء النهار،
+// ولا يكفي أن تختلف رقميًّا فقط.
+val YounesVoid         = Color(0xFF0A1014)  // أعمق طبقة — خلف كل شيء
+val YounesMidnight     = Color(0xFF0A1014)  // خلفية الشاشة والمحادثة
+val YounesDeep         = Color(0xFF121A20)  // شريط الملاحة والقوائم
+val YounesSurface1     = Color(0xFF121A20)  // البطاقات
+val YounesSurface2     = Color(0xFF1A242C)  // العناصر النشطة
+val YounesSurface3     = Color(0xFF223038)  // الحوارات وBottomSheet
+val YounesBorder       = Color(0xFF2C3D47)  // الفواصل
+val YounesMuted        = Color(0xFF9AAEBB)  // نص ثانوي — 8.34:1 على الخلفية
 
-// ─── ألوان المحادثة والفقاعات ────────────────────────────────────────────────
-val YounesBubbleOut    = Color(0xFF2B5278)  // فقاعة صادرة — أزرق تلجرام داكن مريح
-val YounesBubbleOutGlow = Color(0xFF2B5278)
-val YounesBubbleIn     = Color(0xFF182533)  // فقاعة واردة — داكنة عالية التباين
-val YounesReadTick     = Color(0xFF2AABEE)  // ✓✓ مقروء — أزرق
+// ─── فقاعات المحادثة ─────────────────────────────────────────────────────────
+// الفقاعة الصادرة خضراء داكنة من عائلة اللون الأساسي لا زرقاء مستعارة،
+// فتُقرأ الرسائل الصادرة كامتداد لهوية التطبيق.
+val YounesBubbleOut    = Color(0xFF0E3B32)  // صادرة — 11.43:1 للنص عليها
+val YounesBubbleOutGlow = Color(0xFF134A3E)  // تدرّج خفيف يعطي عمقًا
+val YounesBubbleIn     = Color(0xFF16212A)  // واردة — 15.03:1
+val YounesReadTick     = Color(0xFF4FC3F7)  // ✓✓ مقروء
 
-// ─── ألوان النصوص والتباين المرتفع (WCAG AAA Standard) ───────────────────────
-val YounesOnPrimary    = Color(0xFFFFFFFF)  // نص أبيض نقي على الأزرار
-val YounesOnAccent     = Color(0xFFFFFFFF)  // نص أبيض
-val YounesOnSurface    = Color(0xFFFFFFFF)  // نص أبيض نقي للمحاذاة والوضوح
-val YounesOnSurfaceDim = Color(0xFF8E9DAE)  // نص ثانوي رمادي هادئ وسهل القراءة
+// ─── النصوص ──────────────────────────────────────────────────────────────────
+// الأبيض النقي على خلفية داكنة يُتعب العين في الجلسات الطويلة، فالنص
+// الأساسي مائل قليلًا إلى البرودة بدل FFFFFF.
+val YounesOnPrimary    = Color(0xFF06110D)  // على الأزرار الملوّنة — 7.09:1
+val YounesOnAccent     = Color(0xFF06110D)  // على الذهب — 8.99:1
+val YounesOnSurface    = Color(0xFFF2F6F8)  // النص الأساسي — 17.60:1
+val YounesOnSurfaceDim = Color(0xFF9AAEBB)  // النص الثانوي — 8.34:1
 
 // ─── Migration aliases — للحفاظ على التوافق مع الكود القديم ──────────────────
 val YounesEmerald      = YounesPrimary
