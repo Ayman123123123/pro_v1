@@ -1,10 +1,13 @@
-# merge-local-copies.ps1 — دمج كل نسخ المشروع المحلية في نسخة واحدة ورفعها إلى GitHub
+﻿# merge-local-copies.ps1 — merge local project copies into one and upload to GitHub
 # -----------------------------------------------------------------------------
-# يفحص كل مجلدات المشروع على جهازك (Windows)، يجمع كل الملفات الفريدة/الأحدث
-# في المجلد الرئيسي Pictures\pro، يلتزم كل شيء، ويرفع إلى فرع جديد على GitHub
-# باسم local-full-merge — ثم يستلمه الذكاء الاصطناعي ويدمجه في المشروع المتكامل.
+# Scans local project folders, merges unique/newest files into Pictures\pro,
+# commits everything and pushes to a new GitHub branch `local-full-merge`.
 #
-# التشغيل:  powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1
+# SAFETY: pushing to GitHub is DISABLED by default. Pass -Push to enable it:
+#   powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1 -Push
+param(
+  [switch]$Push
+)
 $ErrorActionPreference = "Continue"
 
 $dest = "C:\Users\hpc01\Pictures\pro"
@@ -65,7 +68,12 @@ git add -A
 git commit -m "دمج كل النسخ المحلية في مشروع واحد متكامل" --allow-empty | Out-Null
 Write-Host "   ✅ تم الالتزام" -ForegroundColor Green
 
-# ── 4) الرفع إلى GitHub ──────────────────────────────────────────────────────
+# ── 4) الرفع إلى GitHub (اختياري: يتطلب -Push) ───────────────────────────────
+if (-not $Push) {
+  Write-Host "`n⚠️ خطوة الرفع إلى GitHub معطّلة (آمن). أعد التشغيل مع -Push للرفع." -ForegroundColor Yellow
+  Write-Host "   تم الالتزام محلياً فقط. الفرع: local-full-merge" -ForegroundColor Yellow
+  exit 0
+}
 Write-Host "`n[4/4] الرفع إلى GitHub (فرع جديد: local-full-merge)..." -ForegroundColor Yellow
 git push origin HEAD:local-full-merge 2>&1 | ForEach-Object { Write-Host "   $_" }
 if ($LASTEXITCODE -eq 0) {

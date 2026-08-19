@@ -42,7 +42,7 @@ class PstnManager(
     @Value("\${ASTERISK_AMI_PASSWORD:}") private val amiPassword: String,
     @Value("\${red.pstn.max-retries:3}") private val maxRetries: Int,
     @Value("\${red.pstn.action-timeout-ms:5000}") private val actionTimeoutMs: Long,
-    @Value("\${red.pstn.heartbeat-interval-ms:30000}") private val heartbeatIntervalMs: Long,
+    @Value("\${red.pstn.heartbeat-interval-ms:15000}") private val heartbeatIntervalMs: Long,
     private val dinstarEvents: ObjectProvider<DinstarEventListener>
 ) {
     companion object {
@@ -156,7 +156,8 @@ class PstnManager(
             val conn = DefaultManagerConnection(amiHost, amiUser, amiPassword).apply {
                 // asterisk-java يعرّف هذه كـ setter بلا getter — تُستدعى كدوال لا كخصائص في Kotlin
                 setSocketTimeout(actionTimeoutMs.toInt())
-                setSocketReadTimeout((actionTimeoutMs * 2).toInt())
+                // socket read timeout must exceed heartbeat interval to prevent idle disconnects
+                setSocketReadTimeout((heartbeatIntervalMs * 3).toInt())
             }
             conn.login()
 

@@ -116,6 +116,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     /** WebRTC-PSTN bridge: connect to Asterisk via WSS, dial through DINSTAR GSM */
     private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
+    var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
 
     fun dialPstn(number: String) = viewModelScope.launch {
         refreshPstnEntitlement()
@@ -125,20 +126,39 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
             override fun onConnected() { pstnState = PstnState.Registering }
             override fun onRinging() { pstnState = PstnState.Ringing }
-            override fun onAnswered(usedToday: Int, dailyLimit: Int) { pstnState = PstnState.Started("webrtc", usedToday, dailyLimit) }
+            override fun onAnswered(usedToday: Int, dailyLimit: Int) {
+                pstnState = PstnState.Started(mgr.currentCallId ?: "", usedToday, dailyLimit)
+            }
             override fun onHangup(cause: String?) {
                 pstnState = PstnState.Idle
                 pstnWebRtc?.release()
                 pstnWebRtc = null
             }
-            override fun onIncoming(sdp: String, fromNumber: String) { }
+            override fun onIncoming(sdp: String, fromNumber: String) {
+                incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
+                pstnState = PstnState.Incoming(fromNumber)
+            }
             override fun onError(message: String) {
                 pstnState = PstnState.Error(localize(message))
             }
         })
     }
 
-    fun hangupPstn(callId: String) = viewModelScope.launch {
+    fun acceptIncomingPstnCall() {
+        val incoming = incomingPstnCall ?: return
+        pstnWebRtc?.answerIncoming(incoming.sdp)
+        incomingPstnCall = null
+    }
+
+    fun rejectIncomingPstnCall() {
+        pstnWebRtc?.rejectIncoming()
+        pstnWebRtc?.release()
+        pstnWebRtc = null
+        incomingPstnCall = null
+        pstnState = PstnState.Idle
+    }
+
+    fun hangupPstn() = viewModelScope.launch {
         pstnWebRtc?.hangup()
         pstnWebRtc?.release()
         pstnWebRtc = null
@@ -375,6 +395,7 @@ sealed interface PstnState {
     data object Bridging : PstnState
     data object Registering : PstnState
     data object Ringing : PstnState
+    data class Incoming(val fromNumber: String) : PstnState
     data class Started(
         val callId: String,
         val usedToday: Int,
@@ -384,3 +405,5 @@ sealed interface PstnState {
     ) : PstnState
     data class Error(val message: String) : PstnState
 }
+
+data class IncomingPstnCall(val sdp: String, val fromNumber: String)

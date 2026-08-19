@@ -52,7 +52,8 @@ class LocalServerDiscovery(private val context: Context) {
 
     suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
         val known = knownBases()
-        firstVerified(known, if (mode == Mode.FAST) FAST_BUDGET_MS else FAST_BUDGET_MS)?.let { found ->
+        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين — اكتشاف سريع ثم شامل لاحقاً.
+        firstVerified(known, FAST_BUDGET_MS)?.let { found ->
             ServerEndpoint.update(context, found)
             return@withContext ApiResult.Success(200, found)
         }
@@ -121,8 +122,8 @@ class LocalServerDiscovery(private val context: Context) {
         val seeds = listOf(
             ServerEndpoint.url(),
             BuildConfig.RED_SERVER_URL,
+            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) — عنوان تطوير قياسي وليس IP LAN حقيقي.
             "http://10.0.2.2:8088",
-            "http://192.168.1.50:8088",
         )
         seeds.forEach { seed ->
             val host = YounesServerSignature.hostOf(seed) ?: return@forEach

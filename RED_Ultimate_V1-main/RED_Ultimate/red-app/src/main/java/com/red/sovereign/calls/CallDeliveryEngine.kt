@@ -14,7 +14,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * محرك ضمان وصول المكالمة — Multi-Path Delivery Engine
@@ -35,10 +34,13 @@ class CallDeliveryEngine(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
-    // ── حالة التسليم ──
-    @Volatile private var deliveryConfirmed = AtomicBoolean(false)
-    @Volatile private var retryCount = AtomicInteger(0)
+    // ── حالة التسليم (حالة مستقلة لكل مكالمة — كانت AtomicBoolean مشتركة
+    //    فتتعارض مكالمتان متداخلتان: مكالمة واردة أثناء توصيل مكالمة صادرة) ──
+    private val deliveryStates = ConcurrentHashMap<String, AtomicBoolean>()
     private val pendingCandidates = ConcurrentHashMap<String, MutableList<org.webrtc.IceCandidate>>()
+
+    private fun stateFor(callId: String): AtomicBoolean =
+        deliveryStates.getOrPut(callId) { AtomicBoolean(false) }
 
     // ── معاملات ──
     companion object {
@@ -62,9 +64,9 @@ class CallDeliveryEngine(
         targetRedId: String,
         listener: Listener
     ) {
-        deliveryConfirmed.set(false)
-        retryCount.set(0)
         val callId = callSignal.callId ?: return
+        val deliveryConfirmed = stateFor(callId)
+        deliveryConfirmed.set(false)
 
         scope.launch {
             // === المسار 1: WebSocket الحالي (الأسرع) ===
@@ -77,7 +79,7 @@ class CallDeliveryEngine(
             }
 
             // انتظر تأكيد "ringing" (يأتي عبر onSignal → RINGING)
-            if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS)) {
+            if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS, deliveryConfirmed)) {
                 listener.onDeliveryConfirmed(callId, DeliveryPath.WEBSOCKET)
                 return@launch
             }
@@ -87,7 +89,7 @@ class CallDeliveryEngine(
             val pushSent = sendFcmPush(callId, targetRedId, callSignal.mode, callSignal.payload["sdp"].orEmpty())
             if (pushSent) {
                 Log.d("CallDeliveryEngine", "[$callId] FCM push dispatched")
-                if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS)) {
+                if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS, deliveryConfirmed)) {
                     listener.onDeliveryConfirmed(callId, DeliveryPath.FCM_PUSH)
                     return@launch
                 }
@@ -100,7 +102,7 @@ class CallDeliveryEngine(
                 val webhookSent = sendHttpWebhook(callSignal, targetRedId)
                 if (webhookSent) {
                     Log.d("CallDeliveryEngine", "[$callId] HTTP webhook sent (attempt ${attempt + 1})")
-                    if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS)) {
+                    if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS, deliveryConfirmed)) {
                         listener.onDeliveryConfirmed(callId, DeliveryPath.HTTP_WEBHOOK)
                         return@launch
                     }
@@ -117,11 +119,11 @@ class CallDeliveryEngine(
         }
     }
 
-    fun onDeliveryAckReceived() {
-        deliveryConfirmed.set(true)
+    fun onDeliveryAckReceived(callId: String) {
+        stateFor(callId).set(true)
     }
 
-    private suspend fun awaitDeliveryAck(timeoutMs: Long): Boolean {
+    private suspend fun awaitDeliveryAck(timeoutMs: Long, deliveryConfirmed: AtomicBoolean): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (deliveryConfirmed.get()) return true
@@ -227,11 +229,13 @@ class CallDeliveryEngine(
 
     fun clearCandidates(callId: String) {
         pendingCandidates.remove(callId)
+        deliveryStates.remove(callId)
     }
 
     fun destroy() {
         scope.cancel()
         pendingCandidates.clear()
+        deliveryStates.clear()
     }
 
     // ── DTOs ──

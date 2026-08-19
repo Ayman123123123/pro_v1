@@ -71,6 +71,8 @@ object ConferenceRuntime {
 
 class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var reconnectAttempt = 0
+    private var reconnectJob: kotlinx.coroutines.Job? = null
     private lateinit var signaling: ConferenceSignalingClient
     private var mesh: MeshRtcSession? = null
     private var sfu: SfuMediaClient? = null
@@ -243,6 +245,9 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     }
 
     override fun onConnected() {
+        reconnectAttempt = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
         scope.launch {
             if (!mediaStarted) {
                 mediaStarted = true
@@ -456,7 +461,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         when (ConferenceRuntime.state) {
             is ConferenceUiState.Active, is ConferenceUiState.Connecting -> {
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
-                runCatching { signaling.reconnect(roomId) }
+                scheduleSignalingReconnect()
             }
             else -> leave()
         }
@@ -471,13 +476,26 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             return
         }
         if (ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting) {
-            runCatching { signaling.reconnect(roomId) }
+            scheduleSignalingReconnect()
             return
         }
         ConferenceRuntime.state = ConferenceUiState.Error(message)
         scope.launch {
             kotlinx.coroutines.delay(3000)
             if (ConferenceRuntime.state is ConferenceUiState.Error) leave()
+        }
+    }
+
+    /** إعادة اتصال بتراجع أسي (1s→2s→…→30s) بدل القصف الفوري المتكرر عند انقطاع الإشارة. */
+    private fun scheduleSignalingReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            val delayMs = (1000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
+            reconnectAttempt++
+            kotlinx.coroutines.delay(delayMs)
+            if (ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting) {
+                runCatching { signaling.reconnect(roomId) }
+            }
         }
     }
 

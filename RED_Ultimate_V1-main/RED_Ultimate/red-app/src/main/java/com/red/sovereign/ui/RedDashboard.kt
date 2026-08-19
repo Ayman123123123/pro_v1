@@ -3145,6 +3145,8 @@ private fun MoreOption(icon: ImageVector, title: String, detail: String, color: 
 @Composable
 private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null, prefillNumber: String = "") {
     var tab by remember { mutableIntStateOf(0) }
+    val smsVm: com.red.sovereign.features.sms.SmsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    var inChat by remember { mutableStateOf(false) }
     // 📞 أكثر الأرقام اليمنية اتصالًا — تُشتق من سجل DINSTAR الحقيقي (لا بيانات وهمية)
     val dinstarCalls = history?.calls?.filter { it.route == "DINSTAR" }.orEmpty()
     val favorites = dinstarCalls.groupingBy { it.peerLabel.ifBlank { it.peerId } }.eachCount()
@@ -3169,8 +3171,16 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
         }
         when (tab) {
             0 -> DialPad(account.pstnEnabled, viewModel, prefillNumber)
-            // 📨 الرسائل — إرسال/استقبال SMS عبر شريحة DINSTAR
-            1 -> DinstarSmsScreen(viewModel, account.pstnEnabled)
+            // 📨 الرسائل — SMS احترافي: محادثات + دردشة + إرسال/استقبال/تسليم
+            1 -> if (inChat && smsVm.chatNumber != null) {
+                com.red.sovereign.features.sms.SmsChatScreen(smsVm, onBack = {
+                    smsVm.closeChat(); inChat = false
+                })
+            } else {
+                com.red.sovereign.features.sms.SmsConversationsScreen(smsVm, onOpenChat = {
+                    smsVm.openChat(it); inChat = true
+                })
+            }
             // ⭐ المفضلة — أكثر الأرقام اتصالًا عبر DINSTAR مع إعادة اتصال بنقرة
             2 -> if (favorites.isEmpty()) {
                 EmptyState(Icons.Default.Star, "لا مفضلة بعد", "ستظهر هنا أكثر الأرقام اليمنية اتصالًا عبر DINSTAR تلقائيًا")
@@ -3211,12 +3221,22 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String 
     var number by remember(prefill) { mutableStateOf(prefill) }
     // 📞 أثناء المكالمة النشطة نستبدل اللوحة بشاشة الاتصال الفاخرة كاملة التحكم
     val pstnState = viewModel.pstnState
+    // مكالمة واردة: شاشة قبول/رفض — كانت معطّلة (لا توجد واجهة تربطها)
+    val incomingPstn = viewModel.incomingPstnCall
+    if (incomingPstn != null) {
+        com.red.sovereign.features.pstn.IncomingPstnCallScreen(
+            number = incomingPstn.fromNumber,
+            onAccept = { viewModel.acceptIncomingPstnCall() },
+            onDecline = { viewModel.rejectIncomingPstnCall() }
+        )
+        return
+    }
     val isInPstnCall = pstnState is PstnState.Started || pstnState is PstnState.Bridging || pstnState is PstnState.Registering || pstnState is PstnState.Ringing || pstnState is PstnState.Dialing
     if (isInPstnCall) {
         com.red.sovereign.features.pstn.PstnCallScreen(
             number = number,
             state = viewModel.pstnState,
-            onHangup = { viewModel.hangupPstn("") },
+            onHangup = { viewModel.hangupPstn() },
             onMuteToggle = { viewModel.togglePstnMute(it) },
             onSpeakerToggle = { viewModel.togglePstnSpeaker(it) },
             viewModel = viewModel
@@ -3249,9 +3269,10 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String 
             PstnState.Ringing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(18.dp)); Text("جاري رنين الهاتف...", color = YounesEmerald, fontSize = 13.sp)
             }
-            is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
+is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
             PstnState.Idle -> Unit
             is PstnState.Started -> Unit // عُالجت أعلاه بشاشة الاتصال الكاملة
+            is PstnState.Incoming -> Unit // عُولجت أعلاه بشاشة المكالمة الواردة
         }
     }
 }

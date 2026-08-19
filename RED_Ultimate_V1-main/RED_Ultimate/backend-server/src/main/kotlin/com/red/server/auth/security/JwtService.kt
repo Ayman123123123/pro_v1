@@ -18,7 +18,9 @@ import javax.crypto.SecretKey
 @Service
 class JwtService(
     @Value("\${red.jwt.secret}") private val configuredSecret: String,
-    @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long
+    @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long,
+    @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
+    @Value("\${red.jwt.audience:red-app}") private val audience: String
 ) {
     @PostConstruct
     fun validateSecret() {
@@ -48,6 +50,8 @@ class JwtService(
             .claim("role", user.role.name)
         if (deviceId != null) builder.claim("deviceId", deviceId.toString())
         return builder
+            .issuer(issuer)
+            .audience().add(audience).and()
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plusMillis(expirationMs)))
             .signWith(key)
@@ -73,6 +77,8 @@ class JwtService(
             .claim("sfuGroupRole", groupRole)
             .claim("sfuCanProduce", canProduce)
         return builder
+            .issuer(issuer)
+            .audience().add(audience).and()
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
             .signWith(key)

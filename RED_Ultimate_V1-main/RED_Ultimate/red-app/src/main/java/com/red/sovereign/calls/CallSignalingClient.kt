@@ -6,6 +6,10 @@ import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -30,7 +34,9 @@ class CallSignalingClient(
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
     private val pendingSignals = PendingCallSignalQueue()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var socket: WebSocket? = null
+    @Volatile private var connected = false
 
     fun connect() {
         if (socket != null) return
@@ -42,6 +48,7 @@ class CallSignalingClient(
             Request.Builder().url(url).header("Authorization", "Bearer $token").build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    connected = true
                     pendingSignals.flush(webSocket::send)
                     listener.onConnected()
                 }
@@ -54,24 +61,48 @@ class CallSignalingClient(
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     socket = null
+                    connected = false
                     listener.onDisconnected()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     socket = null
+                    connected = false
+                    if (response?.code == 401) {
+                        // رمز الوصول منتهٍ — حدّثه ثم أعد الاتصال بدل
+                        // الدوران اللانهائي على رمز مرفوض في reconnect().
+                        refreshTokenThenConnect()
+                        return
+                    }
                     listener.onDisconnected()
                 }
             }
         )
     }
 
+    /** تحديث رمز الوصول عبر refresh token ثم إعادة الاتصال. */
+    private fun refreshTokenThenConnect() {
+        val refresh = tokens.refreshToken ?: run { listener.onError("UNAUTHORIZED"); return }
+        scope.launch {
+            when (val result = com.red.sovereign.auth.AuthApi(context).refresh(refresh)) {
+                is com.red.sovereign.auth.ApiResult.Success -> {
+                    tokens.updateTokens(result.value)
+                    socket = null
+                    connect()
+                }
+                is com.red.sovereign.auth.ApiResult.Error -> listener.onError("UNAUTHORIZED")
+            }
+        }
+    }
+
     fun reconnect() {
         runCatching { socket?.cancel() }
         socket = null
+        connected = false
         connect()
     }
 
-    fun isConnected(): Boolean = socket != null
+    fun isConnected(): Boolean = connected
 
     fun send(signal: CallSignal) {
         val encoded = json.encodeToString(signal)

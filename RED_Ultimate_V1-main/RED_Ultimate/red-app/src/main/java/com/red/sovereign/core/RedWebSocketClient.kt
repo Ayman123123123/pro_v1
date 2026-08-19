@@ -47,13 +47,18 @@ class RedWebSocketClient(
         })
     }
 
+    /**
+     * @return معرف الرسالة عند نجاح الإرسال، أو null عند انقطاع الـ socket.
+     * كان يرمي IllegalStateException عبر check() فينهار التطبيق إذا انقطع
+     * الاتصال بين الحشو والإرسال؛ الآن يفشل بصمت ويُسجَّل لدى المتصل.
+     */
     fun sendEncrypted(
         receiverRedId: String,
         conversationId: String,
         messageType: String,
         senderDeviceId: Int,
         encrypted: EncryptedEnvelope
-    ): String {
+    ): String? {
         val sender = requireNotNull(tokens.redId) { "RED ID is unavailable" }
         val id = UuidV7.next()
         val chat = RedProtos.ChatMessage.newBuilder()
@@ -62,16 +67,17 @@ class RedWebSocketClient(
             .setSenderDeviceId(senderDeviceId).setReceiverDeviceId(encrypted.receiverDeviceId)
             .setCiphertextType(encrypted.ciphertextType).build()
         val envelope = RedProtos.RedRED.newBuilder().setMessage(chat).build()
-        check(socket?.send(envelope.toByteArray().toByteString()) == true) { "RED WebSocket is not connected" }
-        return id
+        val sent = socket?.send(envelope.toByteArray().toByteString()) == true
+        if (!sent) android.util.Log.w("RedWebSocketClient", "sendEncrypted failed: socket not connected")
+        return if (sent) id else null
     }
 
-    fun acknowledge(messageId: String, sequence: Long, status: String) {
+    fun acknowledge(messageId: String, sequence: Long, status: String): Boolean {
         require(status == "DELIVERED" || status == "READ")
         val envelope = RedProtos.RedRED.newBuilder().setAck(
             RedProtos.MessageAck.newBuilder().setMessageId(messageId).setSequenceNumber(sequence).setStatus(status)
         ).build()
-        check(socket?.send(envelope.toByteArray().toByteString()) == true) { "RED WebSocket is not connected" }
+        return socket?.send(envelope.toByteArray().toByteString()) == true
     }
 
     fun typing(conversationId: String, targetRedId: String, active: Boolean) {

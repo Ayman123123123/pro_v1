@@ -52,6 +52,7 @@ class CallHistoryService(
             return@update
         }
         val durationMs = Duration.between(it.answeredAt, now).toMillis()
+        it.durationSeconds = durationMs / 1000
         it.status = CallStatus.ENDED
         publisher.callEnded(callId, durationMs, "NORMAL")
     }
@@ -109,7 +110,15 @@ class CallHistoryService(
                 answeredAt = call.answeredAt,
                 endedAt = call.endedAt,
                 mediaServerId = call.mediaServerId,
-                gatewayUsed = call.gatewayUsed
+                gatewayUsed = call.gatewayUsed,
+                durationSeconds = call.durationSeconds,
+                qualityScore = call.qualityScore,
+                callSource = call.callSource,
+                groupId = call.groupId,
+                roomId = call.roomId,
+                participantIds = call.participantIds,
+                hadScreenShare = call.hadScreenShare,
+                wasRecorded = call.wasRecorded
             )
         }
     }

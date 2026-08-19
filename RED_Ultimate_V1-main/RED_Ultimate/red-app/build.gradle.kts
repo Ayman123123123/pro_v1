@@ -5,9 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// ╪º┘ä┘à┘å┘ü╪░ ╪Ñ┘ä╪▓╪º┘à┘è ┘ü┘è ╪º┘ä┘é┘è┘à╪⌐ ╪º┘ä╪º┘ü╪¬╪▒╪º╪╢┘è╪⌐: ╪¿╪»┘ê┘å┘ç ┘è┘é╪╡╪» OkHttp ╪º┘ä┘à┘å┘ü╪░ 80 ╪¿┘è┘å┘à╪º
-// ╪º┘ä╪«╪º╪»┘à ┘è╪│╪¬┘à╪╣ ╪╣┘ä┘ë 8088 (╪¿┘ê╪º╪¿╪⌐ Nginx) ΓÇö ┘ü┘è┘ü╪┤┘ä ┘â┘ä ╪╖┘ä╪¿ ╪¿┘Ç NETWORK_ERROR ╪¿┘ä╪º
-// ╪│╪¿╪¿ ╪╕╪º┘ç╪▒. ╪º┘ä╪¿┘å╪º╪í ╪º┘ä╪¡┘é┘è┘é┘è ┘è┘à╪▒┘æ╪▒ -PRED_SERVER_URL=http://SERVER_IP:PORT.
+// المنفذ الإلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما الخادم
+// يستمع على 8088 (بوابة Nginx) — فيفشل كل طلب بـ NETWORK_ERROR بلا سبب ظاهر.
+// البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
 val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.0.181:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
@@ -51,11 +51,21 @@ android {
             isMinifyEnabled = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Alpha/╪Ñ╪╡╪»╪º╪▒╪º╪¬ ┘à╪º ┘é╪¿┘ä ╪º┘ä╪Ñ┘å╪¬╪º╪¼ ╪¬┘Å┘ê┘é┘Ä┘æ╪╣ ╪¿┘å┘ü╪│ ╪º┘ä┘ç┘ê┘è╪⌐ ╪º┘ä┘à╪│╪¬┘é╪▒╪⌐ ╪¿┘è┘å
-            // Docker ┘êWindows ╪¡╪¬┘ë ╪¬╪¿┘é┘ë ╪¬╪¡╪»┘è╪½╪º╪¬ APK ┘à╪¬┘ê╪º┘ü┘é╪⌐. ┘ä┘ä╪¬┘ê╪▓┘è╪╣ ╪º┘ä╪▒╪│┘à┘è ┘ä╪º╪¡┘é╪º┘ï
-            // ╪º╪│╪¬╪¿╪»┘ä ╪¿┘à╪º ┘è┘ä┘è: ┘é╪▒╪º╪í╪⌐ keystore ┘ê┘à╪╣╪▒┘æ┘ü╪º╪¬┘ç ┘à┘å ┘à╪¬╪║┘è╪▒╪º╪¬ ╪¿┘è╪ª╪⌐/┘à┘ä┘ü ╪║┘è╪▒ ┘à╪╣┘à┘ê┘ä
-            // (┘ä╪ú┘à╪º┘å ╪ú┘ü╪╢┘ä╪î ┘ä╪º ┘è┘Å╪╣╪¬┘à╪» ┘à┘ü╪¬╪º╪¡ ┘à╪╢┘à┘æ┘å ┘ü┘è ╪º┘ä┘à╪│╪¬┘ê╪»╪╣).
-            signingConfig = signingConfigs.getByName("redLocalDebug")
+            // التوقيع الرسمي يُقرأ من متغيرات بيئة/خصائص (RED_KEYSTORE_*) — لا
+            // مفاتيح إنتاج مضمنة في المستودع. إن لم تُضبط تُستخدم هوية alpha
+            // المؤقتة (مفتاح debug عام) حتى يُكمل سير العمل المحلي.
+            val keystoreFile = providers.gradleProperty("RED_KEYSTORE_FILE").orElse("").get()
+            if (keystoreFile.isNotBlank()) {
+                signingConfig = signingConfigs.create("redRelease") {
+                    storeFile = file(keystoreFile)
+                    storePassword = providers.gradleProperty("RED_KEYSTORE_PASSWORD").orElse("").get()
+                    keyAlias = providers.gradleProperty("RED_KEY_ALIAS").orElse("").get()
+                    keyPassword = providers.gradleProperty("RED_KEY_PASSWORD").orElse("").get()
+                    storeType = "PKCS12"
+                }
+            } else {
+                signingConfig = signingConfigs.getByName("redLocalDebug")
+            }
         }
     }
 
@@ -145,27 +155,27 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // ΓöÇΓöÇΓöÇ ╪«╪╖┘ê╪╖ Google (Cairo + Tajawal) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── خطوط Google (Cairo + Tajawal) ─────
     implementation(libs.androidx.compose.ui.text.google.fonts)
 
-    // ΓöÇΓöÇΓöÇ Coil ΓÇö ╪¬╪¡┘à┘è┘ä ┘ê╪╣╪▒╪╢ ╪º┘ä╪╡┘ê╪▒ ┘ê╪º┘ä┘ü┘è╪»┘è┘ê ╪¿┘â┘ü╪º╪í╪⌐ ╪╣╪º┘ä┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Coil — تحميل وعرض الصور والفيديو بكفاءة عالية ─────
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
 
-    // ΓöÇΓöÇΓöÇ Lottie ΓÇö ╪ú┘å┘è┘à┘è╪┤┘å ╪º╪¡╪¬╪▒╪º┘ü┘è (┘à╪ñ╪┤╪▒ ╪º┘ä┘â╪¬╪º╪¿╪⌐╪î ╪▒╪»┘ê╪» ╪º┘ä┘ü╪╣┘ä) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Lottie — أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) ─────
     implementation(libs.lottie.compose)
 
-    // ΓöÇΓöÇΓöÇ emoji2-emojipicker ΓÇö ┘à╪¡╪»╪» ╪º┘ä╪Ñ┘è┘à┘ê╪¼┘è ╪º┘ä╪▒╪│┘à┘è ┘à┘å Google ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── emoji2-emojipicker — محدد الإيموجي الرسمي من Google ─────
     implementation(libs.androidx.emoji2.emojipicker)
 
-    // ΓöÇΓöÇΓöÇ Paging 3 ΓÇö ╪¬╪¡┘à┘è┘ä ╪º┘ä┘à╪¡╪º╪»╪½╪º╪¬ ┘ê╪º┘ä┘à┘å╪┤┘ê╪▒╪º╪¬ ╪¿╪¬┘â╪º╪│┘ä ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Paging 3 — تحميل المحادثات والمنشورات بتكاسل ─────
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // ΓöÇΓöÇΓöÇ WorkManager ΓÇö ┘à╪▓╪º┘à┘å╪⌐ ┘ü┘è ╪º┘ä╪«┘ä┘ü┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── WorkManager — مزامنة في الخلفية ─────
     implementation(libs.androidx.work.runtime.ktx)
 
-    // ΓöÇΓöÇΓöÇ Room ΓÇö ┘é╪º╪╣╪»╪⌐ ╪¿┘è╪º┘å╪º╪¬ ┘à╪¡┘ä┘è╪⌐ ╪│┘è╪º╪»┘è╪⌐ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Room — قاعدة بيانات محلية سيادية ─────
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
     implementation(libs.androidx.room.runtime)
@@ -173,10 +183,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
-    // ΓöÇΓöÇΓöÇ Accompanist ΓÇö ╪ú╪░┘ê┘å╪º╪¬ ┘ê╪¬╪│┘ç┘è┘ä╪º╪¬ Compose ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Accompanist — أذونات وتسهيلات Compose ─────
     implementation(libs.accompanist.permissions)
 
-    // ΓöÇΓöÇΓöÇ Biometric ΓÇö ┘é┘ü┘ä ╪º┘ä╪¬╪╖╪¿┘è┘é ╪¿╪º┘ä╪¿╪╡┘à╪⌐/╪º┘ä┘ê╪¼┘ç ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+    // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
 

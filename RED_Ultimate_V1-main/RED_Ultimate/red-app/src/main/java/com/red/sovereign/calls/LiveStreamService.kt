@@ -78,6 +78,8 @@ object LiveStreamRuntime {
 
 class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, LiveStreamSignalingClient.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var reconnectAttempt = 0
+    private var reconnectJob: kotlinx.coroutines.Job? = null
     private lateinit var signaling: LiveStreamSignalingClient
     private var engine: WebRtcEngine? = null
     private var mesh: MeshRtcSession? = null
@@ -219,6 +221,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     }
 
     override fun onConnected() {
+        reconnectAttempt = 0
+        reconnectJob?.cancel()
+        reconnectJob = null
         scope.launch {
             engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
             LiveStreamRuntime.eglContext = engine?.eglContext
@@ -319,7 +324,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         when (LiveStreamRuntime.state) {
             is LiveStreamUiState.Active, is LiveStreamUiState.Connecting -> {
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
-                runCatching { signaling.reconnect(streamId) }
+                scheduleSignalingReconnect()
             }
             else -> stopStream()
         }
@@ -334,13 +339,26 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             return
         }
         if (LiveStreamRuntime.state is LiveStreamUiState.Active || LiveStreamRuntime.state is LiveStreamUiState.Connecting) {
-            runCatching { signaling.reconnect(streamId) }
+            scheduleSignalingReconnect()
             return
         }
         LiveStreamRuntime.state = LiveStreamUiState.Error(message)
         scope.launch {
             kotlinx.coroutines.delay(3000)
             if (LiveStreamRuntime.state is LiveStreamUiState.Error) stopStream()
+        }
+    }
+
+    /** إعادة اتصال بتراجع أسي (1s→2s→…→30s) بدل القصف الفوري المتكرر عند انقطاع الإشارة. */
+    private fun scheduleSignalingReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            val delayMs = (1000L * (1 shl reconnectAttempt.coerceAtMost(5))).coerceAtMost(30_000L)
+            reconnectAttempt++
+            kotlinx.coroutines.delay(delayMs)
+            if (LiveStreamRuntime.state is LiveStreamUiState.Active || LiveStreamRuntime.state is LiveStreamUiState.Connecting) {
+                runCatching { signaling.reconnect(streamId) }
+            }
         }
     }
 

@@ -50,13 +50,24 @@ object EmergencyCallManager {
         }
 
         if (primary.isGsm) {
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${primary.numberOrRedId}")).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            runCatching {
-                context.startActivity(intent)
-            }.onFailure {
-                // Fallback to DIAL
+            // إجراء المكالمة يتطلب CALL_PHONE — بدونه ينهار التطبيق بـ SecurityException.
+            // إن لم يُمنح الإذن نكتفي بشاشة الطلب (DIAL) التي لا تحتاج إذناً.
+            val hasCallPermission =
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasCallPermission) {
+                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${primary.numberOrRedId}")).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                runCatching {
+                    context.startActivity(intent)
+                }.onFailure {
+                    val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${primary.numberOrRedId}")).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(dialIntent)
+                }
+            } else {
                 val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${primary.numberOrRedId}")).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }

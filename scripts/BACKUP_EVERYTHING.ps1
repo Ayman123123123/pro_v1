@@ -1,4 +1,4 @@
-# ═══════════════════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════════════════
 #  BACKUP_EVERYTHING.ps1  —  حفظ كل شيء من pro_new بلا فقدان حرف واحد
 # ═══════════════════════════════════════════════════════════════════════════
 #  التشغيل:
@@ -14,6 +14,9 @@
 #  لا يحذف شيئاً. لا يعدّل أي فرع قائم. آمن 100%.
 # ═══════════════════════════════════════════════════════════════════════════
 
+param(
+  [switch]$Push
+)
 $ErrorActionPreference = "Continue"
 $ProgressPreference    = "SilentlyContinue"
 
@@ -113,10 +116,15 @@ Say "    ملفات مجهّزة للالتزام: $staged" "Cyan"
 git commit -m "نسخة كاملة من pro_new: كل الملفات بلا استثناء ($stamp)" 2>&1 |
     Select-Object -First 3 | ForEach-Object { Say "    $_" "DarkGray" }
 
-Say "`n    جاري الرفع إلى GitHub (قد يستغرق عدة دقائق)..." "Yellow"
-git config http.postBuffer 524288000
-git push origin "HEAD:refs/heads/$branch" 2>&1 |
-    ForEach-Object { Say "    $_" "DarkGray" }
+if (-not $Push) {
+    Say "`n    تم الالتزام محلياً فقط — الرفع إلى GitHub معطّل افتراضياً (أمان)." "Yellow"
+    Say "    أعد التشغيل مع -Push لرفع الفرع $branch" "Yellow"
+} else {
+    Say "`n    جاري الرفع إلى GitHub (قد يستغرق عدة دقائق)..." "Yellow"
+    git config http.postBuffer 524288000
+    git push origin "HEAD:refs/heads/$branch" 2>&1 |
+        ForEach-Object { Say "    $_" "DarkGray" }
+}
 
 # ═══ [5] تقرير التحقق ══════════════════════════════════════════════════════
 Say "`n[5/5] التحقق من عدم فقدان أي ملف..." "Yellow"

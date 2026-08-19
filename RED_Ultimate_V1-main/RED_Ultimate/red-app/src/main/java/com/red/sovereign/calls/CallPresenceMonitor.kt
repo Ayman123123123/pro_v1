@@ -77,7 +77,7 @@ class CallPresenceMonitor(
         val newPresence = when (signalType) {
             CallSignal.RINGING, "RINGING" -> {
                 state.ringingConfirmed.set(true)
-                deliveryEngine.onDeliveryAckReceived()
+                deliveryEngine.onDeliveryAckReceived(callId)
                 PresenceState.RINGING
             }
             CallSignal.ANSWER, "ANSWER" -> PresenceState.ANSWERED

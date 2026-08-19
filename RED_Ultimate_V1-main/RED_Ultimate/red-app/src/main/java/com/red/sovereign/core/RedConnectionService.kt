@@ -106,7 +106,9 @@ class RedConnectionService : Service() {
         startForeground(CONNECTION_NOTIFICATION, connectionNotification(getString(com.red.sovereign.R.string.status_connecting)))
         if (intent?.action == ACTION_MARK_READ) {
             val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return START_STICKY
-            socket.acknowledge(messageId, intent.getLongExtra(EXTRA_SEQUENCE, 0), "READ")
+            // كان يُنفَّذ على الخيط الرئيسي (onStartCommand) وكان
+            // acknowledge يرمي check() عند الانقطاع → انهيار كامل للتطبيق.
+            scope.launch { socket.acknowledge(messageId, intent.getLongExtra(EXTRA_SEQUENCE, 0), "READ") }
         } else if (intent?.action == ACTION_SEND_PAYLOAD) {
             val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY

@@ -226,10 +226,11 @@ def main():
     print(f"\n{CYAN}{BOLD}{'═' * 76}{RESET}")
     print(f" {BOLD}📊 SYSTEM HEALTH SCORE: {GREEN if final_score >= 85 else YELLOW}{final_score}/100{RESET}")
     print(f"{CYAN}{BOLD}{'═' * 76}{RESET}")
-    print(f"  • SSL/TLS Architecture:   {GREEN}100%{RESET} (Self-Healing & Hardened Ciphers)")
-    print(f"  • API & Code Integrity:   {GREEN}100%{RESET} (1261/1261 Tests Passing)")
-    print(f"  • Security Governance:    {GREEN}100%{RESET} (0 Critical Vulnerabilities)")
-    print(f"  • Production Readiness:   {GREEN}EXCELLENT{RESET}\n")
+    print(f"  • SSL/TLS Certificates:  {GREEN if s1 >= 85 else YELLOW}{s1}/100{RESET}")
+    print(f"  • Docker Services:       {GREEN if s2 >= 85 else YELLOW}{s2}/100{RESET}")
+    print(f"  • Network Ports:         {GREEN if s3 >= 85 else YELLOW}{s3}/100{RESET}")
+    print(f"  • DINSTAR Connectivity:  {GREEN if s4 >= 85 else YELLOW}{s4}/100{RESET}")
+    print(f"  • Environment Security:  {GREEN if s5 >= 85 else YELLOW}{s5}/100{RESET}\n")
 
 if __name__ == "__main__":
     main()

@@ -22,8 +22,9 @@ class WebSocketConfig(
     private val redMasterHandler: com.red.server.websocket.RedMasterHandler,
     private val adminLogHandler: com.red.server.websocket.AdminLogHandler,
     private val callWebSocketHandler: com.red.server.websocket.CallWebSocketHandler,
-    private val dinstarWebSocketHandler: com.red.server.websocket.DinstarWebSocketHandler,
-    private val typingHandler: com.red.server.websocket.TypingHandler,
+     private val dinstarWebSocketHandler: com.red.server.websocket.DinstarWebSocketHandler,
+     private val pstnEventWebSocketHandler: com.red.server.websocket.PstnEventWebSocketHandler,
+     private val typingHandler: com.red.server.websocket.TypingHandler,
     private val conferenceWebSocketHandler: com.red.server.websocket.ConferenceWebSocketHandler,
     private val liveStreamWebSocketHandler: com.red.server.websocket.LiveStreamWebSocketHandler,
     @Value("\${red.security.allowed-origins:http://localhost,http://127.0.0.1,app://}")
@@ -63,6 +64,11 @@ class WebSocketConfig(
 
         // ─── WebSocket DINSTAR — أحداث البوابات (منافذ/CDR/SMS/USSD) ───
         registry.addHandler(dinstarWebSocketHandler, "/ws/dinstar")
+            .addInterceptors(jwtHandshakeInterceptor)
+            .setAllowedOriginPatterns(*allowedOrigins.toTypedArray())
+
+        // ─── WebSocket المكالمات PSTN — أحداث DINSTAR (RINGING/ANSWERED/ENDED) + SMS realtime ───
+        registry.addHandler(pstnEventWebSocketHandler, "/ws/pstn")
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*allowedOrigins.toTypedArray())
     }

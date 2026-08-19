@@ -143,6 +143,15 @@ red:
   pstn:
     daily-limit-default: 100
     signal-threshold: 20
+    # سر تسجيل WebRTC في Asterisk — يُقرأ من WEBRTC_SIP_SECRET (نفس القيمة
+    # التي يولّد منها docker-entrypoint.sh auth password لنظير red-webrtc-client).
+    # ملاحظة: docker-compose يمرّر WEBRTC_SIP_SECRET لكلٍ من backend و pstn-gateway
+    # بنفس القيمة؛ أي اختلاف بينهما يجعل SIP REGISTER يفشل بـ 401/403.
+    sip-secret: ${WEBRTC_SIP_SECRET:red-secret-token}
+    bridge-secret-ttl-minutes: ${PSTN_BRIDGE_SECRET_TTL_MINUTES:60}
+    turn-url: ${PSTN_TURN_URL:}
+    turn-username: ${PSTN_TURN_USERNAME:}
+    turn-password: ${PSTN_TURN_PASSWORD:}
     # WebRTC-PSTN bridge: Asterisk WSS endpoint visible to the Android app.
     # Behind nginx this is typically wss://host:8443/ws/sip; direct is ws://host:8089/ws
     wss-url: ${ASTERISK_WSS_URL:wss://localhost:8089/ws}

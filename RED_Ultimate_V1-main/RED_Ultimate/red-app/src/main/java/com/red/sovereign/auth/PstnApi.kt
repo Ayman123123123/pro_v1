@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 
 @Serializable
 data class BridgeResponse(
+    val callId: String,
     val sipServer: String,
     val sipUsername: String,
     val sipPassword: String,
@@ -68,6 +69,13 @@ class PstnApi(private val tokens: TokenStore) {
         }
     }
 
+    suspend fun hangupBridge(callId: String): ApiResult<Boolean> {
+        return when (val result = client.request("POST", "/api/pstn/bridge/$callId/hangup", "")) {
+            is ApiResult.Success -> ApiResult.Success(result.code, true)
+            is ApiResult.Error -> result
+        }
+    }
+
     suspend fun bridge(number: String): ApiResult<BridgeResponse> {
         return when (val result = client.request("POST", "/api/pstn/bridge", json.encodeToString(mapOf("number" to number)))) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<BridgeResponse>(result.value)) }
@@ -95,13 +103,6 @@ class PstnApi(private val tokens: TokenStore) {
         return when (val result = client.request("GET", "/api/admin/dinstar/sms/incoming", "")) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsIncomingResponse>(result.value).messages) }
                 .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
-
-    suspend fun hangup(callId: String): ApiResult<Boolean> {
-        return when (val result = client.request("POST", "/api/pstn/calls/$callId/hangup", "")) {
-            is ApiResult.Success -> ApiResult.Success(result.code, true)
             is ApiResult.Error -> result
         }
     }

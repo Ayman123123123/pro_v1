@@ -1,0 +1,45 @@
+name: red-sovereign
+
+# إعادة تشغيل pstn-gateway على مضيف بلا /dev/ttyUSB* (Windows Docker Desktop).
+# تُزال devices من الخدمة، ويُبقي كل شيء آخر مطابقًا لـ docker-compose.yml.
+services:
+  pstn-gateway:
+    build: ./pstn-asterisk
+    image: red-pstn-gateway:local
+    container_name: red-pstn-gateway
+    restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    environment:
+      - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - DINSTAR_IPS=${DINSTAR_IPS:-192.168.11.1}
+      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
+      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      - DINSTAR_USB_DEVICES=${DINSTAR_USB_DEVICES:-}
+      - DONGLE_SMSCENTER=${DONGLE_SMSCENTER:-+967712345678}
+      - EXTERNAL_MEDIA_ADDRESS=${TURN_PUBLIC_HOST:-}
+      - EXTERNAL_SIGNALING_ADDRESS=${TURN_PUBLIC_HOST:-}
+      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
+      - ASTERISK_WSS_PORT=8089
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-webrtc-secret}
+    ports:
+      - "5060:5060/udp"
+      - "8089:8088"
+      - "10000-10100:10000-10100/udp"
+    expose: ["5038"]
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks: ["red-net"]
+
+networks:
+  red-net:
+    external: true
+    name: red-sovereign_red-net

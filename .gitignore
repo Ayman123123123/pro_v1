@@ -1,4 +1,4 @@
-﻿# Build outputs
+# Build outputs
 **/build/
 .gradle/
 local.properties
@@ -18,3 +18,15 @@ pro/RED_Ultimate_V1-main/app/src/screenshotTest*/
 RED_Ultimate_V1-main/RED_Ultimate/.gradle_user_home/
 .gradle_user_home/
 pro-backup-before-sync/
+
+# Local-only build/session artifacts (untracked 2026-08-18)
+app.jar
+.gradle_home/
+.android_home/
+upload-clean/
+/backend-server/
+cookies.txt
+dinstar_cookies.txt
+
+# External agent scratch/plans
+.kilo/

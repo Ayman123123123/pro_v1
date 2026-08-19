@@ -24,8 +24,6 @@ import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.audio.JavaAudioDeviceModule
-import com.red.sovereign.calls.WebRtcSipClient
-import java.util.UUID
 
 /**
  * Manages a WebRTC PeerConnection to Asterisk for PSTN calling via WSS.
@@ -52,17 +50,23 @@ class PstnWebRtcManager(private val context: Context) {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val egl = EglBase.create()
+    private var egl: EglBase? = EglBase.create()
     private var factory: PeerConnectionFactory? = null
     private var peer: PeerConnection? = null
     private var audioDevice: JavaAudioDeviceModule? = null
     private var sipClient: WebRtcSipClient? = null
     private var callId: String? = null
+    private var activeEvents: Events? = null
+    private var activeBridge: BridgeResponse? = null
+    private var pendingIncomingSdp: String? = null
 
     @Volatile
     var state: PstnCallState = PstnCallState.IDLE; private set
     var localAudioTrack: org.webrtc.AudioTrack? = null; private set
     var lastLocalSdp: String? = null; private set
+
+    /** callId الحقيقي من استجابة الخادم — يُعرض في واجهة المكالمة. */
+    val currentCallId: String? get() = callId
 
     var isMuted: Boolean = false
         set(value) {
@@ -78,6 +82,7 @@ class PstnWebRtcManager(private val context: Context) {
 
     private fun ensureFactory() {
         if (factory != null) return
+        if (egl == null) egl = EglBase.create()
         WebRtcBootstrap.ensure(context)
         audioDevice = JavaAudioDeviceModule.builder(context)
             .setUseHardwareAcousticEchoCanceler(false)
@@ -85,8 +90,8 @@ class PstnWebRtcManager(private val context: Context) {
             .createAudioDeviceModule()
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDevice)
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl!!.eglBaseContext, true, true))
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl!!.eglBaseContext))
             .createPeerConnectionFactory()
     }
 
@@ -101,6 +106,7 @@ class PstnWebRtcManager(private val context: Context) {
             return@withContext state
         }
         state = PstnCallState.BRIDGING
+        activeEvents = events
 
         val api = PstnApi(TokenStore(context))
         val bridge = when (val result = api.bridge(number)) {
@@ -113,7 +119,10 @@ class PstnWebRtcManager(private val context: Context) {
             }
         }
 
-        callId = UUID.randomUUID().toString()
+        // Use the callId from the bridge response so the backend (PstnBridgeController)
+        // can match this call for hangup and history tracking.
+        callId = bridge.callId
+        activeBridge = bridge
 
         ensureFactory()
 
@@ -171,18 +180,18 @@ class PstnWebRtcManager(private val context: Context) {
                 events.onAnswered(bridge.usedToday, bridge.dailyLimit)
             }
             override fun onIncomingInvite(sdp: String, fromNumber: String) {
+                // لا ردّ تلقائي: تُحضَّر الإجابة محليًا ويُترك القرار للمستخدم.
+                // sendAck يُرسَل فقط عند القبول عبر answerIncoming().
                 state = PstnCallState.INVITING
+                pendingIncomingSdp = sdp
+                val pcLocal = pc
                 val remoteSdp = SessionDescription(SessionDescription.Type.OFFER, sdp)
-                pc.setRemoteDescription(object : org.webrtc.SdpObserver {
+                pcLocal.setRemoteDescription(object : org.webrtc.SdpObserver {
                     override fun onSetSuccess() {
-                        pc.createAnswer(object : org.webrtc.SdpObserver {
+                        pcLocal.createAnswer(object : org.webrtc.SdpObserver {
                             override fun onCreateSuccess(answerSdp: SessionDescription) {
-                                pc.setLocalDescription(object : org.webrtc.SdpObserver {
-                                    override fun onSetSuccess() {
-                                        sipClient?.sendAck()
-                                        state = PstnCallState.ACTIVE
-                                        events.onAnswered(bridge.usedToday, bridge.dailyLimit)
-                                    }
+                                pcLocal.setLocalDescription(object : org.webrtc.SdpObserver {
+                                    override fun onSetSuccess() = Unit
                                     override fun onSetFailure(error: String) {
                                         events.onError("SET_ANSWER_FAILED: $error")
                                     }
@@ -218,7 +227,7 @@ class PstnWebRtcManager(private val context: Context) {
         })
 
         sipClient?.register(
-            sipServer = bridge.sipServer,
+            sipCandidates(bridge.sipServer),
             username = bridge.sipUsername,
             password = bridge.sipPassword
         )
@@ -226,18 +235,86 @@ class PstnWebRtcManager(private val context: Context) {
         state
     }
 
+    /**
+     * قائمة عناوين WSS لتسجيل SIP — يُجرَّب الأول فالأول:
+     * 1. العنوان الصادر من الخادم (ASTERISK_WSS_URL في الإعدادات — عام عند الإنتاج).
+     * 2. عناوين مشتقّة من عنوان API الذي يستخدمه التطبيق بالفعل:
+     *    - http://host:port  → ws://host:8089/ws   (Asterisk مباشرة على الـ LAN)
+     *    - https://host:port → wss://host/ws/sip   (nginx العام)
+     *      و wss://host:8443/ws/sip كاحتياط.
+     */
+    private fun sipCandidates(primary: String): List<String> {
+        val out = LinkedHashSet<String>()
+        out.add(primary)
+        val apiBase = runCatching { com.red.sovereign.core.ServerEndpoint.url() }.getOrNull()
+        if (!apiBase.isNullOrBlank()) {
+            try {
+                val uri = java.net.URI(apiBase)
+                val host = uri.host ?: return out.toList()
+                when (uri.scheme) {
+                    "https" -> {
+                        out.add("wss://$host/ws/sip")
+                        if (uri.port > 0 && uri.port != 443) out.add("wss://$host:${uri.port}/ws/sip")
+                        out.add("wss://$host:8443/ws/sip")
+                    }
+                    "http" -> {
+                        out.add("ws://$host:8089/ws")
+                    }
+                }
+            } catch (_: Exception) {
+                // العنوان الأساسي يبقى — المشتقات تجريبية فقط.
+            }
+        }
+        return out.toList()
+    }
+
     fun hangup() {
         if (state == PstnCallState.IDLE || state == PstnCallState.ENDED) return
         sipClient?.bye()
-        // Also notify backend to release the port lock
-        val callId = this.callId ?: return
-        scope.launch {
-            runCatching {
-                val api = PstnApi(TokenStore(context))
-                api.hangup(callId)
+        val callId = this.callId
+        state = PstnCallState.ENDED
+        // تحرير الموارد فورًا بدل انتظار رد BYE من الخادم.
+        release()
+        if (callId != null) {
+            scope.launch {
+                runCatching {
+                    val api = PstnApi(TokenStore(context))
+                    // Use bridge hangup endpoint (sets the right active-call key)
+                    api.hangupBridge(callId)
+                }
             }
         }
-        state = PstnCallState.ENDED
+    }
+
+    /**
+     * Accept an incoming PSTN call. The answer SDP was prepared when the
+     * INVITE arrived; accepting sends the ACK carrying the answer so the
+     * call becomes active on both sides.
+     */
+    fun answerIncoming(offerSdp: String? = null) {
+        if (state == PstnCallState.INVITING) {
+            sipClient?.sendAck()
+            state = PstnCallState.ACTIVE
+            val bridge = activeBridge
+            val events = activeEvents
+            if (bridge != null && events != null) {
+                events.onAnswered(bridge.usedToday, bridge.dailyLimit)
+            }
+            pendingIncomingSdp = null
+        }
+    }
+
+    /**
+     * Reject an incoming PSTN call: 486 Busy Here + full cleanup.
+     */
+    fun rejectIncoming() {
+        if (state == PstnCallState.INVITING) {
+            runCatching<Unit> { sipClient?.rejectIncoming() }
+            pendingIncomingSdp = null
+            state = PstnCallState.ENDED
+            activeEvents?.onHangup("CALL_REJECTED")
+            release()
+        }
     }
 
     fun release() {
@@ -252,7 +329,12 @@ class PstnWebRtcManager(private val context: Context) {
         audioDevice = null
         factory?.dispose()
         factory = null
-        egl.release()
+        egl?.release()
+        egl = null
+        activeEvents = null
+        activeBridge = null
+        pendingIncomingSdp = null
+        callId = null
         state = PstnCallState.IDLE
     }
 
@@ -263,6 +345,9 @@ class PstnWebRtcManager(private val context: Context) {
                 if (this@PstnWebRtcManager.state == PstnCallState.ACTIVE) {
                     this@PstnWebRtcManager.state = PstnCallState.ENDED
                     events.onHangup("ICE_DISCONNECTED")
+                    // تحرير كامل للموارد — كان يترك PeerConnection/EglBase
+                    // يتسربان بعد كل انقطاع ICE.
+                    release()
                 }
             }
         }

@@ -11,7 +11,8 @@ import java.net.URI
 
 /** Process-wide endpoint selected from a signed build default or verified local discovery. */
 object ServerEndpoint {
-    @Volatile private var current = normalize(BuildConfig.RED_SERVER_URL)
+    @Volatile private var current = runCatching { normalize(BuildConfig.RED_SERVER_URL) }
+        .getOrElse { normalize("http://127.0.0.1:8088") }
     private const val KEY = "server_url"
     private var onEndpointChangedListener: ((String) -> Unit)? = null
 
@@ -54,6 +55,22 @@ object ServerEndpoint {
         require(uri.scheme == "http" || uri.scheme == "https") { "Server URL must use HTTP(S)" }
         require(!uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) { "Invalid server URL" }
         require(uri.path.isNullOrBlank() || uri.path == "/") { "Server URL must not contain a path" }
+        if (uri.scheme == "http") {
+            // cleartext HTTP مسموح فقط لعناوين الشبكة المحلية (LAN/محاكي) —
+            // لا لأي خادم عام على الإنترنت. هذا الحارس يكمّل قاعدة
+            // network_security_config التي لا يمكنها مطابقة عناوين IP الحرفية.
+            require(isLocalCleartextHost(uri.host)) { "Cleartext HTTP allowed only for local (LAN) servers" }
+        }
         return URI(uri.scheme, null, uri.host, uri.port, null, null, null).toString().trimEnd('/')
+    }
+
+    /** فحص حرفي (بدون DNS) لأن cleartext محلي فقط: localhost، مضيف المحاكي، أو نطاق خاص. */
+    private fun isLocalCleartextHost(host: String): Boolean {
+        if (host == "localhost" || host == "10.0.2.2" || host.endsWith(".local")) return true
+        val octets = host.split('.').mapNotNull { it.toIntOrNull() }
+        if (octets.size != 4 || octets.any { it !in 0..255 }) return false
+        return octets[0] == 127 || octets[0] == 10 ||
+            (octets[0] == 192 && octets[1] == 168) ||
+            (octets[0] == 172 && octets[1] in 16..31)
     }
 }

@@ -6,6 +6,7 @@ import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.slf4j.LoggerFactory
+import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.scheduling.annotation.Async
 import org.springframework.stereotype.Service
@@ -52,7 +53,18 @@ class PstnCallService(
         if (used > user.pstnDailyLimit) {
             redis.opsForValue().decrement(key)
             log.warn("PSTN daily limit reached for user {} ({}/{})", user.redId, used - 1, user.pstnDailyLimit)
-            throw IllegalArgumentException("Daily PSTN call limit reached ($used/${user.pstnDailyLimit})")
+            throw com.red.server.auth.RateLimitExceededException()
+        }
+
+        // حجز ذرّي قبل أي استهلاك للمنافذ: SETNX يمنع مكالمتين متزامنتين
+        // لنفس المستخدم من عبور الفحص معًا وحجز المنفذ نفسه (TOCTOU).
+        val reservationId = UUID.randomUUID().toString()
+        val reserved = redis.opsForValue().setIfAbsent(
+            activeKey(user.id), "$reservationId:reserving:0", Duration.ofMinutes(30)
+        )
+        if (reserved != true) {
+            redis.opsForValue().decrement(key)
+            throw IllegalStateException("ALREADY_IN_PSTN_CALL")
         }
 
         return runCatching {
@@ -66,6 +78,7 @@ class PstnCallService(
             // ربط المنفذ الفعلي بالمستخدم لضمان أن الإنهاء اللاحق يُحرر
             // منفذ هذه المكالمة فقط، لا أي منفذ اعتباطي عبر الأسطول.
             redis.opsForValue().set(activeKey(user.id), "${actionId}:${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
+            redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, portIdx)
         }.getOrElse {
             redis.opsForValue().decrement(key)
@@ -95,15 +108,7 @@ class PstnCallService(
         val raw = redis.opsForValue().get(activeKey(userId)) ?: return loadBalancer.resolveActiveCall(userId)?.let {
             Triple(it.first, it.second, it.third)
         }
-        val parts = raw.split(":")
-        if (parts.size != 3) return null
-        return try {
-            Triple(
-                parts[0],
-                parts[1].toInt(),
-                UUID.fromString(parts[2])
-            )
-        } catch (_: Exception) { null }
+        return PstnActiveCallKeys.parse(raw)?.let { Triple(it.first, it.second, it.third) }
     }
 
     /**
@@ -128,12 +133,35 @@ class PstnCallService(
     }
 
     fun clearActive(userId: UUID) {
+        val raw = redis.opsForValue().get(activeKey(userId))
         redis.delete(activeKey(userId))
+        raw?.split(":")?.firstOrNull()?.let { redis.delete(callUserKey(it)) }
     }
 
     private fun activeKey(userId: UUID) = "red:pstn:active:$userId"
+    private fun callUserKey(callId: String) = "red:pstn:calluser:$callId"
 
-    private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
+    /**
+     * Resolves which user owns a given callId (set at dial time).
+     * Returns null if the call is unknown or already expired.
+     */
+    fun findUserByCallId(callId: String): UUID? =
+        redis.opsForValue().get(callUserKey(callId))?.let { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
+
+     private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
+
+    /**
+     * Consumes PstnRetryEvent published by DindarEventListener when a PSTN
+     * call fails while still ringing (e.g. no signal on the selected port).
+     * Delegates to the @Async handleRetry which schedules reconnection
+     * with exponential backoff.
+     */
+    @EventListener
+    @Async
+    fun onPstnRetryEvent(event: PstnRetryEvent) {
+        log.info("Received PstnRetryEvent for callId={} user={} port={}", event.callId, event.userId, event.port)
+        handleRetry(event)
+    }
 
     /**
      * Retry scheduling for a failed PSTN call — fires asynchronously

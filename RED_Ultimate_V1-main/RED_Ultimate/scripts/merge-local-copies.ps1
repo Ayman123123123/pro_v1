@@ -4,7 +4,11 @@
 # Scans every project folder on this machine, copies every unique/newer file
 # into Pictures\pro, commits everything, and pushes to branch "local-full-merge".
 #
-# Run:  powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1
+# SAFETY: pushing is disabled by default. Run with -Push to enable it:
+# Run:  powershell -ExecutionPolicy Bypass -File merge-local-copies.ps1 -Push
+param(
+  [switch]$Push
+)
 $ErrorActionPreference = "Continue"
 
 $dest = "C:\Users\hpc01\Pictures\pro"
@@ -68,7 +72,13 @@ git add -A
 git commit -m "Merged all local copies into one unified project" --allow-empty | Out-Null
 Write-Host "   OK - committed"
 
-# --- 4) Push to GitHub on new branch local-full-merge ----------------------
+# --- 4) Push to GitHub (OPT-IN: requires -Push) ------------------------------
+if (-not $Push) {
+  Write-Host ""
+  Write-Host "[4/4] SKIPPED - pushing to GitHub is disabled by default."
+  Write-Host "       Re-run with -Push to push branch local-full-merge."
+  exit 0
+}
 Write-Host ""
 Write-Host "[4/4] Pushing to GitHub (new branch: local-full-merge)..."
 git push origin HEAD:local-full-merge 2>&1 | ForEach-Object { Write-Host "   $_" }

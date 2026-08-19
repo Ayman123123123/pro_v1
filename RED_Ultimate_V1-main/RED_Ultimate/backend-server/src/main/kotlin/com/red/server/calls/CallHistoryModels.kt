@@ -18,7 +18,15 @@ data class CallHistoryDocument(
     var answeredAt: Instant? = null,
     var endedAt: Instant? = null,
     var mediaServerId: String? = null,
-    var gatewayUsed: String? = null
+    var gatewayUsed: String? = null,
+    var durationSeconds: Long = 0L,
+    var qualityScore: Float = 0f,
+    var callSource: String = "PRIVATE",
+    var groupId: String? = null,
+    var roomId: String? = null,
+    var participantIds: List<String> = emptyList(),
+    var hadScreenShare: Boolean = false,
+    var wasRecorded: Boolean = false
 )
 
 enum class CallType { AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, LIVE_STREAM, SPACE }
@@ -37,5 +45,13 @@ data class CallHistoryItem(
     val answeredAt: Instant?,
     val endedAt: Instant?,
     val mediaServerId: String? = null,
-    val gatewayUsed: String? = null
+    val gatewayUsed: String? = null,
+    val durationSeconds: Long = 0L,
+    val qualityScore: Float = 0f,
+    val callSource: String = "PRIVATE",
+    val groupId: String? = null,
+    val roomId: String? = null,
+    val participantIds: List<String> = emptyList(),
+    val hadScreenShare: Boolean = false,
+    val wasRecorded: Boolean = false
 )

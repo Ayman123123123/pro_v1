@@ -13,6 +13,8 @@ import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
 import java.security.MessageDigest
+import java.util.Timer
+import java.util.TimerTask
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
@@ -59,9 +61,25 @@ class WebRtcSipClient(
     private var inviteTarget: String? = null
     private var pendingNonce: String? = null
     private var pendingRealm: String? = null
+    private var lastIncomingRequest: String? = null
+    private var disposed = false
+
+    // ── Multi-candidate WSS failover ─────────────────────────────────────
+    // التطبيق قد يصل إلى Asterisk عبر عدة عناوين (LAN مباشر / نطاق عام عبر
+    // nginx). تُجرَّب العناوين تسلسلياً مع مهلة اتصال لكل عنوان، ويُكمل
+    // التسجيل (REGISTER) عند نجاح أي منها.
+    private var pendingCandidates: List<String>? = null
+    private var candidateIndex = 0
+    private var connectTimer: Timer? = null
+    private val attemptGuard = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    companion object {
+        private const val SIP_CONNECT_TIMEOUT_MS = 12_000L
+    }
 
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (attemptGuard.getAndSet(false)) connectTimer?.cancel()
             sendRegister()
         }
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -72,19 +90,72 @@ class WebRtcSipClient(
         }
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             webSocket.close(1000, null)
-            events.onError("SIP_CONNECTION_CLOSED: $reason")
+            if (disposed || webSocket !== ws) return
+            // الخادم أغلق الاتصال قبل اكتمال التسجيل — جرب العنوان التالي.
+            if (attemptGuard.getAndSet(false)) {
+                connectTimer?.cancel()
+                val candidates = pendingCandidates
+                if (candidates != null && candidateIndex + 1 < candidates.size) {
+                    tryConnect(candidates, candidateIndex + 1)
+                } else {
+                    events.onError("SIP_CONNECTION_CLOSED: $reason")
+                }
+            }
         }
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            events.onError("SIP_WEBSOCKET_ERROR: ${t.message}")
+            if (disposed || webSocket !== ws) return
+            if (attemptGuard.getAndSet(false)) {
+                connectTimer?.cancel()
+                val candidates = pendingCandidates
+                if (candidates != null && candidateIndex + 1 < candidates.size) {
+                    tryConnect(candidates, candidateIndex + 1)
+                } else {
+                    events.onError("SIP_WEBSOCKET_ERROR: ${t.message}")
+                }
+            }
         }
     }
 
     fun register(sipServer: String, username: String, password: String) {
-        this.sipServer = sipServer
+        register(listOf(sipServer), username, password)
+    }
+
+    /**
+     * سجل لدى أول عنوان WSS ينجح الاتصال به (تسلسلياً مع مهلة).
+     * عند فشل جميع العناوين يُبعث onError("SIP_REGISTER_FAILED_ALL").
+     */
+    fun register(candidates: List<String>, username: String, password: String) {
         this.username = username
         this.password = password
+        pendingCandidates = candidates
+        tryConnect(candidates, 0)
+    }
+
+    private fun tryConnect(candidates: List<String>, index: Int) {
+        if (disposed) return
+        if (index >= candidates.size) {
+            events.onError("SIP_REGISTER_FAILED_ALL")
+            return
+        }
+        sipServer = candidates[index]
+        candidateIndex = index
         callId = UUID.randomUUID().toString()
         fromTag = Random.nextBytes(8).joinToString("") { "%02x".format(it) }
+        branch = generateBranch()
+
+        attemptGuard.set(true)
+        connectTimer?.cancel()
+        connectTimer = Timer("sip-connect-timeout", false).apply {
+            schedule(object : TimerTask() {
+                override fun run() {
+                    if (attemptGuard.getAndSet(false)) {
+                        runCatching { ws?.close(1000, "timeout") }
+                        ws = null
+                        tryConnect(candidates, candidateIndex + 1)
+                    }
+                }
+            }, SIP_CONNECT_TIMEOUT_MS)
+        }
 
         val request = Request.Builder()
             .url(sipServer)
@@ -135,6 +206,9 @@ class WebRtcSipClient(
     }
 
     fun dispose() {
+        disposed = true
+        connectTimer?.cancel()
+        connectTimer = null
         ws?.close(1000, "dispose")
         ws = null
     }
@@ -323,6 +397,7 @@ class WebRtcSipClient(
 
             // Incoming INVITE → incoming PSTN call via WebRTC
             method == "INVITE" -> {
+                lastIncomingRequest = message
                 val sdpMatch = Regex("\\r\\n\\r\\n(.*)", RegexOption.DOT_MATCHES_ALL).find(message)
                 val remoteSdp = sdpMatch?.groupValues?.get(1)
                 val fromHeader = message.lines().find { it.startsWith("From:", ignoreCase = true) }
@@ -431,6 +506,16 @@ class WebRtcSipClient(
             append("\r\n")
         }
         ws?.send(msg)
+    }
+
+    /**
+     * Reject an incoming INVITE with 486 Busy Here.
+     * Uses the last stored incoming INVITE message (set in the INVITE handler).
+     */
+    fun rejectIncoming() {
+        val request = lastIncomingRequest
+        if (request != null) sendResponse(486, "Busy Here", request)
+        lastIncomingRequest = null
     }
 
     private fun sendResponse(statusCode: Int, reason: String, request: String) {

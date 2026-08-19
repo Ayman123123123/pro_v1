@@ -49,7 +49,8 @@ class SmsReceiver : BroadcastReceiver() {
         val sender = sms.originatingAddress
         val body = sms.messageBody
 
-        log("Incoming SMS from: $sender - Body: $body")
+        // لا تُسجَّل محتويات الرسائل في Logcat — كانت تسرّب نصوص SMS حساسة
+        log("Incoming SMS from: $sender (${body?.length ?: 0} chars)")
 
         // Create intent to deliver to activity/ViewModel
         val resultIntent = android.content.Intent("com.red.sovereign.SMS_RECEIVED")

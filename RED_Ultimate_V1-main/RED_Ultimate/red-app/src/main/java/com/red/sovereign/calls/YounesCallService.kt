@@ -56,6 +56,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var mode = "VOICE"
     private var outgoingPending = false
     private var incomingOffer: CallSignal? = null
+    /** آخر عرض وارد (يبقى محفوظاً حتى بعد مسح incomingOffer عند الإلغاء) — لتسجيل الاتجاه الصحيح في السجل المحلي */
+    private var lastIncomingOffer: CallSignal? = null
     private var pendingSecondOffer: CallSignal? = null
     private val pendingIce = java.util.concurrent.CopyOnWriteArrayList<IceCandidate>()
     @Volatile
@@ -165,9 +167,23 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 // أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء PSTN
                 if (CallRuntime.state is CallUiState.Incoming) startRingtone()
             }
-            ACTION_STOP -> { signaling.close(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+            ACTION_STOP -> {
+                // تنظيف كامل عند إيقاف الخدمة يدوياً (من الإشعار أو النظام) —
+                // يضمن عدم بقاء مكالمة وهمية أو تسجيل أو رنة في الخلفية.
+                clearRingTimeout()
+                stopRingback()
+                stopRingtone()
+                failedIceJob?.cancel(); failedIceJob = null
+                statsJob?.cancel(); statsJob = null
+                CallRuntime.state = CallUiState.Idle
+                endCallCore(sendSignal = false)
+                signaling.close()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
-        return START_STICKY
+        // لا تعِد تشغيل الخدمة بعد إيقافها يدوياً — تفادياً لدورة إعادة إحياء لا نهائية
+        return if (intent?.action == ACTION_STOP) START_NOT_STICKY else START_STICKY
     }
 
     override fun onConnected() {
@@ -229,6 +245,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     return
                 }
                 incomingOffer = signal
+                lastIncomingOffer = signal
                 target = newIncoming.peer
                 callId = newIncoming.callId
                 mode = newIncoming.mode
@@ -445,7 +462,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private var statsJob: kotlinx.coroutines.Job? = null
     private var failedIceJob: kotlinx.coroutines.Job? = null
-    private val ICE_RESTART_GRACE_MS: Long = 12_000L
+    // مهلة أطول من نافذة إعادة الاتصال في CallReconnectManager (30 ثانية) —
+    // حتى لا يُقتل ICE restart قبل أن تتعافى شبكة الهاتف من الانقطاع المؤقت.
+    private val ICE_RESTART_GRACE_MS: Long = 45_000L
     private fun startStatsPolling() {
         statsJob?.cancel()
         statsJob = scope.launch {
@@ -678,19 +697,36 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     /**
-     * Accepts a waiting call: holds the current call and answers the second.
-     * Requires a second WebRTC engine (current architecture uses one engine per call).
-     * For simplicity in the first cut, this swaps the active call and parks the first on hold.
+     * يقبل المكالمة الثانية ويُوقف الأولى فعلياً (Real Park) بدل تبديل بسيط:
+     * يحفظ حالة المكالمة الأولى (الهدف والـ callId والوضع وزمن البدء)،
+     * وعند انتهاء المكالمة الثانية يعيد بناء المحرك ويعيد التفاوض مع الطرف الأول.
      */
+    private var parkedCall: ParkedCall? = null
+
+    data class ParkedCall(
+        val callId: String,
+        val peer: String,
+        val mode: String,
+        val startedAt: Long,
+        val video: Boolean
+    )
+
     private fun acceptSecondIncoming() {
         val state = CallRuntime.state as? CallUiState.ActiveWithIncoming ?: return
         val waiting = state.waiting
         val previous = state.active
 
-        // 1) أرسل HOLD للمكالمة الأولى
+        // 1) أرسل HOLD للمكالمة الأولى واحفظها كـ ParkedCall
         runCatching { signaling.send(CallSignal(previous.callId, previous.peer, type = "HOLD", mode = previous.mode)) }
+        parkedCall = ParkedCall(
+            callId = previous.callId,
+            peer = previous.peer,
+            mode = previous.mode,
+            startedAt = previous.startedAt,
+            video = previous.mode == "VIDEO"
+        )
 
-        // 2) أوقف المحرك الحالي وأنشئ جديد للـ waiting
+        // 2) حرر المحرك الحالي وأنشئ جديداً للمكالمة الثانية
         engine?.release()
         engine = null
         target = waiting.peer
@@ -700,13 +736,34 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         promote(notification("تبديل إلى ${waiting.peer}", ongoing = true), media = true)
         prepareAudio()
 
-        // 3) أنشئ محرك جديد وأرسل ANSWER
+        // 3) أنشئ محركاً جديداً وأرسل ANSWER
         scope.launch {
             if (createEngine(mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
             val sdp = pendingSecondOffer?.payload?.get("sdp") ?: return@launch fail("عرض غير صالح")
             engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
             pendingSecondOffer = null
             stopRingtone()
+        }
+    }
+
+    /**
+     * يعيد تشغيل المكالمة الموقوفة بعد انتهاء المكالمة الثانية:
+     * يعيد بناء المحرك ويعيد التفاوض (RENEGOTIATE) مع الطرف الأول لاستعادة المسار.
+     */
+    private fun resumeParkedCall() {
+        val parked = parkedCall ?: return
+        parkedCall = null
+        target = parked.peer
+        callId = parked.callId
+        mode = parked.mode
+        // الحالة Active قبل offer() حتى يُصنَّف الوصف المحلي RENEGOTIATE (وليس OFFER جديد)
+        CallRuntime.state = CallUiState.Active(parked.callId, parked.peer, parked.mode, parked.startedAt)
+        promote(notification("استئناف مكالمة ${parked.peer}", ongoing = true), media = true)
+        prepareAudio()
+        scope.launch {
+            if (createEngine(parked.video) is ApiResult.Error) return@launch fail("تعذر استئناف المكالمة")
+            engine?.offer()
+            updateNotification("مكالمة يونس نشطة")
         }
     }
     private fun fail(message: String) {
@@ -819,6 +876,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         val endedCallId = callId.orEmpty()
         val endedMode = mode
         endCallCore(sendSignal = sendSignal)
+        // كانت هناك مكالمة موقوفة (Call Waiting) → استأنفها فوراً بدل شاشة CallEnded
+        if (parkedCall != null) {
+            resumeParkedCall()
+            return
+        }
         CallRuntime.state = CallUiState.CallEnded(endedPeer, endedMode, durationMs, endedCallId)
         updateNotification("انتهت المكالمة")
         scheduleCleanupAndReset(4000) // Keep the CallEnded screen for 4 seconds
@@ -868,7 +930,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             mode = endedMode,
             startedAt = startedAt,
             durationMs = durationMs,
-            incoming = incomingOffer != null
+            incoming = (incomingOffer ?: lastIncomingOffer) != null
         )
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         // أوقف تسجيل المكالمة إن كان يعمل — كان التسجيل يستمر في الخلفية بعد انتهاء المكالمة
@@ -877,7 +939,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             recordingManager = null
             scope.launch { runCatching { manager?.stop() } }
         }
-        engine?.release(); engine = null; incomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
+        engine?.release(); engine = null; incomingOffer = null; lastIncomingOffer = null; outgoingPending = false; pendingIce.clear(); remoteDescriptionSet = false
         presenceMonitor.stop(callId.orEmpty())
         deliveryEngine.clearCandidates(callId.orEmpty())
         ringTimedOut = false
@@ -942,6 +1004,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun endCall(sendSignal: Boolean) {
+        // إذا كانت هناك مكالمة موقوفة، أنهِ الحالية واستأنف الموقوفة
+        if (parkedCall != null) {
+            endCallCore(sendSignal)
+            resumeParkedCall()
+            return
+        }
         if (CallRuntime.state !is CallUiState.CallEnded && CallRuntime.state !is CallUiState.Idle) {
             handleCallEnded(sendSignal)
         } else {

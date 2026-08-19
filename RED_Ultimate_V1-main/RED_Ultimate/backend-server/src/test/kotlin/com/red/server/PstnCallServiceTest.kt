@@ -47,7 +47,7 @@ class PstnCallServiceTest {
         whenever(values.increment(any())).thenReturn(3)
 
         val service = PstnCallService(users, redis, pstn, loadBalancer, history, retryScheduler)
-        assertThrows(IllegalArgumentException::class.java) { service.dial(id, "+967771234567") }
+        assertThrows(com.red.server.auth.RateLimitExceededException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
         verify(loadBalancer, never()).selectPort(anyOrNull(), anyOrNull())

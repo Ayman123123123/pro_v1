@@ -12,3 +12,5 @@ secrets/
 backups/
 *.tar.gz.gpg
 *.tar.gz.gpg.sha256
+# Vendored Gradle distribution for offline Docker builds (150 MB)
+build-tools/

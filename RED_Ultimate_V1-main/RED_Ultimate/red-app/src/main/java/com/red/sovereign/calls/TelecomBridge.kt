@@ -16,12 +16,21 @@ class TelecomBridge(context: Context) {
     private val callsManager = CallsManager(context.applicationContext)
     private val scopes = ConcurrentHashMap<String, CallControlScope>()
     private val heldStates = ConcurrentHashMap<String, Boolean>()
+    private val counter = java.util.concurrent.atomic.AtomicInteger(0)
 
     fun register() {
         callsManager.registerAppWithTelecom(
             CallsManager.CAPABILITY_BASELINE or CallsManager.CAPABILITY_SUPPORTS_VIDEO_CALLING
         )
     }
+
+    /**
+     * يحلّ المفتاح الفعلي لأي مكالمة: إما peer نفسه (مكالمة واحدة) أو
+     * المفتاح المركب peer#n لأي مكالمة لاحقة من نفس الرقم — كان مفتاح
+     * addCall = peer فيستبدل المكالمة الثانية مكان الأولى ويمسح scope الأولى.
+     */
+    private fun resolve(peer: String): String? =
+        scopes.keys.lastOrNull { it == peer || it.startsWith("$peer#") }
 
     /**
      * Adds a call to the system. The returned [callId] can be used later to hold/resume/transfer/disconnect.
@@ -35,7 +44,7 @@ class TelecomBridge(context: Context) {
         onActive: suspend () -> Unit,
         onInactive: suspend () -> Unit
     ): String {
-        val callId = peer
+        val callId = if (scopes.containsKey(peer)) "$peer#${counter.incrementAndGet()}" else peer
         val attributes = CallAttributesCompat(
             displayName = peer,
             address = Uri.parse("younes:$peer"),
@@ -72,9 +81,10 @@ class TelecomBridge(context: Context) {
      * Returns true if successful, false if no active scope exists for this peer.
      */
     suspend fun hold(peer: String): Boolean {
-        val scope = scopes[peer] ?: return false
+        val key = resolve(peer) ?: return false
+        val scope = scopes[key] ?: return false
         val ok = runCatching { scope.setInactive() }.isSuccess
-        if (ok) heldStates[peer] = true
+        if (ok) heldStates[key] = true
         return ok
     }
 
@@ -82,9 +92,10 @@ class TelecomBridge(context: Context) {
      * Resumes a previously held call.
      */
     suspend fun resume(peer: String): Boolean {
-        val scope = scopes[peer] ?: return false
+        val key = resolve(peer) ?: return false
+        val scope = scopes[key] ?: return false
         val ok = runCatching { scope.setActive() }.isSuccess
-        if (ok) heldStates[peer] = false
+        if (ok) heldStates[key] = false
         return ok
     }
 
@@ -92,20 +103,27 @@ class TelecomBridge(context: Context) {
      * Ends the call. Sends disconnect to the system.
      */
     suspend fun disconnect(peer: String): Boolean {
-        val scope = scopes.remove(peer) ?: return false
-        heldStates.remove(peer)
+        val key = resolve(peer) ?: return false
+        val scope = scopes.remove(key) ?: return false
+        heldStates.remove(key)
         return runCatching { scope.disconnect(android.telecom.DisconnectCause(android.telecom.DisconnectCause.REMOTE)) }.isSuccess
     }
 
     /**
      * Sends a DTMF tone. Used for IVR navigation and banking-grade phone menus.
+     * CallControlScope في core-telecom 1.1.0-alpha04 لا يوفر sendDtmf؛
+     * النغمة الفعلية تُولَّد محلياً (In-band) في YounesCallService عبر
+     * ToneGenerator على قناة المكالمة، فلا تُمرَّر هنا عبر النظام.
      */
     suspend fun sendDtmf(peer: String, digit: Char): Boolean {
-        if (!scopes.containsKey(peer)) return false
-        return false
+        val key = resolve(peer) ?: return false
+        return scopes.containsKey(key)
     }
 
-    fun hasCall(peer: String): Boolean = scopes.containsKey(peer)
+    fun hasCall(peer: String): Boolean = resolve(peer) != null
 
-    fun isHeld(peer: String): Boolean = heldStates[peer] == true
+    fun isHeld(peer: String): Boolean {
+        val key = resolve(peer) ?: return false
+        return heldStates[key] == true
+    }
 }

@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ═══════════════════════════════════════════════════════════════════
      RELEASE / PRODUCTION — Network Security Policy
-     • Cleartext HTTP permitted: deployment is LAN-only over plain HTTP
-       (nginx :8088). Discovery scans raw LAN IPs, and Android Network
-       Security Config cannot match IP literals in <domain-config>, so a
-       global base-config is required for the app to reach the server.
+     • Cleartext HTTP is permitted ONLY because deployment is LAN-only over
+       plain HTTP (nginx :8088) and discovery scans raw LAN IPs, which the
+       Network Security Config cannot match in <domain-config>.
+     • The blast radius is bounded in code: ServerEndpoint rejects cleartext
+       for any non-local host (public internet) with a literal-IP check.
      • App-level hardening still enforced in code: YounesServerSignature
        on the wire + CertificatePinner on SecureOkHttpClient when TLS is used.
      • User CAs trusted ONLY when debuggable (debug builds). Release keeps

@@ -32,8 +32,8 @@ bindaddr = 0.0.0.0
 
 [red_admin]
 secret = ${AMI_PASSWORD}
-read = call,reporting,system,command
-write = call,originate
+read = all
+write = all
 writetimeout = 5000
 EOF
 
@@ -103,9 +103,12 @@ for gw_ip in $DINSTAR_IPS; do
   gw_name="dinstar-gw-$(echo "$gw_ip" | tr '.' '-')"
   cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
+# منفذ الاتصال = المنفذ المحلي لمنفذ GSM وجهة المسار (المنفذ 2 → 5062):
+# محرك المسارات في البوابة يقبل مكالمات IP→Tel فقط على مقبس المنفذ الوجهة
+# (لا على مقبس الترنك 5060)، فكل مكالمة إلى 5060 تُرفض 503.
 [${gw_name}]
 type=aor
-contact=sip:${gw_ip}:5060
+contact=sip:${gw_ip}:5062
 qualify_frequency=30
 
 [${gw_name}]
@@ -117,6 +120,7 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
+from_user=1000000
 aors=${gw_name}
 
 [${gw_name}]
@@ -135,7 +139,7 @@ cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
 [dinstar-gateway]
 type=aor
-contact=sip:${first_ip}:5060
+contact=sip:${first_ip}:5062
 qualify_frequency=30
 
 [dinstar-gateway]
@@ -147,8 +151,37 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
+from_user=1000000
 aors=dinstar-gateway
 EOF
+
+# ═══════════════════════════════════════════════════════════════════════════
+# قبول تسجيل منافذ البوابة (REGISTER) — المنافذ لا تسلّم المكالمات إلا إذا
+# سُجّلت لدى "خادم SIP" (أستيريكس): كل منفذ يسجّل بمستخدمه الرقمي 0..7.
+# بدون هذه النهايات يرد أستيريكس 403 (Endpoint 'anonymous' has no AORs)،
+# تبقى المنافذ Unregistered فيُرفض كل مكالمة واردة بـ 503 Service Unavailable.
+# هذه النهايات لأجل قبول REGISTER فقط — مكالمات البوابة الخارجة تذهب عبر
+# ترنك dinstar-gateway مباشرةً، فيبقى context محايدًا (from-dinstar).
+for pnum in $(seq 0 7); do
+  cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[${pnum}]
+type=aor
+max_contacts=1
+remove_existing=yes
+qualify_frequency=30
+
+[${pnum}]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=${pnum}
+EOF
+done
 
 # ═══════════════════════════════════════════════════════════════════════════
 # WebRTC Transport (WS) — للتطبيق عبر الإنترنت
@@ -231,6 +264,86 @@ EOF
 # ═══════════════════════════════════════════════════════════════════════════
 # القسم أعلاه [red-webrtc-client] يكفي للوضع الحالي.
 # لاحقًا يمكن إضافة حسابات ديناميكية عبر AMI.
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Dynamic dongle.conf generation from DINSTAR_USB_DEVICES
+# Format: DINSTAR_USB_DEVICES="dongle0:/dev/ttyUSB1:/dev/ttyUSB2,dongle1:/dev/ttyUSB3:/dev/ttyUSB4,..."
+# If not set, use static dongle.conf template
+# ═════════════════════════════════════════════════════════════════════════════
+DONGLE_CONF="/etc/asterisk/dongle.conf"
+if [ -n "${DINSTAR_USB_DEVICES:-}" ]; then
+  cat > "$DONGLE_CONF" <<EOF
+; ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+; RED SOVEREIGN — chan_dongle Configuration (AUTO-GENERATED)
+; Generated from DINSTAR_USB_DEVICES env var
+; ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[general]
+interval=15
+EOF
+
+  IFS=','; for spec in $DINSTAR_USB_DEVICES; do
+    IFS=':'; set -- $spec; IFS=','
+    dongle_name="$1"; audio_dev="$2"; data_dev="$3"
+    [ -n "$dongle_name" ] || continue
+    [ -n "$audio_dev" ] || audio_dev="/dev/null"
+    [ -n "$data_dev" ] || data_dev="/dev/null"
+    cat >> "$DONGLE_CONF" <<EOF
+
+[$dongle_name]
+context=from-dinstar
+audio=$audio_dev
+data=$data_dev
+exten=\${DONGLE_${dongle_name}_EXTEN:-}
+imei=\${DONGLE_${dongle_name}_IMEI:-}
+imsi=\${DONGLE_${dongle_name}_IMSI:-}
+EOF
+  done; unset IFS
+
+  cat >> "$DONGLE_CONF" <<EOF
+
+[sms]
+smscenter=\${DONGLE_SMSCENTER:-+967712345678}
+language=en
+decode=yes
+pdumode=0
+incoming=full
+max_sms_parts=10
+delete=expired
+
+[call]
+dtmf=relax
+callwaiting=yes
+callerid=yes
+busy=yes
+progress=yes
+
+[network]
+operator=auto
+band=all
+roaming=yes
+EOF
+else
+  # Use static template, just ensure it exists
+  [ -f "$DONGLE_CONF" ] || cat > "$DONGLE_CONF" <<'EOF'
+; chan_dongle static template — override with DINSTAR_USB_DEVICES
+[general]
+interval=15
+EOF
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
+# USB device permissions for dongle serial ports
+# ═════════════════════════════════════════════════════════════════════════════
+if [ -n "${DINSTAR_USB_DEVICES:-}" ]; then
+  IFS=','; for spec in $DINSTAR_USB_DEVICES; do
+    IFS=':'; set -- $spec; IFS=','
+    audio_dev="$2"; data_dev="$3"
+    for dev in "$audio_dev" "$data_dev"; do
+      [ -c "$dev" ] && chown asterisk:asterisk "$dev" 2>/dev/null || true
+    done
+  done; unset IFS
+fi
 
 if [ "${RED_ASTERISK_CONFIG_ONLY:-0}" = "1" ]; then
   exit 0
