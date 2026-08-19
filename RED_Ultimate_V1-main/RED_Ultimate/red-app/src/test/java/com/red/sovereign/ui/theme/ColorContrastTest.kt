@@ -154,4 +154,46 @@ class ColorContrastTest {
             assertAA(operator.color, YounesMidnight, "لون ${operator.arabicName}")
         }
     }
+
+    /**
+     * حدّ العناصر غير النصّية — WCAG 2.1 SC 1.4.11 — وهو 3:1 لا 4.5:1،
+     * لأن الشكل يُميَّز بحجمه وموضعه لا بحروفه.
+     */
+    private fun assertNonText(fg: Color, bg: Color, label: String) {
+        val ratio = contrast(fg, bg)
+        assertTrue(
+            "$label = ${"%.2f".format(ratio)}:1 — دون حدّ العناصر غير النصّية البالغ 3:1",
+            ratio >= 3.0
+        )
+    }
+
+    /**
+     * شاشة الاستكشاف: اللون الواحد كان يؤدّي دورين متناقضين في متطلّب
+     * التباين — حاويةَ زرٍّ يُقاس نصُّه الأبيض عليها (يلزم 4.5:1، فيسوء
+     * كلّما فتح اللون)، وعلامةً على سطح داكن تُقاس هي نفسها عليه (يلزم
+     * 3:1، فتسوء كلّما غمق اللون). فرسب كلٌّ في دوره الخطأ:
+     *
+     *   أبيض على LiveRed E53935       = 4.23:1  ❌
+     *   SpacePurple 8E24AA على 1E293B = 2.08:1  ❌
+     *
+     * الفصل إلى `*Container` و`*Accent` يُنجح الأربعة. هذا الاختبار
+     * يمنع دمجهما ثانيةً في رمز واحد.
+     */
+    @Test
+    fun `الوان الاستكشاف تفي بحد كل دور على حدة`() {
+        // حاويات الأزرار — النص الأبيض عليها هو ما يُقرأ
+        assertAA(Color.White, SovereignColors.LiveContainer, "نص زر البث")
+        assertAA(Color.White, SovereignColors.SpaceContainer, "نص زر المساحات")
+
+        // العلامات على الأسطح الداكنة — عناصر غير نصّية
+        assertNonText(SovereignColors.LiveAccent, SovereignColors.SurfaceNavy, "علامة البث")
+        assertNonText(SovereignColors.SpaceAccent, SovereignColors.SurfaceNavy, "علامة المساحات")
+
+        // عناوين الأقسام على السطح نفسه
+        assertNonText(SovereignColors.Cyan, SovereignColors.SurfaceNavy, "عنوان البث")
+        assertNonText(SovereignColors.Gold, SovereignColors.SurfaceNavy, "عنوان المساحات")
+
+        // النص الثانوي في الحالة الفارغة — كان Color.Gray بـ3.70:1
+        assertAA(YounesMuted, SovereignColors.SurfaceNavy, "نص الحالة الفارغة")
+    }
 }
