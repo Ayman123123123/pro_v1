@@ -19,8 +19,20 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
  *   كان هذا الملف يسجّل مساراً واحداً فقط هو /ws/dinstar، بلا JWT
  *   وبـ setAllowedOrigins("*") المفتوح. النسخة الكاملة (7 مسارات + JWT
  *   + قيود CORS) كانت في com.red.server.config.WebSocketConfig وفُقدت
- *   أثناء توحيد الحزم. أُعيد دمجها هنا مع الإبقاء على /ws/dinstar.
- *   المرجع: الفرع arena/019fe9e3-pro-v1.
+ *   أثناء توحيد الحزم (التزام 6d3a140). أُعيد دمجها هنا مع الإبقاء على
+ *   /ws/dinstar. المرجع: الفرعان arena/019fe9e3-pro-v1 و
+ *   fix/restore-websocket-registrations.
+ *
+ *   المسارات الستة التي كانت تُرجع 404 عند المصافحة قبل الإصلاح:
+ *     - /ws/master      الرسائل، ACK، الكتابة، المزامنة، الحذف — RedMasterHandler
+ *     - /ws/calls       إشارات مكالمات 1:1 — CallWebSocketHandler
+ *     - /ws/conference  المؤتمرات والمساحات الصوتية — ConferenceWebSocketHandler
+ *     - /ws/livestream  البث المباشر — LiveStreamWebSocketHandler
+ *     - /ws/typing      مؤشر الكتابة — TypingHandler
+ *     - /ws/admin/logs  سجلات الإدارة الحية — AdminLogHandler
+ *
+ *   و/ws/dinstar كان مفتوحاً بلا مصادقة ويُسرّب حالات المنافذ والرسائل
+ *   القصيرة وسجلات المكالمات لأي متصل؛ صار خلف JwtHandshakeInterceptor.
  *
  * ROUTES تعكس بدقة ما يُسجَّل أدناه، ويتحقق منها WebSocketRouteContractTest.
  */

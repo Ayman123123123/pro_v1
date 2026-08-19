@@ -24,7 +24,7 @@ class CallWebSocketHandler(
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
         require(signal.targetUserId.isNotBlank()) { "targetUserId is required" }
@@ -57,12 +57,16 @@ class CallWebSocketHandler(
         targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
         session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to callId))))
 
-        // Once one device answers/rejects/ends, stop the ringing state on the user's other devices.
+        // Once one device answers/rejects/ends, stop the ringing state on the ACTOR's
+        // other devices (e.g. callee answered on the phone -> stop ringing the tablet).
+        // The cancel must go to the actor's own sessions, not the other party's:
+        // `targets` are the *recipient's* devices, so filtering them by the actor's
+        // session id never matched anything and the other devices kept ringing.
         if (type in TERMINAL_TYPES) {
             dropPending(callId)
             val cancelType = if (type == "ANSWER") "CANCELLED" else type
             val cancel = objectMapper.writeValueAsString(mapOf("type" to cancelType, "callId" to callId, "sourceUserId" to source))
-            targets.filter { it.id != session.id }.forEach { target -> runCatching { target.sendMessage(TextMessage(cancel)) } }
+            liveSessions(source).filter { it.id != session.id }.forEach { other -> runCatching { other.sendMessage(TextMessage(cancel)) } }
         }
     }
 

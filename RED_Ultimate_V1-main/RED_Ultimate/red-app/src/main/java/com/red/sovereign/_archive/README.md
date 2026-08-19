@@ -1,38 +1,48 @@
 # 📦 أرشيف الملفات المهملة (Deprecated Archive)
 
-> هذا المجلد يحتوي على ملفات قديمة/مكررة تم نقلها من الكود الإنتاجي.
+> هذا المجلد يحتوي على ملفات قديمة/مكررة نُقلت من الكود الإنتاجي.
 > **لا تستورد من هذا المجلد في الكود الجديد.**
 
-## الملفات
+_آخر تدقيق: 2026-08-19 — طُوبق المحتوى مع الملفات الموجودة فعلاً._
 
-### `VoiceRecorder-core.kt.archived`
-- **المسار الأصلي:** `com.red.sovereign.core.utils.VoiceRecorder`
-- **التاريخ:** 2026-08-09
-- **السبب:** أُعيد تفعيل نسخة محسّنة في `core/utils/VoiceRecorder.kt`، وبقيت هذه النسخة كأرشيف غير مترجم.
-- **البديل النشط:** `com.red.sovereign.core.utils.VoiceRecorder`
+---
 
-### `VoiceRecorder-features-chat.kt`
-- **المسار الأصلي:** `com.red.sovereign.features.chat.VoiceRecorder`
-- **التاريخ:** 2026-08-09
-- **السبب:** Dead code مكرر (نفس المنطق في `core/utils/VoiceRecorder` لكن بدون معالجة أخطاء).
-- **البديل النشط:** `com.red.sovereign.media.VoiceMessageViewModel`
+## الملفات الموجودة حالياً
 
-### `MediaBubble-features-chat.kt`
-- **المسار الأصلي:** `com.red.sovereign.features.chat.MediaBubble`
-- **التاريخ:** 2026-08-09
-- **السبب:** Dead code — كان `Composable` لعرض الفقاعات (IMAGE, VIDEO, FILE) لكن لا أحد يستدعيه. الـ `RedDashboard.kt` يستخدم `AttachmentMessage` و `VoiceMessage` منفصلتين بدلاً منه.
-- **البديل النشط:** `VoiceMessage` + `AttachmentMessage` في `RedDashboard.kt`
+### `AuthFlow.legacy.kt.archived`
+- **المسار الأصلي:** `com.red.sovereign.ui.AuthFlow` (`AuthFlow.kt`)
+- **تاريخ الأرشفة:** 2026-08-11
+- **الحجم:** 821 سطراً
+- **السبب:** تدفق قديم محظور `PHONE_INPUT`/`OTP_VERIFICATION` مع
+  `CountryCode +967` — يخالف مبدأ السيادة (بدون هاتف/SIM/OTP).
+  الفاحص `check-sovereign-boundaries.sh` يفشل بوجوده.
+- **البديل النشط:** `ui/AuthScreens.kt` (601 سطر) + `auth/AuthViewModel.kt`
+  — username + password + RED ID، مُستخدم في `MainActivity`.
+- **تحقق 2026-08-19:** البديل موجود وأشمل ✅
+
+---
+
+## ملفات أُرشفت سابقاً ثم حُذفت نهائياً
+
+هذه كانت مذكورة في نسخة سابقة من هذا الملف لكنها **لم تعد موجودة**
+في المجلد. تُوثَّق هنا للسجل فقط؛ بدائلها النشطة تعمل بالكامل:
+
+| الملف المحذوف | تاريخ الأرشفة | البديل النشط | الحالة |
+|---|---|---|---|
+| `VoiceRecorder-core.kt.archived` | 2026-08-09 | `core/utils/VoiceRecorder.kt` (54س) | ✅ موجود |
+| `VoiceRecorder-features-chat.kt` | 2026-08-09 | `media/VoiceMessageViewModel.kt` (463س) | ✅ موجود |
+| `MediaBubble-features-chat.kt` | 2026-08-09 | `VoiceMessage` + `AttachmentMessage` في `RedDashboard.kt` | ✅ موجود |
+
+> ملاحظة: نسخة أخرى من `MediaBubble.kt` (198 سطراً) ما زالت موجودة في
+> `android/features/chat/` — وهي مجلد مرجع استخراج خارج الـ build graph.
 
 ---
 
 ## 📋 السياسة
 
 - **لا تحذف** الملفات من هذا المجلد إلا بعد 6 أشهر من الأرشفة.
-- إذا احتجت استعادة ملف، انقله إلى مكانه الأصلي وأزل هذا الـ README.
-- ملفات الأرشيف التي قد تسبب تكرار فئات يجب أن تبقى بامتداد غير `.kt` حتى لا تدخل build.
-
-### `AuthFlow.legacy.kt.archived`
-- **المسار الأصلي:** `com.red.sovereign.ui.AuthFlow` (`AuthFlow.kt`)
-- **التاريخ:** 2026-08-11
-- **السبب:** تدفق قديم محظور `PHONE_INPUT`/`OTP_VERIFICATION` مع `CountryCode +967` — يخالف مبدأ السيادة (بدون هاتف/SIM/OTP). الفاحص `check-sovereign-boundaries.sh` يفشل بوجوده. البديل السيادي هو `ui/AuthScreens.kt` (username+password+RED ID) المستخدم في `MainActivity`.
-- **البديل النشط:** `com.red.sovereign.ui.AuthFlow` في `AuthScreens.kt` + `auth/AuthViewModel` (register/login/recovery)
+- إذا احتجت استعادة ملف، انقله إلى مكانه الأصلي وحدّث هذا الـ README.
+- ملفات الأرشيف التي قد تسبب تكرار فئات يجب أن تبقى بامتداد غير `.kt`
+  حتى لا تدخل الـ build.
+- **عند حذف ملف من الأرشيف نهائياً:** انقل سطره إلى جدول
+  "حُذفت نهائياً" أعلاه بدل إزالته من التوثيق.
