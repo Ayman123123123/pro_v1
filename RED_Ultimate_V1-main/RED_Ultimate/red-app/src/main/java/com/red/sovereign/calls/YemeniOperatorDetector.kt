@@ -108,9 +108,11 @@ object YemeniOperatorDetector {
         val local = normalize(number)
         if (local.isEmpty()) return null
 
-        // ─── المحمول: بادئة من رقمين، من المصدر الموحّد ───
+        // ─── المحمول: البادئة من المصدر الموحّد، الأطول أولًا ───
+        // fromNumber يفحص ثلاثة أرقام قبل رقمين، فيلتقط 722 (سبأفون عدن 4G)
+        // قبل أن يُقرأ 72 ويسقط الرقم إلى فرع الهاتف الثابت خطأً.
         if (local.length >= 2) {
-            val operator = YemenOperator.fromPrefix(local.substring(0, 2))
+            val operator = YemenOperator.fromNumber(local)
             if (operator != YemenOperator.UNKNOWN) {
                 return OperatorInfo(
                     name = operator.arabicName,

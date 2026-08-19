@@ -86,7 +86,12 @@ enum class YemenOperator(
     val prefixes: Set<String>,
     val color: Color
 ) {
-    SABAFON("سبأفون", "Sabafon", setOf("71"), Color(0xFFE53935)),
+    /**
+     * `71` النطاق الأصلي (صنعاء وعموم البلاد، ومنه `718` عدن القديم).
+     * `722` نطاق عدن للجيل الرابع (VoLTE) — أُطلق مستقلًّا لا امتدادًا
+     * لـ`71`، فيجب ذكره صراحةً وإلا قُرئ `72` وسقط في «غير معروف».
+     */
+    SABAFON("سبأفون", "Sabafon", setOf("71", "722"), Color(0xFFE53935)),
     YOU("يو", "YOU", setOf("73"), Color(0xFFFFB300)),
     YEMEN_MOBILE("يمن موبايل", "YemenMobile", setOf("77", "78"), Color(0xFF43A047)),
     Y_TELECOM("واي", "YTelecom", setOf("70"), Color(0xFF1E88E5)),
@@ -104,7 +109,11 @@ enum class YemenOperator(
                 digits.startsWith("0") -> digits.removePrefix("0")
                 else -> digits
             }
-            // البادئة رقمان لا ثلاثة — الثلاثة كانت تفشل في المطابقة
+            // الأطول أولًا: 722 (سبأفون عدن 4G) يسبق 72 وإلا سقط في UNKNOWN
+            if (local.length >= 3) {
+                val three = fromPrefix(local.substring(0, 3))
+                if (three != UNKNOWN) return three
+            }
             return if (local.length >= 2) fromPrefix(local.substring(0, 2)) else UNKNOWN
         }
 
