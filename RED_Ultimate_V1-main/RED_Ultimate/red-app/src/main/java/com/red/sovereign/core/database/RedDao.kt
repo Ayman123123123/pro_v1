@@ -84,6 +84,17 @@ interface RedDao {
     @Query("SELECT * FROM stories WHERE expiresAt > :now ORDER BY timestamp DESC")
     fun getActiveStories(now: Long): Flow<List<StoryEntity>>
 
+    /**
+     * حذف القصص المنتهية فعليًا.
+     *
+     * `getActiveStories` يُخفي المنتهية بشرط `expiresAt > now` لكنه لا
+     * يحذفها، فكانت الصفوف تتراكم بلا حد ويكبر ملف القاعدة إلى ما لا
+     * نهاية. يستدعيه [com.red.sovereign.core.workers.StoryCleanupWorker]
+     * دوريًا.
+     */
+    @Query("DELETE FROM stories WHERE expiresAt <= :now")
+    suspend fun cleanupExpiredStories(now: Long): Int
+
     // --- Drafts ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveDraft(draft: DraftEntity)

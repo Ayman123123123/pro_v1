@@ -28,8 +28,7 @@ admin_dashboard/, media-sfu/, pstn-asterisk/ تبنيها Docker/CI
 | [`build-logic/`](build-logic/README.md) | منطق وأدوات Gradle |
 | [`wire-handler/`](wire-handler/README.md) | Wire build-time handler |
 | [`app/`](app/README.md) | Signal gold mine خارج البناء |
-| [`android/`](android/README.md) | AQYAL reference خارج البناء |
-| [`app-android/`](app-android/README.md) | DevelopedChat reference خارج البناء |
+| [`docs/UNIFICATION_2026-08-19.md`](docs/UNIFICATION_2026-08-19.md) | توحيد `android/` و`app-android/` في `red-app/` |
 | [`core/`](core/README.md) | مكتبات Signal قديمة خارج graph |
 | [`lib/`](lib/README.md) | مكتبات Signal قديمة خارج graph |
 | [`feature/`](feature/README.md) | ميزات Signal قديمة خارج graph |
