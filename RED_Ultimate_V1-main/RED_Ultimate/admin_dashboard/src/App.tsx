@@ -57,6 +57,7 @@ const SmsTemplates = lazy(() => import('./pages/SmsTemplates'));
 const PortControl = lazy(() => import('./pages/PortControl'));
 const GroupsManagement = lazy(() => import('./pages/GroupsManagement'));
 const PostsManagement = lazy(() => import('./pages/PostsManagement'));
+const BrowserSettings = lazy(() => import('./pages/BrowserSettings'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -86,7 +87,8 @@ type PageKey =
   | 'diagnostics'
   | 'data-overview'
   | 'groups'
-  | 'posts';
+  | 'posts'
+  | 'browser-settings';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
@@ -101,6 +103,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'messaging', icon: <MessageOutlined />, label: 'مركز الرسائل', group: 'main' },
   { key: 'groups', icon: <TeamOutlined />, label: 'إدارة المجموعات', group: 'main' },
   { key: 'posts', icon: <FileTextOutlined />, label: 'المنشورات والتغريدات', group: 'main' },
+  { key: 'browser-settings', icon: <SettingOutlined />, label: 'إعدادات المتصفح والوصول', group: 'main' },
   // System — مدموجة: الإعلانات + أعلام + نسخ + أمان + إشعارات + سجلات + وسائط + بنية
   { key: 'announcements', icon: <NotificationOutlined />, label: 'الإعلانات', group: 'system' },
   { key: 'featureflags', icon: <ExperimentOutlined />, label: 'أعلام الميزات', group: 'system' },
@@ -222,6 +225,7 @@ export default function App() {
       case 'messaging': return <MessagingCenter />;
       case 'groups': return <GroupsManagement />;
       case 'posts': return <PostsManagement />;
+      case 'browser-settings': return <BrowserSettings />;
       case 'announcements': return <Announcements />;
       case 'featureflags': return <FeatureFlags />;
       case 'backups': return <Backups />;

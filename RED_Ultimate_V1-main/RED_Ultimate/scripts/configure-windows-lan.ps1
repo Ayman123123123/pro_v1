@@ -40,7 +40,7 @@ if ($EnableMediaPorts) {
     Ensure-Rule 'YOUNES TURN Relay' 'UDP' '45000-45050'
 }
 if ($EnableDinstarPorts) {
-    Ensure-Rule 'YOUNES DINSTAR SIP' 'UDP' '5060' '192.168.11.1'
-    Ensure-Rule 'YOUNES DINSTAR RTP' 'UDP' '10000-10100' '192.168.11.1'
+    Ensure-Rule 'YOUNES DINSTAR SIP' 'UDP' '5060' '192.168.11.2'
+    Ensure-Rule 'YOUNES DINSTAR RTP' 'UDP' '10000-10100' '192.168.11.2'
 }
 Write-Host 'YOUNES_WINDOWS_LAN_READY'

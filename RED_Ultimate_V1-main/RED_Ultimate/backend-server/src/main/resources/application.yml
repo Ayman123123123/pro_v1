@@ -86,11 +86,12 @@ red:
     enabled: ${DINSTAR_ENABLED:false}
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
     # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع.
-    ip: ${DINSTAR_IP:192.168.11.1}
+    ip: ${DINSTAR_IP:192.168.11.2}
     port: ${DINSTAR_PORT:443}
     scheme: ${DINSTAR_SCHEME:https}
-    username: ${DINSTAR_USERNAME:admin}
-    password: ${DINSTAR_PASSWORD:admin}
+    # الاعتماد يجب أن يمر من البيئة/مدير الأسرار فقط؛ لا كلمات مرور افتراضية في المستودع.
+    username: ${DINSTAR_USERNAME:}
+    password: ${DINSTAR_PASSWORD:}
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3

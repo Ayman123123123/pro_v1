@@ -228,7 +228,9 @@ export default function DinstarControl() {
         ...(smsGateway ? { gatewayHost: smsGateway } : {}),
         // الترميز يُحسم هنا لا في الجهاز: تركه للاستنتاج التلقائي كان
         // يسقط صامتًا إلى unicode ويضاعف عدد المقاطع.
-        encoding: smsIsUnicode ? 'unicode' : 'gsm-7bit',
+        // Backend يترجم القيم الداخلية إلى gsm-7bit/unicode قبل إرسالها للبوابة.
+        // إرسال القيم السلكية هنا كان يسبب رفض الطلب بسبب عقد UCS2/GSM7BIT.
+        encoding: smsIsUnicode ? 'UCS2' : 'GSM7BIT',
         param: smsRecipients.map((number, i) => ({ number, user_id: i + 1 })),
       };
       const b = await json(await apiFetch('/api/admin/dinstar/sms/send', {

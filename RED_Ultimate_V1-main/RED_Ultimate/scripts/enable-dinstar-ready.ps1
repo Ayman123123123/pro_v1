@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Bring the proven UC2000 (192.168.11.1 on the dedicated NIC) online for YOUNES.
+  Bring the proven UC2000 (192.168.11.2 on the dedicated NIC) online for YOUNES.
 
 .DESCRIPTION
   Keep the factory management IP. The box has no Wi-Fi: unplugging the
@@ -8,7 +8,7 @@
   not help. Internet stays on Wi-Fi; DINSTAR stays on the management NIC.
 
   This script:
-    1. Pings 192.168.11.1 and finds the Windows address on that NIC.
+    1. Pings 192.168.11.2 and finds the Windows address on that NIC.
     2. Sets DINSTAR_ENABLED=true in .env (does not change IP/passwords).
     3. Enables IP forwarding so Docker Desktop / WSL can reach the NIC.
     4. Opens the SIP/RTP firewall rules toward the box.
@@ -20,7 +20,7 @@
     powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1 -EnableMirroredNetworking
 #>
 param(
-    [string]$DinstarIp = "192.168.11.1",
+    [string]$DinstarIp = "192.168.11.2",
     [switch]$EnableMirroredNetworking
 )
 
