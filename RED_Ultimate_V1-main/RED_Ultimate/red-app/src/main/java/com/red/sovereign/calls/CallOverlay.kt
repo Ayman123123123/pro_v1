@@ -64,6 +64,11 @@ fun YounesCallOverlay() {
         is CallUiState.Connecting -> state.mode
         is CallUiState.Active -> state.mode
         is CallUiState.ActiveWithIncoming -> state.active.mode
+        is CallUiState.Reconnecting -> state.mode
+        is CallUiState.Declined -> state.mode
+        is CallUiState.Busy -> state.mode
+        is CallUiState.NoAnswer -> state.mode
+        is CallUiState.CallEnded -> state.mode
         else -> "VOICE"
     }
     val peer = when (state) {
@@ -71,6 +76,11 @@ fun YounesCallOverlay() {
         is CallUiState.Connecting -> state.peer
         is CallUiState.Active -> state.peer
         is CallUiState.ActiveWithIncoming -> state.active.peer
+        is CallUiState.Reconnecting -> state.peer
+        is CallUiState.Declined -> state.peer
+        is CallUiState.Busy -> state.peer
+        is CallUiState.NoAnswer -> state.peer
+        is CallUiState.CallEnded -> state.peer
         else -> ""
     }
     val video = mode == "VIDEO"
@@ -138,6 +148,21 @@ fun YounesCallOverlay() {
                     is CallUiState.Error -> ErrorBody(state.message) {
                         YounesCallService.action(context, YounesCallService.ACTION_END)
                     }
+                    // الحالات النهائية: رسالة + زر إغلاق فقط. تختفي تلقائياً
+                    // بعد TERMINAL_DISPLAY_MS، لكن نتيح الإغلاق الفوري.
+                    is CallUiState.Declined -> ErrorBody("رُفضت المكالمة") {
+                        YounesCallService.action(context, YounesCallService.ACTION_END)
+                    }
+                    is CallUiState.Busy -> ErrorBody("الطرف الآخر مشغول الآن") {
+                        YounesCallService.action(context, YounesCallService.ACTION_END)
+                    }
+                    is CallUiState.NoAnswer -> ErrorBody(CallRingPolicy.unansweredMessage(state.outgoing)) {
+                        YounesCallService.action(context, YounesCallService.ACTION_END)
+                    }
+                    is CallUiState.CallEnded -> ErrorBody("انتهت المكالمة · ${formatCallDuration(state.durationMs)}") {
+                        YounesCallService.action(context, YounesCallService.ACTION_END)
+                    }
+                    is CallUiState.Reconnecting -> ConnectingBody(peer, video)
                     else -> {
                         if (video) {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
@@ -195,9 +220,14 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
         Text(peer.ifBlank { "يونس" }, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
         val subtitle = when (state) {
             is CallUiState.Incoming -> if (video) "مكالمة فيديو واردة" else "مكالمة صوتية واردة"
-            is CallUiState.Connecting -> if (video) "جارٍ الاتصال بالفيديو…" else "جارٍ الاتصال…"
+            is CallUiState.Connecting -> state.presenceLabel
             is CallUiState.Active -> if (state.isHeld) "معلّقة" else if (video) "مكالمة فيديو" else "مكالمة صوتية"
             is CallUiState.ActiveWithIncoming -> "نشطة · ${state.waiting.peer} ينتظر"
+            is CallUiState.Reconnecting -> "انقطع الاتصال — جارٍ إعادة الاتصال…"
+            is CallUiState.Declined -> "رُفضت المكالمة"
+            is CallUiState.Busy -> "الطرف الآخر مشغول"
+            is CallUiState.NoAnswer -> CallRingPolicy.unansweredMessage(state.outgoing)
+            is CallUiState.CallEnded -> "انتهت المكالمة · ${formatCallDuration(state.durationMs)}"
             is CallUiState.Error -> state.message
             else -> ""
         }
