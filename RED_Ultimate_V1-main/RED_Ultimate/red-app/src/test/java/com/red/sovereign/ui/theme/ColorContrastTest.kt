@@ -196,4 +196,39 @@ class ColorContrastTest {
         // النص الثانوي في الحالة الفارغة — كان Color.Gray بـ3.70:1
         assertAA(YounesMuted, SovereignColors.SurfaceNavy, "نص الحالة الفارغة")
     }
+
+    /**
+     * حدّ العناصر الفعّالة مقابل الفاصل الزخرفي.
+     *
+     * `YounesBorder` كان يخدم `outline` و`outlineVariant` معًا، فيرث
+     * كلُّ `OutlinedTextField` في التطبيق (79 موضعًا) حدًّا تباينه
+     * 1.56:1 على البطاقة. والحدّ هو الشيء الوحيد الذي يُظهر حدود
+     * الحقل، فضعفه يعني حقلًا لا يُرى — وهو ما يوجب فيه WCAG 1.4.11
+     * تباين 3:1. فُصل الدوران: `YounesOutline` للفعّال، و`YounesBorder`
+     * للفاصل الزخرفي المستثنى من المعيار.
+     */
+    @Test
+    fun `حدّ الحقول الفعّالة يحقق 3 إلى 1 على كل الأسطح`() {
+        assertNonText(YounesOutline, YounesMidnight, "حدّ حقل على الخلفية")
+        assertNonText(YounesOutline, YounesSurface1, "حدّ حقل على البطاقة")
+        assertNonText(YounesOutline, YounesSurface2, "حدّ حقل على السطح النشط")
+        assertNonText(YounesOutline, YounesSurface3, "حدّ حقل في الحوار")
+    }
+
+    /**
+     * الفاصل يبقى خافتًا عمدًا — لا يُرفع إلى 3:1.
+     *
+     * لو ساوى الفاصلُ الزخرفي حدَّ الحقل الفعّال لضاع التمييز البصري
+     * بينهما، فصار الفاصل يبدو إطار عنصر قابل للإدخال. هذا الاختبار
+     * يحرس الفارق في الاتجاهين: الحدّ أظهر من الفاصل قطعًا.
+     */
+    @Test
+    fun `الفاصل الزخرفي يبقى أخفت من حدّ العنصر الفعّال`() {
+        val outline = contrast(YounesOutline, YounesSurface1)
+        val divider = contrast(YounesBorder, YounesSurface1)
+        assertTrue(
+            "حدّ الحقل ${"%.2f".format(outline)}:1 ليس أظهر من الفاصل ${"%.2f".format(divider)}:1",
+            outline > divider
+        )
+    }
 }
