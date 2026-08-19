@@ -157,7 +157,7 @@ export default function CdrAnalysis() {
         type: 'pie',
         radius: ['40%', '70%'],
         avoidLabelOverlap: true,
-        itemStyle: { borderRadius: 8, borderColor: '#050A16', borderWidth: 2 },
+        itemStyle: { borderRadius: 8, borderColor: '#06110D', borderWidth: 2 },
         label: { show: true, formatter: '{b}: {c} ({d}%)' },
         data: operatorDist.map((d) => ({ name: d.operator, value: d.count })),
       }],
@@ -277,7 +277,7 @@ export default function CdrAnalysis() {
               value={stats.avgDuration}
               prefix={<ClockCircleOutlined />}
               suffix="ث"
-              valueStyle={{ color: '#35CBE0' }}
+              valueStyle={{ color: '#4FC3F7' }}
             />
           </Card>
         </Col>
@@ -287,7 +287,7 @@ export default function CdrAnalysis() {
               title="صادرة / واردة"
               value={`${stats.outbound} / ${stats.inbound}`}
               prefix={<SwapOutlined />}
-              valueStyle={{ color: '#E8B84A' }}
+              valueStyle={{ color: '#E0A83C' }}
             />
           </Card>
         </Col>

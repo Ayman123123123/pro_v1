@@ -7,7 +7,7 @@ import NotificationsTab from './tabs/NotificationsTab';
 export default function NotificationsCenter() {
   return (
     <div>
-      <Typography.Title level={2} style={{color:'#00E6A0', margin:0}}><BellOutlined /> مركز الإشعارات — موحد</Typography.Title>
+      <Typography.Title level={2} style={{color:'#14D89B', margin:0}}><BellOutlined /> مركز الإشعارات — موحد</Typography.Title>
       <Typography.Text type="secondary">كل إشعارات المنصة — مدموج من NotificationsTab القديمة — الآن صفحة مستقلة ببيانات حقيقية</Typography.Text>
       <Alert type="info" showIcon style={{margin:'16px 0'}} message="البيانات حية من /api/notifications — لا بيانات وهمية" description="الفلتر: الكل/رسائل/مكالمات/مجموعات/أمان — النقر يعلّم كمقروء — العداد يتحدث تلقائياً" />
       <Card style={{marginTop:16}}>

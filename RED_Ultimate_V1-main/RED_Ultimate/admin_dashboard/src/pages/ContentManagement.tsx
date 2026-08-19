@@ -63,7 +63,7 @@ export default function ContentManagement() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <BarChartOutlined /> إدارة المحتوى
         </Title>
         <Text type="secondary">استطلاعات، أحداث، هاشتاجات، وملصقات</Text>
@@ -268,7 +268,7 @@ function PollsTab() {
               title="إجمالي الأصوات"
               value={polls.reduce((sum, p) => sum + p.totalVotes, 0)}
               prefix={<RiseOutlined />}
-              valueStyle={{ color: '#E8B84A' }}
+              valueStyle={{ color: '#E0A83C' }}
             />
           </Card>
         </Col>
@@ -499,7 +499,7 @@ function EventsTab() {
         </Col>
         <Col xs={24} sm={6}>
           <Card>
-            <Statistic title="مجدول" value={events.filter(e => e.status === 'SCHEDULED').length} prefix={<CalendarOutlined />} valueStyle={{ color: '#E8B84A' }} />
+            <Statistic title="مجدول" value={events.filter(e => e.status === 'SCHEDULED').length} prefix={<CalendarOutlined />} valueStyle={{ color: '#E0A83C' }} />
           </Card>
         </Col>
         <Col xs={24} sm={6}>
@@ -509,7 +509,7 @@ function EventsTab() {
         </Col>
         <Col xs={24} sm={6}>
           <Card>
-            <Statistic title="إجمالي الحضور" value={events.reduce((s, e) => s + e.currentAttendees, 0)} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#35CBE0' }} />
+            <Statistic title="إجمالي الحضور" value={events.reduce((s, e) => s + e.currentAttendees, 0)} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#4FC3F7' }} />
           </Card>
         </Col>
       </Row>

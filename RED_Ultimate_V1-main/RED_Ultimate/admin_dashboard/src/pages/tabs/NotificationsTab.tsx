@@ -91,7 +91,7 @@ export default function NotificationsTab() {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <Space>
-          <BellOutlined style={{ color: '#00E6A0' }} />
+          <BellOutlined style={{ color: '#14D89B' }} />
           <Typography.Text strong>صندوق الإشعارات</Typography.Text>
           {unreadCount > 0 && <Badge count={unreadCount} color="#00C896" />}
         </Space>

@@ -120,11 +120,11 @@ export default function FeatureFlags() {
         <Space direction="vertical" size={0} style={{ width: 120 }}>
           <Text strong>{pct ?? 0}%</Text>
           <div style={{
-            height: 4, background: '#1A2F4A', borderRadius: 2, overflow: 'hidden'
+            height: 4, background: '#1A242C', borderRadius: 2, overflow: 'hidden'
           }}>
             <div style={{
               height: '100%', width: `${pct ?? 0}%`,
-              background: pct === 100 ? '#00C896' : pct > 0 ? '#35CBE0' : '#666',
+              background: pct === 100 ? '#00C896' : pct > 0 ? '#4FC3F7' : '#666',
               transition: 'width 0.3s'
             }} />
           </div>
@@ -171,7 +171,7 @@ export default function FeatureFlags() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <ExperimentOutlined /> أعلام الميزات
         </Title>
         <Text type="secondary">إدارة تفعيل الميزات بشكل تدريجي (Feature Flags)</Text>
@@ -214,7 +214,7 @@ export default function FeatureFlags() {
               precision={0}
               suffix="%"
               prefix={<RiseOutlined />}
-              valueStyle={{ color: '#35CBE0' }}
+              valueStyle={{ color: '#4FC3F7' }}
             />
           </Card>
         </Col>
