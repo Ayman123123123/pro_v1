@@ -89,8 +89,9 @@ red:
     ip: ${DINSTAR_IP:192.168.11.1}
     port: ${DINSTAR_PORT:443}
     scheme: ${DINSTAR_SCHEME:https}
-    username: ${DINSTAR_USERNAME:admin}
-    password: ${DINSTAR_PASSWORD:admin}
+    # لا تُورَّث بيانات البوابة الافتراضية المعروفة؛ تشغيل DINSTAR يتطلب أسرارًا صريحة.
+    username: ${DINSTAR_USERNAME:}
+    password: ${DINSTAR_PASSWORD:}
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3

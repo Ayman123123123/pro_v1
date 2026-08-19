@@ -32,11 +32,12 @@ import javax.net.ssl.X509TrustManager
 /** محوّل UC2000-VE (‑4/8G و‑4/8T). لا يكشف إلا عمليات HTTP API الموثقة. */
 @Service
 class DinstarHardwareService(
+    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean,
     @Value("\${red.dinstar.ip}") private val configuredIp: String,
     @Value("\${red.dinstar.port:443}") private val configuredPort: Int,
     @Value("\${red.dinstar.scheme:https}") private val configuredScheme: String,
-    @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
-    @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
+    @Value("\${red.dinstar.username:}") private val gatewayUsername: String,
+    @Value("\${red.dinstar.password:}") private val gatewayPassword: String,
     private val mapper: ObjectMapper,
     private val jdbc: JdbcTemplate,
     private val connections: DinstarConnectionFactory
@@ -56,6 +57,17 @@ class DinstarHardwareService(
 
         /** الحد الموثق لحجم نص الرسالة. */
         const val MAX_SMS_TEXT_BYTES = 1500
+    }
+
+    init {
+        if (dinstarEnabled) {
+            require(gatewayUsername.isNotBlank() && gatewayPassword.isNotBlank()) {
+                "DINSTAR_ENABLED requires DINSTAR_USERNAME and DINSTAR_PASSWORD"
+            }
+            require(!(gatewayUsername == "admin" && gatewayPassword == "admin")) {
+                "DINSTAR_ENABLED refuses the known default DINSTAR credentials"
+            }
+        }
     }
 
     /**
