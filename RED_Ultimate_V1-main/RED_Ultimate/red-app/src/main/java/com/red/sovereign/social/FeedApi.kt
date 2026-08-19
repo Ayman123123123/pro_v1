@@ -18,7 +18,7 @@ class FeedApi(private val client: AuthorizedApiClient) {
         return client.request("GET", "/api/feed?$query").decode { json.decodeFromString<FeedResponse>(it) }
     }
 
-    suspend fun create(text: String, visibility: String = "LOCAL_YEMEN"): ApiResult<Post> =
+    suspend fun create(text: String, visibility: String = "PUBLIC"): ApiResult<Post> =
         create(CreatePostRequest(text, visibility))
 
     suspend fun create(request: CreatePostRequest): ApiResult<Post> =
