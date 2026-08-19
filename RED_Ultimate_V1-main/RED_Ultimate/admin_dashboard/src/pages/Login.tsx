@@ -5,7 +5,6 @@ import {
   CloudServerOutlined,
   LockOutlined,
   SafetyCertificateOutlined,
-  ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { adminLogin, probeBackend, type BackendProbe } from '../api';
@@ -81,7 +80,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
         <div style={{ position: 'absolute', bottom: -100, left: -80, width: 300, height: 300, background: 'radial-gradient(circle, rgba(232,184,74,0.12) 0%, transparent 70%)', borderRadius: '50%' }} />
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 620 }}>
           <Space align="center" size={14} style={{ marginBottom: 32 }}>
-            <div style={{ width: 54, height: 54, background: 'linear-gradient(135deg, #00C896 0%, #35CBE0 100%)', borderRadius: 16, display: 'grid', placeItems: 'center', color: '#020617', fontWeight: 900, fontSize: 24, boxShadow: '0 10px 32px rgba(0,201,140,0.32)' }}>◆</div>
+            <img src="/admin-master-icon.svg" alt="شعار يونس" style={{ width: 54, height: 54, borderRadius: 16, boxShadow: '0 10px 32px rgba(0,201,140,0.32)' }} />
             <div>
               <div style={{ color: '#00C896', fontWeight: 900, fontSize: 24, letterSpacing: 1 }}>YOUNES MASTER</div>
               <div style={{ color: '#64748B', fontSize: 11, letterSpacing: 2, marginTop: -4 }}>SOVEREIGN ADMIN CONSOLE</div>
@@ -117,9 +116,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
       <div style={{ width: 500, background: '#030712', display: 'grid', placeItems: 'center', padding: 34, borderLeft: '1px solid #1E293B' }}>
         <Space direction="vertical" align="center" size={22} style={{ width: '100%', maxWidth: 390 }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 60, height: 60, background: 'linear-gradient(135deg, rgba(0,201,140,0.95), rgba(15,23,42,0.95))', borderRadius: 18, display: 'grid', placeItems: 'center', margin: '0 auto 12px', border: '1px solid rgba(0,201,140,0.35)', boxShadow: '0 0 30px rgba(0,201,140,0.22)' }}>
-              <ThunderboltOutlined style={{ color: '#DFFCF4', fontSize: 28 }} />
-            </div>
+            <img src="/admin-master-icon.svg" alt="" style={{ width: 60, height: 60, borderRadius: 18, margin: '0 auto 12px', display: 'block', border: '1px solid rgba(0,201,140,0.35)', boxShadow: '0 0 30px rgba(0,201,140,0.22)' }} />
             <Typography.Title level={3} style={{ color: '#F1F5F9', margin: 0, fontWeight: 800 }}>دخول المسؤول السيادي</Typography.Title>
             <Space style={{ marginTop: 8 }}>
               <Badge status={healthMeta.color} text={<span style={{ color: probe.state === 'DOWN' ? '#FCA5A5' : '#94A3B8', fontSize: 12 }}>{healthMeta.text}</span>} />
@@ -158,7 +155,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
               </Form.Item>
               <Button htmlType="submit" type="primary" block loading={loading}
                 style={{ background: 'linear-gradient(90deg, #00C896, #00A878)', color: '#020617', fontWeight: 900, height: 49, borderRadius: 11, border: 'none', fontSize: 16, boxShadow: '0 8px 22px rgba(0,201,140,0.28)' }}>
-                دخول آمن →
+                دخول آمن ←
               </Button>
             </Form>
             <Divider style={{ borderColor: '#1E293B', margin: '20px 0 14px' }} />

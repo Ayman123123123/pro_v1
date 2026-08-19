@@ -60,13 +60,18 @@ class JwtService(
             .claim("redId", user.redId)
             .claim("username", user.username)
             .claim("role", user.role.name)
+            // نطاق صريح يمنع استخدام التذكرة كرمز API قابل للتبادل
+            .claim("scope", "sfu")
             .claim("deviceId", deviceId.toString())
+            .claim("roomId", groupId)
+            .claim("canProduce", canProduce)
+            // مطالبات قديمة تُقرأ من عملاء سابقين — تُبقى للتوافق
             .claim("sfuGroupId", groupId)
             .claim("sfuGroupRole", groupRole)
-            .claim("sfuCanProduce", canProduce)
         return builder
             .issuedAt(Date.from(now))
-            .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
+            // 120 ثانية — يطابق expiresInSeconds المُعلَن في SfuTicketController
+            .expiration(Date.from(now.plusSeconds(120)))
             .signWith(key)
             .compact()
     }

@@ -134,6 +134,11 @@ class DinstarFleetService(
 
     fun findGateway(id: UUID): Gateway? = listGateways().firstOrNull { it.id == id }
 
+    fun findGatewayByHost(host: String): Gateway? = listGateways().firstOrNull { it.host == host }
+
+    /** البوابة الافتراضية: أولى الصالحة للتوجيه، وإلا أولى المسجّلة. */
+    fun getDefaultGateway(): Gateway? = routableGateways().firstOrNull() ?: listGateways().firstOrNull()
+
     /** البوابات الصالحة للتوجيه: مفعّلة وليست ساقطة، مرتّبة بالأولوية. */
     fun routableGateways(): List<Gateway> =
         listGateways(onlyEnabled = true).filter { it.healthState != "OFFLINE" }

@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -15,7 +16,7 @@ import org.springframework.web.socket.WebSocketSession
 import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = ObjectMapper().registerKotlinModule()
     private val handler = ConferenceWebSocketHandler(objectMapper)
 
     private class Probe(sessionId: String, userId: String) {

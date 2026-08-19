@@ -2,6 +2,7 @@ package com.red.server
 
 import com.red.server.media.MediaAccessService
 import com.red.server.stories.StoryDocument
+import com.red.server.stories.StoryVisibility
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -35,7 +36,21 @@ class MediaAccessServiceTest {
 
     @Test
     fun `active story media is available to another approved account`() {
-        whenever(mongo.exists(any<Query>(), eq(StoryDocument::class.java))).thenReturn(true)
+        // الإنتاج يجلب وثيقة الستوري عبر findOne (لا exists) ليفحص ظهورها
+        whenever(mongo.findOne(any<Query>(), eq(StoryDocument::class.java))).thenReturn(
+            StoryDocument(
+                id = "story-1",
+                ownerId = UUID.randomUUID().toString(),
+                ownerRedId = "10000",
+                ownerUsername = "owner",
+                ownerDisplayName = "المالك",
+                mediaKey = foreignKey,
+                mediaType = "video/mp4",
+                caption = null,
+                visibility = StoryVisibility.EVERYONE,
+                expiresAt = java.time.Instant.now().plusSeconds(3600)
+            )
+        )
         assertDoesNotThrow { service.requireDownloadAllowed(owner, foreignKey) }
     }
 

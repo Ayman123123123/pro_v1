@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.red.server.calls.LiveStreamService
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -16,7 +17,7 @@ import org.springframework.web.socket.WebSocketSession
 import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
-    private val objectMapper = ObjectMapper()
+    private val objectMapper = ObjectMapper().registerKotlinModule()
     private val streams = LiveStreamService()
     private val handler = LiveStreamWebSocketHandler(objectMapper, streams)
 
