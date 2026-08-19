@@ -222,6 +222,39 @@ data class DinstarIncomingSms(
     val timestamp: String = ""
 )
 
+/**
+ * قياسات عتاد البوابة نفسها — لا حالة المنافذ.
+ *
+ * مصدرها `/api/get_status` على الجهاز، يمرّرها الخادم عبر
+ * `/api/admin/dinstar/device-status` ويحفظها في `dinstar_device_status`.
+ *
+ * كل الحقول نصية `String?` عمدًا: البوابة تُرجعها بوحدات مُلحقة
+ * (`"45%"`, `"128MB"`, `"47C"`) وتتفاوت بين الإصدارات، فتحويلها إلى أرقام
+ * هنا يفقد الوحدة ويكسر عند صيغة غير متوقَّعة. العرض يبقى كما أرسله الجهاز.
+ *
+ * استُعيد هذا النموذج في 2026-08-19: كانت السلسلة مقطوعة عند التطبيق —
+ * الجهاز يُنتج القياسات والخادم يخزّنها ولا شيء يستهلكها.
+ */
+data class DinstarDeviceStatus(
+    val cpuUsed: String? = null,
+    val memoryTotal: String? = null,
+    val memoryUsed: String? = null,
+    val memoryFree: String? = null,
+    val flashTotal: String? = null,
+    val flashUsed: String? = null,
+    val flashFree: String? = null,
+    /** حرارة اللوحة — المؤشر الأبكر على اختناق حراري يسبق سقوط المنافذ. */
+    val temperature: String? = null,
+    val uptime: String? = null
+) {
+    /** true حين لم تصل أي قيمة — للتمييز بين "لم يُستعلم بعد" و"جهاز صامت". */
+    val isEmpty: Boolean
+        get() = listOf(
+            cpuUsed, memoryTotal, memoryUsed, memoryFree,
+            flashTotal, flashUsed, flashFree, temperature, uptime
+        ).all { it.isNullOrBlank() }
+}
+
 sealed class DinstarCommandResult {
     data class Success(val message: String, val data: Map<String, Any?> = emptyMap()) : DinstarCommandResult()
     data class Error(val message: String, val code: Int? = null) : DinstarCommandResult()
