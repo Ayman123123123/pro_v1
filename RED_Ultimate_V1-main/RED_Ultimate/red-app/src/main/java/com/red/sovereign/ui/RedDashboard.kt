@@ -49,12 +49,12 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Copy
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Forward
-import androidx.compose.material.icons.filled.QuickReply
+import androidx.compose.material.icons.filled.Quickreply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
@@ -123,6 +123,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetDefaults
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
@@ -262,9 +263,9 @@ import com.red.sovereign.media.PollsScreen
 
 private enum class MainSection(val label: String, val icon: ImageVector) {
     CHATS("الدردشات", Icons.Default.ChatBubble),
-    GROUPS("المجموعات", Icons.Default.Groups),
-    CALLS("المكالمات", Icons.Default.Call),
     HOME("الرئيسية", Icons.Default.Home),
+    CALLS("المكالمات", Icons.Default.Call),
+    GROUPS("المجموعات", Icons.Default.Groups),
     MORE("المزيد", Icons.Default.MoreHoriz)
 }
 
@@ -410,8 +411,12 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
-                // remember lambdas per item لتفادي إعادة التوليد كل recompose
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
+                tonalElevation = 0.dp,
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+            ) {
+                // الترتيب يعكس أهم مسارات اليوم: الرسائل، المحتوى، المكالمات، المجموعات، ثم الأدوات.
                 MainSection.entries.forEach { item ->
                     val itemLabel = item.label
                     val isSelected = section == item
@@ -419,8 +424,23 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     NavigationBarItem(
                         selected = isSelected,
                         onClick = onClick,
+                        alwaysShowLabel = true,
                         icon = { Icon(item.icon, itemLabel) },
-                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+                        label = {
+                            Text(
+                                itemLabel,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .22f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     )
                 }
             }
@@ -456,8 +476,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showCreate) CreateSheet(
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
-        onPost = { text -> feed.create(text) { feed.discardDraft(); showCreate = false } },
-        onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
+        onPost = { text, visibility -> feed.create(text, visibility) { feed.discardDraft(); showCreate = false } },
+        onPoll = { question, options, hours, visibility -> feed.createPoll(question, options, hours, visibility) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE },
@@ -516,27 +536,42 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
 }
 
 @Composable
-private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) = Row(
-    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 4.dp else 10.dp),
-    verticalAlignment = Alignment.CenterVertically
-) {
-    Image(
-        painterResource(R.drawable.younes_icon_master),
-        contentDescription = "يونس",
-        modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
-        contentScale = ContentScale.Crop
-    )
-    Column(Modifier.weight(1f).padding(start = 8.dp)) {
-        Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painterResource(R.drawable.younes_icon_master),
+                contentDescription = "يونس",
+                modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text("يونس • @$username", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(redId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            Spacer(Modifier.width(6.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
     }
-    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
-    IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: StoryViewModel, onCreate: () -> Unit) {
+    val context = LocalContext.current
     var filter by remember { mutableIntStateOf(0) }
     var threadPost by remember { mutableStateOf<Post?>(null) }
     var quotePost by remember { mutableStateOf<Post?>(null) }
@@ -544,9 +579,13 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     var editText by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var quoteText by remember { mutableStateOf("") }
+    var showStoryAudience by remember { mutableStateOf(false) }
+    var storyVisibility by remember { mutableStateOf("CONTACTS") }
     val layout = WindowLayout.current()
     val page = layout.pagePadding
-    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
+    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { stories.upload(it, visibility = storyVisibility) }
+    }
     val refreshing = feed.state == FeedState.Loading && feed.posts.isNotEmpty()
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { feed.refresh() }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -556,14 +595,14 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     ) {
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
+                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { showStoryAudience = true } }
                 items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(listOf("لك" to null, "أتابعهم" to "FOLLOWING", "اليمن" to "YEMEN")) { (title, scope) ->
-                    val idx = when (scope) { "FOLLOWING" -> 1; "YEMEN" -> 2; else -> 0 }
+                items(listOf("لك" to null, "الأصدقاء" to "FRIENDS", "العام" to "PUBLIC")) { (title, scope) ->
+                    val idx = when (scope) { "FRIENDS" -> 1; "PUBLIC" -> 2; else -> 0 }
                     FilterChip(filter == idx, {
                         filter = idx
                         feed.load(scope)
@@ -587,11 +626,39 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
                     Button(onClick = { feed.refresh() }) { Text("إعادة المحاولة") }
                 }
             }
-            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات. هذا النبض عام — ليس E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور للأصدقاء أو للعامة. النظام يدعم السلاسل والاقتباسات والاستطلاعات. المنشورات ليست محادثات مشفرة طرفيًا لطرف.") }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
+    }
+    if (showStoryAudience) {
+        AlertDialog(
+            onDismissRequest = { showStoryAudience = false },
+            title = { Text("جمهور الحالة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("تُعرض الحالة لمدة 24 ساعة. اختر من يمكنه مشاهدتها قبل اختيار الوسيط.")
+                    listOf(
+                        "CONTACTS" to "جهات اتصالي",
+                        "EVERYONE" to "الجميع"
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = storyVisibility == value,
+                            onClick = { storyVisibility = value },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showStoryAudience = false
+                    storyPicker.launch(arrayOf("image/*", "video/*"))
+                }) { Text("اختيار صورة أو فيديو") }
+            },
+            dismissButton = { TextButton(onClick = { showStoryAudience = false }) { Text("إلغاء") } }
+        )
     }
     threadPost?.let { root ->
         AlertDialog(
@@ -694,7 +761,6 @@ private fun PostCard(
     post: Post,
     currentRedId: String,
     onLike: (Post) -> Unit,
-    onFollow: (Post) -> Unit,
     onVote: (Post, String) -> Unit,
     onThread: () -> Unit,
     onQuote: () -> Unit,
@@ -733,10 +799,14 @@ private fun PostCard(
                     DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
                 }
             }
-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            val visibilityLabel = when (post.visibility) {
+                "FRIENDS" -> "الأصدقاء"
+                "PUBLIC" -> "عام"
+                else -> "نبض محلي"
+            }
+            AssistChip({}, { Text(visibilityLabel) }, enabled = false, leadingIcon = { Icon(if (post.visibility == "FRIENDS") Icons.Default.Groups else Icons.Default.Public, null, Modifier.size(15.dp)) })
             AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }
@@ -824,7 +894,7 @@ private fun PostCard(
     else Avatar(group.name.take(1))
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatHubScreen(
     account: AuthState.Authenticated,
@@ -855,7 +925,6 @@ private fun ChatHubScreen(
     var selectedContact by remember { mutableStateOf<PublicRedProfile?>(null) }
     var directoryQuery by remember { mutableStateOf("") }
     var reportDetails by remember { mutableStateOf("") }
-    var messageText by remembr { mutableStateOf("") }
     var messageText by remember { mutableStateOf("") }
     var selectedChatMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
     var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
@@ -1334,11 +1403,9 @@ private fun ChatHubScreen(
                     // فاصل تاريخ بين الأيام (مثل واتساب)
                     val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(item.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1729,11 +1796,9 @@ private fun ChatHubScreen(
                 itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
                     val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
                     if (showDate) {
-                        item {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
-                                    Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                                }
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)) {
+                                Text(dateLabel(message.timestamp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                             }
                         }
                     }
@@ -1972,7 +2037,7 @@ private fun ChatHubScreen(
                     selectedChatMessage = null
                 })
 
-                MessageActionRow(Icons.Default.QuickReply, "الرد", "رد على هذه الرسالة") {
+                MessageActionRow(Icons.Default.Quickreply, "الرد", "رد على هذه الرسالة") {
                     replyToMessage = message; selectedChatMessage = null
                 }
                 MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
@@ -1984,9 +2049,8 @@ private fun ChatHubScreen(
                     }
                 }
                 if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
-                    MessageActionRow(Icons.Default.Copy, "نسخ", "انسخ النص") {
-                        val ctx = LocalContext.current
-                        val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    MessageActionRow(Icons.Default.ContentCopy, "نسخ", "انسخ النص") {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", payload.text))
                         selectedChatMessage = null
                     }
@@ -2252,7 +2316,7 @@ private fun ChatHubScreen(
                                         if (forward != null) {
                                             RedConnectionService.sendRichText(context, person.redId, conversationId(account.redId, person.redId), RichMessage(text = messageDisplayText(forward), forwardOf = forward.id))
                                             pendingForwardMessage = null
-                                        } else openPrivateChat(person.redId)
+                                        } else target = person.redId
                                         showDirectory = false; directory.clear()
                                     }) { Text(if (pendingForwardMessage != null) "توجيه" else "محادثة") }
                                     Button({ directory.request(person) }) { Text("إضافة") }
@@ -2826,8 +2890,8 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
 private fun CreateSheet(
     publishing: Boolean,
     onDismiss: () -> Unit,
-    onPost: (String) -> Unit,
-    onPoll: (String, List<String>, Int) -> Unit,
+    onPost: (String, String) -> Unit,
+    onPoll: (String, List<String>, Int, String) -> Unit,
     onStory: () -> Unit,
     onLive: () -> Unit,
     onExplore: () -> Unit,
@@ -2842,6 +2906,7 @@ private fun CreateSheet(
     }
     var pollQuestion by remember { mutableStateOf("") }
     var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
+    var postVisibility by remember { mutableStateOf("PUBLIC") }
     var pollHours by remember { mutableIntStateOf(24) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2851,9 +2916,10 @@ private fun CreateSheet(
             }
             when (mode) {
                 "post" -> {
-                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، فكرة طويلة، أو إعلاناً محلياً…") }, maxLines = 7)
+                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً أو سلسلة أو فكرة تستحق المشاركة…") }, maxLines = 7)
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
+                    Button({ if (text.isNotBlank()) onPost(text.trim(), postVisibility) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر للأصدقاء" else "نشر للعامة") }
                 }
                 "poll" -> {
                     OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
@@ -2875,8 +2941,9 @@ private fun CreateSheet(
                         OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
                         OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
                     }
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
-                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر الاستطلاع") }
+                    Button({ onPoll(pollQuestion, pollOptions, pollHours, postVisibility) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر الاستطلاع للأصدقاء" else "نشر الاستطلاع للعامة") }
                 }
                 else -> {
                     CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
@@ -2887,6 +2954,17 @@ private fun CreateSheet(
                 }
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun PostVisibilityPicker(selected: String, onSelected: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("من يمكنه رؤية هذا المحتوى؟", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = selected == "PUBLIC", onClick = { onSelected("PUBLIC") }, label = { Text("العام") }, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(16.dp)) })
+            FilterChip(selected = selected == "FRIENDS", onClick = { onSelected("FRIENDS") }, label = { Text("الأصدقاء") }, leadingIcon = { Icon(Icons.Default.Groups, null, Modifier.size(16.dp)) })
         }
     }
 }
@@ -3285,9 +3363,6 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
                 StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
                 Surface(
-                    Modifier.align(Alignment.Center).size(52.dp),
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.55f),
                     onClick = {
                         val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
@@ -3295,7 +3370,10 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         runCatching { context.startActivity(intent) }
-                    }
+                    },
+                    modifier = Modifier.align(Alignment.Center).size(52.dp),
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f)
                 ) {
                     Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
                 }
@@ -3342,7 +3420,10 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
-                VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
+                VoiceNotePlayer(
+                    uri = android.net.Uri.fromFile(java.io.File(downloaded.first)),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     } else {
@@ -3579,11 +3660,11 @@ private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
 // نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @12345)
 private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // الهاشتاجات العربية/اللاتينية
-private val HASHTAG_PARTIAL = Regex("#[\w\u0600-\u06FF]{2,30}")
+private val HASHTAG_PARTIAL = Regex("""#[\w\u0600-\u06FF]{2,30}""")
 // اسم المستخدم للـ @ autocomplete
 private val USERNAME_PARTIAL = Regex("@([A-Za-z0-9_.]{1,20})$")
 // الهاشتاج لـ # autocomplete
-private val HASHTAG_AUTOCOMPLETE = Regex("#([\w\u0600-\u06FF]{1,20})$")
+private val HASHTAG_AUTOCOMPLETE = Regex("""#([\w\u0600-\u06FF]{1,20})$""")
 private val EMOJI_CATEGORIES = listOf(
     "سريعة" to listOf("😀", "😂", "😍", "👍", "❤️", "🔥", "👏", "🙏", "🎉", "😢", "😮", "✅"),
     "الوجوه" to listOf("😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),

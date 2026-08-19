@@ -2,6 +2,7 @@ package com.red.sovereign.calls
 
 import android.content.Context
 import android.net.Uri
+import android.telecom.DisconnectCause
 import androidx.core.telecom.CallAttributesCompat
 import androidx.core.telecom.CallControlScope
 import androidx.core.telecom.CallsManager
@@ -59,9 +60,9 @@ class TelecomBridge(context: Context) {
                 heldStates[callId] = true
                 onInactive()
             }
-        ) { scope ->
-            // Store the scope so we can later set inactive/active from within the app
-            scopes[callId] = scope
+        ) {
+            // This lambda has CallControlScope as receiver in core-telecom 1.1.
+            scopes[callId] = this
             heldStates[callId] = false
         }
         return callId
@@ -94,15 +95,17 @@ class TelecomBridge(context: Context) {
     suspend fun disconnect(peer: String): Boolean {
         val scope = scopes.remove(peer) ?: return false
         heldStates.remove(peer)
-        return runCatching { scope.disconnect() }.isSuccess
+        return runCatching { scope.disconnect(DisconnectCause(DisconnectCause.LOCAL)) }.isSuccess
     }
 
     /**
-     * Sends a DTMF tone. Used for IVR navigation and banking-grade phone menus.
+     * core-telecom does not expose RTP DTMF transmission. This bridge must not
+     * report success for a tone it cannot send; media-level DTMF requires a
+     * negotiated WebRTC/PSTN transport implementation.
      */
     suspend fun sendDtmf(peer: String, digit: Char): Boolean {
-        val scope = scopes[peer] ?: return false
-        return runCatching { scope.sendDtmf(digit.toString()[0]) }.isSuccess
+        if (peer.isBlank() || digit !in "0123456789*#ABCD") return false
+        return false
     }
 
     fun hasCall(peer: String): Boolean = scopes.containsKey(peer)

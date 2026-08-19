@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -399,10 +400,3 @@ private fun formatDuration(seconds: Int): String {
     return "%d:%02d".format(minutes, secs)
 }
 
-private fun androidx.compose.ui.Modifier.border(
-    width: androidx.compose.ui.unit.Dp,
-    color: androidx.compose.ui.graphics.Color,
-    shape: androidx.compose.ui.graphics.Shape
-) = this.then(
-    Modifier.border(width, color, shape)
-)

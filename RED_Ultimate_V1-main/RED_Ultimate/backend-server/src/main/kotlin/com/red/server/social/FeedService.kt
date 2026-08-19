@@ -7,13 +7,19 @@ import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
-class FeedService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val linkCards: LinkCardService? = null) {
+class FeedService(
+    private val mongo: MongoTemplate,
+    private val users: UserAccountRepository,
+    private val jdbc: JdbcTemplate,
+    private val linkCards: LinkCardService? = null
+) {
     fun create(userId: UUID, request: CreatePostRequest): PostDocument {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED)
@@ -45,20 +51,39 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
         if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
+        val friendIds = mutualFriendIds(userId) + userId.toString()
         when (scope) {
-            FeedScope.ALL -> Unit
-            FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
-            FeedScope.FOLLOWING -> {
-                val followed = mongo.find(Query(Criteria.where("followerId").`is`(userId.toString())), FollowDocument::class.java)
-                    .map(FollowDocument::followedId)
-                if (followed.isEmpty()) return FeedResponse(emptyList(), null)
-                criteria.and("authorId").`in`(followed)
+            FeedScope.PUBLIC -> criteria.and("visibility").`is`(PostVisibility.PUBLIC)
+            FeedScope.ALL -> criteria.andOperator(
+                Criteria().orOperator(
+                    Criteria.where("visibility").`is`(PostVisibility.PUBLIC),
+                    Criteria.where("authorId").`is`(userId.toString()),
+                    Criteria.where("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
+                )
+            )
+            FeedScope.FRIENDS, FeedScope.FOLLOWING -> {
+                if (friendIds.size == 1) return FeedResponse(emptyList(), null)
+                criteria.and("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
             }
+            // نطاق توافق للمنشورات المحلية القديمة؛ لا يُستخدم كنطاق خصوصية جديد.
+            FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
         }
         before?.let { criteria.and("createdAt").lt(it) }
         val posts = mongo.find(Query(criteria).with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit.coerceIn(1, 50)), PostDocument::class.java)
         return FeedResponse(posts, posts.lastOrNull()?.createdAt?.toString())
     }
+
+    private fun mutualFriendIds(userId: UUID): List<String> = jdbc.queryForList(
+        """SELECT a.contact_id::text
+           FROM red_contacts a
+           WHERE a.owner_id = ?
+             AND EXISTS (
+                 SELECT 1 FROM red_contacts b
+                 WHERE b.owner_id = a.contact_id AND b.contact_id = a.owner_id
+             )""",
+        String::class.java,
+        userId
+    ).filterNotNull()
 
     fun thread(postId: String): List<PostDocument> {
         require(activePost(postId) != null) { "Post not found" }

@@ -1,6 +1,7 @@
 package com.red.server.calls
 
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.auth.ContactService
 import com.red.server.services.NotificationService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -12,6 +13,7 @@ import java.util.UUID
 class LiveStreamController(
     private val liveStreamService: LiveStreamService,
     private val users: UserAccountRepository,
+    private val contacts: ContactService,
     private val notifications: NotificationService,
     private val history: CallHistoryService,
     private val callSignaling: com.red.server.websocket.CallWebSocketHandler
@@ -26,6 +28,8 @@ class LiveStreamController(
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val streamId = request.streamId.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(12)}" }
         require(streamId.matches(Regex("^[A-Za-z0-9_-]{8,128}$"))) { "INVALID_STREAM_ID" }
+        require(!request.isPrivate || request.password?.length in 8..128) { "PRIVATE_STREAM_PASSWORD_MUST_BE_8_TO_128_CHARACTERS" }
+        require(request.isPrivate || request.password.isNullOrBlank()) { "PUBLIC_STREAM_MUST_NOT_ACCEPT_A_PASSWORD" }
         val record = liveStreamService.createStream(
             streamId = streamId,
             broadcasterId = user.id.toString(),
@@ -121,8 +125,14 @@ class LiveStreamController(
         val record = liveStreamService.getStreamRecord(streamId)
             ?: throw NoSuchElementException("Live stream not found or ended")
         val accountId = UUID.fromString(authentication.name)
+        require(record.broadcasterId == accountId.toString()) { "ONLY_BROADCASTER_CAN_INVITE" }
+        require(request.friendIds.size <= 100) { "AT_MOST_100_FRIENDS_CAN_BE_INVITED" }
         val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        request.friendIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { friendId ->
+        val requested = request.friendIds.asSequence().map(String::trim).filter(String::isNotBlank)
+            .filter { it != inviter.redId }.map(String::uppercase).toSet()
+        val allowed = contacts.contacts(accountId).asSequence().map { it.redId.uppercase() }.toSet()
+        require(requested.all(allowed::contains)) { "LIVE_INVITES_ARE_LIMITED_TO_MUTUAL_FRIENDS" }
+        requested.forEach { friendId ->
             notifications.sendVoipPushNotification(friendId, inviter.redId, streamId, "LIVESTREAM")
             callSignaling.deliverInvite(
                 targetRedId = friendId,
@@ -133,7 +143,7 @@ class LiveStreamController(
                 payload = mapOf("title" to record.title, "inviter" to inviter.displayName)
             )
         }
-        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.friendIds.size, "streamId" to streamId))
+        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to requested.size, "streamId" to streamId))
     }
 }
 

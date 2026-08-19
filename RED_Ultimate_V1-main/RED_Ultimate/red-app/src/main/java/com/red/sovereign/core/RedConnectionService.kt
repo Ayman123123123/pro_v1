@@ -269,6 +269,7 @@ class RedConnectionService : Service() {
         when (envelope.signalCase) {
             RedProtos.RedRED.SignalCase.MESSAGE -> {
                 val message = envelope.message
+                scope.launch {
                 if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
                     runCatching {
                         repository.saveIncomingMessage(message)
@@ -333,26 +334,23 @@ class RedConnectionService : Service() {
                 } else if (message.senderId == tokenStore.redId) {
                     repository.saveIncomingMessage(message, outgoing = true)
                 }
+                }
             }
-            RedProtos.RedRED.SignalCase.ACK -> {
+            RedProtos.RedRED.SignalCase.ACK -> scope.launch {
                 repository.updateMessageStatus(envelope.ack.messageId, envelope.ack.status)
                 com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(envelope.ack.messageId, envelope.ack.status))
             }
-            RedProtos.RedRED.SignalCase.DELETE -> {
+            RedProtos.RedRED.SignalCase.DELETE -> scope.launch {
                 val delete = envelope.delete
-                when (delete.targetCase) {
-                    RedProtos.RedDelete.TargetCase.MESSAGE_IDS -> {
-                        // حذف محلي فقط — لا يُحذف من الخادم
-                        delete.messageIdsList.forEach { msgId ->
-                            runCatching { repository.deleteLocalMessage(msgId) }
-                                .onFailure { android.util.Log.w("RedConnectionService", "delete failed for $msgId: ${it.message}") }
-                        }
+                when {
+                    delete.messageId.isNotBlank() -> {
+                        runCatching { repository.deleteLocalMessage(delete.messageId) }
+                            .onFailure { android.util.Log.w("RedConnectionService", "delete failed for ${delete.messageId}: ${it.message}") }
                     }
-                    RedProtos.RedDelete.TargetCase.CONVERSATION_ID -> {
+                    delete.conversationId.isNotBlank() -> {
                         runCatching { repository.deleteConversation(delete.conversationId) }
-                            .onFailure { android.util.Log.w("RedConnectionService", "delete conv failed: ${it.message}") }
+                            .onFailure { android.util.Log.w("RedConnectionService", "delete conversation failed: ${it.message}") }
                     }
-                    RedProtos.RedDelete.TargetCase.TARGET_NOT_SET -> Unit
                 }
             }
             RedProtos.RedRED.SignalCase.TYPING -> {

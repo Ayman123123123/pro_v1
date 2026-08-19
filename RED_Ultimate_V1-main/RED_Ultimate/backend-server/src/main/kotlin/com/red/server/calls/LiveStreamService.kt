@@ -74,9 +74,10 @@ class LiveStreamService {
 
     fun verifyPassword(streamId: String, password: String?): Boolean {
         val record = activeStreamRecords[streamId] ?: return false
-        if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
+        if (!record.isPrivate) return true
+        val expectedHash = record.passwordHash?.takeIf(String::isNotBlank) ?: return false
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        return hashPassword(password) == expectedHash
     }
 
     fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
