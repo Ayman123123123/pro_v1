@@ -34,15 +34,15 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun create(text: String, done: () -> Unit) = viewModelScope.launch {
+    fun create(text: String, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         state = FeedState.Publishing
-        when (val result = api.create(text)) {
+        when (val result = api.create(text, visibility)) {
             is ApiResult.Success -> { posts.add(0, result.value); state = FeedState.Ready; done() }
             is ApiResult.Error -> state = FeedState.Error(result.message)
         }
     }
 
-    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, done: () -> Unit) = viewModelScope.launch {
+    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         val cleanOptions = options.map(String::trim).filter { it.length >= 2 }.distinct().take(6)
         if (question.isBlank() || cleanOptions.size < 2) {
             state = FeedState.Error("اكتب سؤالاً واضحاً وخيارين على الأقل")
@@ -51,7 +51,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         state = FeedState.Publishing
         val request = CreatePostRequest(
             text = question.trim(),
-            visibility = scope ?: "LOCAL_YEMEN",
+            visibility = visibility,
             pollOptions = cleanOptions,
             pollDurationHours = durationHours.coerceIn(1, 168)
         )

@@ -476,8 +476,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showCreate) CreateSheet(
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
-        onPost = { text -> feed.create(text) { feed.discardDraft(); showCreate = false } },
-        onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
+        onPost = { text, visibility -> feed.create(text, visibility) { feed.discardDraft(); showCreate = false } },
+        onPoll = { question, options, hours, visibility -> feed.createPoll(question, options, hours, visibility) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
         onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE },
@@ -597,8 +597,8 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
         }
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(listOf("لك" to null, "أتابعهم" to "FOLLOWING", "اليمن" to "YEMEN")) { (title, scope) ->
-                    val idx = when (scope) { "FOLLOWING" -> 1; "YEMEN" -> 2; else -> 0 }
+                items(listOf("لك" to null, "الأصدقاء" to "FRIENDS", "العام" to "PUBLIC")) { (title, scope) ->
+                    val idx = when (scope) { "FRIENDS" -> 1; "PUBLIC" -> 2; else -> 0 }
                     FilterChip(filter == idx, {
                         filter = idx
                         feed.load(scope)
@@ -622,8 +622,8 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
                     Button(onClick = { feed.refresh() }) { Text("إعادة المحاولة") }
                 }
             }
-            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات. هذا النبض عام — ليس E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور للأصدقاء أو للعامة. النظام يدعم السلاسل والاقتباسات والاستطلاعات. المنشورات ليست محادثات مشفرة طرفيًا لطرف.") }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -729,7 +729,6 @@ private fun PostCard(
     post: Post,
     currentRedId: String,
     onLike: (Post) -> Unit,
-    onFollow: (Post) -> Unit,
     onVote: (Post, String) -> Unit,
     onThread: () -> Unit,
     onQuote: () -> Unit,
@@ -768,10 +767,14 @@ private fun PostCard(
                     DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
                 }
             }
-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            val visibilityLabel = when (post.visibility) {
+                "FRIENDS" -> "الأصدقاء"
+                "PUBLIC" -> "عام"
+                else -> "نبض محلي"
+            }
+            AssistChip({}, { Text(visibilityLabel) }, enabled = false, leadingIcon = { Icon(if (post.visibility == "FRIENDS") Icons.Default.Groups else Icons.Default.Public, null, Modifier.size(15.dp)) })
             AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }
@@ -2855,8 +2858,8 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
 private fun CreateSheet(
     publishing: Boolean,
     onDismiss: () -> Unit,
-    onPost: (String) -> Unit,
-    onPoll: (String, List<String>, Int) -> Unit,
+    onPost: (String, String) -> Unit,
+    onPoll: (String, List<String>, Int, String) -> Unit,
     onStory: () -> Unit,
     onLive: () -> Unit,
     onExplore: () -> Unit,
@@ -2871,6 +2874,7 @@ private fun CreateSheet(
     }
     var pollQuestion by remember { mutableStateOf("") }
     var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
+    var postVisibility by remember { mutableStateOf("PUBLIC") }
     var pollHours by remember { mutableIntStateOf(24) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2880,9 +2884,10 @@ private fun CreateSheet(
             }
             when (mode) {
                 "post" -> {
-                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، فكرة طويلة، أو إعلاناً محلياً…") }, maxLines = 7)
+                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً أو سلسلة أو فكرة تستحق المشاركة…") }, maxLines = 7)
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
+                    Button({ if (text.isNotBlank()) onPost(text.trim(), postVisibility) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر للأصدقاء" else "نشر للعامة") }
                 }
                 "poll" -> {
                     OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
@@ -2904,8 +2909,9 @@ private fun CreateSheet(
                         OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
                         OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
                     }
+                    PostVisibilityPicker(postVisibility) { postVisibility = it }
                     val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
-                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر الاستطلاع") }
+                    Button({ onPoll(pollQuestion, pollOptions, pollHours, postVisibility) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر الاستطلاع للأصدقاء" else "نشر الاستطلاع للعامة") }
                 }
                 else -> {
                     CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
@@ -2916,6 +2922,17 @@ private fun CreateSheet(
                 }
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun PostVisibilityPicker(selected: String, onSelected: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("من يمكنه رؤية هذا المحتوى؟", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = selected == "PUBLIC", onClick = { onSelected("PUBLIC") }, label = { Text("العام") }, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(16.dp)) })
+            FilterChip(selected = selected == "FRIENDS", onClick = { onSelected("FRIENDS") }, label = { Text("الأصدقاء") }, leadingIcon = { Icon(Icons.Default.Groups, null, Modifier.size(16.dp)) })
         }
     }
 }
