@@ -62,7 +62,12 @@ data class NetworkStats(
          * للجودة الممتازة / الجيدة / المقبولة / السيئة.
          */
         fun classify(rttMs: Long, lossPct: Double, availableKbps: Long = 0): Quality {
-            if (rttMs == 0L && availableKbps == 0L) return Quality.UNKNOWN
+            // Bandwidth alone is not a quality signal; wait for an actual RTT sample
+            // before escalating video quality or showing a quality badge.
+            if (rttMs <= 0L) return Quality.UNKNOWN
+            // A half-second round trip is materially disruptive for live conversation,
+            // even when a short sampling window still reports usable throughput.
+            if (rttMs >= 450L || lossPct >= 10.0) return Quality.POOR
             return when (SdpMediaOptimizer.mos(rttMs, lossPct)) {
                 in 4.0..5.0 -> Quality.EXCELLENT
                 in 3.6..4.0 -> Quality.GOOD

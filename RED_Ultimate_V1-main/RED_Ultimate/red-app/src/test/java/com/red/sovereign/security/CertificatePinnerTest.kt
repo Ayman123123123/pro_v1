@@ -42,14 +42,14 @@ class CertificatePinnerTest {
 
     @Test
     fun addPinAndGetExpectedPinsWorkCorrectly() {
-        CertificatePinner.addPin("test.host", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-        CertificatePinner.addPin("test.host", "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=")
+        CertificatePinner.addPin("test.host", pinFor("first-public-key"))
+        CertificatePinner.addPin("test.host", pinFor("second-public-key"))
         assertEquals(2, CertificatePinner.getExpectedPins("test.host").size)
     }
 
     @Test
     fun removePinsWorksCorrectly() {
-        CertificatePinner.addPin("test.host", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+        CertificatePinner.addPin("test.host", pinFor("removable-public-key"))
         assertTrue(CertificatePinner.isPinned("test.host"))
         CertificatePinner.removePins("test.host")
         assertFalse(CertificatePinner.isPinned("test.host"))
@@ -68,11 +68,20 @@ class CertificatePinnerTest {
         assertEquals(DebugSecurityManager.hashData("test"), DebugSecurityManager.hashData("test"))
     }
 
+    private fun pinFor(publicKeyBytes: String): String =
+        CertificatePinner.generatePin(FakeCertificate(publicKeyBytes.toByteArray()))
+
     private class FakeCertificate(private val bytes: ByteArray) : Certificate("X.509") {
         override fun getEncoded(): ByteArray = bytes
         override fun verify(key: PublicKey?) = Unit
         override fun verify(key: PublicKey?, sigProvider: String?) = Unit
         override fun toString(): String = "FakeCertificate"
-        override fun getPublicKey(): PublicKey? = null
+        override fun getPublicKey(): PublicKey = FakePublicKey(bytes)
+    }
+
+    private class FakePublicKey(private val bytes: ByteArray) : PublicKey {
+        override fun getAlgorithm(): String = "RSA"
+        override fun getFormat(): String = "X.509"
+        override fun getEncoded(): ByteArray = bytes
     }
 }

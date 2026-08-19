@@ -56,9 +56,11 @@ class BitrateProfileTest {
         )
         progression.forEach { (quality, expectedBitrate) ->
             val profile = NetworkStats.recommendBitrate(quality)
-            assertEquals(expectedBitrate, profile.videoMaxBitrateKbps) {
-                "Quality $quality should give bitrate $expectedBitrate but was ${profile.videoMaxBitrateKbps}"
-            }
+            assertEquals(
+                "Quality $quality should give bitrate $expectedBitrate but was ${profile.videoMaxBitrateKbps}",
+                expectedBitrate,
+                profile.videoMaxBitrateKbps,
+            )
         }
     }
 

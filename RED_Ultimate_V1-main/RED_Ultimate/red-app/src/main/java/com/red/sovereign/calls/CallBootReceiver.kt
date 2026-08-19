@@ -19,7 +19,7 @@ import com.red.sovereign.auth.TokenStore
 class CallBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action !in SUPPORTED_ACTIONS) return
+        if (action !in supportedActions) return
         // تحقق سريع: هل في token صالح؟
         val token = runCatching { TokenStore(context).accessToken }.getOrNull()
         if (token.isNullOrBlank()) {
@@ -30,7 +30,7 @@ class CallBootReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private val SUPPORTED_ACTIONS = setOf(
+        internal val supportedActions = setOf(
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.QUICKBOOT_POWERON",
             Intent.ACTION_MY_PACKAGE_REPLACED,
