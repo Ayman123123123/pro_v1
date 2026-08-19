@@ -126,6 +126,7 @@ enum class ConnectionStage(
 @Composable
 fun Material3ExpressivePstnCallScreen(
     status: PstnCallStatus,
+    number: String = "",
     metrics: CallMetrics = CallMetrics(),
     onMuteToggle: (Boolean) -> Unit = {},
     onSpeakerToggle: (Boolean) -> Unit = {},
@@ -240,6 +241,26 @@ fun Material3ExpressivePstnCallScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // الرقم المطلوب ومشغّله — أهمّ معلومة في شاشة مكالمة
+                // هاتفية، وكانت غائبة تماماً قبل الوصل.
+                if (number.isNotBlank()) {
+                    Text(
+                        text = number,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        letterSpacing = 1.sp
+                    )
+                    YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
+                        Text(
+                            text = "${op.name} · ${op.technology}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = op.brandColor
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 Text(
                     text = currentStage.label,

@@ -19,7 +19,8 @@ class PstnCallService(
     private val redis: StringRedisTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
-    private val history: CallHistoryService
+    private val history: CallHistoryService,
+    private val progress: PstnCallProgressTracker
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
@@ -61,6 +62,9 @@ class PstnCallService(
                 user.redId, number, selection.gatewayHost, selection.portIndex)
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
+            // يجب أن يسبق التسجيلُ وصولَ أحداث AMI، وإلا تعذّر ربط
+            // القناة بصاحبها وضاعت كل مراحل المكالمة.
+            progress.register(actionId, user.redId, number)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
         }.getOrElse {
             redis.opsForValue().decrement(key)
