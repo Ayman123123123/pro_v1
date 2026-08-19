@@ -67,6 +67,7 @@ import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.ui.theme.SovereignColors
+import com.red.sovereign.ui.theme.YounesMuted
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -277,13 +278,19 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                 Button(
                     onClick = { createKind = "LIVE" },
                     enabled = !state.busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.LiveRed),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SovereignColors.LiveContainer,
+                        contentColor = Color.White
+                    ),
                     modifier = Modifier.weight(1f)
                 ) { Icon(Icons.Default.LiveTv, null); Text(" بدء بث") }
                 Button(
                     onClick = { createKind = "SPACE" },
                     enabled = !state.busy,
-                    colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.SpacePurple),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SovereignColors.SpaceContainer,
+                        contentColor = Color.White
+                    ),
                     modifier = Modifier.weight(1f)
                 ) { Icon(Icons.Default.Mic, null); Text(" إنشاء مساحة") }
             }
@@ -322,7 +329,8 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                             title = stream.title,
                             host = stream.broadcasterName.ifBlank { stream.broadcasterRedId },
                             count = "${stream.viewerCount} مشاهد",
-                            color = SovereignColors.LiveRed,
+                            accent = SovereignColors.LiveAccent,
+                            container = SovereignColors.LiveContainer,
                             action = "مشاهدة",
                             enabled = !state.busy
                         ) {
@@ -336,7 +344,8 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                             title = space.title,
                             host = space.hostName.ifBlank { space.hostRedId },
                             count = "${space.participantCount} مشارك",
-                            color = SovereignColors.SpacePurple,
+                            accent = SovereignColors.SpaceAccent,
+                            container = SovereignColors.SpaceContainer,
                             action = "دخول",
                             enabled = !state.busy
                         ) {
@@ -387,7 +396,10 @@ private fun ExploreCard(
     title: String,
     host: String,
     count: String,
-    color: Color,
+    /** لون العلامة على السطح الداكن — يُقاس على SurfaceNavy (≥3:1). */
+    accent: Color,
+    /** لون حاوية الزرّ — يُقاس نصُّه الأبيض عليه (≥4.5:1). */
+    container: Color,
     action: String,
     enabled: Boolean,
     onClick: () -> Unit
@@ -398,12 +410,19 @@ private fun ExploreCard(
         colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceNavy)
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).clip(CircleShape).background(color))
+            Box(Modifier.size(12.dp).clip(CircleShape).background(accent))
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(title, fontWeight = FontWeight.Bold, color = Color.White)
                 Text("بواسطة $host · $count", fontSize = 12.sp, color = Color.LightGray)
             }
-            Button(onClick = onClick, enabled = enabled, colors = ButtonDefaults.buttonColors(containerColor = color)) {
+            Button(
+                onClick = onClick,
+                enabled = enabled,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = container,
+                    contentColor = Color.White
+                )
+            ) {
                 Text(action, fontSize = 12.sp)
             }
         }
@@ -413,6 +432,8 @@ private fun ExploreCard(
 @Composable
 private fun ExploreEmpty(message: String) {
     Surface(Modifier.fillMaxWidth(), color = SovereignColors.SurfaceNavy, shape = RoundedCornerShape(14.dp)) {
-        Text(message, Modifier.padding(18.dp), color = Color.Gray)
+        // Color.Gray (808080) يعطي 3.70:1 على SurfaceNavy — دون AA.
+        // YounesMuted رمز النص الثانوي المعتمد: 6.37:1 على السطح نفسه.
+        Text(message, Modifier.padding(18.dp), color = YounesMuted)
     }
 }
