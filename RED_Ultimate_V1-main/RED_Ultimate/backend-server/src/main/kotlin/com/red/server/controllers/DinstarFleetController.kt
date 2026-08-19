@@ -17,7 +17,7 @@ import java.util.UUID
  * تسمح بتسجيل عدة أجهزة، والتعرّف عليها تلقائيًا بفحص نطاق الإدارة،
  * ومتابعة صحّة كل جهاز على حدة.
  *
- * كل المسارات تحت api/admin/* أي محصورة بدور ADMIN في SecurityConfig.
+ * كل المسارات تحت api/admin أي محصورة بدور ADMIN في SecurityConfig.
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/fleet")
