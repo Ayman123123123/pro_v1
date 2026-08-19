@@ -57,6 +57,48 @@ class DinstarHardwareService(
 
         /** الحد الموثق لحجم نص الرسالة. */
         const val MAX_SMS_TEXT_BYTES = 1500
+
+        /** اطلب اشتقاق الترميز من محتوى الرسالة بدل فرضه. */
+        const val AUTO_ENCODING = "AUTO"
+
+        /**
+         * اختيار الترميز من محتوى الرسالة.
+         *
+         * القاعدة: إن كان كل حرف موجودًا في أبجدية GSM 03.38 فالنص يُرسَل
+         * `gsm-7bit` (160 حرفًا للجزء الواحد)؛ وإلا `unicode` (70 حرفًا).
+         *
+         * لماذا هذا مهم في اليمن تحديدًا: الرسائل هنا عربية في الغالب،
+         * والعربية **ليست** في أبجدية GSM أصلًا. الافتراضي السابق كان
+         * `GSM7BIT` لكل رسالة، فكانت كل رسالة عربية تصل «?????».
+         *
+         * ويُقصد بالاشتقاق لا الفرض: لو ثبّتنا `UCS2` دائمًا لحلَّت مشكلة
+         * العربية وخُلقت أخرى — رسائل التحقق ورموز OTP بالإنجليزية تفقد
+         * أكثر من نصف سعتها فتنقسم أجزاءً وتتضاعف كلفتها على كل مستخدم.
+         */
+        fun detectEncoding(text: String): String =
+            if (text.all { it in GSM_03_38_ALPHABET }) "GSM7BIT" else "UCS2"
+
+        /**
+         * أبجدية GSM 03.38 الأساسية + جدول الهروب (Basic + Extension).
+         *
+         * كل حرف هنا يُمثَّل في 7 بتات (أو 14 لحروف الهروب)، فيتسع الجزء
+         * الواحد 160 حرفًا. أي حرف خارجها — والعربية كلها خارجها — يفرض
+         * الترميز UCS2 بسعة 70 حرفًا.
+         *
+         * المصدر: 3GPP TS 23.038 §6.2.1. مُدرَجة صراحةً لأن الاعتماد على
+         * فحصٍ تقريبي مثل `isLetterOrDigit()` أو مدى ASCII يخطئ في
+         * الاتجاهين: يقبل `[` و`{` وهي حروف هروب مزدوجة العرض، ويرفض
+         * `é` و`Ø` وهي أساسية في الأبجدية.
+         */
+        internal val GSM_03_38_ALPHABET: Set<Char> = buildSet {
+            // الأساسية
+            addAll("@£\$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./".toList())
+            addAll("0123456789:;<=>?".toList())
+            addAll("¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§".toList())
+            addAll("¿abcdefghijklmnopqrstuvwxyzäöñüà".toList())
+            // جدول الهروب — تُرسَل ببايتين لكنها تبقى ضمن gsm-7bit
+            addAll("\u000C^{}\\[~]|€".toList())
+        }
     }
 
     /**
@@ -227,7 +269,7 @@ class DinstarHardwareService(
         text: String,
         params: List<Map<String, Any?>>,
         ports: List<Int>? = null,
-        encoding: String = "GSM7BIT",
+        encoding: String = AUTO_ENCODING,
         gatewayHost: String? = null
     ): Map<String, Any?> {
         require(text.isNotBlank()) { "SMS text is required" }
@@ -241,16 +283,22 @@ class DinstarHardwareService(
         require(text.toByteArray(Charsets.UTF_8).size <= MAX_SMS_TEXT_BYTES) {
             "نص الرسالة يتجاوز $MAX_SMS_TEXT_BYTES بايت"
         }
-        require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
+        require(encoding in setOf(AUTO_ENCODING, "GSM7BIT", "UCS2")) {
+            "Encoding must be $AUTO_ENCODING, GSM7BIT or UCS2"
+        }
+
+        // الترميز الفعلي: عند AUTO يُشتق من النص نفسه. الحرف العربي غير
+        // موجود أصلًا في أبجدية GSM 03.38، فإرساله gsm-7bit يصل علامات
+        // استفهام. والعكس مكلف: فرض unicode على نص ASCII يهبط بالسعة من
+        // 160 حرفًا إلى 70 فتتضاعف الأجزاء والتكلفة. لذا يُقرَّر لكل رسالة.
+        val effectiveEncoding = if (encoding == AUTO_ENCODING) detectEncoding(text) else encoding
 
         val body = mutableMapOf<String, Any>(
             "text" to text,
             "param" to params,
             // البوابة تتوقع 'gsm-7bit' أو 'unicode'. إرسال "GSM7BIT"
-            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode':
-            // رسالة ASCII تُرسَل UCS2 فتهبط سعتها من 160 حرفًا إلى 70
-            // وتتضاعف أجزاؤها وتكلفتها.
-            "encoding" to wireEncoding(encoding),
+            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode'.
+            "encoding" to wireEncoding(effectiveEncoding),
             "request_status_report" to true
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
