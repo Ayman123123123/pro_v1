@@ -52,10 +52,11 @@ class RedWebSocketClient(
         conversationId: String,
         messageType: String,
         senderDeviceId: Int,
-        encrypted: EncryptedEnvelope
+        encrypted: EncryptedEnvelope,
+        messageId: String = UuidV7.next()
     ): String {
         val sender = requireNotNull(tokens.redId) { "RED ID is unavailable" }
-        val id = UuidV7.next()
+        val id = messageId
         val chat = RedProtos.ChatMessage.newBuilder()
             .setId(id).setConversationId(conversationId).setSenderId(sender).setReceiverId(receiverRedId)
             .setPayload(ByteString.copyFrom(encrypted.bytes)).setTimestamp(System.currentTimeMillis()).setType(messageType)

@@ -33,6 +33,44 @@ data class LocalHistoryEntity(
     val status: String = "SENT"
 )
 
+/**
+ * نية إرسال محلية دائمة. قاعدة RED مشفرة بـSQLCipher، لذلك تبقى الحمولة
+ * محمية على الجهاز وتنجو من إنهاء العملية أو إعادة تشغيل التطبيق.
+ */
+@Entity(tableName = "outbox", indices = [Index("createdAt"), Index("conversationId")])
+data class OutboxEntity(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val clientId: String?,
+    val targetRedId: String?,
+    val conversationId: String,
+    val messageType: String?,
+    val payload: ByteArray,
+    val groupJson: String?,
+    val isRich: Boolean = false,
+    val localMessageId: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastAttemptAt: Long = 0,
+    val attemptCount: Int = 0
+)
+
+/**
+ * نسخة جاهزة للإرسال من نية Outbox. يحتفظ السجل بنفس UUID v7 عند الإعادة
+ * لضمان idempotency في الخادم ومنع إعادة تشفير مفتاح Signal بلا ضرورة.
+ */
+@Entity(tableName = "outbox_envelopes", indices = [Index("outboxId")])
+data class OutboxEnvelopeEntity(
+    @PrimaryKey val messageId: String,
+    val outboxId: String,
+    val receiverRedId: String,
+    val conversationId: String,
+    val messageType: String,
+    val encryptedPayload: ByteArray,
+    val receiverDeviceId: Int,
+    val ciphertextType: Int,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "conversations")
 data class ConversationEntity(
     @PrimaryKey val id: String,
