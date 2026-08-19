@@ -24,7 +24,7 @@ class CallWebSocketHandler(
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
 
-    override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
+    public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val source = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingCallSignal::class.java)
         require(signal.targetUserId.isNotBlank()) { "targetUserId is required" }
