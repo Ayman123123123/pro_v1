@@ -134,13 +134,21 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
         runCatching {
             val json = org.json.JSONObject(text)
             val type = json.optString("type", "")
+            /*
+             * الخادم يغلّف الحمولة تحت "data" (انظر broadcastEvent و
+             * buildPortStatusPayload). القراءة من الجذر كانت تُرجع قيمًا
+             * فارغة صامتة: gatewayId فارغ وport = 0 — و0 منفذ صالح، فيبدو
+             * كأن المنفذ الأول هو المتغيّر دائمًا.
+             * نُبقي التراجع إلى الجذر احتياطًا لأي باثّ لا يغلّف.
+             */
+            val body = json.optJSONObject("data") ?: json
             when (type) {
                 "DINSTAR_PORT_STATUS" -> _wsEvents.emit(
                     DinstarWsEvent.PortStatusChanged(
                         // معرّف البوابة: بدونه لا يُعرف أي جهاز تغيّر منفذه
-                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
-                        port = json.optInt("port"),
-                        callState = json.optString("callState"),
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = body.optInt("port", -1),
+                        callState = body.optString("callState"),
                         // optInt تُرجع 0 عند الغياب، و0 قراءةٌ صالحة تعني
                         // ‎-113 dBm. التمييز بين «غياب القيمة» و«أضعف قيمة»
                         // ضروري، لذا null صراحةً.
@@ -151,16 +159,65 @@ class DinstarWebSocketBridge(private val backendUrl: String = ServerEndpoint.url
                 "DINSTAR_CDR" -> _wsEvents.emit(DinstarWsEvent.CdrReceived(text))
                 "DINSTAR_SMS" -> _wsEvents.emit(
                     DinstarWsEvent.IncomingSms(
-                        gatewayId = json.optString("gatewayId").takeIf { it.isNotBlank() },
-                        port = json.optInt("port"),
-                        number = json.optString("number"),
-                        text = json.optString("text")
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = body.optInt("port"),
+                        number = body.optString("number"),
+                        text = body.optString("text")
+                    )
+                )
+                // ─── أحداث كان الخادم يبثّها ولا يستقبلها أحد ───
+                "DINSTAR_DEVICE_STATUS" -> _wsEvents.emit(
+                    DinstarWsEvent.DeviceStatusChanged(
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        status = DinstarDeviceStatus(
+                            cpuUsed = body.str("cpu_used", "cpuUsed"),
+                            memoryTotal = body.str("memory_total", "memoryTotal"),
+                            memoryUsed = body.str("memory_used", "memoryUsed"),
+                            memoryFree = body.str("memory_free", "memoryFree"),
+                            flashTotal = body.str("flash_total", "flashTotal"),
+                            flashUsed = body.str("flash_used", "flashUsed"),
+                            flashFree = body.str("flash_free", "flashFree"),
+                            temperature = body.str("temperature"),
+                            uptime = body.str("uptime")
+                        )
+                    )
+                )
+                "DINSTAR_USSD" -> _wsEvents.emit(
+                    DinstarWsEvent.UssdResponse(
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = body.optInt("port", -1),
+                        // الرد قد يصل نصًّا مباشرًا أو كائنًا تحت "response"
+                        response = body.optJSONObject("response")?.toString()
+                            ?: body.optString("response").ifBlank { body.optString("text") }
+                    )
+                )
+                "DINSTAR_PORT_CONTROL" -> _wsEvents.emit(
+                    DinstarWsEvent.PortControlChanged(
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = body.optInt("port", -1),
+                        control = body.optJSONObject("control")?.toString() ?: body.optString("control")
+                    )
+                )
+                /*
+                 * استثناء من البوابة: فشل مكالمة، شريحة منزوعة، انقطاع منفذ.
+                 * أهم حدث تشغيليًّا وكان يُهمل بالكامل — المشغّل لا يعرف أن
+                 * شريحةً سقطت إلا حين تفشل المكالمات عليها.
+                 */
+                "DINSTAR_EXCEPTION" -> _wsEvents.emit(
+                    DinstarWsEvent.GatewayException(
+                        gatewayId = body.optString("gatewayId").takeIf { it.isNotBlank() },
+                        port = if (body.has("port")) body.optInt("port", -1) else -1,
+                        reason = body.str("reason", "message", "error", "exception") ?: "سبب غير محدّد"
                     )
                 )
                 "HEARTBEAT" -> _wsEvents.emit(DinstarWsEvent.Heartbeat)
             }
-        }
+        }.onFailure { Log.w(TAG, "تعذّر تحليل رسالة WS", it) }
     }
+
+    /** أول قيمة نصية غير فارغة من بين مفاتيح مترادفة. */
+    private fun org.json.JSONObject.str(vararg keys: String): String? =
+        keys.firstNotNullOfOrNull { k -> optString(k).takeIf { it.isNotBlank() } }
 
     fun destroy() { disconnect(); scope.cancel() }
 }
@@ -182,5 +239,33 @@ sealed class DinstarWsEvent {
         val number: String,
         val text: String
     ) : DinstarWsEvent()
+
+    /** قياسات عتاد البوابة، تصل دفعًا بعد كل استعلام حالة على الخادم. */
+    data class DeviceStatusChanged(
+        val gatewayId: String?,
+        val status: DinstarDeviceStatus
+    ) : DinstarWsEvent()
+
+    /** رد USSD — يصل غير متزامن بعد إرسال الأمر، فلا يمكن انتظاره في الطلب. */
+    data class UssdResponse(
+        val gatewayId: String?,
+        val port: Int,
+        val response: String
+    ) : DinstarWsEvent()
+
+    /** تغيّر تحكم بالمنفذ (طاقة، تحويل مكالمات) من أي عميل آخر. */
+    data class PortControlChanged(
+        val gatewayId: String?,
+        val port: Int,
+        val control: String
+    ) : DinstarWsEvent()
+
+    /** استثناء من البوابة: فشل مكالمة، شريحة منزوعة، منفذ ساقط. */
+    data class GatewayException(
+        val gatewayId: String?,
+        val port: Int,
+        val reason: String
+    ) : DinstarWsEvent()
+
     data class Error(val message: String) : DinstarWsEvent()
 }
