@@ -72,6 +72,13 @@ need docker
 need openssl
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required (docker compose)"
 docker info >/dev/null 2>&1 || fail "Docker daemon is not running"
+DOCKER_MEMORY_BYTES="$(docker info --format '{{.MemTotal}}' 2>/dev/null || true)"
+case "$DOCKER_MEMORY_BYTES" in
+  *[!0-9]*|'') fail "Unable to read Docker memory limit" ;;
+esac
+if [ "$DOCKER_MEMORY_BYTES" -lt 5905580032 ]; then
+  fail "Docker has less than 5.5 GiB available; allocate at least 6 GiB (8 GiB recommended) and retry"
+fi
 
 if [ ! -f "$ENV_FILE" ]; then
   rand_hex() { openssl rand -hex "$1"; }
