@@ -54,7 +54,7 @@ class ConferenceRoomService {
         if (roomParticipants.containsKey(roomId)) {
             return activeRooms[roomId] ?: ConferenceRoomRecord(roomId, hostId)
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { RoomPasswordHasher.hash(it) }
         val record = ConferenceRoomRecord(
             roomId = roomId,
             hostId = hostId,
@@ -76,7 +76,9 @@ class ConferenceRoomService {
         val record = activeRooms[roomId] ?: return false
         if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == record.passwordHash
+        // PBKDF2 (210k) للكلمات الجديدة، مع قبول تجزئات SHA-256 القديمة للتوافق الرجعي
+        return RoomPasswordHasher.verify(password, record.passwordHash) ||
+            legacySha256(password) == record.passwordHash
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -119,7 +121,8 @@ class ConferenceRoomService {
         return removed
     }
 
-    private fun hashPassword(password: String): String {
+    /** تجزئة SHA-256 القديمة — للتحقق من الغرف المنشأة قبل ترقية PBKDF2 فقط. */
+    private fun legacySha256(password: String): String {
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(password.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
