@@ -28,11 +28,21 @@ class LiveStreamServiceTest {
     @Test
     fun `starting the same stream twice keeps a single entry`() {
         service.startStream("stream-1", "96109")
-        service.startStream("stream-1", "57477") // لا يستبدل الموجود
+        service.startStream("stream-1", "96109") // إعادة البدء لنفس المذيع لا تستبدل الموجود
 
         val active = service.getActiveStreams()
         assertEquals(1, active.size)
         assertEquals("96109", active.first().broadcasterId)
+    }
+
+    @Test
+    fun `stream id owned by another broadcaster is rejected`() {
+        service.startStream("stream-2", "96109")
+        // معرّف مأخوذ لا يُختطف من مذيع آخر — رفض صريح بدل الاستبدال الصامت
+        org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            service.startStream("stream-2", "57477")
+        }
+        assertEquals("96109", service.getActiveStreams().first { it.streamId == "stream-2" }.broadcasterId)
     }
 
     @Test

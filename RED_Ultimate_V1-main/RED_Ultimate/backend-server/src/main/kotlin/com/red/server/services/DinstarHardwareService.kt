@@ -323,6 +323,100 @@ class DinstarHardwareService(
     /** Get Device Status — POST /api/get_status */
     fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
 
+    // ═══════════════════════════════════════════════════════
+    // 🌐 عمليات موجّهة إلى بوابة بعينها من الأسطول
+    //
+    // النسخ بلا وسيط تخاطب العنوان المضبوط في الإعدادات فقط. هذه
+    // الوسائط تبني الاتصال من سجل البوابة (مضيف/منفذ/مخطط) عبر
+    // [DinstarConnectionFactory]، فيعمل كل جهاز مسجّل لا جهاز واحد.
+    // ═══════════════════════════════════════════════════════
+
+    private fun clientFor(gateway: DinstarFleetService.Gateway): DinstarConnectionFactory.DinstarClient =
+        connections.clientFor(gateway.host, gateway.apiPort, gateway.scheme)
+
+    private fun requireGatewayPort(gateway: DinstarFleetService.Gateway, port: Int) =
+        require(port in 0 until gateway.portCount) {
+            "منفذ خارج المدى: البوابة ${gateway.host} تدعم 0-${gateway.portCount - 1}"
+        }
+
+    /** حالة جهاز بوابة محددة (CPU/ذاكرة/فلاش) — POST /api/get_status */
+    fun getDeviceStatus(gateway: DinstarFleetService.Gateway): Map<String, Any?> =
+        clientFor(gateway).getDeviceStatus()
+
+    /**
+     * سجل المكالمات CDR لبوابة محددة — POST /api/get_cdr بجسم JSON.
+     *
+     * عند غياب [port] تُستعلم كل منافذ البوابة حسب عددها الفعلي.
+     * الاستجابة تحمل السجلات في حقل `cdr` (وبعض الإصدارات `info`).
+     */
+    fun getCdrRecords(
+        gateway: DinstarFleetService.Gateway,
+        port: Int? = null,
+        timeAfter: String? = null,
+        timeBefore: String? = null
+    ): List<Map<String, Any?>> {
+        port?.let { requireGatewayPort(gateway, it) }
+        val body = mutableMapOf<String, Any>(
+            "port" to (port?.let { listOf(it) } ?: (0 until gateway.portCount).toList()),
+            "maximum" to 100
+        )
+        timeAfter?.let { body["time_after"] = it }
+        timeBefore?.let { body["time_before"] = it }
+        val response = clientFor(gateway).postJson("/api/get_cdr", body)
+        @Suppress("UNCHECKED_CAST")
+        return (response["cdr"] as? List<Map<String, Any?>>)
+            ?: (response["info"] as? List<Map<String, Any?>>)
+            ?: emptyList()
+    }
+
+    /** إرسال USSD عبر بوابة محددة — POST /api/send_ussd */
+    fun sendUssd(gateway: DinstarFleetService.Gateway, port: Int, text: String): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        require(text.matches(Regex("^[*#0-9]{2,30}$"))) { "Invalid USSD code" }
+        val response = clientFor(gateway).postJson(
+            "/api/send_ussd",
+            mapOf("port" to listOf(port), "command" to "send", "text" to text)
+        )
+        require(apiSuccess(response)) { "تعذّر إرسال USSD: ${apiErrorMessage(response)}" }
+        return response
+    }
+
+    /** تشغيل/إيقاف منفذ في بوابة محددة — GET /api/set_port_info?action=power */
+    fun setPortPower(gateway: DinstarFleetService.Gateway, port: Int, on: Boolean): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        return clientFor(gateway).getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "power", "param" to if (on) "on" else "off"
+        ))
+    }
+
+    /**
+     * تحويل المكالمات في بوابة محددة — GET /api/set_port_info?action=CallForward.
+     *
+     * [condition] يقبل الصيغ الداخلية (ALWAYS/NO_REPLY/BUSY/NOT_REACHABLE)
+     * وتُترجم إلى قيم البوابة الموثقة. التعطيل = CancelAll ولا يحتاج رقمًا.
+     */
+    fun setCallForward(
+        gateway: DinstarFleetService.Gateway,
+        port: Int,
+        enabled: Boolean,
+        number: String? = null,
+        condition: String? = null
+    ): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        if (enabled) require(!number.isNullOrBlank()) { "رقم التحويل مطلوب عند التفعيل" }
+        val param = if (!enabled) "CancelAll" else when (condition?.trim()?.uppercase()) {
+            null, "", "ALWAYS", "UNCONDITIONAL" -> "Unconditional"
+            "NO_REPLY", "NOREPLY" -> "NoReply"
+            "BUSY" -> "Busy"
+            "NOT_REACHABLE", "UNREACHABLE" -> "Not_Reachable"
+            else -> throw IllegalArgumentException("Invalid CallForward condition: $condition")
+        }
+        return clientFor(gateway).getJson("/api/set_port_info", mapOf(
+            "port" to port.toString(), "action" to "CallForward",
+            "param" to param, "number" to (number ?: "")
+        ))
+    }
+
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
         registerGateway(0)

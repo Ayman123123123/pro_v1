@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 /**
  * خدمة API شاملة لـ DINSTAR
@@ -38,7 +39,7 @@ class DinstarApiService(
             // حفظ في قاعدة البيانات
             saveDeviceStatus(gateway.id, status)
             
-            webSocketHandler.broadcastDeviceStatus(gateway.id, status)
+            webSocketHandler.broadcastDeviceStatus(gateway.id.toString(), status)
             
             status
         } catch (e: Exception) {
@@ -47,7 +48,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveDeviceStatus(gatewayId: String, status: Map<String, Any?>) {
+    private fun saveDeviceStatus(gatewayId: UUID, status: Map<String, Any?>) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_device_status 
@@ -112,7 +113,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveCdrRecord(gatewayId: String, cdr: Map<String, Any?>) {
+    private fun saveCdrRecord(gatewayId: UUID, cdr: Map<String, Any?>) {
         try {
             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             val startTime = (cdr["start_time"] as? String)?.let { 
@@ -173,7 +174,7 @@ class DinstarApiService(
             // حفظ في قاعدة البيانات
             saveUssdLog(gateway.id, port, code, result["response_text"] as? String, result["status"] as? String)
             
-            webSocketHandler.broadcastUssdResponse(gateway.id, port, result)
+            webSocketHandler.broadcastUssdResponse(gateway.id.toString(), port, result)
             
             result
         } catch (e: Exception) {
@@ -182,7 +183,7 @@ class DinstarApiService(
         }
     }
 
-    private fun saveUssdLog(gatewayId: String, port: Int, code: String, response: String?, status: String?) {
+    private fun saveUssdLog(gatewayId: UUID, port: Int, code: String, response: String?, status: String?) {
         try {
             jdbc.update("""
                 INSERT INTO dinstar_ussd_log 
@@ -235,7 +236,7 @@ class DinstarApiService(
             logConfigChange(gateway.id, null, "PORT_POWER", port, 
                 if (powerOn) "ON" else "OFF", null)
             
-            webSocketHandler.broadcastPortControl(gateway.id, port, mapOf("power" to powerOn))
+            webSocketHandler.broadcastPortControl(gateway.id.toString(), port, mapOf("power" to powerOn))
             
             result
         } catch (e: Exception) {
@@ -286,7 +287,7 @@ class DinstarApiService(
             logConfigChange(gateway.id, null, "CALL_FORWARD", port, 
                 if (enabled) "ENABLED:$number:$condition" else "DISABLED", null)
             
-            webSocketHandler.broadcastPortControl(gateway.id, port, 
+            webSocketHandler.broadcastPortControl(gateway.id.toString(), port, 
                 mapOf("callForward" to enabled, "number" to number))
             
             result
@@ -297,7 +298,7 @@ class DinstarApiService(
     }
 
     private fun logConfigChange(
-        gatewayId: String,
+        gatewayId: UUID,
         userId: String?,
         changeType: String,
         port: Int?,
