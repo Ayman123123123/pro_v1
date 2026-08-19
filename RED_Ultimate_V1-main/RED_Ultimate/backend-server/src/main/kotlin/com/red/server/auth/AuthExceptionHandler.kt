@@ -7,90 +7,96 @@ import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import java.util.UUID
 
 @RestControllerAdvice
 class AuthExceptionHandler {
     private val log = LoggerFactory.getLogger(AuthExceptionHandler::class.java)
     @ExceptionHandler(RateLimitExceededException::class)
-    fun rateLimited(): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(mapOf("error" to "RATE_LIMITED"))
+    fun rateLimited(error: RateLimitExceededException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED", error)
 
     @ExceptionHandler(InvalidCredentialsException::class)
-    fun invalidCredentials(): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "INVALID_CREDENTIALS"))
+    fun invalidCredentials(error: InvalidCredentialsException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", error)
 
     @ExceptionHandler(InvalidRecoveryCodeException::class)
-    fun invalidRecovery(): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "INVALID_RECOVERY_CODE"))
+    fun invalidRecovery(error: InvalidRecoveryCodeException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.UNAUTHORIZED, "INVALID_RECOVERY_CODE", error)
 
     @ExceptionHandler(InvalidRefreshTokenException::class)
-    fun invalidRefresh(): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "INVALID_REFRESH_TOKEN"))
+    fun invalidRefresh(error: InvalidRefreshTokenException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN", error)
 
     @ExceptionHandler(RefreshTokenReuseException::class)
-    fun refreshReuse(): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "REFRESH_TOKEN_REUSE_DETECTED"))
+    fun refreshReuse(error: RefreshTokenReuseException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.UNAUTHORIZED, "REFRESH_TOKEN_REUSE_DETECTED", error)
 
     @ExceptionHandler(UnsupportedOperationException::class)
     fun notImplemented(error: UnsupportedOperationException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(mapOf("error" to (error.message ?: "NOT_IMPLEMENTED")))
+        apiError(HttpStatus.NOT_IMPLEMENTED, "NOT_IMPLEMENTED", error)
 
     @ExceptionHandler(IllegalArgumentException::class)
-    fun badRequest(error: IllegalArgumentException): ResponseEntity<Map<String, String>> {
-        // تسجيل السبب الفعلي بدل بلعه: «INVALID_REQUEST» بلا سبب كانت تجعل
-        // فشل التسجيل لغزًا لا يمكن تشخيصه من الطرفين.
-        val message = error.message?.takeIf { it.isNotBlank() }
-        if (message == null) log.warn("IllegalArgumentException without message", error) else log.info("Bad request: {}", message)
-        return ResponseEntity.badRequest().body(mapOf("error" to (message ?: "INVALID_REQUEST")))
-    }
+    fun badRequest(error: IllegalArgumentException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", error)
 
-    /** جسم JSON مفقود/تالف — كان يسقط في معالج Spring الافتراضي برسالة خام. */
+    /** جسم JSON مفقود أو تالف. */
     @ExceptionHandler(HttpMessageNotReadableException::class)
-    fun unreadableBody(error: HttpMessageNotReadableException): ResponseEntity<Map<String, String>> {
-        log.warn("Malformed request body: {}", error.message)
-        return ResponseEntity.badRequest().body(mapOf("error" to "MALFORMED_JSON"))
-    }
+    fun unreadableBody(error: HttpMessageNotReadableException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.BAD_REQUEST, "MALFORMED_JSON", error)
 
-    /** فشل Bean Validation (@Valid) — يعيد أول رسالة حقل بدل 500/INVALID_REQUEST. */
+    /** فشل Bean Validation لا يكشف رسائل الحقول أو قيمها ضمن العقد العام. */
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun invalidBody(error: MethodArgumentNotValidException): ResponseEntity<Map<String, String>> {
-        val first = error.bindingResult.fieldErrors.firstOrNull()
-        val message = first?.defaultMessage ?: "VALIDATION_FAILED"
-        log.warn("Validation failed on field '{}': {}", first?.field, message)
-        return ResponseEntity.badRequest().body(mapOf("error" to message))
-    }
+    fun invalidBody(error: MethodArgumentNotValidException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", error)
 
     @ExceptionHandler(NoSuchElementException::class)
     fun notFound(error: NoSuchElementException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to (error.message ?: "NOT_FOUND")))
+        apiError(HttpStatus.NOT_FOUND, "NOT_FOUND", error)
 
-    /** IllegalStateException — حالة غير صالحة (مثل POLL_NOT_ACTIVE / ALREADY_VOTED) → 409 Conflict */
+    /** حالة الطلب لا تسمح بالعملية المطلوبة. */
     @ExceptionHandler(IllegalStateException::class)
     fun conflict(error: IllegalStateException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to (error.message ?: "CONFLICT")))
+        apiError(HttpStatus.CONFLICT, "CONFLICT", error)
 
-    /** ClassCastException — جسم مشوَّه (تحويل غير آمن) → 400 بدل 500 */
+    /** جسم مشوّه بتحويل غير آمن. */
     @ExceptionHandler(ClassCastException::class)
     fun badCast(error: ClassCastException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST_BODY"))
+        apiError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_BODY", error)
 
-    /** NumberFormatException — رقم مشوَّه (مثل toInt() على نص) → 400 بدل 500 */
+    /** رقم مشوّه ضمن جسم أو معامل الطلب. */
     @ExceptionHandler(NumberFormatException::class)
     fun badNumber(error: NumberFormatException): ResponseEntity<Map<String, String>> =
-        ResponseEntity.badRequest().body(mapOf("error" to "INVALID_NUMBER_FORMAT"))
+        apiError(HttpStatus.BAD_REQUEST, "INVALID_NUMBER_FORMAT", error)
 
-    /** NullPointerException — مرجع null غير متوقع → 400 بدل 500 (لا تسريب stack trace) */
+    /** مرجع null غير متوقع. */
     @ExceptionHandler(NullPointerException::class)
-    fun badNull(error: NullPointerException): ResponseEntity<Map<String, String>> {
-        // سجّل الأثر الكامل: هذا هو السبب الخفي خلف «INVALID_REQUEST» في التسجيل.
-        log.error("NullPointerException while handling request", error)
-        return ResponseEntity.badRequest().body(mapOf("error" to "INVALID_REQUEST"))
-    }
+    fun badNull(error: NullPointerException): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", error)
 
-    /** أي استثناء غير متوقع → 500 برسالة عامة بلا تسريب تفاصيل داخلية. */
+    /** أي استثناء غير متوقع يعاد برمز عام فقط. */
     @ExceptionHandler(Exception::class)
-    fun unexpected(error: Exception): ResponseEntity<Map<String, String>> {
-        log.error("Unexpected error while handling request", error)
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf("error" to "INTERNAL_ERROR"))
+    fun unexpected(error: Exception): ResponseEntity<Map<String, String>> =
+        apiError(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", error)
+
+    private fun apiError(
+        status: HttpStatus,
+        code: String,
+        cause: Throwable
+    ): ResponseEntity<Map<String, String>> {
+        val diagnosticId = UUID.randomUUID().toString()
+        log.warn(
+            "Request failed [diagnosticId={}, errorCode={}]: {}",
+            diagnosticId,
+            code,
+            cause.message,
+            cause
+        )
+        return ResponseEntity.status(status).body(
+            mapOf(
+                "error" to code,
+                "diagnosticId" to diagnosticId
+            )
+        )
     }
 }
