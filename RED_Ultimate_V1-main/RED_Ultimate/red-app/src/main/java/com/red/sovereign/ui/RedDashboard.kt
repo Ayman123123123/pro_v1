@@ -1609,41 +1609,15 @@ private fun ChatHubScreen(
             }
         }
     }
-    when (val safetyState = safety.state) {
-        SafetyState.Closed -> Unit
-        is SafetyState.Loading -> AlertDialog(onDismissRequest = safety::close, title = { Text("رمز الأمان") }, text = { Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }, confirmButton = { TextButton(safety::close) { Text("إلغاء") } })
-        is SafetyState.Error -> AlertDialog(onDismissRequest = safety::close, title = { Text("تعذر التحقق") }, text = { Text(safetyState.message) }, confirmButton = { TextButton(safety::close) { Text("إغلاق") } })
-        is SafetyState.Ready -> if (showSafetyScanner) AlertDialog(
-            onDismissRequest = { showSafetyScanner = false },
-            title = { Text("امسح رمز الطرف الآخر") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.fillMaxWidth().height(360.dp).clip(RoundedCornerShape(16.dp))) {
-                        SafetyQrScanner(onCode = { safety.verifyScanned(it); showSafetyScanner = false })
-                    }
-                    Text("تتم المعالجة على الجهاز فقط، ولا تُرفع صور الكاميرا إلى الخادم.", fontSize = 11.sp, textAlign = TextAlign.Center)
-                }
-            },
-            confirmButton = { TextButton({ showSafetyScanner = false }) { Text("إلغاء") } }
-        ) else AlertDialog(
-            onDismissRequest = { safety.clearScanError(); safety.close() },
-            title = { Text(if (safetyState.verified) "تم التحقق من الهوية" else "مقارنة رمز الأمان") },
-            text = { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Image(safetyState.qr, "QR لرمز الأمان", Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)))
-                Text(safetyState.number, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = AqyalGold)
-                Text("الجهاز ${safetyState.deviceId} · ${safetyState.fingerprint.chunked(8).joinToString(" ")}", fontSize = 9.sp, color = Color.Gray, textAlign = TextAlign.Center)
-                safetyState.scanError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, textAlign = TextAlign.Center) }
-                Text("امسح رمز الطرف الآخر وجهًا لوجه، أو قارن الرقم عبر قناة موثوقة مستقلة.", fontSize = 11.sp, textAlign = TextAlign.Center)
-                if (!safetyState.verified) OutlinedButton({
-                    safety.clearScanError()
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showSafetyScanner = true
-                    else cameraPermission.launch(Manifest.permission.CAMERA)
-                }, Modifier.fillMaxWidth()) { Icon(Icons.Default.QrCodeScanner, null); Text(" مسح رمز الطرف الآخر") }
-            } },
-            confirmButton = { if (!safetyState.verified) Button(safety::markVerified) { Text("الأرقام متطابقة يدويًا") } else TextButton(safety::close) { Text("تم") } },
-            dismissButton = { if (!safetyState.verified) TextButton(safety::close) { Text("إلغاء") } }
-        )
-    }
+    // حوار رمز الأمان — فُصل إلى SafetyNumberDialogs.kt (كتلة قائمة
+    // بذاتها لا تشارك الشاشة إلا أربعة أشياء).
+    SafetyNumberDialogs(
+        safety = safety,
+        context = context,
+        showSafetyScanner = showSafetyScanner,
+        onScannerVisibilityChange = { showSafetyScanner = it },
+        cameraPermission = cameraPermission,
+    )
     selectedChatMessage?.let { message ->
         val payload = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
         val isGroupMsg = message.conversationId.length > 32
