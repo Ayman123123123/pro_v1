@@ -489,6 +489,23 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
                 when (event) {
                     is DinstarWsEvent.PortStatusChanged -> refreshStatus()
                     is DinstarWsEvent.CdrReceived -> queryCdr()
+                    // قياسات العتاد تصل دفعًا — أرخص من إعادة الاستعلام
+                    is DinstarWsEvent.DeviceStatusChanged -> _deviceStatus.value = event.status
+                    is DinstarWsEvent.IncomingSms -> queryIncomingSms()
+                    // رد USSD غير متزامن: لا يعود في استجابة الطلب أبدًا
+                    is DinstarWsEvent.UssdResponse -> _commandResult.value =
+                        DinstarCommandResult.Success("رد USSD (منفذ ${event.port}): ${event.response}")
+                    // تحكّم من عميل آخر — نُزامن حتى لا تتضارب اللوحات
+                    is DinstarWsEvent.PortControlChanged -> refreshStatus()
+                    /*
+                     * الاستثناء يُعرض كخطأ ظاهر لا كسطر سجل: شريحة منزوعة
+                     * أو منفذ ساقط يعني مكالمات فاشلة، ومعرفته متأخرًا كلفة.
+                     */
+                    is DinstarWsEvent.GatewayException -> {
+                        val where = if (event.port >= 0) " (منفذ ${event.port})" else ""
+                        _commandResult.value = DinstarCommandResult.Error("عطل في البوابة$where: ${event.reason}")
+                        refreshStatus()
+                    }
                     else -> Unit
                 }
             }
