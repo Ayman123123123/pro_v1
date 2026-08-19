@@ -309,6 +309,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         if (audioGranted && cameraGranted && redId != null && redId.matches(RED_ID_PATTERN)) {
             YounesCallService.start(context, redId, pendingDialerVideo)
             section = MainSection.CALLS
+        } else {
+            explainCallBlocked(context, audioGranted, cameraGranted)
         }
         pendingDialerTarget = null
     }
@@ -798,7 +800,11 @@ private fun ChatHubScreen(
     val callPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingCallVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        if (audioGranted && cameraGranted && target.matches(RED_ID_PATTERN)) YounesCallService.start(context, target, pendingCallVideo)
+        if (audioGranted && cameraGranted && target.matches(RED_ID_PATTERN)) {
+            YounesCallService.start(context, target, pendingCallVideo)
+        } else {
+            explainCallBlocked(context, audioGranted, cameraGranted)
+        }
     }
     var pendingGroupVideo by remember { mutableStateOf(false) }
     val groupCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -807,6 +813,8 @@ private fun ChatHubScreen(
         val group = groups.groups.firstOrNull { it.id == groupConversationId }
         if (audioGranted && cameraGranted && group != null) {
             ConferenceService.join(context, group.id, account.redId, pendingGroupVideo, inviteRedIds = group.members.map { it.redId })
+        } else {
+            explainCallBlocked(context, audioGranted, cameraGranted)
         }
     }
     LaunchedEffect(Unit) { DecryptedMessageBus.messages.collect { item ->
@@ -2214,6 +2222,26 @@ private fun formatClockTime(timestamp: Long): String =
 // يصف `RED_ID_PARTIAL` المنقولة هي الأخرى. التوصيف على `val` لا
 // يُترجم أصلًا، فأُزيل مع تعليقه اليتيم.
 internal val RED_ID_PATTERN = Regex(YounesId.PATTERN)
+
+/**
+ * يشرح للمستخدم سبب تعذُّر المكالمة بدل الصمت.
+ *
+ * كانت مسارات الأذونات الثلاثة تنتهي بـ`if (granted) start(...)` بلا
+ * `else`: يرفض المستخدم الإذن — أو يكون معرّف الوجهة غير صالح —
+ * فلا يحدث شيء البتّة، ولا رسالة ولا مؤشّر، فيبدو الزرّ معطوبًا.
+ */
+private fun explainCallBlocked(
+    context: android.content.Context,
+    audioGranted: Boolean,
+    cameraGranted: Boolean
+) {
+    val reason = when {
+        !audioGranted -> "تعذّرت المكالمة: إذن الميكروفون مرفوض. فعّله من إعدادات التطبيق."
+        !cameraGranted -> "تعذّرت مكالمة الفيديو: إذن الكاميرا مرفوض. فعّله من إعدادات التطبيق."
+        else -> "تعذّرت المكالمة: وجهة غير صالحة."
+    }
+    android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_LONG).show()
+}
 
 internal fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
