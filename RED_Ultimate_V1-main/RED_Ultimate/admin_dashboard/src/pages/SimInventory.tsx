@@ -200,7 +200,7 @@ export default function SimInventory() {
       dataIndex: 'signalPercent',
       render: (v: number | null) => {
         if (v == null) return '—';
-        const color = v >= 60 ? '#00C896' : v >= 30 ? '#E8B84A' : '#F5222D';
+        const color = v >= 60 ? '#00C896' : v >= 30 ? '#E0A83C' : '#F5222D';
         return (
           <Space size={2}>
             <SignalFilled style={{ color, fontSize: 12 }} />
@@ -272,7 +272,7 @@ export default function SimInventory() {
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#E8B84A' }}>{stats.pending}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#E0A83C' }}>{stats.pending}</div>
             <Typography.Text type="secondary">قيد التحقق</Typography.Text>
           </Card>
         </Col>

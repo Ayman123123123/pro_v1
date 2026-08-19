@@ -214,10 +214,12 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 )
             }
             "RAISE_HAND" -> {
-                val participantList = ConferenceRuntime.participants.map { p ->
-                    if (p.userId == signal.userId) p.copy(raisedHand = true) else p
+                // الخادم يبثّ الرفع والخفض بالإشارة نفسها؛ كان الخفض
+                // يُقرأ رفعًا فتبقى اليد مرفوعة في قائمة المضيف أبدًا.
+                val lowered = signal.payload["lowered"] == "true"
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                    if (p.userId == signal.userId) p.copy(raisedHand = !lowered) else p
                 }
-                ConferenceRuntime.participants = participantList
             }
             "HOST_CHANGED" -> {
                 val next = signal.payload["userId"].orEmpty()
@@ -284,6 +286,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (target == userId) {
                     ConferenceRuntime.isMuted = true
                     mesh?.setMicrophoneEnabled(false)
+                }
+                // ويُعلَّم المكتوم في قائمة الجميع لا عند نفسه فقط، وإلا
+                // ظل يبدو للآخرين متحدّثًا صامتًا بلا سبب ظاهر.
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                    if (p.userId == target) p.copy(isMuted = true, hasAudio = false) else p
                 }
             }
             "REACTION" -> {

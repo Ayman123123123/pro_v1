@@ -13,6 +13,14 @@ import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.launch
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        /**
+         * مدى ظهور المنشور الافتراضي — قيمة من `PostVisibility` في الخادم
+         * (`PUBLIC` أو `LOCAL_YEMEN`)، وليست من `FeedScope`.
+         */
+        const val DEFAULT_POST_VISIBILITY = "LOCAL_YEMEN"
+    }
+
     private val api = FeedApi(AuthorizedApiClient(TokenStore(application)))
     private val drafts = DraftsStore(application)
     val posts = mutableStateListOf<Post>()
@@ -51,6 +59,11 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         state = FeedState.Publishing
         val request = CreatePostRequest(
             text = question.trim(),
+            // `visibility` هنا قيمة PostVisibility ("PUBLIC" أو "FRIENDS")
+            // يختارها المستخدم من PostVisibilityPicker، لا قيمة FeedScope.
+            // كان الفرع السابق يثبّتها على DEFAULT_POST_VISIBILITY تفاديًا
+            // لعطبٍ قديم يُمرَّر فيه `scope` مكان `visibility`؛ وقد زال
+            // العطب بإضافة المنتقي، فالتثبيت الآن يُلغي اختيار المستخدم.
             visibility = visibility,
             pollOptions = cleanOptions,
             pollDurationHours = durationHours.coerceIn(1, 168)

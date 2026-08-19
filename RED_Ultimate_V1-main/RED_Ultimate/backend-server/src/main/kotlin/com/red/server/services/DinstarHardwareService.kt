@@ -8,6 +8,7 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator
 import com.burgstaller.okhttp.digest.Credentials
 import com.burgstaller.okhttp.digest.DigestAuthenticator
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.pstn.DinstarLoadBalancer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -56,6 +57,48 @@ class DinstarHardwareService(
 
         /** الحد الموثق لحجم نص الرسالة. */
         const val MAX_SMS_TEXT_BYTES = 1500
+
+        /** اطلب اشتقاق الترميز من محتوى الرسالة بدل فرضه. */
+        const val AUTO_ENCODING = "AUTO"
+
+        /**
+         * اختيار الترميز من محتوى الرسالة.
+         *
+         * القاعدة: إن كان كل حرف موجودًا في أبجدية GSM 03.38 فالنص يُرسَل
+         * `gsm-7bit` (160 حرفًا للجزء الواحد)؛ وإلا `unicode` (70 حرفًا).
+         *
+         * لماذا هذا مهم في اليمن تحديدًا: الرسائل هنا عربية في الغالب،
+         * والعربية **ليست** في أبجدية GSM أصلًا. الافتراضي السابق كان
+         * `GSM7BIT` لكل رسالة، فكانت كل رسالة عربية تصل «?????».
+         *
+         * ويُقصد بالاشتقاق لا الفرض: لو ثبّتنا `UCS2` دائمًا لحلَّت مشكلة
+         * العربية وخُلقت أخرى — رسائل التحقق ورموز OTP بالإنجليزية تفقد
+         * أكثر من نصف سعتها فتنقسم أجزاءً وتتضاعف كلفتها على كل مستخدم.
+         */
+        fun detectEncoding(text: String): String =
+            if (text.all { it in GSM_03_38_ALPHABET }) "GSM7BIT" else "UCS2"
+
+        /**
+         * أبجدية GSM 03.38 الأساسية + جدول الهروب (Basic + Extension).
+         *
+         * كل حرف هنا يُمثَّل في 7 بتات (أو 14 لحروف الهروب)، فيتسع الجزء
+         * الواحد 160 حرفًا. أي حرف خارجها — والعربية كلها خارجها — يفرض
+         * الترميز UCS2 بسعة 70 حرفًا.
+         *
+         * المصدر: 3GPP TS 23.038 §6.2.1. مُدرَجة صراحةً لأن الاعتماد على
+         * فحصٍ تقريبي مثل `isLetterOrDigit()` أو مدى ASCII يخطئ في
+         * الاتجاهين: يقبل `[` و`{` وهي حروف هروب مزدوجة العرض، ويرفض
+         * `é` و`Ø` وهي أساسية في الأبجدية.
+         */
+        internal val GSM_03_38_ALPHABET: Set<Char> = buildSet {
+            // الأساسية
+            addAll("@£\$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./".toList())
+            addAll("0123456789:;<=>?".toList())
+            addAll("¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§".toList())
+            addAll("¿abcdefghijklmnopqrstuvwxyzäöñüà".toList())
+            // جدول الهروب — تُرسَل ببايتين لكنها تبقى ضمن gsm-7bit
+            addAll("\u000C^{}\\[~]|€".toList())
+        }
     }
 
     /**
@@ -226,7 +269,7 @@ class DinstarHardwareService(
         text: String,
         params: List<Map<String, Any?>>,
         ports: List<Int>? = null,
-        encoding: String = "GSM7BIT",
+        encoding: String = AUTO_ENCODING,
         gatewayHost: String? = null
     ): Map<String, Any?> {
         require(text.isNotBlank()) { "SMS text is required" }
@@ -240,16 +283,22 @@ class DinstarHardwareService(
         require(text.toByteArray(Charsets.UTF_8).size <= MAX_SMS_TEXT_BYTES) {
             "نص الرسالة يتجاوز $MAX_SMS_TEXT_BYTES بايت"
         }
-        require(encoding in setOf("GSM7BIT", "UCS2")) { "Encoding must be GSM7BIT or UCS2" }
+        require(encoding in setOf(AUTO_ENCODING, "GSM7BIT", "UCS2")) {
+            "Encoding must be $AUTO_ENCODING, GSM7BIT or UCS2"
+        }
+
+        // الترميز الفعلي: عند AUTO يُشتق من النص نفسه. الحرف العربي غير
+        // موجود أصلًا في أبجدية GSM 03.38، فإرساله gsm-7bit يصل علامات
+        // استفهام. والعكس مكلف: فرض unicode على نص ASCII يهبط بالسعة من
+        // 160 حرفًا إلى 70 فتتضاعف الأجزاء والتكلفة. لذا يُقرَّر لكل رسالة.
+        val effectiveEncoding = if (encoding == AUTO_ENCODING) detectEncoding(text) else encoding
 
         val body = mutableMapOf<String, Any>(
             "text" to text,
             "param" to params,
             // البوابة تتوقع 'gsm-7bit' أو 'unicode'. إرسال "GSM7BIT"
-            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode':
-            // رسالة ASCII تُرسَل UCS2 فتهبط سعتها من 160 حرفًا إلى 70
-            // وتتضاعف أجزاؤها وتكلفتها.
-            "encoding" to wireEncoding(encoding),
+            // قيمة غير معروفة فترجع البوابة إلى الافتراضي 'unicode'.
+            "encoding" to wireEncoding(effectiveEncoding),
             "request_status_report" to true
         )
         ports?.let { if (it.isNotEmpty()) body["port"] = it }
@@ -486,38 +535,20 @@ class DinstarHardwareService(
     }
 
     /**
-     * Yemen mobile operator prefixes — CORRECTED per Wikipedia + ITU E.164
-     * | Prefix | Operator                        |
-     * |--------|---------------------------------|
-     * | 71     | سبأفون (Sabafon)               |
-     * | 73     | يو / YOU (formerly MTN Yemen)   |
-     * | 77, 78 | يمن موبايل (Yemen Mobile)      |
-     * | 70     | واي (Y Telecom)                |
-     * | 10     | يمن 4G (Yemen 4G)              |
+     * تحديد اسم المشغّل، مع تصحيح الأسماء القديمة أو الخاطئة التي تُرجعها
+     * البوابة (MTN ← YOU بعد 2021، HiTel ← YTelecom).
+     *
+     * جدول البادئات **ليس هنا**: المصدر الوحيد للحقيقة هو
+     * [DinstarLoadBalancer.classifyNumber]. كان هذا الملف يحمل نسخته
+     * الخاصة `YEMEN_OPERATOR_PREFIXES` تطابق بخانتين ثابتتين، فتقرأ
+     * شريحة سبأفون عدن `722…` على أنها `72` وتُسقطها في «غير معروف»؛
+     * فتفشل مطابقة «داخل الشبكة» وتُوجَّه المكالمة عبر شريحة مشغّل آخر
+     * بتعرفة أعلى. التفويض أدناه يمنع تكرار هذا الانحراف.
      */
-    private val YEMEN_OPERATOR_PREFIXES: Map<String, String> = mapOf(
-        "71" to "Sabafon",
-        "73" to "YOU",
-        "77" to "YemenMobile",
-        "78" to "YemenMobile",
-        "70" to "YTelecom",
-        "10" to "Yemen4G"
-    )
-
-    /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
     private fun resolveOperatorName(apiName: String?, simNumber: String?): String {
-        // First try: use SIM number prefix (most reliable)
+        // الأوثق: بادئة رقم الشريحة نفسها (تطابق الأطول أولًا: 722 قبل 72)
         if (!simNumber.isNullOrBlank()) {
-            val digits = simNumber.filter { it.isDigit() }
-            val local = when {
-                digits.startsWith("967") -> digits.removePrefix("967")
-                digits.startsWith("0") -> digits.removePrefix("0")
-                else -> digits
-            }
-            if (local.length >= 2) {
-                val prefix = local.substring(0, 2)
-                YEMEN_OPERATOR_PREFIXES[prefix]?.let { return it }
-            }
+            DinstarLoadBalancer.classifyNumber(simNumber)?.let { return it.apiName }
         }
         // Second try: match API operator name with corrections
         if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {

@@ -81,7 +81,7 @@ const resolveOp = (o?: string) => {
 const SIGNAL_LABEL: Record<string, { ar: string; clr: string }> = {
   EXCELLENT: { ar: 'ممتازة', clr: '#00C896' },
   GOOD: { ar: 'جيدة', clr: '#52C41A' },
-  FAIR: { ar: 'مقبولة', clr: '#E8B84A' },
+  FAIR: { ar: 'مقبولة', clr: '#E0A83C' },
   WEAK: { ar: 'ضعيفة', clr: '#FA8C16' },
   UNUSABLE: { ar: 'غير كافية', clr: '#F5222D' },
   NO_SIGNAL: { ar: 'لا يوجد قياس', clr: '#8C8C8C' },
@@ -399,7 +399,7 @@ export default function DinstarControl() {
             <Card size="small">
               <Tooltip title="الشريحة المسجّلة قد تكون بلا إشارة قابلة للقياس؛ الجاهزة فقط تصلح لحمل مكالمة.">
                 <Statistic title="جاهزة للمكالمات" value={totals.usable} suffix={`/ ${totals.registered}`}
-                  valueStyle={{ color: totals.usable < totals.registered ? '#E8B84A' : '#00C896' }} />
+                  valueStyle={{ color: totals.usable < totals.registered ? '#E0A83C' : '#00C896' }} />
               </Tooltip>
             </Card>
           </Col>

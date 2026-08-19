@@ -63,4 +63,71 @@ class DinstarOperatorRoutingTest {
         assertNull(classifyNumber(""))
         assertNull(classifyNumber("abc"))
     }
+
+    /**
+     * `722` نطاق سبأفون عدن للجيل الرابع (VoLTE)، أُطلق مستقلًّا عن `71`.
+     *
+     * المطابقة يجب أن تكون **الأطول أولًا**: لو فُحصت خانتان فقط لقُرئ
+     * `72` — وهو غير مخصَّص — فسقط الرقم في «غير معروف»، ورُفض قبل
+     * الطلب، أو وُجِّه عبر شريحة مشغّل آخر بتعرفة خارج الشبكة.
+     */
+    @Test
+    fun `بادئة سبأفون عدن 722 تُطابَق قبل الخانتين`() {
+        assertEquals("Sabafon", classifyNumber("722012919")?.apiName)
+        assertEquals("Sabafon", classifyNumber("+967722012919")?.apiName)
+        assertEquals("Sabafon", classifyNumber("00967722012919")?.apiName)
+        assertEquals("Sabafon", classifyNumber("0722012919")?.apiName)
+        assertTrue(classifyNumber("722012919")!!.isMobile)
+    }
+
+    /**
+     * `718` نطاق سبأفون عدن القديم؛ يطابقه `71` أصلًا. يُختبر حتى لا
+     * يُضاف جدولٌ ثلاثي يُغيّر نسبته سهوًا.
+     */
+    @Test
+    fun `نطاق عدن القديم 718 يبقى سبأفون`() {
+        assertEquals("Sabafon", classifyNumber("718123456")?.apiName)
+    }
+
+    /**
+     * حارس معماري: `DinstarHardwareService` كان يحمل جدول بادئات موازيًا
+     * (`YEMEN_OPERATOR_PREFIXES`) يطابق بخانتين ثابتتين، فيُخطئ في `722`.
+     * حُذف وفُوِّض إلى `classifyNumber`. هذا الاختبار يمنع عودته.
+     *
+     * تكرار جداول البادئات كان أكثر أخطاء هذا المشروع تكرارًا: بلغت
+     * أربعة جداول متضاربة قبل التوحيد.
+     */
+    @Test
+    fun `لا جدول بادئات موازٍ خارج DinstarLoadBalancer`() {
+        // Gradle يضبط مجلد عمل الاختبار على مجلد الوحدة، لكن التشغيل من
+        // جذر المستودع أو من IDE قد يختلف — لذا تُجرَّب المسارات المحتملة.
+        val relative = "src/main/kotlin/com/red/server"
+        val sourceRoot = listOf(
+            relative,
+            "backend-server/$relative",
+            "RED_Ultimate_V1-main/RED_Ultimate/backend-server/$relative"
+        ).map { java.io.File(it) }.firstOrNull { it.isDirectory }
+
+        assertNotNull(sourceRoot, "لم يُعثر على مصادر الخادم — تحقق من مجلد عمل الاختبار")
+
+        val serverSources = sourceRoot!!
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filterNot { it.name == "DinstarLoadBalancer.kt" }
+            .toList()
+
+        assertTrue(serverSources.isNotEmpty(), "مجلد المصادر فارغ — تحقق من مجلد عمل الاختبار")
+
+        // بادئات يمن موبايل: وجودها كمفتاح خريطة يعني جدولًا موازيًا
+        val offenders = serverSources.filter { file ->
+            val text = file.readText()
+            Regex("""["'](?:77|78)["']\s*(?:to|->)""").containsMatchIn(text)
+        }
+
+        assertTrue(
+            offenders.isEmpty(),
+            "جدول بادئات موازٍ في: ${offenders.joinToString { it.name }} — " +
+                "استخدم DinstarLoadBalancer.classifyNumber بدلًا منه"
+        )
+    }
 }

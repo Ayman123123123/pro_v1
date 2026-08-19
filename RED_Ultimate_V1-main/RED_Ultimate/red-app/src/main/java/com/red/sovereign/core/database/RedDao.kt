@@ -87,6 +87,17 @@ interface RedDao {
     @Query("SELECT * FROM stories WHERE expiresAt > :now ORDER BY timestamp DESC")
     fun getActiveStories(now: Long): Flow<List<StoryEntity>>
 
+    /**
+     * حذف القصص المنتهية فعليًا.
+     *
+     * `getActiveStories` يُخفي المنتهية بشرط `expiresAt > now` لكنه لا
+     * يحذفها، فكانت الصفوف تتراكم بلا حد ويكبر ملف القاعدة إلى ما لا
+     * نهاية. يستدعيه [com.red.sovereign.core.workers.StoryCleanupWorker]
+     * دوريًا.
+     */
+    @Query("DELETE FROM stories WHERE expiresAt <= :now")
+    suspend fun cleanupExpiredStories(now: Long): Int
+
     // --- Drafts ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveDraft(draft: DraftEntity)
@@ -98,7 +109,25 @@ interface RedDao {
     suspend fun deleteDraft(convId: String)
 
     // --- Search ---
-    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND encryptedPlaintext LIKE :query")
+    /**
+     * بحث احتياطي داخل محادثة واحدة.
+     *
+     * **`CAST` ليس زخرفًا.** العمود `encryptedPlaintext` من نوع
+     * `ByteArray` ⇒ `BLOB` في SQLite، و`LIKE` على BLOB **لا يطابق
+     * شيئًا أبدًا** — لا يخطئ بل يرجع صفر صفوف صامتًا. فكان هذا
+     * الاستعلام يرجع قائمة فارغة دائمًا مهما كان النص (مقيس: أربع
+     * عبارات موجودة فعلًا في البيانات، صفر نتيجة).
+     *
+     * **والأفضل منه [FtsSearchManager]**: هذا مسحٌ كامل للجدول بلا
+     * فهرس، ولا يطبّع الحركات فلا تطابق «السلام» كلمة «السَّلام»،
+     * ويفشل مع حمولات `RICH_TEXT` لأنها protobuf لا نصّ خام. يبقى هنا
+     * للاحتياط حين يتعذّر بناء فهرس FTS.
+     */
+    @Query(
+        "SELECT * FROM local_history WHERE conversationId = :convId " +
+            "AND CAST(encryptedPlaintext AS TEXT) LIKE :query ESCAPE '\\' " +
+            "ORDER BY createdAt DESC"
+    )
     suspend fun searchMessages(convId: String, query: String): List<LocalHistoryEntity>
 
     /** وسائط محادثة (صور/فيديو/ملفات/صوت) — مرتبة بالأحدث أولاً. أساس معرض الوسائط. */

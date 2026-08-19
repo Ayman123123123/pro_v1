@@ -397,12 +397,12 @@ export default function SmsTemplates() {
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
-            <Statistic title="مرات الاستخدام" value={stats.totalUsage} valueStyle={{ color: '#35CBE0' }} />
+            <Statistic title="مرات الاستخدام" value={stats.totalUsage} valueStyle={{ color: '#4FC3F7' }} />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
-            <Statistic title="مجدوَلَة" value={stats.pending} valueStyle={{ color: '#E8B84A' }} />
+            <Statistic title="مجدوَلَة" value={stats.pending} valueStyle={{ color: '#E0A83C' }} />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6}>

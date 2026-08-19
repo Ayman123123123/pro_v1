@@ -32,8 +32,42 @@ data class PostDocument(
     val repostCount: Long = 0
 )
 
+/**
+ * خصوصية المنشور. `FRIENDS` أضافها main ويستعملها `FeedService` فعلًا
+ * في ترشيح الفيد، ولذلك بقيت.
+ */
 enum class PostVisibility { PUBLIC, FRIENDS, LOCAL_YEMEN }
-enum class FeedScope { ALL, PUBLIC, FRIENDS, FOLLOWING, YEMEN }
+
+/**
+ * نطاق الفيد المطلوب.
+ *
+ * `FRIENDS` حلّ محلّ `FOLLOWING`، و`PUBLIC` حلّ محلّ `YEMEN`.
+ * والفرق ليس تسمية فقط: «المتابَعة» علاقة أحادية الاتجاه (أتابعك دون
+ * أن تتابعني)، أما «الأصدقاء» فعلاقة متبادلة يلزم فيها أن يكون كلٌّ
+ * منّا في جهات اتصال الآخر — وهذا ما يطبّقه `FeedService`.
+ *
+ * `FOLLOWING` و`YEMEN` مُبقاتان مهجورتين لا تُعرضان في الواجهة: نسخ
+ * التطبيق المثبَّتة على الأجهزة ما زالت ترسلهما، وحذفهما يجعل Spring
+ * يردّ 400 على كل طلب منها.
+ */
+enum class FeedScope {
+    ALL,
+    FRIENDS,
+    PUBLIC,
+
+    @Deprecated("استعمل FRIENDS — أُبقيت لتوافق النسخ المثبَّتة", ReplaceWith("FRIENDS"))
+    FOLLOWING,
+
+    @Deprecated("استعمل PUBLIC — أُبقيت لتوافق النسخ المثبَّتة", ReplaceWith("PUBLIC"))
+    YEMEN;
+
+    /** يوحّد القيم المهجورة إلى ما يقابلها، فيبقى منطق الفيد فرعين لا أربعة. */
+    fun canonical(): FeedScope = when (this) {
+        FOLLOWING -> FRIENDS
+        YEMEN -> PUBLIC
+        else -> this
+    }
+}
 enum class PostKind { POST, POLL }
 data class PostMedia(
     val objectKey: String,
@@ -74,10 +108,24 @@ data class VoiceMetadata(
 )
 
 @Document("post_reactions")
-data class PostReaction(@Id val id: String, val postId: String, val userId: String, val type: String, val createdAt: Instant = Instant.now())
+/**
+ * تفاعل على منشور. المعرّف مركّب `postId:userId:type` فبحث التبديل
+ * الحالي يمرّ على `_id` ولا يمسح المجموعة.
+ *
+ * ومع ذلك `postId` و`userId` مُفهرسان: أي استعلام مستقبلي بمعنى
+ * «كل تفاعلات هذا المنشور» أو «كل ما تفاعل معه هذا المستخدم» —
+ * وهو استعلام طبيعي جدًّا لشاشة تفاعلات أو لحذف حساب — سيمسح
+ * المجموعة كاملة بلا هذين الفهرسين، ولن يظهر العطب إلا بعد أن
+ * تكبر البيانات في الإنتاج.
+ */
+data class PostReaction(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val type: String, val createdAt: Instant = Instant.now())
 
 @Document("poll_votes")
-data class PollVote(@Id val id: String, val postId: String, val userId: String, val optionId: String, val createdAt: Instant = Instant.now())
+/**
+ * صوت في استطلاع. المعرّف `postId:userId` يمنع التصويت مرّتين.
+ * الفهارس لاستعلامات النتائج التفصيلية وحذف بيانات المستخدم.
+ */
+data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, @Indexed val optionId: String, val createdAt: Instant = Instant.now())
 
 @Document("follows")
 data class FollowDocument(

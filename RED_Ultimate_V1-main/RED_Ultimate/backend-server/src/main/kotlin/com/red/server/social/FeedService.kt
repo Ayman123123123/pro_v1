@@ -45,6 +45,9 @@ class FeedService(
         return post
     }
 
+    // القيمتان المهجورتان تردان في `when` لأجل الشمول فقط؛ التنويه
+    // على مستوى الدالة لأن الشرط داخل `when` ليس موضعًا صالحًا للتعليق التوضيحي.
+    @Suppress("DEPRECATION")
     fun feed(userId: UUID, scope: FeedScope, before: Instant?, limit: Int): FeedResponse {
         val criteria = Criteria.where("deletedAt").`is`(null).and("parentId").`is`(null)
         val hidden = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), HiddenPost::class.java).map(HiddenPost::postId)
@@ -52,7 +55,10 @@ class FeedService(
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
         if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
         val friendIds = mutualFriendIds(userId) + userId.toString()
-        when (scope) {
+        // canonical() يوحّد FOLLOWING⇒FRIENDS وYEMEN⇒PUBLIC، فلا يتفرّع
+        // المنطق أربع مرات ولا يُنسى فرعٌ عند إضافة قيمة. النسخ
+        // المثبَّتة على الأجهزة ما زالت ترسل القيمتين المهجورتين.
+        when (scope.canonical()) {
             FeedScope.PUBLIC -> criteria.and("visibility").`is`(PostVisibility.PUBLIC)
             FeedScope.ALL -> criteria.andOperator(
                 Criteria().orOperator(
@@ -61,18 +67,29 @@ class FeedService(
                     Criteria.where("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
                 )
             )
-            FeedScope.FRIENDS, FeedScope.FOLLOWING -> {
+            FeedScope.FRIENDS -> {
                 if (friendIds.size == 1) return FeedResponse(emptyList(), null)
                 criteria.and("visibility").`is`(PostVisibility.FRIENDS).and("authorId").`in`(friendIds)
             }
-            // نطاق توافق للمنشورات المحلية القديمة؛ لا يُستخدم كنطاق خصوصية جديد.
-            FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
+            // canonical() لا يُرجع المهجورتين أبدًا؛ الفرع لازم لشمول when.
+            FeedScope.FOLLOWING, FeedScope.YEMEN -> Unit
         }
         before?.let { criteria.and("createdAt").lt(it) }
         val posts = mongo.find(Query(criteria).with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit.coerceIn(1, 50)), PostDocument::class.java)
         return FeedResponse(posts, posts.lastOrNull()?.createdAt?.toString())
     }
 
+    /**
+     * معرّفات «الأصدقاء»: من تبادلتَ معه جهة الاتصال في الاتجاهين.
+     *
+     * المصدر `red_contacts` لا `FollowDocument`: عند قبول طلب اتصال
+     * يُدرج `ContactService` صفَّين — واحدًا لكل اتجاه — فالجدول هو
+     * السجلّ الحقيقي للعلاقة المتبادلة. أما `FollowDocument` فيكتبه
+     * `follow()` وحده بعلاقة أحادية الاتجاه، فلا يصلح أساسًا للصداقة.
+     *
+     * `EXISTS` المتماثلة تفرض التبادل داخل قاعدة البيانات، فلا تُنقل
+     * قائمتان إلى الذاكرة لتقاطعهما.
+     */
     private fun mutualFriendIds(userId: UUID): List<String> = jdbc.queryForList(
         """SELECT a.contact_id::text
            FROM red_contacts a

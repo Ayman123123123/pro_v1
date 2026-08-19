@@ -7,7 +7,7 @@ import MessagingTab from './tabs/MessagingTab';
 export default function MessagingCenter() {
   return (
     <div>
-      <Typography.Title level={2} style={{color:'#00E6A0', margin:0}}><MessageOutlined /> مركز الرسائل — موحد</Typography.Title>
+      <Typography.Title level={2} style={{color:'#14D89B', margin:0}}><MessageOutlined /> مركز الرسائل — موحد</Typography.Title>
       <Typography.Text type="secondary">إحصائيات الرسائل المشفرة — مدموج من MessagingTab القديمة — الآن صفحة مستقلة بالشكل الجديد — بيانات حية من /api/master/v1/stats/realtime</Typography.Text>
       <Alert type="success" showIcon style={{margin:'16px 0'}} message="البيانات مجمعة فقط — لا تعرض محتوى الرسائل أو هوية المرسل — الخصوصية محفوظة" />
       <Card style={{marginTop:16}}>

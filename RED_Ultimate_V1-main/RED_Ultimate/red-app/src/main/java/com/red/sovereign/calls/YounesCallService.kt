@@ -69,6 +69,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var ringback: ToneGenerator? = null
     private var ringStartedAt: Long = 0L
 
+    /**
+     * المكالمة النشطة المحفوظة أثناء [CallUiState.Reconnecting]، لتُستعاد
+     * بمؤقّتها الأصلي عند عودة الإشارة بدل بدء عدّاد جديد.
+     */
+    private var resumeAfterReconnect: CallUiState.Active? = null
+
     override fun onCreate() {
         super.onCreate(); createChannel()
         audio = getSystemService(AudioManager::class.java)
@@ -100,6 +106,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             ACTION_ACCEPT -> acceptIncoming(
                 cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
+                micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
+            )
+            // قبول المكالمة الواردة بالفيديو مباشرةً — الكاميرا مفروضة بغضّ النظر
+            // عن EXTRA_CAMERA، لأن نيّة المستخدم صريحة عند ضغط زر «فيديو».
+            ACTION_ACCEPT_VIDEO -> acceptIncoming(
+                cameraOn = true,
                 micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
             )
             ACTION_REJECT -> rejectIncoming()
@@ -143,6 +155,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             // لإعادة استكشاف المسار التلقائي وتمرير الحزم عبر الشبكة الجديدة دون انقطاع الصوت أو الفيديو
             if (CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming) {
                 engine?.restartIce()
+            } else if (CallRuntime.state is CallUiState.Reconnecting) {
+                // عادت الإشارة: استعِد المكالمة بمؤقّتها الأصلي ثم أعد بناء المسار
+                resumeAfterReconnect?.let { CallRuntime.state = it }
+                resumeAfterReconnect = null
+                updateNotification("مكالمة يونس نشطة")
+                engine?.restartIce()
             }
             return
         }
@@ -173,6 +191,22 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     notifyWaiting(newIncoming)
                     return
                 }
+                // الجهاز مشغول فعلاً (مكالمة قيد التأسيس، أو رنين قائم، أو
+                // خانة الانتظار محجوزة): نردّ بـ BUSY بدل الكتابة فوق
+                // المكالمة الجارية — كان هذا يُسقط المكالمة الحالية صامتاً.
+                if (isBusyForNewCall()) {
+                    runCatching {
+                        signaling.send(
+                            CallSignal(
+                                callId = newIncoming.callId,
+                                targetUserId = newIncoming.peer,
+                                type = "BUSY",
+                                mode = newIncoming.mode
+                            )
+                        )
+                    }
+                    return
+                }
                 incomingOffer = signal
                 target = newIncoming.peer
                 callId = newIncoming.callId
@@ -200,7 +234,39 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     updateNotification("جاهز لاستقبال مكالمات يونس")
                 }
             }
-            "END", "REJECT" -> endCall(sendSignal = false)
+            "END" -> endCall(sendSignal = false)
+            "REJECT" -> {
+                // رفض صريح من الطرف الآخر — يُميَّز عن الإنهاء العادي
+                // حتى يرى المتصل سبب توقّف المكالمة لا مجرّد اختفائها.
+                if (CallRuntime.state is CallUiState.Connecting) {
+                    enterTerminal(CallUiState.Declined(target, mode), "رُفضت المكالمة")
+                } else {
+                    endCall(sendSignal = false)
+                }
+            }
+            "BUSY" -> {
+                // للمتصل: الطرف الآخر مشغول. أما أجهزة المستدعى الأخرى
+                // فتتلقّى نفس الإشارة كإلغاء للرنين، فلا تُعرض لها الرسالة.
+                if (CallRuntime.state is CallUiState.Connecting) {
+                    enterTerminal(CallUiState.Busy(target, mode), "الطرف الآخر مشغول")
+                } else {
+                    endCall(sendSignal = false)
+                }
+            }
+            // مرحلة مكالمة عبر بوابة DINSTAR — لا تمسّ آلة حالة WebRTC
+            "PSTN_PROGRESS" -> {
+                val stage = signal.payload["stage"].orEmpty()
+                CallRuntime.pstnNumber = signal.payload["number"].orEmpty()
+                signal.callId?.takeIf { it.isNotBlank() }?.let { CallRuntime.pstnCallId = it }
+                CallRuntime.pstnStatus = when (stage) {
+                    "INVITING" -> PstnCallStatus.INVITING
+                    "RINGING" -> PstnCallStatus.RINGING
+                    "BRIDGING" -> PstnCallStatus.BRIDGING
+                    "ACTIVE" -> PstnCallStatus.ACTIVE
+                    "ENDED" -> PstnCallStatus.ENDED
+                    else -> CallRuntime.pstnStatus
+                }
+            }
             "UNAVAILABLE" -> fail("الطرف الآخر غير متاح")
             "CONFERENCE_INVITE" -> {
                 val myId = TokenStore(this).redId.orEmpty()
@@ -307,25 +373,59 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
     override fun onError(message: String) {
         if (isActiveCall()) {
-            updateNotification("انقطع اتصال الإشارة — جارٍ إعادة الاتصال…")
-            reconnect?.start()
+            enterReconnecting("انقطع اتصال الإشارة — جارٍ إعادة الاتصال…")
             return
         }
         if (CallRuntime.state is CallUiState.Incoming) return
         fail(message)
     }
+
     override fun onDisconnected() {
         // مكالمة نشطة → إعادة اتصال بدل إنهاء المكالمة فوراً
         if (CallRuntime.state !is CallUiState.Idle) {
-            updateNotification("انقطع الاتصال — جارٍ إعادة الاتصال…")
-            reconnect?.start()
+            enterReconnecting("انقطع الاتصال — جارٍ إعادة الاتصال…")
         }
+    }
+
+    /**
+     * ينقل الواجهة إلى [CallUiState.Reconnecting] ويبدأ إعادة الاتصال.
+     *
+     * يحفظ بيانات المكالمة الجارية (`callId`/`peer`/`mode`) كي تعود
+     * [CallUiState.Active] بمؤقّتها الأصلي عند نجاح الاستعادة، فلا
+     * يبدو للمستخدم أن مكالمته بدأت من جديد.
+     */
+    private fun enterReconnecting(notice: String) {
+        val current = CallRuntime.state
+        val active = current as? CallUiState.Active
+            ?: (current as? CallUiState.ActiveWithIncoming)?.active
+        if (active != null) {
+            resumeAfterReconnect = active
+            CallRuntime.state = CallUiState.Reconnecting(active.callId, active.peer, active.mode)
+        }
+        updateNotification(notice)
+        reconnect?.start()
     }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
 
     private fun isActiveCall(): Boolean =
         CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming
+
+    /**
+     * هل الجهاز مشغول بحيث يتعذّر قبول عرض مكالمة جديد؟
+     *
+     * الحالات النهائية لا تُعدّ انشغالاً: هي شاشة عرض مؤقّتة لثوانٍ،
+     * ورفض مكالمة جديدة خلالها سيبدو للمتصل عطلاً بلا سبب.
+     */
+    private fun isBusyForNewCall(): Boolean = when (CallRuntime.state) {
+        is CallUiState.Idle -> false
+        is CallUiState.Incoming,
+        is CallUiState.Connecting,
+        is CallUiState.Active,
+        is CallUiState.ActiveWithIncoming,
+        is CallUiState.Reconnecting -> true
+        else -> false
+    }
 
     private fun isRenegotiation(signal: CallSignal): Boolean {
         if (signal.type == "RENEGOTIATE") return engine != null
@@ -452,15 +552,27 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             stopRingtone()
         }
     }
-    private fun fail(message: String) {
+    private fun fail(message: String) = enterTerminal(CallUiState.Error(message), message)
+
+    /**
+     * يعرض حالة نهائية (مرفوضة، مشغول، لا ردّ، انتهت، خطأ) ثم يعود
+     * تلقائيًّا إلى [CallUiState.Idle] بعد [CallUiState.TERMINAL_DISPLAY_MS].
+     *
+     * التحقّق من هوية الحالة قبل التنظيف يمنع سباقًا معروفًا: لو بدأت
+     * مكالمة جديدة أثناء مهلة العرض، فإن التنظيف المؤجَّل كان سينهيها.
+     */
+    private fun enterTerminal(state: CallUiState, notice: String) {
         clearRingTimeout()
         stopRingback()
         stopRingtone()
-        CallRuntime.state = CallUiState.Error(message)
-        updateNotification(message)
+        CallRuntime.state = state
+        updateNotification(notice)
         scope.launch {
-            kotlinx.coroutines.delay(3000)
-            if (CallRuntime.state is CallUiState.Error) {
+            kotlinx.coroutines.delay(CallUiState.TERMINAL_DISPLAY_MS)
+            // لا تُنظّف إلا إن كانت الحالة المعروضة ما تزال هي نفسها
+            if (CallRuntime.state === state) {
+                // تُصفَّر الحالة أولًا كي لا يرى endCall حالةً نهائية فيمتنع
+                CallRuntime.state = CallUiState.Idle
                 endCall(sendSignal = false)
                 promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false)
                 runCatching { signaling.connect() }
@@ -507,9 +619,19 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             if (!CallRingPolicy.shouldExpireUnanswered(System.currentTimeMillis() - ringStartedAt, true)) return@launch
             if (outgoing) {
                 if (target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
-                fail(CallRingPolicy.unansweredMessage(true))
+                enterTerminal(
+                    CallUiState.NoAnswer(target, mode, outgoing = true),
+                    CallRingPolicy.unansweredMessage(true)
+                )
             } else {
+                // مكالمة واردة انقضت مهلتها: تُرفض للطرف الآخر وتُسجَّل فائتة هنا
+                val missedPeer = target
+                val missedMode = mode
                 rejectIncoming()
+                enterTerminal(
+                    CallUiState.NoAnswer(missedPeer, missedMode, outgoing = false),
+                    CallRingPolicy.unansweredMessage(false)
+                )
             }
         }
     }
@@ -537,7 +659,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         statsJob?.cancel(); statsJob = null
         clearRingTimeout()
         stopRingback()
-        val durationMs = CallRuntime.state.let { (it as? CallUiState.Active)?.let { active -> System.currentTimeMillis() - active.startedAt } ?: 0L }
+        // المدّة تُحتسب أيضًا إذا انتهت المكالمة أثناء انتظار مكالمة ثانية
+        // أو أثناء إعادة الاتصال، وإلا سُجِّلت مكالمات حقيقية بمدّة صفر.
+        val startedAt = when (val s = CallRuntime.state) {
+            is CallUiState.Active -> s.startedAt
+            is CallUiState.ActiveWithIncoming -> s.active.startedAt
+            is CallUiState.Reconnecting -> resumeAfterReconnect?.startedAt ?: 0L
+            else -> 0L
+        }
+        val durationMs = if (startedAt > 0L) System.currentTimeMillis() - startedAt else 0L
         CallTelemetry.onCallEnded(callId.orEmpty(), mode, "RED", durationMs)
         CallTelemetry.flush(this)
         CallTelemetry.reset()
@@ -547,7 +677,32 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
         audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
         if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
-        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.state = CallUiState.Idle
+        audio.mode = AudioManager.MODE_NORMAL
+        val endedPeer = target
+        val endedMode = mode
+        target = ""; callId = null; resumeAfterReconnect = null
+        CallRuntime.localVideo = null; CallRuntime.remoteVideo = null
+
+        // مكالمة كانت نشطة تُعرض «انتهت» بمدّتها قبل العودة إلى Idle؛
+        // أما المحاولة التي لم تُجب فتعود مباشرةً حتى لا تُخفي حالةً
+        // نهائية أدقّ (مرفوضة/مشغول/لا ردّ) عُرضت للتوّ.
+        if (durationMs > 0L && !CallUiState.isTerminal(CallRuntime.state)) {
+            val ended = CallUiState.CallEnded(endedPeer, endedMode, durationMs)
+            CallRuntime.state = ended
+            updateNotification("انتهت المكالمة")
+            scope.launch {
+                kotlinx.coroutines.delay(CallUiState.TERMINAL_DISPLAY_MS)
+                if (CallRuntime.state === ended) {
+                    CallRuntime.state = CallUiState.Idle
+                    updateNotification("جاهز لاستقبال مكالمات يونس")
+                }
+            }
+            return
+        }
+
+        if (!CallUiState.isTerminal(CallRuntime.state)) {
+            CallRuntime.state = CallUiState.Idle
+        }
         updateNotification("جاهز لاستقبال مكالمات يونس")
     }
 
@@ -638,7 +793,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     companion object {
         private const val CHANNEL = "red_calls"; private const val NOTIFICATION_ID = 7401
         const val ACTION_LISTEN = "com.red.sovereign.call.LISTEN"; const val ACTION_STOP = "com.red.sovereign.call.STOP"
-        const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
+        const val ACTION_START = "com.red.sovereign.call.START"; const val ACTION_ACCEPT = "com.red.sovereign.call.ACCEPT"; const val ACTION_ACCEPT_VIDEO = "com.red.sovereign.call.ACCEPT_VIDEO"; const val ACTION_REJECT = "com.red.sovereign.call.REJECT"; const val ACTION_END = "com.red.sovereign.call.END"
         const val ACTION_MIC = "com.red.sovereign.call.MIC"; const val ACTION_CAMERA = "com.red.sovereign.call.CAMERA"; const val ACTION_SWITCH_CAMERA = "com.red.sovereign.call.SWITCH_CAMERA"; const val ACTION_SPEAKER = "com.red.sovereign.call.SPEAKER"; const val ACTION_BLUETOOTH = "com.red.sovereign.call.BLUETOOTH"
         const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
         const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
@@ -653,6 +808,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             context,
             Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT).putExtra(EXTRA_CAMERA, cameraOn).putExtra(EXTRA_ENABLED, micOn)
         )
+        /** قبول المكالمة الواردة بالفيديو — يقابل زر «فيديو» في شاشة الاتصال الوارد. */
+        fun acceptVideo(context: Context, micOn: Boolean = true) = ContextCompat.startForegroundService(
+            context,
+            Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT_VIDEO).putExtra(EXTRA_ENABLED, micOn)
+        )
         fun action(context: Context, action: String, enabled: Boolean = true) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = ContextCompat.startForegroundService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
         // PSTN interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
@@ -663,14 +823,76 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 }
 
+/**
+ * حالة واجهة المكالمة الفردية.
+ *
+ * كل حالة هنا **تصدر من حدث فعلي** في `YounesCallService`: إشارة من
+ * الشبكة، أو تغيّر حالة `PeerConnection`، أو انتهاء مهلة الرنين. لا
+ * تُضاف حالة لا يصل إليها التطبيق، لأن الحالة الميتة تُوهم الواجهة
+ * بفروع لا تُنفَّذ أبدًا.
+ *
+ * الحالات النهائية ([Declined], [Busy], [NoAnswer], [CallEnded]) تُعرض
+ * لمدّة [TERMINAL_DISPLAY_MS] ثم تعود الآلة إلى [Idle] تلقائيًّا.
+ */
 sealed interface CallUiState {
     data object Idle : CallUiState
     data class Incoming(val callId: String, val peer: String, val mode: String) : CallUiState
-    data class Connecting(val callId: String, val peer: String, val mode: String) : CallUiState
-    data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long, val isHeld: Boolean = false) : CallUiState
+
+    /**
+     * جارٍ تأسيس المكالمة. [presenceLabel] نصّ يوضّح المرحلة الحالية
+     * للمستخدم (طلب، رنين، تفاوض) بدل «جارٍ الاتصال» المبهمة.
+     */
+    data class Connecting(
+        val callId: String,
+        val peer: String,
+        val mode: String,
+        val presenceLabel: String = "جارٍ التفاوض المشفَّر…"
+    ) : CallUiState
+
+    data class Active(
+        val callId: String,
+        val peer: String,
+        val mode: String,
+        val startedAt: Long,
+        val isHeld: Boolean = false
+    ) : CallUiState
+
     /** مكالمة نشطة + مكالمة واردة ثانية (call waiting) */
     data class ActiveWithIncoming(val active: Active, val waiting: Incoming) : CallUiState
+
+    /**
+     * انقطعت الإشارة أثناء مكالمة قائمة وتجري إعادة الاتصال.
+     * ليست خطأً: الوسائط قد تعود دون أن يفقد المستخدم المكالمة.
+     */
+    data class Reconnecting(val callId: String, val peer: String, val mode: String) : CallUiState
+
+    /** رفض الطرف الآخر المكالمة صراحةً (إشارة `REJECT`). */
+    data class Declined(val peer: String, val mode: String) : CallUiState
+
+    /** الطرف الآخر مشغول بمكالمة أخرى (إشارة `BUSY`). */
+    data class Busy(val peer: String, val mode: String) : CallUiState
+
+    /** انقضت مهلة الرنين دون ردّ (`CallRingPolicy.UNANSWERED_TIMEOUT_MS`). */
+    data class NoAnswer(val peer: String, val mode: String, val outgoing: Boolean) : CallUiState
+
+    /** انتهت مكالمة كانت نشطة — تُعرض مدّتها قبل العودة إلى [Idle]. */
+    data class CallEnded(
+        val peer: String,
+        val mode: String,
+        val durationMs: Long
+    ) : CallUiState
+
     data class Error(val message: String) : CallUiState
+
+    companion object {
+        /** مدّة عرض الحالات النهائية قبل العودة التلقائية إلى [Idle]. */
+        const val TERMINAL_DISPLAY_MS = 3_000L
+
+        /** هل هذه حالة نهائية تعود تلقائيًّا إلى [Idle]؟ */
+        fun isTerminal(state: CallUiState): Boolean =
+            state is Declined || state is Busy || state is NoAnswer ||
+                state is CallEnded || state is Error
+    }
 }
 object CallRuntime {
     var state: CallUiState by androidx.compose.runtime.mutableStateOf(CallUiState.Idle)
@@ -679,4 +901,27 @@ object CallRuntime {
     var remoteVideo: VideoTrack? by androidx.compose.runtime.mutableStateOf(null)
     var speaker by androidx.compose.runtime.mutableStateOf(false)
     var networkStats: NetworkStats by androidx.compose.runtime.mutableStateOf(NetworkStats())
+
+    /**
+     * مرحلة مكالمة PSTN الجارية، مصدرها إشارة `PSTN_PROGRESS` القادمة
+     * من الخادم والمشتقّة من أحداث Asterisk الفعلية.
+     *
+     * منفصلة عن [state] لأن مكالمة البوابة لا تمرّ بمحرّك WebRTC ولا
+     * تملك مساراً صوتياً داخل التطبيق؛ خلطهما كان سيُدخل آلة حالة
+     * المكالمة المشفَّرة في حالات لا تنطبق عليها.
+     */
+    var pstnStatus: PstnCallStatus by androidx.compose.runtime.mutableStateOf(PstnCallStatus.IDLE)
+
+    /** رقم مكالمة PSTN الجارية، لعرضه في الشاشة. */
+    var pstnNumber: String by androidx.compose.runtime.mutableStateOf("")
+
+    /** معرّف مكالمة PSTN الجارية — يلزم لإنهائها عبر REST. */
+    var pstnCallId: String by androidx.compose.runtime.mutableStateOf("")
+
+    /** يُصفّر حالة مكالمة البوابة بعد انتهائها أو إنهائها يدوياً. */
+    fun clearPstn() {
+        pstnStatus = PstnCallStatus.IDLE
+        pstnNumber = ""
+        pstnCallId = ""
+    }
 }

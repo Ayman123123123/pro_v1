@@ -72,7 +72,7 @@ export default function MasterOverview() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Typography.Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Typography.Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           المراقبة الحية — مركز السيادة
         </Typography.Title>
         <Typography.Text type="secondary">
@@ -98,7 +98,7 @@ export default function MasterOverview() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic title="متوسط إشارة DINSTAR" value={signal} suffix="%" prefix={<ApiOutlined />} />
-            <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#00C896' : '#E8B84A'} />
+            <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#00C896' : '#E0A83C'} />
             <Tag color={slots.length ? 'green' : 'red'}>{usable} جاهزة / {registered} مسجّلة</Tag>
           </Card>
         </Col>

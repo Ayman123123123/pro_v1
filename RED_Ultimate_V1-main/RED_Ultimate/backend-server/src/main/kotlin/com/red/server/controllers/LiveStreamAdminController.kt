@@ -11,7 +11,9 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
 
 /**
- * Live broadcast management API.
+ * Live broadcast management API. (bean: liveStreamAdminController —
+ * الاسم القديم LiveStreamController كان يتصادم مع نظيره في حزمة calls
+ * على اسم الـ bean الافتراضي نفسه فيُسقط Spring Boot الإقلاع كله.)
  *
  *  - GET  /api/live/streams                       -> list of active streams
  *  - GET  /api/live/streams/{streamId}/viewers    -> current viewer count

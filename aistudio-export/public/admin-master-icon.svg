@@ -1,0 +1,18 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="72%">
+      <stop offset="0%" stop-color="#0B1E33"/>
+      <stop offset="100%" stop-color="#05080F"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="100" y1="55" x2="415" y2="460" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE27A"/>
+      <stop offset="0.48" stop-color="#E8B84A"/>
+      <stop offset="1" stop-color="#9A6F1C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="256" cy="242" r="198" fill="none" stroke="url(#gold)" stroke-width="14"/>
+  <path fill="url(#gold)" fill-rule="evenodd" d="M256 78C184 78 126 137 126 210C126 261 154 306 196 329L164 390L245 356C249 357 252 358 256 358C328 358 386 299 386 226C386 153 328 78 256 78ZM256 123C304 123 343 162 343 210C343 258 304 297 256 297C208 297 169 258 169 210C169 162 208 123 256 123Z"/>
+  <path fill="url(#gold)" d="M180 140H224L256 200L288 140H332L270 248V328H242V248Z"/>
+  <text x="256" y="468" text-anchor="middle" fill="url(#gold)" font-family="Times New Roman, Cinzel, Georgia, serif" font-size="42" font-weight="600" letter-spacing="8">YOUNES</text>
+</svg>

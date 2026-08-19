@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-server/data/
+.env
+.env.*
+*.log
+.git/
+.github/
+_archive/

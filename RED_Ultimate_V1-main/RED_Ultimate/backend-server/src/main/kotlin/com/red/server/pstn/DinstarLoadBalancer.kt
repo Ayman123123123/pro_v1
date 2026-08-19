@@ -69,6 +69,20 @@ class DinstarLoadBalancer(
         )
 
         /**
+         * بادئات من ثلاثة أرقام — تُفحص **قبل** جدول الرقمين.
+         *
+         * `722` نطاق سبأفون عدن للجيل الرابع (VoLTE)، أُطلق مستقلًّا عن
+         * نطاق `71` الأصلي. بلا هذا الجدول يُقرأ الرقم `72` فيسقط في
+         * «غير معروف»، ويرفضه تحقّق الأرقام قبل أن يُطلب أصلًا.
+         *
+         * `718` نطاق سبأفون عدن القديم، ويطابقه `71` أصلًا — يُذكر هنا
+         * توثيقًا لا حاجةً.
+         */
+        private val OPERATOR_PREFIXES_3: Map<String, YemenOperatorInfo> = mapOf(
+            "722" to YemenOperatorInfo("Sabafon", "سبأفون", isMobile = true)
+        )
+
+        /**
          * أوزان الترجيح. الإشارة تُقاس بالـ dBm (سالبة) فتُحوَّل إلى
          * نسبة 0..100 قبل الترجيح حتى تبقى الأوزان قابلة للمقارنة.
          */
@@ -95,6 +109,10 @@ class DinstarLoadBalancer(
             }
             // البادئة رقمان؛ أقل من ذلك ليس رقمًا صالحًا فلا يُصنَّف تخمينًا
             if (local.length < 2) return null
+            // الأطول أولًا: 722 (سبأفون عدن 4G) يسبق 72 وإلا سقط في «غير معروف»
+            if (local.length >= 3) {
+                OPERATOR_PREFIXES_3[local.substring(0, 3)]?.let { return it }
+            }
             return OPERATOR_PREFIXES[local.substring(0, 2)]
         }
     }

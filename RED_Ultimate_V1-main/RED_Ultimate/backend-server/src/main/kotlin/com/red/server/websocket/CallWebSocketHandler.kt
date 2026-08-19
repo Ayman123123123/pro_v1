@@ -37,6 +37,9 @@ class CallWebSocketHandler(
             "END" -> requireCallId(signal).also { history.end(it, source) }
             "ICE", "HOLD", "RESUME", "RENEGOTIATE" -> requireCallId(signal)
             "REJECT" -> requireCallId(signal).also { history.end(it, source) }
+            // جهاز المستدعى مشغول بمكالمة أخرى: تُنهى كـ MISSED تمامًا
+            // مثل REJECT (end() يصنّف غير المُجابة MISSED تلقائيًّا).
+            "BUSY" -> requireCallId(signal).also { history.end(it, source) }
             "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
@@ -118,6 +121,40 @@ class CallWebSocketHandler(
         pending.entries.removeIf { it.value.isEmpty() }
     }
 
+    /**
+     * يدفع مرحلة مكالمة PSTN إلى صاحبها عبر `/ws/calls`.
+     *
+     * لا يُستعمل صندوق الانتظار هنا عمدًا — بخلاف الدعوات: المرحلة
+     * معلومة لحظية تفقد معناها بعد ثوانٍ، وتسليمها متأخرًا سيُظهر
+     * للمستخدم «يرنّ» لمكالمة انتهت. إن لم يكن متصلًا تُهمَل بصمت.
+     */
+    fun deliverPstnProgress(
+        targetRedId: String,
+        callId: String,
+        stage: String,
+        number: String,
+        payload: Map<String, Any?> = emptyMap()
+    ) {
+        val targets = liveSessions(targetRedId)
+        if (targets.isEmpty()) return
+        // عميل الأندرويد يفكّ `payload` كـ`Map<String, String>` بدقّة، فأي
+        // قيمة غير نصّية (رقم أو null) تُفشل فكّ الإشارة كاملةً وتضيع
+        // المرحلة. التطبيع هنا يضمن العقد بدل الاعتماد على المُرسِل.
+        val textPayload = payload.mapNotNull { (key, value) ->
+            value?.let { key to it.toString() }
+        }.toMap()
+        val outbound = OutgoingCallSignal(
+            callId = callId,
+            sourceUserId = number,
+            targetUserId = targetRedId,
+            type = "PSTN_PROGRESS",
+            mode = "VOICE",
+            payload = textPayload + mapOf("stage" to stage, "number" to number)
+        )
+        val json = objectMapper.writeValueAsString(outbound)
+        targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+    }
+
     /** Deliver a conference/live invite to a RED ID: live socket if present, else 60s mailbox. */
     fun deliverInvite(targetRedId: String, type: String, roomId: String, sourceRedId: String, mode: String, payload: Map<String, Any?> = emptyMap()) {
         val outbound = OutgoingCallSignal(roomId, sourceRedId, targetRedId, type.uppercase(), mode.uppercase(), payload)
@@ -136,7 +173,7 @@ class CallWebSocketHandler(
 
     companion object {
         private const val PENDING_TTL_SECONDS = 60L
-        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END", "BUSY")
     }
 }
 

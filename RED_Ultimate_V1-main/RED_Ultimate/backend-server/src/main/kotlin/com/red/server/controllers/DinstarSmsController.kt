@@ -34,7 +34,7 @@ class DinstarSmsController(
      *   "text": "محتوى الرسالة",
      *   "param": [{"number": "777123456", "user_id": 1}],
      *   "port": [0, 1],        // اختياري: منافذ محددة
-     *   "encoding": "GSM7BIT", // اختياري: GSM7BIT أو UCS2
+     *   "encoding": "AUTO",    // اختياري: AUTO (افتراضي) أو GSM7BIT أو UCS2
      *   "request_status_report": true
      * }
      */
@@ -49,7 +49,9 @@ class DinstarSmsController(
         val params = (body["param"] as? List<Map<String, Any?>>) ?: throw IllegalArgumentException("param array is required")
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
-        val encoding = body["encoding"]?.toString() ?: "GSM7BIT"
+        // الافتراضي AUTO: تشتق الخدمة الترميز من النص. تثبيت GSM7BIT هنا
+        // كان يُبطل الاشتقاق ويجعل كل رسالة عربية تصل «?????».
+        val encoding = body["encoding"]?.toString() ?: DinstarHardwareService.AUTO_ENCODING
         // اختياري: بوابة بعينها من الأسطول. الخدمة تتحقق من أنه عنوان خاص.
         val gatewayHost = body["gatewayHost"]?.toString()
 
