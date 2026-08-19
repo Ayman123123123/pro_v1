@@ -51,7 +51,7 @@ export default function DataOverview() {
   ) : [];
 
   return <div>
-    <Typography.Title level={2} style={{ color: '#00E6A0', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
+    <Typography.Title level={2} style={{ color: '#14D89B', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
     <Typography.Paragraph type="secondary">
       عرض تشغيلي شامل للبيانات المتاحة للإدارة. الأرقام مجمعة فقط ولا تعرض نصوص الرسائل المشفرة أو الأسرار أو مفاتيح الهوية.
     </Typography.Paragraph>

@@ -20,16 +20,21 @@ class PstnCallService(
     private val redis: StringRedisTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
-    private val history: CallHistoryService
+    private val history: CallHistoryService,
+    private val progress: PstnCallProgressTracker
 ) {
     private val activeCalls = ConcurrentHashMap<String, ActivePstnCall>()
 
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
-        /** Valid Yemeni mobile prefixes after +967 or 967 */
-        private val YEMEN_MOBILE_PREFIXES = setOf("770", "771", "772", "773", "774", "775", "776", "777", "778", "779",
-            "730", "731", "732", "733", "734", "735", "736", "737", "738", "739",
-            "710", "711", "712", "713", "714", "715", "716", "717", "718", "719")
+
+        /**
+         * الطول الوطني لرقم المحمول اليمني: بادئة من رقمين + 7 أرقام.
+         *
+         * الهاتف الثابت أقصر (رمز محافظة من رقم واحد + 6–7 أرقام) ولا
+         * تتصل به البوابة عبر شريحة GSM، فيُرفض هنا.
+         */
+        private const val MOBILE_NSN_LENGTH = 9
     }
 
     fun dial(userId: UUID, suppliedNumber: String): PstnCallResponse {
@@ -63,6 +68,12 @@ class PstnCallService(
                 user.redId, number, selection.gatewayHost, selection.portIndex)
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint)
             history.start(user.redId, number, number, CallType.VOICE, CallRoute.DINSTAR, actionId)
+            // يجب أن يسبق التسجيلُ وصولَ أحداث AMI، وإلا تعذّر ربط
+            // القناة بصاحبها وضاعت كل مراحل المكالمة.
+            progress.register(actionId, user.redId, number)
+            // والسجل الثاني لملكية المنفذ: يتحقق منه hangup قبل التحرير
+            // فلا يُحرِّر مستخدمٌ منفذَ مكالمة غيره. السجلّان يخدمان
+            // غرضين مختلفين — تتبّع المراحل مقابل حراسة المورد.
             activeCalls[actionId] = ActivePstnCall(user.redId, selection.gatewayId, selection.portIndex)
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, selection.portIndex)
         } catch (error: Exception) {
@@ -82,6 +93,11 @@ class PstnCallService(
             require(active.ownerRedId == user.redId) { "Only the call initiator can release this PSTN route" }
             loadBalancer.releasePort(active.gatewayId, active.port)
         }
+        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛ بدون
+        // هذا التحرير يبقى قيد المتتبِّع حتى تنتهي مهلته. كان هذا السطر
+        // في المتحكّم قبل الدمج، ونُقل إلى هنا لأن المتحكّم صار يفوّض
+        // الإنهاء كاملًا إلى الخدمة بعد التحقق من الهوية والملكية.
+        progress.finishByCallId(callId)
         return PstnHangupResponse(callId, active?.port ?: -1, active != null)
     }
 
@@ -100,8 +116,19 @@ class PstnCallService(
             else -> compact
         }
         require(local.matches(Regex("^[0-9]{6,12}$"))) { "Only valid Yemeni numbers are allowed" }
-        require(local.substring(0, minOf(3, local.length)) in YEMEN_MOBILE_PREFIXES || local.length >= 9) {
-            "Unrecognized Yemeni mobile prefix"
+
+        // التصنيف يفوَّض إلى DinstarLoadBalancer — المصدر الوحيد لخريطة
+        // بادئات المشغّلين، وهو ما يختار المنفذ فعليًا بعد قليل. جدول
+        // محلي ثانٍ كان يفتح باب التفرّع: النسخة السابقة هنا أغفلت 78
+        // و70 تمامًا فكانت ترفض أرقام يمن موبايل الجديدة وواي.
+        val operator = DinstarLoadBalancer.classifyNumber(local)
+        require(operator != null && operator.isMobile) { "Unrecognized Yemeni mobile prefix" }
+
+        // الشرط السابق كان `... || local.length >= 9`، وكل محمول يمني
+        // تسعة أرقام — فكان الطرف الثاني يُصدّق أي رقم ويُبطل التحقق
+        // من البادئة كليًا.
+        require(local.length == MOBILE_NSN_LENGTH) {
+            "Yemeni mobile numbers are $MOBILE_NSN_LENGTH digits"
         }
         return local
     }

@@ -249,7 +249,7 @@ export default function App() {
       key: m.key,
       icon: m.icon,
       label: m.key === 'approvals' && pendingCount > 0
-        ? <span>{m.label} <Badge count={pendingCount} size="small" color="#E8B84A" /></span>
+        ? <span>{m.label} <Badge count={pendingCount} size="small" color="#E0A83C" /></span>
         : m.label,
     })),
   }));
@@ -261,33 +261,33 @@ export default function App() {
         algorithm: theme.darkAlgorithm,
         token: {
           colorPrimary: '#00C896',
-          colorInfo: '#35CBE0',
-          colorWarning: '#E8B84A',
-          colorBgBase: '#050A16',
+          colorInfo: '#4FC3F7',
+          colorWarning: '#E0A83C',
+          colorBgBase: '#06110D',
           borderRadius: 14,
-          fontFamily: "'Cairo', 'Tajawal', 'Segoe UI', Tahoma, Arial, sans-serif",
+          fontFamily: "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif",
         },
         components: {
           Menu: {
             darkItemBg: 'transparent',
             darkSubMenuItemBg: 'transparent',
-            darkItemColor: '#8892B0',
-            darkItemHoverBg: 'rgba(0, 201, 140, 0.08)',
-            darkItemHoverColor: '#EDF7FB',
-            darkItemSelectedBg: 'linear-gradient(135deg, rgba(0,201,140,0.22) 0%, rgba(53,203,224,0.12) 100%)' as unknown as string,
-            darkItemSelectedColor: '#00E6A0',
+            darkItemColor: '#9AAEBB',
+            darkItemHoverBg: 'rgba(0, 179, 126, 0.08)',
+            darkItemHoverColor: '#F2F6F8',
+            darkItemSelectedBg: 'linear-gradient(135deg, rgba(0, 179, 126,0.22) 0%, rgba(79, 195, 247,0.12) 100%)' as unknown as string,
+            darkItemSelectedColor: '#14D89B',
             itemBorderRadius: 10,
             itemMarginInline: 10,
           },
           Layout: {
-            siderBg: '#0A1628',
+            siderBg: '#0A1014',
             headerBg: 'rgba(8, 21, 37, 0.85)',
             headerHeight: 64,
           },
         },
       }}
     >
-      <Layout style={{ minHeight: '100vh', background: '#050A16' }}>
+      <Layout style={{ minHeight: '100vh', background: '#06110D' }}>
         <Sider theme="dark" collapsible width={248} className="yns-sider">
           <div className="yns-brand">
             <span className="admin-brand-icon admin-brand-icon--image">
@@ -328,7 +328,7 @@ export default function App() {
                 {apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}
               </span>
               {pendingCount > 0 && (
-                <Badge count={pendingCount} color="#E8B84A">
+                <Badge count={pendingCount} color="#E0A83C">
                   <Button size="small" onClick={() => setCurrentPage('approvals')}>موافقات</Button>
                 </Badge>
               )}

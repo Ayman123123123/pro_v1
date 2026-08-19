@@ -235,7 +235,7 @@ export default function Backups() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <DatabaseOutlined /> النسخ الاحتياطية — موحدة
         </Title>
         <Text type="secondary">سجل النسخ السابقة ودليل النسخ والاستعادة التشغيلي المشفر</Text>
@@ -279,7 +279,7 @@ export default function Backups() {
               title="قيد التنفيذ"
               value={stats.inProgress}
               prefix={<SyncOutlined spin />}
-              valueStyle={{ color: '#E8B84A' }}
+              valueStyle={{ color: '#E0A83C' }}
             />
           </Card>
         </Col>
@@ -289,7 +289,7 @@ export default function Backups() {
               title="الحجم الكلي"
               value={formatBytes(stats.totalSize)}
               prefix={<HddOutlined />}
-              valueStyle={{ color: '#35CBE0' }}
+              valueStyle={{ color: '#4FC3F7' }}
             />
           </Card>
         </Col>

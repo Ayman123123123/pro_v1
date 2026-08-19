@@ -91,11 +91,23 @@ class LocalRepository(context: Context) {
     suspend fun deleteDraft(convId: String) = dao.deleteDraft(convId)
 
     // --- Search ---
+    /**
+     * بحث احتياطي داخل محادثة. المسار المفضَّل هو [FtsSearchManager]
+     * لأنه مفهرس ويطبّع الحركات؛ هذا مسحٌ كامل للجدول.
+     *
+     * `%` و`_` محرفا بدل في `LIKE`، فلو مرّا كما هما لطابق بحثُ
+     * المستخدم عن «%» **كلَّ** رسائل المحادثة بدل أن يجد لا شيء
+     * (مقيس). لذا يُهرَّبان مع `\` نفسها — والترتيب مقصود: تهريب
+     * الشرطة المائلة **أولًا** وإلا ضوعف تهريبُ ما بعدها.
+     */
     suspend fun search(convId: String, query: String): List<LocalHistoryEntity> {
-        if (query.isBlank()) return emptyList()
-        // searchMessages يبحث في local_history (النص المفكوك المخزن محليًا بعد فك التشفير).
-        // في بيئة إنتاج، يُضاف فهرس FTS منفصل للنص المفكوك.
-        return dao.searchMessages(convId, "%${query.trim()}%")
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return emptyList()
+        val escaped = trimmed
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        return dao.searchMessages(convId, "%$escaped%")
     }
 
     // --- Delete ---

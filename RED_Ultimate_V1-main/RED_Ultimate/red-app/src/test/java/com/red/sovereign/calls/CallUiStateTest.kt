@@ -69,6 +69,71 @@ class CallUiStateTest {
         assertEquals("26852", state.active.peer)
         assertEquals("55602", state.waiting.peer)
     }
+
+    // ───────── الحالات النهائية وإعادة الاتصال ─────────
+
+    @Test fun `Connecting exposes a default presence label`() {
+        val state = CallUiState.Connecting("c1", "73066", "VOICE")
+        assertTrue("يجب أن تحمل نصاً افتراضياً غير فارغ", state.presenceLabel.isNotBlank())
+        val custom = state.copy(presenceLabel = "يرن الآن…")
+        assertEquals("يرن الآن…", custom.presenceLabel)
+    }
+
+    @Test fun `Reconnecting keeps call identity so the timer can resume`() {
+        val active = CallUiState.Active("c9", "71555", "VIDEO", startedAt = 5_000L)
+        val reconnecting = CallUiState.Reconnecting(active.callId, active.peer, active.mode)
+        assertEquals(active.callId, reconnecting.callId)
+        assertEquals(active.peer, reconnecting.peer)
+        assertEquals(active.mode, reconnecting.mode)
+        // إعادة الاتصال ليست حالة نهائية: المكالمة قد تعود
+        assertEquals(false, CallUiState.isTerminal(reconnecting))
+    }
+
+    @Test fun `Declined Busy and NoAnswer are terminal`() {
+        assertTrue(CallUiState.isTerminal(CallUiState.Declined("73066", "VOICE")))
+        assertTrue(CallUiState.isTerminal(CallUiState.Busy("73066", "VOICE")))
+        assertTrue(CallUiState.isTerminal(CallUiState.NoAnswer("73066", "VOICE", outgoing = true)))
+        assertTrue(CallUiState.isTerminal(CallUiState.CallEnded("73066", "VOICE", 1_000L)))
+        assertTrue(CallUiState.isTerminal(CallUiState.Error("boom")))
+    }
+
+    @Test fun `live states are not terminal`() {
+        assertEquals(false, CallUiState.isTerminal(CallUiState.Idle))
+        assertEquals(false, CallUiState.isTerminal(CallUiState.Incoming("c1", "p", "VOICE")))
+        assertEquals(false, CallUiState.isTerminal(CallUiState.Connecting("c1", "p", "VOICE")))
+        assertEquals(false, CallUiState.isTerminal(CallUiState.Active("c1", "p", "VOICE", 0L)))
+    }
+
+    @Test fun `NoAnswer distinguishes outgoing from missed incoming`() {
+        val unanswered = CallUiState.NoAnswer("73066", "VOICE", outgoing = true)
+        val missed = CallUiState.NoAnswer("73066", "VOICE", outgoing = false)
+        assertNotEquals(unanswered, missed)
+        assertEquals("لم يتم الرد", CallRingPolicy.unansweredMessage(unanswered.outgoing))
+        assertEquals("مكالمة فائتة", CallRingPolicy.unansweredMessage(missed.outgoing))
+    }
+
+    @Test fun `CallEnded preserves the measured duration`() {
+        val started = 10_000L
+        val ended = 73_500L
+        val state = CallUiState.CallEnded("73066", "VIDEO", durationMs = ended - started)
+        assertEquals(63_500L, state.durationMs)
+    }
+
+    @Test fun `terminal states never ring`() {
+        // الرنين مقصور على Incoming/Connecting؛ الحالات النهائية شاشة عرض فقط
+        listOf(
+            CallUiState.Declined("p", "VOICE"),
+            CallUiState.Busy("p", "VOICE"),
+            CallUiState.NoAnswer("p", "VOICE", true),
+            CallUiState.CallEnded("p", "VOICE", 0L),
+            CallUiState.Reconnecting("c", "p", "VOICE")
+        ).forEach { assertEquals(false, CallRingPolicy.isOneToOneRingState(it)) }
+    }
+
+    @Test fun `terminal display window is positive and shorter than ring timeout`() {
+        assertTrue(CallUiState.TERMINAL_DISPLAY_MS > 0L)
+        assertTrue(CallUiState.TERMINAL_DISPLAY_MS < CallRingPolicy.UNANSWERED_TIMEOUT_MS)
+    }
 }
 
 class ConferenceUiStateTest {

@@ -330,7 +330,7 @@ export default function UserManagement() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <TeamOutlined /> إدارة المستخدمين
         </Title>
         <Text type="secondary">قائمة حية من الخادم — موافقة ورفض وحظر وملف تشغيلي وكلمة مؤقتة ومسح عن بُعد</Text>
@@ -338,9 +338,9 @@ export default function UserManagement() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={6}><Card><Statistic title="إجمالي" value={stats.total} prefix={<UserOutlined />} valueStyle={{ color: '#1890ff' }} /></Card></Col>
-        <Col xs={24} sm={6}><Card><Statistic title="في الانتظار" value={stats.pending} prefix={<UserAddOutlined />} valueStyle={{ color: '#E8B84A' }} /></Card></Col>
+        <Col xs={24} sm={6}><Card><Statistic title="في الانتظار" value={stats.pending} prefix={<UserAddOutlined />} valueStyle={{ color: '#E0A83C' }} /></Card></Col>
         <Col xs={24} sm={6}><Card><Statistic title="مقبول" value={stats.approved} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#00C896' }} /></Card></Col>
-        <Col xs={24} sm={6}><Card><Statistic title="محظور" value={stats.banned} prefix={<StopOutlined />} valueStyle={{ color: '#FF6B6B' }} /></Card></Col>
+        <Col xs={24} sm={6}><Card><Statistic title="محظور" value={stats.banned} prefix={<StopOutlined />} valueStyle={{ color: '#FF5A5F' }} /></Card></Col>
       </Row>
 
       {error && (

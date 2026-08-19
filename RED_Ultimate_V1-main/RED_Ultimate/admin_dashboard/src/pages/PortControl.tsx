@@ -185,7 +185,7 @@ export default function PortControl() {
       render: (v: number | null, r: PortControl) => {
         if (v == null) return '—';
         const color = r.signalUsable
-          ? (v >= 60 ? '#00C896' : v >= 30 ? '#E8B84A' : '#FA8C16')
+          ? (v >= 60 ? '#00C896' : v >= 30 ? '#E0A83C' : '#FA8C16')
           : '#F5222D';
         return (
           <span style={{ color, fontWeight: 600 }}>
@@ -285,7 +285,7 @@ export default function PortControl() {
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#35CBE0' }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#4FC3F7' }}>
               {ports.filter((p) => (p.callState || '').toUpperCase() === 'ACTIVE').length}
             </div>
             <Typography.Text type="secondary">نشط الآن</Typography.Text>
@@ -301,7 +301,7 @@ export default function PortControl() {
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#E8B84A' }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#E0A83C' }}>
               {ports.filter((p) => p.callForwardState && p.callForwardState !== 'NONE').length}
             </div>
             <Typography.Text type="secondary">محوّل</Typography.Text>

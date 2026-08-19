@@ -116,7 +116,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun dialPstn(number: String) = viewModelScope.launch {
         pstnState = PstnState.Dialing
         pstnState = when (val result = pstn.dial(number)) {
-            is ApiResult.Success -> PstnState.Started(result.value.callId, result.value.usedToday, result.value.dailyLimit)
+            is ApiResult.Success -> {
+                // تُفتح شاشة المكالمة فوراً عند قبول الخادم، ولا تُنتظر أول
+                // حدث من Asterisk — وإلا بقي المستخدم بلا استجابة مرئية.
+                com.red.sovereign.calls.CallRuntime.pstnNumber = result.value.number.ifBlank { number }
+                com.red.sovereign.calls.CallRuntime.pstnCallId = result.value.callId
+                com.red.sovereign.calls.CallRuntime.pstnStatus =
+                    com.red.sovereign.calls.PstnCallStatus.INVITING
+                PstnState.Started(result.value.callId, result.value.usedToday, result.value.dailyLimit)
+            }
             is ApiResult.Error -> PstnState.Error(localize(result.message))
         }
     }
@@ -124,7 +132,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     /** إنهاء مكالمة PSTN جارية — يحرّر منفذ DINSTAR في موازن الحمولة */
     fun hangupPstn(callId: String) = viewModelScope.launch {
         when (val result = pstn.hangup(callId)) {
-            is ApiResult.Success -> pstnState = PstnState.Idle
+            is ApiResult.Success -> {
+                pstnState = PstnState.Idle
+                com.red.sovereign.calls.CallRuntime.clearPstn()
+            }
             is ApiResult.Error -> pstnState = PstnState.Error(localize(result.message))
         }
     }

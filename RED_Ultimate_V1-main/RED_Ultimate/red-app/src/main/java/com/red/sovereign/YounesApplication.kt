@@ -31,6 +31,8 @@ class YounesApplication : Application() {
         SettingsRuntime.initialize(this)
         // قنوات الإشعارات — مطلوبة لـ RedConnectionService و YounesCallService
         createNotificationChannels()
+        // تنظيف دوري للقصص المنتهية — بدونه تتراكم صفوفها في القاعدة بلا حد
+        com.red.sovereign.core.workers.StoryCleanupWorker.enqueue(this)
     }
 
     private fun createNotificationChannels() {

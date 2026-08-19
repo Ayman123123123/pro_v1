@@ -1,0 +1,109 @@
+# فحوص التكامل — CI
+#
+# كان هذا الملف قالبًا افتراضيًّا لا يفعل شيئًا: خطوتان تطبعان
+# «Hello, world». فكان فحص `build` يظهر أخضر على الدوام بينما لا
+# يُترجَم شيء أصلًا — وقد أخفى فعلًا سطرًا يمنع ترجمة تطبيق الأندرويد
+# بقي في الشيفرة منذ commit الأساس (`remembr` ومتغيّر معلَن مرتين).
+#
+# الفحوص أدناه تُنفَّذ فعلًا وتفشل فعلًا.
+
+name: CI
+
+on:
+  push:
+    branches: ["main", "arena/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  # بنية Kotlin — لا يحتاج JDK، فيعمل بسرعة ويلتقط أخطاء الترجمة
+  # الواضحة قبل صرف دقائق على Gradle.
+  kotlin-structure:
+    name: بنية Kotlin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: فحص بنيوي
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: python3 scripts/check-kotlin-structure.py
+      - name: عقود JSON بين العميل والخادم
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+        run: python3 scripts/check-api-contracts.py
+
+  # لوحة الإدارة — الطبقة الوحيدة القابلة للترجمة والاختبار كاملةً.
+  admin-dashboard:
+    name: لوحة الإدارة
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci || npm install
+      - name: فحص الأنواع
+        run: npx tsc --noEmit
+      - name: عقد الـAPI
+        run: npm run check:api
+      - name: حرّاس الواجهة
+        run: npm run check:guards
+      - name: تطابق الصلاحيات
+        run: npm run check:roles
+      - name: تباين الألوان
+        run: npm run check:contrast
+      - name: البناء
+        run: npm run build
+
+  # الترجمة والاختبارات الفعلية — متعذّرة في بيئة التطوير المحليّة
+  # (بلا JVM)، فهذا هو الموضع الوحيد الذي تُنفَّذ فيه.
+  # ملاحظة: backend-server مشروع Gradle **مستقل** بـsettings.gradle.kts
+  # وwrapper خاصّين به، وليس وحدة في البناء الجذري (الجذر يعرّف :app
+  # و:shared-proto فقط). فيُشغَّل من مجلّده لا بـ:backend-server:test.
+  gradle-server:
+    name: اختبارات الخادم
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate/backend-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: اختبارات الخادم
+        run: ./gradlew test --no-daemon --stacktrace
+
+  gradle-app:
+    name: اختبارات تطبيق الأندرويد
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: RED_Ultimate_V1-main/RED_Ultimate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - name: اختبارات التطبيق
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: رفع تقارير الاختبار عند الإخفاق
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            RED_Ultimate_V1-main/RED_Ultimate/**/build/reports/tests/
+          retention-days: 7

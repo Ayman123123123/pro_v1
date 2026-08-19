@@ -55,7 +55,7 @@ class ConferenceRoomService {
         if (roomParticipants.containsKey(roomId)) {
             return activeRooms[roomId] ?: ConferenceRoomRecord(roomId, hostId)
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { RoomPasswordHasher.hash(it) }
         val record = ConferenceRoomRecord(
             roomId = roomId,
             hostId = hostId,
@@ -78,7 +78,15 @@ class ConferenceRoomService {
         if (!record.isPrivate) return true
         val expectedHash = record.passwordHash?.takeIf(String::isNotBlank) ?: return false
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == expectedHash
+        // PBKDF2 (210k تكرار) للكلمات الجديدة، مع قبول تجزئات SHA-256
+        // القديمة للتوافق الرجعي مع الغرف المنشأة قبل الترقية.
+        //
+        // نسخة origin/main هنا كانت `hashPassword(password) == expectedHash`،
+        // ولها عيبان: `hashPassword` لم يعد له وجود بعد استخراج التجزئة إلى
+        // `RoomPasswordHasher` (فلا تُترجم أصلًا)، وهي تجزئة عارية بلا ملح
+        // ولا تكرار — أضعف مما تستحقه كلمة مرور غرفة خاصة.
+        return RoomPasswordHasher.verify(password, expectedHash) ||
+            legacySha256(password) == expectedHash
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -121,7 +129,8 @@ class ConferenceRoomService {
         return removed
     }
 
-    private fun hashPassword(password: String): String {
+    /** تجزئة SHA-256 القديمة — للتحقق من الغرف المنشأة قبل ترقية PBKDF2 فقط. */
+    private fun legacySha256(password: String): String {
         val md = MessageDigest.getInstance("SHA-256")
         val digest = md.digest(password.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
