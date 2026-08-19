@@ -30,3 +30,7 @@ dinstar_cookies.txt
 
 # External agent scratch/plans
 .kilo/
+[dependencies]
+.gradle_home/
+*.jar
+*.war
