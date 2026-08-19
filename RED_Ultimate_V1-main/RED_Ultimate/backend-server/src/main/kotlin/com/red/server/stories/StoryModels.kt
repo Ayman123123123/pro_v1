@@ -18,6 +18,9 @@ data class StoryDocument(
     /** جمهور القصة؛ الافتراضي الآمن هو جهات الاتصال المتبادلة فقط. */
     val visibility: StoryVisibility = StoryVisibility.CONTACTS,
     val allowedUserIds: Set<String> = emptySet(),
+    val backgroundColor: String? = null,
+    val durationMs: Long? = null,
+    val waveform: List<Int> = emptyList(),
     val createdAt: Instant = Instant.now(),
     @Indexed val expiresAt: Instant,
     var deletedAt: Instant? = null
@@ -35,10 +38,16 @@ data class CreateStoryRequest(
     val mediaKey: String,
     val caption: String? = null,
     val visibility: StoryVisibility = StoryVisibility.CONTACTS,
-    val allowedUserIds: Set<String> = emptySet()
+    val allowedUserIds: Set<String> = emptySet(),
+    val mediaType: String? = null,
+    val backgroundColor: String? = null,
+    val durationMs: Long? = null,
+    val waveform: List<Int> = emptyList()
 )
 data class StoryResponse(
     val id: String, val ownerRedId: String, val ownerUsername: String, val ownerDisplayName: String,
     val mediaUrl: String, val mediaType: String, val caption: String?, val createdAt: Instant,
-    val expiresAt: Instant, val viewCount: Long
+    val expiresAt: Instant, val viewCount: Long,
+    val visibility: StoryVisibility, val allowedUserIds: Set<String>,
+    val backgroundColor: String? = null, val durationMs: Long? = null, val waveform: List<Int> = emptyList()
 )
