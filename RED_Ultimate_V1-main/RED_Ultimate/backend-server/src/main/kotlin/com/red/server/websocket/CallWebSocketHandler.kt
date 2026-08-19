@@ -37,6 +37,9 @@ class CallWebSocketHandler(
             "END" -> requireCallId(signal).also { history.end(it, source) }
             "ICE", "HOLD", "RESUME", "RENEGOTIATE" -> requireCallId(signal)
             "REJECT" -> requireCallId(signal).also { history.end(it, source) }
+            // جهاز المستدعى مشغول بمكالمة أخرى: تُنهى كـ MISSED تمامًا
+            // مثل REJECT (end() يصنّف غير المُجابة MISSED تلقائيًّا).
+            "BUSY" -> requireCallId(signal).also { history.end(it, source) }
             "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }
@@ -136,7 +139,7 @@ class CallWebSocketHandler(
 
     companion object {
         private const val PENDING_TTL_SECONDS = 60L
-        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+        private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END", "BUSY")
     }
 }
 

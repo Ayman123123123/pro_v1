@@ -49,6 +49,20 @@ import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
 
+/**
+ * ينسّق مدّة مكالمة بالمللي ثانية إلى `mm:ss` (أو `h:mm:ss` للمكالمات
+ * التي تتجاوز الساعة) — بنفس شكل [CallElapsedTimer] الجاري.
+ *
+ * الاسم مميّز عمداً: في الوحدة خمس دوال `formatDuration*` أخرى بحزم مختلفة.
+ */
+internal fun formatCallDuration(durationMs: Long): String {
+    val total = (durationMs.coerceAtLeast(0L)) / 1000
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+}
+
 @Composable
 fun CallElapsedTimer(startedAt: Long, color: Color = Color.White) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
