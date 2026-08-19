@@ -44,6 +44,11 @@ class DinstarWebSocketHandler(
     private val portStatusCounter = AtomicInteger(0)
 
     override fun afterConnectionEstablished(session: WebSocketSession) {
+        if (session.attributes["role"] != "ADMIN") {
+            log.warn("Rejected non-admin DINSTAR WebSocket session: {}", session.id)
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
+        }
         val sessionId = session.id
         sessions[sessionId] = session
         log.info("DINSTAR WebSocket connected: {} (total: {})", sessionId, sessions.size)
