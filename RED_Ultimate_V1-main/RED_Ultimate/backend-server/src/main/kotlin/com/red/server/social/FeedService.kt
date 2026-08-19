@@ -39,25 +39,52 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         return post
     }
 
+    // القيمتان المهجورتان تردان في `when` لأجل الشمول فقط؛ التنويه
+    // على مستوى الدالة لأن الشرط داخل `when` ليس موضعًا صالحًا للتعليق التوضيحي.
+    @Suppress("DEPRECATION")
     fun feed(userId: UUID, scope: FeedScope, before: Instant?, limit: Int): FeedResponse {
         val criteria = Criteria.where("deletedAt").`is`(null).and("parentId").`is`(null)
         val hidden = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), HiddenPost::class.java).map(HiddenPost::postId)
         val muted = mongo.find(Query(Criteria.where("userId").`is`(userId.toString())), MutedAuthor::class.java).map(MutedAuthor::authorId)
         if (hidden.isNotEmpty()) criteria.and("id").nin(hidden)
         if (muted.isNotEmpty()) criteria.and("authorId").nin(muted)
-        when (scope) {
+        when (scope.canonical()) {
             FeedScope.ALL -> Unit
-            FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
-            FeedScope.FOLLOWING -> {
-                val followed = mongo.find(Query(Criteria.where("followerId").`is`(userId.toString())), FollowDocument::class.java)
-                    .map(FollowDocument::followedId)
-                if (followed.isEmpty()) return FeedResponse(emptyList(), null)
-                criteria.and("authorId").`in`(followed)
+            FeedScope.PUBLIC -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
+            FeedScope.FRIENDS -> {
+                val friends = friendIds(userId)
+                if (friends.isEmpty()) return FeedResponse(emptyList(), null)
+                criteria.and("authorId").`in`(friends)
             }
+            // canonical() لا يُرجع القيمتين المهجورتين أبدًا، والفرع موجود
+            // لأن `when` على enum يجب أن يكون شاملًا.
+            FeedScope.FOLLOWING, FeedScope.YEMEN -> Unit
         }
         before?.let { criteria.and("createdAt").lt(it) }
         val posts = mongo.find(Query(criteria).with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(limit.coerceIn(1, 50)), PostDocument::class.java)
         return FeedResponse(posts, posts.lastOrNull()?.createdAt?.toString())
+    }
+
+    /**
+     * معرّفات «الأصدقاء»: من تتبادل معهم المتابعة في الاتجاهين.
+     *
+     * الصداقة تقاطُع مجموعتين — من أتابعهم ومن يتابعونني — لا مجرّد
+     * المجموعة الأولى. بهذا لا يظهر في تبويب «الأصدقاء» منشورُ شخص
+     * أتابعه دون أن يتابعني، وهو الفرق الجوهري عن «المتابَعة» السابقة.
+     *
+     * استعلامان بسيطان وتقاطُع في الذاكرة أوضح من `$lookup` تجميعي،
+     * وحجم البيانات هنا (قوائم متابعة مستخدم واحد) يجعله مناسبًا.
+     */
+    internal fun friendIds(userId: UUID): List<String> {
+        val me = userId.toString()
+        val iFollow = mongo.find(
+            Query(Criteria.where("followerId").`is`(me)), FollowDocument::class.java
+        ).map(FollowDocument::followedId).toSet()
+        if (iFollow.isEmpty()) return emptyList()
+        val followMe = mongo.find(
+            Query(Criteria.where("followedId").`is`(me)), FollowDocument::class.java
+        ).map(FollowDocument::followerId).toSet()
+        return iFollow.intersect(followMe).toList()
     }
 
     fun thread(postId: String): List<PostDocument> {

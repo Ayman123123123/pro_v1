@@ -13,6 +13,14 @@ import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.launch
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        /**
+         * مدى ظهور المنشور الافتراضي — قيمة من `PostVisibility` في الخادم
+         * (`PUBLIC` أو `LOCAL_YEMEN`)، وليست من `FeedScope`.
+         */
+        const val DEFAULT_POST_VISIBILITY = "LOCAL_YEMEN"
+    }
+
     private val api = FeedApi(AuthorizedApiClient(TokenStore(application)))
     private val drafts = DraftsStore(application)
     val posts = mutableStateListOf<Post>()
@@ -51,7 +59,11 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         state = FeedState.Publishing
         val request = CreatePostRequest(
             text = question.trim(),
-            visibility = scope ?: "LOCAL_YEMEN",
+            // نطاق العرض ≠ نطاق النشر. كان يُمرَّر `scope` (مُرشِّح الفيد)
+            // مكان `visibility` (مدى ظهور المنشور)، وهما تعدادان مختلفان
+            // في الخادم: FeedScope ضدّ PostVisibility. فكان تبويب مثل
+            // FRIENDS يُرسَل قيمةَ visibility غير موجودة أصلًا فيردّ 400.
+            visibility = DEFAULT_POST_VISIBILITY,
             pollOptions = cleanOptions,
             pollDurationHours = durationHours.coerceIn(1, 168)
         )

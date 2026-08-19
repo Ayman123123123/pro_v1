@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -100,6 +101,29 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import kotlinx.coroutines.launch
 
+/**
+ * تبويب في فيد المنشورات: عنوانه ونطاقه كما يفهمه الخادم.
+ * `scope = null` يعني «كل شيء» فلا يُرسل مُرشِّحًا.
+ */
+internal data class FeedTab(val title: String, val scope: String?)
+
+/**
+ * تبويبات الفيد بترتيب ظهورها.
+ *
+ * «الأصدقاء» حلّ محلّ «أتابعهم»، و«عام» حلّ محلّ «اليمن».
+ * والفرق سلوكيّ لا لفظيّ: الخادم يحسب الأصدقاء بتبادل المتابعة في
+ * الاتجاهين (`FeedService.friendIds`)، فلا يظهر هنا منشور شخص أتابعه
+ * دون أن يتابعني — بخلاف «أتابعهم» التي كانت أحادية الاتجاه.
+ *
+ * الفهرس المستعمل في `FilterChip` هو ترتيب العنصر في هذه القائمة،
+ * فإضافة تبويب لا تستلزم تعديل أي `when` منفصل.
+ */
+internal val FEED_TABS = listOf(
+    FeedTab("لك", null),
+    FeedTab("الأصدقاء", "FRIENDS"),
+    FeedTab("عام", "PUBLIC"),
+)
+
 internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: StoryViewModel, onCreate: () -> Unit) {
     var filter by remember { mutableIntStateOf(0) }
     var threadPost by remember { mutableStateOf<Post?>(null) }
@@ -126,12 +150,14 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
         }
         item {
             LazyRow(Modifier.padding(horizontal = page), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(listOf("لك" to null, "أتابعهم" to "FOLLOWING", "اليمن" to "YEMEN")) { (title, scope) ->
-                    val idx = when (scope) { "FOLLOWING" -> 1; "YEMEN" -> 2; else -> 0 }
+                // مصدر واحد للتبويبات: كان الفهرس يُشتق بـ`when` منفصل عن
+                // القائمة، فأي إضافة تبويب توجب تعديل موضعين ويسهل أن
+                // يختلّ التطابق. الآن الفهرس هو ترتيب العنصر نفسه.
+                itemsIndexed(FEED_TABS) { idx, tab ->
                     FilterChip(filter == idx, {
                         filter = idx
-                        feed.load(scope)
-                    }, { Text(title) })
+                        feed.load(tab.scope)
+                    }, { Text(tab.title) })
                 }
             }
         }
