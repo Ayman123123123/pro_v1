@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -124,12 +123,33 @@ class DinstarLoadBalancer(
 
     private val nextSlot = AtomicInteger(0)
 
-    /** عدّاد الاستخدام لكل (بوابة، منفذ) — لا حجم ثابت. */
-    private val portUsage = ConcurrentHashMap<String, AtomicInteger>()
+    /**
+     * الحجز محفوظ في PostgreSQL، لا في JVM؛ لهذا لا تعيد إعادة تشغيل خادم
+     * اختيار منفذ مشغول ولا تتضارب عقدتان تعملان بالتوازي.
+     */
+    private fun gatewayKey(gatewayId: UUID?) = gatewayId?.toString() ?: "legacy-single-gateway"
 
-    private fun usageKey(gatewayId: UUID?, port: Int) = "${gatewayId ?: "local"}#$port"
-    private fun usageOf(gatewayId: UUID?, port: Int): Int =
-        portUsage[usageKey(gatewayId, port)]?.get() ?: 0
+    private fun usageOf(gatewayId: UUID?, port: Int): Int = jdbc.queryForObject(
+        """SELECT COUNT(*) FROM gateway_port_reservations
+           WHERE gateway_key = ? AND port_index = ? AND expires_at > CURRENT_TIMESTAMP""",
+        Int::class.java,
+        gatewayKey(gatewayId),
+        port
+    ) ?: 0
+
+    private fun reservePort(gatewayId: UUID?, port: Int): Boolean = jdbc.update(
+        """INSERT INTO gateway_port_reservations
+           (gateway_key, port_index, reservation_id, allocated_at, expires_at)
+           VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
+           ON CONFLICT (gateway_key, port_index) DO UPDATE
+              SET reservation_id = EXCLUDED.reservation_id,
+                  allocated_at = EXCLUDED.allocated_at,
+                  expires_at = EXCLUDED.expires_at
+            WHERE gateway_port_reservations.expires_at <= CURRENT_TIMESTAMP""",
+        gatewayKey(gatewayId),
+        port,
+        UUID.randomUUID()
+    ) == 1
 
     /**
      * تصنيف المشغل حسب بادئة الرقم اليمني.
@@ -226,15 +246,23 @@ class DinstarLoadBalancer(
             }
         }
 
-        val best = candidates.maxByOrNull { it.score }
+        val best = candidates.sortedByDescending { it.score }.firstOrNull { candidate ->
+            val port = (candidate.port["index"] as? Number)?.toInt() ?: return@firstOrNull false
+            if (reservePort(candidate.gateway?.id, port)) {
+                true
+            } else {
+                recordDecision(candidate.gateway?.id, port, targetNumber, candidate.port["operator"]?.toString(),
+                    candidate.score, "reserved by another active call", "REJECTED_BUSY")
+                false
+            }
+        }
         if (best == null) {
-            log.error("DINSTAR: no usable port across {} gateway(s) for target={}",
+            log.error("DINSTAR: no usable unreserved port across {} gateway(s) for target={}",
                 sources.size, targetNumber ?: "unknown")
             return null
         }
 
         val index = (best.port["index"] as? Number)?.toInt() ?: return null
-        portUsage.computeIfAbsent(usageKey(best.gateway?.id, index)) { AtomicInteger(0) }.incrementAndGet()
 
         val selection = PortSelection(
             gatewayId = best.gateway?.id,
@@ -280,32 +308,28 @@ class DinstarLoadBalancer(
         else -> name
     }
 
-    /** تحرير المنفذ بعد انتهاء المكالمة — بحدّ أدنى صفر. */
+    /** تحرير حجز منفذ محدد بعد انتهاء المكالمة؛ الحذف المتكرر آمن وidempotent. */
     fun releasePort(gatewayId: UUID?, port: Int) {
-        portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
-            // بدون هذا الحدّ كان التحرير المزدوج يدفع العدّاد إلى السالب
-            // فتبدو الشريحة أبدًا «الأقل استخدامًا» وتُختار دائمًا.
-            if (current > 0) current - 1 else 0
-        }
-        // أيضًا حرر النسخة المحلية القديمة للتوافق
-        if (gatewayId != null) {
-            portUsage[usageKey(null, port)]?.updateAndGet { if (it > 0) it - 1 else 0 }
-        }
+        jdbc.update(
+            "DELETE FROM gateway_port_reservations WHERE gateway_key = ? AND port_index = ?",
+            gatewayKey(gatewayId),
+            port
+        )
     }
 
-    /** تحرير لمن وضع البوابة الواحدة (legacy) — يحرر local وكل البوابات التي تحمل نفس المنفذ */
+    /** تحرير واسع عند حدث Asterisk لا يحمل معرف البوابة؛ يستعمل فقط لمسار hangup التوافقي. */
     fun releasePort(port: Int) {
-        // local
-        releasePort(null, port)
-        // كل البوابات التي لديها نفس المنفذ (for broad cleanup on hangup without gatewayId)
-        portUsage.keys.filter { it.endsWith("#$port") }.forEach { key ->
-            portUsage[key]?.updateAndGet { if (it > 0) it - 1 else 0 }
-        }
+        jdbc.update("DELETE FROM gateway_port_reservations WHERE port_index = ?", port)
     }
 
-    /** تحرير كل المنافذ العالقة — يستخدمها heartbeat لمنع التعليق */
+    /** إزالة الحجوزات منتهية المهلة فقط؛ لا يلمس مكالمة ما زالت ضمن فترة الحجز. */
+    fun releaseExpiredReservations(): Int = jdbc.update(
+        "DELETE FROM gateway_port_reservations WHERE expires_at <= CURRENT_TIMESTAMP"
+    )
+
+    /** تستخدم للإيقاف الإداري فقط؛ لا تستعمل كبديل لمسار hangup. */
     fun releaseAll() {
-        portUsage.forEach { (_, counter) -> counter.set(0) }
+        jdbc.update("DELETE FROM gateway_port_reservations")
     }
 
     @Deprecated("استخدم selectPort التي تراعي الأسطول وصلاحية الإشارة",
