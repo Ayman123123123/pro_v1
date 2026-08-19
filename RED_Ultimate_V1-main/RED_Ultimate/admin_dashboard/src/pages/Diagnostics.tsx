@@ -123,7 +123,7 @@ export default function Diagnostics() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ color: '#E8B84A', marginBottom: 8 }}>تشخيص منظومة يونس السيادية</h2>
+      <h2 style={{ color: '#E0A83C', marginBottom: 8 }}>تشخيص منظومة يونس السيادية</h2>
       <p style={{ color: '#8A9FB2', marginBottom: 20 }}>
         فحص حي ومباشر لكافة الخوادم والبوابات وقواعد البيانات وشبكات الاتصال.
       </p>

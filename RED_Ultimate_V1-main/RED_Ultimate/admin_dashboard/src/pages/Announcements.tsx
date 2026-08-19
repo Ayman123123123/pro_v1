@@ -196,7 +196,7 @@ export default function Announcements() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <NotificationOutlined /> إعلانات النظام
         </Title>
         <Text type="secondary">إدارة الإعلانات والرسائل الجماعية للمستخدمين</Text>
@@ -230,7 +230,7 @@ export default function Announcements() {
               title="نشط الآن"
               value={stats.active}
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#35CBE0' }}
+              valueStyle={{ color: '#4FC3F7' }}
             />
           </Card>
         </Col>

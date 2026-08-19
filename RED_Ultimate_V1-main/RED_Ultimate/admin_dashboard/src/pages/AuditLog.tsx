@@ -192,7 +192,7 @@ export default function AuditLog() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <AuditOutlined /> سجل التدقيق والأمان
         </Title>
         <Text type="secondary">تتبع جميع عمليات الإدارة والأحداث الأمنية</Text>
@@ -216,7 +216,7 @@ export default function AuditLog() {
               title="تنبيهات حرجة"
               value={stats.critical}
               prefix={<ExclamationCircleOutlined />}
-              valueStyle={{ color: '#FF6B6B' }}
+              valueStyle={{ color: '#FF5A5F' }}
             />
           </Card>
         </Col>
@@ -226,7 +226,7 @@ export default function AuditLog() {
               title="اليوم"
               value={stats.todayCount}
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#E8B84A' }}
+              valueStyle={{ color: '#E0A83C' }}
             />
           </Card>
         </Col>
@@ -247,16 +247,16 @@ export default function AuditLog() {
         <Card
           title={
             <Space>
-              <ExclamationCircleOutlined style={{ color: '#FF6B6B' }} />
+              <ExclamationCircleOutlined style={{ color: '#FF5A5F' }} />
               <Text strong>تنبيهات حرجة ({alerts.length})</Text>
             </Space>
           }
-          style={{ borderColor: '#FF6B6B' }}
+          style={{ borderColor: '#FF5A5F' }}
         >
           {alerts.slice(0, 5).map((a, idx) => {
             const meta = getActionMeta(a.action);
             return (
-              <div key={idx} style={{ padding: 8, borderBottom: '1px solid #1A2F4A' }}>
+              <div key={idx} style={{ padding: 8, borderBottom: '1px solid #1A242C' }}>
                 <Space>
                   <Tag color="red" icon={<ExclamationCircleOutlined />}>{a.severity}</Tag>
                   <Tag color={meta.color}>{meta.label}</Tag>
@@ -314,15 +314,15 @@ export default function AuditLog() {
             scroll={{ x: 1400 }}
             expandable={{
               expandedRowRender: (r) => (
-                <div style={{ padding: 16, background: '#0A1628' }}>
+                <div style={{ padding: 16, background: '#0A1014' }}>
                   <Space direction="vertical" size="small" style={{ width: '100%' }}>
                     {r.description && <div><Text type="secondary">الوصف:</Text> {r.description}</div>}
                     {r.metadata && (
                       <div>
                         <Text type="secondary"><CodeOutlined /> Metadata:</Text>
                         <pre style={{
-                          background: '#050A16', padding: 8, borderRadius: 4,
-                          fontSize: 11, color: '#00E6A0', marginTop: 4
+                          background: '#06110D', padding: 8, borderRadius: 4,
+                          fontSize: 11, color: '#14D89B', marginTop: 4
                         }}>
                           {typeof r.metadata === 'string' ? r.metadata : JSON.stringify(r.metadata, null, 2)}
                         </pre>
