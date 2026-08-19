@@ -18,7 +18,7 @@ RED منصة محلية أولًا للمراسلة الاجتماعية وال�
 | PSTN | `pstn-asterisk/` | Asterisk/DINSTAR صوت فقط |
 | Runtime | `docker-compose.yml` + `nginx.conf` | تشغيل محلي متعدد الخدمات |
 
-`app/` و`android/` و`app-android/` وبقية وحدات Signal القديمة مصادر استخراج فقط وخارج graph الحالي. المرجع الحاسم هو `settings.gradle.kts`.
+`app/` وبقية وحدات Signal القديمة مصادر استخراج فقط وخارج graph الحالي. (`android/` و`app-android/` دُمجا في `red-app/` وحُذفا في 2026-08-19 — انظر `UNIFICATION_2026-08-19.md`.) المرجع الحاسم هو `settings.gradle.kts`.
 
 ## الفصل بين مساري المكالمات
 

@@ -209,6 +209,19 @@ data class DinstarStatistics(
     val peakConcurrency: Int = 0
 )
 
+/**
+ * رسالة SMS واردة على إحدى شرائح البوابة.
+ *
+ * `port` هو فهرس المنفذ الذي استقبلها — يُعرَّف بـ -1 حين لا ترسله
+ * البوابة، فلا يُخلط بالمنفذ 0 الحقيقي.
+ */
+data class DinstarIncomingSms(
+    val port: Int = -1,
+    val number: String = "",
+    val text: String = "",
+    val timestamp: String = ""
+)
+
 sealed class DinstarCommandResult {
     data class Success(val message: String, val data: Map<String, Any?> = emptyMap()) : DinstarCommandResult()
     data class Error(val message: String, val code: Int? = null) : DinstarCommandResult()

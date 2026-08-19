@@ -4,7 +4,7 @@ This file is the build and ownership gate for RED. A second implementation of an
 
 | Capability | Canonical implementation | Status of alternatives |
 |---|---|---|
-| Android product | Gradle module `:app` mapped to the clean `red-app/` directory | legacy `app/`, `android/`, and `app-android/` are extraction sources only and are outside the build graph |
+| Android product | Gradle module `:app` mapped to the clean `red-app/` directory | legacy `app/` is an extraction source only and is outside the build graph; `android/` and `app-android/` were merged into `red-app/` and removed on 2026-08-19 |
 | UI identity | AQYAL Arabic design system | Signal screens are reference material, not the product identity |
 | HTTP/WebSocket backend | `backend-server/` | old `server/` and `com.developedchat` removed |
 | Admin UI | `admin_dashboard/` | old `admin-dashboard/` removed |
@@ -18,8 +18,8 @@ This file is the build and ownership gate for RED. A second implementation of an
 ## Migration gates
 
 1. Legacy `app/` stays outside the build until `red-app/` initializes, registers, waits for approval, and exchanges an encrypted message.
-2. Useful AQYAL files are copied from `android/` into the canonical application with tests; `android/` itself is never included in `settings.gradle.kts`.
-3. Useful legacy auth UI may be copied from `app-android/`; that directory is removed after the replacement flow passes tests.
+2. Done: useful AQYAL code was merged from `android/` into `red-app/` and the directory was removed on 2026-08-19.
+3. Done: `app-android/` was merged into `red-app/` and removed on 2026-08-19.
 4. Signal code is removed only after each selected library/schema has an explicit dependency or extraction record. Git history is the archive; do not duplicate thousands of files under an `archive/` folder.
 5. The default build and CI may reference canonical modules only.
 
