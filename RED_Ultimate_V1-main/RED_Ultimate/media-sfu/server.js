@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const mediasoup = require('mediasoup');
 const { WebSocketServer } = require('ws');
+const { clientErrorPayload } = require('./protocol');
 
 const PORT = Number(process.env.PORT || 4000);
 const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT || 40000);
@@ -198,7 +199,8 @@ wss.on('connection', (ws, _req, claims) => {
       if (type === 'leave') { cleanupPeer(context); return send(ws, requestId, { status: 'left' }); }
       throw new Error('Unknown message type');
     } catch (error) {
-      send(ws, message?.requestId, { status: 'error', error: error.message });
+      console.warn('SFU protocol request failed', { requestId: message?.requestId, code: error?.code || null });
+      send(ws, message?.requestId, clientErrorPayload(error));
     }
   });
 
