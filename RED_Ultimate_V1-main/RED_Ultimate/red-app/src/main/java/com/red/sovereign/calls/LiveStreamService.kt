@@ -88,6 +88,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     private var isPrivateStream = false
     private var streamPassword = ""
     private var serverRegistrationComplete = false
+    private var registrationErrorMessage = "LIVE_STREAM_REGISTRATION_FAILED"
     private var isBroadcaster = false
     private var stopping = false
     private var cleanedUp = false
@@ -121,10 +122,11 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()
                 scope.launch {
+                    registrationErrorMessage = "LIVE_STREAM_REGISTRATION_FAILED"
                     val ready = if (serverRegistrationComplete) true else if (isBroadcaster) registerBroadcaster() else joinAsViewer()
                     streamPassword = ""
                     serverRegistrationComplete = false
-                    if (ready) signaling.connect(streamId) else onError("LIVE_STREAM_REGISTRATION_FAILED")
+                    if (ready) signaling.connect(streamId) else onError(registrationErrorMessage)
                 }
             }
             ACTION_STOP -> stopStream()
@@ -201,9 +203,12 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             .put("isPrivate", isPrivateStream)
             .apply { if (isPrivateStream) put("password", streamPassword) }
             .toString()
-        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/create", payload)) {
+        return when (val result = AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/create", payload)) {
             is ApiResult.Success -> true
-            is ApiResult.Error -> false
+            is ApiResult.Error -> {
+                registrationErrorMessage = liveStreamRegistrationError(result.code, isBroadcaster = true)
+                false
+            }
         }
     }
 
@@ -212,9 +217,12 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         val payload = org.json.JSONObject().apply {
             if (streamPassword.isNotBlank()) put("password", streamPassword)
         }.toString()
-        return when (AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/$streamId/join", payload)) {
+        return when (val result = AuthorizedApiClient(TokenStore(this)).request("POST", "/api/livestream/$streamId/join", payload)) {
             is ApiResult.Success -> true
-            is ApiResult.Error -> false
+            is ApiResult.Error -> {
+                registrationErrorMessage = liveStreamRegistrationError(result.code, isBroadcaster = false)
+                false
+            }
         }
     }
 
@@ -405,6 +413,14 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 kotlinx.coroutines.delay(2000)
             }
         }
+    }
+
+    private fun liveStreamRegistrationError(statusCode: Int?, isBroadcaster: Boolean): String = when (statusCode) {
+        401 -> "انتهت الجلسة. سجّل الدخول مجددًا ثم أعد المحاولة."
+        403 -> if (isBroadcaster) "لا تملك صلاحية بدء هذا البث." else "تعذر الانضمام. تحقق من كلمة مرور البث."
+        404 -> "هذا البث انتهى أو لم يعد موجودًا."
+        409 -> "معرّف البث مستخدم بالفعل. اختر معرّفًا آخر."
+        else -> if (isBroadcaster) "تعذر بدء البث الآن. أعد المحاولة." else "تعذر الانضمام إلى البث الآن. أعد المحاولة."
     }
 
     private fun stopStream() {
