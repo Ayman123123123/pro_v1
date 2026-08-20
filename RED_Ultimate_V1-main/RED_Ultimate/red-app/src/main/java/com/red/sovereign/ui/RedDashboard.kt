@@ -238,6 +238,7 @@ import com.red.sovereign.ui.theme.AqyalRoyalBlue
 import com.red.sovereign.ui.theme.AqyalSurfaceNavy
 import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.ui.dashboard.LiveStreamDialog
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
 import com.red.sovereign.ui.dashboard.AudioSpaceDialog
@@ -2380,99 +2381,43 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     var isPrivateStream by remember { mutableStateOf(false) }
     var streamPasswordInput by remember { mutableStateOf("") }
 
-    if (showLiveDialog) {
-        AlertDialog(
-            onDismissRequest = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false },
-            title = { Text("مركز البث المباشر 🔴") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("انضم لمشاهدة بث عام عبر البحث بالاسم/المعرف أو أنشئ بثك الخاص:", color = Color.Gray, fontSize = 13.sp)
-                    
-                    OutlinedTextField(
-                        value = roomInput,
-                        onValueChange = { roomInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف البث أو رابط الدعوة (مثال: stream-123)") },
-                        singleLine = true
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(checked = isBroadcaster, onCheckedChange = { isBroadcaster = it })
-                        Text("بدء البث كمنتج (Broadcaster)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    }
-
-                    if (isBroadcaster) {
-                        OutlinedTextField(
-                            value = streamTitleInput,
-                            onValueChange = { streamTitleInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("عنوان البث (مثال: بث سيادي عام)") },
-                            singleLine = true
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(checked = isPrivateStream, onCheckedChange = { isPrivateStream = it })
-                            Text("بث خاص بكلمة سر 🔒", fontSize = 14.sp)
-                        }
-
-                        if (isPrivateStream) {
-                            OutlinedTextField(
-                                value = streamPasswordInput,
-                                onValueChange = { streamPasswordInput = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("كلمة سر البث الخاص (8 أحرف على الأقل)") },
-                                singleLine = true
-                            )
-                        }
-                    } else {
-                        OutlinedTextField(
-                            value = streamPasswordInput,
-                            onValueChange = { streamPasswordInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("كلمة مرور البث الخاص (إن طُلبت)") },
-                            singleLine = true
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLiveDialog = false
-                        val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
-                        LiveStreamService.start(
-                            context = context,
-                            streamId = finalStreamId,
-                            userId = ownUserId,
-                            isBroadcaster = isBroadcaster,
-                            title = streamTitleInput.trim().ifBlank { "بث مباشر يونس" },
-                            isPrivate = isBroadcaster && isPrivateStream,
-                            password = streamPasswordInput
-                        )
-                        roomInput = ""
-                        streamTitleInput = ""
-                        streamPasswordInput = ""
-                        isPrivateStream = false
-                    },
-                    enabled = (roomInput.trim().isNotBlank() || isBroadcaster) &&
-                        (!isBroadcaster || !isPrivateStream || streamPasswordInput.length in 8..128)
-                ) {
-                    Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLiveDialog = false; roomInput = ""; streamTitleInput = ""; streamPasswordInput = ""; isPrivateStream = false; isBroadcaster = false }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
+    if (showLiveDialog) LiveStreamDialog(
+        roomId = roomInput,
+        title = streamTitleInput,
+        isBroadcaster = isBroadcaster,
+        isPrivate = isPrivateStream,
+        password = streamPasswordInput,
+        onRoomIdChange = { roomInput = it },
+        onTitleChange = { streamTitleInput = it },
+        onBroadcasterChange = { isBroadcaster = it },
+        onPrivateChange = { isPrivateStream = it },
+        onPasswordChange = { streamPasswordInput = it },
+        onDismiss = {
+            showLiveDialog = false
+            roomInput = ""
+            streamTitleInput = ""
+            streamPasswordInput = ""
+            isPrivateStream = false
+            isBroadcaster = false
+        },
+        onConfirm = {
+            showLiveDialog = false
+            val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
+            LiveStreamService.start(
+                context = context,
+                streamId = finalStreamId,
+                userId = ownUserId,
+                isBroadcaster = isBroadcaster,
+                title = streamTitleInput.trim().ifBlank { "بث مباشر يونس" },
+                isPrivate = isBroadcaster && isPrivateStream,
+                password = streamPasswordInput
+            )
+            roomInput = ""
+            streamTitleInput = ""
+            streamPasswordInput = ""
+            isPrivateStream = false
+        }
+    )
 
     if (showSpaceDialog) AudioSpaceDialog(
         roomId = roomInput,
