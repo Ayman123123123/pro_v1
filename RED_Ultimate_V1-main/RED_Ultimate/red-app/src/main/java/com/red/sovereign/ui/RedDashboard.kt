@@ -240,6 +240,7 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.ui.dashboard.AudioSpaceDialog
 import com.red.sovereign.ui.dashboard.ConferenceJoinDialog
 import com.red.sovereign.ui.dashboard.CreateContentSheet
 import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
@@ -2455,55 +2456,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         )
     }
 
-    // 🎙️ حوار المساحات الصوتية — غرفة صوتية جماعية (مؤتمر بلا فيديو)
-    if (showSpaceDialog) {
-        AlertDialog(
-            onDismissRequest = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false },
-            title = { Text("مساحة صوتية يونس") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "مساحة صوتية مشفرة عبر خادم SFU — صوت فقط، بلا كاميرا.\nاترك الحقل فارغًا لإنشاء غرفة جديدة بمعرّف تلقائي.",
-                        color = Color.Gray, fontSize = 14.sp
-                    )
-                    OutlinedTextField(
-                        value = roomInput,
-                        onValueChange = { roomInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف المساحة (اختياري — مثال: majlis-01)") },
-                        singleLine = true
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(checked = isSpaceHost, onCheckedChange = { isSpaceHost = it })
-                        Text("الانضمام كمضيف (متحدث)", fontSize = 14.sp)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showSpaceDialog = false
-                        // معرف تلقائي فريد إن لم يُدخل المستخدم واحدًا
-                        val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
-                        // video=false → مسار صوتي صرف — هذا هو الفرق بين المساحة والمؤتمر المرئي
-                        ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
-                        roomInput = ""
-                        isSpaceHost = false
-                    }
-                ) {
-                    Text(if (roomInput.isBlank()) "إنشاء مساحة جديدة" else "دخول المساحة")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
+    if (showSpaceDialog) AudioSpaceDialog(
+        roomId = roomInput,
+        isHost = isSpaceHost,
+        onRoomIdChange = { roomInput = it },
+        onHostChange = { isSpaceHost = it },
+        onDismiss = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false },
+        onConfirm = {
+            showSpaceDialog = false
+            val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
+            ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
+            roomInput = ""
+            isSpaceHost = false
+        }
+    )
 
     if (showDinstarDialog) {
         val operator = YemeniOperatorDetector.getOperatorInfo(dinstarNumberInput)
