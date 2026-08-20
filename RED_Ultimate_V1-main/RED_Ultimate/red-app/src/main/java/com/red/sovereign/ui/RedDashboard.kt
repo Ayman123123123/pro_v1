@@ -295,6 +295,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
+    var pendingPstnNumber by remember { mutableStateOf<String?>(null) }
     // 🔧 إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
     var showCallDialer by remember { mutableStateOf(false) }
     var dialerRedId by remember { mutableStateOf("") }
@@ -421,16 +422,16 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         Column(Modifier.fillMaxSize().padding(padding)) {
             DashboardTopBar(account.redId, account.username, compact = WindowLayout.current().compactChrome, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
-                showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
+                showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory, pendingPstnNumber)
                 section == DashboardSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == DashboardSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onThreadOpenChange = { threadOpen = it })
                 section == DashboardSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onThreadOpenChange = { threadOpen = it })
                 section == DashboardSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
-                }, onPstn = { showDinstar = true })
+                }, onPstn = { number -> pendingPstnNumber = number; showDinstar = true })
                 else -> DashboardMoreScreen(
                     account,
-                    onDinstar = { showDinstar = true },
+                    onDinstar = { pendingPstnNumber = null; showDinstar = true },
                     onSettings = { showSettings = true },
                     onContacts = { currentScreen = SovereignScreen.CONTACTS },
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
@@ -2321,7 +2322,7 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: () -> Unit = {}) {
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: (String?) -> Unit = {}) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
@@ -2349,7 +2350,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onLive = { showLiveDialog = true },
             onSpace = { showSpaceDialog = true },
             onExplore = onExplore,
-            onPstn = onPstn
+            onPstn = { showDinstarDialog = true }
         )
         Spacer(Modifier.height(16.dp))
         Text("السجل", color = Color.White.copy(0.7f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -2506,9 +2507,10 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             confirmButton = {
                 Button(
                     onClick = {
+                        val selectedNumber = dinstarNumberInput.trim()
                         showDinstarDialog = false
                         dinstarNumberInput = ""
-                        onPstn()
+                        onPstn(selectedNumber)
                     }
                 ) {
                     Text("فتح الهاتف اليمني")
@@ -2588,7 +2590,7 @@ private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enab
 }
 
 @Composable
-private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null) {
+private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null, initialNumber: String? = null) {
     var tab by remember { mutableIntStateOf(0) }
     // 📞 أكثر الأرقام اليمنية اتصالًا — تُشتق من سجل DINSTAR الحقيقي (لا بيانات وهمية)
     val dinstarCalls = history?.calls?.filter { it.route == "DINSTAR" }.orEmpty()
@@ -2607,7 +2609,7 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
             listOf(Icons.Default.Dialpad to "الأرقام", Icons.Default.Star to "المفضلة", Icons.Default.History to "السجل", Icons.Default.Contacts to "جهات الاتصال").forEachIndexed { i, item -> Tab(tab == i, { tab = i }, icon = { Icon(item.first, null) }, text = { Text(item.second, fontSize = 10.sp) }) }
         }
         when (tab) {
-            0 -> DialPad(account.pstnEnabled, viewModel)
+            0 -> DialPad(account.pstnEnabled, viewModel, initialNumber)
             // ⭐ المفضلة — أكثر الأرقام اتصالًا عبر DINSTAR مع إعادة اتصال بنقرة
             1 -> if (favorites.isEmpty()) {
                 EmptyState(Icons.Default.Star, "لا مفضلة بعد", "ستظهر هنا أكثر الأرقام اليمنية اتصالًا عبر DINSTAR تلقائيًا")
@@ -2644,8 +2646,8 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
 }
 
 @Composable
-private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
-    var number by remember { mutableStateOf("") }
+private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, initialNumber: String? = null) {
+    var number by remember(initialNumber) { mutableStateOf(initialNumber.orEmpty()) }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(number.ifEmpty { "أدخل الرقم" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
