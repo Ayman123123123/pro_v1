@@ -312,7 +312,7 @@
 
 | المكوّن | التحقق الأخير | النتيجة |
 |---|---|---|
-| الخادم | `./gradlew --no-daemon -p backend-server test` | 265 اختبارًا ناجحًا بلا إخفاقات |
+| الخادم | `./gradlew --no-daemon -p backend-server test` | 266 اختبارًا ناجحًا بلا إخفاقات |
 | Android | `:app:compileDebugKotlin` و`:app:testDebugUnitTest` | ترجمة ناجحة و206 اختبارات ناجحة |
 | APK محلي | `:app:assembleDebug -PRED_SERVER_URL=http://10.42.0.10:8088` | APK debug ناجح في `red-app/build/outputs/apk/debug/app-debug.apk` وBuildConfig يحمل العنوان المحدد |
 | لوحة الإدارة | `npm run check` | عقود API والحراس والأدوار وTypeScript ناجحة |
