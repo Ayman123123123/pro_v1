@@ -302,14 +302,14 @@
 
 | المكوّن | التحقق الأخير | النتيجة |
 |---|---|---|
-| الخادم | `./gradlew --no-daemon -p backend-server test` | 262 اختبارًا ناجحًا بلا إخفاقات |
-| Android | `:app:compileDebugKotlin` و`:app:testDebugUnitTest` | ترجمة ناجحة و205 اختبارات ناجحة |
-| APK محلي | `:app:assembleDebug -PRED_SERVER_URL=http://10.42.0.10:8088` | APK debug ناجح وBuildConfig يحمل العنوان المحدد |
+| الخادم | `./gradlew --no-daemon -p backend-server test` | 265 اختبارًا ناجحًا بلا إخفاقات |
+| Android | `:app:compileDebugKotlin` و`:app:testDebugUnitTest` | ترجمة ناجحة و206 اختبارات ناجحة |
+| APK محلي | `:app:assembleDebug -PRED_SERVER_URL=http://10.42.0.10:8088` | APK debug ناجح في `red-app/build/outputs/apk/debug/app-debug.apk` وBuildConfig يحمل العنوان المحدد |
 | لوحة الإدارة | `npm run check` | عقود API والحراس والأدوار وTypeScript ناجحة |
 | MediaSFU | `npm run check` | فحص الصياغة وعقد الأخطاء ناجحان؛ لا اختبار ICE/DTLS حي |
 | Flyway | `scripts/check-flyway-migrations.sh` | 34 هجرة versioned صحيحة بلا تكرار |
 
-**إعادة تحقق نهائية:** أعيد تشغيل بوابات الخادم وAndroid ولوحة الإدارة وMediaSFU وFlyway بنجاح، وأعيد بناء APK debug موجّهًا إلى `http://10.42.0.10:8088`. يتطلب مسار Android ضبط `ANDROID_HOME=/home/ubuntu/android-sdk` (أو `sdk.dir` صالحًا محليًا). ظهرت تحذيرات Kotlin غير حاجبة فقط عن استدعاءات آمنة زائدة وواجهة `NsdManager` مهملة في `LocalServerDiscovery`، ولم تمنع الاختبارات أو بناء APK.
+**إعادة تحقق نهائية:** أعيد تشغيل بوابات الخادم وAndroid ولوحة الإدارة وMediaSFU وFlyway بنجاح، وأعيد بناء APK debug موجّهًا إلى `http://10.42.0.10:8088`. يتطلب مسار Android ضبط `ANDROID_HOME=/home/ubuntu/android-sdk` (أو `sdk.dir` صالحًا محليًا). أزيلت تحذيرات الاستدعاءات الآمنة الزائدة؛ بقي تحذير توافق وحيد من `NsdManager.resolveService` للأجهزة الأقدم، بينما يظل التطبيق مهيأً لإذن `ACCESS_LOCAL_NETWORK` وقت التشغيل عند استهداف API 37. لم يمنع ذلك الاختبارات أو بناء APK.
 
 > لم يجر تشغيل Compose كامل أو اختبار WebRTC وDINSTAR/Asterisk/SMS الحي في بيئة التدقيق، لأن Docker غير متاح والذاكرة الفعلية 3.8 GiB. لذلك لا تُستبدل هذه النتائج باختبار تكامل على شبكة وعتاد مصرح بهما.
 
