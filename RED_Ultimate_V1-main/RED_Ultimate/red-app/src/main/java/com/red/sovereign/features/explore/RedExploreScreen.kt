@@ -328,7 +328,16 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                             action = "مشاهدة",
                             enabled = !state.busy
                         ) {
-                            vm.joinLive(stream.streamId) { id -> LiveStreamService.start(context, id, ownRedId, false) }
+                            vm.joinLive(stream.streamId) { id ->
+                                LiveStreamService.start(
+                                    context = context,
+                                    streamId = id,
+                                    userId = ownRedId,
+                                    isBroadcaster = false,
+                                    title = stream.title,
+                                    serverRegistrationComplete = true
+                                )
+                            }
                         }
                     }
                     item { Text("🎙️ الغرف الصوتية المفتوحة", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SovereignColors.Gold) }
@@ -370,7 +379,16 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                     onClick = {
                         val clean = title.trim()
                         if (kind == "LIVE") {
-                            vm.createLive(clean) { id -> LiveStreamService.start(context, id, ownRedId, true) }
+                            vm.createLive(clean) { id ->
+                                LiveStreamService.start(
+                                    context = context,
+                                    streamId = id,
+                                    userId = ownRedId,
+                                    isBroadcaster = true,
+                                    title = clean,
+                                    serverRegistrationComplete = true
+                                )
+                            }
                         } else {
                             vm.createSpace(clean) { id -> ConferenceService.join(context, id, ownRedId, false) }
                         }

@@ -87,6 +87,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     private var streamTitle = ""
     private var isPrivateStream = false
     private var streamPassword = ""
+    private var serverRegistrationComplete = false
     private var isBroadcaster = false
     private var stopping = false
     private var cleanedUp = false
@@ -116,11 +117,13 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 isBroadcaster = intent.getBooleanExtra(EXTRA_BROADCASTER, false)
                 isPrivateStream = intent.getBooleanExtra(EXTRA_PRIVATE, false)
                 streamPassword = intent.getStringExtra(EXTRA_PASSWORD).orEmpty()
+                serverRegistrationComplete = intent.getBooleanExtra(EXTRA_SERVER_REGISTRATION_COMPLETE, false)
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()
                 scope.launch {
-                    val ready = if (isBroadcaster) registerBroadcaster() else joinAsViewer()
+                    val ready = if (serverRegistrationComplete) true else if (isBroadcaster) registerBroadcaster() else joinAsViewer()
                     streamPassword = ""
+                    serverRegistrationComplete = false
                     if (ready) signaling.connect(streamId) else onError("LIVE_STREAM_REGISTRATION_FAILED")
                 }
             }
@@ -537,6 +540,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         const val EXTRA_TITLE = "stream_title"
         const val EXTRA_PRIVATE = "private_stream"
         const val EXTRA_PASSWORD = "stream_password"
+        const val EXTRA_SERVER_REGISTRATION_COMPLETE = "server_registration_complete"
         const val EXTRA_CHAT_TEXT = "chat_text"
         const val EXTRA_SENDER_NAME = "sender_name"
         const val EXTRA_REACTION_EMOJI = "reaction_emoji"
@@ -592,7 +596,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             isBroadcaster: Boolean,
             title: String = "بث مباشر يونس",
             isPrivate: Boolean = false,
-            password: String = ""
+            password: String = "",
+            serverRegistrationComplete: Boolean = false
         ) {
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_START
@@ -602,6 +607,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_PRIVATE, isPrivate)
                 putExtra(EXTRA_PASSWORD, password)
+                putExtra(EXTRA_SERVER_REGISTRATION_COMPLETE, serverRegistrationComplete)
             }
             ContextCompat.startForegroundService(context, intent)
         }

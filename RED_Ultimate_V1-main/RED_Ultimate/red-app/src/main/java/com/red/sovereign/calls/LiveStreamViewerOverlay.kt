@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -495,6 +496,7 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
 @Composable
 private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
     val context = LocalContext.current
+    var password by remember(state.streamId) { mutableStateOf("") }
     Dialog(
         onDismissRequest = {},
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true, dismissOnClickOutside = true)
@@ -526,9 +528,26 @@ private fun LiveIncomingCard(state: LiveStreamUiState.Incoming) {
                     fontWeight = FontWeight.Bold
                 )
                 Text("شاهد عندما تريد — بدون رنين", color = Color.Gray, fontSize = 13.sp)
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it.take(128) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("كلمة مرور البث الخاص (إن طُلبت)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     TextButton(onClick = { LiveStreamService.stop(context) }) { Text("تجاهل", color = Color.White) }
-                    Button(onClick = { LiveStreamService.start(context, state.streamId, state.userId, false) }) {
+                    Button(onClick = {
+                        LiveStreamService.start(
+                            context = context,
+                            streamId = state.streamId,
+                            userId = state.userId,
+                            isBroadcaster = false,
+                            password = password
+                        )
+                        password = ""
+                    }) {
                         Text("مشاهدة")
                     }
                 }
