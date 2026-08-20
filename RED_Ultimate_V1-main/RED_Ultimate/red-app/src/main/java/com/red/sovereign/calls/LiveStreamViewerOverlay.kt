@@ -61,6 +61,18 @@ fun YounesLiveStreamOverlay() {
         return
     }
 
+    if (state is LiveStreamUiState.Error) {
+        AlertDialog(
+            onDismissRequest = { LiveStreamService.stop(context) },
+            title = { Text("تعذر فتح البث") },
+            text = { Text(state.message) },
+            confirmButton = {
+                Button(onClick = { LiveStreamService.stop(context) }) { Text("حسنًا") }
+            }
+        )
+        return
+    }
+
     Dialog(
         onDismissRequest = {},
         properties = DialogProperties(
@@ -77,7 +89,6 @@ fun YounesLiveStreamOverlay() {
             val isBroadcaster = when (state) {
                 is LiveStreamUiState.Connecting -> state.isBroadcaster
                 is LiveStreamUiState.Active -> state.isBroadcaster
-                else -> false
             }
 
             // Video Stream View
@@ -160,8 +171,6 @@ fun YounesLiveStreamOverlay() {
                     val streamTitle = when (state) {
                         is LiveStreamUiState.Connecting -> "جارٍ بدء البث..."
                         is LiveStreamUiState.Active -> "البث السيادي"
-                        is LiveStreamUiState.Error -> "خطأ"
-                        else -> ""
                     }
                     Text(
                         text = streamTitle,
@@ -331,7 +340,6 @@ fun YounesLiveStreamOverlay() {
                     val activeStreamId = when (state) {
                         is LiveStreamUiState.Connecting -> state.streamId
                         is LiveStreamUiState.Active -> state.streamId
-                        else -> ""
                     }
                     IconButton(
                         onClick = {
