@@ -57,7 +57,7 @@ class AuthController(
     @PostMapping("/refresh")
     fun refresh(@RequestBody request: RefreshRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<RefreshResponse> {
         val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
-        val usingCookie = !browserToken.isNullOrBlank()
+        val usingCookie = CsrfTokenValidator.requiresValidation(browserToken)
         if (usingCookie) requireValidCsrf(servlet)
         val refreshed = registration.refresh(RefreshRequest(browserToken ?: request.refreshToken))
         return if (usingCookie) {
@@ -69,7 +69,7 @@ class AuthController(
     @PostMapping("/logout")
     fun logout(@RequestBody request: LogoutRequest, servlet: HttpServletRequest, httpResponse: HttpServletResponse): ResponseEntity<Void> {
         val browserToken = servlet.cookies?.firstOrNull { it.name == ADMIN_REFRESH_COOKIE }?.value
-        if (!browserToken.isNullOrBlank()) requireValidCsrf(servlet)
+        if (CsrfTokenValidator.requiresValidation(browserToken)) requireValidCsrf(servlet)
         registration.logout(LogoutRequest(browserToken ?: request.refreshToken))
         clearAdminCookies(httpResponse)
         return ResponseEntity.noContent().build()

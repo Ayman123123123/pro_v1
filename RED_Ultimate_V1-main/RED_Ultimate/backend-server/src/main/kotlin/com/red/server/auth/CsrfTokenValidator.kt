@@ -8,6 +8,9 @@ import java.security.MessageDigest
  * Bearer-authenticated mobile endpoints remain stateless and do not use this validator.
  */
 internal object CsrfTokenValidator {
+    /** CSRF protects browser cookies only; bearer/body-token callers stay stateless. */
+    fun requiresValidation(refreshCookie: String?): Boolean = !refreshCookie.isNullOrBlank()
+
     fun matches(cookieToken: String?, headerToken: String?): Boolean {
         if (cookieToken.isNullOrBlank() || headerToken.isNullOrBlank()) return false
         return MessageDigest.isEqual(
