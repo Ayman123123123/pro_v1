@@ -240,6 +240,7 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.ui.dashboard.DashboardTopBar
 import java.io.File
 import java.util.UUID
 import kotlinx.serialization.decodeFromString
@@ -447,7 +448,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            RedTopBar(account.redId, account.username, compact = WindowLayout.current().compactChrome, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
+            DashboardTopBar(account.redId, account.username, compact = WindowLayout.current().compactChrome, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
@@ -532,39 +533,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             },
             dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("إلغاء") } }
         )
-    }
-}
-
-@Composable
-private fun RedTopBar(redId: String, username: String, compact: Boolean, onSettings: () -> Unit, onSearch: () -> Unit = {}) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (compact) 6.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painterResource(R.drawable.younes_icon_master),
-                contentDescription = "يونس",
-                modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                Text("يونس • @$username", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(redId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            Spacer(Modifier.width(6.dp))
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-        }
     }
 }
 
