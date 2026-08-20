@@ -77,7 +77,7 @@ class LoggingInterceptor(
         // لا تستدعِ ResponseBody.string(): هي قراءة مدمرة تمنع طبقة العميل من فك الاستجابة.
         logger("← ${response.code} ${response.request.url.newBuilder().query(null).build()} (${duration}ms)")
         logger("  Headers: ${redactHeaders(response.headers)}")
-        logger("  Body: [omitted; ${response.body?.contentLength() ?: -1} bytes]")
+        logger("  Body: [omitted; ${response.body.contentLength()} bytes]")
 
         return response
     }

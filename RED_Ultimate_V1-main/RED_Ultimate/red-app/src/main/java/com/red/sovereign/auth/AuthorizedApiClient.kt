@@ -1,5 +1,6 @@
 package com.red.sovereign.auth
 
+import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.coroutines.Dispatchers
@@ -44,9 +45,9 @@ class AuthorizedApiClient(
             is ApiResult.Error -> result
             is ApiResult.Success -> {
                 result.value.use { response ->
-                    if (!response.isSuccessful) return@withContext ApiResult.Error(response.code, response.body?.string().orEmpty())
+                    if (!response.isSuccessful) return@withContext ApiResult.Error(response.code, response.body.string())
                     target.parentFile?.mkdirs()
-                    response.body?.byteStream()?.use { input -> FileOutputStream(target).use { input.copyTo(it) } }
+                    response.body.byteStream().use { input -> FileOutputStream(target).use { input.copyTo(it) } }
                     ApiResult.Success(200, target)
                 }
             }
@@ -58,8 +59,8 @@ class AuthorizedApiClient(
             return when (result) {
                 is ApiResult.Error -> result
                 is ApiResult.Success -> result.value.use { response ->
-                    if (response.isSuccessful) ApiResult.Success(response.code, response.body?.string().orEmpty())
-                    else ApiResult.Error(response.code, response.body?.string().orEmpty())
+                    if (response.isSuccessful) ApiResult.Success(response.code, response.body.string())
+                    else ApiResult.Error(response.code, response.body.string())
                 }
             }
         }
@@ -77,8 +78,8 @@ class AuthorizedApiClient(
      */
     private suspend fun executeResponseWithRefresh(originalToken: String, initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
         val first = runCatching { client.newCall(initial).execute() }.getOrElse {
-            ServerEndpoint.autoDiscover(tokens.context)
-            return ApiResult.Error(null, "NETWORK_ERROR")
+            recoverReadAfterEndpointDiscovery(initial, originalToken, rebuild)
+                ?: return ApiResult.Error(null, "NETWORK_ERROR")
         }
         if (first.code != 401) return ApiResult.Success(first.code, first)
         first.close()
@@ -88,9 +89,10 @@ class AuthorizedApiClient(
             val currentAccess = tokens.accessToken
             if (currentAccess != null && currentAccess != originalToken) {
                 // التوكن تغيّر ⇒ نُعيد المحاولة بالجديد دون استدعاء refresh
-                val retry = runCatching { client.newCall(rebuild(currentAccess)).execute() }.getOrElse {
-                    ServerEndpoint.autoDiscover(tokens.context)
-                    return@withLock ApiResult.Error(null, "NETWORK_ERROR")
+                val retryRequest = rebuild(currentAccess)
+                val retry = runCatching { client.newCall(retryRequest).execute() }.getOrElse {
+                    recoverReadAfterEndpointDiscovery(retryRequest, currentAccess, rebuild)
+                        ?: return@withLock ApiResult.Error(null, "NETWORK_ERROR")
                 }
                 if (retry.code != 401) return@withLock ApiResult.Success(retry.code, retry)
                 retry.close()
@@ -103,18 +105,40 @@ class AuthorizedApiClient(
                 is ApiResult.Error -> return@withLock ApiResult.Error(401, "UNAUTHENTICATED")
             }
             tokens.updateTokens(refreshed)
-            val second = runCatching { client.newCall(rebuild(refreshed.accessToken)).execute() }
+            val secondRequest = rebuild(refreshed.accessToken)
+            val second = runCatching { client.newCall(secondRequest).execute() }
                 .getOrElse {
-                    ServerEndpoint.autoDiscover(tokens.context)
-                    return@withLock ApiResult.Error(null, "NETWORK_ERROR")
+                    recoverReadAfterEndpointDiscovery(secondRequest, refreshed.accessToken, rebuild)
+                        ?: return@withLock ApiResult.Error(null, "NETWORK_ERROR")
                 }
             ApiResult.Success(second.code, second)
         }
+    }
+
+    /**
+     * عند تبدل عنوان خادم LAN لا يمكن إعادة إرسال الكتابة بأمان؛ فـ POST/PATCH
+     * قد يكرر رسالة أو أمرًا إداريًا. تعاد المحاولة مرة واحدة لطلبات القراءة فقط،
+     * وبعد نجاح اكتشاف عنوان يحمل بصمة يونس، وبناء Request جديد بالعنوان المحدث.
+     */
+    private suspend fun recoverReadAfterEndpointDiscovery(
+        failedRequest: Request,
+        accessToken: String,
+        rebuild: (String) -> Request
+    ): okhttp3.Response? {
+        if (!isSafeReadMethod(failedRequest.method)) {
+            ServerEndpoint.autoDiscover(tokens.context)
+            return null
+        }
+        val discovered = LocalServerDiscovery(tokens.context).discover()
+        if (discovered !is ApiResult.Success) return null
+        return runCatching { client.newCall(rebuild(accessToken)).execute() }.getOrNull()
     }
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         /** حارس تحديث التوكن — مشترك عبر كل كائنات AuthorizedApiClient لتجنب السباق. */
         private val REFRESH_MUTEX = Mutex()
+
+        internal fun isSafeReadMethod(method: String): Boolean = method.uppercase() in setOf("GET", "HEAD", "OPTIONS")
     }
 }

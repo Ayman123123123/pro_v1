@@ -74,14 +74,14 @@ class LocalServerDiscovery(private val context: Context) {
         val health = healthCall.execute().use { response ->
             // 503 مع جسم يونس يعني أن العملية حيّة والتبعيات لم تكتمل بعد.
             if (response.code !in 200..599) return null
-            response.body?.string().orEmpty()
+            response.body.string()
         }
         if (!YounesServerSignature.isReadyHealth(health)) return null
 
         val authorityCall = client.newCall(Request.Builder().url("$normalized/api/identity/authority").get().build())
         val authority = authorityCall.execute().use { response ->
             if (!response.isSuccessful) return@use ""
-            response.body?.string().orEmpty()
+            response.body.string()
         }
         if (!YounesServerSignature.isYounesServer(health, authority)) return null
         normalized
