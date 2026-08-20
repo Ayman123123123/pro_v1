@@ -242,6 +242,7 @@ import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
 import com.red.sovereign.ui.dashboard.CreateContentSheet
 import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
+import com.red.sovereign.ui.dashboard.NewPrivateCallDialog
 import com.red.sovereign.ui.dashboard.DashboardMoreScreen
 import com.red.sovereign.ui.dashboard.DashboardSection
 import com.red.sovereign.ui.dashboard.DashboardTopBar
@@ -2579,53 +2580,21 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         )
     }
 
-    if (showNewCallDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
-            title = { Text("مكالمة جديدة مشفرة E2EE 📞") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("أدخل معرّف يونس (RED ID) الخاص بصديقك للاتصال المشفر الفوري:", color = Color.Gray, fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = newCallTargetInput,
-                        onValueChange = { newCallTargetInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف يونس (مثال: red-user-123)") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            showNewCallDialog = false
-                            YounesCallService.start(context, newCallTargetInput.trim(), video = false)
-                            newCallTargetInput = ""
-                        },
-                        enabled = newCallTargetInput.trim().isNotBlank()
-                    ) {
-                        Text("صوتية")
-                    }
-                    Button(
-                        onClick = {
-                            showNewCallDialog = false
-                            YounesCallService.start(context, newCallTargetInput.trim(), video = true)
-                            newCallTargetInput = ""
-                        },
-                        enabled = newCallTargetInput.trim().isNotBlank()
-                    ) {
-                        Text("فيديو")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewCallDialog = false; newCallTargetInput = "" }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
+    if (showNewCallDialog) NewPrivateCallDialog(
+        target = newCallTargetInput,
+        onTargetChange = { newCallTargetInput = it },
+        onDismiss = { showNewCallDialog = false; newCallTargetInput = "" },
+        onStartAudio = {
+            showNewCallDialog = false
+            YounesCallService.start(context, newCallTargetInput.trim(), video = false)
+            newCallTargetInput = ""
+        },
+        onStartVideo = {
+            showNewCallDialog = false
+            YounesCallService.start(context, newCallTargetInput.trim(), video = true)
+            newCallTargetInput = ""
+        }
+    )
 
 }
 
