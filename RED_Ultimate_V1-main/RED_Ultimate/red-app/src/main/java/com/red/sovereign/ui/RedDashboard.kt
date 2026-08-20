@@ -2426,10 +2426,18 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                                 value = streamPasswordInput,
                                 onValueChange = { streamPasswordInput = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("كلمة سر البث الخاص") },
+                                placeholder = { Text("كلمة سر البث الخاص (8 أحرف على الأقل)") },
                                 singleLine = true
                             )
                         }
+                    } else {
+                        OutlinedTextField(
+                            value = streamPasswordInput,
+                            onValueChange = { streamPasswordInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("كلمة مرور البث الخاص (إن طُلبت)") },
+                            singleLine = true
+                        )
                     }
                 }
             },
@@ -2438,13 +2446,22 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     onClick = {
                         showLiveDialog = false
                         val finalStreamId = roomInput.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }
-                        LiveStreamService.start(context, finalStreamId, ownUserId, isBroadcaster, streamTitleInput.trim().ifBlank { "بث مباشر يونس" })
+                        LiveStreamService.start(
+                            context = context,
+                            streamId = finalStreamId,
+                            userId = ownUserId,
+                            isBroadcaster = isBroadcaster,
+                            title = streamTitleInput.trim().ifBlank { "بث مباشر يونس" },
+                            isPrivate = isBroadcaster && isPrivateStream,
+                            password = streamPasswordInput
+                        )
                         roomInput = ""
                         streamTitleInput = ""
                         streamPasswordInput = ""
                         isPrivateStream = false
                     },
-                    enabled = roomInput.trim().isNotBlank() || isBroadcaster
+                    enabled = (roomInput.trim().isNotBlank() || isBroadcaster) &&
+                        (!isBroadcaster || !isPrivateStream || streamPasswordInput.length in 8..128)
                 ) {
                     Text(if (isBroadcaster) "إنشاء وبدء البث" else "انضمام للبث")
                 }
