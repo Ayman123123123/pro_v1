@@ -240,6 +240,7 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.ui.dashboard.ConferenceJoinDialog
 import com.red.sovereign.ui.dashboard.CreateContentSheet
 import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
 import com.red.sovereign.ui.dashboard.NewPrivateCallDialog
@@ -2362,41 +2363,16 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         }
     }
 
-    if (showJoinDialog) {
-        AlertDialog(
-            onDismissRequest = { showJoinDialog = false; roomInput = "" },
-            title = { Text("الانضمام إلى مؤتمر جماعي") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("أدخل اسم الغرفة أو معرف المؤتمر للاتصال الآمن عبر SFU:", color = Color.Gray, fontSize = 14.sp)
-                    OutlinedTextField(
-                        value = roomInput,
-                        onValueChange = { roomInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("معرف الغرفة (مثال: red-room-123)") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showJoinDialog = false
-                        ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
-                        roomInput = ""
-                    },
-                    enabled = roomInput.trim().isNotBlank()
-                ) {
-                    Text("انضمام")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showJoinDialog = false; roomInput = "" }) {
-                    Text("إلغاء")
-                }
-            }
-        )
-    }
+    if (showJoinDialog) ConferenceJoinDialog(
+        roomId = roomInput,
+        onRoomIdChange = { roomInput = it },
+        onDismiss = { showJoinDialog = false; roomInput = "" },
+        onJoin = {
+            showJoinDialog = false
+            ConferenceService.join(context, roomInput.trim(), ownUserId, true, asHost = true)
+            roomInput = ""
+        }
+    )
 
     var streamTitleInput by remember { mutableStateOf("") }
     var isPrivateStream by remember { mutableStateOf(false) }
