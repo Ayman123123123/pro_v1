@@ -105,6 +105,11 @@ red:
       enabled: ${DINSTAR_DISCOVERY_ENABLED:false}
       # نطاقات الإدارة بصيغة CIDR ‎/24..‎/30 وعلى عناوين خاصة فقط.
       subnets: ${DINSTAR_DISCOVERY_SUBNETS:}
+  notifications:
+    sms:
+      # إشعارات SMS الخارجة لا تُرسل تلقائيًا في التطوير أو Docker.
+      # يلزم تمكين صريح مع DINSTAR وشرائح اختبار مصرح بها.
+      enabled: ${RED_NOTIFICATION_SMS_ENABLED:false}
   security:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
   jwt:
