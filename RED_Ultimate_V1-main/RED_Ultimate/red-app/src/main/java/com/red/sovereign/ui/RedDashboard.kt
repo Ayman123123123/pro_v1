@@ -241,6 +241,7 @@ import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
 import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
+import com.red.sovereign.ui.dashboard.DashboardMoreScreen
 import com.red.sovereign.ui.dashboard.DashboardSection
 import com.red.sovereign.ui.dashboard.DashboardTopBar
 import java.io.File
@@ -423,7 +424,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == DashboardSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
                 }, onPstn = { showDinstar = true })
-                else -> MoreScreen(
+                else -> DashboardMoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
                     onSettings = { showSettings = true },
@@ -2673,61 +2674,6 @@ private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enab
     FilledIconButton(onClick, Modifier.size(62.dp), enabled = enabled) { Icon(icon, title, tint = if (enabled) color else Color.Gray, modifier = Modifier.size(30.dp)) }
     Text(title, fontSize = 11.sp); if (!enabled) Text("قيد الربط", color = Color.Gray, fontSize = 9.sp)
 }
-
-@Composable
-private fun MoreScreen(
-    account: AuthState.Authenticated,
-    onDinstar: () -> Unit,
-    onSettings: () -> Unit,
-    onContacts: () -> Unit,
-    onDevices: () -> Unit,
-    onPrivacy: () -> Unit,
-    onBackup: () -> Unit,
-    onCommunities: () -> Unit = {},
-    onProfile: () -> Unit = {},
-    onEvents: () -> Unit = {},
-    onPolls: () -> Unit = {}
-) {
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
-        Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(account.username.take(1))
-                Column(Modifier.padding(horizontal = 12.dp)) {
-                    Text(account.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("البروفايل · الصورة والبايو والهوية", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        MoreOption(Icons.Default.SimCard, "الهاتف اليمني", "اتصال صوتي مصرح عبر DINSTAR وشرائح الشبكات اليمنية", AqyalGold, click = onDinstar)
-        MoreOption(Icons.Default.Security, "الخصوصية والأمان", "من يرى بياناتك، التشفير، وقفل البصمة", com.red.sovereign.ui.theme.YounesEmerald, click = onPrivacy)
-        MoreOption(Icons.Default.CloudSync, "النسخ الاحتياطي", "تأمين محادثاتك وسجلاتك محلياً", com.red.sovereign.ui.theme.YounesGold, click = onBackup)
-        MoreOption(Icons.Default.Devices, "الأجهزة المتصلة", "إدارة جلسات يونس على كافة أجهزتك", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onDevices)
-        MoreOption(Icons.Default.Settings, "الإعدادات العامة", "الهوية والأجهزة والخادم والجلسة", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
-        MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
-        MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
-        MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
-        MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
-    }
-}
-
-@Composable
-private fun MoreOption(icon: ImageVector, title: String, detail: String, color: Color, enabled: Boolean = true, click: () -> Unit) =
-    Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = color)
-            }
-            Column(Modifier.padding(horizontal = 14.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
 
 @Composable
 private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null) {
