@@ -240,6 +240,8 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
+import com.red.sovereign.ui.dashboard.DashboardSection
 import com.red.sovereign.ui.dashboard.DashboardTopBar
 import java.io.File
 import java.util.UUID
@@ -262,14 +264,6 @@ import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.media.EventsScreen
 import com.red.sovereign.media.PollsScreen
 
-private enum class MainSection(val label: String, val icon: ImageVector) {
-    CHATS("الدردشات", Icons.Default.ChatBubble),
-    HOME("الرئيسية", Icons.Default.Home),
-    CALLS("المكالمات", Icons.Default.Call),
-    GROUPS("المجموعات", Icons.Default.Groups),
-    MORE("المزيد", Icons.Default.MoreHoriz)
-}
-
 private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -278,17 +272,17 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
-    var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
+    var section by remember { mutableStateOf(DashboardSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
     // 🔗 فتح محادثة خاصة من قائمة أعضاء المجموعة أو جهات الاتصال (يتغذى على deepLinkSender في ChatHubScreen)
     var pendingChatTarget by remember { mutableStateOf<String?>(null) }
     var threadOpen by remember { mutableStateOf(false) }
     // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
-        if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
+        if (CallRuntime.state !is CallUiState.Idle) section = DashboardSection.CALLS
     }
     // 🧹 مسح pendingChatTarget بعد فتح المحادثة حتى لا يُعاد فتحها عند التبديل بين التبويبات
     androidx.compose.runtime.LaunchedEffect(pendingChatTarget, section) {
-        if (pendingChatTarget != null && section == MainSection.CHATS) {
+        if (pendingChatTarget != null && section == DashboardSection.CHATS) {
             kotlinx.coroutines.delay(600)
             pendingChatTarget = null
         }
@@ -308,7 +302,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         val redId = pendingDialerTarget
         if (audioGranted && cameraGranted && redId != null && redId.matches(RED_ID_PATTERN)) {
             YounesCallService.start(context, redId, pendingDialerVideo)
-            section = MainSection.CALLS
+            section = DashboardSection.CALLS
         }
         pendingDialerTarget = null
     }
@@ -343,7 +337,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 onBack = { currentScreen = SovereignScreen.DASHBOARD },
                 friends = directory.contacts,
                 onCreate = { name, description, privacy, memberRedIds ->
-                    groups.create(name, description, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = MainSection.GROUPS }
+                    groups.create(name, description, privacy, memberRedIds) { currentScreen = SovereignScreen.DASHBOARD; section = DashboardSection.GROUPS }
                 }
             )
             SovereignScreen.BACKUP -> BackupScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -371,7 +365,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onBack = { currentScreen = SovereignScreen.DASHBOARD },
                     onMessage = { redId ->
                         pendingChatTarget = redId
-                        section = MainSection.CHATS
+                        section = DashboardSection.CHATS
                         currentScreen = SovereignScreen.DASHBOARD
                     }
                 )
@@ -386,7 +380,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 onBack = { currentScreen = SovereignScreen.DASHBOARD },
                 onChat = { person ->
                     pendingChatTarget = person.redId
-                    section = MainSection.CHATS
+                    section = DashboardSection.CHATS
                     currentScreen = SovereignScreen.DASHBOARD
                 },
                 onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) },
@@ -404,46 +398,18 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         floatingActionButton = {
             // زر المحادثة المفتوحة يقع في نفس الزاوية. إبقاء FAB فوقه يسرق الضغط عن الإرسال.
             if (!showDinstar && !threadOpen) when (section) {
-                MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
-                MainSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
-                MainSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
-                MainSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
+                DashboardSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Chat, "دردشة جديدة") }
+                DashboardSection.GROUPS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CREATE_GROUP }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
+                DashboardSection.CALLS -> FloatingActionButton(onClick = { showCallDialer = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Dialpad, "اتصال جديد عبر يونس") }
+                DashboardSection.HOME -> FloatingActionButton(onClick = { showCreate = true }, containerColor = YounesEmerald, contentColor = Color(0xFF002117)) { Icon(Icons.Default.Add, "إنشاء محتوى") }
                 else -> {}
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
-                tonalElevation = 0.dp,
-                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
-            ) {
-                // الترتيب يعكس أهم مسارات اليوم: الرسائل، المحتوى، المكالمات، المجموعات، ثم الأدوات.
-                MainSection.entries.forEach { item ->
-                    val itemLabel = item.label
-                    val isSelected = section == item
-                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) callHistory.load() } }
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = onClick,
-                        alwaysShowLabel = true,
-                        icon = { Icon(item.icon, itemLabel) },
-                        label = {
-                            Text(
-                                itemLabel,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = .22f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    )
-                }
+            DashboardBottomNavigation(selectedSection = section) { item ->
+                section = item
+                showDinstar = false
+                if (item == DashboardSection.CALLS) callHistory.load()
             }
         }
     ) { padding ->
@@ -451,10 +417,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             DashboardTopBar(account.redId, account.username, compact = WindowLayout.current().compactChrome, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
                 showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory)
-                section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
-                section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onThreadOpenChange = { threadOpen = it })
-                section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onThreadOpenChange = { threadOpen = it })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
+                section == DashboardSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
+                section == DashboardSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onThreadOpenChange = { threadOpen = it })
+                section == DashboardSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onThreadOpenChange = { threadOpen = it })
+                section == DashboardSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
                 }, onPstn = { showDinstar = true })
                 else -> MoreScreen(
