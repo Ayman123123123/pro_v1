@@ -4,6 +4,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.index.Indexed
 import org.springframework.data.mongodb.core.mapping.Document
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -29,7 +31,9 @@ data class LiveStreamRecord(
 }
 
 @Service
-class LiveStreamService {
+class LiveStreamService(
+    private val passwords: PasswordEncoder = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8()
+) {
     companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
 
     // In-memory overlay for fast viewer counts
@@ -55,7 +59,7 @@ class LiveStreamService {
             log.info("Stream {} already active for the same broadcaster", streamId)
             return existing
         }
-        val passHash = password?.takeIf { it.isNotBlank() }?.let { hashPassword(it) }
+        val passHash = password?.takeIf { it.isNotBlank() }?.let { passwords.encode(it) }
         val record = LiveStreamRecord(
             streamId = streamId,
             broadcasterId = broadcasterId,
@@ -77,7 +81,7 @@ class LiveStreamService {
         if (!record.isPrivate) return true
         val expectedHash = record.passwordHash?.takeIf(String::isNotBlank) ?: return false
         if (password.isNullOrBlank()) return false
-        return hashPassword(password) == expectedHash
+        return passwords.matches(password, expectedHash)
     }
 
     fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
@@ -104,6 +108,9 @@ class LiveStreamService {
         return count
     }
 
+    fun isViewerAuthorized(streamId: String, viewerId: String): Boolean =
+        liveViewers[streamId]?.contains(viewerId) == true
+
     fun removeViewer(streamId: String, viewerId: String) {
         liveViewers[streamId]?.remove(viewerId)
         val count = getViewerCount(streamId)
@@ -123,10 +130,5 @@ class LiveStreamService {
         return removed
     }
 
-    private fun hashPassword(password: String): String {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(password.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
-    }
 
 }

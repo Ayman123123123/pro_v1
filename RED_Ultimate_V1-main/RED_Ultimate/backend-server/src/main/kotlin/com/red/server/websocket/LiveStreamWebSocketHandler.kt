@@ -75,7 +75,16 @@ class LiveStreamWebSocketHandler(
                     }
                     broadcasters[signal.roomId] = session
                 } else {
-                    // Viewer path — ensure stream exists (allow viewer before broadcaster join for UX?)
+                    val record = liveStreamService.getStreamRecord(signal.roomId)
+                    if (record == null) {
+                        rejectJoin(session, signal.roomId, "STREAM_NOT_FOUND", "Live stream not found or ended")
+                        return
+                    }
+                    val viewerId = accountId?.takeIf(String::isNotBlank) ?: userId
+                    if (!liveStreamService.isViewerAuthorized(signal.roomId, viewerId)) {
+                        rejectJoin(session, signal.roomId, "STREAM_JOIN_NOT_AUTHORIZED", "Join the stream through the authorized endpoint first")
+                        return
+                    }
                     sessionToStream[session.id] = signal.roomId
                     sessionRole[session.id] = Role.VIEWER
                     viewers.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }.add(session)
@@ -189,6 +198,16 @@ class LiveStreamWebSocketHandler(
                 throw IllegalArgumentException("Unsupported live signal type: ${signal.type}")
             }
         }
+    }
+
+    private fun rejectJoin(session: WebSocketSession, streamId: String, code: String, message: String) {
+        val error = objectMapper.writeValueAsString(mapOf(
+            "type" to "ERROR",
+            "roomId" to streamId,
+            "payload" to mapOf("code" to code, "message" to message)
+        ))
+        runCatching { session.sendMessage(TextMessage(error)) }
+        runCatching { session.close() }
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: org.springframework.web.socket.CloseStatus) {

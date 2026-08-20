@@ -59,6 +59,33 @@ class LiveStreamServiceTest {
     }
 
     @Test
+    fun `private stream accepts only its password without retaining plaintext`() {
+        val stream = service.createStream(
+            streamId = "stream-private-1",
+            broadcasterId = "96109",
+            broadcasterName = "مضيف",
+            broadcasterRedId = "RED96109",
+            title = "بث خاص",
+            isPrivate = true,
+            password = "private-pass-123"
+        )
+
+        assertTrue(service.verifyPassword(stream.streamId, "private-pass-123"))
+        assertFalse(service.verifyPassword(stream.streamId, "wrong-private-pass"))
+        assertFalse(stream.passwordHash == "private-pass-123")
+    }
+
+    @Test
+    fun `viewer authorization follows the REST join membership`() {
+        service.startStream("stream-1", "96109")
+        assertFalse(service.isViewerAuthorized("stream-1", "viewer-a"))
+        service.addViewer("stream-1", "viewer-a")
+        assertTrue(service.isViewerAuthorized("stream-1", "viewer-a"))
+        service.removeViewer("stream-1", "viewer-a")
+        assertFalse(service.isViewerAuthorized("stream-1", "viewer-a"))
+    }
+
+    @Test
     fun `unknown stream returns zero viewers`() {
         assertEquals(0, service.getViewerCount("does-not-exist"))
     }

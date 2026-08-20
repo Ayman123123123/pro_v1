@@ -50,6 +50,7 @@ class LiveStreamWebSocketHandlerTest {
     @Test fun `broadcaster JOIN registers them and notifies viewers`() {
         val broadcaster = Probe("b1", "91179")
         val viewer = Probe("v1", "11154")
+        streams.addViewer("stream-12345678", "11154")
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
         broadcaster.sent.clear()
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
@@ -60,6 +61,7 @@ class LiveStreamWebSocketHandlerTest {
     @Test fun `OFFER from broadcaster reaches viewer`() {
         val broadcaster = Probe("b1", "91179")
         val viewer = Probe("v1", "11154")
+        streams.addViewer("stream-12345678", "11154")
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
         broadcaster.sent.clear()
@@ -73,6 +75,8 @@ class LiveStreamWebSocketHandlerTest {
         val broadcaster = Probe("b1", "91179")
         val first = Probe("v1", "11154")
         val second = Probe("v2", "22261")
+        streams.addViewer("stream-12345678", "11154")
+        streams.addViewer("stream-12345678", "22261")
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
         handler.handleTextMessage(first.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
         handler.handleTextMessage(second.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
@@ -85,6 +89,7 @@ class LiveStreamWebSocketHandlerTest {
     @Test fun `ANSWER from viewer reaches broadcaster`() {
         val broadcaster = Probe("b1", "91179")
         val viewer = Probe("v1", "11154")
+        streams.addViewer("stream-12345678", "11154")
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
         broadcaster.sent.clear()
@@ -94,9 +99,21 @@ class LiveStreamWebSocketHandlerTest {
         assertTrue(bMessages.any { it["type"].asText() == "ANSWER" }) { "Broadcaster should receive ANSWER" }
     }
 
+    @Test fun `viewer JOIN is rejected without authorized REST membership`() {
+        val broadcaster = Probe("b1", "91179")
+        val viewer = Probe("v1", "11154")
+        handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
+        handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
+        val errors = viewer.sent.map { objectMapper.readTree(it) }
+        assertTrue(errors.any { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "STREAM_JOIN_NOT_AUTHORIZED" }) {
+            "Viewer must not enter WebSocket signaling before a successful REST join"
+        }
+    }
+
     @Test fun `broadcaster LEAVE notifies viewer`() {
         val broadcaster = Probe("b1", "91179")
         val viewer = Probe("v1", "11154")
+        streams.addViewer("stream-12345678", "11154")
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"broadcaster"}}"""))
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
         viewer.sent.clear()
