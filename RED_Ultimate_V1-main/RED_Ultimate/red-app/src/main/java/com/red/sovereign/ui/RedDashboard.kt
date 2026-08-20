@@ -240,6 +240,7 @@ import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
 import com.red.sovereign.features.contacts.ContactsScreen
+import com.red.sovereign.ui.dashboard.CreateContentSheet
 import com.red.sovereign.ui.dashboard.DashboardBottomNavigation
 import com.red.sovereign.ui.dashboard.DashboardMoreScreen
 import com.red.sovereign.ui.dashboard.DashboardSection
@@ -441,7 +442,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         }
     }
 
-    if (showCreate) CreateSheet(
+    if (showCreate) CreateContentSheet(
         publishing = feed.state == FeedState.Publishing,
         onDismiss = { showCreate = false },
         onPost = { text, visibility -> feed.create(text, visibility) { feed.discardDraft(); showCreate = false } },
@@ -2764,91 +2765,6 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CreateSheet(
-    publishing: Boolean,
-    onDismiss: () -> Unit,
-    onPost: (String, String) -> Unit,
-    onPoll: (String, List<String>, Int, String) -> Unit,
-    onStory: () -> Unit,
-    onLive: () -> Unit,
-    onExplore: () -> Unit,
-    feed: FeedViewModel? = null,
-) {
-    var mode by remember { mutableStateOf("menu") }
-    var text by remember { mutableStateOf("") }
-    LaunchedEffect(mode) {
-        if (mode == "post" && text.isBlank()) {
-            feed?.loadDraft()?.let { saved -> if (saved.isNotBlank()) text = saved }
-        }
-    }
-    var pollQuestion by remember { mutableStateOf("") }
-    var pollOptions by remember { mutableStateOf(listOf("", "", "")) }
-    var postVisibility by remember { mutableStateOf("PUBLIC") }
-    var pollHours by remember { mutableIntStateOf(24) }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("إنشاء في يونس", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                if (mode != "menu") TextButton({ mode = "menu" }) { Text("الخيارات") }
-            }
-            when (mode) {
-                "post" -> {
-                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً أو سلسلة أو فكرة تستحق المشاركة…") }, maxLines = 7)
-                    PostVisibilityPicker(postVisibility) { postVisibility = it }
-                    Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    Button({ if (text.isNotBlank()) onPost(text.trim(), postVisibility) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر للأصدقاء" else "نشر للعامة") }
-                }
-                "poll" -> {
-                    OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
-                    pollOptions.forEachIndexed { index, value ->
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { next -> pollOptions = pollOptions.toMutableList().also { it[index] = next.take(80) } },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("الخيار ${index + 1}") },
-                            singleLine = true
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(1 to "ساعة", 24 to "يوم", 72 to "3 أيام", 168 to "أسبوع").forEach { option ->
-                            FilterChip(selected = pollHours == option.first, onClick = { pollHours = option.first }, label = { Text(option.second) })
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
-                        OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
-                    }
-                    PostVisibilityPicker(postVisibility) { postVisibility = it }
-                    val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
-                    Button({ onPoll(pollQuestion, pollOptions, pollHours, postVisibility) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text(if (postVisibility == "FRIENDS") "نشر الاستطلاع للأصدقاء" else "نشر الاستطلاع للعامة") }
-                }
-                else -> {
-                    CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
-                    CreateOption(Icons.Default.Forum, "استطلاع تفاعلي", "سؤال وخيارات وتصويت فعلي عبر الخادم", true) { mode = "poll" }
-                    CreateOption(Icons.Default.AddCircle, "حالة 24 ساعة", "صورة أو فيديو يُحذف تلقائياً", true, onStory)
-                    CreateOption(Icons.Default.LiveTv, "بث مباشر", "فيديو عبر SFU المحلي", true, onLive)
-                    CreateOption(Icons.Default.Explore, "استكشاف يونس", "اكتشف البثوث والغرف الصوتية النشطة", true, onExplore)
-                }
-            }
-            Spacer(Modifier.height(20.dp))
-        }
-    }
-}
-
-@Composable
-private fun PostVisibilityPicker(selected: String, onSelected: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("من يمكنه رؤية هذا المحتوى؟", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = selected == "PUBLIC", onClick = { onSelected("PUBLIC") }, label = { Text("العام") }, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(16.dp)) })
-            FilterChip(selected = selected == "FRIENDS", onClick = { onSelected("FRIENDS") }, label = { Text("الأصدقاء") }, leadingIcon = { Icon(Icons.Default.Groups, null, Modifier.size(16.dp)) })
-        }
-    }
-}
-
 @Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = Color.Gray, fontSize = 12.sp) } } }
 
 @Composable private fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
