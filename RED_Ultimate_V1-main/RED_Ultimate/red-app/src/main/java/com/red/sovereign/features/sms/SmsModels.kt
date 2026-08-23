@@ -56,5 +56,13 @@ data class PstnWsEnvelope(
     val cause: String? = null,
     val caller: String? = null,
     val redId: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    /** معرف قناة AMI للمكالمة الواردة — مطلوب في PSTN_ACCEPT/PSTN_REJECT. */
+    val channel: String? = null,
+    /** قناة البوابة الخام كما وردت من الخادم (تشخيص). */
+    val gateway: String? = null,
+    /** الرقم المطلوب (رقم شريحة المالك) في المكالمات الواردة. */
+    val called: String? = null,
+    /** مضيف البوابة المستقبِلة (192.168.11.2/.3). */
+    val gatewayHost: String? = null
 )

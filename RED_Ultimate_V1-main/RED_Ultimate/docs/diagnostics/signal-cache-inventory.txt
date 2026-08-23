@@ -1,0 +1,6 @@
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-android\0.86.5\1cee82f53ca19b46f8dac8fd277e5a82eaa73f22\libsignal-android-0.86.5.module|2814|2026-08-20 22:36:09Z
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-android\0.86.5\867188162e17d5f6dae5ce6e92b0ad792e2e6e0a\libsignal-android-0.86.5.aar|128538524|2026-08-20 23:32:01Z
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-android\0.86.5\a7fee28ecf633fc3a12905baeb6cdcf708445349\libsignal-android-0.86.5.pom|2035|2026-08-20 22:36:08Z
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-client\0.86.5\78599bb9df4ef0bba76a1956c1f3c02d6f17c800\libsignal-client-0.86.5.pom|1818|2026-08-20 22:36:51Z
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-client\0.86.5\ca892fdbfd9f6f2632a8a4bae5a68a495692c174\libsignal-client-0.86.5.jar|105854021|2026-08-20 23:59:37Z
+C:\Users\hpc01\.gradle\caches\modules-2\files-2.1\org.signal\libsignal-client\0.86.5\f690bd8c01051c80887c0819fcd92e63cc65a5f1\libsignal-client-0.86.5.module|3526|2026-08-20 22:36:52Z

@@ -135,6 +135,19 @@ class LiveStreamController(
         }
         return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.friendIds.size, "streamId" to streamId))
     }
+
+    @PostMapping("/{streamId}/kick/{viewerId}")
+    fun kickViewer(
+        @PathVariable streamId: String,
+        @PathVariable viewerId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val kicked = liveStreamService.kickViewer(streamId, authentication.name, viewerId)
+        if (!kicked) {
+            return ResponseEntity.badRequest().body(mapOf("error" to "Failed to kick viewer. Make sure you are the broadcaster and the viewer is active."))
+        }
+        return ResponseEntity.ok(mapOf("status" to "kicked", "viewerId" to viewerId, "streamId" to streamId))
+    }
 }
 
 data class CreateStreamRequest(

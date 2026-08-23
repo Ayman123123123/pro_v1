@@ -33,7 +33,12 @@ class RoomPasswordHasher {
         val salt = ByteArray(SALT_LENGTH).also { random.nextBytes(it) }
         val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, HASH_LENGTH * 8)
         val hash = keyFactory.generateSecret(spec).encoded
-        return "$FORMAT_VERSION$ITERATIONS${Base64.getEncoder().encodeToString(salt)}${Base64.getEncoder().encodeToString(hash)}"
+        return listOf(
+            FORMAT_VERSION,
+            ITERATIONS.toString(),
+            Base64.getEncoder().encodeToString(salt),
+            Base64.getEncoder().encodeToString(hash),
+        ).joinToString(separator = "\$")
     }
 
     /**

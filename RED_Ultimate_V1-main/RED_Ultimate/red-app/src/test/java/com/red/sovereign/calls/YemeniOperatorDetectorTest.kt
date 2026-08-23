@@ -13,15 +13,15 @@ class YemeniOperatorDetectorTest {
     }
 
     @Test fun `mobile 73 سبأفون without prefix`() {
-        assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo("733456789")!!.name)
+        assertEquals("يو (YOU)", YemeniOperatorDetector.getOperatorInfo("733456789")!!.name)
     }
 
     @Test fun `mobile 71 Y(واي) with 00967 prefix`() {
-        assertEquals("Y (واي)", YemeniOperatorDetector.getOperatorInfo("00967712345678")!!.name)
+        assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo("00967712345678")!!.name)
     }
 
     @Test fun `mobile 70 يو YOU after stripping leading zero`() {
-        assertEquals("يو (YOU)", YemeniOperatorDetector.getOperatorInfo("0701234567")!!.name)
+        assertEquals("واي (Y)", YemeniOperatorDetector.getOperatorInfo("0701234567")!!.name)
     }
 
     @Test fun `landline 1 هاتف ثابت صنعاء`() {
@@ -49,7 +49,7 @@ class YemeniOperatorDetectorTest {
     }
 
     @Test fun `prefix 967 stripped correctly`() {
-        assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo("967733456789")!!.name)
+        assertEquals("يو (YOU)", YemeniOperatorDetector.getOperatorInfo("967733456789")!!.name)
     }
 
     @Test fun `mixed-format number with spaces and dashes`() {

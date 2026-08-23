@@ -53,7 +53,12 @@ class MessageService(
     fun processIncoming(message: RedProtos.ChatMessage): MessageDocument {
         validate(message)
         enforceNotBlocked(message.senderId, message.receiverId)
-        if (message.type in GROUP_TYPES) enforceGroupMembership(message)
+        // 🔐 C4: فرض قواعد المجموعة على كل رسائل المجموعات بغض النظر عن نوع التشفير —
+        // وإلا استطاع عضو عادي تجاوز onlyAdminsCanSend بإرسال RICH_TEXT/وسائط بتشفير زوجي (2/3).
+        // الحاسم: وجود مستند المجموعة هو الفاصل الحقيقي، لا طول المعرف (الـ heuristic القديم
+        // كان يخطئ مع محادثات 1:1 الطويلة redId1_redId2 = 77 حرفاً).
+        val isGroupConversation = mongo.exists(Query(Criteria.where("_id").`is`(message.conversationId)), GroupDocument::class.java)
+        if (message.type in GROUP_TYPES || isGroupConversation) enforceGroupMembership(message)
         mongo.findOne(Query(Criteria.where("uuid").`is`(message.id)), MessageDocument::class.java)?.let { existing ->
             require(existing.senderId == message.senderId && existing.receiverId == message.receiverId && existing.conversationId == message.conversationId &&
                 existing.senderDeviceId == message.senderDeviceId && existing.receiverDeviceId == message.receiverDeviceId) {
@@ -213,9 +218,11 @@ class MessageService(
             require(message.senderId != message.receiverId || message.conversationId.contains("self")) { "Invalid receiver YOUNES ID" }
         }
         // وسائط/ملفات المجموعة (IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER + RICH_TEXT) تُرسل
-        // بنص المجموعة المشفر (SenderKey type 4) تماماً كـ GROUP_MESSAGE — لا تُقيَّد بـ GROUP_MESSAGE فقط.
+        // بنص المجموعة المشفر (SenderKey) تماماً كـ GROUP_MESSAGE — لا تُقيَّد بـ GROUP_MESSAGE فقط.
         // أي رسالة بنص المجموعة يجب أن تكون بين عضوين فعليين في المجموعة (حماية الانتحال).
-        val isGroupCiphertext = message.ciphertextType == 4
+        // ⚠️ ترقيم الأنواع في libsignal 0.86+ (Rust): SENDERKEY_TYPE = 7 (كان 4 في الإصدارات القديمة)،
+        // وWHISPER/PREKEY تبادلا بين 2 و3 — نقبل القديم والجديد معاً لتوافق الإصدارات.
+        val isGroupCiphertext = message.ciphertextType == 4 || message.ciphertextType == 7
         if (isGroupCiphertext) enforceGroupMembership(message)
         val allowedCiphertext = isGroupCiphertext || message.ciphertextType == 2 || message.ciphertextType == 3
         require(allowedCiphertext) { "Unsupported libsignal ciphertext type for ${message.type}" }

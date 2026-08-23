@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
 
+internal fun expiredDisappearingMessagesQuery(now: Instant): Query =
+    Query(Criteria.where("disappearAt").ne(null).lte(now))
+
 @Service
 class AdvancedMessageService(
     private val mongoTemplate: MongoTemplate,
@@ -97,7 +100,7 @@ class AdvancedMessageService(
         val now = Instant.now()
         // Mongo: احذف الرسائل التي انتهى وقتها
         val expired = mongoTemplate.find(
-            Query(Criteria.where("disappearAt").lte(now)),
+            expiredDisappearingMessagesQuery(now),
             MessageDocument::class.java
         )
         if (expired.isNotEmpty()) {

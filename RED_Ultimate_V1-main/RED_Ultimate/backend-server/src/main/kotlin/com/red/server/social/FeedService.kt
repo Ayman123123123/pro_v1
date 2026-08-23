@@ -2,24 +2,37 @@ package com.red.server.social
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.media.MediaService
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
 import org.springframework.data.mongodb.core.query.Update
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @Service
-class FeedService(private val mongo: MongoTemplate, private val users: UserAccountRepository, private val linkCards: LinkCardService? = null) {
+class FeedService(
+    private val mongo: MongoTemplate,
+    private val users: UserAccountRepository,
+    private val mediaService: MediaService,
+    private val linkCards: LinkCardService? = null,
+    private val jdbc: JdbcTemplate? = null,
+) {
     fun create(userId: UUID, request: CreatePostRequest): PostDocument {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED)
         val text = request.text.trim()
         require(text.isNotEmpty() && text.length <= 10_000) { "Post text must contain 1-10000 characters" }
         require(request.media.size <= 10) { "A post may contain at most 10 media objects" }
+        val validatedMedia = request.media.map { item ->
+            require(item.objectKey.startsWith("users/$userId/")) { "Post media must belong to the account" }
+            require(mediaService.exists(item.objectKey)) { "Post media object not found" }
+            item.copy(mimeType = mediaService.metadata(item.objectKey).mimeType)
+        }
         request.parentId?.let { require(activePost(it) != null) { "Parent post not found" } }
         request.quotePostId?.let { require(activePost(it) != null) { "Quoted post not found" } }
         val poll = buildPoll(request)
@@ -31,7 +44,7 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
             id = UuidV7.next(), authorId = user.id.toString(), authorRedId = user.redId,
             authorUsername = user.username, authorDisplayName = user.displayName, text = text,
             visibility = request.visibility, kind = if (poll == null) PostKind.POST else PostKind.POLL,
-            parentId = request.parentId, quotePostId = request.quotePostId, poll = poll, media = request.media,
+            parentId = request.parentId, quotePostId = request.quotePostId, poll = poll, media = validatedMedia,
             linkCard = linkCard
         )
         mongo.save(post)
@@ -48,11 +61,10 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         when (scope) {
             FeedScope.ALL -> Unit
             FeedScope.YEMEN -> criteria.and("visibility").`is`(PostVisibility.LOCAL_YEMEN)
-            FeedScope.FOLLOWING -> {
-                val followed = mongo.find(Query(Criteria.where("followerId").`is`(userId.toString())), FollowDocument::class.java)
-                    .map(FollowDocument::followedId)
-                if (followed.isEmpty()) return FeedResponse(emptyList(), null)
-                criteria.and("authorId").`in`(followed)
+            FeedScope.FRIENDS, FeedScope.FOLLOWING -> {
+                val friendIds = mutualFriendIds(userId)
+                if (friendIds.isEmpty()) return FeedResponse(emptyList(), null)
+                criteria.and("authorId").`in`(friendIds)
             }
         }
         before?.let { criteria.and("createdAt").lt(it) }
@@ -142,6 +154,23 @@ class FeedService(private val mongo: MongoTemplate, private val users: UserAccou
         val post = requireNotNull(activePost(postId)) { "Post not found" }
         require(post.authorId == userId.toString()) { "Only the author can delete this post" }
         mongo.updateFirst(Query(Criteria.where("id").`is`(postId)), Update().set("deletedAt", Instant.now()).set("text", ""), PostDocument::class.java)
+    }
+
+    /**
+     * لا تعتمد خلاصة الأصدقاء على متابعة أحادية؛ يلزم وجود جهتي الاتصال معًا.
+     * تبقى FOLLOWING في العقد كمرادف توافق فقط حتى تستبدل النسخ القديمة الطلب.
+     */
+    private fun mutualFriendIds(userId: UUID): List<String> {
+        val database = jdbc ?: return emptyList()
+        return database.query(
+            """SELECT c.contact_id FROM red_contacts c
+               JOIN red_contacts reverse_contact
+                 ON reverse_contact.owner_id = c.contact_id
+                AND reverse_contact.contact_id = c.owner_id
+               WHERE c.owner_id=?""",
+            { resultSet, _ -> resultSet.getObject("contact_id").toString() },
+            userId,
+        )
     }
 
     private fun activePost(id: String) = mongo.findOne(Query(Criteria.where("id").`is`(id).and("deletedAt").`is`(null)), PostDocument::class.java)

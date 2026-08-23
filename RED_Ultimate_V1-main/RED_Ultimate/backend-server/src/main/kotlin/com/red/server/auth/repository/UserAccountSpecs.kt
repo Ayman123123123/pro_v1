@@ -25,10 +25,12 @@ object UserAccountSpecs {
         status: AccountStatus?,
         role: AccountRole?,
         search: String?,
+        pstnEnabled: Boolean? = null,
     ): Specification<UserAccount> = Specification { root, _, cb ->
         val predicates = mutableListOf<Predicate>()
         status?.let { predicates += cb.equal(root.get<AccountStatus>("status"), it) }
         role?.let { predicates += cb.equal(root.get<AccountRole>("role"), it) }
+        pstnEnabled?.let { predicates += cb.equal(root.get<Boolean>("pstnEnabled"), it) }
         val term = search?.trim()?.takeIf { it.isNotEmpty() }
         if (term != null) {
             val pattern = SqlLike.contains(term)

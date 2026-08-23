@@ -787,9 +787,21 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun prepareAudio() {
+        if (CallSystemSurfacePolicy.usesAndroidTelecom(mode)) {
+            android.util.Log.d("YounesCallService", "prepareAudio skipped — Telecom manages audio for mode $mode")
+            return
+        }
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
-        audioFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { }.build().also(audio::requestAudioFocus)
+        audioFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { focusChange ->
+            if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                android.util.Log.w("YounesCallService", "AudioFocus lost: $focusChange")
+            }
+        }.build()
+        val focusResult = audio.requestAudioFocus(audioFocus!!)
+        if (focusResult != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            android.util.Log.w("YounesCallService", "AudioFocus not granted: $focusResult — audio may be muted")
+        }
         setSpeaker(mode == "VIDEO")
     }
 
@@ -1093,13 +1105,22 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             .setColor(0xFF00C98C.toInt())
             .setOnlyAlertOnce(false)
             .setOngoing(true)
-            .setFullScreenIntent(appIntent(), true)
+            .setFullScreenIntent(incomingFullScreenIntent(peer, callMode), true)
             // رد فعلًا (يقبل المكالمة) — لا يفتح التطبيق فقط
             .addAction(0, getString(com.red.sovereign.R.string.notification_accept), serviceIntent(ACTION_ACCEPT))
             .addAction(0, getString(com.red.sovereign.R.string.notification_reject), serviceIntent(ACTION_REJECT))
             .build()
     private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
     private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    private fun incomingFullScreenIntent(peer: String, callMode: String): PendingIntent {
+        val intent = Intent(this, IncomingCallActivity::class.java).apply {
+            putExtra("callId", callId)
+            putExtra("peer", peer)
+            putExtra("mode", callMode)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        return PendingIntent.getActivity(this, callId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
     private fun serviceIntent(action: String) = PendingIntent.getService(this, action.hashCode(), Intent(this, YounesCallService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     override fun onDestroy() {
@@ -1108,7 +1129,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         stopRingback()
         stopRingtone()
         scope.cancel()
-        engine?.release()
+        val engineToRelease = engine
+        engine = null
+        if (engineToRelease != null) {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                runCatching { engineToRelease.release() }
+            }
+        }
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null

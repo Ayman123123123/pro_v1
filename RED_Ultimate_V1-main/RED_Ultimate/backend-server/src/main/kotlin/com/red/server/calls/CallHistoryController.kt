@@ -24,7 +24,9 @@ import java.util.concurrent.ConcurrentHashMap
 class CallHistoryController(
     private val history: CallHistoryService,
     private val users: UserAccountRepository,
-    private val notificationService: NotificationService
+    private val notificationService: NotificationService,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val callWebSocketHandler: com.red.server.websocket.CallWebSocketHandler? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @GetMapping("/history")
@@ -56,8 +58,17 @@ class CallHistoryController(
     /** سحب العرض المخزن عند اتصال المستلم (Path 3 of Multi-Path Delivery). */
     @PostMapping("/pending")
     fun pullPending(@RequestBody request: PullPendingRequest, auth: Authentication): ResponseEntity<Any> {
-        val key = "pending:${request.callId}:${request.targetRedId}"
-        val offer = pendingOffers.remove(key) ?: return ResponseEntity.notFound().build()
+        val authenticated = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
+        // لا نثق في targetRedId القادم من الهاتف؛ هوية JWT هي المصدر الوحيد الصحيح.
+        // هذا يمنع فشل polling عندما تكون قيمة RED ID المحلية قديمة بعد تبديل الحساب.
+        val targetRedId = authenticated.redId
+        val entry = if (request.callId.isNullOrBlank()) {
+            pendingOffers.entries.firstOrNull { it.value.targetRedId.equals(targetRedId, ignoreCase = true) }
+        } else {
+            pendingOffers.entries.firstOrNull { it.key == "pending:${request.callId}:${targetRedId}" }
+        } ?: return ResponseEntity.noContent().build()
+        // يمكن أن يسحب جهاز ثانٍ العرض بين البحث والإزالة؛ هذه ليست حالة خطأ للـ poller.
+        val offer = pendingOffers.remove(entry.key) ?: return ResponseEntity.noContent().build()
         if (offer.createdAt.plusSeconds(offer.ttlSeconds.toLong()).isBefore(Instant.now())) {
             return ResponseEntity.status(HttpStatus.GONE).body(mapOf("error" to "EXPIRED"))
         }
@@ -79,9 +90,31 @@ class CallHistoryController(
         val ttlSeconds: Int? = null
     )
 
-    data class PullPendingRequest(
-        val callId: String,
-        val targetRedId: String
+    class PullPendingRequest {
+        var callId: String? = null
+        var targetRedId: String? = null
+    }
+
+    /** دعوة إضافية أثناء مكالمة جماعية مستقلة — يرن الجدد ويُسجلون كأعضاء الغرفة. */
+    @PostMapping("/group/invite-extra")
+    fun inviteExtra(
+        @RequestBody request: InviteExtraRequest,
+        auth: Authentication
+    ): ResponseEntity<Any> {
+        val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
+        val callSignalingHandler = callWebSocketHandler
+            ?: throw IllegalStateException("signaling unavailable")
+        request.inviteeIds.filter { it.isNotBlank() && it != user.redId }.forEach { invitee ->
+            // نفس مسار GROUP_CALL_INVITE الأولي — الخادم يسجل ويرسل الرنين
+            callWebSocketHandler?.deliverGroupCallInvite(request.groupCallId, user.redId, listOf(invitee), "VOICE", mapOf("hostName" to request.hostName))
+        }
+        return ResponseEntity.ok(mapOf("status" to "invited", "count" to request.inviteeIds.size))
+    }
+
+    data class InviteExtraRequest(
+        val groupCallId: String,
+        val inviteeIds: List<String> = emptyList(),
+        val hostName: String = ""
     )
 
     data class PendingOffer(

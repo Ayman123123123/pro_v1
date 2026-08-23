@@ -52,6 +52,10 @@
             android:exported="false"
             android:foregroundServiceType="camera|microphone|phoneCall" />
         <service
+            android:name=".calls.PstnCallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
             android:name=".calls.YounesConnectionService"
             android:exported="true"
             android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
@@ -137,5 +141,13 @@
             android:name=".calls.ScheduledCallReceiver"
             android:enabled="true"
             android:exported="false" />
-    </application>
+        <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
+        <service
+            android:name=".calls.PstnFcmListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+</application>
 </manifest>

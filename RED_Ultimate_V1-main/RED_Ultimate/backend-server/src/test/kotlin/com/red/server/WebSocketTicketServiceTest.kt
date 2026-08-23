@@ -12,6 +12,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.data.redis.core.ValueOperations
 import java.time.Duration
 import java.util.UUID
@@ -39,9 +40,10 @@ class WebSocketTicketServiceTest {
     fun `consumes valid ticket exactly through atomic get and delete`() {
         val account = UUID.randomUUID()
         val ticket = "A".repeat(43)
-        whenever(values.getAndDelete("younes:ws-ticket:$ticket")).thenReturn(account.toString())
+        whenever(redis.execute(any<DefaultRedisScript<String>>(), eq(listOf("younes:ws-ticket:$ticket"))))
+            .thenReturn(account.toString())
         assertEquals(account, service.consume(ticket))
-        verify(values).getAndDelete("younes:ws-ticket:$ticket")
+        verify(redis).execute(any<DefaultRedisScript<String>>(), eq(listOf("younes:ws-ticket:$ticket")))
     }
 
     @Test

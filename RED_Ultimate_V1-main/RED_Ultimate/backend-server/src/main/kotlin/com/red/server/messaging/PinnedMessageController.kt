@@ -57,9 +57,10 @@ class PinnedMessageController(private val pins: PinnedMessageService) {
         @RequestParam(required = false) groupId: String?,
         auth: Authentication
     ): ResponseEntity<Any> {
+        val actorId = UUID.fromString(auth.name)
         val list = when {
             conversationId != null -> pins.listForConversation(conversationId)
-            groupId != null -> pins.listForGroup(groupId)
+            groupId != null -> pins.listForGroup(actorId, groupId)
             else -> return ResponseEntity.badRequest().body(mapOf("error" to "MISSING_SCOPE"))
         }
         return ResponseEntity.ok(mapOf("pins" to list, "count" to list.size))

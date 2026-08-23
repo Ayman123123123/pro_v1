@@ -10,6 +10,7 @@ import org.webrtc.PeerConnectionFactory
 object WebRtcBootstrap {
     @Volatile private var ready = false
     private val lock = Any()
+    @Volatile private var cachedIce: IceConfigurationDto? = null
 
     fun ensure(context: Context) {
         if (ready) return
@@ -28,5 +29,15 @@ object WebRtcBootstrap {
             )
             ready = true
         }
+    }
+
+    fun getCachedIce(): IceConfigurationDto? {
+        val c = cachedIce ?: return null
+        if (System.currentTimeMillis() > (c.expiresAt - 30_000)) return null
+        return c
+    }
+
+    fun setCachedIce(dto: IceConfigurationDto) {
+        cachedIce = dto
     }
 }

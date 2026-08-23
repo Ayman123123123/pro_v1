@@ -311,7 +311,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             // استخدام unified plan + multi-stream
             keyType = PeerConnection.KeyType.ECDSA
-            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
+            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
             iceCandidatePoolSize = 2
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
@@ -500,22 +500,20 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     fun release() {
-        runCatching { capturer?.stopCapture() }; capturer?.dispose(); textureHelper?.dispose()
+        runCatching { capturer?.stopCapture() }; capturer?.dispose(); textureHelper?.dispose(); capturer = null; textureHelper = null
         localMedia?.audioTrack?.dispose(); localMedia?.videoTrack?.dispose()
-        audioSource?.dispose(); videoSource?.dispose()
-        peer?.close(); peer?.dispose()
-        factory.dispose()
-        audioDevice.release()
-        egl.release()
-        peer = null; localMedia = null
+        audioSource?.dispose(); videoSource?.dispose(); audioSource = null; videoSource = null
+        peer?.close(); peer?.dispose(); peer = null; localMedia = null
+        // factory و audioDevice و egl ثقيلة — لا نحذفها كل مكالمة (Singleton). تُحفظ لإعادة الاستخدام
     }
 
     private suspend fun loadIce(): IceConfigurationDto? = withContext(Dispatchers.IO) {
+        WebRtcBootstrap.getCachedIce()?.let { return@withContext it }
         val client = AuthorizedApiClient(TokenStore(context))
         val json = Json { ignoreUnknownKeys = true }
         when (val response = client.request("GET", "/api/calls/ice-servers")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()
-            is ApiResult.Error -> null
+            is ApiResult.Success -> runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()?.also { WebRtcBootstrap.setCachedIce(it) }
+            is ApiResult.Error -> WebRtcBootstrap.getCachedIce()
         }
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -145,6 +146,7 @@ fun Material3ExpressivePstnCallScreen(
                 callStartTime = 0L
                 elapsedMs = 0L
             }
+            else -> Unit
         }
     }
 
@@ -495,7 +497,7 @@ private fun CallControlPanel(
                 enabled = status == PstnCallStatus.ACTIVE,
                 onClick = { onRecordToggle(!isRecording) }
             )
-        )
+            }
 
         // Secondary row: Keypad, Video, Hangup
         Row(
@@ -604,7 +606,8 @@ private fun KeypadOverlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp),
+                .padding(bottom = 48.dp)
+                .padding(horizontal = 16.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Display dialed digits
@@ -673,7 +676,7 @@ private fun KeypadOverlay(
                     tint = Color.White
                 )
             }
-        }.padding(horizontal = 16.dp, vertical = 24.dp)
+        }
     }
 }
 

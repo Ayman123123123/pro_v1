@@ -61,9 +61,9 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun follow(post: Post) = viewModelScope.launch {
-        when (val result = api.follow(post.authorRedId)) {
-            is ApiResult.Success -> state = FeedState.Message("تمت متابعة @${post.authorUsername}")
+    fun requestFriend(post: Post) = viewModelScope.launch {
+        when (val result = api.requestFriend(post.authorRedId)) {
+            is ApiResult.Success -> state = FeedState.Message("تم إرسال طلب صداقة إلى @${post.authorUsername}")
             is ApiResult.Error -> state = FeedState.Error(result.message)
         }
     }

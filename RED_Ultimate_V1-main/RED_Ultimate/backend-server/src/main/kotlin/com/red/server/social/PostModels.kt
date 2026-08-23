@@ -37,7 +37,7 @@ data class PostDocument(
 )
 
 enum class PostVisibility { PUBLIC, LOCAL_YEMEN }
-enum class FeedScope { ALL, FOLLOWING, YEMEN }
+enum class FeedScope { ALL, FRIENDS, YEMEN, FOLLOWING }
 enum class PostKind { POST, POLL }
 data class PostMedia(
     val objectKey: String,

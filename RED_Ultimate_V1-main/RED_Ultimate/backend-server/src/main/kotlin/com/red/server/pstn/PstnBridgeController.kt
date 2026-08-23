@@ -7,6 +7,7 @@ import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import com.red.server.calls.IceServerController
 import com.red.server.calls.IceConfiguration
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -27,6 +28,7 @@ class PstnBridgeController(
     private val redis: StringRedisTemplate,
     private val iceController: IceServerController,
     private val history: CallHistoryService,
+    private val objectMapper: ObjectMapper,
     @Value("\${red.pstn.sip-secret:red-secret-token}") private val sipSecret: String,
     @Value("\${ASTERISK_WSS_URL:wss://localhost:8089/ws}") private val asteriskWssUrl: String,
     @Value("\${red.pstn.bridge-secret-ttl-minutes:60}") private val bridgeSecretTtlMinutes: Long,
@@ -36,12 +38,8 @@ class PstnBridgeController(
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnBridgeController::class.java)
-        private val YEMEN_MOBILE_PREFIXES = setOf(
-            "770", "771", "772", "773", "774", "775", "776", "777", "778", "779",
-            "780", "781", "782", "783", "784", "785", "786", "787", "788", "789",
-            "730", "731", "732", "733", "734", "735", "736", "737", "738", "739",
-            "710", "711", "712", "713", "714", "715", "716", "717", "718", "719"
-        )
+        /** مفوَّضة إلى YemenNumberPlan — كانت النسخة المحلية تفتقد واي 700-709. */
+        private val YEMEN_MOBILE_PREFIXES = YemenNumberPlan.MOBILE_PREFIXES_3
     }
 
     /**
@@ -138,6 +136,53 @@ class PstnBridgeController(
     }
 
     /**
+     * تجهيز مسار SIP/WebRTC لمستلم مكالمة DINSTAR واردة قبل أن يرسل التطبيق
+     * PSTN_ACCEPT. لا يحجز رصيداً ولا ينشئ originate؛ يثبت فقط أن المستخدم
+     * من المستلمين المحددين في offer قصير العمر.
+     */
+    @PostMapping("/incoming-bridge")
+    fun incomingBridge(@RequestBody request: IncomingBridgeRequest, authentication: Authentication): ResponseEntity<Any> {
+        val userId = UUID.fromString(authentication.name)
+        val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
+        if (user.status != AccountStatus.APPROVED || !user.pstnEnabled) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PSTN_NOT_ENABLED"))
+        }
+        val raw = redis.opsForValue().get("red:pstn:incoming-call:${request.callId}")
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf("error" to "INCOMING_CALL_EXPIRED"))
+        @Suppress("UNCHECKED_CAST")
+        val incoming = runCatching { objectMapper.readValue(raw, Map::class.java) as Map<String, Any?> }
+            .getOrElse { return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to "INCOMING_CALL_INVALID")) }
+        val recipients = (incoming["recipientAccountIds"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
+        if (userId.toString() !in recipients) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "INCOMING_CALL_NOT_ASSIGNED"))
+        }
+        val iceConfig = try {
+            iceController.iceServers(authentication)
+        } catch (e: Exception) {
+            log.warn("Failed to generate ICE servers for incoming bridge: {}", e.message)
+            IceConfiguration(Instant.now().plusSeconds(3600).epochSecond, emptyList())
+        }
+        val turn = if (turnUrl.isNotBlank()) TurnCredentials(turnUrl, turnUsername, turnPassword) else null
+        val usedToday = redis.opsForValue().get("red:pstn:daily:${user.id}:${LocalDate.now(ZoneId.of("Asia/Aden"))}")
+            ?.toIntOrNull() ?: 0
+        return ResponseEntity.ok(BridgeResponse(
+            callId = request.callId,
+            sipServer = asteriskWssUrl,
+            sipUsername = "red-webrtc-client",
+            sipPassword = sipSecret,
+            sipTransport = "WSS",
+            targetNumber = incoming["caller"]?.toString().orEmpty(),
+            iceServers = iceConfig,
+            expiresAt = Instant.now().plusSeconds(3600).epochSecond,
+            usedToday = usedToday,
+            dailyLimit = user.pstnDailyLimit,
+            turnServerUrl = turn?.url,
+            turnUsername = turn?.username,
+            turnPassword = turn?.password,
+        ))
+    }
+
+    /**
      * Release the user's active bridge call. Only the owner of the
      * callId can release it — a stale or foreign callId is ignored so
      * one user cannot kill another user's call.
@@ -180,6 +225,7 @@ class PstnBridgeController(
 }
 
 data class BridgeRequest(val number: String)
+data class IncomingBridgeRequest(val callId: String)
 
 data class TurnCredentials(val url: String, val username: String, val password: String)
 

@@ -27,7 +27,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 
-private fun storyTimestamp(value: String): Long =
+internal fun storyTimestamp(value: String): Long =
     value.toLongOrNull() ?: runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull() ?: 0L
 
 class StoryViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,20 +43,9 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         load()
         viewModelScope.launch {
             repository.getActiveStories().collectLatest { entities ->
+                val merged = mergeCachedStories(entities, stories.toList())
                 stories.clear()
-                stories.addAll(entities.map { entity ->
-                    Story(
-                        id = entity.id,
-                        ownerRedId = entity.userId,
-                        ownerUsername = "user",
-                        ownerDisplayName = "Owner",
-                        mediaUrl = entity.mediaUrl,
-                        mediaType = entity.mediaType,
-                        caption = entity.caption,
-                        createdAt = entity.timestamp.toString(),
-                        expiresAt = entity.expiresAt.toString()
-                    )
-                })
+                stories.addAll(merged)
             }
         }
     }
@@ -66,17 +55,19 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         when (val result = client.request("GET", "/api/stories")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<List<Story>>(result.value) }
                 .onSuccess { list ->
+                    // احتفظ أولاً بالـ metadata الكاملة القادمة من الخادم؛ ثم يؤدي حفظ
+                    // cache إلى دمج آمن بدل الرجوع إلى اسم مالك عام أو بيانات قديمة.
+                    stories.clear()
+                    stories.addAll(list)
                     state = StoryState.Idle
-                    repository.saveStories(list.map { 
-                        StoryEntity(it.id, it.ownerRedId, it.mediaUrl, it.mediaType, it.caption, storyTimestamp(it.createdAt), storyTimestamp(it.createdAt) + 86400000)
-                    })
+                    repository.saveStories(list.map(Story::toCacheEntity))
                 }
                 .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
             is ApiResult.Error -> state = StoryState.Error(result.message)
         }
     }
 
-    fun upload(uri: Uri, caption: String? = null, visibleTo: String = "EVERYONE", mediaType: String? = null) = viewModelScope.launch {
+    fun upload(uri: Uri, caption: String? = null, visibleTo: String = "CONTACTS", mediaType: String? = null) = viewModelScope.launch {
         state = StoryState.Uploading
         val compressed = if (mediaType == null) compressStoryImage(uri) else null
         when (val uploaded = if (compressed != null) media.uploadEncrypted(compressed, "story") else media.upload(uri)) {
@@ -85,7 +76,11 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
                 val effectiveType = mediaType ?: if (compressed != null) "image/jpeg" else uploaded.value.mimeType
                 when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo, mediaType = effectiveType)))) {
                     is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }
-                        .onSuccess { stories.add(0, it); state = StoryState.Idle }
+                        .onSuccess {
+                            stories.add(0, it)
+                            repository.saveStories(listOf(it.toCacheEntity()))
+                            state = StoryState.Idle
+                        }
                         .onFailure { state = StoryState.Error("INVALID_STORY_RESPONSE") }
                     is ApiResult.Error -> state = StoryState.Error(created.message)
                 }
@@ -116,22 +111,30 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun createTextStory(text: String, backgroundColor: String = "#1565C0", visibleTo: String = "EVERYONE") = viewModelScope.launch {
+    fun createTextStory(text: String, backgroundColor: String = "#1565C0", visibleTo: String = "CONTACTS") = viewModelScope.launch {
         if (text.isBlank() || text.length > 500) { state = StoryState.Error("النص يجب أن يكون 1..500 حرف"); return@launch }
         state = StoryState.Uploading
         // Text stories don't need media upload — send text directly as caption with TEXT type
         when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest("text://${text.hashCode()}", text, visibleTo, mediaType = "TEXT", backgroundColor = backgroundColor)))) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess { stories.add(0, it); state = StoryState.Idle }
+            is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess {
+                stories.add(0, it)
+                repository.saveStories(listOf(it.toCacheEntity()))
+                state = StoryState.Idle
+            }
             is ApiResult.Error -> state = StoryState.Error(created.message)
         }
     }
 
-    fun createVoiceStory(uri: Uri, durationMs: Long, waveform: List<Int>, visibleTo: String = "EVERYONE") = viewModelScope.launch {
+    fun createVoiceStory(uri: Uri, durationMs: Long, waveform: List<Int>, visibleTo: String = "CONTACTS") = viewModelScope.launch {
         state = StoryState.Uploading
         when (val uploaded = media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
             is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, null, visibleTo, mediaType = "VOICE", durationMs = durationMs)))) {
-                is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess { stories.add(0, it); state = StoryState.Idle }
+                is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess {
+                stories.add(0, it)
+                repository.saveStories(listOf(it.toCacheEntity()))
+                state = StoryState.Idle
+            }
                 is ApiResult.Error -> state = StoryState.Error(created.message)
             }
         }

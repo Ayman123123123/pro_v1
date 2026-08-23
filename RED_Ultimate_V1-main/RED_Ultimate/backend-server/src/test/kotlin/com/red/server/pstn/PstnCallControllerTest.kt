@@ -23,10 +23,11 @@ class PstnCallControllerTest {
     private lateinit var controller: PstnCallController
     private val calls = mock<PstnCallService>()
     private val loadBalancer = mock<DinstarLoadBalancer>()
+    private val pstnManager = mock<PstnManager>()
 
     @BeforeEach
     fun setup() {
-        controller = PstnCallController(calls, loadBalancer)
+        controller = PstnCallController(calls, loadBalancer, pstnManager)
     }
 
     private fun auth(uuid: UUID): Authentication =
@@ -91,7 +92,7 @@ class PstnCallControllerTest {
     }
 
     @Test
-    fun `dial passes slotIndex when provided`() {
+    fun `dial ignores user supplied slotIndex because binding is admin only`() {
         val userId = UUID.randomUUID()
         val user = testUser(userId)
         whenever(calls.getUser(userId)).thenReturn(user)
@@ -101,7 +102,8 @@ class PstnCallControllerTest {
         )
 
         controller.dial(PstnCallRequest("+967771234567", slotIndex = 5), auth(userId))
-        verify(calls).dial(any(), any(), eq(5))
+        // الربط الدائم قرار أدمن: slotIndex من المستخدم يُتجاهل ويُمرَّر null
+        verify(calls).dial(eq(userId), eq("+967771234567"), anyOrNull<Int>())
     }
 
     @Test

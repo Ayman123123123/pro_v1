@@ -30,7 +30,9 @@ data class LiveStreamRecord(
 
 @Service
 class LiveStreamService(
-    private val passwordHasher: RoomPasswordHasher
+    private val passwordHasher: RoomPasswordHasher,
+    private val liveStreamRepository: LiveStreamRepository,
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler
 ) {
     companion object { private val log = LoggerFactory.getLogger(LiveStreamService::class.java) }
 
@@ -51,6 +53,9 @@ class LiveStreamService(
         isPrivate: Boolean,
         password: String?
     ): LiveStreamRecord {
+        require(streamId.isNotBlank()) { "STREAM_ID_REQUIRED" }
+        require(broadcasterId.isNotBlank()) { "BROADCASTER_ID_REQUIRED" }
+        require(!isPrivate || !password.isNullOrBlank()) { "PRIVATE_STREAM_PASSWORD_REQUIRED" }
         if (liveViewers.containsKey(streamId)) {
             val existing = activeStreamRecords[streamId] ?: error("LIVE_STREAM_STATE_CORRUPT")
             require(existing.broadcasterId == broadcasterId) { "STREAM_ID_ALREADY_OWNED" }
@@ -70,15 +75,20 @@ class LiveStreamService(
         )
         liveViewers[streamId] = ConcurrentHashMap.newKeySet()
         activeStreamRecords[streamId] = record
+        
+        // Save to MongoDB for persistent history
+        liveStreamRepository.save(record)
+        
         log.info("Stream {} created by broadcaster {} (title={}, private={})", streamId, broadcasterId, title, isPrivate)
         return record
     }
 
     fun verifyPassword(streamId: String, password: String?): Boolean {
         val record = activeStreamRecords[streamId] ?: return false
-        if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
+        if (!record.isPrivate) return true
+        val passwordHash = record.passwordHash ?: return false
         if (password.isNullOrBlank()) return false
-        return passwordHasher.verify(password, record.passwordHash!!)
+        return passwordHasher.verify(password, passwordHash)
     }
 
     fun searchPublicStreams(query: String?): List<LiveStreamRecord> {
@@ -113,15 +123,47 @@ class LiveStreamService(
 
     fun getViewerCount(streamId: String): Int = liveViewers[streamId]?.size ?: 0
 
+    /** يثبت أن المشاهد مرّ عبر مسار الانضمام المعتمد قبل منحه تذكرة SFU. */
+    fun isViewer(streamId: String, viewerId: String): Boolean =
+        liveViewers[streamId]?.contains(viewerId) == true
+
     fun getActiveStreams(): List<LiveStreamRecord> {
         return activeStreamRecords.values.onEach { record -> record.viewerCount = getViewerCount(record.streamId) }.toList()
     }
 
     fun stopStream(streamId: String): Boolean {
         val removed = liveViewers.remove(streamId) != null
-        activeStreamRecords.remove(streamId)
+        val record = activeStreamRecords.remove(streamId)
+        
+        if (record != null) {
+            record.endedAt = Instant.now()
+            // Update MongoDB with final stats and end time
+            liveStreamRepository.save(record)
+        }
+        
         if (removed) log.info("Stream {} ended", streamId)
         return removed
+    }
+
+    /** طرد مشاهد من البث المباشر (Kick Viewer) */
+    fun kickViewer(streamId: String, broadcasterId: String, viewerIdToKick: String): Boolean {
+        val record = activeStreamRecords[streamId] ?: return false
+        require(record.broadcasterId == broadcasterId) { "ONLY_BROADCASTER_CAN_KICK" }
+        
+        val viewers = liveViewers[streamId]
+        if (viewers?.remove(viewerIdToKick) == true) {
+            record.viewerCount = viewers.size
+            // إرسال إشارة الطرد عبر WebSocket للمشاهد
+            callSignaling.deliverSignal(
+                targetRedId = viewerIdToKick,
+                type = "KICKED",
+                roomId = streamId,
+                payload = mapOf("reason" to "Kicked by broadcaster")
+            )
+            log.info("Viewer {} kicked from stream {} by broadcaster {}", viewerIdToKick, streamId, broadcasterId)
+            return true
+        }
+        return false
     }
 
 }

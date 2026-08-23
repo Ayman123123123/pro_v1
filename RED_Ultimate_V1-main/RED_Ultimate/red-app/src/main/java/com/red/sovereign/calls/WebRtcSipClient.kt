@@ -61,7 +61,13 @@ class WebRtcSipClient(
     private var inviteTarget: String? = null
     private var pendingNonce: String? = null
     private var pendingRealm: String? = null
+    /** تحدّي RFC 3261 الحالي — عند توفره تُبنى الترويسة بـ qop=auth (يتطلبه Asterisk). */
+    private var authChallenge: SipDigestAuth.Challenge? = null
+    private var nonceCount = 0
     private var lastIncomingRequest: String? = null
+    var lastIncomingSdp: String? = null
+        private set
+    private var uasToTag: String? = null
     private var disposed = false
 
     // ── Multi-candidate WSS failover ─────────────────────────────────────
@@ -213,6 +219,65 @@ class WebRtcSipClient(
         ws = null
     }
 
+    // ─── UAS helpers for inbound INVITE ─────────────────────────────────
+
+    /**
+     * Store last inbound INVITE for later 200 OK generation.
+     * Exposed so PstnWebRtcManager can persist invite before SDP creation.
+     */
+    fun storeLastInvite(request: String) {
+        lastIncomingRequest = request
+        val sdpMatch = Regex("\\r\\n\\r\\n(.*)", RegexOption.DOT_MATCHES_ALL).find(request)
+        lastIncomingSdp = sdpMatch?.groupValues?.get(1)?.trim()?.ifEmpty { null }
+        if (lastIncomingSdp == null) {
+            val idx = request.indexOf("\r\n\r\n")
+            if (idx >= 0) lastIncomingSdp = request.substring(idx + 4).trim().ifEmpty { null }
+        }
+    }
+
+    /**
+     * UAS 200 OK with SDP answer — RFC 3261 §13.3.1.4.
+     * Must be used for inbound INVITE, not the UAC sendAck().
+     * Extracts Via/From/To/Call-ID/CSeq from stored lastIncomingRequest,
+     * generates a To tag if missing, and sends SIP/2.0 200 OK with SDP.
+     * Returns true if the WebSocket send was attempted.
+     */
+    fun send200OkWithSdp(localSdp: String): Boolean {
+        val request = lastIncomingRequest ?: return false
+        val via = extractHeader(request, "Via") ?: return false
+        val from = extractHeader(request, "From") ?: return false
+        val toRaw = extractHeader(request, "To") ?: return false
+        val callIdHeader = extractHeader(request, "Call-ID") ?: return false
+        val cseqHeader = extractHeader(request, "CSeq") ?: return false
+        val host = buildSipHost()
+        val tag = uasToTag ?: Random.nextBytes(8).joinToString("") { "%02x".format(it) }.also { uasToTag = it }
+        val toHeader = if (toRaw.contains("tag=", ignoreCase = true)) toRaw else "$toRaw;tag=$tag"
+        val sdpBytes = localSdp.toByteArray()
+        val msg = buildString {
+            append("SIP/2.0 200 OK\r\n")
+            append("$via\r\n")
+            append("$from\r\n")
+            append("$toHeader\r\n")
+            append("$callIdHeader\r\n")
+            append("$cseqHeader\r\n")
+            append("Contact: <sip:$username@$host;transport=ws>\r\n")
+            append("Content-Type: application/sdp\r\n")
+            append("Allow: INVITE,ACK,CANCEL,BYE,OPTIONS,INFO\r\n")
+            append("User-Agent: RED-Sovereign/1.0\r\n")
+            append("Content-Length: ${sdpBytes.size}\r\n")
+            append("\r\n")
+            append(localSdp)
+        }
+        val sent = ws?.send(msg) ?: false
+        // Update internal callId to match dialog so BYE uses correct ID
+        runCatching {
+            val extracted = callIdHeader.substringAfter(":", "").trim()
+            if (extracted.isNotBlank()) callId = extracted
+        }
+        lastIncomingSdp = localSdp
+        return sent
+    }
+
     // ─── SIP Message Building ─────────────────────────────────────────
 
     private fun generateBranch(): String =
@@ -292,7 +357,6 @@ class WebRtcSipClient(
         val number = targetNumber.removePrefix("+")
         val sdp = localSdp ?: return
         val uri = "sip:$number@$host"
-        val response = computeDigestAuth("INVITE", uri, realm, username, password, nonce)
 
         val msg = buildString {
             append("INVITE $uri SIP/2.0\r\n")
@@ -303,7 +367,7 @@ class WebRtcSipClient(
             append("Call-ID: $callId\r\n")
             append("CSeq: $cseq INVITE\r\n")
             append("Contact: <sip:${username}@${host};transport=ws>\r\n")
-            append("Authorization: Digest username=\"$username\", realm=\"$realm\", nonce=\"$nonce\", uri=\"$uri\", response=\"$response\", algorithm=MD5\r\n")
+            append("Authorization: ${digestAuthorization("INVITE", uri)}\r\n")
             append("Content-Type: application/sdp\r\n")
             append("Allow: INVITE,ACK,CANCEL,BYE,OPTIONS,INFO\r\n")
             append("User-Agent: RED-Sovereign/1.0\r\n")
@@ -320,6 +384,7 @@ class WebRtcSipClient(
         val host = buildSipHost()
         val number = inviteTarget?.removePrefix("+") ?: ""
         val toUri = toTag?.let { ";tag=$it" } ?: ""
+        // For UAS dialog, the remote tag is fromTag-like; if uasToTag exists, BYE To should carry remote's tag
         return buildString {
             append("BYE sip:${buildSipHost()} SIP/2.0\r\n")
             append("Via: SIP/2.0/WSS $host;branch=$branch;rport\r\n")
@@ -364,19 +429,36 @@ class WebRtcSipClient(
         when {
             // 401 Unauthorized → resend with digest auth (REGISTER أو INVITE حسب السياق)
             statusCode == 401 -> {
-                val nonce = parseHeader(message, "WWW-Authenticate", "nonce")
-                val realm = parseHeader(message, "WWW-Authenticate", "realm")
-                if (nonce != null && realm != null) {
-                    pendingNonce = nonce
-                    pendingRealm = realm
+                // حاول تحليل تحدٍّ Digest كامل (realm/nonce/qop/opaque/algorithm).
+                val headerValue = extractHeader(message, "WWW-Authenticate")?.substringAfter(':', "")?.trim()
+                val challenge = SipDigestAuth.parseChallenge(headerValue)
+                if (challenge != null) {
+                    authChallenge = challenge
+                    nonceCount = 0
+                    pendingNonce = challenge.nonce
+                    pendingRealm = challenge.realm
                     val challengedMethod = parseCSeqMethod(message)
                     if (challengedMethod == "INVITE" && inviteTarget != null) {
-                        sendInviteWithAuth(inviteTarget!!, nonce, realm)
+                        sendInviteWithAuth(inviteTarget!!, challenge.nonce, challenge.realm)
                     } else {
-                        sendRegisterWithAuth(nonce, realm)
+                        sendRegisterWithAuth(challenge.nonce, challenge.realm)
                     }
                 } else {
-                    events.onError("SIP_AUTH_MISSING_CHALLENGE")
+                    // fallback: رأس غير قياسي — استخدم MD5 الخام كما كان سابقاً
+                    val nonce = parseHeader(message, "WWW-Authenticate", "nonce")
+                    val realm = parseHeader(message, "WWW-Authenticate", "realm")
+                    if (nonce != null && realm != null) {
+                        pendingNonce = nonce
+                        pendingRealm = realm
+                        val challengedMethod = parseCSeqMethod(message)
+                        if (challengedMethod == "INVITE" && inviteTarget != null) {
+                            sendInviteWithAuth(inviteTarget!!, nonce, realm)
+                        } else {
+                            sendRegisterWithAuth(nonce, realm)
+                        }
+                    } else {
+                        events.onError("SIP_AUTH_MISSING_CHALLENGE")
+                    }
                 }
             }
 
@@ -399,16 +481,23 @@ class WebRtcSipClient(
             method == "INVITE" -> {
                 lastIncomingRequest = message
                 val sdpMatch = Regex("\\r\\n\\r\\n(.*)", RegexOption.DOT_MATCHES_ALL).find(message)
-                val remoteSdp = sdpMatch?.groupValues?.get(1)
+                lastIncomingSdp = sdpMatch?.groupValues?.get(1)?.trim()?.ifEmpty { null }
                 val fromHeader = message.lines().find { it.startsWith("From:", ignoreCase = true) }
                 val fromNumber = fromHeader?.let {
                     Regex("<sip:([^@>]+)@").find(it)?.groupValues?.get(1)?.removePrefix("+") ?: "UNKNOWN"
                 } ?: "UNKNOWN"
-                if (remoteSdp != null) {
-                    events.onIncomingInvite(remoteSdp, fromNumber)
+                if (lastIncomingSdp != null) {
+                    events.onIncomingInvite(lastIncomingSdp!!, fromNumber)
                 }
                 // Send 180 Ringing
                 sendResponse(180, "Ringing", message)
+            }
+
+            // ACK from UAC after our 200 OK (UAS flow) — just acknowledge
+            method == "ACK" -> {
+                // Asterisk ACK to our 200 OK; call is now confirmed bidirectional.
+                // Nothing to send; audio already flows via WebRTC. Log for debugging.
+                android.util.Log.i("SipClient", "ACK received for dialog $callId")
             }
 
             // BYE from remote
@@ -467,7 +556,7 @@ class WebRtcSipClient(
         branch = generateBranch()
         cseq++
         val host = buildSipHost()
-        val response = computeDigestAuth("REGISTER", sipUri(username), realm, username, password, nonce)
+        val registerUri = sipUri(username)
         val msg = buildString {
             append("REGISTER sip:$host SIP/2.0\r\n")
             append("Via: SIP/2.0/WSS $host;branch=$branch;rport\r\n")
@@ -478,7 +567,7 @@ class WebRtcSipClient(
             append("CSeq: $cseq REGISTER\r\n")
             append("Expires: 3600\r\n")
             append("Contact: <sip:${username}@${host};transport=ws>\r\n")
-            append("Authorization: Digest username=\"$username\", realm=\"$realm\", nonce=\"$nonce\", uri=\"${sipUri(username)}\", response=\"$response\", algorithm=MD5\r\n")
+            append("Authorization: ${digestAuthorization("REGISTER", registerUri)}\r\n")
             append("Allow: INVITE,ACK,CANCEL,BYE,OPTIONS,INFO\r\n")
             append("User-Agent: RED-Sovereign/1.0\r\n")
             append("Content-Length: 0\r\n")
@@ -516,20 +605,31 @@ class WebRtcSipClient(
         val request = lastIncomingRequest
         if (request != null) sendResponse(486, "Busy Here", request)
         lastIncomingRequest = null
+        lastIncomingSdp = null
+        uasToTag = null
     }
 
     private fun sendResponse(statusCode: Int, reason: String, request: String) {
         val host = buildSipHost()
         val via = extractHeader(request, "Via")
         val from = extractHeader(request, "From")
-        val to = extractHeader(request, "To")
+        val toRaw = extractHeader(request, "To")
+        val callIdHeader = extractHeader(request, "Call-ID")
+        val cseqHeader = extractHeader(request, "CSeq")
+        // Generates To tag for provisional/final responses if missing (RFC 3261 8.2.6.2)
+        val toHeader = if (toRaw != null && !toRaw.contains("tag=", ignoreCase = true) && statusCode != 408 && statusCode != 481) {
+            val tag = uasToTag ?: Random.nextBytes(8).joinToString("") { "%02x".format(it) }.also { uasToTag = it }
+            "$toRaw;tag=$tag"
+        } else toRaw
         val msg = buildString {
             append("SIP/2.0 $statusCode $reason\r\n")
             if (via != null) append("$via\r\n")
             if (from != null) append("$from\r\n")
-            if (to != null) append("$to\r\n")
-            append("Call-ID: $callId\r\n")
-            append("CSeq: $cseq INVITE\r\n")
+            if (toHeader != null) append("$toHeader\r\n")
+            if (callIdHeader != null) append("$callIdHeader\r\n") else append("Call-ID: $callId\r\n")
+            if (cseqHeader != null) append("$cseqHeader\r\n") else append("CSeq: $cseq INVITE\r\n")
+            // Contact is required for dialog-forming responses (180/200)
+            if (statusCode in 180..200) append("Contact: <sip:$username@$host;transport=ws>\r\n")
             append("User-Agent: RED-Sovereign/1.0\r\n")
             append("Content-Length: 0\r\n")
             append("\r\n")
@@ -574,6 +674,24 @@ class WebRtcSipClient(
         return message.lines().find {
             it.startsWith("$headerName:", ignoreCase = true) || it.startsWith("$headerName ", ignoreCase = true)
         }
+    }
+
+    /**
+     * يبني ترويسة Authorization وفق RFC 3261 عبر SipDigestAuth (يدعم
+     * qop=auth وSHA-256 الذي يتحداه Asterisk الحديث)، مع fallback إلى
+     * MD5 الخام إذا لم يُفهم التحدي إطلاقاً.
+     */
+    private fun digestAuthorization(method: String, uri: String): String {
+        val challenge = authChallenge
+        if (challenge != null) {
+            nonceCount += 1
+            val cnonce = Random.nextBytes(8).joinToString("") { "%02x".format(it) }
+            val built = SipDigestAuth.buildAuthorization(method, uri, username, password, challenge, nonceCount, cnonce)
+            if (built != null) return built.value
+            // خوارزمية غير مدعومة → صفّر التحدي واستخدم المسار القديم بدل الفشل الصامت.
+            authChallenge = null
+        }
+        return computeDigestAuth(method, uri, pendingRealm ?: "", username, password, pendingNonce ?: "")
     }
 
     /**

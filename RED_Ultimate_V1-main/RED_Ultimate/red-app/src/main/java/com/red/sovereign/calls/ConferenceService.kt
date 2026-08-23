@@ -256,6 +256,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (roomId.isNotBlank() && roomId.length in 4..128) {
                     sfu = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
                     if (attachSfuWithRetry(sfu!!, roomId)) {
+                        // 🔧 publish يفتح الكاميرا داخلياً (createEngine) — انتظر اكتماله قبل قراءة localVideo
                         sfu?.publish(kind)
                         ConferenceRuntime.mediaPath = "SFU"
                         ConferenceRuntime.eglContext = sfu?.eglContext
@@ -286,11 +287,15 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     private fun startMesh(kind: CallMediaKind) {
         mesh = MeshRtcSession(this@ConferenceService, userId, this@ConferenceService)
         ConferenceRuntime.mediaPath = "MESH"
-        ConferenceRuntime.eglContext = mesh?.eglContext
-        scope.launch { mesh?.start(kind) }
-        ConferenceRuntime.localVideo = mesh?.localVideo
-        applyListenerMute()
-        markConferenceReady()
+        // 🔧 إصلاح الشاشة السوداء: start() يفتح الكاميرا بشكل غير متزامن —
+        // قراءة localVideo قبل اكتمالها كانت تعطي null للأبد. ننتظر الاكتمال ثم نحدّث الحالة.
+        scope.launch {
+            mesh?.start(kind)
+            ConferenceRuntime.eglContext = mesh?.eglContext
+            ConferenceRuntime.localVideo = mesh?.localVideo
+            applyListenerMute()
+            markConferenceReady()
+        }
     }
 
     private fun markConferenceReady() {

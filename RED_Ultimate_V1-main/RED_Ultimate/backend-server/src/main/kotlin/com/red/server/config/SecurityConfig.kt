@@ -56,6 +56,10 @@ class SecurityConfig(
                 auth
                     // Public endpoints
                     .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/recover").permitAll()
+                    // مسار Asterisk dialplan الداخلي (System curl داخل شبكة Docker
+                    // فقط — غير منشور عبر nginx). الحماية الفعلية: X-Internal-Secret
+                    // يُتحقق منها في InternalPstnController نفسه.
+                    .requestMatchers("/api/internal/pstn/**").permitAll()
                     // سلطة التوقيع وحدها عامة: مفتاح عام يجب أن يصل إلى
                     // العميل قبل أن يملك جلسة، وهو غير حساس بطبيعته.
                     .requestMatchers(HttpMethod.GET, "/api/identity/authority").permitAll()
@@ -111,9 +115,19 @@ class SecurityConfig(
                     .requestMatchers(HttpMethod.POST, "/api/admin/content/sticker-packs/*/install").authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/api/admin/content/sticker-packs/*/install").authenticated()
 
-                    // SMS send/incoming accessible to any authenticated user (server checks pstnEnabled)
+                    // SMS send/incoming: authenticated() عمداً — التطبيق يستخدمه للمستخدمين.
+                    // الإنفاذ الفعلي داخل DinstarSmsController: المستخدم محبوس على شريحته
+                    // المربوطة 1:1، والأدمن وحده يتحكم بالمنافذ/البوابات بحرية.
+                    // ⚠️ SPRING SECURITY — FIRST MATCH WINS: specific authenticated() exceptions
+                    // MUST come BEFORE broader hasRole(ADMIN) for same prefix, else ADMIN dead code.
+                    // send/incoming are intentional user-level exceptions (isAdmin branching in controller
+                    // — regular user locked to bound SIM, admin free on ports/gateways).
                     .requestMatchers(HttpMethod.POST, "/api/admin/dinstar/sms/send").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/admin/dinstar/sms/incoming").authenticated()
+                    // All other Dinstar SMS ops (queue, result, stop, deliver) remain ADMIN-only.
+                    // Placed AFTER send/incoming exceptions but BEFORE broad /api/admin/** so it is
+                    // explicit and not shadowed/dead (previously at EOF after broad ADMIN → dead code).
+                    .requestMatchers("/api/admin/dinstar/sms/**").hasRole("ADMIN")
                     // Admin endpoints (including the legacy live-stream admin namespace)
                     .requestMatchers("/api/admin/**", "/api/master/admin/**", "/api/master/v1/**", "/api/live/admin/**").hasRole("ADMIN")
                     // Social features
@@ -134,7 +148,9 @@ class SecurityConfig(
                     .requestMatchers("/api/messages/pins/**").authenticated()
                     .requestMatchers("/api/messages/**", "/api/contacts/**", "/api/devices/**").authenticated()
                     .requestMatchers("/api/pstn/**", "/api/dinstar/**").authenticated()
-                    .requestMatchers("/api/admin/dinstar/sms/**").hasRole("ADMIN")
+                    // Note: /api/admin/dinstar/sms/** ADMIN is already handled ABOVE
+                    // (after send/incoming exceptions, before broad /api/admin/**).
+                    // Removed dead duplicate that was here after broad ADMIN → never matched.
                     .requestMatchers("/api/media/**").authenticated()
                     .requestMatchers("/api/**").authenticated()
                     .anyRequest().authenticated()

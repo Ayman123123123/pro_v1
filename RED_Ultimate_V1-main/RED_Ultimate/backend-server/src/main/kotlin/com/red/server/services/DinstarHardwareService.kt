@@ -10,6 +10,7 @@ import com.burgstaller.okhttp.digest.DigestAuthenticator
 import com.fasterxml.jackson.databind.ObjectMapper
 import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.CertificatePinner
 import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -41,6 +42,7 @@ class DinstarHardwareService(
     @Value("\${red.dinstar.scheme:http}") private val configuredScheme: String,
     @Value("\${red.dinstar.username:admin}") private val gatewayUsername: String,
     @Value("\${red.dinstar.password:admin}") private val gatewayPassword: String,
+    @Value("\${red.dinstar.cert-pins:}") private val certPinsConfig: String,
     private val mapper: ObjectMapper,
     private val jdbc: JdbcTemplate,
     private val connections: DinstarConnectionFactory
@@ -105,7 +107,11 @@ class DinstarHardwareService(
             .build()
         val authCache = ConcurrentHashMap<String, CachingAuthenticator>()
 
-        return OkHttpClient.Builder()
+        // SPKI pinning اختياري: حتى مع trust-all (شهادات ذاتية التوقيع على
+        // LAN إداري)، OkHttp يتحقق من الدبوس بعد بناء السلسلة — أي شهادة
+        // مزوّرة من مهاجم في الشبكة تُرفض رغم قبول TrustManager لها.
+        // الصيغة: sha256/xxx,sha256/yyy
+        val builder = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .authenticator(CachingAuthenticatorDecorator(dispatching, authCache))
             .addInterceptor(AuthenticationCacheInterceptor(authCache))
@@ -113,6 +119,20 @@ class DinstarHardwareService(
             .followSslRedirects(false)
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }  // Dinstar cert won't match IP hostname
+
+        certPinsConfig.split(',')
+            .map { it.trim() }
+            .filter { it.startsWith("sha256/") }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.let { pins ->
+                val pinner = CertificatePinner.Builder()
+                pins.forEach { pinner.add("*", it) }
+                builder.certificatePinner(pinner.build())
+                log.info("DINSTAR HTTP client: {} SPKI pin(s) active", pins.size)
+            }
+
+        return builder
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .callTimeout(15, TimeUnit.SECONDS)
@@ -496,7 +516,7 @@ class DinstarHardwareService(
     )
 
     /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
-    private fun resolveOperatorName(apiName: String?, simNumber: String?): String {
+    private fun resolveOperatorName(apiName: String?, simNumber: String?, imsi: String? = null): String {
         // First try: use SIM number prefix (most reliable)
         if (!simNumber.isNullOrBlank()) {
             val digits = simNumber.filter { it.isDigit() }
@@ -510,7 +530,20 @@ class DinstarHardwareService(
                 YEMEN_OPERATOR_PREFIXES[prefix]?.let { return it }
             }
         }
-        // Second try: match API operator name with corrections
+        // Second try: use IMSI MNC (MCC 421 is Yemen) — works even when number is empty
+        if (!imsi.isNullOrBlank() && imsi.length >= 5) {
+            val digits = imsi.filter { it.isDigit() }
+            if (digits.startsWith("421") && digits.length >= 5) {
+                val mnc = digits.substring(3, 5)
+                when (mnc) {
+                    "01" -> return "Sabafon"
+                    "02" -> return "YOU"
+                    "03" -> return "YemenMobile"
+                    "04" -> return "YTelecom"
+                }
+            }
+        }
+        // Third try: match API operator name with corrections
         if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
             return when {
                 apiName.contains("Sabafon", ignoreCase = true) -> "Sabafon"
@@ -520,6 +553,10 @@ class DinstarHardwareService(
                 apiName.contains("Y Telecom", ignoreCase = true) || apiName == "Y" -> "YTelecom"
                 apiName.contains("HiTel", ignoreCase = true) || apiName.contains("Hi Tel", ignoreCase = true) -> "YTelecom"  // HiTel→YTelecom
                 apiName.contains("Yemen 4G", ignoreCase = true) -> "Yemen4G"
+                apiName.contains("42101", true) -> "Sabafon"
+                apiName.contains("42102", true) -> "YOU"
+                apiName.contains("42103", true) -> "YemenMobile"
+                apiName.contains("42104", true) -> "YTelecom"
                 else -> apiName  // Return as-is if unrecognized
             }
         }
@@ -530,7 +567,8 @@ class DinstarHardwareService(
         val index = (raw["port"] as? Number)?.toInt() ?: return null
         val simNumber = raw["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
         val apiOperator = raw["operator"]?.toString()
-        val resolvedOperator = resolveOperatorName(apiOperator, simNumber)
+        val imsi = raw["imsi"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+        val resolvedOperator = resolveOperatorName(apiOperator, simNumber, imsi)
 
         // تفسير الإشارة حسب 3GPP TS 27.007 §8.5 بدل القسمة الساذجة على 31.
         // كانت `coerceIn(0,31)` تحوّل القراءة 99 — ومعناها «لا توجد شبكة» —
@@ -543,8 +581,11 @@ class DinstarHardwareService(
             "status" to raw["reg"].toString(),
             "callState" to raw["callstate"].toString(),
             "gprs" to raw["gprs"].toString(),
+            "number" to simNumber,
             "numberMasked" to mask(simNumber),
+            "imsi" to raw["imsi"]?.toString(),
             "imsiMasked" to mask(raw["imsi"]?.toString()),
+            "iccid" to raw["iccid"]?.toString(),
             "iccidMasked" to mask(raw["iccid"]?.toString()),
             "operator" to resolvedOperator
         ) + signal.toMap()

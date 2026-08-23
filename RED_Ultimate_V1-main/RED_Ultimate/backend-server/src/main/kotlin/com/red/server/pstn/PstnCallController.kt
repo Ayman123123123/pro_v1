@@ -19,7 +19,8 @@ import java.util.UUID
 @RequestMapping("/api/pstn")
 class PstnCallController(
     private val calls: PstnCallService,
-    private val loadBalancer: DinstarLoadBalancer
+    private val loadBalancer: DinstarLoadBalancer,
+    private val pstnManager: PstnManager
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<Any> {
@@ -31,7 +32,11 @@ class PstnCallController(
         if (calls.hasActiveCall(userId)) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to "ALREADY_IN_PSTN_CALL"))
         }
-        val result = calls.dial(userId, request.number, request.slotIndex)
+        // الربط الدائم 1:1 — المنفذ يحدده الأدمن فقط، لا يسمح للمستخدم باختياره
+        if (request.slotIndex != null) {
+            org.slf4j.LoggerFactory.getLogger(javaClass).warn("User {} attempted to specify slotIndex {} — ignored (admin-only binding)", user.redId, request.slotIndex)
+        }
+        val result = calls.dial(userId, request.number, null)
         return ResponseEntity.ok(result)
     }
 
@@ -60,6 +65,8 @@ class PstnCallController(
         }
 
         loadBalancer.releasePort(bound.third, bound.second)
+        // Actually hang up the GSM leg via AMI — without this the GSM side keeps ringing
+        runCatching { pstnManager.hangupCall(bound.first) }
         calls.clearActive(userId)
         return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to bound.second))
     }

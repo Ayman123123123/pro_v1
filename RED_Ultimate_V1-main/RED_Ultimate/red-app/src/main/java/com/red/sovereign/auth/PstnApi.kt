@@ -84,6 +84,18 @@ class PstnApi(private val tokens: TokenStore) {
         }
     }
 
+    /**
+     * بيانات الجسر للمكالمة الواردة (اعتماد المالك + SIP creds + ICE).
+     * لا يحجز منفذ صادر — يعمل فقط أثناء عرض offer قصير العمر.
+     */
+    suspend fun incomingBridge(callId: String): ApiResult<BridgeResponse> {
+        return when (val result = client.request("POST", "/api/pstn/incoming-bridge", json.encodeToString(mapOf("callId" to callId)))) {
+            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<BridgeResponse>(result.value)) }
+                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
+            is ApiResult.Error -> result
+        }
+    }
+
     // 📨 SMS Methods
     suspend fun sendSms(recipient: String, text: String, encoding: String = "unicode"): ApiResult<SmsSendResponse> {
         val currentUserId = tokens.redId ?: ""

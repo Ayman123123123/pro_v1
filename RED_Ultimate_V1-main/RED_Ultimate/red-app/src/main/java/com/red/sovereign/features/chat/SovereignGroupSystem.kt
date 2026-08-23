@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -27,6 +28,9 @@ import com.red.sovereign.groups.Group
 import com.red.sovereign.groups.GroupMember
 import com.red.sovereign.groups.GroupViewModel
 import com.red.sovereign.ui.theme.SovereignColors
+import com.red.sovereign.core.MessageStore
+import com.red.sovereign.crypto.SafetyState
+import com.red.sovereign.crypto.SafetyViewModel
 
 /**
  * 👥 YOUNES Sovereign Group System
@@ -36,6 +40,7 @@ import com.red.sovereign.ui.theme.SovereignColors
 enum class GroupRole(val label: String, val icon: ImageVector, val color: Color) {
     OWNER("المالك السيادي", Icons.Rounded.VpnKey, SovereignColors.Gold),
     ADMIN("مشرف", Icons.Rounded.Shield, SovereignColors.Cyan),
+    MODERATOR("مراقب", Icons.Rounded.VerifiedUser, SovereignColors.Success),
     MEMBER("عضو", Icons.Rounded.Person, Color.Gray)
 }
 
@@ -171,6 +176,7 @@ private fun roleOf(member: GroupMember): GroupRole {
     return when (member.role.uppercase()) {
         "OWNER" -> GroupRole.OWNER
         "ADMIN" -> GroupRole.ADMIN
+        "MODERATOR" -> GroupRole.MODERATOR
         else -> GroupRole.MEMBER
     }
 }
@@ -185,11 +191,36 @@ fun SovereignGroupInfoScreen(
     onMessage: (String) -> Unit = {}
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val localMessages = remember(ctx) { MessageStore(ctx) }
+    val safety: SafetyViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val groupId = group?.id.orEmpty()
+    var mutedUntil by remember(groupId) { mutableStateOf(localMessages.conversationPreference(groupId).third) }
+    var disappearingDurationMs by remember(groupId) {
+        mutableStateOf(localMessages.conversationDisappearingDuration(groupId).takeIf { it > 0L })
+    }
     var showAddMembers by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    val tabs = listOf("الأعضاء", "الإعدادات")
+    var showMuteOptions by remember { mutableStateOf(false) }
+    var showDisappearingOptions by remember { mutableStateOf(false) }
+    // طلبات الانضمام — تظهر فقط للمشرفين عندما يكون requireJoinApproval مفعّل
+    val myRole = group?.members?.firstOrNull { it.redId == ownRedId }?.role
+    val isManager = myRole == "OWNER" || myRole == "ADMIN"
+    LaunchedEffect(groupId) { if (groupId.isNotBlank() && isManager) group?.let { groups.loadJoinRequests(it) } }
+    val tabs = if (isManager && group?.settings?.requireJoinApproval == true) listOf("الأعضاء", "الطلبات (${groups.joinRequests.size})", "الإعدادات") else listOf("الأعضاء", "الإعدادات")
     var selectedTab by remember { mutableIntStateOf(0) }
+
+    // ◀️ رجوع هرمي في معلومات المجموعة — يغلق النوافذ قبل العودة
+    BackHandler {
+        when {
+            showAddMembers -> showAddMembers = false
+            showMuteOptions -> showMuteOptions = false
+            showDisappearingOptions -> showDisappearingOptions = false
+            confirmLeave -> confirmLeave = false
+            confirmDelete -> confirmDelete = false
+            else -> onBack()
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian)) {
         // رأس المجموعة
@@ -204,22 +235,39 @@ fun SovereignGroupInfoScreen(
                 }
             }
             Row(modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                val callLauncher = com.red.sovereign.ui.rememberCallPermissionLauncher(
-                    needCamera = true,
-                    onGranted = { /* Handled per button */ },
+                val callLauncherVoice = com.red.sovereign.ui.rememberCallPermissionLauncher(
+                    needCamera = false,
+                    onGranted = {
+                        group?.let { g ->
+                            val members = g.members.filter { it.redId != ownRedId }
+                            if (members.isEmpty()) {
+                                android.widget.Toast.makeText(ctx, "لا يوجد أعضاء آخرون للاتصال بهم", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                com.red.sovereign.calls.GroupCallService.startGroupCall(ctx, ownRedId, members.map { it.redId }, members.map { it.username }, false, groupName = g.name, groupId = g.id)
+                            }
+                        }
+                    },
                     onDenied = { android.widget.Toast.makeText(ctx, "الصلاحيات مطلوبة للاتصال", android.widget.Toast.LENGTH_SHORT).show() }
                 )
-                IconButton(onClick = {
-                    callLauncher()
-                    group?.let { com.red.sovereign.calls.ConferenceService.join(ctx, it.id, ownRedId, video = false, asHost = false) }
-                }) {
-                    Icon(Icons.Rounded.Phone, "مكالمة صوتية للمجموعة", tint = SovereignColors.Cyan)
+                val callLauncherVideo = com.red.sovereign.ui.rememberCallPermissionLauncher(
+                    needCamera = true,
+                    onGranted = {
+                        group?.let { g ->
+                            val members = g.members.filter { it.redId != ownRedId }
+                            if (members.isEmpty()) {
+                                android.widget.Toast.makeText(ctx, "لا يوجد أعضاء آخرون للاتصال بهم", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                com.red.sovereign.calls.GroupCallService.startGroupCall(ctx, ownRedId, members.map { it.redId }, members.map { it.username }, true, groupName = g.name, groupId = g.id)
+                            }
+                        }
+                    },
+                    onDenied = { android.widget.Toast.makeText(ctx, "الصلاحيات مطلوبة للاتصال", android.widget.Toast.LENGTH_SHORT).show() }
+                )
+                IconButton(onClick = { callLauncherVoice() }) {
+                    Icon(Icons.Rounded.Phone, "مكالمة صوتية جماعية — ترن الجميع", tint = SovereignColors.Cyan)
                 }
-                IconButton(onClick = {
-                    callLauncher()
-                    group?.let { com.red.sovereign.calls.ConferenceService.join(ctx, it.id, ownRedId, video = true, asHost = false) }
-                }) {
-                    Icon(Icons.Rounded.Videocam, "مكالمة فيديو للمجموعة", tint = SovereignColors.Cyan)
+                IconButton(onClick = { callLauncherVideo() }) {
+                    Icon(Icons.Rounded.Videocam, "مكالمة فيديو جماعية — ترن الجميع", tint = SovereignColors.Cyan)
                 }
             }
             Row(Modifier.padding(top = 40.dp, start = 16.dp, end = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -255,10 +303,12 @@ fun SovereignGroupInfoScreen(
             }
         }
 
-        when (selectedTab) {
-            0 -> {
-                // زر إضافة أعضاء
-                if (group != null && friends.isNotEmpty()) {
+        val currentTab = tabs.getOrNull(selectedTab)?.substringBefore(" ") ?: "الأعضاء"
+        when {
+            currentTab == "الأعضاء" -> {
+                // زر إضافة أعضاء — يظهر فقط للمشرفين أو إذا كانت الإعدادات تسمح للأعضاء
+                val canAdd = group != null && (isManager || group.settings.onlyAdminsCanEditInfo == false)
+                if (group != null && friends.isNotEmpty() && canAdd) {
                     Button(
                         onClick = { showAddMembers = true },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
@@ -304,34 +354,76 @@ fun SovereignGroupInfoScreen(
                     }
                 }
             }
-            1 -> {
+            currentTab == "الطلبات" -> {
+                // طلبات الانضمام المعلقة — للمشرفين فقط
+                if (groups.joinRequests.isEmpty()) {
+                    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("لا توجد طلبات معلقة", color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(groups.joinRequests, key = { it.id }) { req ->
+                            Surface(shape = RoundedCornerShape(12.dp), color = SovereignColors.SurfaceNavy, modifier = Modifier.fillMaxWidth()) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(req.username, color = Color.White, fontWeight = FontWeight.Bold)
+                                        Text(req.redId, color = SovereignColors.Cyan, fontSize = 11.sp)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(onClick = { group?.let { groups.resolveJoin(it, req, true) } }, colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Success), shape = RoundedCornerShape(10.dp)) { Text("قبول", color = Color.White) }
+                                        OutlinedButton(onClick = { group?.let { groups.resolveJoin(it, req, false) } }, shape = RoundedCornerShape(10.dp)) { Text("رفض", color = SovereignColors.Danger) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
                 // الإعدادات
                 LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (group != null) {
                         item {
-                            InfoRow(Icons.Rounded.Schedule, "رسائل مؤقتة", "أرسل رسائل تختفي بعد وقت — من شاشة المحادثة") { }
+                            InfoRow(
+                                Icons.Rounded.Schedule,
+                                "رسائل مؤقتة",
+                                disappearingDurationLabel(disappearingDurationMs)
+                            ) { showDisappearingOptions = true }
                         }
                         item {
-                            InfoRow(Icons.Rounded.VolumeOff, "كتم الإشعارات", "إيقاف تنبيهات هذه المجموعة") { }
+                            val isMuted = mutedUntil > System.currentTimeMillis()
+                            InfoRow(
+                                if (isMuted) Icons.Rounded.VolumeOff else Icons.Rounded.Notifications,
+                                if (isMuted) "الإشعارات مكتومة" else "كتم الإشعارات",
+                                if (isMuted) "حتى ${formatMuteUntil(mutedUntil)}" else "اختَر مدة لإيقاف تنبيهات هذه المجموعة"
+                            ) { showMuteOptions = true }
                         }
                         item {
-                            InfoRow(Icons.Rounded.Shield, "رمز أمان المجموعة", "تأكد من تطابق رمز الأمان مع الأعضاء") { }
+                            InfoRow(Icons.Rounded.Shield, "رمز أمان مالك المجموعة", "تحقق من هوية مالك المجموعة قبل الوثوق بالدعوة") {
+                                group.ownerRedId.takeIf { it.isNotBlank() }?.let(safety::open)
+                            }
                         }
-                        item {
-                            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = SovereignColors.Danger.copy(alpha = 0.12f)) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.ExitToApp, null, tint = SovereignColors.Danger)
-                                    Text(" مغادرة المجموعة", color = SovereignColors.Danger, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { confirmLeave = true })
+                        if (myRole != "OWNER") {
+                            item {
+                                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = SovereignColors.Danger.copy(alpha = 0.12f)) {
+                                    Row(Modifier.padding(12.dp).clickable { confirmLeave = true }, verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Rounded.ExitToApp, null, tint = SovereignColors.Danger)
+                                        Text(" مغادرة المجموعة", color = SovereignColors.Danger, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
-                        item {
-                            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = SovereignColors.Danger.copy(alpha = 0.12f)) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Rounded.DeleteForever, null, tint = SovereignColors.Danger)
-                                    Text(" حذف المجموعة نهائياً", color = SovereignColors.Danger, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { confirmDelete = true })
+                        if (myRole == "OWNER") {
+                            item {
+                                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = SovereignColors.Danger.copy(alpha = 0.12f)) {
+                                    Row(Modifier.padding(12.dp).clickable { confirmDelete = true }, verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Rounded.DeleteForever, null, tint = SovereignColors.Danger)
+                                        Text(" حذف المجموعة نهائياً", color = SovereignColors.Danger, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
+                        } else if (myRole != "OWNER" && group.members.size == 1) {
+                            item { Text("أنت المالك الوحيد — انقل الملكية أولاً قبل المغادرة", color = Color.Gray, fontSize = 12.sp) }
                         }
                     }
                 }
@@ -372,6 +464,97 @@ fun SovereignGroupInfoScreen(
         )
     }
 
+    if (showMuteOptions && group != null) {
+        AlertDialog(
+            onDismissRequest = { showMuteOptions = false },
+            containerColor = SovereignColors.SurfaceNavy,
+            title = { Text("كتم إشعارات المجموعة", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("يبقى المحتوى متاحاً، لكن لن تصلك تنبيهات هذه المجموعة خلال المدة التي تختارها.", color = Color.Gray) },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("ساعة" to 3_600_000L, "8 ساعات" to 28_800_000L, "أسبوع" to 604_800_000L).forEach { (label, duration) ->
+                        TextButton(onClick = {
+                            mutedUntil = System.currentTimeMillis() + duration
+                            localMessages.setConversationPreference(group.id, "muted_until", mutedUntil)
+                            showMuteOptions = false
+                        }) { Text(label, color = SovereignColors.Cyan) }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mutedUntil = 0L
+                    localMessages.setConversationPreference(group.id, "muted_until", 0L)
+                    showMuteOptions = false
+                }) { Text("إلغاء الكتم", color = Color.Gray) }
+            }
+        )
+    }
+
+    if (showDisappearingOptions && group != null) {
+        AlertDialog(
+            onDismissRequest = { showDisappearingOptions = false },
+            containerColor = SovereignColors.SurfaceNavy,
+            title = { Text("الرسائل المؤقتة", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("تُطبّق المدة المختارة على الرسائل الجديدة المرسلة من هذا الجهاز إلى المجموعة.", color = Color.Gray) },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    listOf("ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L).forEach { (label, duration) ->
+                        TextButton(onClick = {
+                            disappearingDurationMs = duration
+                            localMessages.setConversationDisappearingDuration(group.id, duration)
+                            if (isManager) groups.updateDisappearing(group, duration)
+                            showDisappearingOptions = false
+                        }) { Text(label, color = SovereignColors.Cyan) }
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    disappearingDurationMs = null
+                    localMessages.setConversationDisappearingDuration(group.id, null)
+                    if (isManager) groups.updateDisappearing(group, null)
+                    showDisappearingOptions = false
+                }) { Text("إيقاف", color = Color.Gray) }
+            }
+        )
+    }
+
+    when (val safetyState = safety.state) {
+        SafetyState.Closed -> Unit
+        is SafetyState.Loading -> AlertDialog(
+            onDismissRequest = safety::close,
+            containerColor = SovereignColors.SurfaceNavy,
+            title = { Text("رمز أمان مالك المجموعة", color = Color.White) },
+            text = { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = SovereignColors.Cyan) } },
+            confirmButton = { TextButton(safety::close) { Text("إلغاء", color = Color.Gray) } }
+        )
+        is SafetyState.Error -> AlertDialog(
+            onDismissRequest = safety::close,
+            containerColor = SovereignColors.SurfaceNavy,
+            title = { Text("تعذر التحقق", color = Color.White) },
+            text = { Text(safetyState.message, color = Color.Gray) },
+            confirmButton = { TextButton(safety::close) { Text("إغلاق", color = SovereignColors.Cyan) } }
+        )
+        is SafetyState.Ready -> AlertDialog(
+            onDismissRequest = safety::close,
+            containerColor = SovereignColors.SurfaceNavy,
+            title = { Text(if (safetyState.verified) "هوية مالك المجموعة مؤكدة" else "قارن رمز أمان مالك المجموعة", color = Color.White) },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    androidx.compose.foundation.Image(safetyState.qr, "رمز QR لمالك المجموعة", Modifier.size(220.dp).clip(RoundedCornerShape(12.dp)))
+                    Text(safetyState.number, color = SovereignColors.Gold, fontWeight = FontWeight.Bold)
+                    Text("قارن الرقم عبر قناة موثوقة قبل اعتماد هوية المالك.", color = Color.Gray, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                if (safetyState.verified) TextButton(safety::close) { Text("تم", color = SovereignColors.Cyan) }
+                else Button(onClick = safety::markVerified, colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.Cyan)) { Text("الأرقام متطابقة", color = Color.Black) }
+            },
+            dismissButton = { if (!safetyState.verified) TextButton(safety::close) { Text("إلغاء", color = Color.Gray) } }
+        )
+    }
+
     // تأكيد المغادرة
     if (confirmLeave && group != null) {
         AlertDialog(
@@ -407,5 +590,22 @@ private fun InfoRow(icon: ImageVector, title: String, detail: String, onClick: (
                 Text(detail, color = Color.Gray, fontSize = 12.sp)
             }
         }
+    }
+}
+
+private fun disappearingDurationLabel(durationMs: Long?): String = when (durationMs) {
+    null, 0L -> "متوقفة — الرسائل الجديدة لا تنتهي تلقائياً"
+    3_600_000L -> "الرسائل الجديدة تختفي بعد ساعة"
+    86_400_000L -> "الرسائل الجديدة تختفي بعد يوم"
+    604_800_000L -> "الرسائل الجديدة تختفي بعد أسبوع"
+    else -> "الرسائل الجديدة تختفي حسب المدة المحددة"
+}
+
+private fun formatMuteUntil(until: Long): String {
+    val remaining = (until - System.currentTimeMillis()).coerceAtLeast(0L)
+    return when {
+        remaining >= 86_400_000L -> "${(remaining + 86_399_999L) / 86_400_000L} أيام"
+        remaining >= 3_600_000L -> "${(remaining + 3_599_999L) / 3_600_000L} ساعات"
+        else -> "قريباً"
     }
 }

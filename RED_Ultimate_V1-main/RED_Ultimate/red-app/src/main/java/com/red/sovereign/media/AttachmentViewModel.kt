@@ -14,10 +14,13 @@ import com.red.sovereign.core.RedConnectionService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 
 class AttachmentViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = EncryptedAttachmentRepository(application, AuthorizedApiClient(TokenStore(application)))
+    private val manifestJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     var sendState: AttachmentState by mutableStateOf(AttachmentState.Idle); private set
     private val downloadStates = androidx.compose.runtime.mutableStateMapOf<String, AttachmentState>()
 
@@ -74,6 +77,36 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         if (downloadStates[messageId] is AttachmentState.Working) return@launch
         downloadStates[messageId] = AttachmentState.Working("جارٍ تنزيل الملف المشفر والتحقق منه…")
         downloadStates[messageId] = when (val result = repository.downloadAndDecrypt(manifestJson)) {
+            is ApiResult.Error -> AttachmentState.Error(result.message)
+            is ApiResult.Success -> AttachmentState.Downloaded(result.value.absolutePath, result.value.name)
+        }
+    }
+
+    /**
+     * التسجيلات الصوتية تستخدم VoiceManifest الذي يحتوي بيانات إضافية مثل المدة والموجة.
+     * لا يمرر JSON الخام إلى محلل AttachmentManifest، لأن تسجيلات الإصدارات السابقة قد
+     * لا تتضمن mimeType الافتراضي بعد التسلسل. نحوله إلى بنية المرفق المتوافقة أولاً.
+     */
+    fun downloadVoice(messageId: String, voiceManifestJson: String) = viewModelScope.launch {
+        if (downloadStates[messageId] is AttachmentState.Working) return@launch
+        downloadStates[messageId] = AttachmentState.Working("جارٍ تنزيل الرسالة الصوتية وفك تشفيرها…")
+        val voice = runCatching { manifestJson.decodeFromString<VoiceManifest>(voiceManifestJson) }.getOrNull()
+        if (voice == null || voice.size <= 0L || voice.objectKey.isBlank() || voice.url.isBlank()) {
+            downloadStates[messageId] = AttachmentState.Error("INVALID_VOICE_MANIFEST")
+            return@launch
+        }
+        val attachmentManifest = com.red.sovereign.media.AttachmentManifest(
+            objectKey = voice.objectKey,
+            url = voice.url,
+            name = voice.name,
+            mimeType = voice.mimeType,
+            size = voice.size,
+            sha256 = voice.sha256,
+            key = voice.key,
+            nonce = voice.nonce
+        )
+        val attachmentPayload = manifestJson.encodeToString<AttachmentManifest>(attachmentManifest)
+        downloadStates[messageId] = when (val result = repository.downloadAndDecrypt(attachmentPayload)) {
             is ApiResult.Error -> AttachmentState.Error(result.message)
             is ApiResult.Success -> AttachmentState.Downloaded(result.value.absolutePath, result.value.name)
         }

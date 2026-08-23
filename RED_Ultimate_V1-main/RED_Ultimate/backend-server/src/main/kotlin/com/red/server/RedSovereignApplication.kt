@@ -26,7 +26,7 @@ class RedSovereignApplication {
     @Primary
     fun objectMapper(): ObjectMapper = jacksonObjectMapper()
 
-    @Bean
+        @Bean
     @Suppress("unused")
     fun pstnRetryScheduler(): ScheduledExecutorService {
         var threadNum = AtomicInteger(0)
@@ -34,6 +34,16 @@ class RedSovereignApplication {
             Thread(r, "pstn-retry-${threadNum.incrementAndGet()}").apply { isDaemon = true }
         }
     }
+
+    @Bean(name = ["adminSseScheduler"])
+    @Suppress("unused")
+    fun adminSseScheduler(): ScheduledExecutorService {
+        var threadNum = AtomicInteger(0)
+        return Executors.newScheduledThreadPool(2) { r ->
+            Thread(r, "admin-sse-${threadNum.incrementAndGet()}").apply { isDaemon = true }
+        }
+    }
+
 }
 
 fun main(args: Array<String>) {

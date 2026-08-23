@@ -41,6 +41,20 @@ import com.red.sovereign.ui.theme.SovereignBackground
 
 class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
+
+    /** مستهلك أحداث PSTN الدائم — يبدأ مع جلسة الدخول ويحوّل PSTN_INCOMING إلى رنين. */
+    private var pstnCoordinator: com.red.sovereign.calls.PstnIncomingCallCoordinator? = null
+
+    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN — مُخزَّن لتجنب التسريب عند إعادة التركيب. */
+    private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onResume(owner: LifecycleOwner) {
+            if (authViewModel.state is AuthState.Authenticated) {
+                authViewModel.refreshPstnEntitlement()
+            }
+        }
+    }
+    private var pstnObserverRegistered = false
+
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         Log.i("Permissions", "Initial permissions granted: $grants")
     }
@@ -106,6 +120,13 @@ class MainActivity : FragmentActivity() {
                                 }
                                 runCatching { com.red.sovereign.core.RedConnectionService.start(this@MainActivity) }
                                 runCatching { com.red.sovereign.calls.YounesCallService.listen(this@MainActivity) }
+                                // بدء مستهلك أحداث PSTN الدائم (كان ميتاً — لا مستدعِ له)
+                                runCatching {
+                                    val coordinator = pstnCoordinator
+                                        ?: com.red.sovereign.calls.PstnIncomingCallCoordinator(application)
+                                            .also { pstnCoordinator = it }
+                                    coordinator.start()
+                                }.onFailure { Log.w("PstnCoordinator", "start failed: ${it.message}") }
                                 // ملاحظة: لا نسجّل YounesConnectionService القديم — TelegramBridge (CallsManager)
                                 // يُسجَّل تلقائياً من YounesCallService.onCreate. تسجيل الاثنين معاً يخلق
                                 // PhoneAccount مزدوجاً → مكالمات نظام عالقة/مكررة على بعض الأجهزة.
@@ -117,18 +138,16 @@ runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivi
             } catch (_: Exception) {
                 try { startService(routerIntent) } catch (_: Exception) {}
             }
-            // تحديث صلاحيات PSTN عند استئناف التطبيق
-            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
-                override fun onResume(owner: LifecycleOwner) {
-                    if (authViewModel.state is AuthState.Authenticated) {
-                        authViewModel.refreshPstnEntitlement()
-                    }
-                }
-            })
-        } else {
+            // تحديث صلاحيات PSTN عند استئناف التطبيق — مسجل مرة واحدة فقط
+            if (!pstnObserverRegistered) {
+                ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
+                pstnObserverRegistered = true
+            }
+            } else {
                                 com.red.sovereign.core.RedConnectionService.stop(this@MainActivity)
                                 com.red.sovereign.calls.YounesCallService.stop(this@MainActivity)
                                 stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))
+                                pstnCoordinator?.stop()
                             }
                         }
                         if (state is AuthState.Authenticated) {
@@ -156,6 +175,18 @@ runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivi
         super.onNewIntent(intent)
         setIntent(intent)
         handleNotificationIntent(intent)
+    }
+
+    override fun onDestroy() {
+        if (!isChangingConfigurations) {
+            pstnCoordinator?.destroy()
+            pstnCoordinator = null
+            if (pstnObserverRegistered) {
+                runCatching { ProcessLifecycleOwner.get().lifecycle.removeObserver(pstnLifecycleObserver) }
+                pstnObserverRegistered = false
+            }
+        }
+        super.onDestroy()
     }
 
     override fun onUserLeaveHint() {

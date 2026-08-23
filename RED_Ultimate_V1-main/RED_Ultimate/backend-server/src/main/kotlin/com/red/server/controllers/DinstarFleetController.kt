@@ -1,6 +1,8 @@
 package com.red.server.controllers
 
 import com.red.server.audit.AuditService
+import com.red.server.auth.model.AccountStatus
+import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.pstn.DinstarLoadBalancer
 import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
@@ -16,8 +18,25 @@ class DinstarFleetController(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService,
     private val loadBalancer: DinstarLoadBalancer,
-    private val audit: AuditService
+    private val audit: AuditService,
+    private val users: UserAccountRepository
 ) {
+
+    /**
+     * خريطة المنفذ ← الحساب المالك (الربط الدائم 1:1). تُجلب مرة لكل بوابة
+     * لتجنب استعلام لكل منفذ، وتُلحق بكل منفذ في واجهات العرض كي تعرض لوحة
+     * الإدارة فوراً «من يملك هذه الشريحة».
+     */
+    private fun boundUsersByPort(gatewayId: UUID): Map<Int, com.red.server.auth.model.UserAccount> =
+        users.findByPstnGatewayId(gatewayId)
+            .filter { it.pstnPortIndex != null }
+            .associateBy { it.pstnPortIndex!! }
+
+    private fun annotateOwner(portMap: Map<String, Any?>, owner: com.red.server.auth.model.UserAccount?): Map<String, Any?> =
+        if (owner == null) portMap else portMap + mapOf(
+            "boundRedId" to owner.redId,
+            "boundUsername" to owner.username
+        )
 
     @GetMapping
     fun list(): List<Map<String, Any?>> = fleet.listGateways().map(::present)
@@ -129,22 +148,31 @@ class DinstarFleetController(
     @GetMapping("/{id}/ports")
     fun ports(@PathVariable id: UUID): List<Map<String, Any?>> {
         val gateway = requireNotNull(fleet.findGateway(id)) { "Gateway not found" }
+        val owners = boundUsersByPort(id)
         return runCatching { hardware.getHardwareStatus(gateway) }
             .onSuccess { fleet.markHealthy(id) }
             .onFailure { fleet.markFailure(id, it.message ?: "port query failed") }
             .getOrThrow()
+            .map { p ->
+                val idx = (p["index"] as? Number)?.toInt()
+                annotateOwner(p, idx?.let { owners[it] })
+            }
     }
 
     @GetMapping("/ports")
     fun allPorts(): Map<String, Any?> {
         val gateways = fleet.listGateways(onlyEnabled = true)
         val perGateway = gateways.map { gw ->
+            val owners = boundUsersByPort(gw.id)
             val result = runCatching { hardware.getHardwareStatus(gw) }
             if (result.isSuccess) fleet.markHealthy(gw.id)
             else fleet.markFailure(gw.id, result.exceptionOrNull()?.message ?: "unreachable")
             mapOf(
                 "gateway" to present(gw),
-                "ports" to result.getOrDefault(emptyList()),
+                "ports" to result.getOrDefault(emptyList()).map { p ->
+                    val idx = (p["index"] as? Number)?.toInt()
+                    annotateOwner(p, idx?.let { owners[it] })
+                },
                 "error" to result.exceptionOrNull()?.message
             )
         }

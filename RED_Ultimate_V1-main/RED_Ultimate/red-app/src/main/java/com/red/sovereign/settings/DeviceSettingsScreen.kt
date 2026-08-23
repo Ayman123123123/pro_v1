@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.animation.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,6 +72,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -94,6 +94,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -111,11 +112,13 @@ import kotlinx.coroutines.launch
  * Material 3 Expressive Device Settings Screen
  * Comprehensive settings organized by category
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceSettingsScreen(
     onBack: () -> Unit,
     tokenStore: TokenStore,
-    snackbarHostState: SnackbarHostState
+    snackbarHostState: SnackbarHostState,
+    onPstnConfigClick: (() -> Unit)? = null
 ) {
     Scaffold(
         topBar = {
@@ -139,6 +142,11 @@ fun DeviceSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
             // Account & Identity
             SettingsSectionItem(
                 title = "Account & Identity",
@@ -180,7 +188,11 @@ fun DeviceSettingsScreen(
                 title = "PSTN Configuration",
                 subtitle = "DINSTAR gateway, SIM status, port mapping",
                 icon = Icons.Filled.NetworkCell,
-                onClick = { /* navigate to PSTN config */ }
+                onClick = { 
+                    // Navigate to PSTN Config Screen
+                    // This requires a navigation controller - for now we'll use a callback approach
+                    onPstnConfigClick?.invoke()
+                }
             )
             SettingsItem(
                 title = "Call Limits & Quotas",
@@ -449,6 +461,8 @@ fun DeviceSettingsScreen(
                 icon = Icons.Filled.Info,
                 onClick = { /* navigate to about */ }
             )
+                }
+            }
         }
     }
 }

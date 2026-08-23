@@ -2,7 +2,9 @@ package com.red.server.controllers
 
 import com.red.server.audit.AuditService
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
+import com.red.server.services.DinstarSmsContract
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -25,8 +27,42 @@ import java.util.UUID
 class DinstarSmsController(
     private val hardware: DinstarHardwareService,
     private val audit: AuditService,
-    private val users: UserAccountRepository
+    private val users: UserAccountRepository,
+    private val fleet: DinstarFleetService
 ) {
+
+    /**
+     * هل المُستدعي أدمن؟ الأدمن وحده يتحكم بمنافذ/بوابات الإرسال بحرية
+     * (حملات لوحة التحكم). المستخدم العادي يُحبَس على شريحته المربوطة
+     * 1:1 (pstn_gateway_id/pstn_port_index) — إغلاق ثغرة إرسال SMS من
+     * شريحة غيره أو استهداف بوابة اعتباطية عبر gatewayHost.
+     */
+    private fun isAdmin(authentication: Authentication): Boolean =
+        authentication.authorities.any { it.authority == "ROLE_ADMIN" }
+
+    /** نطاق الشريحة الإلزامي للمستخدم العادي: (gatewayHost, portIndex) */
+    private fun resolveBoundScope(user: com.red.server.auth.model.UserAccount): Pair<String, Int>? {
+        val gwId = user.pstnGatewayId ?: return null
+        val portIdx = user.pstnPortIndex ?: return null
+        val host = fleet.findGateway(gwId)?.host ?: return null
+        return host to portIdx
+    }
+
+    /** يفلتر رسائل واردة على عنصر port محدد مع دعم أشكال الاستجابة الشائعة */
+    private fun filterMessagesForPort(raw: Map<String, Any?>, port: Int): Map<String, Any?> {
+        fun match(item: Any?): Boolean {
+            if (item !is Map<*, *>) return false
+            val p = item["port"] ?: item["port_index"] ?: return false
+            return p.toString().trim().toIntOrNull() == port
+        }
+        val filtered = HashMap(raw)
+        for ((k, v) in raw.entries) {
+            if (v is List<*> && v.isNotEmpty() && v.first() is Map<*, *> && (v.first() as Map<*, *>).keys.any { it == "port" || it == "port_index" }) {
+                filtered[k] = v.filter { match(it) }
+            }
+        }
+        return filtered
+    }
 
     /**
      * إرسال SMS عبر Dinstar
@@ -53,19 +89,45 @@ class DinstarSmsController(
         val text = body["text"]?.toString() ?: throw IllegalArgumentException("SMS text is required")
         @Suppress("UNCHECKED_CAST")
         val params = (body["param"] as? List<Map<String, Any?>>) ?: throw IllegalArgumentException("param array is required")
+        val preparedRecipients = DinstarSmsContract.prepare(params)
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
         val encoding = body["encoding"]?.toString() ?: "GSM7BIT"
-        // اختياري: بوابة بعينها من الأسطول. الخدمة تتحقق من أنه عنوان خاص.
-        val gatewayHost = body["gatewayHost"]?.toString()
+        // اختياري: توجيه الإرسال لبوابة بعينها. للأدمن فقط — المستخدم العادي
+        // يُرسل حصراً من شريحته المربوطة مهما أرسل من port/gatewayHost.
+        val requestedHost = body["gatewayHost"]?.toString()
+
+        val effectivePorts: List<Int>?
+        val effectiveHost: String?
+        if (isAdmin(authentication)) {
+            effectivePorts = portList
+            effectiveHost = requestedHost
+        } else {
+            val scope = resolveBoundScope(user)
+                ?: return mapOf(
+                    "error" to "SIM_NOT_BOUND",
+                    "message" to "No permanent SIM bound to this account — ask the administrator"
+                )
+            effectiveHost = scope.first
+            effectivePorts = listOf(scope.second)
+        }
 
         audit.record(actor, "DINSTAR_SMS_SEND", text.length.toString(), mapOf(
-            "recipientCount" to params.size, "encoding" to encoding,
-            "ports" to (portList?.toString() ?: "all"),
-            "gateway" to (gatewayHost ?: "active")
+            "recipientCount" to preparedRecipients.recipients.size, "encoding" to encoding,
+            "ports" to (effectivePorts?.toString() ?: "all"),
+            "gateway" to (effectiveHost ?: "active"),
+            "admin" to isAdmin(authentication)
         ))
 
-        return hardware.sendSms(text, params, portList, encoding, gatewayHost)
+        val gatewayResponse = hardware.sendSms(text, preparedRecipients.recipients, effectivePorts, encoding, effectiveHost)
+        val taskId = (gatewayResponse["task_id"] as? Number)?.toInt()
+        val queueCount = (gatewayResponse["sms_in_queue"] as? Number)?.toInt()
+        return mapOf(
+            "status" to if (DinstarSmsContract.isAccepted(gatewayResponse)) "ACCEPTED" else "FAILED",
+            "taskId" to taskId,
+            "queueCount" to queueCount,
+            "userIds" to preparedRecipients.userIds
+        )
     }
 
     /** جلب نتائج إرسال SMS */
@@ -85,13 +147,18 @@ class DinstarSmsController(
         return hardware.querySmsDeliveryStatus(numbers, timeAfter, timeBefore)
     }
 
-    /** جلب SMS الواردة */
+    /** جلب SMS الواردة — المستخدم العادي يرى رسائل شريحته فقط */
     @GetMapping("/incoming")
     fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
         val user = users.findById(actor).orElseThrow { NoSuchElementException("User not found") }
         if (!user.pstnEnabled) {
             return mapOf("error" to "SMS_NOT_ENABLED", "messages" to emptyList<Any>())
+        }
+        if (!isAdmin(authentication)) {
+            val scope = resolveBoundScope(user)
+                ?: return mapOf("error" to "SIM_NOT_BOUND", "messages" to emptyList<Any>())
+            return filterMessagesForPort(hardware.queryIncomingSms(), scope.second)
         }
         return hardware.queryIncomingSms()
     }

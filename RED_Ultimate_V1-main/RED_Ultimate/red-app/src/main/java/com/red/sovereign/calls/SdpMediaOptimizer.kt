@@ -14,7 +14,9 @@ enum class CallMediaKind {
 
     val wantsVideo: Boolean get() = this == VIDEO || this == CONFERENCE || this == LIVE
     val wantsSvc: Boolean get() = this == CONFERENCE || this == LIVE || this == SPACE
-    val wantsSimulcast: Boolean get() = this == VIDEO || this == CONFERENCE || this == LIVE
+    // فيديو 1:1 بلا simulcast — قرار معتمد 2026-08-20 (CallMediaKindPolicyTest يحميه):
+    // طبقات متعددة بلا مستقبلات إضافية تضيع عرضاً وقدمةً فقط؛ simulcast للمجموعات/البث.
+    val wantsSimulcast: Boolean get() = this == CONFERENCE || this == LIVE
     val stereoAudio: Boolean get() = this == LIVE
     val preferredVideoCodec: String get() = when (this) {
         CONFERENCE, LIVE -> "VP9"

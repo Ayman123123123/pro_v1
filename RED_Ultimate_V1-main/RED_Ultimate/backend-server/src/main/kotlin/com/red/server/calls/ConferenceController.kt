@@ -41,6 +41,8 @@ class ConferenceRoomService(
 
     private val roomParticipants = ConcurrentHashMap<String, MutableSet<String>>()
     private val activeRooms = ConcurrentHashMap<String, ConferenceRoomRecord>()
+    /** قائمة دعوة الجلسات الخاصة؛ تبقى مستقلة عن الحضور الفعلي. */
+    private val roomInvitees = ConcurrentHashMap<String, MutableSet<String>>()
 
     fun createRoom(
         roomId: String,
@@ -50,10 +52,16 @@ class ConferenceRoomService(
         title: String,
         isSpace: Boolean,
         isPrivate: Boolean,
-        password: String?
+        password: String?,
+        inviteeRedIds: Collection<String> = emptyList()
     ): ConferenceRoomRecord {
+        require(roomId.isNotBlank()) { "ROOM_ID_REQUIRED" }
+        require(hostId.isNotBlank()) { "HOST_ID_REQUIRED" }
         if (roomParticipants.containsKey(roomId)) {
-            return activeRooms[roomId] ?: ConferenceRoomRecord(roomId, hostId)
+            val existing = activeRooms[roomId] ?: error("CONFERENCE_ROOM_STATE_CORRUPT")
+            require(existing.hostId == hostId) { "ROOM_ID_ALREADY_OWNED" }
+            addInvitees(roomId, inviteeRedIds)
+            return existing
         }
         val passHash = password?.takeIf { it.isNotBlank() }?.let { passwordHasher.hash(it) }
         val record = ConferenceRoomRecord(
@@ -68,6 +76,10 @@ class ConferenceRoomService(
             createdAt = Instant.now()
         )
         roomParticipants[roomId] = ConcurrentHashMap.newKeySet()
+        roomInvitees[roomId] = ConcurrentHashMap.newKeySet<String>().apply {
+            add(hostRedId)
+            addAll(inviteeRedIds.filter { it.isNotBlank() })
+        }
         activeRooms[roomId] = record
         log.info("Conference room {} created by host {} (space={}, private={})", roomId, hostId, isSpace, isPrivate)
         return record
@@ -75,9 +87,11 @@ class ConferenceRoomService(
 
     fun verifyPassword(roomId: String, password: String?): Boolean {
         val record = activeRooms[roomId] ?: return false
-        if (!record.isPrivate || record.passwordHash.isNullOrBlank()) return true
+        if (!record.isPrivate) return true
+        // الجلسة الخاصة بدعوة صريحة لا تحتاج كلمة مرور مشتركة بين المدعوين.
+        val passwordHash = record.passwordHash ?: return true
         if (password.isNullOrBlank()) return false
-        return passwordHasher.verify(password, record.passwordHash!!)
+        return passwordHasher.verify(password, passwordHash)
     }
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
@@ -97,6 +111,18 @@ class ConferenceRoomService(
 
     fun getRoom(roomId: String): ConferenceRoomRecord? = activeRooms[roomId]
 
+    /** الجلسة العامة تسمح لأي مستخدم مصادق؛ الخاصة تسمح للمضيف أو للمدعوين فقط. */
+    fun canJoin(roomId: String, accountId: String, redId: String): Boolean {
+        val room = activeRooms[roomId] ?: return false
+        if (!room.isPrivate) return true
+        return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true
+    }
+
+    fun addInvitees(roomId: String, redIds: Collection<String>) {
+        val invitees = roomInvitees[roomId] ?: return
+        invitees.addAll(redIds.filter { it.isNotBlank() })
+    }
+
     fun addParticipant(roomId: String, userId: String): Int {
         val set = roomParticipants[roomId] ?: return -1
         set.add(userId)
@@ -115,6 +141,7 @@ class ConferenceRoomService(
 
     fun closeRoom(roomId: String): Boolean {
         val removed = roomParticipants.remove(roomId) != null
+        roomInvitees.remove(roomId)
         activeRooms.remove(roomId)
         if (removed) log.info("Conference room {} closed", roomId)
         return removed
@@ -147,7 +174,8 @@ class ConferenceController(
             title = request.title,
             isSpace = request.isSpace,
             isPrivate = request.isPrivate,
-            password = request.password
+            password = request.password,
+            inviteeRedIds = request.inviteeRedIds
         )
         val inviteLink = "younes://${if (request.isSpace) "space" else "conference"}/$roomId"
         runCatching {
@@ -201,12 +229,15 @@ class ConferenceController(
     ): ResponseEntity<JoinRoomResponse> {
         val record = roomService.getRoom(roomId)
             ?: throw NoSuchElementException("Conference room not found")
-        val isAuth = roomService.verifyPassword(roomId, request.password)
-        if (!isAuth) {
+        val accountId = UUID.fromString(authentication.name)
+        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val authorized = roomService.canJoin(roomId, authentication.name, user.redId) &&
+            roomService.verifyPassword(roomId, request.password)
+        if (!authorized) {
             return ResponseEntity.status(403).body(JoinRoomResponse(
                 authorized = false,
                 roomId = roomId,
-                errorMessage = "كلمة السر غير صحيحة"
+                errorMessage = "لا تملك صلاحية الانضمام إلى هذه المكالمة"
             ))
         }
         roomService.addParticipant(roomId, authentication.name)
@@ -248,6 +279,8 @@ class ConferenceController(
             ?: throw NoSuchElementException("Room not found")
         val accountId = UUID.fromString(authentication.name)
         val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        require(record.hostId == authentication.name) { "ONLY_HOST_CAN_INVITE" }
+        roomService.addInvitees(roomId, request.memberIds)
         val mode = if (record.isSpace) "SPACE" else "CONFERENCE"
         request.memberIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { memberId ->
             notifications.sendVoipPushNotification(memberId, inviter.redId, roomId, mode)
@@ -273,7 +306,8 @@ data class CreateRoomRequest(
     val title: String = "",
     val isSpace: Boolean = false,
     val isPrivate: Boolean = false,
-    val password: String? = null
+    val password: String? = null,
+    val inviteeRedIds: List<String> = emptyList()
 )
 
 data class ConferenceRoomResponse(

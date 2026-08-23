@@ -19,6 +19,10 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
     fun countByStatus(status: AccountStatus): Long
     fun countByCreatedAtAfter(createdAt: Instant): Long
     fun findAllByOrderByCreatedAtDesc(): List<UserAccount>
+    fun findAllByPstnEnabledTrueAndStatus(status: AccountStatus): List<UserAccount>
+    fun findByPstnGatewayIdAndPstnPortIndex(gatewayId: UUID, portIndex: Int): UserAccount?
+    fun findByPstnNumber(pstnNumber: String): UserAccount?
+    fun findByPstnGatewayId(gatewayId: UUID): List<UserAccount>
 }
 
 /**
@@ -32,4 +36,5 @@ fun UserAccountRepository.searchForAdmin(
     role: AccountRole?,
     search: String?,
     pageable: Pageable,
-): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search), pageable)
+    pstnEnabled: Boolean? = null,
+): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search, pstnEnabled), pageable)

@@ -265,10 +265,25 @@ fun YounesCallOverlay() {
                             callerNumber = peer,
                             callerName = null, // Could be enhanced with contact lookup
                             callId = callId,
-                            onAccept = { YounesCallService.action(context, YounesCallService.ACTION_ACCEPT) },
-                            onReject = { YounesCallService.action(context, YounesCallService.ACTION_REJECT) },
+                            onAccept = {
+                                // مسار PSTN الصحيح: منسق /ws/pstn (PSTN_ACCEPT →
+                                // AMI Redirect) — YounesCallService مخصص app-to-app.
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.acceptIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT)
+                            },
+                            onReject = {
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.rejectIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                            },
                             onDeclineWithMessage = { msg -> /* TODO: send decline message */ },
-                            onAcceptVideo = { YounesCallService.action(context, YounesCallService.ACTION_ACCEPT_VIDEO) },
+                            onAcceptVideo = {
+                                // مكالمات PSTN صوتية فقط — القبول يعالجها صوتياً
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.acceptIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT_VIDEO)
+                            },
                             context = context
                         )
                     } else {

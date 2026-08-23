@@ -56,7 +56,7 @@ class FeedApi(private val client: AuthorizedApiClient) {
     suspend fun vote(postId: String, optionId: String): ApiResult<Post> =
         client.request("POST", "/api/feed/posts/$postId/vote", json.encodeToString(PollVoteRequest(optionId))).decode { json.decodeFromString<Post>(it) }
 
-    suspend fun follow(redId: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/feed/following/$redId")) {
+    suspend fun requestFriend(redId: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/contacts/requests/$redId")) {
         is ApiResult.Success -> ApiResult.Success(result.code, Unit)
         is ApiResult.Error -> result
     }

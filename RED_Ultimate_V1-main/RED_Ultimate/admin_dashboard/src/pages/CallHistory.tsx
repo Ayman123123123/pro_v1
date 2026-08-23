@@ -58,7 +58,7 @@ export default function CallHistory() {
     setLoading(true);
     try {
       const query = filter ? `?status=${encodeURIComponent(filter)}` : '';
-      const res = await apiFetch(`/api/master/v1/calls/history${query}`);
+      const res = await apiFetch('/api/master/v1/calls/history' + query);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
       setRows(Array.isArray(body?.calls) ? body.calls : []);

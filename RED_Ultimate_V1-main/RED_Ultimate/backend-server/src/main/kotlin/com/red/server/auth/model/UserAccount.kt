@@ -59,6 +59,16 @@ class UserAccount(
     @Column(name = "pstn_daily_limit", nullable = false)
     var pstnDailyLimit: Int = 0,
 
+    // ━━━ الربط الدائم 1:1 — شريحة GSM ثابتة لكل حساب (16 منفذ = 8G + 8T) ━━━
+    @Column(name = "pstn_gateway_id")
+    var pstnGatewayId: UUID? = null,
+
+    @Column(name = "pstn_port_index")
+    var pstnPortIndex: Int? = null,
+
+    @Column(name = "pstn_number", length = 20)
+    var pstnNumber: String? = null,
+
     // ━━━ عمليات الأمان (الأعمدة مُنشأة في V17__User_Security_Operations.sql) ━━━
     @Column(name = "password_reset_required", nullable = false)
     var passwordResetRequired: Boolean = false,

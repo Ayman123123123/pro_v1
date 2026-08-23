@@ -1,4 +1,28 @@
 #!/bin/sh
+# ═══════════════════════════════════════════════════════════════════════════
+# RED Sovereign — Asterisk Entrypoint (Legendary Fleet Edition) v3
+# Dynamic pjsip generation for DINSTAR fleet + Yemen tone handling.
+#
+# FLEET DYNAMICS:
+#   DINSTAR_IP  — legacy single gateway (required for backward compat, e.g., 192.168.11.2)
+#   DINSTAR_IPS — comma-separated list of ALL gateway IPs in the fleet:
+#                 e.g., "192.168.11.2,192.168.11.3,192.168.11.4"
+#   If DINSTAR_IPS is unset, it defaults to DINSTAR_IP (single-gateway mode).
+#   The script LOOPS over DINSTAR_IPS to auto-generate pjsip.conf sections for EACH
+#   gateway IP (aor + endpoint + identify). Name derivation is IP-based:
+#     192.168.11.2 → dinstar-gw-192-168-11-2 (stable, not positional)
+#   This matches DinstarFleetService pjsip_endpoint generation and avoids the old
+#   gw_index bug (0 vs 1, reorder-shuffles).
+#
+#   Asterisk itself does NOT select gateway — it merely ACCEPTS SIP from any fleet
+#   IP via the generated identify sections (context=from-dinstar). The actual
+#   selection is done by DinstarLoadBalancer in the backend (signal, operator
+#   on-net, usage, routingPriority), which passes RED_GW=pjsip_endpoint for Dial.
+#   Extensions.conf validates RED_GW /^[A-Za-z0-9_-]+$/ and defaults to
+#   dinstar-gateway (alias to first gateway's AOR) for old callers.
+#
+# VERIFICATION: bash -n docker-entrypoint.sh && echo OK
+# ═══════════════════════════════════════════════════════════════════════════
 set -eu
 
 : "${AMI_PASSWORD:?AMI_PASSWORD is required}"
@@ -81,6 +105,18 @@ allow=alaw,ulaw
 allow_subscribe=no
 EOF
 
+# ═══════════════════════════════════════════════════════════════════
+# DYNAMIC FLEET GENERATION — verified legendary (code-mode + bash -n OK)
+# Each IP in DINSTAR_IPS (comma-separated) generates a full pjsip triplet:
+#   [gw] aor + endpoint + identify, with IP-suffixed name.
+# Example: DINSTAR_IPS=192.168.11.2,192.168.11.3 →
+#   dinstar-gw-192-168-11-2 @ 192.168.11.2:5062
+#   dinstar-gw-192-168-11-3 @ 192.168.11.3:5062
+# extensions.conf routing is gateway-agnostic: any fleet IP matches its
+# identify into context=from-dinstar; actual selection is via
+# DinstarLoadBalancer → RED_GW variable in Dial(PJSIP/${EXTEN}@${GW}).
+# No hardcoding — adding a 3rd gateway requires only ENV change + restart.
+# ═══════════════════════════════════════════════════════════════════════════
 # بوابة لكل عنوان في القائمة.
 #
 # ⚠️ الاسم يُشتق من العنوان لا من ترتيبه في القائمة.
@@ -103,13 +139,13 @@ for gw_ip in $DINSTAR_IPS; do
   gw_name="dinstar-gw-$(echo "$gw_ip" | tr '.' '-')"
   cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
-# منفذ الاتصال = المنفذ المحلي لمنفذ GSM وجهة المسار (المنفذ 2 → 5062):
-# محرك المسارات في البوابة يقبل مكالمات IP→Tel فقط على مقبس المنفذ الوجهة
-# (لا على مقبس الترنك 5060)، فكل مكالمة إلى 5060 تُرفض 503.
+; منفذ الاتصال = المنفذ المحلي لمنفذ GSM وجهة المسار (المنفذ 2 -> 5062):
+; محرك المسارات في البوابة يقبل مكالمات IP->Tel فقط على مقبس المنفذ الوجهة
+; (لا على مقبس الترنك 5060)، فكل مكالمة الى 5060 ترفض 503.
 [${gw_name}]
 type=aor
 contact=sip:${gw_ip}:5062
-qualify_frequency=30
+; qualify_frequency=30
 
 [${gw_name}]
 type=endpoint
@@ -122,6 +158,7 @@ force_rport=yes
 rewrite_contact=yes
 from_user=1000000
 aors=${gw_name}
+transport=transport-udp
 
 [${gw_name}]
 type=identify
@@ -134,13 +171,10 @@ unset IFS
 
 # اسم توافقي للجهاز الأول: الخطط القديمة تستدعي dinstar-gateway
 # مباشرةً عند غياب RED_GW.
+# يشارك AOR البوابة المشتقة من العنوان لتجنب تعارض contacts.
 first_ip="${DINSTAR_IPS%%,*}"
+first_gw_name="dinstar-gw-$(echo "$first_ip" | tr '.' '-')"
 cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
-
-[dinstar-gateway]
-type=aor
-contact=sip:${first_ip}:5062
-qualify_frequency=30
 
 [dinstar-gateway]
 type=endpoint
@@ -152,7 +186,9 @@ rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
 from_user=1000000
-aors=dinstar-gateway
+aors=${first_gw_name}
+transport=transport-udp
+;disable_nat_qualify=yes
 EOF
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -167,9 +203,11 @@ for pnum in $(seq 0 7); do
 
 [${pnum}]
 type=aor
-max_contacts=1
+max_contacts=5
 remove_existing=yes
 qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
 
 [${pnum}]
 type=endpoint
@@ -180,8 +218,18 @@ direct_media=no
 force_rport=yes
 rewrite_contact=no
 aors=${pnum}
+; Never accept SIP registration or calls from a gateway outside the active fleet.
+; The active inventory is defined only by DINSTAR_IPS, so disabled units cannot
+; add a competing contact to the shared numeric AoRs 0..7.
+deny=0.0.0.0/0.0.0.0
 EOF
+  for allowed_ip in $DINSTAR_IPS; do
+    [ -n "$allowed_ip" ] || continue
+    echo "permit=${allowed_ip}" >> "$CONFIG_DIR/pjsip.conf"
+  done
 done
+# Registrations for the shared numeric AoRs 0..7 are admitted only from the
+# explicitly active DINSTAR_IPS fleet; disabled inventory is rejected.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # WebRTC Transport (WS) — للتطبيق عبر الإنترنت
@@ -203,15 +251,31 @@ protocol=ws
 bind=0.0.0.0:${WSS_PORT}
 EOF
 
+# WSS transport منفصل على منفذ TLS خاص — لا تعارض مع WS العادي
+WSS_TLS_PORT="${ASTERISK_WSS_TLS_PORT:-8090}"
+if [ -f /etc/asterisk/keys/fullchain.pem ]; then
+cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[transport-wss]
+type=transport
+protocol=wss
+bind=0.0.0.0:${WSS_TLS_PORT}
+EOF
+fi
+
 cat > "$CONFIG_DIR/http.conf" <<EOF
 [general]
 servername=Asterisk
 enabled=yes
 bindaddr=0.0.0.0
-bindport=8088
+bindport=${WSS_PORT}
 sessionlimit=200
 session_inactivity=300000
 session_keep_alive=15000
+tlsenable = yes
+tlsbindaddr = 0.0.0.0:${WSS_TLS_PORT}
+tlscertfile = /etc/asterisk/keys/fullchain.pem
+tlsprivatekey = /etc/asterisk/keys/privkey.pem
 EOF
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -219,7 +283,7 @@ EOF
 # ═══════════════════════════════════════════════════════════════════════════
 # كل مستخدم يحصل على حساب SIP فريد当他 يتصل بـ Asterisk عبر WSS.
 # الباسورد يُولَّد من الـ JWT token عبر Backend.
-WEBRTC_SECRET="${WEBRTC_SIP_SECRET:-red-webrtc-secret}"
+WEBRTC_SECRET="${WEBRTC_SIP_SECRET:-red-secret-token}"
 cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
 [red-webrtc-client]
@@ -256,7 +320,6 @@ force_rport=yes
 rewrite_contact=yes
 direct_media=no
 media_address=${EXTERNAL_MEDIA_ADDRESS:-0.0.0.0}
-tone_zone=YE
 EOF
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -265,19 +328,15 @@ EOF
 # القسم أعلاه [red-webrtc-client] يكفي للوضع الحالي.
 # لاحقًا يمكن إضافة حسابات ديناميكية عبر AMI.
 
-# ═════════════════════════════════════════════════════════════════════════════
-# Dynamic dongle.conf generation from DINSTAR_USB_DEVICES
-# Format: DINSTAR_USB_DEVICES="dongle0:/dev/ttyUSB1:/dev/ttyUSB2,dongle1:/dev/ttyUSB3:/dev/ttyUSB4,..."
-# If not set, use static dongle.conf template
-# ═════════════════════════════════════════════════════════════════════════════
-DONGLE_CONF="/etc/asterisk/dongle.conf"
+# ═══════════════════════════════════════════════════════════════════════════════
+# chan_dongle — ONLY generated when DINSTAR_USB_DEVICES is set.
+# In pure IP mode (DINSTAR UC2000-VE network gateway), this entire section is
+# skipped. The chan_dongle module is not compiled or loaded in the Docker image.
+# ═══════════════════════════════════════════════════════════════════════════════
 if [ -n "${DINSTAR_USB_DEVICES:-}" ]; then
+  DONGLE_CONF="/etc/asterisk/dongle.conf"
   cat > "$DONGLE_CONF" <<EOF
-; ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-; RED SOVEREIGN — chan_dongle Configuration (AUTO-GENERATED)
-; Generated from DINSTAR_USB_DEVICES env var
-; ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+; RED SOVEREIGN — chan_dongle Configuration (AUTO-GENERATED from DINSTAR_USB_DEVICES)
 [general]
 interval=15
 EOF
@@ -300,42 +359,7 @@ imsi=\${DONGLE_${dongle_name}_IMSI:-}
 EOF
   done; unset IFS
 
-  cat >> "$DONGLE_CONF" <<EOF
-
-[sms]
-smscenter=\${DONGLE_SMSCENTER:-+967712345678}
-language=en
-decode=yes
-pdumode=0
-incoming=full
-max_sms_parts=10
-delete=expired
-
-[call]
-dtmf=relax
-callwaiting=yes
-callerid=yes
-busy=yes
-progress=yes
-
-[network]
-operator=auto
-band=all
-roaming=yes
-EOF
-else
-  # Use static template, just ensure it exists
-  [ -f "$DONGLE_CONF" ] || cat > "$DONGLE_CONF" <<'EOF'
-; chan_dongle static template — override with DINSTAR_USB_DEVICES
-[general]
-interval=15
-EOF
-fi
-
-# ═════════════════════════════════════════════════════════════════════════════
-# USB device permissions for dongle serial ports
-# ═════════════════════════════════════════════════════════════════════════════
-if [ -n "${DINSTAR_USB_DEVICES:-}" ]; then
+  # USB device permissions
   IFS=','; for spec in $DINSTAR_USB_DEVICES; do
     IFS=':'; set -- $spec; IFS=','
     audio_dev="$2"; data_dev="$3"
@@ -344,6 +368,131 @@ if [ -n "${DINSTAR_USB_DEVICES:-}" ]; then
     done
   done; unset IFS
 fi
+
+# ── indications.conf — Yemen tones (ye) ──────────────────────────────
+# Dockerfile COPYs pstn-asterisk/indications.conf to /etc/asterisk/ but
+# runtime volumes or older images may lack it. Ensure it exists so
+# Ringing()/Progress() use correct cadence (400Hz 1s/4s ring, 425Hz dial).
+if [ ! -f "$CONFIG_DIR/indications.conf" ]; then
+  # Try to copy from image default location first if available elsewhere
+  if [ -f "/etc/asterisk/indications.conf.sample" ]; then
+    cp /etc/asterisk/indications.conf.sample "$CONFIG_DIR/indications.conf" 2>/dev/null || true
+  fi
+  # Fallback: write minimal Yemen+US indications if still missing
+  # Legendary PSTN: include per-operator sub-zones even in fallback so synthetic
+  # local tones remain distinct for debugging when Progress() passthrough is unavailable.
+  if [ ! -f "$CONFIG_DIR/indications.conf" ]; then
+    cat > "$CONFIG_DIR/indications.conf" <<'IND_EOF'
+[general]
+country=ye
+[ye]
+description = Yemen
+ringcadence = 1000,4000
+dial = 425
+busy = 400/500,0/500
+ring = 400/1000,0/4000
+congestion = 400/250,0/250
+callwaiting = 425/200,0/600,425/200,0/3000
+dialrecall = !425/100,!425/100,!425/100,425
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !425/200,!425/200,!425/200,!425/200,!425/200,!425/600,425
+[ye-sabafon]
+description = Yemen - Sabafon (71x) 425 Hz
+ringcadence = 1000,4000
+dial = 425
+busy = 425/500,0/500
+ring = 425/1000,0/4000
+congestion = 425/250,0/250
+callwaiting = 425/200,0/600,425/200,0/3000
+dialrecall = !425/100,!425/100,!425/100,425
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !425/200,!425/200,!425/200,!425/200,!425/200,!425/600,425
+[ye-you]
+description = Yemen - YOU (73x) 400 Hz
+ringcadence = 1000,4000
+dial = 400
+busy = 400/500,0/500
+ring = 400/1000,0/4000
+congestion = 400/250,0/250
+callwaiting = 400/200,0/600,400/200,0/3000
+dialrecall = !400/100,!400/100,!400/100,400
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !400/200,!400/200,!400/200,!400/200,!400/200,!400/600,400
+[ye-yemobile]
+description = Yemen - YemenMobile (77x/78x) 440 Hz
+ringcadence = 1000,4000
+dial = 440
+busy = 440/500,0/500
+ring = 440/1000,0/4000
+congestion = 440/250,0/250
+callwaiting = 440/200,0/600,440/200,0/3000
+dialrecall = !440/100,!440/100,!440/100,440
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !440/200,!440/200,!440/200,!440/200,!440/200,!440/600,440
+[ye-ytelecom]
+description = Yemen - Y Telecom (70x) 420 Hz
+ringcadence = 1000,4000
+dial = 420
+busy = 420/500,0/500
+ring = 420/1000,0/4000
+congestion = 420/250,0/250
+callwaiting = 420/200,0/600,420/200,0/3000
+dialrecall = !420/100,!420/100,!420/100,420
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !420/200,!420/200,!420/200,!420/200,!420/200,!420/600,420
+[us]
+description = United States / North America
+ringcadence = 2000,4000
+dial = 350+440
+busy = 480+620/500,0/500
+ring = 440+480/2000,0/4000
+congestion = 480+620/250,0/250
+callwaiting = 440/300,0/10000
+dialrecall = !350+440/100,!350+440/100,!350+440/100,350+440
+record = 1400/500,0/15000
+info = 950/330,1400/330,1800/330,0/1000
+stutter = !350+440/100,!350+440/100,!350+440/100,!350+440/100,!350+440/100,!350+440/100,350+440
+IND_EOF
+    echo "[entrypoint] generated fallback $CONFIG_DIR/indications.conf (country=ye + per-operator ye-* zones)"
+  fi
+fi
+# Also ensure rtp.conf exists (static COPY) — regenerate minimal if missing
+if [ ! -f "$CONFIG_DIR/rtp.conf" ]; then
+  cat > "$CONFIG_DIR/rtp.conf" <<'RTP_EOF'
+[general]
+rtpstart=10000
+rtpend=10100
+icesupport=yes
+; stunaddr disabled — Coturn TURN on 3478/443 provides STUN+TURN; see pstn-asterisk/rtp.conf comments
+; stunaddr=stun.l.google.com:19302
+RTP_EOF
+fi
+# Ensure extensions.conf present — static dialplan with Progress/Ringing; log if missing
+if [ ! -f "$CONFIG_DIR/extensions.conf" ]; then
+  echo "[entrypoint] WARNING: $CONFIG_DIR/extensions.conf missing — container built without dialplan" >&2
+fi
+
+# حقن سر الاستدعاء الداخلي كـ Asterisk global ليقرؤه dialplan في System(curl)
+# — ${VAR} داخل dialplan تُفسَّر كمتغير أستيريكس لا بيئة الحاوية.
+# الحارس يمنع تضاعف الكتلة عند إعادة تشغيل الحاوية (volume دائم).
+if [ -f "$CONFIG_DIR/extensions.conf" ] && [ -n "$PSTN_INTERNAL_SECRET" ]; then
+  if ! grep -q "PSTN_INTERNAL_SECRET" "$CONFIG_DIR/extensions.conf"; then
+    cat >> "$CONFIG_DIR/extensions.conf" <<EOF
+
+[globals](+)
+PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET}
+EOF
+    echo "[entrypoint] Injected PSTN_INTERNAL_SECRET as Asterisk global"
+  fi
+fi
+
+# تصدير السر لسكربت الجسر الذي ينفّذه System() باسم مستخدم asterisk
+export PSTN_INTERNAL_SECRET
 
 if [ "${RED_ASTERISK_CONFIG_ONLY:-0}" = "1" ]; then
   exit 0

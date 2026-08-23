@@ -89,7 +89,8 @@ class ContactService(
         val id = UUID.randomUUID()
         jdbc.update(
             """INSERT INTO contact_requests(id,requester_id,recipient_id,status) VALUES (?,?,?,'PENDING')
-               ON CONFLICT ON CONSTRAINT uq_contact_request_pending DO UPDATE SET status='PENDING',created_at=CURRENT_TIMESTAMP,resolved_at=NULL""",
+               ON CONFLICT (requester_id,recipient_id) WHERE status='PENDING'
+               DO UPDATE SET status='PENDING',created_at=CURRENT_TIMESTAMP,resolved_at=NULL""",
             id, requesterId, target.id
         )
         val actualId = jdbc.queryForObject(

@@ -31,6 +31,32 @@ class PstnCallServiceTest {
     private val retryScheduler = mock<ScheduledExecutorService>()
 
     @Test
+    fun `gateway selection failure releases pre-dial reservation`() {
+        val id = UUID.randomUUID()
+        val user = UserAccount(
+            id = id,
+            redId = "90787",
+            username = "pstn-test",
+            displayName = "PSTN Test",
+            status = AccountStatus.APPROVED,
+            pstnEnabled = true,
+            pstnDailyLimit = 2
+        )
+        whenever(users.findById(id)).thenReturn(Optional.of(user))
+        whenever(redis.opsForValue()).thenReturn(values)
+        whenever(values.increment(any())).thenReturn(1)
+        whenever(values.setIfAbsent(any(), any(), any())).thenReturn(true)
+        whenever(loadBalancer.selectPort(any(), anyOrNull())).thenReturn(null)
+
+        val service = PstnCallService(users, redis, pstn, loadBalancer, history, retryScheduler)
+        assertThrows(IllegalStateException::class.java) { service.dial(id, "+967771234567") }
+
+        verify(values).decrement(any())
+        verify(redis).delete("red:pstn:active:$id")
+        verify(pstn, never()).dialGsm(any(), any(), any(), anyOrNull())
+    }
+
+    @Test
     fun `daily limit rejection rolls back reservation and never reaches Asterisk`() {
         val id = UUID.randomUUID()
         val user = UserAccount(
@@ -51,6 +77,6 @@ class PstnCallServiceTest {
 
         verify(values).decrement(any())
         verify(loadBalancer, never()).selectPort(anyOrNull(), anyOrNull())
-        verify(pstn, never()).dialGsm(any(), any(), any())
+        verify(pstn, never()).dialGsm(any(), any(), any(), anyOrNull())
     }
 }

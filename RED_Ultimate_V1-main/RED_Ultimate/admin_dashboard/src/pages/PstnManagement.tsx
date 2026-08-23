@@ -291,7 +291,7 @@ export default function PstnManagement() {
             extra="0 يعني غير محدود (حسب سياسة الخادم الافتراضية)."
             rules={[{ required: true, message: 'أدخل الحد اليومي' }]}
           >
-            <InputNumber min={0} max={10000} style={{ width: '100%' }} />
+            <InputNumber min={0} max={1000} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

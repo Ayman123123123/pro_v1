@@ -1,0 +1,427 @@
+diff --git a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/ui/RedDashboard.kt b/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/ui/RedDashboard.kt
+index b8ffa0eb..0b9ad4c6 100644
+--- a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/ui/RedDashboard.kt
++++ b/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/ui/RedDashboard.kt
+@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.AttachFile
+ import androidx.compose.material.icons.filled.CloudSync
+ import androidx.compose.material.icons.filled.Event
+ import androidx.compose.material.icons.filled.Explore
++import androidx.compose.material.icons.filled.NetworkCheck
+ import androidx.compose.material.icons.filled.PhoneInTalk
+ import androidx.compose.material.icons.filled.Poll
+ import androidx.compose.material.icons.filled.Backspace
+@@ -133,6 +134,8 @@ import androidx.compose.material3.OutlinedTextField
+ import androidx.compose.material3.PrimaryTabRow
+ import androidx.compose.material3.RadioButton
+ import androidx.compose.material3.Scaffold
++import androidx.compose.material3.SnackbarHost
++import androidx.compose.material3.SnackbarHostState
+ import androidx.compose.material3.Surface
+ import androidx.compose.material3.Tab
+ import androidx.compose.material3.TabRow
+@@ -227,6 +230,7 @@ import com.red.sovereign.media.voice.VoiceTimerDisplay
+ import com.red.sovereign.media.voice.VoiceWaveformCanvas
+ import com.red.sovereign.media.voice.VoiceCancelProgressBar
+ import com.red.sovereign.media.voice.VoiceLockIndicator
++import com.red.sovereign.settings.PstnConfigScreen
+ import com.red.sovereign.settings.SettingsRuntime
+ import com.red.sovereign.settings.SettingsViewModel
+ import com.red.sovereign.settings.YounesSettingsSheet
+@@ -273,11 +277,13 @@ import com.red.sovereign.media.PollsScreen
+ import com.red.sovereign.ui.theme.CairoFamily
+ import com.red.sovereign.ui.theme.TajawalFamily
+ import com.red.sovereign.ui.theme.SovereignColors
++import com.red.sovereign.ui.components.SovereignBottomBar
++import com.red.sovereign.ui.components.SovereignEmptyConversationState
+ import androidx.compose.material3.OutlinedTextFieldDefaults
+ 
+ 
+ 
+-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN }
++private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN, PSTN_CONFIG }
+ 
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+@@ -390,6 +396,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
+                 val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
+                 com.red.sovereign.features.dinstar.DinstarAdminScreen(dm, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+             }
++            SovereignScreen.PSTN_CONFIG -> {
++                val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
++                PstnConfigScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, tokenStore = TokenStore(context), snackbarHostState = remember { SnackbarHostState() })
++            }
+             SovereignScreen.COMMUNITIES -> {
+                 val tokens = remember { TokenStore(context) }
+                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+@@ -414,20 +424,17 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
+             }
+         },
+         bottomBar = {
+-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
+-                // remember lambdas per item ┘ä╪¬┘ü╪º╪»┘è ╪Ñ╪╣╪º╪»╪⌐ ╪º┘ä╪¬┘ê┘ä┘è╪» ┘â┘ä recompose
+-                MainSection.entries.forEach { item ->
+-                    val itemLabel = item.label
+-                    val isSelected = section == item
+-                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) { callHistory.load(); directory.refreshPresence() } } }
+-                    NavigationBarItem(
+-                        selected = isSelected,
+-                        onClick = onClick,
+-                        icon = { Icon(item.icon, itemLabel) },
+-                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
+-                    )
++            SovereignBottomBar(
++                currentSection = section,
++                onSectionSelected = { item ->
++                    section = item
++                    showDinstar = false
++                    if (item == MainSection.CALLS) {
++                        callHistory.load()
++                        directory.refreshPresence()
++                    }
+                 }
+-            }
++            )
+         }
+     ) { padding ->
+         Column(Modifier.fillMaxSize().padding(padding)) {
+@@ -443,7 +450,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
+                 else -> MoreScreen(
+                     account,
+                     onDinstar = { showDinstar = true },
+-                    onAdmin = { currentScreen = SovereignScreen.DINSTAR_ADMIN },
++                    onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.DINSTAR_ADMIN },
+                     onSettings = { showSettings = true },
+                     onContacts = { currentScreen = SovereignScreen.CONTACTS },
+                     onDevices = { currentScreen = SovereignScreen.DEVICES },
+@@ -452,7 +459,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
+                     onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
+                     onProfile = { currentScreen = SovereignScreen.PROFILE },
+                     onEvents = { currentScreen = SovereignScreen.EVENTS },
+-                    onPolls = { currentScreen = SovereignScreen.POLLS }
++                    onPolls = { currentScreen = SovereignScreen.POLLS },
++                    onPstnConfig = { currentScreen = SovereignScreen.PSTN_CONFIG }
+                 )
+             }
+         }
+@@ -558,10 +566,10 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
+         }
+         item {
+             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                listOf("┘ä┘â", "╪ú╪¬╪º╪¿╪╣┘ç┘à", "╪º┘ä┘è┘à┘å").forEachIndexed { i, title ->
++                listOf("┘ä┘â", "╪ú╪╡╪»┘é╪º╪ª┘è", "╪º┘ä┘è┘à┘å").forEachIndexed { i, title ->
+                     FilterChip(filter == i, {
+                         filter = i
+-                        feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })
++                        feed.load(when (i) { 1 -> "FRIENDS"; 2 -> "YEMEN"; else -> null })
+                     }, { Text(title) })
+                 }
+             }
+@@ -578,7 +586,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
+             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
+             feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "╪¬╪╣╪░╪▒ ╪¬╪¡┘à┘è┘ä ┘å╪¿╪╢ ┘è┘ê┘å╪│", it.message) } }
+             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "╪º╪¿╪»╪ú ┘à╪¼╪¬┘à╪╣ ┘è┘ê┘å╪│", "╪º┘â╪¬╪¿ ╪ú┘ê┘ä ┘à┘å╪┤┘ê╪▒ ┘à╪¡┘ä┘è. ╪º┘ä┘å╪╕╪º┘à ┘è╪»╪╣┘à ╪º┘ä╪│┘ä╪º╪│┘ä ┘ê╪º┘ä╪º┘é╪¬╪¿╪º╪│╪º╪¬ ┘ê╪º┘ä╪º╪│╪¬╪╖┘ä╪º╪╣╪º╪¬╪î ╪¿┘è┘å┘à╪º ╪º┘ä┘à╪¡╪¬┘ê┘ë ╪º┘ä╪«╪º╪╡ ┘è┘å╪¬╪╕╪▒ ╪¬╪┤┘ü┘è╪▒ E2EE.") }
+-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
++            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+         }
+         item { Spacer(Modifier.height(12.dp)) }
+     }
+@@ -722,7 +730,7 @@ private fun PostCard(
+                     DropdownMenuItem(text = { Text("╪Ñ╪¿┘ä╪º╪║") }, onClick = { showMenu = false; onReport(post) })
+                 }
+             }
+-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("┘à╪¬╪º╪¿╪╣╪⌐") }
++            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("╪Ñ╪╢╪º┘ü╪⌐ ╪╡╪»┘è┘é") }
+         }
+         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+             AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "┘å╪¿╪╢ ┘à╪¡┘ä┘è" else "╪╣╪º┘à") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+@@ -921,6 +929,9 @@ private fun ChatHubScreen(
+         groupMuted = if (groupConversationId != null) {
+             localMessages.conversationPreference(groupConversationId.orEmpty()).third > System.currentTimeMillis()
+         } else false
++        groupDisappearingMs = groupConversationId
++            ?.let(localMessages::conversationDisappearingDuration)
++            ?.takeIf { it > 0L }
+     }
+     // ╪Ñ╪╣╪º╪»╪⌐ ╪¿┘å╪º╪í ╪ú╪╡┘ê╪º╪¬ ╪º┘ä╪º╪│╪¬╪╖┘ä╪º╪╣ ┘à┘å ╪º┘ä╪│╪¼┘ä ╪º┘ä┘à╪¡┘ä┘è ╪╣┘å╪» ┘ü╪¬╪¡ ╪º┘ä┘à╪¼┘à┘ê╪╣╪⌐
+     androidx.compose.runtime.LaunchedEffect(groupConversationId, decrypted.size) {
+@@ -1407,7 +1418,7 @@ private fun ChatHubScreen(
+                     }
+                 }
+                 if (target.isNotBlank() && conversationMessages.isEmpty()) item {
+-                    Text("╪º╪¿╪»╪ú ╪º┘ä┘à╪¡╪º╪»╪½╪⌐ ╪¿╪▒╪│╪º┘ä╪⌐. ╪º┘ä╪¬╪┤┘ü┘è╪▒ ┘è┘Å┘å╪┤╪ú ╪╣┘ä┘ë ╪º┘ä╪¼┘ç╪º╪▓ ┘ê┘ä╪º ┘è╪▒┘ë ╪º┘ä╪«╪º╪»┘à ╪º┘ä┘å╪╡.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
++                    SovereignEmptyConversationState()
+                 }
+                 itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
+                     // ┘ü╪º╪╡┘ä ╪¬╪º╪▒┘è╪« ╪¿┘è┘å ╪º┘ä╪ú┘è╪º┘à (┘à╪½┘ä ┘ê╪º╪¬╪│╪º╪¿)
+@@ -1767,7 +1778,9 @@ private fun ChatHubScreen(
+                         }
+                     )
+                 }
+-                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
++                // ┘â┘ä ╪º┘ä╪ú┘å┘ê╪º╪╣ (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) ΓÇö
++                // ┘ê╪│╪º╪ª╪╖ ╪º┘ä┘à╪¼┘à┘ê╪╣╪⌐ ╪¬┘Å╪┤┘ü┘Ä┘æ╪▒ ╪¿┘Ç Sender Keys ┘ê╪¬╪╡┘ä ╪¿┘å┘ê╪╣┘ç╪º ╪º┘ä╪ú╪╡┘ä┘è ┘ê┘ä╪º ┘è╪¼┘ê╪▓ ╪º╪│╪¬╪¿╪╣╪º╪»┘ç╪º.
++                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id })
+                 androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
+                     if (groupMessages.isNotEmpty()) groupListState.animateScrollToItem(groupMessages.lastIndex)
+                 }
+@@ -2141,7 +2154,10 @@ private fun ChatHubScreen(
+                     listOf("1╪│╪º╪╣╪⌐" to 3_600_000L, "┘è┘ê┘à" to 86_400_000L, "╪ú╪│╪¿┘ê╪╣" to 604_800_000L, "90┘è┘ê┘à" to 7_776_000_000L, "╪Ñ┘è┘é╪º┘ü" to 0L).forEach { (label, ms) ->
+                         OutlinedButton({
+                             val value = if (ms > 0) ms else null
+-                            if (isGroupMsg) groupDisappearingMs = value else disappearingDurationMs = value
++                            if (isGroupMsg) {
++                                groupDisappearingMs = value
++                                localMessages.setConversationDisappearingDuration(message.conversationId, value)
++                            } else disappearingDurationMs = value
+                             selectedChatMessage = null
+                         }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                     }
+@@ -3098,7 +3114,8 @@ private fun MoreScreen(
+     onCommunities: () -> Unit = {},
+     onProfile: () -> Unit = {},
+     onEvents: () -> Unit = {},
+-    onPolls: () -> Unit = {}
++    onPolls: () -> Unit = {},
++    onPstnConfig: () -> Unit = {}
+ ) {
+     Column(
+         Modifier.fillMaxSize().padding(horizontal = 16.dp),
+@@ -3125,6 +3142,7 @@ private fun MoreScreen(
+         MoreOption(Icons.Default.Public, "╪º┘ä┘à╪¼╪¬┘à╪╣╪º╪¬ ┘ê╪º┘ä┘é┘å┘ê╪º╪¬", "┘à╪¼╪¬┘à╪╣╪º╪¬ ╪╣╪º┘à╪⌐ ┘ê┘é┘å┘ê╪º╪¬ ΓÇö ╪º┘å╪╢┘à ┘ê╪¬╪º╪¿╪╣ (╪╣╪º┘à╪î ┘ä┘è╪│ ┘à╪┤┘ü╪▒╪º┘ï)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
+         MoreOption(Icons.Default.Event, "╪º┘ä┘ü╪╣╪º┘ä┘è╪º╪¬", "┘ü╪╣╪º┘ä┘è╪º╪¬ ┘à╪¼╪¬┘à╪╣┘è╪⌐ ┘à╪╣ RSVP ┘ê╪¬╪│╪¼┘è┘ä ╪¡╪╢┘ê╪▒", Color(0xFFE8B84A), enabled = true, click = onEvents)
+         MoreOption(Icons.Default.Poll, "╪º┘ä╪º╪│╪¬╪╖┘ä╪º╪╣╪º╪¬", "╪¬╪╡┘ê┘è╪¬ ┘à╪¼╪¬┘à╪╣┘è ┘à╪╣ ┘å╪¬╪º╪ª╪¼ ┘ü┘ê╪▒┘è╪⌐ ┘ê┘å┘É╪│┘Ä┘à ┘à╪ª┘ê┘è╪⌐", Color(0xFF65D7E7), enabled = true, click = onPolls)
++        MoreOption(Icons.Default.NetworkCheck, "╪Ñ╪╣╪»╪º╪»╪º╪¬ PSTN / DINSTAR", "╪¿┘ê╪º╪¿╪⌐ DINSTAR╪î ╪¡╪º┘ä╪⌐ ╪º┘ä╪┤╪▒╪º╪ª╪¡╪î SMSC╪î ╪º╪«╪¬╪¿╪º╪▒ SIP Bridge", AqyalGold, click = onPstnConfig)
+     }
+ }
+ 
+@@ -3277,198 +3295,6 @@ is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.erro
+     }
+ }
+ 
+-/**
+- * ≡ƒô¿ ╪┤╪º╪┤╪⌐ ╪▒╪│╪º╪ª┘ä DINSTAR SMS ΓÇö ╪Ñ╪▒╪│╪º┘ä/╪º╪│╪¬┘é╪¿╪º┘ä ╪╣╪¿╪▒ ╪┤╪▒┘è╪¡╪⌐ GSM
+- */
+-@Composable
+-private fun DinstarSmsScreen(viewModel: AuthViewModel, pstnEnabled: Boolean) {
+-    var recipient by remember { mutableStateOf("") }
+-    var messageText by remember { mutableStateOf("") }
+-    var sentMessages by remember { mutableStateOf<List<SmsItem>>(emptyList()) }
+-    var inboxMessages by remember { mutableStateOf<List<SmsIncomingMessage>>(emptyList()) }
+-    var loading by remember { mutableStateOf(false) }
+-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = ╪Ñ╪▒╪│╪º┘ä╪î 1 = ╪º┘ä┘ê╪º╪▒╪»
+-
+-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+-        // Header
+-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
+-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+-                Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
+-                Column(Modifier.padding(start = 12.dp)) {
+-                    Text("╪▒╪│╪º╪ª┘ä DINSTAR SMS", fontWeight = FontWeight.Bold, color = AqyalGold)
+-                    Text(if (pstnEnabled) "╪º┘ä╪┤╪▒┘è╪¡╪⌐ ╪¼╪º┘ç╪▓╪⌐ ┘ä┘ä╪Ñ╪▒╪│╪º┘ä ┘ê╪º┘ä╪º╪│╪¬┘é╪¿╪º┘ä" else "╪║┘è╪▒ ┘à┘ü╪╣┘ä ΓÇö ┘è┘ü╪╣┘ä┘ç ╪º┘ä┘à╪│╪ñ┘ê┘ä ┘à┘å ╪º┘ä┘ä┘ê╪¡╪⌐", fontSize = 12.sp)
+-                }
+-            }
+-        }
+-
+-        // Tab row
+-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-            TabButton(
+-                selected = selectedTab == 0,
+-                onClick = { selectedTab = 0 },
+-                modifier = Modifier.weight(1f).fillMaxHeight()
+-            ) { Text("╪Ñ╪▒╪│╪º┘ä", fontSize = 12.sp) }
+-            TabButton(
+-                selected = selectedTab == 1,
+-                onClick = { selectedTab = 1 },
+-                modifier = Modifier.weight(1f).fillMaxHeight()
+-            ) { Text("╪º┘ä┘ê╪º╪▒╪»", fontSize = 12.sp) }
+-        }
+-
+-        // Content
+-        when (selectedTab) {
+-            0 -> SendSmsPanel(
+-                pstnEnabled = pstnEnabled,
+-                recipient = recipient,
+-                onRecipientChange = { recipient = it },
+-                messageText = messageText,
+-                onMessageChange = { messageText = it },
+-                onSend = {
+-                    loading = true
+-                    viewModel.sendSms(recipient, messageText) { success, msg ->
+-                        loading = false
+-                        if (success) {
+-                            messageText = ""
+-                            sentMessages = sentMessages + SmsItem(
+-                                recipient = recipient,
+-                                text = messageText,
+-                                time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
+-                                port = 2
+-                            )
+-                        }
+-                    }
+-                },
+-                sentMessages = sentMessages,
+-                loading = loading
+-            )
+-            1 -> InboxSmsPanel(
+-                pstnEnabled = pstnEnabled,
+-                inboxMessages = inboxMessages,
+-                onRefresh = {
+-                    loading = true
+-                    viewModel.loadSmsInbox { msgs ->
+-                        loading = false
+-                        inboxMessages = msgs.map { SmsIncomingMessage(
+-                            port = it.port,
+-                            sender = it.sender,
+-                            text = it.text,
+-                            time = it.time,
+-                            coding = it.coding,
+-                            udh = it.udh
+-                        ) }
+-                    }
+-                },
+-                loading = loading
+-            )
+-        }
+-    }
+-}
+-
+-@Composable
+-private fun SendSmsPanel(
+-    pstnEnabled: Boolean,
+-    recipient: String,
+-    onRecipientChange: (String) -> Unit,
+-    messageText: String,
+-    onMessageChange: (String) -> Unit,
+-    onSend: () -> Unit,
+-    sentMessages: List<SmsItem>,
+-    loading: Boolean
+-) {
+-    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-        OutlinedTextField(
+-            value = recipient,
+-            onValueChange = onRecipientChange,
+-            modifier = Modifier.fillMaxWidth(),
+-            label = { Text("╪▒┘é┘à ╪º┘ä┘à╪│╪¬┘ä┘à (┘à╪½╪º┘ä: 777123456)") },
+-            singleLine = true,
+-            enabled = pstnEnabled
+-        )
+-        OutlinedTextField(
+-            value = messageText,
+-            onValueChange = onMessageChange,
+-            modifier = Modifier.fillMaxWidth().height(120.dp),
+-            label = { Text("┘å╪╡ ╪º┘ä╪▒╪│╪º┘ä╪⌐") },
+-            maxLines = 5,
+-            enabled = pstnEnabled
+-        )
+-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+-            TextButton(onClick = { }, enabled = false) { Text("${messageText.length}/160") }
+-            Button(onClick = onSend, enabled = pstnEnabled && recipient.isNotBlank() && messageText.isNotBlank() && !loading) {
+-                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("╪Ñ╪▒╪│╪º┘ä")
+-            }
+-        }
+-        if (sentMessages.isNotEmpty()) {
+-            Text("╪º┘ä┘à╪▒╪│┘ä╪⌐ ╪¡╪»┘è╪½╪º┘ï", style = MaterialTheme.typography.titleSmall, color = AqyalGold)
+-            LazyColumn(Modifier.fillMaxWidth().height(200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+-                items(sentMessages) { item ->
+-                    Card(Modifier.fillMaxWidth()) {
+-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+-                            Icon(Icons.Default.CheckCircle, null, tint = YounesEmerald)
+-                            Column(Modifier.padding(start = 8.dp).weight(1f)) {
+-                                Text("╪Ñ┘ä┘ë: ${item.recipient}", fontWeight = FontWeight.Bold)
+-                                Text(item.text.take(60), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+-                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-@Composable
+-private fun InboxSmsPanel(
+-    pstnEnabled: Boolean,
+-    inboxMessages: List<SmsIncomingMessage>,
+-    onRefresh: () -> Unit,
+-    loading: Boolean
+-) {
+-    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+-            Button(onClick = onRefresh, enabled = pstnEnabled && !loading) {
+-                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("╪¬╪¡╪»┘è╪½")
+-            }
+-        }
+-        if (inboxMessages.isEmpty()) {
+-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+-                    Icon(Icons.Default.Inbox, null, tint = AqyalGold.copy(alpha = 0.5f), modifier = Modifier.size(64.dp))
+-                    Text("┘ä╪º ╪¬┘ê╪¼╪» ╪▒╪│╪º╪ª┘ä ┘ê╪º╪▒╪»╪⌐", color = MaterialTheme.colorScheme.onSurfaceVariant)
+-                    Text("╪│╪¬╪╕┘ç╪▒ ╪▒╪│╪º╪ª┘ä SMS ┘ç┘å╪º ╪╣┘å╪» ┘ê╪╡┘ê┘ä┘ç╪º", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+-                }
+-            }
+-        } else {
+-            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+-                items(inboxMessages) { item ->
+-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard)) {
+-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+-                            Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(28.dp))
+-                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+-                                Text("┘à┘å: ${item.sender}", fontWeight = FontWeight.Bold)
+-                                Text(item.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+-                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+-                            }
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-    }
+-}
+-
+-data class SmsItem(
+-    val recipient: String = "",
+-    val sender: String = "",
+-    val text: String = "",
+-    val time: String = "",
+-    val port: Int = -1
+-)
+-
+-// SMS actions are handled via AuthViewModel.sendSms() and AuthViewModel.loadSmsInbox()
+-// which call the real PstnApi endpoints (sendSms / getInbox) ΓÇö no stubs needed.
+-
+ @OptIn(ExperimentalMaterial3Api::class)
+ @Composable
+ private fun CreateSheet(
+@@ -3893,7 +3719,7 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
+     }
+     val context = LocalContext.current
+     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
+-        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
++        if (shouldAutoDownload(context, manifest.size)) attachments.downloadVoice(item.id, manifestJson)
+     }
+     val downloadState = attachments.getDownloadState(item.id)
+     val downloadedPath = when (downloadState) {
+@@ -3922,11 +3748,11 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
+             isOutgoing = item.outgoing,
+             isDownloaded = isDownloaded,
+             isDownloading = isDownloading,
+-            onPlayPause = { attachments.download(item.id, manifestJson) },
++            onPlayPause = { attachments.downloadVoice(item.id, manifestJson) },
+             onSeek = { /* no-op before download */ },
+             onSpeedChange = { /* no-op before download */ },
+-            onDownload = { attachments.download(item.id, manifestJson) },
+-            onWaveformTap = { attachments.download(item.id, manifestJson) }
++            onDownload = { attachments.downloadVoice(item.id, manifestJson) },
++            onWaveformTap = { attachments.downloadVoice(item.id, manifestJson) }
+         )
+     }
+ }
+@@ -4405,7 +4231,3 @@ private fun TabButton(selected: Boolean, onClick: () -> Unit, modifier: Modifier
+ }
+ 
+ 
+-
+-
+-
+-

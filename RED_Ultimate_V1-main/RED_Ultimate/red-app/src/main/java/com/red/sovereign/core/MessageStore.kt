@@ -26,7 +26,7 @@ data class LocalMessage(val id: String, val conversationId: String, val senderId
 data class ConversationSummary(val conversationId: String, val peerId: String, val preview: String, val timestamp: Long, val pinned: Boolean, val archived: Boolean, val mutedUntil: Long)
 
 /** Ciphertext is retained for protocol delivery; decrypted UI history is separately encrypted with Android Keystore. */
-class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.db", null, 4) {
+class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.db", null, 5) {
     private val recordCipher = ProtocolRecordCipher()
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE messages (
@@ -54,6 +54,9 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE local_history ADD COLUMN status TEXT NOT NULL DEFAULT 'SENT'")
         }
+        if (oldVersion < 5) {
+            runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN disappearing_duration_ms INTEGER NOT NULL DEFAULT 0") }
+        }
     }
 
     private fun createLocalHistoryTables(db: SQLiteDatabase) {
@@ -65,10 +68,12 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         db.execSQL("""CREATE TABLE IF NOT EXISTS conversation_preferences (
             conversation_id TEXT PRIMARY KEY, pinned INTEGER NOT NULL DEFAULT 0,
             archived INTEGER NOT NULL DEFAULT 0, muted_until INTEGER NOT NULL DEFAULT 0,
-            custom_name TEXT DEFAULT NULL, wallpaper INTEGER NOT NULL DEFAULT 0)""")
+            custom_name TEXT DEFAULT NULL, wallpaper INTEGER NOT NULL DEFAULT 0,
+            disappearing_duration_ms INTEGER NOT NULL DEFAULT 0)""")
         // ترقية الجداول القديمة بإضافة الأعمدة الجديدة بأمان
         runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN custom_name TEXT DEFAULT NULL") }
         runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN wallpaper INTEGER NOT NULL DEFAULT 0") }
+        runCatching { db.execSQL("ALTER TABLE conversation_preferences ADD COLUMN disappearing_duration_ms INTEGER NOT NULL DEFAULT 0") }
     }
 
     fun save(message: RedProtos.ChatMessage, status: String = "DELIVERED") {
@@ -220,6 +225,27 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
         writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
         writableDatabase.update("conversation_preferences", ContentValues().apply { put(field, value) }, "conversation_id=?", arrayOf(conversationId))
     }
+
+    /** مدة اختفاء الرسائل الافتراضية للمحادثة بالمللي ثانية؛ الصفر يعني تعطيلها. */
+    fun setConversationDisappearingDuration(conversationId: String, durationMs: Long?) {
+        writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
+        writableDatabase.update(
+            "conversation_preferences",
+            ContentValues().apply { put("disappearing_duration_ms", durationMs?.coerceAtLeast(0L) ?: 0L) },
+            "conversation_id=?",
+            arrayOf(conversationId)
+        )
+    }
+
+    fun conversationDisappearingDuration(conversationId: String): Long = readableDatabase.query(
+        "conversation_preferences",
+        arrayOf("disappearing_duration_ms"),
+        "conversation_id=?",
+        arrayOf(conversationId),
+        null,
+        null,
+        null
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0).coerceAtLeast(0L) else 0L }
 
     /** تخزين/استرجاع الاسم المخصص للمحادثة (تجاوز اسم الصديق). */
     fun setConversationCustomName(conversationId: String, name: String) {

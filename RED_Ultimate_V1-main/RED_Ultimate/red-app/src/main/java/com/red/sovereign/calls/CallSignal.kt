@@ -5,12 +5,16 @@ import org.webrtc.IceCandidate
 
 /**
  * إشارة المكالمة الموحدة — متوافقة مع YounesCallService / GroupCallService / Backend.
+ *
+ * ⚠️ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
+ * وليس callType — يحميه CallSignalPositionalContractTest. البناء المسمّى
+ * مفضَّل دائماً، لكن أي بناء موضعي قديم يسلك السلوك الصحيح الآن.
  */
 @Serializable
 data class CallSignal(
     val callId: String? = null,
-    val callType: String = CallType.PRIVATE_VOICE.name,
     val targetUserId: String = "",
+    val callType: String = CallType.PRIVATE_VOICE.name,
     val sourceUserId: String? = null,
     val type: String,
     val mode: String = "VOICE",

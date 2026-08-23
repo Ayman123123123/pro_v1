@@ -111,7 +111,17 @@ class CallSignalingClient(
         connect()
     }
 
-    fun sendGroupCallInvite(groupCallId: String, inviteeIds: List<String>, isVideo: Boolean, hostName: String = "") {
+    fun sendGroupCallInvite(
+        groupCallId: String,
+        inviteeIds: List<String>,
+        isVideo: Boolean,
+        hostName: String = "",
+        sourceGroupId: String? = null
+    ) {
+        val payload = buildMap {
+            if (hostName.isNotBlank()) put("hostName", hostName)
+            if (!sourceGroupId.isNullOrBlank()) put("sourceGroupId", sourceGroupId)
+        }
         send(
             CallSignal(
                 callId = groupCallId,
@@ -121,7 +131,7 @@ class CallSignalingClient(
                 mode = if (isVideo) "VIDEO" else "VOICE",
                 groupCallId = groupCallId,
                 inviteeIds = inviteeIds,
-                payload = if (hostName.isNotBlank()) mapOf("hostName" to hostName) else emptyMap()
+                payload = payload
             )
         )
     }

@@ -6,6 +6,8 @@ import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
+
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.scheduling.annotation.Async
@@ -27,15 +29,13 @@ class PstnCallService(
     private val redis: StringRedisTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
-    private val history: CallHistoryService,
-    private val retryScheduler: ScheduledExecutorService
+private val history: CallHistoryService,
+    @Qualifier("pstnRetryScheduler") private val retryScheduler: ScheduledExecutorService
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
-        /** Valid Yemeni mobile prefixes after +967 or 967 */
-        private val YEMEN_MOBILE_PREFIXES = setOf("770", "771", "772", "773", "774", "775", "776", "777", "778", "779",
-            "730", "731", "732", "733", "734", "735", "736", "737", "738", "739",
-            "710", "711", "712", "713", "714", "715", "716", "717", "718", "719")
+        /** بادئات المحمول اليمني — مفوَّضة إلى YemenNumberPlan (كانت ناقصة: بلا واي 700-709 وحافة 789). */
+        private val YEMEN_MOBILE_PREFIXES = YemenNumberPlan.MOBILE_PREFIXES_3
     }
 
     fun dial(userId: UUID, suppliedNumber: String, slotIndex: Int? = null): PstnCallResponse {
@@ -68,12 +68,23 @@ class PstnCallService(
         }
 
         return runCatching {
-            val selection = loadBalancer.selectPort(number, slotIndex)
-                ?: throw IllegalStateException("No DINSTAR port with a usable signal is available")
-            log.info("PSTN dial: user={} number={} gateway={} port={}",
-                user.redId, number, selection.gatewayHost, selection.portIndex)
+            // الربط الدائم 1:1 — كل حساب يملك شريحة ثابتة (16 منفذ = 8G + 8T)
+            val selection = if (user.pstnGatewayId != null && user.pstnPortIndex != null) {
+                // تحقق من أن الشريحة الدائمة متاحة (إشارة + تسجيل + غير مشغولة)
+                val permanent = loadBalancer.selectPermanentPort(user.pstnGatewayId!!, user.pstnPortIndex!!, number)
+                    ?: throw IllegalStateException("PSTN SIM not available: gateway=${user.pstnGatewayId} port=${user.pstnPortIndex} — check signal/registration")
+                log.info("PSTN dial (permanent): user={} sim={} number={} gateway={} port={}",
+                    user.redId, user.pstnNumber, number, permanent.gatewayHost, permanent.portIndex)
+                permanent
+            } else {
+                // Fallback: لم يُربط المستخدم بعد — استخدم أقرب شريحة متاحة (مؤقت)
+                loadBalancer.selectPort(number, slotIndex)
+                    ?: throw IllegalStateException("No DINSTAR port with a usable signal is available — assign permanent SIM first")
+            }
             val portIdx = if (slotIndex != null && slotIndex >= 0) slotIndex else selection.portIndex
-            val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, portIdx)
+            // إظهار رقم الشريحة الحقيقي للمستلم الخارجي
+            val callerSimNumber = user.pstnNumber ?: selection.simNumber
+            val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, portIdx, callerSimNumber)
             history.start(user.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
             // ربط المنفذ الفعلي بالمستخدم لضمان أن الإنهاء اللاحق يُحرر
             // منفذ هذه المكالمة فقط، لا أي منفذ اعتباطي عبر الأسطول.
@@ -81,7 +92,11 @@ class PstnCallService(
             redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, portIdx)
         }.getOrElse {
+            // Release both the daily counter and the pre-dial reservation.
+            // Without this cleanup, a transient gateway failure leaves the
+            // user blocked by ALREADY_IN_PSTN_CALL until the 30-minute TTL.
             redis.opsForValue().decrement(key)
+            redis.delete(activeKey(user.id))
             throw IllegalStateException("Asterisk rejected the PSTN call", it)
         }
     }
@@ -167,7 +182,6 @@ class PstnCallService(
      * Retry scheduling for a failed PSTN call — fires asynchronously
      * with exponential backoff, then cleans up Redis state on exhaustion.
      */
-    @Async
     fun handleRetry(event: PstnRetryEvent) {
         val attempt = retryAttempts.computeIfAbsent(event.callId) { AtomicInteger(0) }.incrementAndGet()
         val backoffMs = listOf(1_000L, 2_000L, 5_000L, 10_000L).getOrElse(attempt - 1) { 10_000L }
@@ -180,7 +194,14 @@ class PstnCallService(
                         log.warn("Retry: user {} no longer eligible", event.userId)
                         return@schedule
                     }
-                    val selection = loadBalancer.selectPort(event.phoneNumber, null)
+                    // الربط الدائم 1:1 يفرض نفسه على إعادة المحاولة أيضاً —
+                    // المكالمة المعادة يجب أن تخرج من شريحة المستخدم نفسها
+                    // (نفس CLIP) وإلا انتهك عقد الشريحة الشخصية.
+                    val selection = if (user.pstnGatewayId != null && user.pstnPortIndex != null) {
+                        loadBalancer.selectPermanentPort(user.pstnGatewayId!!, user.pstnPortIndex!!, event.phoneNumber)
+                    } else {
+                        loadBalancer.selectPort(event.phoneNumber, null)
+                    }
                     if (selection == null) {
                         if (attempt >= 4) {
                             log.error("PSTN retry exhausted for {} on {}", event.userId, event.phoneNumber)
@@ -191,7 +212,12 @@ class PstnCallService(
                         }
                         return@schedule
                     }
-                    pstn.dialGsm(event.phoneNumber, selection.pjsipEndpoint, event.port)
+                    val callerSimNumber = user.pstnNumber ?: selection.simNumber
+                    val actionId = pstn.dialGsm(event.phoneNumber, selection.pjsipEndpoint, selection.portIndex, callerSimNumber)
+                    history.start(user.redId, event.phoneNumber, event.phoneNumber, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
+                    redis.opsForValue().set(activeKey(user.id), "${actionId}:${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
+                    redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
+
                     log.info("PSTN retry succeeded for user {} call {}", event.userId, event.callId)
                     retryAttempts.remove(event.callId)
                 } catch (e: Exception) {

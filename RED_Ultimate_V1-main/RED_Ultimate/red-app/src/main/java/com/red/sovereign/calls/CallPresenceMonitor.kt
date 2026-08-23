@@ -22,7 +22,8 @@ class CallPresenceMonitor(
     private val monitoredCalls = ConcurrentHashMap<String, CallMonitorState>()
 
     companion object {
-        private const val RINGING_GRACE_MS = 5_000L
+        /** مهلة سماح الرنين قبل إعلان عدم الإجابة — ثابت سياسة معلن للاختبارات. */
+        const val RINGING_GRACE_MS = 5_000L
         private const val PROGRESS_TICK_MS = 500L
     }
 

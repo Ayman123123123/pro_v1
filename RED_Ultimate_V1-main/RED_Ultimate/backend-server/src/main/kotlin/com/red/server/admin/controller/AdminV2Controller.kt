@@ -224,6 +224,65 @@ class AdminV2Controller(
         return ResponseEntity.ok(updated)
     }
 
+    @GetMapping("/users/{userId}")
+    fun getUser(@PathVariable userId: UUID): ResponseEntity<Any> {
+        val user = users.findById(userId).orElse(null) ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(user.toResponse(emptyList()))
+    }
+
+    @PostMapping("/users/{userId}/reject")
+    fun rejectUser(
+        @PathVariable userId: UUID,
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): ResponseEntity<*> = ResponseEntity.ok(
+        approval.processAction(userId, AccountStatus.REJECTED, body["reason"], UUID.fromString(authentication.name))
+    )
+
+    @PostMapping("/users/{userId}/unban")
+    fun unbanUser(@PathVariable userId: UUID, authentication: Authentication): ResponseEntity<*> = ResponseEntity.ok(
+        approval.processAction(userId, AccountStatus.APPROVED, null, UUID.fromString(authentication.name))
+    )
+
+    @PutMapping("/users/{userId}/role")
+    fun updateUserRole(
+        @PathVariable userId: UUID,
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): ResponseEntity<Any> {
+        val actor = UUID.fromString(authentication.name)
+        require(actor != userId) { "Administrators cannot change their own role" }
+        val role = runCatching { AccountRole.valueOf(body["role"].orEmpty().trim().uppercase()) }
+            .getOrElse { return ResponseEntity.badRequest().body(mapOf("error" to "Invalid role")) }
+        val user = users.findById(userId).orElse(null) ?: return ResponseEntity.notFound().build()
+        user.role = role
+        user.updatedAt = Instant.now()
+        users.save(user)
+        service.recordAudit(actor, authentication.name, "UPDATE_USER_ROLE", "AUTH", "USER", userId.toString(), metadata = mapOf("role" to role.name))
+        return ResponseEntity.ok(user.toResponse(emptyList()))
+    }
+
+    @DeleteMapping("/users/{userId}")
+    fun deleteUser(
+        @PathVariable userId: UUID,
+        @RequestParam(defaultValue = "false") hard: Boolean,
+        authentication: Authentication
+    ): ResponseEntity<Any> {
+        if (hard) {
+            return ResponseEntity.status(501).body(mapOf(
+                "error" to "HARD_DELETE_REQUIRES_OPERATOR_WORKFLOW",
+                "message" to "Use the audited retention workflow; direct database deletion is disabled."
+            ))
+        }
+        val updated = approval.processAction(
+            userId,
+            AccountStatus.REJECTED,
+            "ADMIN_SOFT_DELETE",
+            UUID.fromString(authentication.name)
+        )
+        return ResponseEntity.ok(mapOf("deleted" to true, "softDeleted" to true, "user" to updated))
+    }
+
     // ━━━━━━ Audit Log ━━━━━━
     @GetMapping("/audit")
     fun getAuditLog(

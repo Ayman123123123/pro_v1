@@ -129,7 +129,7 @@ class RedMasterController(
         val role: String
     )
 
-    /** قائمة المستخدمين مع حالة PSTN — للوحة الأدمن */
+    /** قائمة المستخدمين مع حالة PSTN — للوحة الأدمن (تصفية pstnEnabled على مستوى DB قبل pagination) */
     @GetMapping("/pstn/users")
     @PreAuthorize("hasRole('ADMIN')")
     fun listPstnUsers(
@@ -139,14 +139,15 @@ class RedMasterController(
         @RequestParam(required = false) pstnEnabled: Boolean?
     ): ResponseEntity<Any> {
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
-        
+
         val pageResult = userRepository.searchForAdmin(
             status = null,
             role = null,
             search = search,
-            pageable = pageable
+            pageable = pageable,
+            pstnEnabled = pstnEnabled
         )
-        
+
         val users = pageResult.content.map { user ->
             val usedToday = getUsedToday(user.id)
             PstnUserListItem(
@@ -160,10 +161,8 @@ class RedMasterController(
                 accountStatus = user.status.name,
                 role = user.role.name
             )
-        }.filter { item ->
-            pstnEnabled?.let { item.pstnEnabled == it } ?: true
         }
-        
+
         return ResponseEntity.ok(mapOf(
             "content" to users,
             "totalElements" to pageResult.totalElements,

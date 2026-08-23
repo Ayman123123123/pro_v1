@@ -8,6 +8,7 @@ import com.burgstaller.okhttp.digest.CachingAuthenticator
 import com.burgstaller.okhttp.digest.Credentials
 import com.burgstaller.okhttp.digest.DigestAuthenticator
 import com.fasterxml.jackson.databind.ObjectMapper
+import okhttp3.CertificatePinner
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -51,6 +52,7 @@ class DinstarConnectionFactory(
     @Value("\${red.dinstar.connect-timeout-seconds:5}") private val connectTimeout: Long,
     @Value("\${red.dinstar.read-timeout-seconds:10}") private val readTimeout: Long,
     @Value("\${red.dinstar.probe-timeout-seconds:2}") private val probeTimeout: Long,
+    @Value("\${red.dinstar.cert-pins:}") private val certPinsConfig: String,
     private val mapper: ObjectMapper
 ) {
     companion object {
@@ -91,11 +93,26 @@ class DinstarConnectionFactory(
         // الفحص يستخدم مهلة أقصر: عنوان بلا جهاز يجب أن يسقط بسرعة
         // وإلا استغرق مسح ‎/24 دقائق.
         val timeout = if (probe) probeTimeout else connectTimeout
-        return OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .authenticator(CachingAuthenticatorDecorator(dispatching, authCache))
             .addInterceptor(AuthenticationCacheInterceptor(authCache))
             .sslSocketFactory(ssl.socketFactory, trustAll[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
+
+        // SPKI pinning — نفس منطق DinstarHardwareService: الثقة المحلية
+        // للشهادات الذاتية لا تلغي تحقق OkHttp من الدبوس بعد بناء السلسلة.
+        certPinsConfig.split(',')
+            .map { it.trim() }
+            .filter { it.startsWith("sha256/") }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.let { pins ->
+                val pinner = CertificatePinner.Builder()
+                pins.forEach { pinner.add("*", it) }
+                builder.certificatePinner(pinner.build())
+            }
+
+        return builder
             .connectTimeout(timeout, TimeUnit.SECONDS)
             .readTimeout(if (probe) probeTimeout else readTimeout, TimeUnit.SECONDS)
             .callTimeout(if (probe) probeTimeout * 2 else readTimeout + connectTimeout, TimeUnit.SECONDS)

@@ -23,14 +23,46 @@ class StoryService(
 ) {
     fun create(userId: UUID, request: CreateStoryRequest): StoryResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
-        require(request.mediaKey.startsWith("users/$userId/")) { "Story media must belong to the account" }
-        require(media.exists(request.mediaKey)) { "Media object not found" }
-        val metadata = media.metadata(request.mediaKey)
-        require(metadata.mimeType.startsWith("image/") || metadata.mimeType.startsWith("video/")) { "Stories support images and videos only" }
         val caption = request.caption?.trim()?.takeIf(String::isNotEmpty)
         require(caption == null || caption.length <= 500) { "Story caption is too long" }
-        val story = mongo.save(StoryDocument(UuidV7.next(), user.id.toString(), user.redId, user.username, user.displayName,
-            request.mediaKey, metadata.mimeType, caption, request.visibility, request.allowedUserIds, expiresAt = Instant.now().plus(24, ChronoUnit.HOURS)))
+        val backgroundColor = request.backgroundColor?.trim()?.takeIf(String::isNotEmpty)
+        require(backgroundColor == null || HEX_COLOR.matches(backgroundColor)) { "Story background color is invalid" }
+        val durationMs = request.durationMs
+        require(durationMs == null || durationMs in 1..MAX_STORY_DURATION_MS) { "Story duration is invalid" }
+
+        val requestedType = request.mediaType?.trim()?.uppercase()
+        val (mediaKey, mediaType) = if (requestedType == "TEXT") {
+            require(!caption.isNullOrBlank()) { "Text stories require a caption" }
+            "" to "TEXT"
+        } else {
+            require(request.mediaKey.startsWith("users/$userId/")) { "Story media must belong to the account" }
+            require(media.exists(request.mediaKey)) { "Media object not found" }
+            val metadata = media.metadata(request.mediaKey)
+            require(
+                metadata.mimeType.startsWith("image/") ||
+                    metadata.mimeType.startsWith("video/") ||
+                    metadata.mimeType.startsWith("audio/")
+            ) { "Stories support images, videos, and audio only" }
+            request.mediaKey to metadata.mimeType
+        }
+
+        val story = mongo.save(
+            StoryDocument(
+                id = UuidV7.next(),
+                ownerId = user.id.toString(),
+                ownerRedId = user.redId,
+                ownerUsername = user.username,
+                ownerDisplayName = user.displayName,
+                mediaKey = mediaKey,
+                mediaType = mediaType,
+                caption = caption,
+                visibility = request.visibility,
+                allowedUserIds = request.allowedUserIds,
+                backgroundColor = backgroundColor,
+                durationMs = durationMs,
+                expiresAt = Instant.now().plus(24, ChronoUnit.HOURS),
+            ),
+        )
         return response(story, 0)
     }
 
@@ -61,7 +93,7 @@ class StoryService(
         val story = activeStory(storyId)
         require(story.ownerId == ownerId.toString()) { "Only the owner can delete this story" }
         mongo.updateFirst(Query(Criteria.where("id").`is`(storyId)), Update().set("deletedAt", Instant.now()), StoryDocument::class.java)
-        runCatching { media.delete(story.mediaKey) }
+        if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
     }
 
     fun activeCount(): Long = mongo.count(Query(Criteria.where("expiresAt").gt(Instant.now()).and("deletedAt").`is`(null)), StoryDocument::class.java)
@@ -69,7 +101,9 @@ class StoryService(
     @Scheduled(fixedDelay = 300_000)
     fun cleanupExpired() {
         val expired = mongo.find(Query(Criteria.where("expiresAt").lte(Instant.now())), StoryDocument::class.java)
-        expired.forEach { story -> runCatching { media.delete(story.mediaKey) } }
+        expired.forEach { story ->
+            if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
+        }
         if (expired.isNotEmpty()) {
             val ids = expired.map(StoryDocument::id)
             mongo.remove(Query(Criteria.where("storyId").`in`(ids)), StoryView::class.java)
@@ -79,7 +113,9 @@ class StoryService(
 
     fun purgeAll(): Long {
         val stories = mongo.findAll(StoryDocument::class.java)
-        stories.forEach { runCatching { media.delete(it.mediaKey) } }
+        stories.forEach { story ->
+            if (story.mediaKey.isNotBlank()) runCatching { media.delete(story.mediaKey) }
+        }
         mongo.remove(Query(), StoryView::class.java)
         return mongo.remove(Query(), StoryDocument::class.java).deletedCount
     }
@@ -98,6 +134,23 @@ class StoryService(
         return jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM red_contacts a JOIN red_contacts b ON a.owner_id=b.contact_id AND a.contact_id=b.owner_id WHERE a.owner_id=? AND a.contact_id=?)", Boolean::class.java, owner, viewerId) == true
     }
 
-    private fun response(story: StoryDocument, views: Long) = StoryResponse(story.id, story.ownerRedId, story.ownerUsername,
-        story.ownerDisplayName, "/api/media/${story.mediaKey}", story.mediaType, story.caption, story.createdAt, story.expiresAt, views)
+    private fun response(story: StoryDocument, views: Long) = StoryResponse(
+        story.id,
+        story.ownerRedId,
+        story.ownerUsername,
+        story.ownerDisplayName,
+        story.mediaKey.takeIf(String::isNotBlank)?.let { "/api/media/$it" }.orEmpty(),
+        story.mediaType,
+        story.caption,
+        story.createdAt,
+        story.expiresAt,
+        views,
+        story.backgroundColor,
+        story.durationMs,
+    )
+
+    private companion object {
+        val HEX_COLOR = Regex("^#[0-9A-Fa-f]{6}$")
+        const val MAX_STORY_DURATION_MS = 24 * 60 * 60 * 1000L
+    }
 }

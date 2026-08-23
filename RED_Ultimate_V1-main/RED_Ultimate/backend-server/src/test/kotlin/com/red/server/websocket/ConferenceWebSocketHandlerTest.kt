@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.web.socket.CloseStatus
@@ -18,15 +17,30 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
+    private val accessGuard: ApprovedDeviceSessionGuard = mock<ApprovedDeviceSessionGuard>().also {
         whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
     }
-    private val conferenceRoomService: com.red.server.calls.ConferenceRoomService = mock()
+    private val conferenceRoomService: com.red.server.calls.ConferenceRoomService =
+        mock<com.red.server.calls.ConferenceRoomService>().also {
+            val room = com.red.server.calls.ConferenceRoomRecord(
+                roomId = "red-room-12345",
+                hostId = "73066",
+                hostRedId = "73066",
+                title = "اختبار مكالمة جماعية",
+                isPrivate = false
+            )
+            whenever(it.getRoom(any())).thenReturn(room)
+            whenever(it.canJoin(any(), any(), any())).thenReturn(true)
+        }
     private val handler = ConferenceWebSocketHandler(objectMapper, accessGuard, conferenceRoomService)
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()
-        private val attrs: MutableMap<String, Any> = mutableMapOf("userId" to userId)
+        private val attrs: MutableMap<String, Any> = mutableMapOf(
+            "userId" to userId,
+            "accountId" to userId,
+            "deviceId" to "device-test"
+        )
         val session: WebSocketSession = mock<WebSocketSession>().also { sock ->
             whenever(sock.id).thenReturn(sessionId)
             whenever(sock.attributes).thenReturn(attrs)
@@ -41,14 +55,16 @@ class ConferenceWebSocketHandlerTest {
         }
     }
 
-    @Test fun `JOIN adds session to room and sends ROOM_STATE`() {
+    @Test
+    fun `JOIN adds session to room and sends ROOM_STATE`() {
         val session = Probe("s1", "73066")
         handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         val messages = session.sent.map { objectMapper.readTree(it) }
         assertTrue(messages.any { it["type"].asText() == "ROOM_STATE" }) { "Expected ROOM_STATE in: $messages" }
     }
 
-    @Test fun `JOIN broadcasts PARTICIPANT_JOINED to existing peers`() {
+    @Test
+    fun `JOIN broadcasts PARTICIPANT_JOINED to existing peers`() {
         val alice = Probe("s1", "73066")
         val bob = Probe("s2", "28261")
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
@@ -58,7 +74,8 @@ class ConferenceWebSocketHandlerTest {
         assertTrue(aliceMessages.any { it["type"].asText() == "PARTICIPANT_JOINED" }) { "Expected PARTICIPANT_JOINED in: $aliceMessages" }
     }
 
-    @Test fun `OFFER relayed to other peers but not back to sender`() {
+    @Test
+    fun `OFFER relayed to other peers but not back to sender`() {
         val alice = Probe("s1", "73066")
         val bob = Probe("s2", "28261")
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
@@ -72,7 +89,16 @@ class ConferenceWebSocketHandlerTest {
         assertTrue(aliceMessages.none { it["type"].asText() == "OFFER" }) { "Alice should NOT receive her own OFFER" }
     }
 
-    @Test fun `invalid roomId rejected`() {
+    @Test
+    fun `unregistered room is rejected before it can become a session`() {
+        whenever(conferenceRoomService.getRoom("red-room-77777")).thenReturn(null)
+        val session = Probe("s-denied", "73066")
+        handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"red-room-77777"}"""))
+        assertTrue(session.sent.any { it.contains("FORBIDDEN") })
+    }
+
+    @Test
+    fun `invalid roomId rejected`() {
         val session = Probe("s1", "73066")
         try {
             handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
@@ -82,21 +108,25 @@ class ConferenceWebSocketHandlerTest {
         }
     }
 
-    @Test fun `targeted OFFER reaches only the named peer`() {
+    @Test
+    fun `targeted OFFER reaches only the named peer`() {
         val alice = Probe("s1", "73066")
         val bob = Probe("s2", "28261")
         val cara = Probe("s3", "11154")
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         handler.handleTextMessage(bob.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         handler.handleTextMessage(cara.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        alice.sent.clear(); bob.sent.clear(); cara.sent.clear()
+        alice.sent.clear()
+        bob.sent.clear()
+        cara.sent.clear()
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"OFFER","roomId":"red-room-12345","payload":{"sdp":"v=0","targetUserId":"28261"}}"""))
         assertTrue(bob.sent.any { it.contains("OFFER") }) { "Bob is the target" }
         assertTrue(cara.sent.none { it.contains("OFFER") }) { "Cara must not receive Alice's offer to Bob" }
         assertTrue(alice.sent.none { it.contains("OFFER") })
     }
 
-    @Test fun `LEAVE notifies other peers`() {
+    @Test
+    fun `LEAVE notifies other peers`() {
         val alice = Probe("s1", "73066")
         val bob = Probe("s2", "28261")
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))

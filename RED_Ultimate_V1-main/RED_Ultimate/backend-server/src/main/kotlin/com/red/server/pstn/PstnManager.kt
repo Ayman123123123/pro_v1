@@ -1,4 +1,4 @@
-﻿package com.red.server.pstn
+package com.red.server.pstn
 
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
@@ -6,6 +6,8 @@ import org.asteriskjava.manager.DefaultManagerConnection
 import org.asteriskjava.manager.TimeoutException
 import org.asteriskjava.manager.action.OriginateAction
 import org.asteriskjava.manager.action.PingAction
+import org.asteriskjava.manager.action.HangupAction
+import org.asteriskjava.manager.action.RedirectAction
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
@@ -16,7 +18,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
+
 import kotlin.concurrent.withLock
 
 /**
@@ -42,7 +46,7 @@ class PstnManager(
     @Value("\${ASTERISK_AMI_PASSWORD:}") private val amiPassword: String,
     @Value("\${red.pstn.max-retries:3}") private val maxRetries: Int,
     @Value("\${red.pstn.action-timeout-ms:5000}") private val actionTimeoutMs: Long,
-    @Value("\${red.pstn.heartbeat-interval-ms:15000}") private val heartbeatIntervalMs: Long,
+    @Value("\${red.pstn.heartbeat-interval-ms:30000}") private val heartbeatIntervalMs: Long,
     private val dinstarEvents: ObjectProvider<DinstarEventListener>
 ) {
     companion object {
@@ -59,7 +63,9 @@ class PstnManager(
         Executors.newSingleThreadScheduledExecutor { r ->
             Thread(r, "pstn-ami-reconnect").apply { isDaemon = true }
         }
-    @Volatile private var reconnectFuture: ScheduledFuture<*>? = null
+        @Volatile private var reconnectFuture: ScheduledFuture<*>? = null
+    /** آخر قناة AMI فعلية لكل callId، يربطها DinstarEventListener عند VarSet. */
+    private val callChannels = ConcurrentHashMap<String, String>()
 
     // ── Startup ────────────────────────────────────────────────────────────
 
@@ -156,8 +162,11 @@ class PstnManager(
             val conn = DefaultManagerConnection(amiHost, amiUser, amiPassword).apply {
                 // asterisk-java يعرّف هذه كـ setter بلا getter — تُستدعى كدوال لا كخصائص في Kotlin
                 setSocketTimeout(actionTimeoutMs.toInt())
-                // socket read timeout must exceed heartbeat interval to prevent idle disconnects
-                setSocketReadTimeout((heartbeatIntervalMs * 3).toInt())
+                // Read timeout must far exceed the heartbeat interval.
+                // asterisk-java's ManagerReaderImpl has its own SO_TIMEOUT which causes
+                // "Read timed out" disconnects. Setting this to 5 minutes gives our
+                // heartbeat plenty of headroom to keep the connection alive.
+                setSocketReadTimeout(300_000)
             }
             conn.login()
 
@@ -186,24 +195,31 @@ class PstnManager(
     fun dialGsm(
         phoneNumber: String,
         pjsipEndpoint: String = "dinstar-gateway",
-        portIndex: Int = -1
+        portIndex: Int = -1,
+        callerSimNumber: String? = null
     ): String {
         require(phoneNumber.matches(Regex("^\\+?[0-9]{6,15}$"))) { "Invalid phone number" }
         require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
 
         val correlationId = UUID.randomUUID().toString()
+        // إظهار رقم الشريحة الحقيقي للمستلم الخارجي — بدل "RED SOVEREIGN" العام
+        val effectiveCallerId = callerSimNumber?.filter { it.isDigit() }?.takeIf { it.length in 6..15 } ?: "RED SOVEREIGN"
         val action = OriginateAction().apply {
             actionId = correlationId
             channel = "Local/$phoneNumber@from-red-backend"
             application = "Wait"
             data = "1"
-            callerId = "RED SOVEREIGN"
+            callerId = effectiveCallerId
             // Pass selected gateway to dialplan
             setVariable("RED_GW", pjsipEndpoint)
             // Expose the selected SIM/port slot for gateway dialplan branching
             setVariable("RED_PORT_INDEX", portIndex.toString())
             // Expose correlationId for DinstarEventListener binding
             setVariable("RED_CALL_ID", correlationId)
+            // رقم الشريحة الحقيقي — يستخدمه extensions.conf لضبط CALLERID(num)
+            if (callerSimNumber != null) {
+                setVariable("RED_SIM_NUMBER", callerSimNumber.filter { it.isDigit() })
+            }
             setAsync(true)
         }
 
@@ -241,6 +257,57 @@ class PstnManager(
         )
     }
 
+    /** يسجل DinstarEventListener القناة الفعلية التي أنشأها Asterisk لكل callId. */
+    fun bindChannel(callId: String, channel: String) {
+        if (callId.isNotBlank() && channel.isNotBlank()) callChannels[callId] = channel
+    }
+
+    fun forgetChannel(callId: String) {
+        callChannels.remove(callId)
+    }
+
+    /**
+     * ينهي قناة AMI بالاسم الصريح — يستخدمه رفض المكالمة الواردة لتحرير
+     * منفذ GSM فوراً بدل تركها تستهلك Wait(RING_TIMEOUT) كاملة.
+     */
+    fun hangupChannel(channel: String): Boolean = try {
+        val response = ensureConnected().sendAction(HangupAction(channel), actionTimeoutMs)
+        val success = response.response?.equals("Success", ignoreCase = true) == true
+        if (success) log.info("Hung up channel {} (explicit)", channel)
+        else log.warn("Hangup channel {} failed: {}", channel, response.message)
+        success
+    } catch (e: Exception) {
+        log.error("Error hanging up channel {}: {}", channel, e.message)
+        false
+    }
+
+    /**
+     * ينهي مكالمة PSTN باستعمال callId الموثق في Redis/المتحكم. لا يستخدم
+     * CoreShowChannels لأن إصدار Asterisk-Java الحالي لا يعيد قائمة أحداث
+     * عبر sendAction؛ القناة تُلتقط عند VarSet(RED_CALL_ID).
+     */
+    fun hangupCall(callId: String): Boolean {
+        val targetChannel = callChannels[callId]
+        if (targetChannel.isNullOrBlank()) {
+            log.warn("No tracked AMI channel found for PSTN call {}", callId)
+            return false
+        }
+        return try {
+            val response = ensureConnected().sendAction(HangupAction(targetChannel), actionTimeoutMs)
+            val success = response.response?.equals("Success", ignoreCase = true) == true
+            if (success) {
+                callChannels.remove(callId)
+                log.info("Hung up PSTN channel {} for call {}", targetChannel, callId)
+            } else {
+                log.warn("Failed to hangup PSTN channel {}: {}", targetChannel, response.message)
+            }
+            success
+        } catch (e: Exception) {
+            log.error("Error hanging up PSTN call {}: {}", callId, e.message)
+            false
+        }
+    }
+
     /**
      * هل الاتصال بـ Asterisk سليم؟ يُستخدَم في health endpoint.
      */
@@ -255,6 +322,59 @@ class PstnManager(
                 runCatching { conn.logoff() }.onSuccess { log.info("AMI connection closed") }
                 connection = null
             }
+        }
+    }
+
+    // Incoming PSTN call control, invoked by PstnEventWebSocketHandler.
+
+    /**
+     * Accept an incoming PSTN call by bridging the DINSTAR channel to the WebRTC client.
+     * Uses AMI RedirectAction to move the channel from from-dinstar to from-incoming-bridge
+     * which dials the red-webrtc-client endpoint, sending a SIP INVITE to the app.
+     */
+    fun acceptIncomingCall(channel: String, webrtcUser: String): Boolean {
+        return try {
+            val conn = ensureConnected()
+            // Redirect the incoming DINSTAR channel to the incoming-bridge context
+            // which will dial the red-webrtc-client endpoint via exten 's'
+            val action = RedirectAction().apply {
+                setChannel(channel)
+                setContext("from-incoming-bridge")
+                setExten("s")
+                setPriority(1)
+            }
+            val response = conn.sendAction(action, actionTimeoutMs)
+            val success = response.response?.equals("Success", ignoreCase = true) == true
+            if (success) {
+                log.info("Redirected incoming channel {} to from-incoming-bridge for {}", channel, webrtcUser)
+            } else {
+                log.warn("Failed to redirect channel {}: {}", channel, response.message)
+            }
+            success
+        } catch (e: Exception) {
+            log.error("Error accepting incoming call on channel {}: {}", channel, e.message)
+            false
+        }
+    }
+
+    /**
+     * Reject an incoming PSTN call by hanging up the DINSTAR channel.
+     */
+    fun rejectIncomingCall(channel: String): Boolean {
+        return try {
+            val conn = ensureConnected()
+            val action = HangupAction(channel)
+            val response = conn.sendAction(action, actionTimeoutMs)
+            val success = response.response?.equals("Success", ignoreCase = true) == true
+            if (success) {
+                log.info("Hung up incoming channel {}", channel)
+            } else {
+                log.warn("Failed to hangup channel {}: {}", channel, response.message)
+            }
+            success
+        } catch (e: Exception) {
+            log.error("Error rejecting incoming call on channel {}: {}", channel, e.message)
+            false
         }
     }
 }

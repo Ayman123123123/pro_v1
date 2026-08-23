@@ -1,12 +1,15 @@
 package com.red.server
 
+import com.red.server.calls.LiveStreamRepository
 import com.red.server.calls.LiveStreamService
 import com.red.server.calls.RoomPasswordHasher
+import com.red.server.websocket.CallWebSocketHandler
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.mockito.kotlin.mock
 
 /**
  * اختبارات خدمة البث المباشر: بدء/إيقاف البث، عدّ المشاهدين،
@@ -14,7 +17,11 @@ import org.junit.jupiter.api.Test
  */
 class LiveStreamServiceTest {
 
-    private val service = LiveStreamService(RoomPasswordHasher())
+    private val service = LiveStreamService(
+        RoomPasswordHasher(),
+        mock<LiveStreamRepository>(),
+        mock<CallWebSocketHandler>()
+    )
 
     @Test
     fun `starting a stream registers broadcaster and returns zero viewers`() {
@@ -47,6 +54,38 @@ class LiveStreamServiceTest {
         val active = service.getActiveStreams()
         assertEquals(1, active.size)
         assertEquals("96109", active.first().broadcasterId)
+    }
+
+    @Test
+    fun `private stream requires a password`() {
+        org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            service.createStream(
+                streamId = "private-1",
+                broadcasterId = "96109",
+                broadcasterName = "يونس",
+                broadcasterRedId = "96109",
+                title = "بث خاص",
+                isPrivate = true,
+                password = null,
+            )
+        }
+    }
+
+    @Test
+    fun `private stream verifies only its configured password`() {
+        service.createStream(
+            streamId = "private-1",
+            broadcasterId = "96109",
+            broadcasterName = "يونس",
+            broadcasterRedId = "96109",
+            title = "بث خاص",
+            isPrivate = true,
+            password = "مفتاح-خاص-قوي",
+        )
+
+        assertFalse(service.verifyPassword("private-1", null))
+        assertFalse(service.verifyPassword("private-1", "خاطئة"))
+        assertTrue(service.verifyPassword("private-1", "مفتاح-خاص-قوي"))
     }
 
     @Test

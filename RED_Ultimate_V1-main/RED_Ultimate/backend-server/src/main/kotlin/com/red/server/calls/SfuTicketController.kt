@@ -21,7 +21,8 @@ class SfuTicketController(
     private val groups: GroupService,
     private val jwt: JwtService,
     private val activeCalls: ActiveCallRegistry,
-    private val conferenceRooms: ConferenceRoomService
+    private val conferenceRooms: ConferenceRoomService,
+    private val liveStreams: LiveStreamService
 ) {
     @GetMapping("/{groupId}/ticket")
     fun issue(@PathVariable groupId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
@@ -45,16 +46,50 @@ class SfuTicketController(
         require(roomId.matches(ROOM_ID)) { "Invalid SFU room ID" }
         // لا تذاكر لغرف عشوائية: الغرفة يجب أن تكون مؤتمراً/مساحة نشطة أو مكالمة جماعية مسجّلة.
         // هذا يمنع فحص الغرف واستنزاف موارد mediasoup عبر استدعاءات join مجهولة.
-        val legitimateRoom = conferenceRooms.getRoom(roomId) != null || activeCalls.isActiveCall(roomId)
+        val conferenceRoom = conferenceRooms.getRoom(roomId)
+        val legitimateRoom = conferenceRoom != null || activeCalls.isActiveCall(roomId)
         require(legitimateRoom) { "Room not open for SFU" }
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        if (conferenceRoom != null) {
+            require(conferenceRooms.canJoin(roomId, authentication.name, user.redId)) { "Not authorized for this meeting" }
+        }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
         val ticket = jwt.issueSfuTicket(user, deviceId, roomId, "MEMBER", canProduce = true)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
             .body(SfuTicketResponse(ticket, 120, roomId, "MEMBER", true))
+    }
+
+    /**
+     * LIVE requires an explicit REST join before a viewer can obtain a media
+     * capability. The broadcaster alone receives producer permission.
+     */
+    @GetMapping("/live/{streamId}/ticket")
+    fun issueLive(@PathVariable streamId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
+        require(streamId.matches(ROOM_ID)) { "Invalid live stream ID" }
+        val record = liveStreams.getStreamRecord(streamId)
+            ?: throw NoSuchElementException("Live stream not found or ended")
+        val accountId = UUID.fromString(authentication.name)
+        val accountIdText = accountId.toString()
+        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val isBroadcaster = record.broadcasterId == accountIdText
+        require(isBroadcaster || liveStreams.isViewer(streamId, accountIdText)) {
+            "Join the live stream before requesting media access"
+        }
+        val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
+        val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
+        val ticket = jwt.issueSfuTicket(
+            user = user,
+            deviceId = deviceId,
+            groupId = streamId,
+            groupRole = if (isBroadcaster) "BROADCASTER" else "VIEWER",
+            canProduce = isBroadcaster
+        )
+        return ResponseEntity.ok()
+            .cacheControl(CacheControl.noStore())
+            .body(SfuTicketResponse(ticket, 120, streamId, if (isBroadcaster) "BROADCASTER" else "VIEWER", isBroadcaster))
     }
 
     companion object {

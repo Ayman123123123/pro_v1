@@ -48,7 +48,7 @@ class ConferenceWebSocketHandler(
         when (signal.type.uppercase()) {
             "JOIN" -> handleJoin(session, userId, signal)
             "OFFER", "ANSWER", "ICE", "PRODUCE", "CONSUME" -> relay(session, signal)
-            "RAISE_HAND", "REACTION" -> relay(session, signal) // anyone can
+            "RAISE_HAND", "REACTION", "USE_MESH" -> relay(session, signal) // anyone can
             "APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST",
             "KICK_USER", "MUTE_USER", "PIN_MESSAGE" -> handleStageManagement(session, userId, signal)
             "LEAVE" -> handleLeave(session, signal)
@@ -57,19 +57,16 @@ class ConferenceWebSocketHandler(
     }
 
     private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
-        // Enforce private room access
         val record = conferenceRoomService.getRoom(signal.roomId)
-        if (record != null && record.isPrivate) {
-            val providedPassword = signal.payload["password"] as? String
-            if (!conferenceRoomService.verifyPassword(signal.roomId, providedPassword)) {
-                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
-                    "type" to "ERROR",
-                    "code" to "FORBIDDEN",
-                    "message" to "Private conference - password required"
-                ))))
-                session.close(CloseStatus.NOT_ACCEPTABLE)
-                return
-            }
+        val accountId = session.attributes["accountId"] as? String
+        if (record == null || accountId == null || !conferenceRoomService.canJoin(signal.roomId, accountId, userId)) {
+            session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                "type" to "ERROR",
+                "code" to "FORBIDDEN",
+                "message" to "You are not authorized to join this meeting"
+            ))))
+            session.close(CloseStatus.POLICY_VIOLATION)
+            return
         }
 
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
@@ -77,15 +74,15 @@ class ConferenceWebSocketHandler(
         synchronized(room) { room.add(session) }
         sessionToRoom[session.id] = signal.roomId
 
-        // First participant becomes HOST if no host yet
-        if (roomHosts[signal.roomId] == null) {
-            roomHosts[signal.roomId] = userId
+        // مصدر الحقيقة للمضيف هو الغرفة المسجلة، لا ترتيب اتصال WebSocket.
+        roomHosts[signal.roomId] = record.hostRedId
+        if (record.hostId == accountId) {
             roles[userId] = "HOST"
         } else {
-            roles.putIfAbsent(userId, "LISTENER")
+            roles.putIfAbsent(userId, if (record.isSpace) "LISTENER" else "SPEAKER")
         }
-        val myRole = roles[userId] ?: "LISTENER"
-        val isHost = roomHosts[signal.roomId] == userId
+        val myRole = roles[userId] ?: if (record.isSpace) "LISTENER" else "SPEAKER"
+        val isHost = record.hostId == accountId
 
         // Notify existing peers
         val joinMsg = objectMapper.writeValueAsString(mapOf(
@@ -121,6 +118,7 @@ class ConferenceWebSocketHandler(
     }
 
     private fun relay(session: WebSocketSession, signal: IncomingConferenceSignal) {
+        if (sessionToRoom[session.id] != signal.roomId) return
         val room = rooms[signal.roomId] ?: return
         val source = session.attributes["userId"] as? String ?: ""
         val targetId = signal.payload["targetUserId"]?.toString()?.takeIf { it.isNotBlank() }
@@ -159,9 +157,10 @@ class ConferenceWebSocketHandler(
             }
         }
 
-        // Apply role changes atomically
+        // Apply role changes atomically فقط لمشارك حاضر في الجلسة.
         val targetId = signal.payload["targetUserId"]?.toString()
-        if (targetId != null) {
+        val targetPresent = targetId != null && (rooms[roomId]?.any { (it.attributes["userId"] as? String) == targetId } == true)
+        if (targetId != null && targetPresent) {
             when (type) {
                 "APPROVE_SPEAKER" -> roles[targetId] = "SPEAKER"
                 "DEMOTE_LISTENER" -> roles[targetId] = "LISTENER"
@@ -268,6 +267,8 @@ class ConferenceWebSocketHandler(
     }
 }
 
+// 🛡️ ignoreUnknown: العميل يرسل حقولاً إضافية (userId وغيرها) — رفضها كان يغلق مقبس المكالمة بالكامل
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 data class IncomingConferenceSignal(
     val type: String,
     val roomId: String = "",

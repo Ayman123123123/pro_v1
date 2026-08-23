@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -38,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
@@ -45,6 +48,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Backspace
@@ -133,9 +137,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
@@ -188,9 +195,10 @@ import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.calls.CreateConferenceScreen
 import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
-import com.red.sovereign.calls.GroupCallService
 import com.red.sovereign.calls.GroupCallRuntime
+import com.red.sovereign.calls.GroupCallService
 import com.red.sovereign.calls.GroupCallUiState
+import com.red.sovereign.calls.GroupCallMemberStatus
 import com.red.sovereign.contacts.DirectoryState
 import com.red.sovereign.contacts.DirectoryViewModel
 import com.red.sovereign.contacts.PublicRedProfile
@@ -227,6 +235,7 @@ import com.red.sovereign.media.voice.VoiceTimerDisplay
 import com.red.sovereign.media.voice.VoiceWaveformCanvas
 import com.red.sovereign.media.voice.VoiceCancelProgressBar
 import com.red.sovereign.media.voice.VoiceLockIndicator
+import com.red.sovereign.settings.PstnConfigScreen
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
@@ -273,11 +282,13 @@ import com.red.sovereign.media.PollsScreen
 import com.red.sovereign.ui.theme.CairoFamily
 import com.red.sovereign.ui.theme.TajawalFamily
 import com.red.sovereign.ui.theme.SovereignColors
+import com.red.sovereign.ui.components.SovereignBottomBar
+import com.red.sovereign.ui.components.SovereignEmptyConversationState
 import androidx.compose.material3.OutlinedTextFieldDefaults
 
 
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN, PSTN_CONFIG }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -311,6 +322,11 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var dialerVideo by remember { mutableStateOf(false) }
     var pendingDialerTarget by remember { mutableStateOf<String?>(null) }
     var pendingDialerVideo by remember { mutableStateOf(false) }
+    // 🔴 البث المباشر — خيار خاص/عام بكلمة سر
+    var showLiveCreateDialog by remember { mutableStateOf(false) }
+    var liveTitle by remember { mutableStateOf("") }
+    var liveIsPrivate by remember { mutableStateOf(false) }
+    var livePassword by remember { mutableStateOf("") }
     val dialerCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingDialerVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -333,6 +349,30 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     val settings: SettingsViewModel = viewModel()
     val callHistory: CallHistoryViewModel = viewModel()
     val createStoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
+
+    // ◀️ زر الرجوع — لا يخرج من التطبيق مباشرة، بل يتنقل هرمياً (واتساب)
+    val activity = LocalContext.current as? android.app.Activity
+    var lastBackPress by remember { mutableStateOf(0L) }
+    BackHandler {
+        when {
+            showCreate -> showCreate = false
+            showSettings -> showSettings = false
+            showLiveCreateDialog -> { showLiveCreateDialog = false; livePassword = "" }
+            showCallDialer -> { showCallDialer = false; dialerRedId = ""; dialerVideo = false }
+            showDinstar -> showDinstar = false
+            currentScreen != SovereignScreen.DASHBOARD -> currentScreen = SovereignScreen.DASHBOARD
+            section != MainSection.CHATS -> section = MainSection.CHATS
+            else -> {
+                val now = System.currentTimeMillis()
+                if (now - lastBackPress < 2000) {
+                    activity?.finish()
+                } else {
+                    lastBackPress = now
+                    android.widget.Toast.makeText(context, "اضغط مرة أخرى للخروج", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     // 🔔 Overlays must be global — before early return so they appear on ANY screen (Devices, Privacy, etc.)
     // YounesCallOverlay etc. are placed at the very end as well, but this early placement ensures incoming call is never missed
@@ -390,6 +430,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
                 com.red.sovereign.features.dinstar.DinstarAdminScreen(dm, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             }
+            SovereignScreen.PSTN_CONFIG -> {
+                val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
+                PstnConfigScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, tokenStore = TokenStore(context), snackbarHostState = remember { SnackbarHostState() })
+            }
             SovereignScreen.COMMUNITIES -> {
                 val tokens = remember { TokenStore(context) }
                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -414,20 +458,17 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f)) {
-                // remember lambdas per item لتفادي إعادة التوليد كل recompose
-                MainSection.entries.forEach { item ->
-                    val itemLabel = item.label
-                    val isSelected = section == item
-                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) { callHistory.load(); directory.refreshPresence() } } }
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = onClick,
-                        icon = { Icon(item.icon, itemLabel) },
-                        label = { Text(itemLabel, maxLines = 1, style = MaterialTheme.typography.labelSmall) }
-                    )
+            SovereignBottomBar(
+                currentSection = section,
+                onSectionSelected = { item ->
+                    section = item
+                    showDinstar = false
+                    if (item == MainSection.CALLS) {
+                        callHistory.load()
+                        directory.refreshPresence()
+                    }
                 }
-            }
+            )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -443,7 +484,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
-                    onAdmin = { currentScreen = SovereignScreen.DINSTAR_ADMIN },
+                    onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.DINSTAR_ADMIN },
                     onSettings = { showSettings = true },
                     onContacts = { currentScreen = SovereignScreen.CONTACTS },
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
@@ -452,7 +493,8 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
                     onProfile = { currentScreen = SovereignScreen.PROFILE },
                     onEvents = { currentScreen = SovereignScreen.EVENTS },
-                    onPolls = { currentScreen = SovereignScreen.POLLS }
+                    onPolls = { currentScreen = SovereignScreen.POLLS },
+                    onPstnConfig = { currentScreen = SovereignScreen.PSTN_CONFIG }
                 )
             }
         }
@@ -464,7 +506,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         onPost = { text -> feed.create(text) { showCreate = false } },
         onPoll = { question, options, hours -> feed.createPoll(question, options, hours) { showCreate = false } },
         onStory = { showCreate = false; createStoryPicker.launch(arrayOf("image/*", "video/*")) },
-        onLive = { showCreate = false; LiveStreamService.start(context, "stream-${account.redId}", account.redId, true) },
+        onLive = { showCreate = false; liveTitle = ""; liveIsPrivate = false; livePassword = ""; showLiveCreateDialog = true },
         onExplore = { showCreate = false; currentScreen = SovereignScreen.EXPLORE }
     )
     if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
@@ -517,6 +559,63 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("إلغاء") } }
         )
     }
+
+    // 🔴 حوار إنشاء البث المباشر — خاص بكلمة سر أو عام + دعوة أصدقاء
+    if (showLiveCreateDialog) {
+        val livePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val camOk = grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            val micOk = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (camOk && micOk) {
+                val titleFinal = liveTitle.trim().ifBlank { "بث مباشر ${account.username}" }
+                val pw = if (liveIsPrivate) livePassword.trim().takeIf { it.isNotBlank() } else null
+                if (liveIsPrivate && pw.isNullOrBlank()) {
+                    android.widget.Toast.makeText(context, "أدخل كلمة سر للبث الخاص", android.widget.Toast.LENGTH_SHORT).show()
+                    return@rememberLauncherForActivityResult
+                }
+                showLiveCreateDialog = false
+                LiveStreamService.start(context, "stream-${account.redId}-${System.currentTimeMillis()}", account.redId, true, titleFinal, liveIsPrivate, pw)
+                livePassword = ""
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showLiveCreateDialog = false; livePassword = "" },
+            title = { Text("بدء بث مباشر 🔴", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = liveTitle,
+                        onValueChange = { liveTitle = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("عنوان البث (اختياري)") },
+                        singleLine = true
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Icon(if (liveIsPrivate) Icons.Filled.Lock else Icons.Filled.Public, null, tint = if (liveIsPrivate) Color(0xFFE53935) else YounesEmerald)
+                        Column(Modifier.weight(1f)) {
+                            Text(if (liveIsPrivate) "بث خاص بكلمة سر" else "بث عام (بدون كلمة سر)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (liveIsPrivate) "المشاهدون يحتاجون كلمة السر" else "يمكن للجميع المشاهدة", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        Switch(checked = liveIsPrivate, onCheckedChange = { liveIsPrivate = it })
+                    }
+                    if (liveIsPrivate) {
+                        OutlinedTextField(
+                            value = livePassword,
+                            onValueChange = { livePassword = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("كلمة السر") },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                        )
+                    }
+                    Text("سيتمكن الأصدقاء من الانضمام عبر دعوة أو رابط younes://livestream/<id>", fontSize = 11.sp, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(onClick = { livePermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("بدء البث") }
+            },
+            dismissButton = { TextButton({ showLiveCreateDialog = false; livePassword = "" }) { Text("إلغاء") } }
+        )
+    }
 }
 
 @Composable
@@ -558,10 +657,10 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
         }
         item {
             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أتابعهم", "اليمن").forEachIndexed { i, title ->
+                listOf("لك", "أصدقائي", "اليمن").forEachIndexed { i, title ->
                     FilterChip(filter == i, {
                         filter = i
-                        feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })
+                        feed.load(when (i) { 1 -> "FRIENDS"; 2 -> "YEMEN"; else -> null })
                     }, { Text(title) })
                 }
             }
@@ -578,7 +677,7 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
             feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", it.message) } }
             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -722,7 +821,7 @@ private fun PostCard(
                     DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
                 }
             }
-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("متابعة") }
+            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("إضافة صديق") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
@@ -889,6 +988,27 @@ private fun ChatHubScreen(
     var name by remember { mutableStateOf("") }
     var groupDescription by remember { mutableStateOf("") }
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
+    // ◀️ رجوع هرمي داخل المحادثات — يغلق الطبقات قبل الخروج من التطبيق
+    BackHandler(enabled = target.isNotBlank() || groupConversationId != null || showDirectory || showMessageSearch || showMediaGallery || showGroupMediaGallery || selectedContact != null || showJoinGroup || manageGroupId != null || selectedChatMessage != null || showDisappearingDialog || showGroupDisappearingDialog || showGroupAttachmentSheet || showEmoji || showStickers || showGroupEmoji || showGroupStickers || showGroupPollDialog) {
+        when {
+            selectedChatMessage != null -> selectedChatMessage = null
+            selectedContact != null -> selectedContact = null
+            showDirectory -> showDirectory = false
+            showMessageSearch -> showMessageSearch = false
+            showMediaGallery -> showMediaGallery = false
+            showGroupMediaGallery -> showGroupMediaGallery = false
+            showJoinGroup -> showJoinGroup = false
+            manageGroupId != null -> manageGroupId = null
+            showDisappearingDialog -> showDisappearingDialog = false
+            showGroupDisappearingDialog -> showGroupDisappearingDialog = false
+            showGroupAttachmentSheet -> showGroupAttachmentSheet = false
+            showGroupEmoji || showGroupStickers -> { showGroupEmoji = false; showGroupStickers = false }
+            showEmoji || showStickers -> { showEmoji = false; showStickers = false }
+            groupConversationId != null -> groupConversationId = null
+            target.isNotBlank() -> target = ""
+            showGroupPollDialog -> showGroupPollDialog = false
+        }
+    }
     val context = LocalContext.current
     val pinApi = remember { PinsApi(com.red.sovereign.auth.AuthorizedApiClient(com.red.sovereign.auth.TokenStore(context))) }
     var messageInfo by remember { mutableStateOf<DecryptedMessage?>(null) }
@@ -921,6 +1041,9 @@ private fun ChatHubScreen(
         groupMuted = if (groupConversationId != null) {
             localMessages.conversationPreference(groupConversationId.orEmpty()).third > System.currentTimeMillis()
         } else false
+        groupDisappearingMs = groupConversationId
+            ?.let(localMessages::conversationDisappearingDuration)
+            ?.takeIf { it > 0L }
     }
     // إعادة بناء أصوات الاستطلاع من السجل المحلي عند فتح المجموعة
     androidx.compose.runtime.LaunchedEffect(groupConversationId, decrypted.size) {
@@ -1135,36 +1258,44 @@ private fun ChatHubScreen(
         }
     }
     var pendingGroupVideo by remember { mutableStateOf(false) }
-    var pendingGroupRing by remember { mutableStateOf(true) }
+    // 📞 واتساب: المجموعات تملك فقط مكالمات ترن الجميع (حتى 32). المساحات/المؤتمرات ميزات مستقلة خارج المجموعات.
     val groupCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingGroupVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val group = groups.groups.firstOrNull { it.id == groupConversationId }
-        // رفض الكاميرا لا يمنع المكالمة الجماعية — تبدأ صوتية مع إعلام.
+        // رفض الكاميرا لا يمنع المكالمة الجماعية — تبدأ صوتية مع إعلام (واتساب: يمكن تشغيل الفيديو لاحقاً)
         val effectiveVideo = pendingGroupVideo && cameraGranted
         if (audioGranted && group != null) {
-            // سقف Mesh: الصوت يتحمل عدداً أكبر، الفيديو يتدهور بسرعة —
-            // منع الانضمام فوق السقف بدل مكالمة تالفة.
-            val memberCount = group.members.size
-            val cap = if (effectiveVideo) 6 else 12
-            if (memberCount > cap && pendingGroupRing) {
-                android.widget.Toast.makeText(context, "المكالمة الجماعية (بالرنين) تدعم حتى $cap مشاركاً (حالياً $memberCount). استخدم المؤتمر المفتوح للعدد الأكبر.", android.widget.Toast.LENGTH_LONG).show()
+            // واتساب: حتى 32 مشاركاً (2024) لكل من الصوت والفيديو؛ SFU يوسع السقف، Mesh يتراجع لـ 8
+            val inviteeMembers = group.members.filter { it.redId != account.redId }
+            if (inviteeMembers.isEmpty()) {
+                android.widget.Toast.makeText(context, "لا يوجد أعضاء آخرون للاتصال بهم في هذه المجموعة", android.widget.Toast.LENGTH_SHORT).show()
                 return@rememberLauncherForActivityResult
             }
+            if (inviteeMembers.size > 32) {
+                android.widget.Toast.makeText(context, "مكالمة المجموعة تدعم حتى 32 مشاركاً (المجموعة بها ${group.members.size}). سيتم الاتصال بأول 32.", android.widget.Toast.LENGTH_LONG).show()
+            }
+            val inviteIds = inviteeMembers.take(32).map { it.redId }
+            val inviteNames = inviteeMembers.take(32).map { it.username ?: it.redId.take(8) }
             if (pendingGroupVideo && !cameraGranted) {
                 android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا — ستبدأ المكالمة صوتية. يمكنك تفعيل الكاميرا لاحقاً.", android.widget.Toast.LENGTH_LONG).show()
             }
-            ConferenceService.join(context, group.id, account.redId, effectiveVideo, inviteRedIds = if (pendingGroupRing) group.members.map { it.redId } else emptyList())
-            
-            // إرسال رسالة نظام للمجموعة ببدء المكالمة أو المساحة لكي يعلم الجميع بوجودها حتى لو لم يرن هاتفهم
-            val title = if (pendingGroupRing) {
-                if (effectiveVideo) "مكالمة فيديو جماعية 📹" else "مكالمة صوتية جماعية 📞"
-            } else {
-                if (effectiveVideo) "مؤتمر فيديو 🎥" else "مساحة صوتية 🎙"
-            }
+            // واتساب: كل مكالمة مجموعة ترن جميع الأعضاء مباشرة عبر GroupCallService (Mesh/SFU)
+            com.red.sovereign.calls.GroupCallService.startGroupCall(
+                context = context,
+                myUserId = account.redId,
+                inviteeIds = inviteIds,
+                inviteeNames = inviteNames,
+                isVideo = effectiveVideo,
+                hostName = account.username,
+                groupId = group.id
+            )
+
+            // رسالة نظام في دردشة المجموعة — مثل واتساب: "بدأت مكالمة صوتية جماعية — انقر للانضمام"
+            val title = if (effectiveVideo) "مكالمة فيديو جماعية 📹" else "مكالمة صوتية جماعية 📞"
             val rich = com.red.sovereign.core.RichMessage(
                 action = "CALL_STARTED",
-                text = "بدأ $title. يمكن للأعضاء الدخول والمشاركة الان."
+                text = "بدأ $title. ترن جميع الأعضاء — يمكن الانضمام حتى بعد بدء المكالمة."
             )
             com.red.sovereign.core.RedConnectionService.sendGroupRichText(context, group, rich)
         }
@@ -1407,7 +1538,7 @@ private fun ChatHubScreen(
                     }
                 }
                 if (target.isNotBlank() && conversationMessages.isEmpty()) item {
-                    Text("ابدأ المحادثة برسالة. التشفير يُنشأ على الجهاز ولا يرى الخادم النص.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
+                    SovereignEmptyConversationState()
                 }
                 itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
                     // فاصل تاريخ بين الأيام (مثل واتساب)
@@ -1714,33 +1845,37 @@ private fun ChatHubScreen(
                     }
                 }
             } else {
-                val liveRoomId = when (val live = ConferenceRuntime.state) {
-                    is ConferenceUiState.Active -> live.roomId
-                    is ConferenceUiState.Connecting -> live.roomId
-                    is ConferenceUiState.Incoming -> live.roomId
-                    else -> ""
+                // واتساب: ترويسة المجموعة — [رجوع] [أفاتار+اسم+عدد الأعضاء] [📞 صوت] [🎥 فيديو] [⋮]
+                // المؤتمرات/المساحات خارج المجموعات تماماً (ميزات مستقلة)
+                val waGroupCall = GroupCallRuntime.state
+                val waIsActiveForThisGroup = when (waGroupCall) {
+                    is GroupCallUiState.Ringing -> waGroupCall.members.isNotEmpty() && GroupCallRuntime.activeGroupId == openGroup.id
+                    is GroupCallUiState.Active -> GroupCallRuntime.activeGroupId == openGroup.id
+                    is GroupCallUiState.IncomingGroup -> GroupCallRuntime.activeGroupId == openGroup.id || waGroupCall.groupCallId.contains(openGroup.id.take(8))
+                    else -> false
                 }
-                val groupSessionLive = liveRoomId == openGroup.id
-                val groupSessionVideo = ConferenceRuntime.isVideoEnabled && groupSessionLive
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups)
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(openGroup.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val statusText = when {
+                                waGroupCall is GroupCallUiState.Active && GroupCallRuntime.activeGroupId == openGroup.id -> if (waGroupCall.isVideo) "مكالمة فيديو جماعية جارية" else "مكالمة صوتية جماعية جارية"
+                                waGroupCall is GroupCallUiState.Ringing && GroupCallRuntime.activeGroupId == openGroup.id -> "ترن الأعضاء..."
+                                waGroupCall is GroupCallUiState.IncomingGroup -> "مكالمة جماعية واردة"
+                                else -> "${openGroup.members.size} أعضاء · مشفّرة E2EE"
+                            }
                             Text(
-                                if (groupSessionLive) (if (groupSessionVideo) "مؤتمر فيديو جارٍ" else "مساحة صوتية جارية") else "${openGroup.members.size} أعضاء · مشفّرة",
-                                color = if (groupSessionLive) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                                statusText,
+                                color = if (waIsActiveForThisGroup) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
+                        // 📞 واتساب النقي: فيديو + صوت فقط — لا مساحات ولا مؤتمرات هنا
                         GroupChatCallActions(
-                            spaceLive = groupSessionLive && !groupSessionVideo,
-                            meetingLive = groupSessionLive && groupSessionVideo,
-                            onVideoCall = { pendingGroupVideo = true; pendingGroupRing = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
-                            onVoiceCall = { pendingGroupVideo = false; pendingGroupRing = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
-                            onSpace = { pendingGroupVideo = false; pendingGroupRing = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
-                            onMeeting = { pendingGroupVideo = true; pendingGroupRing = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                            onVideoCall = { pendingGroupVideo = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
+                            onVoiceCall = { pendingGroupVideo = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
                             onInfo = { onManageGroup(openGroup.id) },
                             onSearch = { showMessageSearch = true },
                             onMedia = { showGroupMediaGallery = true },
@@ -1756,18 +1891,33 @@ private fun ChatHubScreen(
                         )
                     }
                 }
-                if (groupSessionLive) {
-                    GroupLiveSessionBanner(
-                        isVideo = groupSessionVideo,
-                        inSession = ConferenceRuntime.state is ConferenceUiState.Active || ConferenceRuntime.state is ConferenceUiState.Connecting,
+                // شريط واتساب لمكالمة المجموعة الجارية — انضمام/عودة
+                if (waIsActiveForThisGroup) {
+                    val isVideoActive = (waGroupCall as? GroupCallUiState.Active)?.isVideo == true || (waGroupCall as? GroupCallUiState.Ringing)?.isVideo == true || (waGroupCall as? GroupCallUiState.IncomingGroup)?.isVideo == true
+                    val count = when (waGroupCall) {
+                        is GroupCallUiState.Active -> waGroupCall.members.count { it.status == GroupCallMemberStatus.JOINED } + 1
+                        is GroupCallUiState.Ringing -> waGroupCall.members.size
+                        is GroupCallUiState.IncomingGroup -> waGroupCall.otherMembers.size + 1
+                        else -> 0
+                    }
+                    val inCall = waGroupCall is GroupCallUiState.Active
+                    WhatsAppGroupCallBanner(
+                        isVideo = isVideoActive,
+                        participantCount = count,
+                        isInCall = inCall,
+                        groupName = openGroup.name,
                         onJoinOrReturn = {
-                            if (ConferenceRuntime.state is ConferenceUiState.Incoming) {
-                                ConferenceService.join(context, openGroup.id, account.redId, groupSessionVideo, asHost = false)
+                            when (waGroupCall) {
+                                is GroupCallUiState.IncomingGroup -> GroupCallService.accept(context, waGroupCall.groupCallId, account.redId, waGroupCall.isVideo)
+                                is GroupCallUiState.Ringing -> {} // المضيف بالفعل في المكالمة
+                                else -> {} // Active: العودة عبر Overlay
                             }
                         }
                     )
                 }
-                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id && (it.type == "GROUP_MESSAGE" || it.type == "RICH_TEXT") })
+                // كل الأنواع (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) —
+                // وسائط المجموعة تُشفَّر بـ Sender Keys وتصل بنوعها الأصلي ولا يجوز استبعادها.
+                val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id })
                 androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
                     if (groupMessages.isNotEmpty()) groupListState.animateScrollToItem(groupMessages.lastIndex)
                 }
@@ -2141,7 +2291,10 @@ private fun ChatHubScreen(
                     listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L, "90يوم" to 7_776_000_000L, "إيقاف" to 0L).forEach { (label, ms) ->
                         OutlinedButton({
                             val value = if (ms > 0) ms else null
-                            if (isGroupMsg) groupDisappearingMs = value else disappearingDurationMs = value
+                            if (isGroupMsg) {
+                                groupDisappearingMs = value
+                                localMessages.setConversationDisappearingDuration(message.conversationId, value)
+                            } else disappearingDurationMs = value
                             selectedChatMessage = null
                         }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
                     }
@@ -2588,14 +2741,16 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمكالمة الجماعية", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val conferenceLauncher = rememberCallPermissionLauncher(
-            needCamera = false,
+            // 🔧 إصلاح الشاشة السوداء: مؤتمر الفيديو يحتاج الكاميرا — كانت needCamera=false فلا يُطلب الإذن
+            needCamera = true,
             onGranted = { showJoinDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون للانضمام للمؤتمر", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمؤتمر", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val liveLauncher = rememberCallPermissionLauncher(
-            needCamera = false,
+            // 🔧 البث المباشر كمذيع يحتاج كاميرا + ميكروفون
+            needCamera = true,
             onGranted = { showLiveDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون للبث أو المشاهدة بالمشاركة", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للبث", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val spaceLauncher = rememberCallPermissionLauncher(
             needCamera = false,
@@ -3098,7 +3253,8 @@ private fun MoreScreen(
     onCommunities: () -> Unit = {},
     onProfile: () -> Unit = {},
     onEvents: () -> Unit = {},
-    onPolls: () -> Unit = {}
+    onPolls: () -> Unit = {},
+    onPstnConfig: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -3125,6 +3281,7 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
         MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
         MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
+        MoreOption(Icons.Default.NetworkCheck, "إعدادات PSTN / DINSTAR", "بوابة DINSTAR، حالة الشرائح، SMSC، اختبار SIP Bridge", AqyalGold, click = onPstnConfig)
     }
 }
 
@@ -3276,198 +3433,6 @@ is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.erro
         }
     }
 }
-
-/**
- * 📨 شاشة رسائل DINSTAR SMS — إرسال/استقبال عبر شريحة GSM
- */
-@Composable
-private fun DinstarSmsScreen(viewModel: AuthViewModel, pstnEnabled: Boolean) {
-    var recipient by remember { mutableStateOf("") }
-    var messageText by remember { mutableStateOf("") }
-    var sentMessages by remember { mutableStateOf<List<SmsItem>>(emptyList()) }
-    var inboxMessages by remember { mutableStateOf<List<SmsIncomingMessage>>(emptyList()) }
-    var loading by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = إرسال، 1 = الوارد
-
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Header
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
-                Column(Modifier.padding(start = 12.dp)) {
-                    Text("رسائل DINSTAR SMS", fontWeight = FontWeight.Bold, color = AqyalGold)
-                    Text(if (pstnEnabled) "الشريحة جاهزة للإرسال والاستقبال" else "غير مفعل — يفعله المسؤول من اللوحة", fontSize = 12.sp)
-                }
-            }
-        }
-
-        // Tab row
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TabButton(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            ) { Text("إرسال", fontSize = 12.sp) }
-            TabButton(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                modifier = Modifier.weight(1f).fillMaxHeight()
-            ) { Text("الوارد", fontSize = 12.sp) }
-        }
-
-        // Content
-        when (selectedTab) {
-            0 -> SendSmsPanel(
-                pstnEnabled = pstnEnabled,
-                recipient = recipient,
-                onRecipientChange = { recipient = it },
-                messageText = messageText,
-                onMessageChange = { messageText = it },
-                onSend = {
-                    loading = true
-                    viewModel.sendSms(recipient, messageText) { success, msg ->
-                        loading = false
-                        if (success) {
-                            messageText = ""
-                            sentMessages = sentMessages + SmsItem(
-                                recipient = recipient,
-                                text = messageText,
-                                time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
-                                port = 2
-                            )
-                        }
-                    }
-                },
-                sentMessages = sentMessages,
-                loading = loading
-            )
-            1 -> InboxSmsPanel(
-                pstnEnabled = pstnEnabled,
-                inboxMessages = inboxMessages,
-                onRefresh = {
-                    loading = true
-                    viewModel.loadSmsInbox { msgs ->
-                        loading = false
-                        inboxMessages = msgs.map { SmsIncomingMessage(
-                            port = it.port,
-                            sender = it.sender,
-                            text = it.text,
-                            time = it.time,
-                            coding = it.coding,
-                            udh = it.udh
-                        ) }
-                    }
-                },
-                loading = loading
-            )
-        }
-    }
-}
-
-@Composable
-private fun SendSmsPanel(
-    pstnEnabled: Boolean,
-    recipient: String,
-    onRecipientChange: (String) -> Unit,
-    messageText: String,
-    onMessageChange: (String) -> Unit,
-    onSend: () -> Unit,
-    sentMessages: List<SmsItem>,
-    loading: Boolean
-) {
-    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
-            value = recipient,
-            onValueChange = onRecipientChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("رقم المستلم (مثال: 777123456)") },
-            singleLine = true,
-            enabled = pstnEnabled
-        )
-        OutlinedTextField(
-            value = messageText,
-            onValueChange = onMessageChange,
-            modifier = Modifier.fillMaxWidth().height(120.dp),
-            label = { Text("نص الرسالة") },
-            maxLines = 5,
-            enabled = pstnEnabled
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { }, enabled = false) { Text("${messageText.length}/160") }
-            Button(onClick = onSend, enabled = pstnEnabled && recipient.isNotBlank() && messageText.isNotBlank() && !loading) {
-                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("إرسال")
-            }
-        }
-        if (sentMessages.isNotEmpty()) {
-            Text("المرسلة حديثاً", style = MaterialTheme.typography.titleSmall, color = AqyalGold)
-            LazyColumn(Modifier.fillMaxWidth().height(200.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(sentMessages) { item ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = YounesEmerald)
-                            Column(Modifier.padding(start = 8.dp).weight(1f)) {
-                                Text("إلى: ${item.recipient}", fontWeight = FontWeight.Bold)
-                                Text(item.text.take(60), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InboxSmsPanel(
-    pstnEnabled: Boolean,
-    inboxMessages: List<SmsIncomingMessage>,
-    onRefresh: () -> Unit,
-    loading: Boolean
-) {
-    Column(Modifier.fillMaxSize().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Button(onClick = onRefresh, enabled = pstnEnabled && !loading) {
-                if (loading) CircularProgressIndicator(Modifier.size(20.dp)) else Text("تحديث")
-            }
-        }
-        if (inboxMessages.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Inbox, null, tint = AqyalGold.copy(alpha = 0.5f), modifier = Modifier.size(64.dp))
-                    Text("لا توجد رسائل واردة", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("ستظهر رسائل SMS هنا عند وصولها", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(inboxMessages) { item ->
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard)) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(28.dp))
-                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                Text("من: ${item.sender}", fontWeight = FontWeight.Bold)
-                                Text(item.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                                Text(item.time, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-data class SmsItem(
-    val recipient: String = "",
-    val sender: String = "",
-    val text: String = "",
-    val time: String = "",
-    val port: Int = -1
-)
-
-// SMS actions are handled via AuthViewModel.sendSms() and AuthViewModel.loadSmsInbox()
-// which call the real PstnApi endpoints (sendSms / getInbox) — no stubs needed.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -3893,7 +3858,7 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
     }
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
+        if (shouldAutoDownload(context, manifest.size)) attachments.downloadVoice(item.id, manifestJson)
     }
     val downloadState = attachments.getDownloadState(item.id)
     val downloadedPath = when (downloadState) {
@@ -3922,11 +3887,11 @@ private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMode
             isOutgoing = item.outgoing,
             isDownloaded = isDownloaded,
             isDownloading = isDownloading,
-            onPlayPause = { attachments.download(item.id, manifestJson) },
+            onPlayPause = { attachments.downloadVoice(item.id, manifestJson) },
             onSeek = { /* no-op before download */ },
             onSpeedChange = { /* no-op before download */ },
-            onDownload = { attachments.download(item.id, manifestJson) },
-            onWaveformTap = { attachments.download(item.id, manifestJson) }
+            onDownload = { attachments.downloadVoice(item.id, manifestJson) },
+            onWaveformTap = { attachments.downloadVoice(item.id, manifestJson) }
         )
     }
 }
@@ -4403,9 +4368,5 @@ private fun TabButton(selected: Boolean, onClick: () -> Unit, modifier: Modifier
         shape = RoundedCornerShape(12.dp)
     ) { content() }
 }
-
-
-
-
 
 

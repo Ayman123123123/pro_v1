@@ -53,22 +53,13 @@ class DinstarLoadBalancer(
         private val log = LoggerFactory.getLogger(DinstarLoadBalancer::class.java)
 
         /**
-         * بادئات المشغلين حسب خطة الترقيم الوطنية اليمنية (وزارة
-         * الاتصالات). البادئة رقمان بعد `+967`.
-         *
-         * المحمول يبدأ دائمًا بالرقم 7. أما `10` فهي تخصيص **Yemen 4G**
-         * لخدمة بيانات ثابتة لاسلكية، وليست شبكة GSM محمولة: بوابة
-         * DINSTAR لا تحمل شريحة عليها، فهي مُصنَّفة للعرض والتقارير
-         * فقط ومستبعدة من مطابقة «داخل الشبكة» عبر `isMobile`.
+         * بادئات المشغلين — مفوَّضة الآن إلى YemenNumberPlan (المصدر الوحيد)
+         * بعد أن كانت نسخة محلية ناقصة تفتقد واي 700-709 وحافة 789.
          */
-        private val OPERATOR_PREFIXES: Map<String, YemenOperatorInfo> = mapOf(
-            "70" to YemenOperatorInfo("YTelecom", "واي", isMobile = true),
-            "71" to YemenOperatorInfo("Sabafon", "سبأفون", isMobile = true),
-            "73" to YemenOperatorInfo("YOU", "يو", isMobile = true),
-            "77" to YemenOperatorInfo("YemenMobile", "يمن موبايل", isMobile = true),
-            "78" to YemenOperatorInfo("YemenMobile", "يمن موبايل", isMobile = true),
-            "10" to YemenOperatorInfo("Yemen4G", "يمن فورجي", isMobile = false)
-        )
+        private val OPERATOR_PREFIXES: Map<String, YemenOperatorInfo> =
+            YemenNumberPlan.OPERATORS.mapValues { (api, info) ->
+                YemenOperatorInfo(api, info.arabicName, info.isMobile)
+            }
 
         /**
          * أوزان الترجيح. الإشارة تُقاس بالـ dBm (سالبة) فتُحوَّل إلى
@@ -81,24 +72,13 @@ class DinstarLoadBalancer(
         private const val W_GATEWAY_PRIORITY = 0.5
 
         /**
-         * تصنيف رقم يمني إلى مشغله — دالة نقيّة بلا حالة.
-         *
-         * تُطبَّع الصيغ الدولية (`+967`، `00967`) وصيغة الصفر المحلية،
-         * وتُزال الفواصل والمسافات الشائعة في الإدخال اليدوي.
+         * تصنيف رقم يمني إلى مشغله — مفوَّض إلى YemenNumberPlan (المصدر الوحيد).
          */
         @JvmStatic
-        fun classifyNumber(phoneNumber: String): YemenOperatorInfo? {
-            val digits = phoneNumber.filter { it.isDigit() }
-            val local = when {
-                digits.startsWith("00967") -> digits.removePrefix("00967")
-                digits.startsWith("967") -> digits.removePrefix("967")
-                digits.startsWith("0") -> digits.removePrefix("0")
-                else -> digits
+        fun classifyNumber(phoneNumber: String): YemenOperatorInfo? =
+            YemenNumberPlan.classify(phoneNumber)?.let {
+                YemenOperatorInfo(it.apiName, it.arabicName, it.isMobile)
             }
-            // البادئة رقمان؛ أقل من ذلك ليس رقمًا صالحًا فلا يُصنَّف تخمينًا
-            if (local.length < 2) return null
-            return OPERATOR_PREFIXES[local.substring(0, 2)]
-        }
     }
 
     data class YemenOperatorInfo(
@@ -121,7 +101,8 @@ class DinstarLoadBalancer(
         val operator: String?,
         val signalDbm: Int?,
         val score: Double,
-        val reason: String
+        val reason: String,
+        val simNumber: String? = null
     )
 
     private val nextSlot = AtomicInteger(0)
@@ -140,6 +121,61 @@ class DinstarLoadBalancer(
      * كاملة (تتطلب اتصال قاعدة بيانات وعميل أجهزة).
      */
     fun classifyOperator(phoneNumber: String): YemenOperatorInfo? = classifyNumber(phoneNumber)
+
+    /**
+     * اختيار شريحة دائمة ثابتة لحساب محدد — يتحقق من صلاحية شريحته فقط.
+     * @return PortSelection إذا كانت شريحته مسجلة وغير مشغولة وإشارتها صالحة، وإلا null
+     */
+    fun selectPermanentPort(gatewayId: UUID, portIndex: Int, targetNumber: String? = null): PortSelection? {
+        val gateway = fleet.findGateway(gatewayId) ?: run {
+            log.warn("Permanent SIM gateway not found: {}", gatewayId)
+            return null
+        }
+        val ports = runCatching { hardware.getHardwareStatus(gateway) }.getOrElse { e ->
+            fleet.markFailure(gateway.id, e.message ?: "status query failed")
+            log.warn("Permanent SIM gateway {} unreachable: {}", gateway.host, e.message)
+            return null
+        }
+        val port = ports.find { (it["index"] as? Number)?.toInt() == portIndex } ?: run {
+            log.warn("Permanent SIM port {} not found on gateway {}", portIndex, gateway.host)
+            return null
+        }
+        val status = port["status"]?.toString()
+        val callState = port["callState"]?.toString()
+        val usable = port["signalUsable"] as? Boolean ?: false
+        if (!status.registeredOnNetwork()) {
+            log.warn("Permanent SIM port {} on {} not registered: {}", portIndex, gateway.host, status)
+            recordDecision(gatewayId, portIndex, targetNumber, null, 0.0, "permanent not registered: $status", "REJECTED_OFFLINE")
+            return null
+        }
+        if (callState.equals("ACTIVE", true) || callState.equals("DIALING", true)) {
+            log.warn("Permanent SIM port {} on {} busy: {}", portIndex, gateway.host, callState)
+            recordDecision(gatewayId, portIndex, targetNumber, null, 0.0, "permanent busy: $callState", "REJECTED_BUSY")
+            return null
+        }
+        if (!usable) {
+            log.warn("Permanent SIM port {} on {} no signal: raw={}", portIndex, gateway.host, port["signalRaw"])
+            recordDecision(gatewayId, portIndex, targetNumber, null, 0.0, "permanent no signal", "REJECTED_NO_SIGNAL")
+            return null
+        }
+        // الشريحة صالحة — ابنِ PortSelection مباشرة بلا حساب score
+        val simNumber = port["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" } ?: port["simNumber"]?.toString()
+        portUsage.computeIfAbsent(usageKey(gatewayId, portIndex)) { AtomicInteger(0) }.incrementAndGet()
+        val selection = PortSelection(
+            gatewayId = gatewayId,
+            gatewayHost = gateway.host,
+            pjsipEndpoint = gateway.pjsipEndpoint ?: "dinstar-gw-${gateway.host.replace('.', '-')}",
+            portIndex = portIndex,
+            operator = port["operator"]?.toString(),
+            signalDbm = (port["signalDbm"] as? Number)?.toInt(),
+            score = 100.0,
+            reason = "permanent SIM ${simNumber ?: "?"} signal=${port["signalDbm"]}dBm",
+            simNumber = simNumber
+        )
+        recordDecision(gatewayId, portIndex, targetNumber, selection.operator, 100.0, "permanent SIM selected", "SELECTED")
+        log.info("DINSTAR permanent routing: gateway={} port={} sim={} target={}", gateway.host, portIndex, simNumber, targetNumber ?: "unknown")
+        return selection
+    }
 
     /**
      * الاختيار الأمثل عبر الأسطول كله.
@@ -247,6 +283,8 @@ class DinstarLoadBalancer(
         val index = (best.port["index"] as? Number)?.toInt() ?: return null
         portUsage.computeIfAbsent(usageKey(best.gateway?.id, index)) { AtomicInteger(0) }.incrementAndGet()
 
+        val simNum = best.port["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+            ?: best.port["simNumber"]?.toString()
         val selection = PortSelection(
             gatewayId = best.gateway?.id,
             gatewayHost = best.gateway?.host ?: "configured",
@@ -255,7 +293,8 @@ class DinstarLoadBalancer(
             operator = best.port["operator"]?.toString(),
             signalDbm = (best.port["signalDbm"] as? Number)?.toInt(),
             score = best.score,
-            reason = best.reason
+            reason = best.reason,
+            simNumber = simNum
         )
 
         recordDecision(selection.gatewayId, index, targetNumber, selection.operator,
@@ -368,10 +407,6 @@ class DinstarLoadBalancer(
      */
     fun resolveActiveCall(userId: UUID): Triple<String, Int, UUID>? {
         val raw = redis.opsForValue().get("red:pstn:active:$userId") ?: return null
-        val parts = raw.split(":")
-        if (parts.size != 3) return null
-        return try {
-            Triple(parts[0], parts[1].toInt(), UUID.fromString(parts[2]))
-        } catch (_: Exception) { null }
+        return PstnActiveCallKeys.parse(raw)
     }
 }

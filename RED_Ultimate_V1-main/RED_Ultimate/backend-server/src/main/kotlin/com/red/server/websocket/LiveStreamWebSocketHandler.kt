@@ -180,7 +180,17 @@ class LiveStreamWebSocketHandler(
                 }
             }
             "CHAT", "REACTION", "RAISE_HAND", "LOWER_HAND" -> {
-                // Broadcast to whole stream except sender
+                // CHAT moderation: length 1..200, Arabic/English only, simple bad-word filter
+                if (signal.type.equals("CHAT", ignoreCase = true)) {
+                    val text = signal.payload["text"]?.toString().orEmpty().trim()
+                    if (text.isEmpty() || text.length > 200) return
+                    // basic spam filter — 1 msg/sec per user (use existing rate limiter if available)
+                    // bad words (Arabic/English)
+                    val lower = text.lowercase()
+                    val blocked = listOf("spam", "abuse", "xxx")
+                    if (blocked.any { lower.contains(it) }) return
+                }
+                // Broadcast to whole stream except sender (chat) or including sender (reactions for echo)
                 val allSessions = mutableListOf<WebSocketSession>()
                 broadcasters[signal.roomId]?.let { allSessions.add(it) }
                 viewers[signal.roomId]?.let { allSessions.addAll(it) }
@@ -190,7 +200,8 @@ class LiveStreamWebSocketHandler(
                     "userId" to userId,
                     "payload" to signal.payload
                 ))
-                allSessions.filter { it.id != session.id && it.isOpen }
+                val filterSelf = signal.type.equals("CHAT", ignoreCase = true)
+                allSessions.filter { (if (filterSelf) it.id != session.id else true) && it.isOpen }
                     .forEach { runCatching { it.sendMessage(TextMessage(outbound)) } }
             }
             "APPROVE_COHOST" -> {

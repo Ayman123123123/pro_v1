@@ -129,10 +129,26 @@ class VoiceMessageTypeTest {
     }
 
     @Test
-    fun `VOICE message rejects ciphertext type 4 (group-only)`() {
-        val message = buildMessage(type = "VOICE", ciphertextType = 4)
+    fun `VOICE message accepts group ciphertext types 4 and 7 (sender-key media)`() {
+        // مطابق لمنطق MessageService: الوسائط قد تُرسل بنص المجموعة (SenderKey)
+        // مع فرض عضوية المجموعة في enforceGroupMembership.
+        val legacy = buildMessage(type = "VOICE", ciphertextType = 4)
+        assertNull(
+            runCatching { validateCiphertext(legacy) }.exceptionOrNull(),
+            "VOICE should accept legacy sender-key type 4"
+        )
+        val modern = buildMessage(type = "VOICE", ciphertextType = 7)
+        assertNull(
+            runCatching { validateCiphertext(modern) }.exceptionOrNull(),
+            "VOICE should accept libsignal 0.86+ sender-key type 7"
+        )
+    }
+
+    @Test
+    fun `VOICE message rejects unknown ciphertext type`() {
+        val message = buildMessage(type = "VOICE", ciphertextType = 9)
         val exception = runCatching { validateCiphertext(message) }.exceptionOrNull()
-        assertNotNull(exception, "VOICE should reject ciphertext type 4 (group-only)")
+        assertNotNull(exception, "VOICE should reject unknown ciphertext type 9")
     }
 
     @Test
@@ -184,10 +200,13 @@ class VoiceMessageTypeTest {
     }
 
     private fun validateCiphertext(message: RedProtos.ChatMessage) {
+        // Mirror of MessageService.validate — libsignal 0.86+ (Rust): SENDERKEY_TYPE = 7،
+        // والإصدارات القديمة تستخدم 4. نقبل كليهما للرسائل الجماعية.
+        val isGroupCiphertext = message.ciphertextType == 4 || message.ciphertextType == 7
         val allowed = if (message.type == "GROUP_MESSAGE") {
-            message.ciphertextType == 4
+            isGroupCiphertext
         } else {
-            message.ciphertextType == 2 || message.ciphertextType == 3
+            isGroupCiphertext || message.ciphertextType == 2 || message.ciphertextType == 3
         }
         require(allowed) { "Unsupported libsignal ciphertext type for ${message.type}" }
     }

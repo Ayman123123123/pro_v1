@@ -81,8 +81,11 @@ class LiveStreamSignalingClient(
         socket?.send(json.encodeToString(signal)) ?: listener.onError("LIVESTREAM_NOT_CONNECTED")
     }
 
-    fun join(streamId: String, userId: String, role: String) = send(
-        LiveStreamSignal(type = "JOIN", roomId = streamId, userId = userId, payload = mapOf("role" to role))
+    fun join(streamId: String, userId: String, role: String, password: String? = null) = send(
+        LiveStreamSignal(type = "JOIN", roomId = streamId, userId = userId, payload = buildMap {
+            put("role", role)
+            if (!password.isNullOrBlank()) put("password", password)
+        })
     )
 
     fun leave(streamId: String, userId: String) = send(

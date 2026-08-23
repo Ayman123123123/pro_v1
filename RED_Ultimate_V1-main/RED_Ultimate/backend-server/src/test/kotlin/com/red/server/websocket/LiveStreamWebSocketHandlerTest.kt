@@ -18,7 +18,11 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private val streams = LiveStreamService(mock<RoomPasswordHasher>())
+    private val streams = LiveStreamService(
+        mock<RoomPasswordHasher>(),
+        mock(),
+        mock()
+    )
     private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
         whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
     }
@@ -34,7 +38,9 @@ class LiveStreamWebSocketHandlerTest {
         private val attrs: MutableMap<String, Any> = mutableMapOf(
             "userId" to userId,
             "redId" to userId,
-            "accountId" to userId
+                        "accountId" to userId,
+            "deviceId" to "device-test"
+
         )
         val session: WebSocketSession = mock<WebSocketSession>().also { sock ->
             whenever(sock.id).thenReturn(sessionId)

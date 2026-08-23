@@ -3,7 +3,7 @@ package com.red.sovereign.groups
 import kotlinx.serialization.Serializable
 
 @Serializable data class GroupMember(val id: String, val groupId: String, val userId: String, val redId: String, val username: String, val role: String, val joinedAt: String)
-@Serializable data class GroupSettings(val onlyAdminsCanSend: Boolean = false, val onlyAdminsCanEditInfo: Boolean = true, val requireJoinApproval: Boolean = true)
+@Serializable data class GroupSettings(val onlyAdminsCanSend: Boolean = false, val onlyAdminsCanEditInfo: Boolean = true, val requireJoinApproval: Boolean = true, val onlyAdminsCanAddMembers: Boolean = true, val onlyAdminsCanInvite: Boolean = false, val onlyAdminsCanPin: Boolean = true, val onlyAdminsCanCall: Boolean = false)
 @Serializable data class Group(val id: String, val name: String, val description: String? = null, val ownerRedId: String, val avatarUrl: String? = null, val privacy: String = "PRIVATE", val settings: GroupSettings = GroupSettings(), val createdAt: String, val members: List<GroupMember> = emptyList())
 @Serializable data class CreateGroupRequest(val name: String, val description: String? = null, val privacy: String = "PRIVATE")
 @Serializable data class AddGroupMemberRequest(val redId: String, val role: String = "MEMBER")

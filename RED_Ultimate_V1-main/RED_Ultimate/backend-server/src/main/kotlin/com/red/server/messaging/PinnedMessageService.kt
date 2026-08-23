@@ -1,7 +1,8 @@
 package com.red.server.messaging
 
-import com.red.server.database.MessageDocument
 import com.red.server.database.GroupMessageDocument
+import com.red.server.database.MessageDocument
+import com.red.server.groups.GroupService
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
@@ -19,7 +20,8 @@ import java.util.UUID
 @Service
 class PinnedMessageService(
     private val mongo: MongoTemplate,
-    private val jdbc: JdbcTemplate
+    private val jdbc: JdbcTemplate,
+    private val groups: GroupService
 ) {
     companion object {
         const val MAX_PINNED_PRIVATE = 5
@@ -52,6 +54,10 @@ class PinnedMessageService(
             conversationId != null -> "PRIVATE"
             groupId != null -> "GROUP"
             else -> "CHANNEL"
+        }
+        // 🔐 C3: التثبيت في مجموعة يتطلب عضوية فعلية — لا تثبيت من غير الأعضاء
+        if (groupId != null) {
+            require(groups.roleFor(actorId, groupId) != null) { "Only group members may pin messages" }
         }
         // تحقق من وجود الرسالة وصلاحية التثبيت
         verifyMessageExists(messageUuid, conversationId, groupId, channelId, actorRedId)
@@ -108,7 +114,9 @@ class PinnedMessageService(
         )
     }
 
-    fun listForGroup(groupId: String): List<PinResponse> {
+    fun listForGroup(actorId: UUID, groupId: String): List<PinResponse> {
+        // 🔐 C3: سرد مثبتات المجموعة للأعضاء فقط
+        require(groups.roleFor(actorId, groupId) != null) { "Only group members may view pinned messages" }
         return jdbc.query(
             "SELECT * FROM pinned_messages WHERE group_id=? AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY pinned_at DESC",
             { rs, _ ->
@@ -137,12 +145,13 @@ class PinnedMessageService(
     }
 
     private fun verifyMessageExists(messageUuid: String, conversationId: String?, groupId: String?, channelId: String?, actorRedId: String) {
-        val exists = when {
-            conversationId != null -> mongo.exists(Query(Criteria.where("uuid").`is`(messageUuid)), MessageDocument::class.java)
-            groupId != null -> mongo.exists(Query(Criteria.where("uuid").`is`(messageUuid)), GroupMessageDocument::class.java)
-            else -> mongo.exists(Query(Criteria.where("uuid").`is`(messageUuid)), MessageDocument::class.java)
-        }
-        require(exists) { "الرسالة غير موجودة" }
+        // 🔧 C2: رسائل المجموعات تُخزَّن فعلياً في messages — مجموعة group_messages مرآة
+        // لم تُفعّل قط، والتحقق منها كان يفشل دائماً فيمنع تثبيت أي رسالة مجموعة.
+        val doc = mongo.findOne(Query(Criteria.where("uuid").`is`(messageUuid)), MessageDocument::class.java)
+        require(doc != null) { "الرسالة غير موجودة" }
+        // 🔐 الرسالة المثبتة يجب أن تنتمي فعلاً للنطاق المطلوب — لا تثبيت رسائل غريبة
+        if (groupId != null) require(doc.conversationId == groupId) { "الرسالة لا تنتمي لهذه المجموعة" }
+        if (conversationId != null) require(doc.conversationId == conversationId) { "الرسالة لا تنتمي لهذه المحادثة" }
     }
 
     private fun checkLimit(conversationId: String?, groupId: String?, channelId: String?) {

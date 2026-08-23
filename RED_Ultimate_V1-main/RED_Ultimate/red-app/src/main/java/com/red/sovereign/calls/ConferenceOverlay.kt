@@ -645,27 +645,31 @@ private fun QualityIndicator(stats: NetworkStats) {
 @Composable
 private fun ConferenceVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
     val egl = ConferenceRuntime.eglContext ?: return
+    if (track == null) return
     var renderer: SurfaceViewRenderer? by remember { mutableStateOf(null) }
-    AndroidView(
-        factory = { context ->
-            SurfaceViewRenderer(context).apply {
-                init(egl, null)
-                setMirror(mirror)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                renderer = this
-                track?.addSink(this)
-            }
-        },
-        update = { view ->
-            track?.addSink(view)
-        },
-        modifier = modifier
-    )
-    DisposableEffect(track, renderer) {
-        onDispose {
-            renderer?.let {
-                track?.removeSink(it)
-                it.release()
+    // 🔧 إصلاح الشاشة السوداء: key(track) يجبر إعادة إنشاء الـ renderer عند تغيّر المسار
+    // (كان المسار يُنشأ بعد تركيب الـ sink فيظل الإطار أسود)
+    androidx.compose.runtime.key(track) {
+        AndroidView(
+            factory = { context ->
+                SurfaceViewRenderer(context).apply {
+                    init(egl, null)
+                    setMirror(mirror)
+                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                    setEnableHardwareScaler(true)
+                    renderer = this
+                    track.addSink(this)
+                }
+            },
+            update = { view -> if (renderer == view) track.addSink(view) },
+            modifier = modifier
+        )
+        DisposableEffect(track, renderer) {
+            onDispose {
+                renderer?.let {
+                    track.removeSink(it)
+                    it.release()
+                }
             }
         }
     }

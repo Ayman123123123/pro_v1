@@ -1,5 +1,9 @@
 package com.red.sovereign.calls
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -8,13 +12,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 
-private val YEMENI_NUMBER_PATTERN = Regex("""^\+967[71379]\d{6}$""")
+private val YEMENI_NUMBER_PATTERN = Regex("""^\+967(70|71|73|77|78)\d{7}$""")
 
 private fun formatYemeniNumber(raw: String): String {
     val digits = raw.filter { it.isDigit() }
@@ -39,6 +45,22 @@ fun DialPadScreen(
 ) {
     var dialedNumber by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    var pendingPstnNumber by remember { mutableStateOf<String?>(null) }
+    val pstnAudioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingPstnNumber
+        pendingPstnNumber = null
+        if (granted && pending != null) {
+            onPstnCall(pending)
+            dialedNumber = ""
+            errorMessage = null
+        } else if (!granted) {
+            errorMessage = "إذن الميكروفون مطلوب لمكالمة PSTN"
+            android.widget.Toast.makeText(context, "الميكروفون مطلوب للمكالمة الهاتفية", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 
     fun appendDigit(digit: String) {
         dialedNumber += digit
@@ -74,6 +96,16 @@ fun DialPadScreen(
         }
         if (dailyLimit > 0 && usedToday >= dailyLimit) {
             errorMessage = "Daily limit reached ($usedToday/$dailyLimit)"
+            return
+        }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingPstnNumber = formatted
+            errorMessage = null
+            val activity = context as? android.app.Activity
+            if (activity != null && androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)) {
+                android.widget.Toast.makeText(context, "الميكروفون مطلوب لمكالمة PSTN — يرجى السماح", android.widget.Toast.LENGTH_LONG).show()
+            }
+            pstnAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             return
         }
         onPstnCall(formatted)

@@ -81,12 +81,17 @@ red:
     # false = no hardware / Docker cannot see the LAN box. IP calls stay on.
     enabled: ${DINSTAR_ENABLED:false}
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
-    # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع.
-    ip: ${DINSTAR_IP:192.168.11.1}
+    # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع. (192.168.11.2 هو DINSTAR UC2000-VE الحقيقي، .1 هو الراوتر)
+    ip: ${DINSTAR_IP:192.168.11.2}
+    ips: ${DINSTAR_IPS:}
     port: ${DINSTAR_PORT:443}
     scheme: ${DINSTAR_SCHEME:https}
     username: ${DINSTAR_USERNAME:admin}
     password: ${DINSTAR_PASSWORD:}
+    # SPKI pins اختيارية (sha256/...) — عند تعبئتها تُتحقق هوية شهادة البوابة
+    # حتى مع trust-all المحلي: OkHttp يرفض أي سلسلة لا تطابق الدبوس.
+    # صيغة القيمة: sha256/xxx,sha256/yyy (فاصلة بين بوابات متعددة).
+    cert-pins: ${DINSTAR_CERT_SHA256_PINS:}
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3

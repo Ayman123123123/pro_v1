@@ -9,6 +9,7 @@ import com.red.server.messaging.MessageService
 import com.red.server.services.AdminUserIntelligenceService
 import com.red.server.services.NotificationService
 import com.red.sovereign.proto.RedProtos
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.BinaryMessage
@@ -29,6 +30,7 @@ class RedMasterHandler(
     private val accessGuard: ApprovedDeviceSessionGuard,
     private val notifications: NotificationService
 ) : BinaryWebSocketHandler() {
+    private val log = LoggerFactory.getLogger(RedMasterHandler::class.java)
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
     // Per-connection fixed-window guard: bounds CPU/DB work a single socket can demand
     // before a distributed gateway-level limit is applied.
@@ -52,14 +54,25 @@ class RedMasterHandler(
             session.close(CloseStatus.BAD_DATA)
             return
         }
-        when (envelope.signalCase) {
-            RedProtos.RedRED.SignalCase.MESSAGE -> receiveMessage(session, envelope.message)
-            RedProtos.RedRED.SignalCase.ACK -> receiveAck(session, envelope.ack)
-            RedProtos.RedRED.SignalCase.TYPING -> receiveTyping(session, envelope.typing)
-            RedProtos.RedRED.SignalCase.SYNC_REQ -> sync(session, envelope.syncReq)
-            RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
-            RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> receiveRemoteWipeAck(session, envelope.remoteWipeAck)
-            else -> Unit
+        // 🛡️ أي فشل في معالجة المغلف (تحقق/عضوية/تسلسل) لا يقتل المقبس — نسجّل ونكمل.
+        handleEnvelopeSafely(session, envelope)
+    }
+
+    /** معالجة مغلف واحد بعزل الأخطاء — مرونة بمستوى واتساب: رسالة مرفوضة
+     *  تُسجَّل فقط، ويبقى اتصال المرسل حياً لاستقبال الرسائل التالية. */
+    private fun handleEnvelopeSafely(session: WebSocketSession, envelope: RedProtos.RedRED) {
+        try {
+            when (envelope.signalCase) {
+                RedProtos.RedRED.SignalCase.MESSAGE -> receiveMessage(session, envelope.message)
+                RedProtos.RedRED.SignalCase.ACK -> receiveAck(session, envelope.ack)
+                RedProtos.RedRED.SignalCase.TYPING -> receiveTyping(session, envelope.typing)
+                RedProtos.RedRED.SignalCase.SYNC_REQ -> sync(session, envelope.syncReq)
+                RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
+                RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> receiveRemoteWipeAck(session, envelope.remoteWipeAck)
+                else -> Unit
+            }
+        } catch (e: Exception) {
+            log.warn("Rejected {} frame from session {}: {}", envelope.signalCase, session.id, e.message)
         }
     }
 
@@ -194,6 +207,29 @@ class RedMasterHandler(
             .setCiphertextType(0)
             .build()
         sendToUser(redId, RedProtos.RedRED.newBuilder().setMessage(control).build())
+    }
+
+    /**
+     * 🔔 بث لحظي بتغيّر عضوية/حالة مجموعة لكل الأعضاء المتصلين (GROUP_SYNC).
+     * رسالة تحكم غير مخزّنة: العميل عند استلامها يُحدّث قائمة مجموعاته ويعيد توزيع مفاتيح
+     * Sender Key للعضو الجديد عند أول إرسال. الأعضاء غير المتصلين يلتقطون الحالة عبر load() العادي.
+     */
+    @org.springframework.context.event.EventListener
+    fun onGroupMembershipChanged(event: com.red.server.groups.GroupMembershipChangedEvent) {
+        val payload = """{"groupId":"${event.groupId}"}"""
+        event.memberRedIds.forEach { redId ->
+            val control = RedProtos.ChatMessage.newBuilder()
+                .setId("sync-${event.groupId}-${System.nanoTime()}")
+                .setConversationId("red-control")
+                .setSenderId(RedIdGenerator.SYSTEM_ID)
+                .setReceiverId(redId)
+                .setPayload(ByteString.copyFrom(payload, Charsets.UTF_8))
+                .setTimestamp(System.currentTimeMillis())
+                .setType("GROUP_SYNC")
+                .setCiphertextType(0)
+                .build()
+            sendToUser(redId, RedProtos.RedRED.newBuilder().setMessage(control).build())
+        }
     }
 
     private fun userId(session: WebSocketSession): String =

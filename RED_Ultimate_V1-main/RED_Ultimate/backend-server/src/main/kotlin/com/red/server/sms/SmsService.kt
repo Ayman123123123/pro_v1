@@ -6,12 +6,15 @@ import com.red.server.services.DinstarHardwareService
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
 import kotlin.math.min
 
@@ -21,10 +24,14 @@ class SmsService(
     private val markers: SmsReadMarkerRepository,
     private val users: UserAccountRepository,
     private val hardware: DinstarHardwareService,
-    private val redis: StringRedisTemplate
+    private val redis: StringRedisTemplate,
+    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
+    private val jdbc: org.springframework.jdbc.core.JdbcTemplate
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(SmsService::class.java)
+        private val lastSmsWarnAt = ConcurrentHashMap<String, Instant>()
+        private val lastSmsReachable = ConcurrentHashMap<String, Boolean>()
 
         /** Yemeni mobile prefixes after +967 / 967 / 0 (per ITU E.164 + NTA-Yemen). */
         private val YEMEN_PREFIXES = setOf(
@@ -79,20 +86,25 @@ class SmsService(
 
         val encoding = detectEncoding(text)
         val segments = countParts(text, encoding)
+        // استخدم شريحة المستخدم الدائمة إن لم يحدد المنفذ صراحةً
+        val effectivePort = port ?: listOfNotNull(user.pstnPortIndex)
+        val effectiveGatewayHost = user.pstnGatewayId?.let { gid ->
+            runCatching { jdbc.queryForObject("SELECT host FROM telecom_gateways WHERE id = ?", String::class.java, gid) }.getOrNull()
+        }
         val entity = SmsMessageEntity(
             ownerId = userId,
             number = number,
             content = text,
             direction = SmsDirection.OUT,
             status = SmsStatus.PENDING,
-            port = port?.firstOrNull(),
+            port = effectivePort.firstOrNull(),
             smsParts = segments
         )
         messages.save(entity)
 
         try {
             val params = listOf(mapOf("number" to number, "user_id" to user.redId))
-            hardware.sendSms(text, params, port, encoding)
+            hardware.sendSms(text, params, effectivePort, encoding, effectiveGatewayHost)
             entity.status = SmsStatus.SENT
             entity.sentAt = Instant.now()
             entity.errorText = null
@@ -114,23 +126,46 @@ class SmsService(
      */
     @Transactional
     fun ingestIncoming(): List<SmsMessageEntity> {
+        if (!dinstarEnabled) return emptyList()
         val raw = runCatching { hardware.queryIncomingSms() }
             .getOrElse {
-                log.warn("DINSTAR query_incoming_sms failed: ${it.message}")
+                val msg = it.message ?: "unknown"
+                val firstFailure = lastSmsReachable.put("ingest", false) != false
+                val last = lastSmsWarnAt["ingest"]
+                val quiet = last != null && Duration.between(last, Instant.now()).toMinutes() < 5
+                if (firstFailure || !quiet) {
+                    log.warn("DINSTAR query_incoming_sms failed: {} — Set DINSTAR_ENABLED=false if no hardware", msg)
+                    lastSmsWarnAt["ingest"] = Instant.now()
+                } else {
+                    log.debug("DINSTAR still unreachable (ingest): {}", msg)
+                }
                 return emptyList()
             }
+        lastSmsReachable["ingest"] = true
+        lastSmsWarnAt.remove("ingest")
         return parseIncomingResponse(raw).mapNotNull { entry ->
-            val sender = normalizeYemeniNumber(entry.number)
+            val sender = runCatching { normalizeYemeniNumber(entry.number) }
+                .getOrElse {
+                    log.warn("Ignoring incoming SMS with invalid sender from DINSTAR: {}", entry.number)
+                    return@mapNotNull null
+                }
             val text = entry.text
-            if (text.isNullOrEmpty()) return@mapNotNull null
+            if (text.isBlank()) return@mapNotNull null
 
             // dedup خلال آخر 2 دقيقة
             val cutoff = Instant.now().minusSeconds(120)
             val dup = messages.findByOwnerIdIsNullAndNumberOrderByCreatedAtAsc(sender).lastOrNull()
             if (dup != null && dup.createdAt.isAfter(cutoff) && dup.content == text) return@mapNotNull null
 
+            // الربط الدائم 1:1 — حدد مالك الشريحة عبر المنفذ
+            val ownerId = entry.port?.let { pIdx ->
+                // ابحث عن حساب يملك هذا المنفذ (على أي بوابة — مؤقت أحادي)
+                users.findAllByStatusOrderByCreatedAtAsc(com.red.server.auth.model.AccountStatus.APPROVED)
+                    .firstOrNull { it.pstnPortIndex == pIdx && it.pstnEnabled }?.id
+            }
+
             val msg = SmsMessageEntity(
-                ownerId = null,
+                ownerId = ownerId,
                 number = sender,
                 content = text,
                 direction = SmsDirection.IN,
@@ -164,12 +199,14 @@ class SmsService(
 
         return list.mapNotNull { item ->
             val m = item as? Map<*, *> ?: return@mapNotNull null
-            val number = (m["number"] ?: m["sender"] ?: m["from"]).toString()
-            val text = (m["text"] ?: m["content"] ?: m["msg"]).toString()
+            val rawNumber = m["number"] ?: m["sender"] ?: m["from"] ?: return@mapNotNull null
+            val rawText = m["text"] ?: m["content"] ?: m["msg"] ?: return@mapNotNull null
+            val number = rawNumber.toString().trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val text = rawText.toString().takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val port = (m["port"] as? Number)?.toInt()
             val time = runCatching { Instant.parse((m["time"] ?: m["datetime"] ?: m["timestamp"]).toString()) }
                 .getOrNull() ?: Instant.now()
-            IncomingEntry(port, normalizeYemeniNumber(number), text, time)
+            IncomingEntry(port, number, text, time)
         }
     }
 

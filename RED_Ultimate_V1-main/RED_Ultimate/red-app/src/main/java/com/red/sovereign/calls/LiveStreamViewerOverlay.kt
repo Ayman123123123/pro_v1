@@ -34,6 +34,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.red.sovereign.ui.theme.AqyalGold
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
@@ -53,7 +55,9 @@ fun YounesLiveStreamOverlay() {
     val remoteVideo = LiveStreamRuntime.remoteVideo
     var chatText by remember { mutableStateOf("") }
     var showRaisedHandsSheet by remember { mutableStateOf(false) }
-    var showGiftsSheet by remember { mutableStateOf(false) }
+    var showViewersSheet by remember { mutableStateOf(false) }
+    var showInviteSheet by remember { mutableStateOf(false) }
+    var inviteRedId by remember { mutableStateOf("") }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
     if (state is LiveStreamUiState.Incoming) {
@@ -146,17 +150,19 @@ fun YounesLiveStreamOverlay() {
                     }
                 }
 
-                // Stats Cluster (Viewers, Close)
+                // Stats Cluster (Viewers clickable, Close)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Viewer Count (TikTok style transparent badge)
+                    // Viewer Count — قابل للنقر لعرض قائمة المشاهدين (عين)
                     Box(
                         Modifier
-                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                            .clickable { showViewersSheet = true }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Visibility, null, tint = Color.White, modifier = Modifier.size(14.dp))
                             Text("${LiveStreamRuntime.viewerCount}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White.copy(0.7f), modifier = Modifier.size(12.dp))
                         }
                     }
 
@@ -271,8 +277,9 @@ fun YounesLiveStreamOverlay() {
                         })
                     )
 
-                    // Action Icons (Right side)
+                    // Action Icons (Right side) — منظمة: دعوة + مشاركة
                     if (isBroadcaster) {
+                        ActionIcon(Icons.Default.PersonAdd, "دعوة") { showInviteSheet = true }
                         ActionIcon(Icons.Default.Cameraswitch, "تبديل الكاميرا") {
                             LiveStreamService.action(context, LiveStreamService.ACTION_SWITCH_CAMERA)
                         }
@@ -284,10 +291,7 @@ fun YounesLiveStreamOverlay() {
                             LiveStreamService.action(context, LiveStreamService.ACTION_TOGGLE_MIC)
                         }
                     } else {
-                        // Viewer tools
-                        ActionIcon(Icons.Default.CardGiftcard, "هدايا", tint = Color(0xFFFFD700)) {
-                            showGiftsSheet = true
-                        }
+                        ActionIcon(Icons.Default.PersonAdd, "دعوة") { showInviteSheet = true }
                         ActionIcon(Icons.Default.Share, "مشاركة") {
                             val activeStreamId = when (state) {
                                 is LiveStreamUiState.Connecting -> state.streamId
@@ -313,15 +317,171 @@ fun YounesLiveStreamOverlay() {
                 }
             }
 
-            if (showGiftsSheet) {
-                LiveGiftsSheet(
-                    onDismiss = { showGiftsSheet = false },
-                    onSendGift = { gift ->
-                        LiveStreamService.sendReaction(context, gift.emoji)
-                        LiveStreamService.sendChat(context, "أرسل ${gift.name} ${gift.emoji}", "أنا")
-                        android.widget.Toast.makeText(context, "✨ تم إرسال ${gift.name} ${gift.emoji} للمضيف بنجاح!", android.widget.Toast.LENGTH_SHORT).show()
+            // شيت المشاهدين — عند الضغط على العين
+            if (showViewersSheet) {
+                ViewersSheet(
+                    viewerCount = LiveStreamRuntime.viewerCount,
+                    isBroadcaster = isBroadcaster,
+                    onDismiss = { showViewersSheet = false },
+                    onInvite = { showViewersSheet = false; showInviteSheet = true }
+                )
+            }
+            // شيت الدعوة من داخل البث — أصدقاء أو رابط
+            if (showInviteSheet) {
+                InviteFromLiveSheet(
+                    streamId = when (state) {
+                        is LiveStreamUiState.Connecting -> state.streamId
+                        is LiveStreamUiState.Active -> state.streamId
+                        else -> ""
+                    },
+                    inviteRedId = inviteRedId,
+                    onRedIdChange = { inviteRedId = it },
+                    onDismiss = { showInviteSheet = false; inviteRedId = "" },
+                    onInviteFriend = {
+                        val sid = when (state) {
+                            is LiveStreamUiState.Connecting -> state.streamId
+                            is LiveStreamUiState.Active -> state.streamId
+                            else -> ""
+                        }
+                        if (inviteRedId.isNotBlank() && sid.isNotBlank()) {
+                            // دعوة عبر الخادم — استدعاء API مباشر
+                            val ctx = context
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                try {
+                                    val api = com.red.sovereign.auth.AuthorizedApiClient(com.red.sovereign.auth.TokenStore(ctx))
+                                    val body = org.json.JSONObject().put("friendIds", org.json.JSONArray().put(inviteRedId.trim())).toString()
+                                    api.request("POST", "/api/livestream/$sid/invite", body)
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        android.widget.Toast.makeText(ctx, "تم إرسال الدعوة إلى $inviteRedId", android.widget.Toast.LENGTH_SHORT).show()
+                                        showInviteSheet = false; inviteRedId = ""
+                                    }
+                                } catch (_: Exception) {
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        android.widget.Toast.makeText(ctx, "تعذر إرسال الدعوة", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onCopyLink = {
+                        val sid = when (state) {
+                            is LiveStreamUiState.Connecting -> state.streamId
+                            is LiveStreamUiState.Active -> state.streamId
+                            else -> ""
+                        }
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("younes://livestream/$sid"))
+                        android.widget.Toast.makeText(context, "تم نسخ رابط البث: younes://livestream/$sid", android.widget.Toast.LENGTH_LONG).show()
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewersSheet(
+    viewerCount: Int,
+    isBroadcaster: Boolean,
+    onDismiss: () -> Unit,
+    onInvite: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(0.6f)).clickable { onDismiss() }, contentAlignment = Alignment.BottomCenter) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).clickable(enabled = false) {},
+                color = Color(0xFF0F172A)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Visibility, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Text("المشاهدون ($viewerCount)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp).background(Color.White.copy(0.1f), CircleShape)) {
+                            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    if (viewerCount == 0) {
+                        Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                            Text("لا يوجد مشاهدون بعد — ادعُ أصدقاءك!", color = Color.Gray, fontSize = 13.sp)
+                        }
+                    } else {
+                        // قائمة المشاهدين (مبسطة — عرض العدد مع أيقونات)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            repeat(minOf(viewerCount, 8)) {
+                                Box(Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFFF91850), Color(0xFF25F4EE)))), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                }
+                            }
+                            if (viewerCount > 8) {
+                                Box(Modifier.size(48.dp).clip(CircleShape).background(Color.White.copy(0.12f)), contentAlignment = Alignment.Center) {
+                                    Text("+${viewerCount - 8}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                    Button(onClick = onInvite, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850)), shape = RoundedCornerShape(24.dp)) {
+                        Icon(Icons.Default.PersonAdd, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("دعوة أصدقاء / نسخ الرابط", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InviteFromLiveSheet(
+    streamId: String,
+    inviteRedId: String,
+    onRedIdChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onInviteFriend: () -> Unit,
+    onCopyLink: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(0.6f)).clickable { onDismiss() }, contentAlignment = Alignment.BottomCenter) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).clickable(enabled = false) {},
+                color = Color(0xFF0F172A)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("دعوة إلى البث", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("شارك الرابط أو ادعُ صديقاً عبر معرّف يونس", color = Color.Gray, fontSize = 12.sp)
+                    // رابط
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.08f)).clickable { onCopyLink() }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("younes://livestream/$streamId", color = Color(0xFF25F4EE), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.ContentCopy, null, tint = Color(0xFF25F4EE), modifier = Modifier.size(18.dp))
+                    }
+                    Button(onClick = onCopyLink, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25F4EE)), shape = RoundedCornerShape(12.dp)) {
+                        Icon(Icons.Default.Share, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("نسخ الرابط", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                    HorizontalDivider(color = Color.White.copy(0.08f))
+                    Text("دعوة صديق عبر معرّف يونس", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = inviteRedId,
+                        onValueChange = onRedIdChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("مثال: 12345", color = Color.Gray) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = Color.White.copy(0.06f), unfocusedContainerColor = Color.White.copy(0.04f), focusedBorderColor = Color(0xFFF91850), unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Button(
+                        onClick = onInviteFriend,
+                        enabled = inviteRedId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850), disabledContainerColor = Color.Gray.copy(0.3f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Send, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("إرسال دعوة", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

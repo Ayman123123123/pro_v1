@@ -69,8 +69,8 @@ class MediaSecurityScanner {
                     header[2] == 0x44.toByte() && header[3] == 0x46.toByte()
 
                 // === تطبيق عام (octet-stream — مُشفّر، لا نتحقق) ===
-                //拒绝 octet-stream — لا يمكن التحقق من نوعه بـ magic bytes
-                "application/octet-stream" -> false
+                // لا يمكن فحص magic bytes للملف المشفّر؛ يُقيّد الامتداد أعلاه إلى .bin.
+                "application/octet-stream" -> true
 
                 else -> false  // صارم: رفض أي mime غير معروف
             }

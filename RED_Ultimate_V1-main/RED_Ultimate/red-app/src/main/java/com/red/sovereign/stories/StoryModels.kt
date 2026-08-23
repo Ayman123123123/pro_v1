@@ -1,12 +1,13 @@
 package com.red.sovereign.stories
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable data class CreateStoryRequest(
     val mediaKey: String, 
     val caption: String? = null, 
-    val visibleTo: String = "EVERYONE", 
-    val audience: List<String> = emptyList(),
+    @SerialName("visibility") val visibleTo: String = "EVERYONE", 
+    @SerialName("allowedUserIds") val audience: List<String> = emptyList(),
     val mediaType: String = "image/jpeg",
     val backgroundColor: String? = null, // For TEXT: #D32F2F, #1565C0
     val durationMs: Long? = null // For VOICE/VIDEO

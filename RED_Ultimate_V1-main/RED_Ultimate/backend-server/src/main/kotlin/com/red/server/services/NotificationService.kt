@@ -60,19 +60,28 @@ class NotificationService(
      * Dispatch High-Priority FCM / Sovereign VoIP Push Notification to wake up
      * a backgrounded or killed device when an incoming call offer arrives.
      */
-    fun sendVoipPushNotification(targetUserId: String, callerId: String, callId: String, mode: String) {
-        logger.info("notification.voip_push targetUser={} caller={} callId={} mode={}", targetUserId, callerId, callId, mode)
+    fun sendVoipPushNotification(
+        targetUserId: String,
+        callerId: String,
+        callId: String,
+        mode: String,
+        called: String? = null,
+        channel: String? = null
+    ) {
+        logger.info("notification.voip_push targetUser={} caller={} called={} callId={} mode={}", targetUserId, callerId, called ?: "-", callId, mode)
         val kind = mode.uppercase()
         val title = when (kind) {
             "VIDEO" -> "مكالمة فيديو واردة"
             "SPACE" -> "مساحة صوتية"
             "CONFERENCE", "GROUP" -> "دعوة مؤتمر"
             "LIVE" -> "بدأ بث مباشر"
+            "MISSED_PSTN" -> "مكالمة فائتة على رقمك"
             else -> "مكالمة صوتية واردة"
         }
         val body = when (kind) {
             "SPACE", "CONFERENCE", "GROUP" -> "$callerId يدعوك للانضمام"
             "LIVE" -> "$callerId بدأ بثاً مباشراً"
+            "MISSED_PSTN" -> "اتصال فائت من $callerId — لم يتم الرد في الوقت المحدد"
             else -> "$callerId يتصل بك"
         }
         val type = when (kind) {
@@ -91,7 +100,7 @@ class NotificationService(
                 threadId = callId
             )
         }
-        dispatchOptionalFcm(targetUserId, title, body, callId, kind)
+        dispatchOptionalFcm(targetUserId, title, body, callId, kind, called = called, channel = channel)
     }
 
     /**
@@ -115,33 +124,149 @@ class NotificationService(
 
     /**
      * Optional high-priority FCM data message when YOUNES_FCM_SERVER_KEY is configured.
-     * Local / sovereign deployments skip this and rely on /ws/calls + the 60s mailbox.
+     * Uses FCM HTTP v1 API (https://fcm.googleapis.com/v1/projects/{id}/messages:send)
+     * with OAuth2 access token. Supports both service account JSON and legacy server key.
+     * Local / sovereign deployments skip this and rely on /ws/calls + the pending mailbox.
      */
-    private fun dispatchOptionalFcm(targetUserId: String, title: String, body: String, callId: String, mode: String, dataType: String = "VOIP") {
-        val key = System.getenv("YOUNES_FCM_SERVER_KEY")?.takeIf { it.isNotBlank() } ?: return
+    private fun dispatchOptionalFcm(
+        targetUserId: String,
+        title: String,
+        body: String,
+        callId: String,
+        mode: String,
+        dataType: String = "VOIP",
+        called: String? = null,
+        channel: String? = null
+    ) {
+        val fcmConfig = FcmConfig.fromEnv() ?: return
         val tokens = buildList {
             addAll(pushTokens?.tokensFor(targetUserId).orEmpty())
             System.getenv("YOUNES_FCM_DEVICE_$targetUserId")?.takeIf { it.isNotBlank() }?.let(::add)
         }.distinct()
         if (tokens.isEmpty()) return
+        val accessToken = fcmConfig.getAccessToken() ?: run {
+            logger.warn("notification.voip_fcm_failed target={} reason=no_access_token", targetUserId)
+            return
+        }
         tokens.forEach { token ->
             runCatching {
-                // تُبنى الحمولة آمنة JSON (إفلات كل قيمة) بدل الربط الخام —
-                // أي محتوى title/body/callId لا يمكنه كسر غلاف الرسالة.
+                // FCM HTTP v1: الأولوية تُقرأ من android.priority فقط — الحقل
+                // الأعلى "priority" خاص بالـ legacy API وv1 يتجاهله فيعالج
+                // الرسالة Normal فتتأخر في Doze. HIGH + TTL قصير + collapse_key
+                // يمنع تراكم رنات قديمة انتهت قبل وصول الدفع.
+                val calledField = if (called.isNullOrBlank()) "" else ",\"called\": ${str(called)}"
+                val channelField = if (channel.isNullOrBlank()) "" else ",\"channel\": ${str(channel)}"
                 val payload = """
-                    {"to":${str(token)},"priority":"high","content_available":true,"data":{"type":"$dataType","callId":${str(callId)},"mode":${str(mode)},"title":${str(title)},"body":${str(body)}}}
+                    {
+                        "message": {
+                            "token": ${str(token)},
+                            "android": {
+                                "priority": "HIGH",
+                                "ttl": "25s",
+                                "collapse_key": ${str(callId)},
+                                "restricted_package_name": "com.red.sovereign"
+                            },
+                            "data": {
+                                "type": ${str(dataType)},
+                                "callId": ${str(callId)},
+                                "mode": ${str(mode)},
+                                "title": ${str(title)},
+                                "body": ${str(body)}$calledField$channelField
+                            }
+                        }
+                    }
                 """.trimIndent()
-                val conn = java.net.URI("https://fcm.googleapis.com/fcm/send").toURL().openConnection() as java.net.HttpURLConnection
+                val url = "https://fcm.googleapis.com/v1/projects/${fcmConfig.projectId}/messages:send"
+                val conn = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.doOutput = true
-                conn.setRequestProperty("Authorization", "key=$key")
+                conn.setRequestProperty("Authorization", "Bearer $accessToken")
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.connectTimeout = 2500
-                conn.readTimeout = 2500
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
                 conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
                 logger.info("notification.voip_fcm target={} http={}", targetUserId, conn.responseCode)
+                if (conn.responseCode !in 200..299) {
+                    val error = conn.errorStream?.bufferedReader()?.readText() ?: "unknown"
+                    logger.warn("notification.voip_fcm_error target={} code={} body={}", targetUserId, conn.responseCode, error)
+                }
                 conn.disconnect()
             }.onFailure { logger.warn("notification.voip_fcm_failed target={} err={}", targetUserId, it.message) }
+        }
+    }
+
+    /**
+     * FCM configuration — supports both service account JSON and legacy server key.
+     * Service account JSON is preferred (HTTP v1 API).
+     */
+    private data class FcmConfig(
+        val projectId: String,
+        val privateKey: String,
+        val clientEmail: String
+    ) {
+        companion object {
+            fun fromEnv(): FcmConfig? {
+                // Try service account JSON first (FCM_V1_SERVICE_ACCOUNT env var)
+                val saJson = System.getenv("FCM_V1_SERVICE_ACCOUNT")?.takeIf { it.isNotBlank() }
+                if (saJson != null) {
+                    return try {
+                        val node = com.fasterxml.jackson.databind.ObjectMapper().readTree(saJson)
+                        FcmConfig(
+                            projectId = node.get("project_id").asText(),
+                            privateKey = node.get("private_key").asText(),
+                            clientEmail = node.get("client_email").asText()
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                // Fallback: legacy server key (deprecated but still works for some projects)
+                val key = System.getenv("YOUNES_FCM_SERVER_KEY")?.takeIf { it.isNotBlank() } ?: return null
+                // With legacy key, we can't use HTTP v1 API — use legacy API as fallback
+                return null // Legacy API is discontinued; service account is required
+            }
+        }
+
+        fun getAccessToken(): String? {
+            return try {
+                val now = System.currentTimeMillis() / 1000
+                val header = com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
+                    mapOf("alg" to "RS256", "typ" to "JWT")
+                ).let { java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray()) }
+                val payload = com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
+                    mapOf(
+                        "iss" to clientEmail,
+                        "scope" to "https://www.googleapis.com/auth/firebase.messaging",
+                        "aud" to "https://oauth2.googleapis.com/token",
+                        "iat" to now,
+                        "exp" to now + 3600
+                    )
+                ).let { java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray()) }
+                val signedInput = "$header.$payload"
+                val signature = java.security.Signature.getInstance("SHA256withRSA").apply {
+                    initSign(java.security.KeyFactory.getInstance("RSA").generatePrivate(
+                        java.security.spec.PKCS8EncodedKeySpec(
+                            java.util.Base64.getMimeDecoder().decode(privateKey.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replace("\\s".toRegex(), ""))
+                        )
+                    ))
+                    update(signedInput.toByteArray())
+                }.sign()
+                val jwt = "$signedInput.${java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(signature)}"
+
+                val tokenUrl = java.net.URI("https://oauth2.googleapis.com/token").toURL().openConnection() as java.net.HttpURLConnection
+                tokenUrl.requestMethod = "POST"
+                tokenUrl.doOutput = true
+                tokenUrl.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                tokenUrl.connectTimeout = 5000
+                tokenUrl.readTimeout = 5000
+                val body = "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=$jwt"
+                tokenUrl.outputStream.use { it.write(body.toByteArray()) }
+                val response = tokenUrl.inputStream.bufferedReader().readText()
+                tokenUrl.disconnect()
+                com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("access_token")?.asText()
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 

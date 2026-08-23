@@ -1,6 +1,7 @@
 package com.red.server.auth
 
 import com.red.server.auth.model.DeviceStatus
+import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.UserDeviceRepository
 import com.red.server.notification.DevicePushTokenService
 import org.springframework.http.ResponseEntity
@@ -20,6 +21,7 @@ import java.util.UUID
 @RequestMapping("/api/devices")
 class DeviceController(
     private val devices: UserDeviceRepository,
+    private val users: UserAccountRepository,
     private val refreshTokens: RefreshTokenService,
     private val pushTokens: DevicePushTokenService
 ) {
@@ -36,7 +38,7 @@ class DeviceController(
         @RequestBody request: PushTokenRequest,
         authentication: Authentication
     ): ResponseEntity<Any> {
-        val redId = authentication.name
+        val redId = users.findById(UUID.fromString(authentication.name)).orElseThrow { NoSuchElementException("User not found") }.redId
         if (request.token.isBlank()) return ResponseEntity.badRequest().body(mapOf("error" to "token is required"))
         val registered = pushTokens.register(redId, request.token, request.platform)
         return ResponseEntity.ok(mapOf("status" to "ok", "id" to registered.id))

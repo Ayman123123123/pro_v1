@@ -38,14 +38,18 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         load()
         viewModelScope.launch {
             repository.getGroups().collectLatest { entities ->
-                groups.clear()
-                groups.addAll(entities.map { entity ->
-                    // الحفاظ على عدد الأعضاء عند إعادة التحميل من قاعدة البيانات المحلية
-                    // (قائمة Group.members تأتي من الخادم؛ نحتفظ بالعدد المحفوظ محلياً).
-                    val memberCount = entity.memberCount.coerceAtLeast(0)
-                    val placeholderMembers = if (memberCount > 0) List(memberCount) { GroupMember("", entity.id, "", "", "", "MEMBER", "") } else emptyList()
-                    Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, createdAt = entity.createdAt.toString(), members = placeholderMembers)
-                })
+                // ⚠️ القائمة المحلية تُستخدم فقط كـ cache عند غياب الشبكة؛ لا نُنشئ أعضاء وهميين
+                // بـ redId فارغ لأنها تُسمم حساب العضوية وتُفشل تشفير المجموعة (directory.get(""))
+                if (state == GroupState.Loading || state is GroupState.Error) {
+                    val known = groups.map { it.id }.toSet()
+                    groups.clear()
+                    groups.addAll(entities.mapNotNull { entity ->
+                        if (entity.id in known) null else {
+                            // نحتفظ بالعدد للعرض فقط، لكن قائمة الأعضاء الفعلية تُجلب من الخادم عند الاتصال
+                            Group(entity.id, entity.name, entity.description, "owner", entity.avatarUrl, createdAt = entity.createdAt.toString(), members = emptyList())
+                        }
+                    })
+                }
             }
         }
     }
@@ -145,11 +149,30 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createInvite(group: Group, requireApproval: Boolean = true) = viewModelScope.launch {
+    var invites = mutableStateListOf<GroupInviteResponse>(); private set
+
+    fun createInvite(group: Group, requireApproval: Boolean = true, expiresHours: Long = 24, maxUses: Int = 10) = viewModelScope.launch {
         state = GroupState.Saving
         val effectiveApproval = requireApproval || group.settings.requireJoinApproval
-        when (val result = client.request("POST", "/api/groups/${group.id}/invites", json.encodeToString(CreateGroupInviteRequest(requireApproval = effectiveApproval)))) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<GroupInviteResponse>(result.value) }.onSuccess { latestInvite = it; state = GroupState.Ready }.onFailure { state = GroupState.Error("INVALID_INVITE_RESPONSE") }
+        val safeHours = expiresHours.coerceIn(1, 168)
+        val safeUses = maxUses.coerceIn(1, 100)
+        when (val result = client.request("POST", "/api/groups/${group.id}/invites", json.encodeToString(CreateGroupInviteRequest(expiresHours = safeHours, maxUses = safeUses, requireApproval = effectiveApproval)))) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<GroupInviteResponse>(result.value) }.onSuccess { latestInvite = it; invites.add(0, it); state = GroupState.Ready }.onFailure { state = GroupState.Error("INVALID_INVITE_RESPONSE") }
+            is ApiResult.Error -> state = GroupState.Error(result.message)
+        }
+    }
+
+    fun listInvites(group: Group) = viewModelScope.launch {
+        when (val result = client.request("GET", "/api/groups/${group.id}/invites")) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<List<GroupInviteResponse>>(result.value) }.onSuccess { invites.clear(); invites.addAll(it) }
+            is ApiResult.Error -> Unit
+        }
+    }
+
+    fun revokeInvite(group: Group, inviteId: String) = viewModelScope.launch {
+        state = GroupState.Saving
+        when (val result = client.request("DELETE", "/api/groups/${group.id}/invites/$inviteId")) {
+            is ApiResult.Success -> { invites.removeAll { it.id == inviteId }; if (latestInvite?.id == inviteId) latestInvite = null; state = GroupState.Ready }
             is ApiResult.Error -> state = GroupState.Error(result.message)
         }
     }
@@ -184,6 +207,14 @@ class GroupViewModel(application: Application) : AndroidViewModel(application) {
         when (val result = client.request("POST", "/api/groups/${group.id}/transfer-ownership", json.encodeToString(TransferGroupOwnershipRequest(member.userId)))) {
             is ApiResult.Success -> decodeAndStore(result.value, done = done)
             is ApiResult.Error -> state = GroupState.Error(result.message)
+        }
+    }
+
+    fun updateDisappearing(group: Group, durationMs: Long?) = viewModelScope.launch {
+        val secs = durationMs?.let { it / 1000 }
+        when (val result = client.request("PATCH", "/api/groups/${group.id}/disappearing", json.encodeToString(mapOf("durationSeconds" to secs)))) {
+            is ApiResult.Success -> Unit
+            is ApiResult.Error -> android.util.Log.w("GroupViewModel", "disappearing sync failed: ${result.message}")
         }
     }
 

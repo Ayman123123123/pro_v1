@@ -26,7 +26,9 @@ import org.springframework.stereotype.Component
 @Component
 class DinstarFleetBootstrap(
     private val fleet: DinstarFleetService,
-    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean
+    @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
+    @Value("\${red.dinstar.ips:}") private val dinstarIps: String,
+    @Value("\${DINSTAR_IPS:}") private val dinstarIpsEnv: String
 ) {
     private val log = LoggerFactory.getLogger(DinstarFleetBootstrap::class.java)
 
@@ -44,5 +46,57 @@ class DinstarFleetBootstrap(
                 else log.debug("لا حاجة لتسجيل بوابة بذرة — مسجّلة سلفًا أو العنوان غير خاص")
             }
             .onFailure { log.warn("تعذّر تسجيل بوابة DINSTAR الافتراضية: {}", it.message) }
+
+        // تسجيل كل بوابات DINSTAR_IPS (دعم 16 منفذ: 8G + 8T) — يضمن ظهور .2 و .3 في Fleet DB حتى لو لم يزرهما المستخدم
+        val ipsRaw = (if (dinstarIps.isNotBlank()) dinstarIps else dinstarIpsEnv).trim()
+        if (ipsRaw.isNotBlank()) {
+            val ips = ipsRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            for (ip in ips) {
+                if (!isPrivateIp(ip)) {
+                    log.warn("تخطي IP غير خاص في DINSTAR_IPS: {}", ip)
+                    continue
+                }
+                runCatching {
+                    val discovered = fleet.probeHost(ip)
+                    // discoveryMethod يجب أن يطابق قيد DB المسموح
+                    // (MANUAL/SUBNET_SCAN/CONFIG_SEED/MDNS) — القيمة السابقة
+                    // "DINSTAR_IPS" كانت تكسر UPSERT سجل البوابة في كل إقلاع
+                    // فيبقى last_seen قديماً والبوابة تظهر OFFLINE كاذبةً.
+                    if (discovered != null) {
+                        fleet.upsertGateway(
+                            host = ip,
+                            apiPort = discovered.apiPort,
+                            scheme = discovered.scheme,
+                            model = discovered.model,
+                            portCount = discovered.portCount,
+                            name = "DINSTAR ${discovered.model} @ $ip",
+                            serialNumber = discovered.serialNumber,
+                            firmwareVersion = discovered.firmwareVersion,
+                            macAddress = discovered.macAddress,
+                            discoveryMethod = "CONFIG_SEED"
+                        )
+                        log.info("سُجّلت بوابة DINSTAR من DINSTAR_IPS: {} ({})", ip, discovered.model)
+                    } else {
+                        fleet.upsertGateway(
+                            host = ip,
+                            apiPort = 443,
+                            scheme = "https",
+                            model = "UC2000-VE-8G",
+                            portCount = 8,
+                            name = "DINSTAR @ $ip",
+                            discoveryMethod = "CONFIG_SEED"
+                        )
+                        log.info("سُجّلت بوابة DINSTAR (fallback) من DINSTAR_IPS: {}", ip)
+                    }
+                }.onFailure { log.warn("تعذّر تسجيل بوابة DINSTAR {}: {}", ip, it.message) }
+            }
+        }
+    }
+
+    private fun isPrivateIp(ip: String): Boolean {
+        return try {
+            val addr = java.net.InetAddress.getByName(ip)
+            addr.isSiteLocalAddress || addr.isLoopbackAddress || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")
+        } catch (_: Exception) { false }
     }
 }

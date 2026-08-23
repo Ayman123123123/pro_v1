@@ -5,9 +5,9 @@ import {
   Tooltip, Typography, message,
 } from 'antd';
 import {
-  ApiOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
+  ApiOutlined, AuditOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
   PlusOutlined, RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled,
-  ToolOutlined, PhoneOutlined,
+  ToolOutlined, PhoneOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
@@ -23,7 +23,8 @@ type Port = {
   index: number; radioType?: string; status?: string; callState?: string;
   signal?: number | null; signalRaw?: number | null; signalDbm?: number | null;
   signalUsable?: boolean; signalLabel?: string; gprs?: string;
-  numberMasked?: string; imsiMasked?: string; iccidMasked?: string; operator?: string;
+  number?: string; numberMasked?: string; imsi?: string; imsiMasked?: string; iccid?: string; iccidMasked?: string; operator?: string;
+  boundRedId?: string; boundUsername?: string;
 };
 type Gateway = {
   id: string; name: string; model: string; host: string; scheme: string; apiPort: number;
@@ -128,6 +129,9 @@ export default function DinstarControl() {
   const [routeResult, setRouteResult] = useState<any>(null);
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<any | null>(null);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
   const [form] = Form.useForm();
   const [routeForm] = Form.useForm();
 
@@ -171,6 +175,35 @@ export default function DinstarControl() {
         .map((p) => ({ host: gateway.host, index: p.index, raw: p.signalRaw })),
     );
   }, [fleetPorts]);
+
+  /** منافذ تحتاج تعلّم الرقم: مسجّلة + إشارة صالحة لكن number فارغ (Sabafon — يحتاج Phone Number Learning) */
+  const needsNumberLearningPorts = useMemo(() => {
+    if (!fleetPorts) return [];
+    return fleetPorts.gateways.flatMap(({ gateway, ports }) =>
+      ports
+        .filter((p) => isRegistered(p.status) && !!p.signalUsable && !p.number)
+        .map((p) => ({ host: gateway.host, gatewayId: gateway.id, index: p.index, operator: p.operator, imsiMasked: p.imsiMasked })),
+    );
+  }, [fleetPorts]);
+
+  const runReconcile = useCallback(async () => {
+    setReconcileLoading(true);
+    try {
+      const b = await json(await apiFetch('/api/admin/dinstar/bindings/reconcile'));
+      setReconcileResult(b);
+      setReconcileOpen(true);
+      const s = (b as any)?.summary;
+      if (s) {
+        if (s.mismatched > 0 || s.orphanBindings > 0) message.warning(`يوجد ${s.mismatched} تضارب و ${s.orphanBindings} ربط يتيم`);
+        else if (s.ok > 0) message.success(`المطابقة سليمة — ${s.ok} منفذ مطابق`);
+        else message.info('لا توجد مطابقات — تحقق من الربط');
+      }
+    } catch (e: any) {
+      message.error(e.message || 'تعذر التحقق من الربط');
+    } finally {
+      setReconcileLoading(false);
+    }
+  }, []);
 
   const resetPort = (gatewayHost: string, port: number) =>
     Modal.confirm({
@@ -358,15 +391,23 @@ export default function DinstarControl() {
   const renderPort = (gateway: Gateway, port: Port) => {
     const label = SIGNAL_LABEL[port.signalLabel || 'NO_SIGNAL'] || SIGNAL_LABEL.NO_SIGNAL;
     const measured = port.signalDbm != null;
+    const needsLearning = isRegistered(port.status) && !!port.signalUsable && !port.number;
     return (
       <Col xs={24} sm={12} lg={6} key={`${gateway.id}-${port.index}`}>
         <Card
           size="small"
           title={`SIM ${port.index + 1}`}
           extra={
-            <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
-              {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
-            </Tag>
+            <Space size={4}>
+              {needsLearning && (
+                <Tooltip title="الرقم فارغ رغم وجود الشريحة — فعّل Phone Number Learning من واجهة الجهاز (Human Behavior → Phone Number Learning). راجع docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md — نمط Call موصى به لـ Sabafon.">
+                  <Tag color="orange" icon={<WarningOutlined />}>يحتاج تعلّم الرقم</Tag>
+                </Tooltip>
+              )}
+              <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
+                {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
+              </Tag>
+            </Space>
           }
         >
           <div style={{ textAlign: 'center' }}>
@@ -394,10 +435,53 @@ export default function DinstarControl() {
           </div>
           <Descriptions column={1} size="small" style={{ marginTop: 8 }}>
             <Descriptions.Item label="المشغل">
-              <Tag color={resolveOp(port.operator).clr}>{resolveOp(port.operator).ar}</Tag>
+              <Tag color={resolveOp(port.operator).clr} style={{ fontWeight: 600, fontSize: 12, padding: '2px 10px' }}>{resolveOp(port.operator).ar}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="الرقم">{port.numberMasked || 'غير معروف'}</Descriptions.Item>
-            <Descriptions.Item label="IMSI">{port.imsiMasked || '—'}</Descriptions.Item>
+            <Descriptions.Item label="الرقم">
+              {port.number ? (
+                <Space>
+                  <Typography.Text copyable style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1677ff' }}>{port.number}</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>({port.numberMasked})</Typography.Text>
+                </Space>
+              ) : port.numberMasked ? (
+                <Typography.Text copyable style={{ fontFamily: 'monospace' }}>{port.numberMasked}</Typography.Text>
+              ) : needsLearning ? (
+                <Tooltip title="الرقم فارغ رغم التسجيل والإشارة — الحل: Human Behavior → Phone Number Learning (نمط Call موصى به لـ Sabafon). راجع docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md">
+                  <Tag color="warning" icon={<WarningOutlined />}>يحتاج تعلّم الرقم</Tag>
+                </Tooltip>
+              ) : (
+                <Tag color="default">غير معروف</Tag>
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="IMSI">
+              {port.imsi ? (
+                <Typography.Text copyable style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.imsi}</Typography.Text>
+              ) : port.imsiMasked ? (
+                <Space>
+                  <Typography.Text style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.imsiMasked}</Typography.Text>
+                  <Tooltip title="IMSI الكامل مخفي للخصوصية — يظهر للأدمن فقط عند الحاجة"><Tag>مخفي</Tag></Tooltip>
+                </Space>
+              ) : (
+                '—'
+              )}
+            </Descriptions.Item>
+            {port.iccid && (
+              <Descriptions.Item label="ICCID">
+                <Typography.Text copyable style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.iccid}</Typography.Text>
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label="الحساب المالك">
+              {port.boundUsername ? (
+                <Space size={4}>
+                  <Tag color="purple" style={{ fontWeight: 600 }}>{port.boundUsername}</Tag>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>#{port.boundRedId}</Typography.Text>
+                </Space>
+              ) : (
+                <Tooltip title="لا يوجد ربط دائم — هذه الشريحة غير مخصصة لأي حساب">
+                  <Tag color="default">غير مرتبط</Tag>
+                </Tooltip>
+              )}
+            </Descriptions.Item>
           </Descriptions>
           <Space style={{ marginTop: 6 }}>
             <Button
@@ -429,6 +513,9 @@ export default function DinstarControl() {
           </Typography.Text>
         </div>
         <Space>
+          <Tooltip title="يقارن أرقام الشرائح الحية (get_port_info) مع ربط PSTN في القاعدة ويكشف التضارب واحتياج Number Learning">
+            <Button icon={<AuditOutlined />} loading={reconcileLoading} onClick={runReconcile}>تحقق من الربط</Button>
+          </Tooltip>
           <Button icon={<RadarChartOutlined />} onClick={() => { setRouteResult(null); setRouteOpen(true); }}>
             اختبار التوجيه
           </Button>
@@ -462,6 +549,28 @@ export default function DinstarControl() {
               هذه الشرائح تبدو سليمة في حالة التسجيل، لكن قراءة الإشارة تعني «غير قابلة
               للكشف» أو أضعف من ‎-100 dBm. تُستبعد من توجيه المكالمات تلقائيًا.{' '}
               {silentlyDead.map((d) => `${d.host}#${d.index + 1}(raw=${d.raw ?? '—'})`).join('، ')}
+            </>
+          }
+        />
+      )}
+
+      {needsNumberLearningPorts.length > 0 && (
+        <Alert
+          type="warning" showIcon style={{ marginBottom: 14 }}
+          message={`${needsNumberLearningPorts.length} شريحة مسجّلة بإشارة صالحة لكن رقمها فارغ — تحتاج تعلّم الرقم`}
+          description={
+            <>
+              الحقل <code>number</code> فارغ في <code>get_port_info</code> رغم التسجيل والإشارة — حال Sabafon الافتراضي قبل تفعيل Phone Number Learning.{' '}
+              افتح واجهة الجهاز: <Typography.Text strong>Human Behavior → Phone Number Learning</Typography.Text> واختر <Tag color="green">Call</Tag> لكل المنافذ (موصى به — يتعلم 8 أرقام داخليًا عبر CLIP بدون USSD).
+              التفاصيل الكاملة مع لقطات توضيحية:{' '}
+              <Typography.Text code>docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md</Typography.Text>{' '}
+              — بعد الحفظ اضغط <Button size="small" onClick={runReconcile} loading={reconcileLoading}>تحقق من الربط</Button> ليظهر <code>liveNumber</code> مملوءًا.
+              <br />
+              المنافذ: {needsNumberLearningPorts.map((d) => `${d.host}#${d.index + 1}(${resolveOp(d.operator).ar}${d.imsiMasked ? ` · ${d.imsiMasked}` : ''})`).join('، ')}
+              <br />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                بدائل: USSD (<code>*121#</code> + Keyword) أو SMS — لكن USSD لمعرفة الرقم غير موثق في Sabafon. كذلك فعّل <code>Auto CLIP Routing</code> و <code>Auto Update SIM Number</code> كميزتين مرتبطتين.
+              </Typography.Text>
             </>
           }
         />
@@ -757,6 +866,57 @@ export default function DinstarControl() {
             )}
           </>
         ))}
+      </Modal>
+
+      {/* ── Reconcile ── */}
+      <Modal title="تحقق من الربط — المطابقة الحية vs القاعدة" open={reconcileOpen} onCancel={() => setReconcileOpen(false)} footer={[<Button key="close" onClick={() => setReconcileOpen(false)}>إغلاق</Button>, <Button key="reload" type="primary" loading={reconcileLoading} onClick={runReconcile}>تحديث</Button>]} width={900}>
+        {!reconcileResult ? (
+          <Empty description="لا توجد نتيجة بعد — اضغط تحديث" />
+        ) : (
+          <>
+            {(() => {
+              const s = (reconcileResult as any)?.summary;
+              return s ? (
+                <Row gutter={[8, 8]} style={{ marginBottom: 12 }}>
+                  <Col span={4}><Card size="small"><Statistic title="الإجمالي" value={s.totalPorts} /></Card></Col>
+                  <Col span={4}><Card size="small"><Statistic title="مربوط" value={s.boundPorts} /></Card></Col>
+                  <Col span={4}><Card size="small"><Statistic title="مطابق" value={s.ok} valueStyle={{ color: '#00C896' }} /></Card></Col>
+                  <Col span={4}><Card size="small"><Statistic title="تضارب" value={s.mismatched} valueStyle={{ color: s.mismatched ? '#F5222D' : undefined }} /></Card></Col>
+                  <Col span={4}><Card size="small"><Statistic title="يتيم" value={s.orphanBindings} valueStyle={{ color: s.orphanBindings ? '#FA8C16' : undefined }} /></Card></Col>
+                  <Col span={4}><Card size="small"><Statistic title="بلا ربط وبه SIM" value={s.unboundWithSim} valueStyle={{ color: s.unboundWithSim ? '#FA8C16' : undefined }} /></Card></Col>
+                </Row>
+              ) : null;
+            })()}
+            {(reconcileResult as any)?.learnInstruction && (
+              <Alert type="info" showIcon style={{ marginBottom: 12 }} message="تعليمات تعلّم الرقم" description={<><Typography.Text code>{(reconcileResult as any).learnInstruction}</Typography.Text><br /><Typography.Text type="secondary" style={{ fontSize: 12 }}>المسار: Human Behavior → Phone Number Learning — التفاصيل في docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md (نمط Call موصى به لـ Sabafon).</Typography.Text></>} />
+            )}
+            <Table
+              size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }}
+              dataSource={((reconcileResult as any)?.ports || []) as any[]}
+              rowKey={(r: any) => `${r.gatewayId}#${r.index}`}
+              columns={[
+                { title: '#', dataIndex: 'index', width: 50, render: (v: number) => v + 1 },
+                { title: 'المضيف', dataIndex: 'host', width: 130 },
+                { title: 'الرقم الحي', dataIndex: 'liveNumber', render: (v: string | null) => v ? <Tag color="blue" style={{ fontFamily: 'monospace' }}>{v}</Tag> : <Tag color="orange" icon={<WarningOutlined />}>فارغ</Tag> },
+                { title: 'IMSI/مقنّع', dataIndex: 'imsiLast4', render: (v: string | null, r: any) => v ? `••••${v}` : (r.liveNumberMasked || '—') },
+                { title: 'المشغل', dataIndex: 'operator', render: (v: string) => <Tag color={resolveOp(v).clr}>{resolveOp(v).ar}</Tag> },
+                { title: 'المربوط', dataIndex: 'boundRedId', render: (v: string | null, r: any) => v ? <><Tag color="purple">{v}</Tag><br /><span style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.boundNumber || '—'}</span></> : <Tag>غير مربوط</Tag> },
+                { title: 'الحالة', dataIndex: 'suggestedAction', width: 160, render: (v: string, r: any) => {
+                  const needs = r.needsNumberLearning;
+                  if (v === 'MISMATCH') return <Tag color="red">تضارب</Tag>;
+                  if (v === 'ORPHAN_BINDING_NEEDS_CLEAR') return <Tag color="red">يتيم — يحتاج فك</Tag>;
+                  if (v === 'UNBOUND_HAS_SIM') return <Tag color="orange">بلا ربط وبه SIM</Tag>;
+                  if (needs) return <Tag color="orange" icon={<WarningOutlined />}>يحتاج تعلّم</Tag>;
+                  return <Tag color="green">مطابق</Tag>;
+                } },
+                { title: 'السبب', dataIndex: 'reason', ellipsis: true, render: (v: string) => <Tooltip title={v}><span style={{ fontSize: 11 }}>{v}</span></Tooltip> },
+              ]}
+            />
+            <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
+              المصدر: <code>GET /api/admin/dinstar/bindings/reconcile</code> — يقارن <code>liveNumber</code> من <code>get_port_info</code> مع <code>pstn_number</code> في القاعدة. <code>GET /api/admin/dinstar/bindings/discover</code> يعيد نفس البيانات + <code>learnable/learnInstruction</code>.
+            </Typography.Paragraph>
+          </>
+        )}
       </Modal>
 
       {/* ── USSD ── */}

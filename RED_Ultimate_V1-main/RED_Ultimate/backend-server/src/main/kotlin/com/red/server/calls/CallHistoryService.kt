@@ -125,7 +125,7 @@ class CallHistoryService(
 
     private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {
         val doc = mongo.findById(id, CallHistoryDocument::class.java)
-            ?: throw NoSuchElementException("Call not found")
+            ?: throw NoSuchElementException("Call not found: $id")
         action(doc)
         return mongo.save(doc)
     }
