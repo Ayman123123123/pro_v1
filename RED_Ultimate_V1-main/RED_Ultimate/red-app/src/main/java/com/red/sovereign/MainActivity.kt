@@ -28,7 +28,6 @@ import androidx.fragment.app.FragmentActivity
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.calls.YounesCallService
-import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.security.AppLockScreen
 import com.red.sovereign.security.AppLockPolicy
 import com.red.sovereign.security.DebugSecurityManager
@@ -150,19 +149,19 @@ class MainActivity : FragmentActivity() {
 
     private fun requestNecessaryPermissions() {
         val needed = buildList {
-            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.RECORD_AUDIO)
             }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.CAMERA)
             }
-            if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.BLUETOOTH_CONNECT)
             }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.READ_PHONE_STATE)
             }
         }
@@ -191,7 +190,7 @@ class MainActivity : FragmentActivity() {
         // can reach the sovereign LAN server. Request it before login/discovery.
         if (Build.VERSION.SDK_INT >= 37 &&
             !localNetworkPermissionRequested &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
         ) {
             localNetworkPermissionRequested = true
             localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)

@@ -11,14 +11,34 @@ import java.net.URI
 
 /** Process-wide endpoint selected from a signed build default or verified local discovery. */
 object ServerEndpoint {
-    @Volatile private var current = runCatching { normalize(BuildConfig.RED_SERVER_URL) }
-        .getOrElse { normalize("http://127.0.0.1:8088") }
     private const val KEY = "server_url"
+
+    /**
+     * كانت هذه العناوين افتراضات تطوير قديمة وليست خوادم RED على شبكة المستخدم.
+     * لا نرحّل أي عنوان آخر حتى لا نكسر إعدادًا يدويًا مشروعًا.
+     */
+    private val deprecatedDefaults = setOf(
+        "http://127.0.0.1:8088",
+        "http://localhost:8088",
+        "http://192.168.11.210:8088"
+    )
+
+    private fun buildDefaultUrl(): String = runCatching { normalize(BuildConfig.RED_SERVER_URL) }
+        .getOrElse { normalize("http://192.168.11.131:8088") }
+
+    @Volatile private var current = buildDefaultUrl()
     private var onEndpointChangedListener: ((String) -> Unit)? = null
 
     fun initialize(context: Context) {
-        SecureStore(context.applicationContext, "red_server_endpoint").get(KEY)?.let { stored ->
-            runCatching { current = normalize(stored) }
+        val store = SecureStore(context.applicationContext, "red_server_endpoint")
+        val stored = store.get(KEY) ?: return
+        val normalized = runCatching { normalize(stored) }.getOrNull() ?: return
+        if (normalized in deprecatedDefaults) {
+            // ترحيل محدد للعناوين القديمة فقط؛ الحساب والرموز وبقية التفضيلات لا تتغير.
+            current = buildDefaultUrl()
+            store.put(KEY, current)
+        } else {
+            current = normalized
         }
     }
 

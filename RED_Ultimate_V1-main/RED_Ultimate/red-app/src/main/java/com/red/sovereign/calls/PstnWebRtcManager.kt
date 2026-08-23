@@ -87,6 +87,9 @@ class PstnWebRtcManager(private val context: Context) {
     /** callId الحقيقي من استجابة الخادم — يُعرض في واجهة المكالمة. */
     val currentCallId: String? get() = callId
 
+    /** الرقم البعيد (المتصل به أو المتصل) لعرضه في شاشة المكالمة النشطة. */
+    @Volatile var remoteNumber: String? = null; private set
+
     var isMuted: Boolean = false
         set(value) {
             field = value
@@ -253,6 +256,8 @@ class PstnWebRtcManager(private val context: Context) {
         }
         state = PstnCallState.BRIDGING
         activeEvents = events
+        remoteNumber = number
+        Companion.activeUi = this@PstnWebRtcManager
 
         val api = PstnApi(TokenStore(context))
         val bridge = when (val result = api.bridge(number)) {
@@ -530,6 +535,8 @@ class PstnWebRtcManager(private val context: Context) {
             lastLocalSdp = null
         }
         callId = null
+        remoteNumber = null
+        if (Companion.activeUi === this) Companion.activeUi = null
         state = PstnCallState.IDLE
     }
 
@@ -595,6 +602,7 @@ class PstnWebRtcManager(private val context: Context) {
 
     private fun setupListener(bridge: BridgeResponse) {
         if (listenerSip != null) return
+        Companion.activeUi = this
         if (listenerEgl == null) listenerEgl = EglBase.create()
         WebRtcBootstrap.ensure(context)
         val adm = JavaAudioDeviceModule.builder(context)
@@ -681,6 +689,7 @@ class PstnWebRtcManager(private val context: Context) {
                 // حضّر الإجابة؛ إن كان المستخدم قد ضغط قبولاً قبل وصول INVITE
                 // (التوقيت الأشيع لأن PSTN_ACCEPT يسبق Redirect) أرسل 200 OK فوراً عند جهوزية SDP.
                 state = PstnCallState.INVITING
+                remoteNumber = fromNumber
                 pendingIncomingSdp = sdp
                 pendingLocalAnswerSdp = null
                 prepareAnswer(pc, sdp)
@@ -796,5 +805,15 @@ class PstnWebRtcManager(private val context: Context) {
             incomingInstance ?: synchronized(this) {
                 incomingInstance ?: PstnWebRtcManager(context.applicationContext).also { incomingInstance = it }
             }
+
+        /**
+         * المثيل النشط حالياً (صادر أو وارد) — تضبطه call()/setupListener
+         * ويُمسح في release(). تستخدمه واجهة المكالمة النشطة للتحكم.
+         */
+        @Volatile var activeUi: PstnWebRtcManager? = null
+            private set
+
+        /** الوصول للتحكم: النشط إن وجد وإلا مستمع الوارد. */
+        fun controls(context: Context): PstnWebRtcManager? = activeUi ?: incomingInstance.takeIf { it != null }
     }
 }

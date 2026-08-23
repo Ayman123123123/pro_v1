@@ -94,6 +94,7 @@ enum class ConnectionStage(val label: String, val description: String, val icon:
 fun Material3ExpressivePstnCallScreen(
     status: PstnCallStatus,
     metrics: CallMetrics = CallMetrics(),
+    callerNumber: String? = null,
     onMuteToggle: (Boolean) -> Unit = {},
     onSpeakerToggle: (Boolean) -> Unit = {},
     onKeypadToggle: () -> Unit = {},
@@ -216,6 +217,41 @@ fun Material3ExpressivePstnCallScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+
+                // رقم الطرف البعيد + شارة المشغل اليمني (أسطوري: هوية فورية)
+                if (!callerNumber.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val opInfo = remember(callerNumber) {
+                        runCatching { com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(callerNumber) }.getOrNull()
+                    }
+                    Text(
+                        text = callerNumber,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        letterSpacing = 1.sp
+                    )
+                    if (opInfo != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(opInfo.brandColor)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = opInfo.name,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
 
                 // Stage description
                 Text(
