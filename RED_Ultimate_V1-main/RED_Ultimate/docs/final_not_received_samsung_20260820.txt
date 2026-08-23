@@ -1,0 +1,9 @@
+--------- beginning of main
+08-20 04:48:24.346 19511 19511 D CallPresenceMonitor: [] stopped
+08-20 04:48:48.903 20235 20235 D CallPresenceMonitor: [] stopped
+08-20 04:49:41.028 20235 20235 D CallPresenceMonitor: [748b4a9d-6c53-49c5-a110-a88f8fa8202c] stopped
+08-20 04:49:42.047 20235 20441 D CallPresenceMonitor: [] stopped
+08-20 04:49:45.044 20235 20441 D CallPresenceMonitor: [] stopped
+08-20 04:50:33.623 20235 20235 D CallPresenceMonitor: [5c0937cf-225e-4b68-ab85-cc0298c2afce] stopped
+08-20 04:50:34.105 20235 20296 D CallPresenceMonitor: [] stopped
+08-20 04:50:37.646 20235 20296 D CallPresenceMonitor: [] stopped

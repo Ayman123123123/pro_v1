@@ -1,0 +1,20 @@
+--------- beginning of main
+08-20 04:37:12.738 16887 16887 D CallPresenceMonitor: [62b748a6-9606-4171-9227-dfa77111c9ae] stopped
+08-20 04:37:16.987 16887 17204 D CallPresenceMonitor: [] stopped
+08-20 04:37:54.504 16887 17203 D CallDeliveryEngine: [6c394d18-52d2-4150-9003-2ad65f5e21d3] Offer dispatched via WebSocket at +6ms
+08-20 04:38:00.214 16887 17278 D CallDeliveryEngine: [6c394d18-52d2-4150-9003-2ad65f5e21d3] Delivery ACK received
+08-20 04:38:00.215 16887 17278 D CallPresenceMonitor: [6c394d18-52d2-4150-9003-2ad65f5e21d3] stopped
+08-20 04:38:00.215 16887 17278 D CallDeliveryEngine: [6c394d18-52d2-4150-9003-2ad65f5e21d3] Delivery ACK received
+08-20 04:38:00.225 16887 17125 D CallDeliveryEngine: [6c394d18-52d2-4150-9003-2ad65f5e21d3] Durable fallback confirmed at +5727ms
+08-20 04:38:00.225 16887 17125 D YounesCallService: [6c394d18-52d2-4150-9003-2ad65f5e21d3] Delivery confirmed via HTTP_WEBHOOK
+08-20 04:38:15.477 18069 18069 D CallPresenceMonitor: [] stopped
+08-20 04:39:18.881 18069 18069 D CallPresenceMonitor: [59290ea1-92ac-47fd-b879-4256761b7a44] stopped
+08-20 04:39:20.048 18069 18140 D CallPresenceMonitor: [] stopped
+08-20 04:39:22.893 18069 18140 D CallPresenceMonitor: [] stopped
+08-20 04:39:57.524 18069 18102 D CallDeliveryEngine: [25ff8497-7729-4210-8901-90f3388c0594] Offer dispatched via WebSocket at +6ms
+08-20 04:39:57.594 18069 18181 D CallDeliveryEngine: [25ff8497-7729-4210-8901-90f3388c0594] Delivery ACK received
+08-20 04:39:57.627 18069 18144 D CallDeliveryEngine: [25ff8497-7729-4210-8901-90f3388c0594] Direct delivery confirmed at +109ms
+08-20 04:39:57.627 18069 18144 D YounesCallService: [25ff8497-7729-4210-8901-90f3388c0594] Delivery confirmed via WEBSOCKET
+08-20 04:40:01.356 18069 18181 D CallDeliveryEngine: [25ff8497-7729-4210-8901-90f3388c0594] Delivery ACK received
+08-20 04:40:01.357 18069 18181 D CallPresenceMonitor: [25ff8497-7729-4210-8901-90f3388c0594] stopped
+08-20 04:40:01.357 18069 18181 D CallDeliveryEngine: [25ff8497-7729-4210-8901-90f3388c0594] Delivery ACK received

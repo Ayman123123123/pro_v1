@@ -84,6 +84,10 @@ data class UserAccountResponse(
     val rejectionReason: String?,
     val pstnEnabled: Boolean,
     val pstnDailyLimit: Int,
+    val pstnGatewayId: UUID? = null,
+    val pstnGatewayHost: String? = null,
+    val pstnPortIndex: Int? = null,
+    val pstnNumber: String? = null,
     val devices: List<DeviceResponse> = emptyList()
 )
 
@@ -129,6 +133,9 @@ fun UserAccount.toResponse(devices: List<UserDevice> = emptyList()) = UserAccoun
     rejectionReason = rejectionReason,
     pstnEnabled = pstnEnabled,
     pstnDailyLimit = pstnDailyLimit,
+    pstnGatewayId = pstnGatewayId,
+    pstnPortIndex = pstnPortIndex,
+    pstnNumber = pstnNumber,
     devices = devices.map { it.toResponse() }
 )
 

@@ -10,6 +10,7 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.searchForAdmin
 import com.red.server.auth.UserAccountResponse
 import com.red.server.auth.toResponse
+import com.red.server.services.DinstarFleetService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.data.redis.core.RedisTemplate
@@ -34,7 +35,8 @@ class AdminV2Controller(
     private val announcements: SystemAnnouncementRepository,
     private val backups: BackupHistoryRepository,
     private val approval: RedApprovalService,
-    private val redis: RedisTemplate<String, String>
+    private val redis: RedisTemplate<String, String>,
+    private val fleet: DinstarFleetService
 ) {
 
     @GetMapping("/dashboard/summary")
@@ -201,7 +203,12 @@ class AdminV2Controller(
 
         val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
 
-        val dtoContent = allUsers.content.map { it.toResponse(emptyList()) }
+        val fleetMap = fleet.listGateways().associateBy { it.id }
+        val dtoContent = allUsers.content.map {
+            it.toResponse(emptyList()).copy(
+                pstnGatewayHost = it.pstnGatewayId?.let { gid -> fleetMap[gid]?.host }
+            )
+        }
 
         return ResponseEntity.ok(mapOf(
             "content" to dtoContent,

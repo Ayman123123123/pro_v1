@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.OperatorInfo
+import com.red.sovereign.ui.components.PstnStatusIndicator
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 
@@ -81,6 +82,9 @@ fun DialPadScreen(
             Text("لوحة الاتصال السيادية", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.size(48.dp))
         }
+
+        // PSTN Status Indicator (Connection + Operator)
+        PstnStatusIndicator(targetNumber = number, modifier = Modifier.padding(bottom = 8.dp))
 
         Spacer(Modifier.height(12.dp))
 

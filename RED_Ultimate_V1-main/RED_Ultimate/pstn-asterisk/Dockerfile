@@ -22,16 +22,12 @@ COPY pstn-incoming.sh /usr/local/bin/pstn-incoming.sh
 COPY docker-entrypoint.sh /usr/local/bin/red-asterisk-entrypoint
 
 # ═══════════════════════════════════════════════════════════════════════════
-# إعدادات TLS / WSS لدعم اتصالات WebRTC/WSS من العملاء
+# TLS / WSS certificates
 # ═══════════════════════════════════════════════════════════════════════════
-RUN mkdir -p /etc/asterisk/keys
-
-#Generate self-signed certificate for TLS (valid 365 days) with SAN for current + legacy IPs
-#CommonName set to server IP for internal testing - replace with your domain+certs in production
-RUN openssl req -x509 -newkey rsa:2048 -keyout /etc/asterisk/keys/privkey.pem -out /etc/asterisk/keys/fullchain.pem -days 365 -nodes -subj '/CN=192.168.11.20/O=RED Sovereign/CN=Asterisk PSTN Gateway' -addext 'subjectAltName=IP:192.168.11.20,IP:192.168.11.210,IP:192.168.11.131,IP:127.0.0.1,DNS:localhost,DNS:red.local'
-
-# Ensure proper permissions on key files (Asterisk requires key to be read by asterisk user)
-RUN chown asterisk:asterisk /etc/asterisk/keys/privkey.pem /etc/asterisk/keys/fullchain.pem
+# The upstream image declares /etc/asterisk as a VOLUME, so files created there
+# during docker build are hidden and unavailable to later build layers. The
+# entrypoint therefore creates a development-only certificate at runtime only
+# when no managed certificate exists in the persistent key volume.
 
 RUN sed -i 's/\r$//' /usr/local/bin/red-asterisk-entrypoint /etc/asterisk/*.conf /usr/local/bin/pstn-incoming.sh \
     && chmod 0755 /usr/local/bin/red-asterisk-entrypoint /usr/local/bin/pstn-incoming.sh \

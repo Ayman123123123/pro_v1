@@ -3,15 +3,25 @@
 import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.util.concurrent.TimeUnit
 
 /**
  * خدمة الأتمتة لتعلّم أرقام الشرائح.
- * تقوم بفحص المنافذ دورياً وتفعيل نمط التعلّم تلقائياً للشرائح التي تفتقد لأرقامها.
+ *
+ * قد يرسل التعلّم SMS أو ينشئ مكالمة بحسب إعداد البوابة والمشغل، ولذلك يبقى
+ * **معطلاً افتراضيًا**. يُفعّل فقط بعد تفويض صريح ومحدد للتكلفة والنطاق عبر
+ * `RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED=true`.
  */
 @Service
+@ConditionalOnProperty(
+    prefix = "red.dinstar.number-learning",
+    name = ["auto-enabled"],
+    havingValue = "true",
+    matchIfMissing = false
+)
 class AutoNumberLearningService(
     private val fleet: DinstarFleetService,
     private val hardware: DinstarHardwareService

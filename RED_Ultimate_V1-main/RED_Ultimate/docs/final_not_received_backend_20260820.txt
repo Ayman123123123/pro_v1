@@ -1,0 +1,5 @@
+2026-08-20 01:48:35.533 [pool-4-thread-1] INFO  c.r.s.a.s.DashboardDataScheduler - Recorded 8 health checks
+2026-08-20 01:49:38.227 [http-nio-8080-exec-10] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=748b4a9d-6c53-49c5-a110-a88f8fa8202c message=Call not found
+2026-08-20 01:49:40.167 [http-nio-8080-exec-5] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=748b4a9d-6c53-49c5-a110-a88f8fa8202c message=Call not found
+2026-08-20 01:50:30.395 [http-nio-8080-exec-8] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=5c0937cf-225e-4b68-ab85-cc0298c2afce message=Call not found
+2026-08-20 01:50:32.752 [http-nio-8080-exec-10] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=5c0937cf-225e-4b68-ab85-cc0298c2afce message=Call not found

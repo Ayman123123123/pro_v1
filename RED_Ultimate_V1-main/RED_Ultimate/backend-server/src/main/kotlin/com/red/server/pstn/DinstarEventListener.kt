@@ -33,7 +33,7 @@ class DinstarEventListener(
     private val users: UserAccountRepository,
     @Lazy private val pstnEvents: PstnEventWebSocketHandler,
     private val notifications: NotificationService,
-    private val pstnManager: PstnManager,
+    @Lazy private val pstnManager: PstnManager,
     private val objectMapper: ObjectMapper,
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate

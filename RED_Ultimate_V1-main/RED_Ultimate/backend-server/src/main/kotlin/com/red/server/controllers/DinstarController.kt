@@ -33,6 +33,15 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
         return result
     }
 
+    /** تفعيل "تعلّم الرقم" يدوياً لمنفذ بعينه من لوحة الإدارة. */
+    @PostMapping("/ports/{port}/learning")
+    fun triggerLearning(@PathVariable port: Int, authentication: Authentication): ResponseEntity<Map<String, Any?>> {
+        val actor = UUID.fromString(authentication.name)
+        val ok = hardware.triggerNumberLearning(port)
+        audit.record(actor, "DINSTAR_NUMBER_LEARNING_TRIGGERED", port.toString(), mapOf("success" to ok))
+        return ResponseEntity.ok(mapOf("success" to ok, "port" to port))
+    }
+
     @PostMapping("/ports/{port}/ussd")
     fun sendUssd(@PathVariable port: Int, @RequestBody body: Map<String, String>, authentication: Authentication): Map<String, Any?> {
         val code = body["code"] ?: throw IllegalArgumentException("USSD code is required")

@@ -419,7 +419,18 @@ export default function UserManagement() {
               <Descriptions.Item label="أنشئ في">{formatWhen(overview.user.createdAt)}</Descriptions.Item>
               <Descriptions.Item label="آخر ظهور">{formatWhen(overview.user.lastSeen ?? overview.lastSeen)}</Descriptions.Item>
               <Descriptions.Item label="الأجهزة">{overview.user.devices?.length ?? overview.devices?.length ?? '—'}</Descriptions.Item>
-              <Descriptions.Item label="PSTN">{overview.user.pstnEnabled || overview.pstnEnabled ? `${overview.user.pstnDailyLimit ?? overview.pstnDailyLimit}/يوم` : 'معطل'}</Descriptions.Item>
+              <Descriptions.Item label="PSTN">
+                {overview.user.pstnEnabled || overview.pstnEnabled ? (
+                  <Space direction="vertical" size={0}>
+                    <Text>{overview.user.pstnDailyLimit ?? overview.pstnDailyLimit}/يوم</Text>
+                    {overview.user.pstnGatewayId && (
+                      <Tag color="cyan" style={{ marginTop: 4 }}>
+                        SIM {Number(overview.user.pstnPortIndex) + 1} @ {overview.user.pstnGatewayHost || 'بوابة'}
+                      </Tag>
+                    )}
+                  </Space>
+                ) : 'معطل'}
+              </Descriptions.Item>
               <Descriptions.Item label="كلمة المرور">{overview.passwordResetRequired ? <Tag color="warning">تغيير مطلوب</Tag> : <Tag color="success">طبيعية</Tag>}</Descriptions.Item>
               <Descriptions.Item label="Remote App Wipe">{overview.remoteWipeStatus || 'NONE'}</Descriptions.Item>
               <Descriptions.Item label="MDM Factory Reset">{overview.managedDeviceWipeAllowed ? 'مسموح لجهاز مؤسسة مسجل' : 'غير متاح لهذا الحساب'}</Descriptions.Item>

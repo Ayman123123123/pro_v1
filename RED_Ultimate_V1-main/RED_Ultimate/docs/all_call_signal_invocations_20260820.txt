@@ -1,0 +1,31 @@
+\com\red\sovereign\calls\CallDeliveryEngine.kt:201:val signal = CallSignal(
+\com\red\sovereign\calls\CallDeliveryEngine.kt:219:CallSignal(
+\com\red\sovereign\calls\CallSignal.kt:10:data class CallSignal(
+\com\red\sovereign\calls\CallSignal.kt:64:CallSignal(callId = callId, targetUserId = targetUserId, type = OFFER, mode = mode, payload = mapOf("sdp" to sdp))
+\com\red\sovereign\calls\CallSignal.kt:67:CallSignal(callId = callId, targetUserId = targetUserId, type = ANSWER, mode = mode, payload = mapOf("sdp" to sdp))
+\com\red\sovereign\calls\CallSignal.kt:70:CallSignal(
+\com\red\sovereign\calls\CallSignal.kt:82:CallSignal(callId = callId, targetUserId = targetUserId, type = END, mode = mode)
+\com\red\sovereign\calls\CallSignal.kt:85:CallSignal(callId = callId, targetUserId = targetUserId, type = REJECT, mode = mode)
+\com\red\sovereign\calls\CallSignalingClient.kt:116:CallSignal(
+\com\red\sovereign\calls\CallSignalingClient.kt:131:CallSignal(
+\com\red\sovereign\calls\CallSignalingClient.kt:140:send(CallSignal(callId = groupCallId, type = CallSignal.GROUP_CALL_END, groupCallId = groupCallId))
+\com\red\sovereign\calls\CallSignalingClient.kt:145:CallSignal(
+\com\red\sovereign\calls\CallSignalingClient.kt:155:send(CallSignal(callId = callId, targetUserId = targetUserId, type = CallSignal.CALL_RAISE_HAND))
+\com\red\sovereign\calls\GroupCallService.kt:183:CallSignal(
+\com\red\sovereign\calls\GroupCallService.kt:324:CallSignal(
+\com\red\sovereign\calls\GroupCallService.kt:554:signaling.send(CallSignal(callId = groupCallId, type = type, groupCallId = groupCallId, payload = mapOf("sdp" to description.description)))
+\com\red\sovereign\calls\GroupCallService.kt:559:signaling.send(CallSignal(callId = groupCallId, targetUserId = peerId, type = type, groupCallId = groupCallId, payload = mapOf("sdp" to description.description)))
+\com\red\sovereign\calls\GroupCallService.kt:563:signaling.send(CallSignal(callId = groupCallId, type = "ICE", groupCallId = groupCallId,
+\com\red\sovereign\calls\GroupCallService.kt:568:signaling.send(CallSignal(callId = groupCallId, targetUserId = peerId, type = "ICE", groupCallId = groupCallId,
+\com\red\sovereign\calls\YounesCallService.kt:132:scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
+\com\red\sovereign\calls\YounesCallService.kt:172:runCatching { signaling.send(CallSignal(state.waiting.callId, state.waiting.peer, type = "REJECT", mode = state.waiting.mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:292:scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
+\com\red\sovereign\calls\YounesCallService.kt:426:incomingOffer?.let { signaling.send(CallSignal(it.callId, target, type = "REJECT", mode = mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:449:val signal = CallSignal(callId, target, type = type, mode = mode, payload = mapOf("sdp" to description.description))
+\com\red\sovereign\calls\YounesCallService.kt:625:CallSignal(
+\com\red\sovereign\calls\YounesCallService.kt:678:runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:692:runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:811:runCatching { signaling.send(CallSignal(previous.callId, previous.peer, type = "HOLD", mode = previous.mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:914:if (target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:1026:if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
+\com\red\sovereign\calls\YounesCallService.kt:1217:CallSignal(

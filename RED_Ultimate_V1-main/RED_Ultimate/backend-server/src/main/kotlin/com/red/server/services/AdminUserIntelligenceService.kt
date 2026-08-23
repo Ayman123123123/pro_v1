@@ -9,6 +9,7 @@ import com.red.server.auth.repository.UserDeviceRepository
 import com.red.server.auth.toResponse
 import com.red.server.calls.CallHistoryDocument
 import com.red.server.database.MessageDocument
+import com.red.server.services.DinstarFleetService
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
@@ -48,7 +49,8 @@ class AdminUserIntelligenceService(
     private val redis: StringRedisTemplate,
     private val passwords: PasswordEncoder,
     private val refreshTokens: RefreshTokenService,
-    private val auditEvents: AuditRepository
+    private val auditEvents: AuditRepository,
+    private val fleet: DinstarFleetService
 ) {
     fun overview(userId: UUID): AdminUserOverview {
         val user = user(userId)
@@ -63,8 +65,12 @@ class AdminUserIntelligenceService(
             .filter { it.actorId == user.id || it.targetId == user.id.toString() }
             .take(30)
             .map { AdminUserSecurityEvent(it.action, it.targetId, it.createdAt) }
+
+        val userDto = user.toResponse(devices.findAllByUserIdOrderByCreatedAtAsc(user.id))
+        val gatewayHost = user.pstnGatewayId?.let { fleet.findGateway(it)?.host }
+
         return AdminUserOverview(
-            user = user.toResponse(devices.findAllByUserIdOrderByCreatedAtAsc(user.id)),
+            user = userDto.copy(pstnGatewayHost = gatewayHost),
             online = score >= cutoff,
             messagesSent = mongo.count(Query(sender), MessageDocument::class.java),
             messagesReceived = mongo.count(Query(receiver), MessageDocument::class.java),

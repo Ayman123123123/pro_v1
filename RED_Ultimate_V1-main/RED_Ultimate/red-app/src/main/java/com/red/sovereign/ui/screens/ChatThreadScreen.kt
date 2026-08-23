@@ -25,6 +25,7 @@ import com.red.sovereign.crypto.DecryptedMessage
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 
+import com.red.sovereign.features.chat.LuxuryChatBubble
 import com.red.sovereign.ui.theme.*
 import java.time.Instant
 import java.time.LocalDateTime
@@ -48,7 +49,7 @@ fun ChatThreadScreen(
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    
+
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
@@ -79,11 +80,41 @@ fun ChatThreadScreen(
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             items(messages, key = { it.id }) { message ->
-                MessageBubble(
-                    message = message,
-                    isMine = message.outgoing,
-                    onReplyClick = { onReplyClick(message) }
-                )
+                val formatter = DateTimeFormatter.ofPattern("HH:mm")
+                val messageTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(message.timestamp), ZoneId.systemDefault())
+
+                var showMenu by remember { mutableStateOf(false) }
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+                Box {
+                    LuxuryChatBubble(
+                        message = String(message.plaintext, Charsets.UTF_8),
+                        isMe = message.outgoing,
+                        time = messageTime.format(formatter),
+                        status = message.status,
+                        onLongClick = { showMenu = true }
+                    )
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("رد") },
+                            onClick = {
+                                showMenu = false
+                                onReplyClick(message)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("نسخ") },
+                            onClick = {
+                                showMenu = false
+                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(String(message.plaintext, Charsets.UTF_8)))
+                            }
+                        )
+                    }
+                }
             }
             if (isTyping) {
                 item {
@@ -237,9 +268,9 @@ fun MessageBubble(
                         fontFamily = TajawalFamily,
                         lineHeight = 22.sp
                     )
-                    
+
                     Spacer(modifier = Modifier.height(4.dp))
-                    
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
@@ -250,7 +281,7 @@ fun MessageBubble(
                             fontSize = 11.sp,
                             fontFamily = TajawalFamily
                         )
-                        
+
                         if (isMine) {
                             Spacer(modifier = Modifier.width(4.dp))
                             val isRead = message.status == "READ" || message.status == "DELIVERED"
@@ -265,7 +296,7 @@ fun MessageBubble(
                     }
                 }
             }
-            
+
             DropdownMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false }

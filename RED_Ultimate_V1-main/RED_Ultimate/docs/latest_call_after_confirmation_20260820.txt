@@ -1,0 +1,342 @@
+=== ADB DEVICES ===
+List of devices attached
+ZY22CRW9T2             device product:guamna_a model:moto_g_play__2021_ device:guamna transport_id:14
+
+
+=== ANDROID CALL EVENTS ===
+--- ZY22CRW9T2 ---
+08-19 21:40:13.469  1690  7343 W ActivityManager: Scheduling restart of crashed service com.red.sovereign/.calls.YounesCallService in 2518ms
+08-19 21:40:16.046  1690  1738 I ActivityManager: Start proc 25284:com.red.sovereign/u0a244 for service {com.red.sovereign/com.red.sovereign.calls.YounesCallService}
+08-19 21:40:21.314 25284 25284 W ActivityThread: serviceCreate starts in 5123 ms, CreateServiceData = CreateServiceData{token=android.os.BinderProxy@d1d39cd className=com.red.sovereign.calls.YounesCallService packageName=com.red.sovereign intent=null}
+08-19 21:40:21.513 25284 25284 W ActivityThread: serviceStart starts in 5320 ms, ServiceArgsData = ServiceArgsData{token=android.os.BinderProxy@d1d39cd startId=5 args=Intent { act=com.red.sovereign.call.END cmp=com.red.sovereign/.calls.YounesCallService (has extras) }}
+08-19 21:44:30.519  1690  1737 W ActivityManager: Timeout executing service: ServiceRecord{163ee3c u0 com.red.sovereign/.calls.YounesCallService}
+08-19 21:44:41.989  1690  1737 E ActivityManager: Reason: executing service com.red.sovereign/.calls.YounesCallService
+08-19 21:44:47.969  1690  8173 W ActivityManager: Scheduling restart of crashed service com.red.sovereign/.calls.YounesCallService in 74940ms
+08-19 21:44:49.027  1690  8173 W ActivityManager: Stopping service due to app idle: u0a244 -2m31s872ms com.red.sovereign/.calls.YounesCallService
+08-19 21:56:49.449 27173 27173 D AudioManager: dispatching onAudioFocusChange(-2) to android.media.AudioManager@5b20afecom.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@a9c425f
+08-19 21:57:35.842 27173 27173 D CallPresenceMonitor: [487dd2ee-83d9-45a2-9d78-32ce5ed4a3d1] stopped
+08-19 21:57:36.593 27173 27245 D CallPresenceMonitor: [] stopped
+08-19 21:57:40.281 27173 27245 D CallPresenceMonitor: [] stopped
+08-19 21:57:44.964 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:57:56.949 27173 27173 D AudioManager: dispatching onAudioFocusChange(-2) to android.media.AudioManager@43a0da8com.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@4d130c1
+08-19 21:58:12.378 27173 27173 D CallPresenceMonitor: [592437b8-0955-41bb-9c25-da489234788f] stopped
+08-19 21:58:16.920 27173 27244 D CallPresenceMonitor: [] stopped
+08-19 21:58:28.187 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:29.124 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:29.287 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:29.466 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:29.621 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:29.769 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:32.290 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:58:51.608 27173 27173 D CallPresenceMonitor: [] stopped
+08-19 21:59:16.519  1690  7343 I MediaFocusControl: requestAudioFocus() from uid/pid 10244/27173 clientId=android.media.AudioManager@42a122dcom.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@341a362 callingPack=com.red.sovereign req=2 flags=0x0 sdk=37
+08-19 21:59:17.007 27173 27173 D AudioManager: dispatching onAudioFocusChange(-2) to android.media.AudioManager@42a122dcom.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@341a362
+08-19 22:00:04.738 27173 27243 D CallPresenceMonitor: [05c30105-b404-4e6f-b0ed-e490e1ff83f6] stopped
+08-19 22:00:04.751  1690  3288 I MediaFocusControl: abandonAudioFocus() from uid/pid 10244/27173 clientId=android.media.AudioManager@42a122dcom.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@341a362
+08-19 22:00:04.751  1690  3288 I MediaFocusControl: AudioFocus  removeFocusStackEntry(): removing entry for android.media.AudioManager@42a122dcom.red.sovereign.calls.YounesCallService$$ExternalSyntheticLambda3@341a362
+
+=== BACKEND LAST 600 ===
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:40:00.458 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:40:00.463 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:40:11.115 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:14.364 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f908bfbd-9bac-48bb-b8e2-3e434f46fc5d, uri=ws://192.168.11.131/ws/calls]
+java.util.NoSuchElementException: Call not found
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:159)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:54.631 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalArgumentException: Unsupported call signal type
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:58.149 [http-nio-8080-exec-6] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_answered callId=e441fe7b-3474-4f6e-bc86-6abb33d56664
+2026-08-20 01:43:58.154 [http-nio-8080-exec-6] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: Message will not be sent because the WebSocket session has been closed
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.writeMessagePart(WsRemoteEndpointImplBase.java:458)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlockInternal(WsRemoteEndpointImplBase.java:316)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlock(WsRemoteEndpointImplBase.java:269)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlock(WsRemoteEndpointImplBase.java:253)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:226)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:58.215 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:58.220 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:58.277 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:43:58.280 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:44:09.406 [http-nio-8080-exec-5] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
+java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
+	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendPartialString(WsRemoteEndpointImplBase.java:225)
+	at org.apache.tomcat.websocket.WsRemoteEndpointBasic.sendText(WsRemoteEndpointBasic.java:48)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketSession.sendTextMessage(StandardWebSocketSession.java:206)
+	at org.springframework.web.socket.adapter.AbstractWebSocketSession.sendMessage(AbstractWebSocketSession.java:106)
+	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:188)
+	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
+	at org.springframework.web.socket.handler.WebSocketHandlerDecorator.handleMessage(WebSocketHandlerDecorator.java:75)
+	at org.springframework.web.socket.handler.LoggingWebSocketHandlerDecorator.handleMessage(LoggingWebSocketHandlerDecorator.java:56)
+	at org.springframework.web.socket.handler.ExceptionWebSocketHandlerDecorator.handleMessage(ExceptionWebSocketHandlerDecorator.java:58)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter.handleTextMessage(StandardWebSocketHandlerAdapter.java:113)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:84)
+	at org.springframework.web.socket.adapter.standard.StandardWebSocketHandlerAdapter$3.onMessage(StandardWebSocketHandlerAdapter.java:81)
+	at org.apache.tomcat.websocket.WsFrameBase.sendMessageText(WsFrameBase.java:392)
+	at org.apache.tomcat.websocket.server.WsFrameServer.sendMessageText(WsFrameServer.java:130)
+	at org.apache.tomcat.websocket.WsFrameBase.processDataText(WsFrameBase.java:486)
+	at org.apache.tomcat.websocket.WsFrameBase.processData(WsFrameBase.java:286)
+	at org.apache.tomcat.websocket.WsFrameBase.processInputBuffer(WsFrameBase.java:129)
+	at org.apache.tomcat.websocket.server.WsFrameServer.onDataAvailable(WsFrameServer.java:85)
+	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
+	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
+	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
+2026-08-20 01:46:59.568 [cluster-ClusterId{value='6a8659708f8b1fc19b2bedd3', description='null'}-db-mongo:27017] ERROR org.mongodb.driver.cluster - Thread[#33,cluster-ClusterId{value='6a8659708f8b1fc19b2bedd3', description='null'}-db-mongo:27017,5,main] for ServerId{clusterId=ClusterId{value='6a8659708f8b1fc19b2bedd3', description='null'}, address=db-mongo:27017} stopped working. You may want to recreate the MongoClient
+java.lang.NoClassDefFoundError: com/mongodb/internal/thread/InterruptionUtil
+	at com.mongodb.internal.connection.InternalStreamConnection.translateReadException(InternalStreamConnection.java:803)
+Caused by: java.lang.ClassNotFoundException: com.mongodb.internal.thread.InterruptionUtil
+Exception in thread "cluster-ClusterId{value='6a8659708f8b1fc19b2bedd3', description='null'}-db-mongo:27017" java.lang.NoClassDefFoundError: com/mongodb/internal/thread/InterruptionUtil
+	at com.mongodb.internal.connection.InternalStreamConnection.translateReadException(InternalStreamConnection.java:803)
+Caused by: java.lang.ClassNotFoundException: com.mongodb.internal.thread.InterruptionUtil
+Picked up JAVA_TOOL_OPTIONS: -Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
+2026-08-20 01:49:38.227 [http-nio-8080-exec-10] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=748b4a9d-6c53-49c5-a110-a88f8fa8202c message=Call not found
+2026-08-20 01:49:40.167 [http-nio-8080-exec-5] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=748b4a9d-6c53-49c5-a110-a88f8fa8202c message=Call not found
+2026-08-20 01:50:30.395 [http-nio-8080-exec-8] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=5c0937cf-225e-4b68-ab85-cc0298c2afce message=Call not found
+2026-08-20 01:50:32.752 [http-nio-8080-exec-10] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=5c0937cf-225e-4b68-ab85-cc0298c2afce message=Call not found
+2026-08-20 01:57:32.265 [http-nio-8080-exec-6] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=487dd2ee-83d9-45a2-9d78-32ce5ed4a3d1 message=Call not found
+2026-08-20 01:57:34.702 [http-nio-8080-exec-3] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=487dd2ee-83d9-45a2-9d78-32ce5ed4a3d1 message=Call not found
+2026-08-20 01:58:11.239 [http-nio-8080-exec-5] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=592437b8-0955-41bb-9c25-da489234788f message=Call not found
+2026-08-20 01:59:12.672 [http-nio-8080-exec-3] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=b2883ea6-f6df-4c28-93f6-56fae587e81d message=Call not found
+2026-08-20 02:00:00.401 [http-nio-8080-exec-10] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=05c30105-b404-4e6f-b0ed-e490e1ff83f6 message=Call not found

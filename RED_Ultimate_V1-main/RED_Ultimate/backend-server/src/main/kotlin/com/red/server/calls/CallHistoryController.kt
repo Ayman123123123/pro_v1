@@ -38,20 +38,40 @@ class CallHistoryController(
     /** FCM wake endpoint — يخزن العرض للسحب لاحقاً عند اتصال المستلم (Path 2 of Multi-Path Delivery). */
     @PostMapping("/push-notify")
     fun pushNotify(@RequestBody request: PushNotifyRequest, auth: Authentication): ResponseEntity<Any> {
-        val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
-        // نخزن العرض مؤقتاً للسحب عند اتصال المستلم
+        val authenticated = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
+        if (request.callId.isBlank() || request.targetRedId.isBlank() || request.offerSdp.isBlank()) {
+            return ResponseEntity.badRequest().body(mapOf("error" to "INVALID_CALL_OFFER"))
+        }
+
+        val now = Instant.now()
+        purgeExpiredOffers(now)
         val key = "pending:${request.callId}:${request.targetRedId}"
+        if (!pendingOffers.containsKey(key) && pendingOffers.size >= MAX_PENDING_OFFERS) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(mapOf("error" to "PENDING_OFFER_CAPACITY_REACHED"))
+        }
+
+        // هوية JWT هي مصدر هوية المتصل؛ لا نقبل callerId الوارد من الجهاز لأنه قابل للانتحال.
+        val ttlSeconds = request.ttlSeconds?.coerceIn(MIN_PENDING_OFFER_TTL_SECONDS, MAX_PENDING_OFFER_TTL_SECONDS)
+            ?: DEFAULT_PENDING_OFFER_TTL_SECONDS
         pendingOffers[key] = PendingOffer(
             callId = request.callId,
             targetRedId = request.targetRedId,
-            callerId = request.callerId,
+            callerId = authenticated.redId,
             mode = request.mode,
             offerSdp = request.offerSdp,
-            ttlSeconds = request.ttlSeconds ?: 45,
-            createdAt = Instant.now()
+            ttlSeconds = ttlSeconds,
+            createdAt = now
         )
-        // أرسل إشعار FCM إذا كان الجهاز متصلاً (NotificationService يتعامل مع التوكنات)
-        scope.launch { notificationService.sendVoipPushNotification(request.targetRedId, request.callerId, request.callId, request.mode) }
+        // أرسل إشعار FCM إذا كان الجهاز متصلاً (NotificationService يتعامل مع التوكنات).
+        scope.launch {
+            notificationService.sendVoipPushNotification(
+                request.targetRedId,
+                authenticated.redId,
+                request.callId,
+                request.mode
+            )
+        }
         return ResponseEntity.ok(mapOf("status" to "stored"))
     }
 
@@ -81,7 +101,17 @@ class CallHistoryController(
         ))
     }
 
+    private fun purgeExpiredOffers(now: Instant) {
+        pendingOffers.entries.forEach { (key, offer) ->
+            if (offer.createdAt.plusSeconds(offer.ttlSeconds.toLong()).isBefore(now)) {
+                // Conditional remove keeps a concurrently replaced offer intact.
+                pendingOffers.remove(key, offer)
+            }
+        }
+    }
+
     data class PushNotifyRequest(
+
         val callId: String,
         val targetRedId: String,
         val callerId: String,
@@ -128,6 +158,11 @@ class CallHistoryController(
     )
 
     companion object {
+        private const val DEFAULT_PENDING_OFFER_TTL_SECONDS = 45
+        private const val MIN_PENDING_OFFER_TTL_SECONDS = 5
+        private const val MAX_PENDING_OFFER_TTL_SECONDS = 120
+        private const val MAX_PENDING_OFFERS = 10_000
+
         private val pendingOffers = ConcurrentHashMap<String, PendingOffer>()
     }
 }

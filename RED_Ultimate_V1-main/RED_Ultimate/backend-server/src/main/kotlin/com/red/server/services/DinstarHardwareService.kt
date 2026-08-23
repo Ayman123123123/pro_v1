@@ -159,7 +159,9 @@ class DinstarHardwareService(
     private val gatewayId: UUID get() = UUID.nameUUIDFromBytes("DINSTAR:$activeHost:$configuredPort".toByteArray())
 
     fun discoverGateway(): Map<String, Any> {
-        val candidates = linkedSetOf(configuredIp, "192.168.11.1")
+        // الاتصال يقتصر على البوابة المهيأة صراحةً؛ لا توجد عودة صامتة إلى عنوان
+        // تاريخي لأنها قد تستعلم جهازًا آخر وتكتب حالة منافذه في السجل الخطأ.
+        val candidates = linkedSetOf(configuredIp)
         for (host in candidates) {
             if (!isPrivateAddress(host)) continue
             val result = runCatching { discoverPorts(host) }.getOrNull()?.takeIf { it.isNotEmpty() } ?: continue
@@ -203,12 +205,44 @@ class DinstarHardwareService(
         return info.mapNotNull(::normalizePort).also { persistPorts(it, gateway.id) }
     }
 
+    /** إعادة تشغيل الوحدة (المنفذ). */
     fun resetPort(port: Int): Map<String, Any> {
         requireValidPort(port)
         // set_port_info uses GET with query parameters per the official Dinstar API documentation
         val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
         require(apiSuccess(response)) { "تعذّرت إعادة تشغيل الوحدة: ${apiErrorMessage(response)}" }
         return mapOf("status" to "SUCCEEDED", "port" to port)
+    }
+
+    /**
+     * تفعيل "تعلّم الرقم" (Phone Number Learning) عبر واجهة الويب للجهاز.
+     * يستخدم نمط "Call" الموصى به لسبأفون.
+     */
+    fun triggerNumberLearning(port: Int, host: String? = null): Boolean {
+        requireValidPort(port)
+        val target = host ?: activeHost
+        log.info("Triggering Number Learning (Call Mode) for port {} on {}", port, target)
+
+        return runCatching {
+            ensureWebSession(target)
+            val url = "$configuredScheme://$target:$configuredPort/goform/HBPhoneNumberRuleAdd".toHttpUrl()
+            val formBody = FormBody.Builder()
+                .add("Index", port.toString())
+                .add("Method", "2") // 2 = Call
+                .add("IsWRSim", "1") // Write to SIM
+                .add("Ok", "Save")
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                response.isSuccessful || response.code == 302
+            }
+        }.getOrDefault(false)
     }
 
     fun sendUssd(port: Int, text: String): Map<String, Any?> {

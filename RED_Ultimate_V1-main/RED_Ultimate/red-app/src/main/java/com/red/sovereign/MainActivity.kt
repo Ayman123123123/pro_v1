@@ -34,6 +34,8 @@ import com.red.sovereign.security.AppLockPolicy
 import com.red.sovereign.security.DebugSecurityManager
 import com.red.sovereign.security.CertificatePinner
 import com.red.sovereign.settings.SettingsRuntime
+import com.red.sovereign.core.AppStartupCoordinator
+import com.red.sovereign.core.RedConnectionService
 import com.red.sovereign.ui.AuthFlow
 import com.red.sovereign.ui.RedDashboard
 import com.red.sovereign.ui.theme.YounesTheme
@@ -42,10 +44,10 @@ import com.red.sovereign.ui.theme.SovereignBackground
 class MainActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
 
-    /** مستهلك أحداث PSTN الدائم — يبدأ مع جلسة الدخول ويحوّل PSTN_INCOMING إلى رنين. */
-    private var pstnCoordinator: com.red.sovereign.calls.PstnIncomingCallCoordinator? = null
+    /** منسق البداية — يدير تشغيل وإيقاف الخدمات بعيداً عن Activity. */
+    private lateinit var startupCoordinator: AppStartupCoordinator
 
-    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN — مُخزَّن لتجنب التسريب عند إعادة التركيب. */
+    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN. */
     private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
         override fun onResume(owner: LifecycleOwner) {
             if (authViewModel.state is AuthState.Authenticated) {
@@ -73,10 +75,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startupCoordinator = AppStartupCoordinator(application)
         handleNotificationIntent(intent)
         // Initialize security manager
         DebugSecurityManager.initialize(application)
-        
+
         // Log security recommendations
         DebugSecurityManager.getSecurityRecommendations().forEach { rec ->
             Log.i("Security", "[${rec.severity}] ${rec.title}: ${rec.description}")
@@ -96,58 +99,15 @@ class MainActivity : FragmentActivity() {
                         val state = authViewModel.state
                         LaunchedEffect(state is AuthState.Authenticated) {
                             if (state is AuthState.Authenticated) {
-                                val needed = buildList {
-                                    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                                        add(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                                        add(Manifest.permission.RECORD_AUDIO)
-                                    }
-                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                                        add(Manifest.permission.CAMERA)
-                                    }
-                                    if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                                        add(Manifest.permission.BLUETOOTH_CONNECT)
-                                    }
-                                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-                                        add(Manifest.permission.READ_PHONE_STATE)
-                                    }
-                                    // Android 14+ Foreground service specific permissions (optional, but good if the OS enforces them at runtime)
-                                    // Though typically they are declared in manifest and granted automatically if CAMERA/RECORD_AUDIO are granted.
+                                requestNecessaryPermissions()
+                                startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
+
+                                if (!pstnObserverRegistered) {
+                                    ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
+                                    pstnObserverRegistered = true
                                 }
-                                if (needed.isNotEmpty()) {
-                                    appPermissions.launch(needed.toTypedArray())
-                                }
-                                runCatching { com.red.sovereign.core.RedConnectionService.start(this@MainActivity) }
-                                runCatching { com.red.sovereign.calls.YounesCallService.listen(this@MainActivity) }
-                                // بدء مستهلك أحداث PSTN الدائم (كان ميتاً — لا مستدعِ له)
-                                runCatching {
-                                    val coordinator = pstnCoordinator
-                                        ?: com.red.sovereign.calls.PstnIncomingCallCoordinator(application)
-                                            .also { pstnCoordinator = it }
-                                    coordinator.start()
-                                }.onFailure { Log.w("PstnCoordinator", "start failed: ${it.message}") }
-                                // ملاحظة: لا نسجّل YounesConnectionService القديم — TelegramBridge (CallsManager)
-                                // يُسجَّل تلقائياً من YounesCallService.onCreate. تسجيل الاثنين معاً يخلق
-                                // PhoneAccount مزدوجاً → مكالمات نظام عالقة/مكررة على بعض الأجهزة.
-runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivity) }
-            // منع الانهيار على Android 12+ عند فتح التطبيق من إشعار من الخلفية
-            val routerIntent = Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java)
-            try {
-                if (Build.VERSION.SDK_INT >= 26) startForegroundService(routerIntent) else startService(routerIntent)
-            } catch (_: Exception) {
-                try { startService(routerIntent) } catch (_: Exception) {}
-            }
-            // تحديث صلاحيات PSTN عند استئناف التطبيق — مسجل مرة واحدة فقط
-            if (!pstnObserverRegistered) {
-                ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
-                pstnObserverRegistered = true
-            }
-            } else {
-                                com.red.sovereign.core.RedConnectionService.stop(this@MainActivity)
-                                com.red.sovereign.calls.YounesCallService.stop(this@MainActivity)
-                                stopService(Intent(this@MainActivity, com.red.sovereign.core.network.SovereignNotificationRouter::class.java))
-                                pstnCoordinator?.stop()
+                            } else {
+                                startupCoordinator.onLoggedOut(this@MainActivity)
                             }
                         }
                         if (state is AuthState.Authenticated) {
@@ -179,14 +139,36 @@ runCatching { com.red.sovereign.calls.VoipPushRegistrar.register(this@MainActivi
 
     override fun onDestroy() {
         if (!isChangingConfigurations) {
-            pstnCoordinator?.destroy()
-            pstnCoordinator = null
+            startupCoordinator.onDestroy()
             if (pstnObserverRegistered) {
                 runCatching { ProcessLifecycleOwner.get().lifecycle.removeObserver(pstnLifecycleObserver) }
                 pstnObserverRegistered = false
             }
         }
         super.onDestroy()
+    }
+
+    private fun requestNecessaryPermissions() {
+        val needed = buildList {
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.RECORD_AUDIO)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.CAMERA)
+            }
+            if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.READ_PHONE_STATE)
+            }
+        }
+        if (needed.isNotEmpty()) {
+            appPermissions.launch(needed.toTypedArray())
+        }
     }
 
     override fun onUserLeaveHint() {

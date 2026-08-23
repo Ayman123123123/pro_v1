@@ -1,0 +1,4 @@
+--------- beginning of main
+08-20 05:07:46.544 26526 26526 D CallSignalingClient: Sent END callId=027ecea6-b597-44bb-9f07-2e1a6064f7b8
+08-20 05:07:46.544 26526 26526 D CallPresenceMonitor: [027ecea6-b597-44bb-9f07-2e1a6064f7b8] stopped
+08-20 05:07:50.772 26526 27511 D CallPresenceMonitor: [] stopped

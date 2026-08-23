@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
  */
 @Service
 class DinstarFleetService(
-    @Value("\${red.dinstar.ip:192.168.11.1}") private val seedIp: String,
+    @Value("\${red.dinstar.ip:192.168.11.2}") private val seedIp: String,
     @Value("\${red.dinstar.port:443}") private val seedPort: Int,
     @Value("\${red.dinstar.scheme:https}") private val seedScheme: String,
     @Value("\${red.dinstar.discovery.subnets:}") private val configuredSubnets: String,
@@ -60,7 +60,7 @@ class DinstarFleetService(
         /**
          * اسم نظير PJSIP مشتقّ من العنوان — يطابق ما يولّده
          * `pstn-asterisk/docker-entrypoint.sh` بالضبط:
-         *   192.168.11.1 → dinstar-gw-192-168-11-1
+         *   192.168.11.2 → dinstar-gw-192-168-11-2
          *
          * الاشتقاق (لا الترقيم بالموضع) يمنع الاختلال الصامت عند إعادة
          * ترتيب `DINSTAR_IPS` أو حذف عنوان من وسطها.

@@ -35,10 +35,10 @@ object YemeniOperatorDetector {
 
         return when {
             clean.startsWith("70") -> OperatorInfo("واي (Y)", Color(0xFF00A1E4), "GSM/4G")
-            clean.startsWith("71") -> OperatorInfo("سبأفون", Color(0xFFFDB913), "GSM/3G/4G")
-            clean.startsWith("73") -> OperatorInfo("يو (YOU)", Color(0xFFFFF200), "GSM/4G")
+            clean.startsWith("71") -> OperatorInfo("سبأفون", Color(0xFFFDB913), "GSM/3G/4G") // Sabafon Gold/Yellow
+            clean.startsWith("73") -> OperatorInfo("يو (YOU)", Color(0xFFFFF200), "GSM/4G") // YOU Yellow
             clean.startsWith("77") || clean.startsWith("78") ->
-                OperatorInfo("يمن موبايل", Color(0xFFE31E24), "GSM/4G")
+                OperatorInfo("يمن موبايل", Color(0xFFE31E24), "GSM/4G") // Yemen Mobile Red
             clean.startsWith("10") -> OperatorInfo("يمن 4G", Color(0xFF009688), "LTE")
             // هاتف ثابت: prefix 1X-5X
             clean.startsWith("1") -> OperatorInfo("هاتف ثابت (صنعاء)", Color(0xFF607D8B), "PSTN")

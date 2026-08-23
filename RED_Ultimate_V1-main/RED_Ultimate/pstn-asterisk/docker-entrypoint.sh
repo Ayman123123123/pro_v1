@@ -48,6 +48,25 @@ esac
 CONFIG_DIR="${ASTERISK_CONFIG_DIR:-/etc/asterisk}"
 mkdir -p "$CONFIG_DIR"
 
+# The upstream image stores /etc/asterisk in a runtime volume. Create a local
+# development certificate only when the persistent key volume has none; never
+# overwrite a managed certificate.
+KEY_DIR="$CONFIG_DIR/keys"
+if [ ! -s "$KEY_DIR/fullchain.pem" ] || [ ! -s "$KEY_DIR/privkey.pem" ]; then
+  mkdir -p "$KEY_DIR"
+  if command -v openssl >/dev/null 2>&1; then
+    umask 077
+    openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+      -keyout "$KEY_DIR/privkey.pem" -out "$KEY_DIR/fullchain.pem" \
+      -subj '/CN=192.168.11.20/O=RED Sovereign/CN=Asterisk PSTN Gateway' \
+      -addext 'subjectAltName=IP:192.168.11.20,IP:127.0.0.1,DNS:localhost,DNS:red.local'
+    chown asterisk:asterisk "$KEY_DIR/privkey.pem" "$KEY_DIR/fullchain.pem" 2>/dev/null || true
+    echo "[entrypoint] generated development TLS certificate"
+  else
+    echo "[entrypoint] WARNING: no TLS certificate and openssl is unavailable" >&2
+  fi
+fi
+
 cat > "$CONFIG_DIR/manager.conf" <<EOF
 [general]
 enabled = yes
@@ -133,6 +152,7 @@ EOF
 # الاشتقاق من العنوان يجعل الطرفين يصلان إلى الاسم نفسه استقلالًا،
 # بلا ترتيب مشترك: 192.168.11.1 → dinstar-gw-192-168-11-1
 gw_index=0
+OLD_IFS="$IFS"
 IFS=','
 for gw_ip in $DINSTAR_IPS; do
   [ -n "$gw_ip" ] || continue
@@ -165,6 +185,35 @@ type=identify
 endpoint=${gw_name}
 match=${gw_ip}
 EOF
+
+  # A selected SIM port must reach its own SIP socket. OPTIONS probes against
+  # this UC2000 verified that module ports 0..7 respond on UDP 5060..5067.
+  # Keep the legacy gateway AOR below for compatibility only; new backend
+  # selections use these stable address-derived endpoint names.
+  for pnum in 0 1 2 3 4 5 6 7; do
+    sip_port=$((5060 + pnum))
+    port_endpoint="${gw_name}-port-${pnum}"
+    cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[${port_endpoint}]
+type=aor
+contact=sip:${gw_ip}:${sip_port}
+qualify_frequency=30
+
+[${port_endpoint}]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+from_user=1000000
+aors=${port_endpoint}
+transport=transport-udp
+EOF
+  done
   gw_index=$((gw_index + 1))
 done
 unset IFS
@@ -191,6 +240,27 @@ transport=transport-udp
 ;disable_nat_qualify=yes
 EOF
 
+# Aliases for legacy single-gateway calls. Each alias maps to the matching
+# concrete module socket, never to the generic compatibility AOR above.
+for pnum in 0 1 2 3 4 5 6 7; do
+  first_port_endpoint="${first_gw_name}-port-${pnum}"
+  cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
+
+[dinstar-port-${pnum}]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+from_user=1000000
+aors=${first_port_endpoint}
+transport=transport-udp
+EOF
+done
+
 # ═══════════════════════════════════════════════════════════════════════════
 # قبول تسجيل منافذ البوابة (REGISTER) — المنافذ لا تسلّم المكالمات إلا إذا
 # سُجّلت لدى "خادم SIP" (أستيريكس): كل منفذ يسجّل بمستخدمه الرقمي 0..7.
@@ -198,7 +268,7 @@ EOF
 # تبقى المنافذ Unregistered فيُرفض كل مكالمة واردة بـ 503 Service Unavailable.
 # هذه النهايات لأجل قبول REGISTER فقط — مكالمات البوابة الخارجة تذهب عبر
 # ترنك dinstar-gateway مباشرةً، فيبقى context محايدًا (from-dinstar).
-for pnum in $(seq 0 7); do
+for pnum in 0 1 2 3 4 5 6 7; do
   cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
 [${pnum}]
@@ -218,14 +288,14 @@ direct_media=no
 force_rport=yes
 rewrite_contact=no
 aors=${pnum}
-; Never accept SIP registration or calls from a gateway outside the active fleet.
-; The active inventory is defined only by DINSTAR_IPS, so disabled units cannot
-; add a competing contact to the shared numeric AoRs 0..7.
-deny=0.0.0.0/0.0.0.0
+; The packets reach Docker through its NAT gateway, so source-IP ACLs cannot
+; distinguish DINSTAR units. Restrict instead on the advertised Contact address.
+; This prevents disabled units from adding competing contacts to AoRs 0..7.
+contact_deny=0.0.0.0/0.0.0.0
 EOF
   for allowed_ip in $DINSTAR_IPS; do
     [ -n "$allowed_ip" ] || continue
-    echo "permit=${allowed_ip}" >> "$CONFIG_DIR/pjsip.conf"
+    echo "contact_permit=${allowed_ip}" >> "$CONFIG_DIR/pjsip.conf"
   done
 done
 # Registrations for the shared numeric AoRs 0..7 are admitted only from the

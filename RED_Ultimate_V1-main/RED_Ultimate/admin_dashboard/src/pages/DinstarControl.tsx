@@ -9,7 +9,9 @@ import {
   PlusOutlined, RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled,
   ToolOutlined, PhoneOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { apiFetch } from '../api';
+import {
+  apiFetch, bindSim, unbindSim, getPstnEligibleUsers, updateSimInventory, type SimInventoryUpdate,
+} from '../api';
 import { usePolling } from '../hooks/usePolling';
 
 /**
@@ -132,8 +134,20 @@ export default function DinstarControl() {
   const [reconcileLoading, setReconcileLoading] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<any | null>(null);
   const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [bindOpen, setBindOpen] = useState(false);
+  const [bindPort, setBindPort] = useState<number | null>(null);
+  const [bindGwId, setBindGwId] = useState<string | null>(null);
+  const [bindGwHost, setBindGwGwHost] = useState('');
+  const [eligibleUsers, setEligibleUsers] = useState<any[]>([]);
+  const [binding, setBinding] = useState(false);
+  const [invOpen, setInvOpen] = useState(false);
+  const [invPort, setInvPort] = useState<number | null>(null);
+  const [invGwId, setInvGwId] = useState<string | null>(null);
+  const [invSaving, setInvSaving] = useState(false);
   const [form] = Form.useForm();
   const [routeForm] = Form.useForm();
+  const [bindForm] = Form.useForm();
+  const [invForm] = Form.useForm();
 
   const json = async (r: Response) => {
     const b = await r.json().catch(() => ({}));
@@ -204,6 +218,14 @@ export default function DinstarControl() {
       setReconcileLoading(false);
     }
   }, []);
+
+  const triggerLearning = async (port: number) => {
+    try {
+      await json(await apiFetch(`/api/admin/dinstar/ports/${port}/learning`, { method: 'POST' }));
+      message.success(`أُرسل طلب تعلّم الرقم للمنفذ ${port + 1} (Call Mode)`);
+      setTimeout(load, 2000);
+    } catch (e: any) { message.error(e.message); }
+  };
 
   const resetPort = (gatewayHost: string, port: number) =>
     Modal.confirm({
@@ -388,6 +410,94 @@ export default function DinstarControl() {
     }
   };
 
+  const openBind = async (gwId: string, host: string, port: number, currentUser?: string) => {
+    setBindGwId(gwId);
+    setBindGwGwHost(host);
+    setBindPort(port);
+    bindForm.setFieldsValue({ userId: currentUser || undefined });
+    setBindOpen(true);
+    try {
+      const users = await getPstnEligibleUsers();
+      setEligibleUsers(users);
+    } catch (e: any) {
+      message.error('تعذر تحميل قائمة المستخدمين المؤهلين');
+    }
+  };
+
+  const doBind = async () => {
+    if (bindGwId === null || bindPort === null) return;
+    setBinding(true);
+    try {
+      const { userId, number } = await bindForm.validateFields();
+      if (!userId) {
+        // Unbind case
+        const portKey = `${bindGwId}#${bindPort}`;
+        const existing = fleetPorts?.gateways.find(g => g.gateway.id === bindGwId)?.ports.find(p => p.index === bindPort);
+        if (existing?.boundRedId) {
+          // We need the internal UUID to unbind. PstnUser type has it.
+          // For now, let's find the user in eligibleUsers or just call bind with null.
+          // Backend bind supports updating to another user or 409 if exists.
+          // PstnBindingController DELETE /{userId} is the explicit unbind.
+        }
+        message.warning('اختر مستخدماً للربط أو استخدم فك الارتباط الصريح');
+        return;
+      }
+      await bindSim(userId, bindGwId, bindPort, number);
+      message.success('تم ربط الشريحة بالمستخدم بنجاح');
+      setBindOpen(false);
+      load();
+    } catch (e: any) {
+      if (e.errorFields) return;
+      message.error(e.message || 'فشل عملية الربط');
+    } finally {
+      setBinding(false);
+    }
+  };
+
+  const doUnbind = async (userId: string, redId: string) => {
+    Modal.confirm({
+      title: `فك ارتباط ${redId}؟`,
+      content: 'لن يتمكن هذا المستخدم من استخدام هذه الشريحة (CLIP) بعد الآن.',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await unbindSim(userId);
+          message.success('تم فك الارتباط');
+          load();
+        } catch (e: any) { message.error(e.message); }
+      }
+    });
+  };
+
+  const openInventory = (gwId: string, port: Port) => {
+    setInvGwId(gwId);
+    setInvPort(port.index);
+    invForm.setFieldsValue({
+      simLabel: '', // TODO: fetch existing if any
+      operatorLabel: port.operator || '',
+      verificationState: 'UNVERIFIED',
+      notes: ''
+    });
+    setInvOpen(true);
+  };
+
+  const doSaveInventory = async () => {
+    if (invGwId === null || invPort === null) return;
+    setInvSaving(true);
+    try {
+      const values = await invForm.validateFields();
+      await updateSimInventory(invGwId, invPort, values as SimInventoryUpdate);
+      message.success('تم تحديث بيانات المخزون بنجاح');
+      setInvOpen(false);
+      load();
+    } catch (e: any) {
+      if (e.errorFields) return;
+      message.error(e.message || 'فشل تحديث المخزون');
+    } finally {
+      setInvSaving(false);
+    }
+  };
+
   const renderPort = (gateway: Gateway, port: Port) => {
     const label = SIGNAL_LABEL[port.signalLabel || 'NO_SIGNAL'] || SIGNAL_LABEL.NO_SIGNAL;
     const measured = port.signalDbm != null;
@@ -472,18 +582,25 @@ export default function DinstarControl() {
             )}
             <Descriptions.Item label="الحساب المالك">
               {port.boundUsername ? (
-                <Space size={4}>
+                <Space size={4} wrap>
                   <Tag color="purple" style={{ fontWeight: 600 }}>{port.boundUsername}</Tag>
                   <Typography.Text type="secondary" style={{ fontSize: 11 }}>#{port.boundRedId}</Typography.Text>
+                  <Button size="small" type="link" danger onClick={() => {
+                    // We need the internal UUID which isn't in Port type currently.
+                    // Let's assume boundRedId is enough for a lookup or update the API to include it.
+                    // Actually, the reconcile logic shows we need the userId.
+                    message.info('استخدم صفحة إدارة PSTN لفك الارتباط حالياً أو Reconcile');
+                  }}>فك</Button>
                 </Space>
               ) : (
-                <Tooltip title="لا يوجد ربط دائم — هذه الشريحة غير مخصصة لأي حساب">
+                <Space>
                   <Tag color="default">غير مرتبط</Tag>
-                </Tooltip>
+                  <Button size="small" type="link" onClick={() => openBind(gateway.id, gateway.host, port.index)}>ربط</Button>
+                </Space>
               )}
             </Descriptions.Item>
           </Descriptions>
-          <Space style={{ marginTop: 6 }}>
+          <Space style={{ marginTop: 6 }} wrap>
             <Button
               type="primary" size="small" icon={<PhoneOutlined />}
               disabled={!isRegistered(port.status) || !port.signalUsable}
@@ -494,8 +611,14 @@ export default function DinstarControl() {
             <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget(port.index); setUssd(''); }}>
               USSD
             </Button>
+            <Button size="small" icon={<HistoryOutlined />} onClick={() => triggerLearning(port.index)}>
+              تعلّم
+            </Button>
+            <Button size="small" icon={<SafetyCertificateOutlined />} onClick={() => openInventory(gateway.id, port)}>
+              جرد
+            </Button>
             <Button size="small" danger icon={<ToolOutlined />} onClick={() => resetPort(gateway.host, port.index)}>
-              إعادة تشغيل
+              إعادة
             </Button>
           </Space>
         </Card>
@@ -945,6 +1068,89 @@ export default function DinstarControl() {
           <Alert style={{ marginTop: 12 }} type="success" showIcon
             message={`أُطلقت: ${dialResult.status} · المنفذ ${(dialResult.slot ?? 0) + 1} · callId ${dialResult.callId}`} />
         )}
+      </Modal>
+
+      {/* ── ربط شريحة بمستخدم ── */}
+      <Modal
+        title={`ربط شريحة بمستخدم — المنفذ ${(bindPort ?? 0) + 1} @ ${bindGwHost}`}
+        open={bindOpen}
+        onCancel={() => setBindOpen(false)}
+        onOk={doBind}
+        confirmLoading={binding}
+        okText="حفظ الربط"
+        cancelText="إلغاء"
+      >
+        <Form form={bindForm} layout="vertical">
+          <Form.Item name="userId" label="المستخدم المستهدف" rules={[{ required: true, message: 'اختر مستخدماً' }]}>
+            <Select
+              showSearch
+              placeholder="ابحث عن مستخدم (الاسم أو معرّف RED)"
+              optionFilterProp="children"
+              options={eligibleUsers.map(u => ({
+                value: u.userId,
+                label: `${u.displayName} (@${u.username}) — ${u.redId}`
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="number"
+            label="رقم الهاتف (CLIP)"
+            tooltip="الرقم الفعلي للشريحة. يُستخدم للتحقق ولإظهاره كـ Caller ID للمستلم."
+          >
+            <Input placeholder="مثال: 712064924" />
+          </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            message="الربط الدائم"
+            description="عند ربط مستخدم بمنفذ، ستخرج كافة مكالماته من هذا المنفذ حصرًا، وستوجه المكالمات الواردة لهذا المنفذ إليه مباشرة."
+          />
+        </Form>
+      </Modal>
+
+      {/* ── جرد الشريحة ── */}
+      <Modal
+        title={`جرد الشريحة — المنفذ ${(invPort ?? 0) + 1}`}
+        open={invOpen}
+        onCancel={() => setInvOpen(false)}
+        onOk={doSaveInventory}
+        confirmLoading={invSaving}
+        okText="حفظ البيانات"
+        cancelText="إلغاء"
+      >
+        <Form form={invForm} layout="vertical">
+          <Form.Item name="simLabel" label="تسمية الشريحة" tooltip="اسم وصفي (مثلاً: رقم الطوارئ 1)">
+            <Input placeholder="أدخل اسماً اختيارياً" />
+          </Form.Item>
+          <Form.Item name="operatorLabel" label="تسمية المشغل" tooltip="تجاوز كشف المشغل التلقائي">
+            <Input placeholder="مثلاً: Sabafon North" />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="verificationState" label="حالة التحقق" rules={[{ required: true }]}>
+                <Select options={[
+                  { value: 'UNVERIFIED', label: 'غير محقق' },
+                  { value: 'VERIFIED', label: 'محقق' },
+                  { value: 'LEARNED', label: 'تم تعلمه آلياً' },
+                  { value: 'FAILED', label: 'فشل التحقق' },
+                ]} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="verificationMethod" label="طريقة التحقق">
+                <Select allowClear options={[
+                  { value: 'MANUAL', label: 'يدوي' },
+                  { value: 'USSD', label: 'USSD' },
+                  { value: 'SMS_KEYWORD', label: 'SMS Keyword' },
+                  { value: 'CALL_LOOP', label: 'Call Loop' },
+                ]} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="notes" label="ملاحظات فنية">
+            <Input.TextArea rows={2} placeholder="أي معلومات إضافية عن هذه الشريحة" />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

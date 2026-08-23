@@ -1,0 +1,13 @@
+=== META ===
+CaptureStartedUtc=2026-08-20T02:07:11.0230712Z
+SamsungSerial=R5CT41S307K
+AndroidCapturePid=23476
+BackendCapturePid=3164
+
+=== SAMSUNG EVENTS ===
+08-20 05:07:46.544 26526 26526 D CallPresenceMonitor: [027ecea6-b597-44bb-9f07-2e1a6064f7b8] stopped
+08-20 05:07:50.772 26526 27511 D CallPresenceMonitor: [] stopped
+
+=== BACKEND EVENTS ===
+2026-08-20 02:07:45.659 [http-nio-8080-exec-6] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=027ecea6-b597-44bb-9f07-2e1a6064f7b8 message=Call not found
+2026-08-20 02:08:34.016 [http-nio-8080-exec-6] WARN  c.r.s.websocket.CallWebSocketHandler - call_signal_rejected reason=unknown_call callId=7db358ed-c15c-477b-acf8-e28b5a1021f8 message=Call not found
