@@ -46,17 +46,17 @@ class DinstarEventListener(
         private const val INCOMING_CHANNEL_PREFIX = "red:pstn:incoming:"
         /** فهرس قصير العمر لتمرير callId فقط إلى endpoint تجهيز وسائط الوارد. */
         private const val INCOMING_CALL_PREFIX = "red:pstn:incoming-call:"
+        private const val CHANNEL_CALLID_PREFIX = "red:pstn:channel-callid:"
         private const val INCOMING_TTL_SECONDS = 120L
+        private const val CHANNEL_TTL_HOURS = 2L
     }
-
-    private val channelToCallId = ConcurrentHashMap<String, String>()
 
     /**
      * منفّذ مخصص لمعالجة أحداث AMI الثقيلة (Mongo/JDBC/Redis/FCM).
      * خيط واحد يحافظ على ترتيب الأحداث نفسه، لكنه يفصل المعالجة عن خيط
      * قارئ asterisk-java حتى لا يعطّل FCM المتزامن كل أحداث المكالمات.
      */
-    private val amiExecutor: ExecutorService = Executors.newSingleThreadExecutor { r ->
+    private val amiExecutor: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "dinstar-ami-events").apply { isDaemon = true }
     }
 
@@ -102,7 +102,7 @@ class DinstarEventListener(
         val variable = event.variable ?: return
         val value = event.value ?: return
         if (variable == "CALL_ID" || variable == "RED_CALL_ID") {
-            channelToCallId[channel] = value
+            redis.opsForValue().set("$CHANNEL_CALLID_PREFIX$channel", value, Duration.ofHours(CHANNEL_TTL_HOURS))
             pstnManager.bindChannel(value, channel)
             log.debug("Channel {} bound to callId {}", channel, value)
         }
@@ -118,7 +118,7 @@ class DinstarEventListener(
         when (state) {
             "Up" -> {
                 log.info("Line {} answered (CONNECTED)", lineNumber)
-                val callId = channelToCallId[channel]
+                val callId = redis.opsForValue().get("$CHANNEL_CALLID_PREFIX$channel")
                     ?: findCallIdFromPort(extractPortIndex(channel, lineNumber))
                 if (callId != null) {
                     runCatching { history.answer(callId) }
@@ -143,7 +143,7 @@ class DinstarEventListener(
 
         log.info("DINSTAR line {} hung up - cause: {} ({}) failed={}", lineNumber, cause, causeTxt, isFailed)
 
-        val callId = channelToCallId.remove(channel)
+        val callId = redis.opsForValue().getAndDelete("$CHANNEL_CALLID_PREFIX$channel")
             ?: findCallIdFromPort(extractPortIndex(channel, lineNumber))
         callId?.let { pstnManager.forgetChannel(it) }
         // التقاط ربط المكالمة (callId:gatewayId:port) قبل تنظيف مفاتيح Redis —

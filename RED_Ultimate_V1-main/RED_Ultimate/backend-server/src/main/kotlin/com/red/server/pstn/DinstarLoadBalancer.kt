@@ -115,6 +115,18 @@ class DinstarLoadBalancer(
         portUsage[usageKey(gatewayId, port)]?.get() ?: 0
 
     /**
+     * يطابق مولّد Asterisk: كل منفذ GSM يملك AOR ثابتًا على UDP 5060 + index.
+     * لا يكفي تمرير RED_PORT_INDEX كرأس/متغير؛ وجهة Dial نفسها هي التي تثبت
+     * المنفذ الفيزيائي. في وضع البوابة الواحدة تستخدم الأسماء التوافقية.
+     */
+    private fun pjsipEndpointFor(gateway: DinstarFleetService.Gateway?, portIndex: Int): String {
+        require(portIndex in 0..7) { "DINSTAR port index out of range: $portIndex" }
+        return gateway?.host
+            ?.let { "dinstar-gw-${it.replace('.', '-')}-port-$portIndex" }
+            ?: "dinstar-port-$portIndex"
+    }
+
+    /**
      * تصنيف المشغل حسب بادئة الرقم اليمني.
      *
      * يفوّض إلى دالة نقيّة في الـ companion حتى تُختبر بلا بناء الخدمة
@@ -164,7 +176,7 @@ class DinstarLoadBalancer(
         val selection = PortSelection(
             gatewayId = gatewayId,
             gatewayHost = gateway.host,
-            pjsipEndpoint = gateway.pjsipEndpoint ?: "dinstar-gw-${gateway.host.replace('.', '-')}",
+            pjsipEndpoint = pjsipEndpointFor(gateway, portIndex),
             portIndex = portIndex,
             operator = port["operator"]?.toString(),
             signalDbm = (port["signalDbm"] as? Number)?.toInt(),
@@ -288,7 +300,7 @@ class DinstarLoadBalancer(
         val selection = PortSelection(
             gatewayId = best.gateway?.id,
             gatewayHost = best.gateway?.host ?: "configured",
-            pjsipEndpoint = best.gateway?.pjsipEndpoint ?: "dinstar-gateway",
+            pjsipEndpoint = pjsipEndpointFor(best.gateway, index),
             portIndex = index,
             operator = best.port["operator"]?.toString(),
             signalDbm = (best.port["signalDbm"] as? Number)?.toInt(),

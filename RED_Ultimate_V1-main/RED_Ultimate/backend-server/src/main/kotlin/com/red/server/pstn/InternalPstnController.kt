@@ -1,5 +1,6 @@
 package com.red.server.pstn
 
+import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
@@ -24,12 +25,14 @@ import org.springframework.web.bind.annotation.RestController
  * ## الأمان
  * - الـendpoint غير منشور للخارج (nginx لا يمرر /api/internal)
  * - يتطلب ترويسة X-Internal-Secret مطابقة لـ PSTN_INTERNAL_SECRET
+ * - يتم التحقق من IP المصدر (اختياري)
  */
 @RestController
 @RequestMapping("/api/internal/pstn")
 class InternalPstnController(
     private val listener: DinstarEventListener,
-    @Value("\${pstn.internal-secret:red-internal-pstn-secret}") private val internalSecret: String
+    @Value("\${pstn.internal-secret:red-internal-pstn-secret}") private val internalSecret: String,
+    @Value("\${pstn.internal-allowed-ips:}") private val allowedIps: String
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(InternalPstnController::class.java)
@@ -45,12 +48,26 @@ class InternalPstnController(
     @PostMapping("/incoming")
     fun incoming(
         @RequestHeader(value = "X-Internal-Secret", required = false) secret: String?,
-        @RequestBody payload: IncomingPayload
+        @RequestBody payload: IncomingPayload,
+        request: HttpServletRequest
     ): ResponseEntity<Map<String, Any?>> {
+        val clientIp = request.remoteAddr
+        log.debug("Internal PSTN attempt from IP: {}", clientIp)
+
         if (internalSecret.isBlank() || secret != internalSecret) {
-            log.warn("internal.pstn unauthorized attempt")
+            log.warn("internal.pstn unauthorized attempt: wrong secret from IP={}", clientIp)
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(mapOf("error" to "BAD_SECRET"))
         }
+
+        // IP validation (if configured)
+        if (allowedIps.isNotBlank()) {
+            val allowedList = allowedIps.split(",").map { it.trim() }
+            if (clientIp !in allowedList && "0.0.0.0" !in allowedList) {
+                log.warn("internal.pstn unauthorized attempt: IP {} not in allowed list", clientIp)
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "IP_NOT_ALLOWED"))
+            }
+        }
+
         val caller = payload.caller?.takeIf { it.isNotBlank() } ?: return ResponseEntity.badRequest()
             .body(mapOf("error" to "caller required"))
         val called = payload.called?.takeIf { it.isNotBlank() }

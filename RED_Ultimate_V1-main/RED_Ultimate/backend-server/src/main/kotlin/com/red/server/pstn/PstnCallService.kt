@@ -81,7 +81,9 @@ private val history: CallHistoryService,
                 loadBalancer.selectPort(number, slotIndex)
                     ?: throw IllegalStateException("No DINSTAR port with a usable signal is available — assign permanent SIM first")
             }
-            val portIdx = if (slotIndex != null && slotIndex >= 0) slotIndex else selection.portIndex
+            // الاختيار القابل للتنفيذ هو ما رجعه الموزع بعد شروط الربط الدائم
+            // والإشارة والانشغال؛ لا تُعد كتابة slotIndex مختلفة دليلًا على منفذ فعلي.
+            val portIdx = selection.portIndex
             // إظهار رقم الشريحة الحقيقي للمستلم الخارجي
             val callerSimNumber = user.pstnNumber ?: selection.simNumber
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, portIdx, callerSimNumber)
