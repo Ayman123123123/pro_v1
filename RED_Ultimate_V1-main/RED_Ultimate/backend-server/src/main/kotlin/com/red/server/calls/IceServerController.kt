@@ -34,7 +34,8 @@ class IceServerController(
     @Value("\${red.turn.port:3478}") private val port: Int,
     @Value("\${red.turn.tls-port:5349}") private val tlsPort: Int,
     @Value("\${red.turn.443-port:443}") private val altPort: Int,
-    @Value("\${red.turn.secret}") private val secret: String,
+    // default فارغ بدل الفشل عند الإقلاع — التحقق من الطول يتم في iceServers()
+    @Value("\${red.turn.secret:}") private val secret: String,
     @Value("\${red.turn.ttl-seconds:3600}") private val ttlSeconds: Long,
     // Open Relay (Metered.ca)
     @Value("\${red.turn.openrelay.enabled:false}") private val openRelayEnabled: Boolean,
