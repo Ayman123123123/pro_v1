@@ -1,0 +1,165 @@
+[0mPBX UUID: 83007476-8e80-493e-993f-d9a5d5563c71
+Could not find option 'minimum_size' with type 'threadpool' in module 'stasis'
+[Aug 23 17:58:20] [1;33mNOTICE[0m[1]: [1;37mloader.c[0m:[1;37m2568[0m [1;37mload_modules[0m: 332 modules will be loaded.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1468[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database user found, using 'asterisk' as default.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1480[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database password found, using 'asterisk' as default.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1492[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database host found, using localhost via socket.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1499[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database name found, using 'asterisk' as default.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1512[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database port found, using 5432 as default.
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1538[0m [1;37mparse_config[0m: PostgreSQL RealTime: No database socket found, using '/tmp/.s.PGSQL.5432' as default.
+[Aug 23 17:58:20] [1;31mERROR[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1636[0m [1;37mpgsql_reconnect[0m: PostgreSQL RealTime: Failed to connect database asterisk on : 
+[Aug 23 17:58:20] [1;31mWARNING[0m[1]: [1;37mres_config_pgsql.c[0m:[1;37m1574[0m [1;37mparse_config[0m: PostgreSQL RealTime: Couldn't establish connection. Check debug.
+[Aug 23 17:58:20] [1;33mNOTICE[0m[1]: [1;37mres_config_ldap.c[0m:[1;37m1881[0m [1;37mparse_config[0m: No directory user found, anonymous binding as default.
+[Aug 23 17:58:20] [1;31mERROR[0m[1]: [1;37mres_config_ldap.c[0m:[1;37m1907[0m [1;37mparse_config[0m: No directory URL or host found.
+[Aug 23 17:58:20] [1;31mERROR[0m[1]: [1;37mres_config_ldap.c[0m:[1;37m1769[0m [1;37mload_module[0m: Cannot load LDAP RealTime driver.
+[Aug 23 17:58:20] [1;33mNOTICE[0m[1]: [1;37mcdr.c[0m:[1;37m4656[0m [1;37mcdr_toggle_runtime_options[0m: CDR simple logging enabled.
+[Aug 23 17:58:20] [1;33mNOTICE[0m[1]: [1;37mindications.c[0m:[1;37m1100[0m [1;37mload_indications[0m: Default country for indication tones: ye
+[Aug 23 17:58:20] [1;33mNOTICE[0m[1]: [1;37mindications.c[0m:[1;37m424[0m [1;37mast_set_indication_country[0m: Setting default indication country to 'ye'
+[Aug 23 17:58:21] [1;33mNOTICE[0m[1]: [1;37mres_smdi.c[0m:[1;37m1430[0m [1;37mload_module[0m: No SMDI interfaces are available to listen on, not starting SMDI listener.
+[Aug 23 17:58:21] [1;31mWARNING[0m[1]: [1;37mres_musiconhold.c[0m:[1;37m2333[0m [1;37mload_module[0m: No music on hold classes configured, disabling music on hold.
+[Aug 23 17:58:21] [1;31mWARNING[0m[1]: [1;37mres_phoneprov.c[0m:[1;37m1255[0m [1;37mget_defaults[0m: Unable to find a valid server address or name.
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM sysdefault
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM sysdefault
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.front
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.rear
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.center_lfe
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.side
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround21
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround21
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround40
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround41
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround50
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround51
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.surround71
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.iec958
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.iec958
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.iec958
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM hdmi
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.modem
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.modem
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM cards.pcm.phoneline
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM default
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM default
+ALSA lib confmisc.c:855:(parse_card) cannot find card '0'
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_card_id returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) error evaluating name
+ALSA lib conf.c:5205:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5728:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) Unknown PCM dmix
+Cannot connect to server socket err = No such file or directory
+Cannot connect to server request channel
+jack server is not running or cannot be started
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+JackShmReadWritePtr::~JackShmReadWritePtr - Init not done for -1, skipping unlock
+[Aug 23 17:58:22] [1;31mWARNING[0m[62]: [1;37mpjproject[0m:[1;37m[0m [1;37m<?>[0m: 	        sip_endpoint.c Warning: Module "Maintenance Module" registered during operation. Enable PJSIP_SAFE_MODULE to prevent race condition.
+[Aug 23 17:58:22] [1;33mNOTICE[0m[1]: [1;37mconfbridge/conf_config_parser.c[0m:[1;37m2601[0m [1;37mverify_default_profiles[0m: Adding default_menu menu to app_confbridge
+[Aug 23 17:58:23] [1;31mERROR[0m[1]: [1;37mloader.c[0m:[1;37m2687[0m [1;37mload_modules[0m: Error loading module 'format_ogg_vorbis.so': libvorbisenc.so.2: cannot open shared object file: No such file or directory
+[Aug 23 17:58:23] [1;31mWARNING[0m[37]: [1;37mpbx_config.c[0m:[1;37m2003[0m [1;37mstartup_event_cb[0m: users.conf is deprecated and will be removed in a future version of Asterisk
+[1;32mAsterisk Ready.[0m
+[Aug 23 17:58:23] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:23] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:4@192.168.11.20>' failed for '172.22.0.1:37261' (callid: 63be0c4d749598866bf7107a6a707018@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:7@192.168.11.20>' failed for '172.22.0.1:46270' (callid: 7243ab535a5b6690e800c23f03be477b@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:7@192.168.11.20>' failed for '172.22.0.1:46270' (callid: 7243ab535a5b6690e800c23f03be477b@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:7@192.168.11.20>' failed for '172.22.0.1:46270' (callid: 7243ab535a5b6690e800c23f03be477b@192.168.11.2) - Failed to authenticate
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:26] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:7@192.168.11.20>' failed for '172.22.0.1:40354' (callid: 4c90b56a3c5420996fdbdf91b6fba2ff@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:27] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:27] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:4@192.168.11.20>' failed for '172.22.0.1:40265' (callid: a5114ae09c4405b11ace228339bda020@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: de3aebd61b940dd24d940f3a0f4e4dfc@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: de3aebd61b940dd24d940f3a0f4e4dfc@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: de3aebd61b940dd24d940f3a0f4e4dfc@192.168.11.2) - Failed to authenticate
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 01906636e8b6977f7a362a6ce72ee65c@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 01906636e8b6977f7a362a6ce72ee65c@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:28] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 01906636e8b6977f7a362a6ce72ee65c@192.168.11.3) - Failed to authenticate
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 4d839a15f26be0befc4989bba34a6588@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 4d839a15f26be0befc4989bba34a6588@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 4d839a15f26be0befc4989bba34a6588@192.168.11.2) - Failed to authenticate
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: d3a7b21773bca51b760e52a3c9f37023@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: d3a7b21773bca51b760e52a3c9f37023@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:33] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: d3a7b21773bca51b760e52a3c9f37023@192.168.11.3) - Failed to authenticate
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: ab918920ab655a55b15f603b75f34a9d@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: ab918920ab655a55b15f603b75f34a9d@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: ab918920ab655a55b15f603b75f34a9d@192.168.11.2) - Failed to authenticate
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 915a705f8b9e74be9a9c46fbcd574992@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 915a705f8b9e74be9a9c46fbcd574992@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:38] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 915a705f8b9e74be9a9c46fbcd574992@192.168.11.3) - Failed to authenticate
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 48b88ea65879ae85a04fd1f0d5420ef9@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 48b88ea65879ae85a04fd1f0d5420ef9@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:59691' (callid: 48b88ea65879ae85a04fd1f0d5420ef9@192.168.11.2) - Failed to authenticate
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 012534cbb388ae3ddffc78d8c3f8cfc3@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 012534cbb388ae3ddffc78d8c3f8cfc3@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:43] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:1@192.168.11.20>' failed for '172.22.0.1:44957' (callid: 012534cbb388ae3ddffc78d8c3f8cfc3@192.168.11.3) - Failed to authenticate
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:46698' (callid: 0b5039f973eed75b9fd7eb560ee99bcf@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:46698' (callid: 0b5039f973eed75b9fd7eb560ee99bcf@192.168.11.3) - Not match Endpoint ACL
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:46698' (callid: 0b5039f973eed75b9fd7eb560ee99bcf@192.168.11.3) - Failed to authenticate
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:49107' (callid: 53a74d85d390d15ea366ba24def7a00a@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37macl.c[0m:[1;37m783[0m [1;37mast_apply_acl_internal[0m: SIP ACL: Rejecting '172.22.0.1' due to a failure to pass ACL '(BASELINE)'
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:49107' (callid: 53a74d85d390d15ea366ba24def7a00a@192.168.11.2) - Not match Endpoint ACL
+[Aug 23 17:58:47] [1;33mNOTICE[0m[62]: [1;37mres_pjsip/pjsip_distributor.c[0m:[1;37m688[0m [1;37mlog_failed_request[0m: Request 'REGISTER' from '<sip:0@192.168.11.20>' failed for '172.22.0.1:49107' (callid: 53a74d85d390d15ea366ba24def7a00a@192.168.11.2) - Failed to authenticate

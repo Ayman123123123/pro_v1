@@ -1,0 +1,1384 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>SIP Config</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var eia_is_dwg;
+
+var url = decodeURI(window.location.href);
+var argsIndex = url .split("?flag=");
+var quickLoadFlag = argsIndex[1]
+
+function next_html(type){
+	var url = ''
+	if(type == 1){
+		url = 'enLocalNetwork.htm'+'?flag='+1;
+	}else if(type == 2){
+		url = 'enPortGroup.htm'+'?flag='+1;
+	}
+    url = encodeURI(url);
+    parent.document.getElementById('mainframe').src = url
+}
+function MM_callJS(is_dwg,Version,IsPlatLocked,IsSipServerLocked,EiaGetSrcValue)
+{
+	eia_is_dwg = parseInt(is_dwg);
+			
+	if(IsPlatLocked=="yes")
+	{
+		document.forms[0].SipPxyIP.disabled=true;
+		document.forms[0].SipPxyPort.disabled=true;
+	}
+
+	if(IsSipServerLocked=="yes")
+	{
+		document.forms[0].SipPxyIP.disabled=true;
+		document.forms[0].SipPxyPort.disabled=true;
+	}
+	else
+	{
+		document.forms[0].SipPxyIP.disabled=false;
+		document.forms[0].SipPxyPort.disabled=false;
+	}
+	
+	document.getElementById("callIDSendType").style.display="none";	
+	if(eia_is_dwg)
+	{
+		document.getElementById("referToInfo").style.display="none";
+	}
+	else
+	{
+		document.getElementById("referToInfo").style.display="";
+	}	
+	/*
+	for(var i=0; i<PortNum; i++)
+	{
+		document.getElementById("port"+i).style.display="";
+	}*/
+	document.getElementById("RouteSrc").value = parseInt(EiaGetSrcValue);
+
+	mouse_click();
+
+
+	if(quickLoadFlag == "1")
+	{
+		for(var i=0; i < 66; i++){
+			if(document.getElementsByName("loadConfig")[i]){
+				document.getElementsByName("loadConfig")[i].style.display = "none"
+			}
+		}
+		document.getElementById("next").style.display = ""
+		document.getElementById("back").style.display = ""
+	}
+}
+function radio_click()
+{
+	document.getElementById("SipSERefresherEnable").style.display = "";
+	document.getElementById("SipRefresherMode").style.display = "";
+}
+
+function move_left_onblur()
+{
+	if (document.forms[0].RouteDelPrefix.value.length == 0 
+	||  0 == parseInt(document.forms[0].RouteDelPrefix.value))    		//??????
+	{
+		document.getElementById("RouteSaveNumID").style.display = "";	//??????
+	}
+	else
+	{
+		document.getElementById("RouteSaveNumID").style.display = "none";	
+	}
+
+}
+
+function remain_right_onblur()
+{
+	if (document.forms[0].RouteSaveNum.value.length == 0
+	||  255 == parseInt(document.forms[0].RouteSaveNum.value))			//??????
+	{
+		document.getElementById("RouteDelPrefixID").style.display = "";	
+	}
+	else if(document.getElementById("RouteSaveNumID").style.display == "")
+	{
+		document.getElementById("RouteDelPrefixID").style.display = "none";
+	}
+	
+	if(255 == parseInt(document.forms[0].RouteSaveNum.value))
+	{
+		document.forms[0].RouteSaveNum.value = "";
+	}
+}
+
+function mouse_click()
+{	
+/*
+	if(document.forms[0].IsEnableMWI[0].checked)
+	{
+		document.getElementById("VMID").style.display = "none";
+		//document.getElementById("SubInterval").style.display = "none";		
+	}
+	if(document.forms[0].IsEnableMWI[1].checked)
+	{	
+		document.getElementById("VMID").style.display = "";
+		//document.getElementById("SubInterval").style.display = "";		
+	}
+*/
+	
+	if(document.forms[0].SipAllowSameUser[1].checked)
+	{
+			document.getElementById("SipSamePortID").style.display = "none";
+			document.getElementById("SipRandomPortID").style.display = "";
+			document.forms[0].AutoSipAccount[0].checked = true;
+			document.getElementById("idAutoSipAccountIDn").style.display = "none";
+			document.getElementById("AutoSipAccountID").style.display = "none";
+			document.getElementById("idGSMSIPBinding").style.display = "none";
+			if(document.forms[0].SipPortRandom[0].checked)
+			{
+				document.getElementById("SipLocalPortID").style.display="";
+			}
+			else
+			{
+				document.getElementById("SipLocalPortID").style.display="none";
+			}
+	}
+	else
+	{
+		document.getElementById("SipSamePortID").style.display = "";
+		document.getElementById("idGSMSIPBinding").style.display = "";
+		document.getElementById("idAutoSipAccountIDn").style.display = "";
+		document.getElementById("AutoSipAccountID").style.display = "";
+		if(document.forms[0].SipAllowSamePort[0].checked)
+		{
+			document.getElementById("SipRandomPortID").style.display="none";
+			document.getElementById("SipLocalPortID").style.display="none";
+			document.getElementById("SIPTransWay").value = 0;
+		}
+		else
+		{
+			document.getElementById("SipRandomPortID").style.display="";
+			if(document.forms[0].SipPortRandom[0].checked)
+			{
+				document.getElementById("SipLocalPortID").style.display="";
+			}
+			else
+			{
+				document.getElementById("SipLocalPortID").style.display="none";
+			}
+		}
+	}
+	
+	var siptransway = parseInt(document.getElementById("SIPTransWay").value)
+	
+	if(siptransway == 3)
+	{
+		document.getElementById("SipsUriEnable").style.display = "";
+		document.getElementById("idAutoSipAccountIDn").style.display = "none";
+		document.getElementById("AutoSipAccountID").style.display = "none";
+		document.getElementById("SipLocalTlsPortID").style.display = "";
+		document.getElementById("SipLocalTcpPortID").style.display = "none";
+		document.forms[0].AutoSipAccount[0].checked = true;	
+		document.forms[0].SipServerCheckEnable.value = 0;
+	}
+	else if(siptransway == 1)
+	{
+		document.getElementById("SipsUriEnable").style.display = "none";
+		document.getElementById("idAutoSipAccountIDn").style.display = "none";
+		document.getElementById("AutoSipAccountID").style.display = "none";
+		document.getElementById("SipLocalTlsPortID").style.display = "none";
+		document.getElementById("SipLocalTcpPortID").style.display = "";
+		document.forms[0].AutoSipAccount[0].checked = true;
+		document.getElementById("SipsUriEnable").checked = false;
+		document.forms[0].SipServerCheckEnable.value = 0;
+	}
+	else
+	{
+		document.getElementById("SipLocalTlsPortID").style.display = "none";
+		document.getElementById("SipLocalTcpPortID").style.display = "none";
+		document.getElementById("SipsUriEnable").style.display = "none";
+		document.getElementById("idAutoSipAccountIDn").style.display = "";
+		document.getElementById("AutoSipAccountID").style.display = "";
+	}
+	
+	if(document.forms[0].AutoSipAccount[0].checked)
+	{
+		document.getElementById("SipId").style.display="none";
+		document.getElementById("AuthId").style.display="none";
+		document.getElementById("AuthPsw").style.display="none";
+		document.getElementById("VoipHotline").style.display="none";
+		document.getElementById("PstnHotline").style.display="none";
+	}
+	else
+	{
+		document.getElementById("SipId").style.display="";
+		document.getElementById("AuthId").style.display="";
+		document.getElementById("AuthPsw").style.display="";
+		document.getElementById("VoipHotline").style.display="";
+		document.getElementById("PstnHotline").style.display="";
+	}
+	
+	if(document.forms[0].AutoIp2TelRoute[0].checked)
+	{
+		document.getElementById("RouteCallingID").style.display="none";
+		document.getElementById("RouteCalledID").style.display="none";
+		document.getElementById("RouteAddPrefixID").style.display="none";
+		document.getElementById("RouteDelPrefixID").style.display="none";
+		document.getElementById("RouteSaveNumID").style.display="none";
+		document.getElementById("RouteSrcID").style.display="none";
+	}
+	else
+	{
+		document.getElementById("RouteCallingID").style.display="";
+		document.getElementById("RouteCalledID").style.display="";
+		document.getElementById("RouteAddPrefixID").style.display="";
+		document.getElementById("RouteDelPrefixID").style.display="";
+		document.getElementById("RouteSaveNumID").style.display="";
+		document.getElementById("RouteSrcID").style.display="";
+		move_left_onblur();
+		remain_right_onblur();
+	}
+	
+	if (quickLoadFlag != "1") 
+	{
+		if(document.forms[0].SessionTimerCfg[0].checked)
+		{
+			document.getElementById("SipSessionTimerIV").style.display = "none";
+			document.getElementById("SipSERefresherEnable").style.display = "none";
+			document.getElementById("SipRefresherMode").style.display = "none";
+		}
+		else
+		{
+			document.getElementById("SipSessionTimerIV").style.display = "";
+			document.getElementById("SipSERefresherEnable").style.display = "";
+			document.getElementById("SipRefresherMode").style.display = "";
+		}	
+		
+		if(document.forms[0].GsmCodeEnable[0].checked)
+		{
+			document.getElementById("GsmSipCode1").style.display = "none";
+			document.getElementById("GsmSipCode2").style.display = "none";
+			document.getElementById("GsmSipCode3").style.display = "none";
+			document.getElementById("GsmSipCode4").style.display = "none";
+			document.getElementById("GsmSipCode5").style.display = "none";
+			document.getElementById("GsmSipCode6").style.display = "none";
+			document.getElementById("SipReasonHeaderEnable").style.display = "none";
+		}
+		else
+		{
+			document.getElementById("GsmSipCode1").style.display = "";
+			document.getElementById("GsmSipCode2").style.display = "";
+			document.getElementById("GsmSipCode3").style.display = "";
+			document.getElementById("GsmSipCode4").style.display = "";
+			document.getElementById("GsmSipCode5").style.display = "";
+			document.getElementById("GsmSipCode6").style.display = "";
+			document.getElementById("SipReasonHeaderEnable").style.display = "";
+		}
+		
+		if(document.forms[0].SipEncryptEnable[0].checked)
+		{
+			document.getElementById("idEncryptAlgorithm").style.display="none";
+			document.getElementById("idEncryptkey").style.display="none";
+		}
+		else
+		{
+			document.getElementById("idEncryptAlgorithm").style.display="";
+			document.getElementById("idEncryptkey").style.display="";
+		}
+	}
+}
+
+function ReTestNumber(Param)
+{
+	var Re = /^[0-9\-_]+$/
+	return Re.test(Param);
+}
+
+function ReTestHotLine(Param)
+{
+	var Re = /^[0-9a-zA-Z\-_]+$/
+	return Re.test(Param);
+}
+
+function ReTestPsw(Password)
+{
+	var Re = /^[0-9a-zA-Z\-_\!\@\#\$\%\^\&\*\.\~]+$/;
+	return Re.test(Password);
+}
+function ReTestCalled(Param)
+{
+    var Re = /^[+{0,1}]+[0-9\-_]+$/;
+    return Re.test(Param);
+}
+
+function ip2tel_check()
+{
+    if(document.forms[0].RouteCallingPrefix.value.length != 0)
+    {
+        var calling = document.getElementById("RouteCallingPrefix").value;
+        if(false == isCorrectRexChar(calling))
+        {
+            alert("'Source Prefix' is incorrect!");
+            document.forms[0].RouteCallingPrefix.select();
+            return false;
+        }
+    }
+	if(document.forms[0].RouteCallingPrefixR.value.length != 0)
+    {
+        var calling = document.getElementById("RouteCallingPrefixR").value;
+        if(false == isCorrectRexChar(calling))
+        {
+            alert("'Source Prefix' is incorrect!");
+            document.forms[0].RouteCallingPrefixR.select();
+            return false;
+        }
+    }
+
+    if(document.forms[0].RouteCalledPrefix.value.length != 0)
+    {
+        var called = document.getElementById("RouteCalledPrefix").value;
+        if(false == isCorrectRexDigit(called))
+        {
+            alert("'Destination Prefix' is incorrect!");
+            document.forms[0].RouteCalledPrefix.select();
+            return false;
+        }
+    }
+	if(document.forms[0].RouteCalledPrefixR.value.length != 0)
+    {
+        var called = document.getElementById("RouteCalledPrefixR").value;
+        if(false == isCorrectRexDigit(called))
+        {
+            alert("'Destination Prefix' is incorrect!");
+            document.forms[0].RouteCalledPrefixR.select();
+            return false;
+        }
+    }
+
+    if(document.forms[0].RouteAddPrefix.value.length != 0)
+    {
+        var called_prefix = document.getElementById("RouteAddPrefix").value;
+        if(false == isRegDigitPrefix(called_prefix))
+        {
+            alert("'Prefix to Add' is incorrect!");
+            document.forms[0].RouteAddPrefix.select();
+            return false;
+        }
+        if (document.forms[0].RouteAddPrefix.value.length > 15)
+        {
+            alert("'Prefix to Add' is incorrect, and input length must be less than 15!");
+            document.forms[0].RouteAddPrefix.select();
+            return false;
+        }
+    }
+
+    if(document.forms[0].RouteDelPrefix.value.length != 0)
+    {
+        document.getElementById("RouteSaveNum").value = "";
+        var call_left = document.getElementById("RouteDelPrefix").value;
+        if(false == isRegDigit(call_left))
+        {
+            alert("'Digits to be Deleted' is incorrect!");
+            document.forms[0].RouteDelPrefix.select();
+            return false;
+        }
+        if(isNaN(parseInt(document.getElementById("RouteDelPrefix").value)))
+        {
+            alert("'Digits to be Deleted' is incorrect!");
+            document.forms[0].RouteDelPrefix.select();
+            return false;
+        }
+        if(parseInt(document.getElementById("RouteDelPrefix").value) > 31)
+        {
+            alert("'Digits to be Deleted' is incorrect, please enter a number between 0 and 31!");
+            document.forms[0].RouteDelPrefix.select();
+            return false;
+        }
+    }
+    else if(document.forms[0].RouteSaveNum.value.length != 0)
+    {
+        document.getElementById("RouteDelPrefix").value = "";
+        var call_left = document.getElementById("RouteSaveNum").value;
+        if(false == isRegDigit(call_left))
+        {
+            alert("'Number of Digits Reserved' is incorrect' is incorrect!");
+            document.forms[0].RouteSaveNum.select();
+            return false;
+        }
+        if(isNaN(parseInt(document.getElementById("RouteSaveNum").value)))
+        {
+            alert("'Number of Digits Reserved' is incorrect' is incorrect!");
+            document.forms[0].RouteSaveNum.select();
+            return false;
+        }
+        if(parseInt(document.getElementById("RouteSaveNum").value) > 31)
+        {
+            alert("'Number of Digits Reserved' is incorrect, please enter a number between 0 and 31!");
+            document.forms[0].RouteSaveNum.select();
+            return false;
+        }
+    }
+    return true;
+}
+
+function form_check()
+{
+	//Permission
+	var permit = 1;
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	if(document.forms[0].SipPxyIP.value.length+document.forms[0].SipPxyPort.value.length>0)
+	{
+		if(document.forms[0].SipPxyIP.value.length>31)
+		{
+			alert("SIP server IP is incorrect, and input length must be less than 32!");
+			document.forms[0].SipPxyIP.select();
+			return false;
+		}
+		if(!is_number(document.forms[0].SipPxyPort.value,0,65535))
+		{
+			alert("SIP server port is incorrect, please enter a number between 0 and 65535!");
+			document.forms[0].SipPxyPort.select();
+			return false;
+		}
+	}
+	if(document.forms[0].SipOutBoundPxyIP.value.length+document.forms[0].SipOutBoundPxyPort.value.length>0)
+	{
+		if(document.forms[0].SipOutBoundPxyIP.value.length>31)
+		{
+			alert("Outbound proxy address is incorrect, and input length must be less than 32!");
+			document.forms[0].SipOutBoundPxyPort.select();
+			return false;
+		}
+		if(!is_number(document.forms[0].SipOutBoundPxyPort.value,0,65535))
+		{
+			alert("Outbound proxy port is incorrect, please enter a number between 0 and 65535!");
+			document.forms[0].SipOutBoundPxyPort.select();
+			return false;
+		}
+	}
+	
+	if(document.getElementById("SipLocalPortID").style.display == "" && !is_number(document.forms[0].SipSameLocalPort.value,1024,65534))
+	{
+		alert("local sip port is incorrect, please enter a number between 1024 and 65534!");
+		document.forms[0].SipSameLocalPort.select();
+		return false;
+	}
+	if(!is_number(document.forms[0].SipRegIV.value,1,3600) && document.forms[0].SipIsRegister[1].checked)
+	{
+		alert("Register interval is incorrect, please enter a number between 1 and 3600!");
+		document.forms[0].SipRegIV.select();
+		return false;
+	}
+	if(!is_number(document.forms[0].SipKeepAliveIV.value,10,3600))
+	{
+		alert("Keepalive interval is incorrect, please enter a number between 10 and 3600!");
+		document.forms[0].SipKeepAliveIV.select();
+		return false;
+	}
+	
+	if(!is_number(document.forms[0].DNSRefIntrvl.value,0,60000))
+	{
+		alert("DNS refresh interval is incorrect, please enter a number between 0 and 60000!");
+		document.forms[0].DNSRefIntrvl.select();
+		return false;
+	}
+	if(parseInt(document.forms[0].T1Time.value)<=0)
+	{
+		alert("T1 is incorrect, please enter a number more than 0!");
+		document.forms[0].T1Time.select();
+		return false;	
+	}
+	if(parseInt(document.forms[0].T2Time.value)<=0)
+	{
+		alert("T2 is incorrect, please enter a number more than 0!");
+		document.forms[0].T2Time.select();
+		return false;	
+	}
+	if(parseInt(document.forms[0].T4Time.value)<=0)
+	{
+		alert("T4 is incorrect, please enter a number more than 0!");
+		document.forms[0].T4Time.select();
+		return false;	
+	}
+	if(parseInt(document.forms[0].TMaxTime.value)<=0)
+	{
+		alert("TMAX is incorrect, please enter a number more than 0!");
+		document.forms[0].TMaxTime.select();
+		return false;	
+	}
+	
+	if(document.getElementById("AuthPswPrefix").value.length != 0
+	 && ReTestPsw(document.getElementById("AuthPswPrefix").value) == false && (document.getElementById("AutoSipAccount1").checked == true))
+	 {
+		alert("Please enter a correct Authenticate Password!");
+		document.forms[0].AuthPswPrefix.select();
+		return false;
+	 }
+	 
+	 if(document.getElementById("VoipHotlinePrefix").value.length != 0
+	 && ReTestHotLine(document.getElementById("VoipHotlinePrefix").value) == false && (document.getElementById("AutoSipAccount1").checked == true))
+	 {
+		alert("Please enter a correct VOIP Hotline!");
+		document.forms[0].VoipHotlinePrefix.select();
+		return false;
+	 }
+	 
+	 if(document.getElementById("PstnHotlinePrefix").value.length != 0
+	 && ReTestNumber(document.getElementById("PstnHotlinePrefix").value) == false && (document.getElementById("AutoSipAccount1").checked == true))
+	 {
+		alert("Please enter a correct PSTN Hotline!");
+		document.forms[0].PstnHotlinePrefix.select();
+		return false;
+	 }
+	
+	if(!is_number(document.forms[0].SipSessionTimerIV.value,90,60000)&& document.forms[0].SessionTimerCfg[1].checked)
+	{
+		alert("Session Timer interval is incorrect, please enter a number between 90 and 60000!");
+		document.forms[0].SipSessionTimerIV.select();
+		return false;
+	}
+
+    if(document.forms[0].AutoIp2TelRoute[1].checked == true)
+    {
+        if (ip2tel_check() == false) {
+            return false;
+        }
+    }
+
+	for(i=0;i<7;i++)
+	{
+		GsmSipMappedCodeVal = eval("document.forms[0].GsmSipMappedCode"+i+".value");
+		
+		if(GsmSipMappedCodeVal.length!=0 && !is_number(GsmSipMappedCodeVal,400,699))
+		{
+			alert("'Sip Response code' is incorrect, please enter a number between 400 and 699!");	
+			eval("document.forms[0].GsmSipMappedCode"+i+".select()");
+			return false;
+		}				
+	}		
+		
+	for(i=0;i<4;i++)
+	{
+		ResponseCodeVal = eval("document.forms[0].SipResponseCode"+i+".value");
+		ResponseCodeMappedVal = eval("document.forms[0].SipResponseCodeMapped"+i+".value");	
+		
+		if(ResponseCodeVal.length!=0 && !is_number(ResponseCodeVal,100,699))
+		{
+			alert("'Response code' is incorrect, please enter a number between 100 and 699!");	
+			eval("document.forms[0].SipResponseCode"+i+".select()");
+			return false;
+		}
+		if(ResponseCodeVal.length!=0 && !is_number(ResponseCodeMappedVal,100,699))
+		{
+			alert("'Response code after switch' is incorrect, please enter a number between 100 and 699!");
+			eval("document.forms[0].SipResponseCodeMapped"+i+".select()");
+			return false;
+		}
+		if(ResponseCodeMappedVal.length!=0 && !is_number(ResponseCodeVal,100,699))
+		{
+			alert("'Response code' is incorrect, please enter a number between 100 and 699!");	
+			eval("document.forms[0].SipResponseCode"+i+".select()");
+			return false;
+		}				
+	}
+	
+	if(document.forms[0].KeepaliveSipID.value.length>31)
+	{
+		alert("Keepalive Sip ID is incorrect, and input length must be less than 32!");
+		document.forms[0].KeepaliveSipID.select();
+		return false;
+	}
+	if(!is_number(document.forms[0].KeepAliveJudgeNum.value,1,10))
+	{
+		alert("Keepalive Retry Count is incorrect, please enter a number between 1 and 10!");
+		document.forms[0].KeepAliveJudgeNum.select();
+		return false;
+	}
+	
+	if(document.forms[0].SipEncryptEnable[1].checked 
+	&& document.forms[0].Encryptkey.value.length>255)
+	{
+		alert("SIP Encrypt key is incorrect, and input length must be less than 255!");
+		document.forms[0].Encryptkey.select();
+		return false;
+	}
+		
+	if(document.forms[0].SipEncryptEnable[1].checked 
+	&& document.forms[0].Encryptkey.value.length==0)
+	{
+		alert("SIP Encrypt key is incorrect, and input length must be more than 0!");
+		document.forms[0].Encryptkey.select();
+		return false;
+	}
+
+    if(!is_number(document.forms[0].DelayAnswer.value,0,10))
+    {
+        alert("'Delay Answer' is incorrect, please enter a number between 0 and 10!");
+        document.forms[0].DelayAnswer.select();
+        return false;
+    }
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS('1','v9','no','no','255')">
+<form action="/goform/SipCfg" method="post" name="SipCfg" id="SipCfg" onSubmit="return form_check();">
+ <table width="80%" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>SIP Configuration</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="80%" align="center" class="TB">
+  <tr>
+   <td width="5%">&nbsp;</td>
+   <td>
+    <table width="100%"  cellspacing="0" cellpadding="0">
+	<tr>
+      <td width="5%">&nbsp;</td>
+      <td width="45%">&nbsp;</td>
+  	  <td width="50%">&nbsp;</td>
+	</tr>
+     <tr>
+      <td colspan="3" class="td_title">SIP Proxy</td>
+     </tr>
+     <tr>
+      <td>&nbsp;</td>
+      <td>SIP Server Address </td>
+      <td>
+       <input name="SipPxyIP" class="text" id="SipPxyIP" value="192.168.11.20" size="18" maxlength="31" disabled="disabled">      </td>
+     </tr>
+     <tr>
+      <td>&nbsp;</td>
+      <td>SIP Server Port(default: 5060)</td>
+      <td>
+       <input name="SipPxyPort" class="text" id="SipPxyPort" value="5060" size="18" maxlength="5" disabled="disabled">      </td>
+     </tr>
+      <tr name="loadConfig">
+      <td>&nbsp;</td>
+      <td>Check Net Status</td>
+      <td>
+       <input name="SipServerCheckEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="SipServerCheckEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes	  </td>	  
+     </tr>	
+     <tr>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr id="outboundtitle"  name="loadConfig">
+      <td colspan="3" class="td_title">Outbound Proxy</td>
+     </tr>
+     <tr id="outboundip"  name="loadConfig">
+      <td>&nbsp;</td>
+      <td>Outbound Proxy Address</td>
+      <td>
+       <input name="SipOutBoundPxyIP" class="text" id="SipOutBoundPxyIP" value="" size="18" maxlength="31">      
+      </td>
+     </tr>
+     <tr id="outboundport"  name="loadConfig">
+      <td>&nbsp;</td>
+      <td>Outbound Proxy Port</td>
+      <td>
+       <input name="SipOutBoundPxyPort" class="text" id="SipOutBoundPxyPort" value="5060" size="18" maxlength="5">      </td>
+     </tr>
+	 
+     <tr id="blank0" style="display:none"  name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+     <tr id="MWI" style="display:none"  name="loadConfig">
+        <td colspan="2" class="td_title">SUBSCRIBE for MWI(Message Waiting Indicator)</td>
+        <td>
+         <input name="IsEnableMWI" type="radio" value="0" onClick="mouse_click();" checked>
+         No
+         <input name="IsEnableMWI" type="radio" value="1" onClick="mouse_click();" >
+         Yes
+	    </td>		 
+     </tr>
+     <tr id="VMID" style="display:none"  name="loadConfig">
+        <td colspan="2">VM User ID</td>
+        <td>
+         <input class="text" id="VMUserID" maxlength="31" name="VMUserID" size="18" value="">        </td>
+     </tr>	 	 
+	 
+     <tr  name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+      <tr>
+      <td colspan="2" class="td_title">All Ports Register Used Same User ID</td>
+      <td>
+       <input name="SipAllowSameUser" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipAllowSameUser" type="radio" value="1" onClick="mouse_click();" >
+       Yes	 
+      </td>	   
+     </tr>
+     <tr id="SipSamePortID" style="display:none">
+      <td colspan="2">Use Same Local Udp Port</td>
+      <td>
+       <input name="SipAllowSamePort" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipAllowSamePort" type="radio" value="1" onClick="mouse_click();" >
+       Yes	 
+      </td>	   
+     </tr>
+	 
+     <tr id="SipRandomPortID" style="display:none">
+      <td>&nbsp;</td>
+      <td>Use Random Port</td>
+      <td>
+       <input name="SipPortRandom" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipPortRandom" type="radio" value="1" onClick="mouse_click();" >
+       Yes	  </td>	  
+     </tr>	 
+	 <tr id="SipLocalPortID" style="display:none">
+      <td>&nbsp;</td>	  
+      <td>Local SIP Port</td>
+      <td>
+       <input name="SipSameLocalPort" class="text" id="SipSameLocalPort" value="5060" size="18" maxlength="5">      </td>
+     </tr>
+	 <tr>
+	  <td colspan="2" class="td_title">Transport</td>
+	  <td>
+	  <select name="SIPTransWay"class="list" id="SIPTransWay" onChange="mouse_click();">
+          <option value="0" selected>UDP</option>
+          <option value="1" >TCP</option>
+		  <option value="3" >TLS</option>	   
+	  </select>
+	  </td>
+	  </tr>
+	  <tr id="SipsUriEnable">
+		<td colspan="2">SIPS URL</td>
+		<td>
+			<input type="checkbox" name="SipsUrlEnable" id="SipsUrlEnable"   >Enable</td>
+	  </tr>
+	 <tr id="SipLocalTcpPortID" style="display:none">	 
+      <td id="SipLocalTcpPortText" colspan="2">Local TCP Port</td>
+      <td>
+       <input name="SipSameLocalTcpPort" class="text" id="SipSameLocalTcpPort" value="5060" size="18" maxlength="5">      </td>
+     </tr>
+	  <tr id="SipLocalTlsPortID" style="display:none">	 
+      <td id="SipLocalTlsPortText" colspan="2">Local TLS Port</td>
+      <td>
+       <input name="SipSameLocalTlsPort" class="text" id="SipSameLocalTlsPort" value="5061" size="18" maxlength="5">      </td>
+     </tr>
+	 
+	 
+	 <tr>
+       <td colspan="3">&nbsp;</td>
+     </tr>
+	 	 
+	 <tr id="idGSMSIPBinding" style="display:none">
+		<td colspan="2" class="td_title">GSM SIP state binding</td>
+		<td>
+			<input name="GSM_SIP_Binding" type="radio" value="0" onClick="mouse_click();" checked>
+			No
+			<input name="GSM_SIP_Binding" type="radio" value="1" onClick="mouse_click();" >
+			Yes	
+		</td>
+	 </tr>
+     
+	 <tr id="idAutoSipAccountIDn" style="display:none">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+	 
+	 <tr id="AutoSipAccountID" style="display:none">
+		<td colspan="2" class="td_title">Auto SIP Account</td>
+		<td>
+			<input name="AutoSipAccount" id="AutoSipAccount0" type="radio" value="0" onClick="mouse_click();" checked>
+			No
+			<input name="AutoSipAccount" id="AutoSipAccount1" type="radio" value="1" onClick="mouse_click();" >
+			Yes	
+		</td>
+	 </tr>
+	 
+	 <tr>
+	 <td></td>
+	 <td colspan="2">
+		<table width="100%" cellspacing="0" cellpadding="0" align="left">
+		 <tr id="SipId" style="display:none">
+		 	<td width="48%">SIP User ID</td>
+		 	<td width="19%"><input name="SipIdPrefix" type="text" id="SipIdPrefix" value="" size="7" maxlength="7" >&nbsp;&nbsp;+</td>													
+		 	<td width="38%">
+		 	<select name="SipIdType" class="list" id="SipIdType" onChange="mouse_click();" style="width:70px">
+				<option value="1" selected>Port</option>
+				<option value="2" >ICCID</option>
+				<option value="3" >IMSI</option>
+				<option value="4" >Number</option>
+			</select>
+		 	</td>
+		 </tr>
+		
+		 <tr id="AuthId" style="display:none">
+			<td>Authenticate ID</td>
+			<td ><input name="AuthIdPrefix" type="text" id="AuthIdPrefix" value="" size="7" maxlength="7" >&nbsp;&nbsp;+</td>
+			<td >
+			<select name="AuthIdType" class="list" id="AuthIdType" onChange="mouse_click();" style="width:70px">
+				<option value="0" selected>Empty</option>
+				<option value="1" >Port</option>
+				<option value="2" >ICCID</option>
+				<option value="3" >IMSI</option>
+				<option value="4" >Number</option>
+			</select>
+			</td>
+		 </tr>
+		 <tr id="AuthPsw" style="display:none">
+			<td>Authenticate Password</td>
+			<td ><input name="AuthPswPrefix" type="text" id="AuthPswPrefix" value="" size="7" maxlength="7" >&nbsp;&nbsp;+</td>
+			<td >
+			<select name="AuthPswType" class="list" id="AuthPswType" onChange="mouse_click();" style="width:70px">
+				<option value="0" selected>Empty</option>
+				<option value="1" >Port</option>
+				<option value="2" >ICCID</option>
+				<option value="3" >IMSI</option>
+				<option value="4" >Number</option>
+			</select>
+		    </td>
+		 </tr>
+		 <tr id="VoipHotline" style="display:none"> 
+			<td>To VOIP Hotline</td>
+			   <td><input name="VoipHotlinePrefix" type="text" id="VoipHotlinePrefix" value="" size="7" maxlength="7" >&nbsp;&nbsp;+</td>
+			   <td>
+			   <select name="VoipHotlineType" class="list" id="VoipHotlineType" onChange="mouse_click();" style="width:70px">
+				<option value="0" selected>Empty</option>
+				<option value="1" >Port</option>
+				<option value="2" >ICCID</option>
+				<option value="3" >IMSI</option>
+				<option value="4" >Number</option>
+			   </select>
+			   </td>
+		 </tr>
+		 <tr id="PstnHotline" style="display:none">
+			<td>To PSTN Hotline</td>
+			<td><input name="PstnHotlinePrefix" type="text" id="PstnHotlinePrefix" value="" size="7" maxlength="7" >&nbsp;&nbsp;+</td>
+			<td>
+			<select name="PstnHotlineType" class="list" id="PstnHotlineType" onChange="mouse_click();" style="width:70px">
+				<option value="0" selected>Empty</option>
+				<option value="1" >Port</option>
+				<option value="2" >ICCID</option>
+				<option value="3" >Imsi</option>
+				<option value="4" >Number</option>
+			</select>
+			</td>
+		 </tr>
+	 </table>
+	 </td>
+	 </tr>
+	
+	<tr>
+	 <td colspan="3"> &nbsp;</td>
+	 </tr>
+	 
+	 <tr>
+		<td colspan="2" class="td_title">Auto IP->TEL Route</td>
+		<td>
+			<input name="AutoIp2TelRoute" type="radio" value="0" onClick="mouse_click();" checked>
+			No
+			<input name="AutoIp2TelRoute" type="radio" value="1" onClick="mouse_click();" >
+			Yes	
+		</td>
+	 </tr>
+	 
+	<tr>
+	 <td></td>
+	 <td colspan="2">
+		<table width="100%" cellspacing="0" cellpadding="0" align="left">
+		
+		 <tr id="RouteSrcID" style="display:none">
+		 	<td width="48%">Source</td>
+		 	<td colspan="3">                    
+				<div>
+					<select name='RouteSrc' class='alist' id='RouteSrc'>
+								<optgroup label="SIP Trunk">
+									<option value='0' id='idSrcIpTrunk0'>sip-trunk-0 &lt;Asterisk-Peer&gt;</option>
+								</optgroup>
+								<optgroup label="SIP Trunk Group">
+																						
+								</optgroup>
+								<optgroup label="SIP Server">
+									<option value="512">SIP Server</option>
+								</optgroup>
+					</select>                      
+				</div>
+			</td>	
+		 </tr>
+		 
+		 <tr id="RouteCallingID" >
+		 	<td width="48%">Source Prefix</td>
+		 	<td width="10%"><input name="RouteCallingPrefix" type="text" id="RouteCallingPrefix" value="" size="7" maxlength="15" >&nbsp;&nbsp;+</td>													
+		 	<td width="12%">
+		 	<select name="RoutePrefixType" class="list" id="RoutePrefixType" onChange="mouse_click();" style="width:70px">
+				<option value="0" >Empty</option>
+				<option value="1" selected>Iccid</option>
+				<option value="2" >Imsi</option>
+				<option value="3" >Number</option>
+			</select>
+		 	&nbsp;&nbsp;+
+			</td>
+			<td width="35%"><input name="RouteCallingPrefixR" type="text" id="RouteCallingPrefixR" value="" size="7" maxlength="15" ></td>
+		 </tr>
+		 
+		 <tr id="RouteCalledID" >
+		 	<td width="48%">Destination Prefix</td>
+		 	<td width="10%"><input name="RouteCalledPrefix" type="text" id="RouteCalledPrefix" value="" size="7" maxlength="15" >&nbsp;&nbsp;+</td>													
+			<td width="12%">
+		 	<select name="RouteCalledPrefixType" class="list" id="RouteCalledPrefixType" onChange="mouse_click();" style="width:70px">
+				<option value="0" >Empty</option>
+				<option value="1" selected>Iccid</option>
+				<option value="2" >Imsi</option>
+				<option value="3" >Number</option>
+			</select>
+		 	&nbsp;&nbsp;+
+			</td>
+			<td width="35%"><input name="RouteCalledPrefixR" type="text" id="RouteCalledPrefixR" value="" size="7" maxlength="15" ></td>	
+		 </tr>
+		 
+		 <tr id="RouteAddPrefixID" >
+		 	<td >Prefix to Add</td>
+		 	<td colspan="3"><input name="RouteAddPrefix" type="text" id="RouteAddPrefix" value="" size="15" maxlength="15" ></td>													
+		 </tr>
+		 
+		 <tr id="RouteDelPrefixID" >
+		 	<td >Digits to be Deleted</td>
+		 	<td colspan="3"><input name="RouteDelPrefix" type="text" id="RouteDelPrefix" value="" size="15" maxlength="2" onblur="move_left_onblur()"></td>													
+		 </tr>
+		 
+		 <tr id="RouteSaveNumID" >
+		 	<td >Number of Digits Reserved</td>
+		 	<td colspan="3"><input name="RouteSaveNum" type="text" id="RouteSaveNum" value="" size="15" maxlength="2" onblur="remain_right_onblur()" ></td>													
+		 </tr>
+		 
+		</table>
+		</td>
+	 </tr>
+	 
+     <tr>
+       <td colspan="3">&nbsp;</td>
+     </tr>	 
+     <tr id="RegInterval" name="loadConfig">
+      <td colspan="2">Register Interval(range: 1 - 3600s)</td>
+      <td>
+       <input name="SipRegIV" class="text" id="SipRegIV" value="60" size="18" maxlength="4">
+       s</td>
+     </tr>
+     <tr name="loadConfig">
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">DNS query type</td> 
+       <td><select name="SipQueryType" class="list" id="SipQueryType" onChange="mouse_click();">
+          <option value="0" selected>A query</option>
+          <option value="1" >SRV query</option>
+        </select>
+	   </td>	    
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">DNS refresh interval (range:0 - 60,000min, 0 means disable)</td>
+      <td>
+       <input name="DNSRefIntrvl" class="text" id="DNSRefIntrvl" value="0" size="18" maxlength="5">
+       min</td>
+     </tr>	 
+     <tr name="loadConfig">
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>	 	  
+     <tr name="loadConfig">
+      <td colspan="2">T1</td>
+      <td>
+       <input name="T1Time" class="text" id="T1Time" value="500" size="18" maxlength="18">
+       ms </td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">T2</td>
+      <td>
+       <input name="T2Time" class="text" id="T2Time" value="4000" size="18" maxlength="18">
+       ms </td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">T4</td>
+      <td>
+       <input name="T4Time" class="text" id="T4Time" value="5000" size="18" maxlength="18">
+       ms </td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">TMAX</td>
+      <td>
+       <input name="TMaxTime" class="text" id="TMaxTime" value="32000" size="18" maxlength="18">
+       ms </td>
+     </tr>	 	 	
+     <tr id="KeepAliveCfg"  name="loadConfig">
+      <td colspan="2">Keepalive Interval(range:10 - 3600s)</td>
+      <td>
+       <input name="SipKeepAliveIV" class="text" id="SipKeepAliveIV" value="32" size="18" maxlength="4">
+       s </td>
+     </tr>
+      <tr name="loadConfig">
+       <td colspan="2">Keepalive SIP ID</td>
+       <td>
+         <input class="text" id="KeepaliveSipID" maxlength="31" name="KeepaliveSipID" size="18" value="" >
+	   </td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2">Keepalive Retry Count(range:1 - 10)</td>
+      <td>
+       <input name="KeepAliveJudgeNum" class="text" id="KeepAliveJudgeNum" value="3" size="18" maxlength="4">
+       </td>
+     </tr>	  	 
+     <tr id="is100relEnable" name="loadConfig">
+      <td colspan="2">Enable 100rel</td>
+      <td>
+       <input name="Sip100relEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="Sip100relEnable" type="radio" value="1" onClick="mouse_click();" >
+       yes	  </td>		   
+     </tr>	 	 
+     <tr id="referToInfo" style="display:none" name="loadConfig">
+      <td colspan="2">Refer to use target contact</td>
+      <td>
+       <input name="SipReferToInfo" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="SipReferToInfo" type="radio" value="1" onClick="mouse_click();" >
+       yes	  </td>		   
+     </tr>
+     
+	 <tr name="loadConfig">
+	  <td colspan="2">From Mode when Caller ID Is Available</td>
+	  <td>
+	    <select name="CIDValidFromMode" class="alist" id="CIDValidFromMode" style="width:37%;">
+        <option value="0" >Tel/User</option>
+		<option value="1" >User/User</option>
+        <option value="2" selected>Tel/Tel</option>
+        <option value="3" >User/Tel</option>
+        <option value="4" >Anonymous</option>
+        </select>	  
+      </td>
+	 </tr>     
+     
+	 <tr name="loadConfig">
+	  <td colspan="2">From Mode when Caller ID Is Unavailable</td>
+	  <td>
+	    <select name="CIDInvalidFromMode" class="alist" id="CIDInvalidFromMode" style="width:37%;">
+        <option value="0" selected>Anonymous</option>
+		<option value="1" >Username</option>
+        </select>	  
+      </td>
+	 </tr>
+     
+     <tr name="loadConfig">
+	  <td colspan="2">Answer Mode</td>
+	  <td>
+	    <select name="AnswerMode" class="alist" id="AnswerMode" style="width:37%;">
+        <option value="0" selected>Answered</option>
+		<option value="1" >Alerted</option>
+        </select>	  
+      </td>
+	 </tr>
+        <tr name="loadConfig">
+            <td colspan="2">Delay Answer(range:0 - 10s)</td>
+            <td>
+                <input name="DelayAnswer" class="text" id="DelayAnswer" value="0" size="18" maxlength="2">
+                s </td>
+        </tr>
+          
+    <tr name="loadConfig">
+	  <td colspan="2">183 Mode</td>
+	  <td>
+	    <select name="AlertingMode" class="alist" id="AlertingMode" style="width:37%;">
+        <option value="0" selected>Immediately</option>
+		<option value="1" >Alerted</option>
+        </select>	  
+      </td>
+	 </tr>
+     <tr name="loadConfig">
+	  <td colspan="2">Called Number Parse</td>
+	  <td>
+	    <select name="CalledNumParse" class="alist" id="CalledNumParse" style="width:37%;">
+        <option value="0" selected>Request-Line</option>
+		<option value="1" >To</option>
+        </select>	  
+      </td>
+	 </tr>
+	 <tr name="loadConfig">
+	  <td colspan="2">Caller Number Source</td>
+	  <td>
+	    <select name="CallerNumParse" class="alist" id="CallerNumParse" style="width:37%;">
+        <option value="0" selected>User</option>
+		<option value="1" >Display</option>
+        </select>	  
+      </td>
+	 </tr>
+	 <tr name="loadConfig">
+	 		<td colspan="2">Request Line</td>
+		<td>
+			<select name="ByeRequest" id="ByeRequest" class="alist" style="width:37%;">
+				<option value="0" selected/>Default
+				<option value="1" />Remote Contact
+			</select>
+		</td>
+	 </tr>
+	 <tr id="isIstIgnoreAckEnable" name="loadConfig">
+      <td colspan="2">Ignore ACK</td>
+      <td>
+       <input name="IstIgnoreAckEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="IstIgnoreAckEnable" type="radio" value="1" onClick="mouse_click();" >
+       yes	  
+	  </td>		   
+     </tr>
+     <tr name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2" class="td_title">Session Timer</td>
+      <td>
+       <input name="SessionTimerCfg" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SessionTimerCfg" type="radio" value="1" onClick="mouse_click();" >
+       Yes	  </td>	  
+     </tr>
+     <tr id="SipSessionTimerIV" style="display:none" name="loadConfig">
+      <td colspan="2">Session Timer Interval(range:90 - 60000s)</td>
+      <td>
+       <input name="SipSessionTimerIV" class="text" id="SipSessionTimerIV" onClick="radio_click();" value="1800" size="18" maxlength="16">
+       s </td>
+     </tr>
+     <tr id="SipSERefresherEnable" style="display:none" name="loadConfig">
+      <td colspan="2">Session timer mode</td>
+      <td>
+      <select name="SipSERefresherEnable" class="alist" id="SipSERefresherEnable" style="width:37%;">
+        <option value="0" selected>no</option>
+        <option value="1" >refresh</option>
+     </select>	
+     </td>		   
+     </tr>
+        <tr id="SipRefresherMode" style="display:none" name="loadConfig">
+	  <td colspan="2">Session timer refresher</td>
+	  <td>
+	    <select name="SipRefresherMode" class="alist" id="SipRefresherMode" style="width:37%;">
+        <option value="0" selected>none</option>
+		<option value="1" >uac</option>
+		<option value="2" >uas</option>
+        </select>	  
+      </td>
+	 </tr>
+      <tr name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>	     
+      <tr id="sipGsmCodeMap" name="loadConfig">
+      <td colspan="3" class="td_title">Gsm-Sip Code Map</td>
+     </tr>       
+     <tr name="loadConfig">
+       <td>&nbsp;</td>
+       <td class="td_title">Gsm Code Enable</td>
+       <td>
+       <input name="GsmCodeEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="GsmCodeEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes	  </td>
+      </tr>
+      <tr id="SipReasonHeaderEnable" style="display:none" name="loadConfig">
+       <td>&nbsp;</td>
+       <td class="td_title">Sip Reason Header Enable</td>
+       <td>
+       <input name="ReasonHeaderEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="ReasonHeaderEnable" type="radio" value="1" onClick="mouse_click();" >
+       Yes	  </td>
+      </tr>
+      <tr name="loadConfig">
+        <td>&nbsp;</td>
+        <td class="td_title">Gsm Reason</td>
+        <td class="td_title">Sip Response Code</td>
+      </tr> 
+      <tr name="loadConfig">
+        <td>&nbsp;</td>
+        <td>No Port Found</td>
+        <td><input class="text" id="GsmSipMappedCode0" maxlength="3" name="GsmSipMappedCode0" size="10" type="text" value="503"></td>
+      </tr>
+      <tr id="GsmSipCode1" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>Unassigned Number</td>
+        <td><input class="text" id="GsmSipMappedCode1" maxlength="3" name="GsmSipMappedCode1" size="10" type="text" value="404"></td>
+      </tr>
+      <tr id="GsmSipCode2" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>Normal Call Clearing</td>
+        <td><input class="text" id="GsmSipMappedCode2" maxlength="3" name="GsmSipMappedCode2" size="10" type="text" value="480"></td>
+      </tr>
+            <tr id="GsmSipCode3" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>User Busy</td>
+        <td><input class="text" id="GsmSipMappedCode3" maxlength="3" name="GsmSipMappedCode3" size="10" type="text" value="486"></td>
+      </tr>
+      <tr id="GsmSipCode4" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>User Not Answer</td>
+        <td><input class="text" id="GsmSipMappedCode4" maxlength="3" name="GsmSipMappedCode4" size="10" type="text" value="408"></td>
+      </tr>
+       <tr id="GsmSipCode5" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>Call Rejected</td>
+        <td><input class="text" id="GsmSipMappedCode5" maxlength="3" name="GsmSipMappedCode5" size="10" type="text" value="403"></td>
+      </tr>
+      <tr id="GsmSipCode6" style="display:none" name="loadConfig">
+        <td>&nbsp;</td>
+        <td>Mobile Network Fault</td>
+        <td><input class="text" id="GsmSipMappedCode6" maxlength="3" name="GsmSipMappedCode6" size="10" type="text" value="503"></td>
+      </tr>
+      <tr name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>	
+     <tr id="sipResponseCode" name="loadConfig">
+      <td colspan="3" class="td_title">Response Code switch</td>
+     </tr>   
+      <tr name="loadConfig">
+        <td>&nbsp;</td>
+        <td>Response code</td>
+        <td>Response code after switch</td>
+      </tr>
+      <tr name="loadConfig">
+        <td>&nbsp;</td>
+        <td><input class="text" id="SipResponseCode0" maxlength="3" name="SipResponseCode0" size="10" type="text" value=""></td>
+        <td><input class="text" id="SipResponseCodeMapped0" maxlength="3" name="SipResponseCodeMapped0" size="10" type="text" value=""></td>
+      </tr>
+      <tr name="loadConfig">
+        <td>&nbsp;</td>      
+        <td><input class="text" id="SipResponseCode1" maxlength="3" name="SipResponseCode1" size="10" type="text" value=""></td>
+        <td><input class="text" id="SipResponseCodeMapped1" maxlength="3" name="SipResponseCodeMapped1" size="10" type="text" value=""></td>
+      </tr>
+      <tr name="loadConfig">
+        <td>&nbsp;</td>      
+        <td><input class="text" id="SipResponseCode2" maxlength="3" name="SipResponseCode2" size="10" type="text" value=""></td>
+        <td><input class="text" id="SipResponseCodeMapped2" maxlength="3" name="SipResponseCodeMapped2" size="10" type="text" value=""></td>
+      </tr>
+      <tr name="loadConfig">
+        <td>&nbsp;</td>      
+        <td><input class="text" id="SipResponseCode3" maxlength="3" name="SipResponseCode3" size="10" type="text" value=""></td>
+        <td><input class="text" id="SipResponseCodeMapped3" maxlength="3" name="SipResponseCodeMapped3" size="10" type="text" value=""></td>
+      </tr>
+      <tr name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+      <tr id="sipResponseCode" name="loadConfig">
+      <td colspan="3" class="td_title">Custom Extensions Header</td>
+     </tr>
+     <tr id="isIMEIEnable" name="loadConfig">
+      <td colspan="2">Enable IMEI Header</td>
+      <td>
+       <input name="SipIMEIEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="SipIMEIEnable" type="radio" value="1" onClick="mouse_click();" >
+       yes	  </td>		   
+     </tr>	
+     <tr id="isIMSIEnable" name="loadConfig">
+      <td colspan="2">Enable IMSI Header</td>
+      <td>
+       <input name="SipIMSIEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="SipIMSIEnable" type="radio" value="1" onClick="mouse_click();" >
+       yes	  </td>		   
+     </tr>	
+     <tr id="isPortnoEnable" name="loadConfig">
+      <td colspan="2">Enable Portno Header</td>
+      <td>
+       <input name="SipPortnoEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="SipPortnoEnable" type="radio" value="1" onClick="mouse_click();" >
+       yes	  </td>		   
+     </tr>
+     <tr name="loadConfig">
+       <td colspan="3">&nbsp;</td>
+     </tr>
+     <tr name="loadConfig">
+      <td colspan="2" class="td_title">SIP Encryption</td>
+      <td>
+       <input name="SipEncryptEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipEncryptEnable" type="radio" value="1" onClick="mouse_click();" >
+       Yes	  </td>	  
+     </tr>
+     	<tr id="idEncryptAlgorithm" style="display:none" name="loadConfig">
+      	<td colspan="2">Encryption Algorithm</td>
+      	<td>
+      	<select name="EncryptAlgorithm" class="alist" id="SipEncryptAlgorithm" style="width:37%;">
+        <option value="0" selected>VOS RC4</option>
+     	</select>	
+     	</td>		   
+     </tr>
+     <tr id="idEncryptkey" style="display:none" name="loadConfig">
+		<td  colspan="2">Encryption key</td>
+		<td><input class="text" type="password" id="Encryptkey" name="Encryptkey" maxlength="255" size="10" value="">
+		</td>
+	</tr>	
+   <tr name="loadConfig">
+      <td colspan="2" class="td_title">RTP Encryption</td>
+      <td>
+       <input name="RtpEncryptEnable" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="RtpEncryptEnable" type="radio" value="1" onClick="mouse_click();" >
+       Yes	  </td>	  
+     </tr>
+     	     
+    </table> 
+	<table id="callIDSendType" width="100%" cellspacing="0" cellpadding="0" style="display:none"  name="loadConfig">
+      <tr>
+        <td>&nbsp;</td>
+        <td>&nbsp;</td>
+      </tr>
+      <tr>
+        <td class="td_title">Caller ID transport type</td>
+        <td ><select name="CallIDTxType" class="list" id="CallIDTxType" onChange="mouse_click();">
+          <option value="0" >Relay via SIP from</option>
+          <option value="1" >Disable</option>
+          <option value="2" >Send anonymous</option>
+          <option value="3" >Relay via SIP P-Asserted-Identity</option>
+        </select></td>
+      </tr>
+    </table>
+   </td>
+   <td width="5%">&nbsp;</td>
+  </tr>
+ </table>
+ <table width="70%" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="35%"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">NOTE:&nbsp;</td>
+   <td class="notes">It must restart the device to take effect.</td>
+  </tr>
+ </table>
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save">
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <input class="button" type ="button" id="back" value="Back" style="display: none" onclick="next_html(1)">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <input class="button" type ="button" id="next" value="Next" style="display: none" onclick="next_html(2)">
+ </p>
+ <p>&nbsp;</p>
+</form>
+</body>
+</html>
+

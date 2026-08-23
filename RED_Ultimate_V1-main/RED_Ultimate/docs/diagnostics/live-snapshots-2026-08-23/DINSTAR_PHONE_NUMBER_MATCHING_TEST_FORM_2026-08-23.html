@@ -1,0 +1,73 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Phone Number Matching Test</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+function MM_callJS()
+{
+
+}
+
+function ReTestASCII(szname)
+{
+	var reascii = /[^\da-zA-Z\s`~!@#\$%\^&\*\(\)\-_=\+\{\}\[\];:'"\\|,\<\.\>\/\?]+/;
+
+	if(reascii.test(szname) == true)
+	{
+		if(document.getElementById('PhoneKey').value.length > 21)
+		{
+		    return false;	
+		}
+	}
+	return true;
+}
+
+function form_check()
+{
+	if(document.getElementById('PhoneSMS').value.length == 0)
+	{
+		document.getElementById('PhoneSMS').select();
+		alert("Please input 'SMS Text'");	
+        return false;
+	}
+	document.getElementById("PhoneKey").value = parent.document.getElementById("Key").value;
+	if(ReTestASCII(document.getElementById('PhoneKey').value) == false)
+	{
+		document.getElementById('PhoneKey').select();
+	    alert("Including special character, the key words' length is up to 21");
+		return false;	
+	}
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS()" marginwidth="0" marginheight="0" style="padding:0;background: #F4F4F4;" >
+<form action="/goform/EiaHBPhoneNumberTest" method="post" name="HBDebug" id="HBDebug" target="idBehind">
+<div style="display:none">
+<iframe name="idBehind" id="idBehind" src="enHBPhoneNumberTestResult.htm" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+</div>
+<table width="100%" align="center" cellpadding=1 cellspacing=0 style="background: #F4F4F4; padding:0px">  
+  <tr align="left" style="padding:0px">
+    <td width="50%" style="padding:0px">Test SMS Text</td>
+    <td width="50%" style="padding:0px">
+    <textarea style="font-size:12px; height:50px;" cols="30" name="PhoneSMS" id="PhoneSMS" maxlength="120" ></textarea>
+    </td>
+  </tr>
+  <tr align="left" style="padding:0px">
+    <td style="padding:0px">Result</td>
+    <td style="padding:0px" id="idTestResult"><input name="Ok"  class="button" type="submit" id="Ok" value="Test" onClick="return form_check();">&nbsp;&nbsp;&nbsp;&nbsp;</td>
+  </tr>   
+</table>
+<div style="display:none">
+<input name="PhoneKey" id="PhoneKey" maxlength="63" value="">
+</div>
+</form>
+
+</body>
+</html>
+

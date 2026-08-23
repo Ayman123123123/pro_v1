@@ -1,0 +1,885 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Service Config</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var IadVer;
+var oPortNum=0;
+var sPortNum=0;
+var eia_is_dwg;
+var g_is2001B;
+var g_FxoMap;
+var g_totalPort;
+var g_IsGSMmodule;
+
+function MM_callJS(is_dwg,FxoPortNum,FxsPortNum,Version,Is2001B, FxoMap,IsGSMmodule,IsWIASinglePort)
+{
+	g_is2001B = Is2001B;
+	IadVer=Version;
+	oPortNum = parseInt(FxoPortNum);
+	sPortNum = parseInt(FxsPortNum);
+	eia_is_dwg = parseInt(is_dwg);
+	g_totalPort = oPortNum + sPortNum;
+	g_FxoMap = FxoMap;
+	g_IsGSMmodule = IsGSMmodule;
+	
+	if (sPortNum != 0)
+	{
+		document.getElementById("blankLine0").style.display="";
+		document.getElementById("slicCfg").style.display="";
+		document.getElementById("sendPolaReversal").style.display="";			
+		document.getElementById("hookFlashTbl").style.display="";
+		document.getElementById("callFeatures").style.display="";
+		document.getElementById("PToPCall").style.display="";
+	}
+	
+	if(oPortNum != 0)
+	{
+		if (g_IsGSMmodule == "no")
+		{
+			document.getElementById("idToneDisc").style.display="";
+			document.getElementById("idCurrentDisc").style.display="";
+			document.getElementById("idSilenceTime").style.display="";			
+		}
+	}
+	
+	if(g_is2001B == "yes")
+	{
+		document.getElementById("dialPrefixTbl").style.display="";
+	}
+
+	if (IadVer == "v7")
+	{
+		document.getElementById("callIDSchemeTbl").style.display="";
+	}	
+	
+
+	if(IsWIASinglePort=="yes")
+	{
+		document.getElementById("callIDSchemeTbl").style.display = "none";		
+	}
+	
+	if(eia_is_dwg)
+	{
+		document.getElementById("slicCfg").style.display="none";
+		document.getElementById("idHookFlash1").style.display="none";
+		document.getElementById("idHookFlash0").style.display="none";
+		document.getElementById("sendPolaReversal").style.display="none";
+		document.getElementById("PToPCall").style.display="none";
+		document.getElementById("sendFlash").style.display="none";
+		document.getElementById("FlashLimit").style.display="none";
+		document.getElementById("FlashLowerLimit").style.display="none";
+		document.getElementById("callFeatures").style.display="none";
+	}
+	
+	tmp = '{smsenable:"0",smsinfo:""}';
+	obj = eval('('+tmp+')');
+
+	if(typeof(obj)!="object")
+	{
+		alert("Unexpect Error!!!");
+		return;
+	}
+	
+	if(obj.smsenable == "1")
+	{
+		document.forms[0].SMSAfterCall[1].checked = true;				
+	}
+	else
+	{
+		document.forms[0].SMSAfterCall[0].checked = true;
+	}
+	
+	document.getElementById("SMSAfterCallMsg").value = obj.smsinfo;
+	
+	mouse_click();
+	stun_change();
+}
+function mouse_click()
+{	
+	if (sPortNum != 0)//fxs
+	{
+		if(document.forms[0].HookFlashClose[0].checked)
+		{
+			document.getElementById("FlashLimit").style.display = "";
+		}
+		if(document.forms[0].HookFlashClose[1].checked)
+		{
+			document.getElementById("FlashLimit").style.display = "none";
+		}
+	}
+
+	if (oPortNum != 0)//fxo
+	{
+		if (g_IsGSMmodule == "no")
+		{
+			if(document.forms[0].EnableCurrentDisconnect[0].checked)
+			{
+				document.getElementById("CurrentDiscThreshold").style.display = "none";
+			}
+			if(document.forms[0].EnableCurrentDisconnect[1].checked)
+			{
+				document.getElementById("CurrentDiscThreshold").style.display = "";
+			}
+		}
+	}
+	/*
+	if(document.forms[0].OPort1StageCalling[0].checked)
+	{
+		//document.getElementById("itemIsBusyRedirect").style.display = "none";
+		document.getElementById("itemBusyRedirectIP").style.display = "none";
+		document.getElementById("itemBusyRedirectPort").style.display = "none";	
+		//document.getElementById("idFxoDetectPolarity").style.display = "none";
+		//document.getElementById("idOffhookTimeout").style.display = "none";	
+	}
+	if(document.forms[0].OPort1StageCalling[1].checked)
+	{
+		//document.getElementById("itemIsBusyRedirect").style.display = "";
+		if(document.forms[0].IsBusyRedirect[0].checked)
+		{
+			document.getElementById("itemBusyRedirectIP").style.display = "none";
+			document.getElementById("itemBusyRedirectPort").style.display = "none";			
+		}
+		if(document.forms[0].IsBusyRedirect[1].checked)
+		{
+			document.getElementById("itemBusyRedirectIP").style.display = "";
+			document.getElementById("itemBusyRedirectPort").style.display = "";	
+		}
+		
+		//document.getElementById("idFxoDetectPolarity").style.display = "";
+		//document.getElementById("idOffhookTimeout").style.display = "";
+	}*/
+		
+	if(document.forms[0].NoRTPDetectedEnable[1].checked)
+	{
+		document.getElementById("idSilenceTime").style.display = "";
+	}
+	else
+	{
+		document.getElementById("idSilenceTime").style.display = "none";
+	}
+	
+	if(document.forms[0].IsAutoCLIPRouting[1].checked)
+	{
+		document.getElementById("ForceClipRoute").style.display = "";
+	}
+	else
+	{
+		document.forms[0].IsForceCLIPRouting[0].checked = true;
+		document.getElementById("ForceClipRoute").style.display = "none";
+	}
+
+	if(document.forms[0].SMSAfterCall[1].checked)
+	{
+		document.getElementById("id_SMSAfterCallMsg").style.display = "";
+	}
+	else
+	{
+		document.getElementById("id_SMSAfterCallMsg").style.display = "none";
+	}
+}
+function stun_change()
+{
+	var curOpt = document.getElementById("NatTraversal").value;
+	if ( curOpt == 0 )
+	{
+		document.getElementById("refreshInt").style.display = "none";
+		document.getElementById("stunServIP").style.display = "none";
+		document.getElementById("stunServPort").style.display = "none";
+		document.getElementById("NatIPNode").style.display = "none";
+	}
+	else if ( curOpt == 1 )
+	{
+		document.getElementById("refreshInt").style.display = "";
+		document.getElementById("stunServIP").style.display = "";
+		document.getElementById("stunServPort").style.display = "";
+		document.getElementById("NatIPNode").style.display = "none";
+	}
+	else if ( curOpt == 2 )
+	{
+		document.getElementById("refreshInt").style.display = "none";
+		document.getElementById("stunServIP").style.display = "none";
+		document.getElementById("stunServPort").style.display = "none";
+		document.getElementById("NatIPNode").style.display = "";
+	}
+	else if ( curOpt == 3 )
+	{
+		document.getElementById("refreshInt").style.display = "none";
+		document.getElementById("stunServIP").style.display = "none";
+		document.getElementById("stunServPort").style.display = "none";
+		document.getElementById("NatIPNode").style.display = "none";
+	}
+}
+function form_check()
+{
+/*
+	if (g_is2001B == "yes")
+	{
+		if(!is_number(document.forms[0].dialPrefix.value,0,9))
+		{
+			alert("VOIP dial prefix is incorrect, please enter a number between 0 and 9!");
+			document.forms[0].dialPrefix.select();
+			return false;
+		}
+	}
+*/	
+	if(sPortNum != 0)//fxs
+	{
+		if(document.forms[0].HookFlashClose[0].checked)
+		{
+			if(!is_number(document.forms[0].HookFlashMaxtime.value,101,1000))
+			{
+				alert("Hook flash max time is incorrect, please enter a number between 101 and 1000!");
+				document.forms[0].HookFlashMaxtime.select();
+				return false;
+			}
+		}
+	}
+
+	if(oPortNum != 0)//fxo
+	{
+		if (g_IsGSMmodule == "no")
+		{
+			if(document.forms[0].EnableCurrentDisconnect[1].checked)
+			{
+				if(!is_number(document.forms[0].CurrentDisconnectThreshold.value,100,2000))
+				{
+					alert("Current disconnect threshold is incorrect, please enter a number between 100 and 2000!");
+					document.forms[0].CurrentDisconnectThreshold.select();
+					return false;
+				}
+			}
+			
+			/*if(!is_number(document.forms[0].SilenceTimeout.value,30,65535))
+			{
+				alert("PSTN incoming silence timeout is incorrect, please enter a number between 30 and 65535!!");
+				document.forms[0].SilenceTimeout.select();
+				return false;
+			}	*/		
+		}
+	
+	}
+
+	
+	var curOpt = document.getElementById("NatTraversal").value;
+	if(curOpt == 1)
+	{
+		if(document.forms[0].STUNServerIP.value == "" || document.forms[0].STUNServerIP.value.length>31)
+		{
+			alert("STUN server IP is incorrect, and input length must be less than 32!");
+			document.forms[0].STUNServerIP.select();
+			return false;
+		}
+		if(document.forms[0].STUNServerPort.value == "" || !is_number(document.forms[0].STUNServerPort.value,0,65535))
+		{
+			alert("STUN server port is incorrect, please enter a number between 0 and 65535!");
+			document.forms[0].STUNServerPort.select();
+			return false;
+		}
+	}
+	else if(curOpt == 2)
+	{
+		if ( document.getElementById("NatIP").value == "" || document.getElementById("NatIP").value.length > 31 )
+		{
+			alert("NAT IP is incorrect, and input length must be less than 32!");
+			document.getElementById("NatIP").select();
+			return false;
+		}
+	}
+	else if(curOpt == 3)
+	{
+	}
+
+	if(!is_number(document.forms[0].NoDialTimeout.value,3,10))
+	{
+		alert("No dial timeout is incorrect, please enter a number between 3 and 10!");
+		document.forms[0].NoDialTimeout.select();
+		return false;
+	}
+
+	if(!is_number(document.forms[0].NoAnswerTimeout.value,10,255))
+	{
+		alert("NoAnswer Timeout is incorrect, please enter a number between 10 and 255!");
+		document.forms[0].NoAnswerTimeout.select();
+		return false;
+	}
+    
+	if (document.forms[0].NoRTPDetectedEnable[1].checked
+	  && !is_number(document.getElementById("SilenceTimeout").value,10,120))
+	{
+		alert("'Period without RTP Packet' is incorrect, please enter a number between 10 and 120!!");
+		document.getElementById("SilenceTimeout").select();
+		return false;
+	}
+
+	if (document.forms[0].SMSAfterCall[1].checked)
+	{
+		if (document.forms[0].SMSAfterCallMsg.value.length == 0)
+		{
+			alert("Automatic Reply SMS content cannot be empty!");
+			document.forms[0].SMSAfterCallMsg.select();
+			return false;
+		}	
+		
+		if (document.forms[0].SMSAfterCallMsg.value.length > 300)
+		{
+			alert("Automatic Reply SMS content cannot exceed 300 characters!");
+			document.forms[0].SMSAfterCallMsg.select();
+			return false;
+		}
+	}
+	
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS('1','8','0','v9','no','255','yes','no')">
+<form action="/goform/ServiceCfg" method="post" name="ServiceCfg" id="ServiceCfg" onSubmit="return form_check();">
+ <table width="70%" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Service Configuration</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="70%" align="center" class="TB">
+  <tr>
+   <td width="5%">&nbsp;</td>
+   <td>
+   <!--
+    <table width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+     <tr>
+      <td width="60%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>
+    </table>
+    -->
+	<table width="100%"  cellspacing="0" cellpadding="0">
+	 <tr>
+      <td width="60%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>
+	 
+
+	 
+	 <tr id="slicCfg" style="display:none">
+	  <td class="td_title">SLIC setting</td>
+	  <td>
+	    <select name="SLICSetting" class="list" id="SLICSetting" >
+        <option value="0" selected>USA</option>
+		<option value="1" >AUSTRIA</option>
+        <option value="2" >BELGIUM</option>
+        <option value="3" >FINLAND</option>
+		<option value="4" >FRANCE</option>
+		<option value="5" >GERMANY</option>
+		<option value="6" >GREECE</option>
+		<option value="7" >ITALY</option>
+		<option value="8" >JAPAN</option>
+		<option value="9" >NORWAY</option>
+		<option value="10" >SPAIN</option>
+		<option value="11" >SWEDEN</option>
+		<option value="12" >UK</option>
+		<option value="13" >AUSTRALIA</option>
+		<option value="14" >CHINA</option>
+		<option value="15" >HONGKONG</option>
+		<option value="16" >DENMARK</option>
+		<option value="17" >RUSSIA</option>
+		<option value="18" >POLAND</option>
+		<option value="19" >PORTUGAL</option>
+		<option value="20" >TURKEY</option>
+		<option value="21" >DUTCH</option>
+        </select>	   </td>
+	 </tr>
+	</table>
+    <table id="dialPrefixTbl" width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+	 <tr>
+	   <td width="60%">&nbsp;</td>
+	   <td width="40%">&nbsp;</td>
+	 </tr>
+	 <tr>
+	   <td colspan="2" class="td_title">Dial Prefix Setting </td>
+	 </tr>
+     <tr>
+      <td>CID Detect Side</td>
+      <td>
+       <input name="dialDirect" type="radio" value="0" onClick="mouse_click();" checked>
+       VOIP Side  
+       <input name="dialDirect" type="radio" value="1" onClick="mouse_click();" >
+       PSTN Side</td>
+     </tr>	 
+     <tr>
+      <td>PSTN Prefix Number</td>
+      <td>
+       <input class="text" id="dialPrefix" maxlength="6" name="dialPrefix" size="20" value="">
+      </td>
+     </tr>	 	
+	</table>
+    <table id="hookFlashTbl" width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+	 <tr>
+	   <td width="60%">&nbsp;</td>
+	   <td width="40%">&nbsp;</td>
+	 </tr>
+	 <tr id = "idHookFlash0">
+	   <td colspan="2" class="td_title">HookFlash Detect Setting</td>
+	 </tr>
+     <tr id = "idHookFlash1">
+      <td>HookFlash Close</td>
+      <td>
+       <input name="HookFlashClose" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="HookFlashClose" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+	 <tr id="FlashLowerLimit" style="display:none">
+       <td>HookFlash Minimun Time</td>
+	   <td>
+	    <input class="text" id="HookFlashMintime" maxlength="3" name="HookFlashMintime" size="18" value="100">
+	    ms       </td>
+	 </tr>
+	 <tr id="FlashLimit">
+       <td>HookFlash Maximum Time</td>
+	   <td>
+	    <input class="text" id="HookFlashMaxtime" maxlength="4" name="HookFlashMaxtime" size="18" value="400">
+	    ms       </td>
+	 </tr>
+	</table>
+    <table id="EphoneV3" width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+	 <tr>
+	   <td width="60%">&nbsp;</td>
+	   <td width="40%">&nbsp;</td>
+	 </tr>	
+	 <tr>
+	   <td colspan="2" class="td_title">Ephone One Touch Dial Config</td>
+	 </tr>
+     <tr>
+       <td>Transfer One Touch Dial Number</td>
+       <td>
+         <input class="text" id="TransferToDial" maxlength="31" name="TransferToDial" size="18" value="">       </td>
+     </tr>	 	
+     <tr>
+       <td>CONF One Touch Dial Number</td>
+       <td>
+         <input class="text" id="ConfToDial" maxlength="31" name="ConfToDial" size="18" value="">       </td>
+     </tr>	
+     <tr>
+      <td colspan="2" class="td_title">Notice: The configure will result in function disable of corresponding button</td>
+     </tr>
+	</table>
+    
+	<table  width="100%" cellpadding="0"  cellspacing="0" >
+     <tr>
+      <td width="5%">&nbsp;</td>
+      <td width="55%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>
+     <tr>
+      <td colspan="2">Do Not Answer GSM Imcoming Call for Hotline</td>
+      <td>
+       <input name="FxoKeepOnhook" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="FxoKeepOnhook" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>    
+     <tr>
+      <td colspan="2">Enable GSM Incoming Configuration</td>
+      <td>
+       <input name="FxoConfigEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="FxoConfigEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+
+     <tr id="idOffhookTimeout">
+	  <td colspan="2">Answer Delay</td>
+	  <td><input class="text" id="OffhookTimeout" maxlength="3" name="OffhookTimeout" size="18" value="5">
+	     Sec(s) </td>
+	 </tr> 
+	 
+<!--  by watson 2015-11-24
+     <tr id="itemIsBusyRedirect">
+      <td colspan="2">Redirect Call When All Ports Busy</td>
+      <td>
+       <input name="IsBusyRedirect" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="IsBusyRedirect" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>     
+     <tr id="itemBusyRedirectIP">
+      <td colspan="2">Redirect IP</td>
+      <td>
+       <input class="text" id="BusyRedirectIP" maxlength="31" name="BusyRedirectIP" size="18" value="">      </td>
+     </tr>
+     <tr id="itemBusyRedirectPort">
+      <td colspan="2">Redirect Port</td>
+      <td>
+       <input class="text" id="BusyRedirectPort" maxlength="5" name="BusyRedirectPort" size="18" value="0">      </td>
+     </tr>     
+ -->
+ 
+     <tr style="display:none">
+      <td colspan="2">Play Local Ring Back Tone for IP Incoming Calls</td>
+      <td>
+       <input name="PlayLocalRingToIP" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="PlayLocalRingToIP" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+	 <tr>
+      <td colspan="2">Ringback Tone</td>
+      <td>
+       <input name="EnableGsmRingback" type="radio" value="0" onClick="mouse_click();" >
+       None
+       <input name="EnableGsmRingback" type="radio" value="1" onClick="mouse_click();" checked>
+       GSM Ringback
+       <input name="EnableGsmRingback" type="radio" value="2" onClick="mouse_click();" >
+       Fake Ringback
+	  </td>
+     </tr>
+     <tr>
+      <td width="5%">&nbsp;</td>
+      <td width="55%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>
+     <tr>
+      <td colspan="2">RTP Detected Enable</td>
+      <td>
+       <input name="NoRTPDetectedEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="NoRTPDetectedEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+     <tr id="idSilenceTime" style="display:none">
+      <td colspan="2">Period without RTP Packet</td>
+      <td>
+       <input class="text" id="SilenceTimeout" maxlength="5" name="SilenceTimeout" size="18" value="90">
+	  </td>
+     </tr>
+     <tr >
+      <td colspan="2">Auto CLIP Routing</td>
+      <td>
+       <input name="IsAutoCLIPRouting" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="IsAutoCLIPRouting" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+	 <tr id="ForceClipRoute">
+      <td colspan="2">CLIP Routing is force</td>
+      <td>
+       <input name="IsForceCLIPRouting" type="radio" value="0" checked>
+       No
+       <input name="IsForceCLIPRouting" type="radio" value="1" >
+       Yes
+	  </td>
+     </tr>
+    </table>     
+ 	<table id="fxoCfgTbl" width="100%" cellpadding="0"  cellspacing="0" style="display:none">
+     <tr>
+      <td width="5%">&nbsp;</td>
+      <td width="55%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>    
+     <tr style="display:none">
+      <td colspan="2">Send Original Caller ID for PSTN Incoming Calls</td>
+      <td>
+       <input name="IsSendRealCallerID" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="IsSendRealCallerID" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr id="idToneDisc" style="display:none">
+      <td colspan="2">Disconnect Call on Busy Tone Detection</td>
+      <td>
+       <input name="EnableToneDisconnect" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="EnableToneDisconnect" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+     <tr id="idCurrentDisc" style="display:none">
+      <td  colspan="2">Disconnect Call on Current Detection</td>
+      <td>
+       <input id="CurrentDisc" name="EnableCurrentDisconnect" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input id="CurrentDisc" name="EnableCurrentDisconnect" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr id="CurrentDiscThreshold" style="display:none">
+      <td colspan="2">Current Dectection Period</td>
+      <td>
+       <input class="text" id="CurrentDisconnectThreshold" maxlength="4" name="CurrentDisconnectThreshold" size="18" value="0">
+       ms
+	  </td>
+     </tr>
+    </table>
+	<table id="ACImpTbl" width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+     <tr>
+      <td width="60%">FXO Line Impedance</td>
+      <td width="40%">
+	    <select name="ACTerminImpe" class="list" id="ACTerminImpe" >
+		<option value="0" selected>600 Ohm (North America)</option>
+		<option value="1" >900 Ohm</option>
+        <option value="2" >270 Ohm+(750 Ohm||150 nF) and 275 Ohm+(780 Ohm||150 nF)</option>
+        <option value="3" >220 Ohm+(820 Ohm||120 nF) and 220 Ohm+(820 Ohm||115 nF)</option>
+		<option value="4" >370 Ohm+(620 Ohm||310 nF)</option>
+		<option value="5" >320 Ohm+(1050 Ohm||230 nF)</option>
+		<option value="6" >370 Ohm+(820 Ohm||110 nF)</option>
+        <option value="7" >275 Ohm+(780 Ohm||150 nF)</option>
+        <option value="8" >120 Ohm+(820 Ohm||110 nF)</option>
+		<option value="9" >350 Ohm+(1000 Ohm||210 nF)</option>
+        <option value="10" >0 Ohm+(900 Ohm||30 nF)</option>
+        <option value="11" >600 Ohm+2.16 uF</option>
+		<option value="12" >900 Ohm+1 uF</option>
+		<option value="13" >900 Ohm+2.16 uF</option>
+		<option value="14" >600 Ohm+1 uF</option>
+		<option value="15" >Global complex impedance</option>
+        </select>      </td>
+     </tr>
+	</table>
+		
+    <table width="100%"  cellspacing="0" cellpadding="0">
+     <tr>
+      <td width="60%">&nbsp;</td>
+      <td width="40%">&nbsp;</td>
+     </tr>
+     
+     <tr>
+      <td class="td_title">NAT Traversal</td>
+      <td>
+       <select id="NatTraversal" name="NatTraversal" class="list" onChange="stun_change();">
+       	<option value="0" selected>Disable</option>
+        <option value="1" >STUN</option>
+        <option value="2" >Static NAT</option>
+        <option value="3" >Dynamic NAT</option>
+       </select>
+	  </td>
+     </tr>
+     <tr id="refreshInt">
+      <td>Refresh Interval</td>
+      <td>
+       <input class="text" id="RefreshInterval" maxlength="5" name="RefreshInterval" size="18" value="0"> Sec(s)     </td>
+     </tr>
+     <tr id="stunServIP">
+      <td>STUN Server IP</td>
+      <td>
+       <input class="text" id="STUNServerIP" maxlength="31" name="STUNServerIP" size="18" value="">      </td>
+     </tr>
+     <tr id="stunServPort">
+      <td>STUN Server Port</td>
+      <td>
+       <input class="text" id="STUNServerPort" maxlength="5" name="STUNServerPort" size="18" value="3478">      </td>
+     </tr>
+     <tr id="NatIPNode">
+      <td>NAT IP</td>
+      <td>
+       <input class="text" id="NatIP" maxlength="31" name="NatIP" size="18" value="">      </td>
+     </tr>
+     <tr>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+	 
+     <tr id="incoming" style="display:none">
+      <td class="td_title">CLID Mode</td>
+      <td>
+       <input name="incomingDisplayMode" type="radio" value="0" onClick="mouse_click();" selected>
+       Number
+       <input name="incomingDisplayMode" type="radio" value="1" onClick="mouse_click();" >
+       Name
+	  </td>
+     </tr>	
+	 <tr id="notice2" style="display:none">
+      <td colspan="2" class="td_title">Notice: when select  'name', please insure there isn't letter in it</td>
+     </tr>
+     <tr style="display:none">
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>	 
+	 	 
+     <tr>
+      <td colspan="2" class="td_title">Other Configuration</td>
+     </tr>
+     <tr id="sendPolaReversal" style="display:none">
+      <td>Enable Polarity Reversal</td>
+      <td>
+       <input name="isSendPolaReversal" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="isSendPolaReversal" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr id="sendFlash" style="display:none">
+      <td>Send Flash Event</td>
+      <td>
+       <input name="SendFlashEvent" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SendFlashEvent" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr id="callFeatures" style="display:none">
+      <td>Enable Call Features</td>
+      <td>
+       <input name="CallFeaturesEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="CallFeaturesEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+     <tr>
+      <td>Enable Private Service</td>
+      <td>
+       <input name="PrivateServiceEnable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="PrivateServiceEnable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+     <tr id="PToPCall" style="display:none">
+      <td>Disable Direct IP->IP Calling</td>
+      <td>
+       <input name="DirectIPPToPCallDisable" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="DirectIPPToPCallDisable" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+     <tr>
+      <td>User ID Is Phone Number</td>
+      <td>
+       <input name="UserIDIsPhoneNumber" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="UserIDIsPhoneNumber" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr style="display:none">
+      <td>Enable Anonymous Call from GSM to IP</td>
+      <td>
+       <input name="SipUseAnonymousCall" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipUseAnonymousCall" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr>
+      <td>Reject Anonymous Call from IP to GSM</td>
+      <td>
+       <input name="SipRejectAnonymousCall" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SipRejectAnonymousCall" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+     </tr>
+     <tr id="DialKey">
+      <td>Use # as End Key</td>
+      <td>
+       <input name="UseDialKey" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input name="UseDialKey" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes
+	  </td>
+     </tr>
+	 <tr>
+	  <td>No Answer Timeout</td>
+	  <td><input class="text" id="NoAnswerTimeout" maxlength="3" name="NoAnswerTimeout" size="18" value="55">
+	     Sec(s) </td>
+	 </tr>     
+     
+	 <tr>
+	  <td>Interdigit Timeout</td>
+	  <td><input class="text" id="NoDialTimeout" maxlength="2" name="NoDialTimeout" size="18" value="4">
+	     Sec(s) </td>
+	 </tr>
+     <tr id="idIfResetASR">
+      <td>Reset SIM Usage Data after Switching SIM</td>
+      <td>
+       <input name="IfResetASR" type="radio" value="0" onClick="mouse_click();" checked>
+       no
+       <input name="IfResetASR" type="radio" value="1" onClick="mouse_click();" >
+       yes
+	  </td>
+     </tr>
+     <tr id="notice1" style="display:none">
+      <td colspan="2" class="td_title">Notice: The function of transfer will disable when 'Send flash event' is select</td>
+	 </tr>
+    </table>
+    <table id="callIDSchemeTbl" width="100%"  cellspacing="0" cellpadding="0" style="display:none">
+     <tr>
+       <td width="5%">&nbsp;</td>
+       <td width="55%">&nbsp;</td>
+       <td width="40%">&nbsp;</td>
+     </tr>
+     <tr>
+       <td colspan="2" class="td_title">Caller ID Scheme</td>
+       <td><select name="CallerIDScheme" class="list" id="CallerIDScheme" >
+           <option value="0" selected selected>Bellcore/Telcordia</option>
+           <option value="1" >ETSI-FSK during ringing</option>
+           <option value="2" >ETSI-FSK prior to ringing with DTAS</option>
+           <option value="3" >ETSI-FSK prior to ringing with LR</option>
+           <option value="4" >ETSI-FSK prior to ringing with RP</option>
+           <option value="5" >ETSI-DTMF during ringing</option>
+           <option value="6" >ETSI-DTMF prior to ringing with DTAS</option>
+           <option value="7" >ETSI-DTMF prior to ringing with LR</option>
+           <option value="8" >ETSI-DTMF prior to ringing with RP</option>
+           <option value="9" >SIN 227 - BT</option>
+           <option value="10" >NTT Japan</option>
+         </select>       </td>
+     </tr>
+	</table>
+	<table width="100%"  cellspacing="0" cellpadding="0">
+	<tr>
+       <td width="5%">&nbsp;</td>
+       <td width="55%">&nbsp;</td>
+       <td width="40%">&nbsp;</td>
+    </tr>
+	<tr id="id_SMSAfterCall">
+		<td colspan="2" class="td_title">Automatic Reply SMS</td>
+		<td>
+			<input name="SMSAfterCall" type="radio" value="0" onClick="mouse_click();">
+			No
+			<input name="SMSAfterCall" type="radio" value="1" onClick="mouse_click();">
+			Yes
+		</td>
+    </tr>
+	<tr id="id_SMSAfterCallMsg" style="display:none">
+		<td colspan="2" class="td_title">SMS Info</td>
+		<td>
+            <textarea name="SMSAfterCallMsg" id="SMSAfterCallMsg" cols="40" rows="10"></textarea>
+        </td>
+    </tr> 
+	</table>
+   </td>
+   <td width="5%">&nbsp;</td>
+  </tr>
+ </table>
+ <table width="70%" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="35%"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">NOTE:&nbsp;</td>
+   <td class="notes">It must restart the device to take effect.</td>
+  </tr>
+ </table>
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save">
+ </p>
+ <p>&nbsp;</p>
+</form>
+</body>
+</html>
+

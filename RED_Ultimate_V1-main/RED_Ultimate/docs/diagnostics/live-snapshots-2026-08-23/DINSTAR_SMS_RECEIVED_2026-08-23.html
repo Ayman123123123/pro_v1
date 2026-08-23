@@ -1,0 +1,410 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Statistics</title><link href="css/main.css" rel="stylesheet" type="text/css">
+<style type="text/css">
+INPUT.button1{	BACKGROUND-COLOR: #ddddff; COLOR: #000000; FONT-SIZE: 12px; FONT-WEIGHT: lighter; border: 1px solid #183ead;}
+</style>
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var totalPort=0;
+function charCompare_length_limit(szname,limit){
+	var c;
+	var ch = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+";
+	if(szname.length > limit)
+		return false;
+	for (var i = 0; i < szname.length; i++){
+		c = szname.charAt(i);
+		if (ch.indexOf(c) == -1){
+				return false;
+		}
+	}
+	return true;
+}
+
+function IsLeapYear(iYear) 
+{
+ 	if (iYear % 4 == 0 && iYear % 100 != 0)
+ 	{
+ 		return true;
+ 	} 
+ 	else if(iYear % 400 == 0) 
+ 	{
+   		return true;
+ 	} 
+  	else 
+  	{
+   		return false;
+  	}
+}
+
+function GetDayCount(month,year)
+{
+	if(month==1 || month==3 || month==5 || month==7 || month==8 || month==10 || month==12)
+	{
+		return 31;
+	}
+	else if(month==4 || month==6 || month==9 || month==11)
+	{
+		return 30;
+	}
+	else if(month == 2)
+	{
+		if(IsLeapYear(year))
+		{
+			return 29;
+		}
+		else
+		{
+			return 28;
+		}
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+function MM_CalllJS(TotalPort, SelsectPort, StartTime, EndTime, SendFlag)
+{
+	var i = 0;	
+	var totalPort = parseInt(TotalPort);
+	var selectPort = parseInt(SelsectPort);
+	var startTime, endTime;
+
+	for(var i=0; i<totalPort; i++)
+	{
+		if(i == selectPort)
+		{
+			document.getElementById("SelectPort").options[i].selected=true;
+		}
+		else
+		{
+			document.getElementById("SelectPort").options[i].selected=false;
+		}			
+	}
+	if(selectPort == 255)
+	{
+		document.getElementById("SelectPort").options[i].selected=true;
+	}
+	else
+	{
+		document.getElementById("SelectPort").options[i].selected=false;
+	}
+	
+	if(SendFlag == 1)
+	{
+		startTime = new Date(StartTime);
+		endTime = new Date(EndTime);
+	}
+	else
+	{
+		startTime = new Date('2010/1/1 00:00:00');
+		endTime = new Date();
+	}
+		
+	document.getElementById("StartDay").options.add(new Option("28",28));
+	document.getElementById("StartDay").options.add(new Option("29",29));
+	document.getElementById("StartDay").options.add(new Option("30",30));
+	document.getElementById("StartDay").options.add(new Option("31",31));
+	
+	document.getElementById("EndDay").options.add(new Option("28",28));
+	document.getElementById("EndDay").options.add(new Option("29",29));
+	document.getElementById("EndDay").options.add(new Option("30",30));
+	document.getElementById("EndDay").options.add(new Option("31",31));
+	
+	document.forms[0].StartYear.value = parseInt(startTime.getFullYear());
+	document.forms[0].StartMonth.value = parseInt(startTime.getMonth())+1;
+	document.forms[0].StartDay.value = parseInt(startTime.getDate());
+	
+	document.forms[0].EndYear.value = parseInt(endTime.getFullYear());
+	document.forms[0].EndMonth.value = parseInt(endTime.getMonth())+1;
+	document.forms[0].EndDay.value = parseInt(endTime.getDate());	
+	mouse_click();	
+}
+
+function mouse_click()
+{
+	var StartDayCount = GetDayCount(document.forms[0].StartMonth.value, document.forms[0].StartYear.value);	
+	var EndDayCount = GetDayCount(document.forms[0].EndMonth.value, document.forms[0].EndYear.value);
+	var StartDay = document.forms[0].StartDay.value;
+	var EndDay = document.forms[0].EndDay.value;
+	
+	while (document.forms[0].StartDay.length > 27)
+	{
+		document.getElementById("StartDay").options.remove(27);
+	}
+	
+	var i;
+	for (i=28; i<=StartDayCount; i++)
+	{
+		document.getElementById("StartDay").options.add(new Option(""+i,i));
+	}
+	
+	while (document.forms[0].EndDay.length > 27)
+	{
+		document.getElementById("EndDay").options.remove(27);
+	}	
+
+	var j;
+	for (j=28; j<=EndDayCount; j++)
+	{
+		document.getElementById("EndDay").options.add(new Option(""+j,j));
+	}
+
+	document.forms[0].StartDay.value = StartDay;
+	document.forms[0].EndDay.value = EndDay;
+	
+	return true;
+}
+
+function form_check()
+{
+	if(parseInt(document.forms[0].StartYear.value) > parseInt(document.forms[0].EndYear.value))
+	{
+		alert("The end year must more than the start year!");
+		return false;
+	}
+	else if(parseInt(document.forms[0].StartYear.value) == parseInt(document.forms[0].EndYear.value))
+	{
+		if(parseInt(document.forms[0].StartMonth.value) > parseInt(document.forms[0].EndMonth.value))
+		{
+			alert("The end month must not be less than the start month in the same year!");
+			return false;
+		}
+		else if(parseInt(document.forms[0].StartMonth.value) == parseInt(document.forms[0].EndMonth.value))
+		{
+			if(parseInt(document.forms[0].StartDay.value) > parseInt(document.forms[0].EndDay.value))
+			{
+				alert("The end day must not be less than the start day in the same month!");
+				return false;
+			}
+		}
+	}
+	
+	if(false == charCompare_length_limit(document.forms[0].SmsNumber.value.length, 31))
+	{
+		alert("Number is incorrect, and input length must be less than 31!");
+		document.forms[0].SmsNumber.select();
+		return false;
+	}	
+	
+	if(isRegDigit(document.getElementById("IMSI").value) == false || document.getElementById("IMSI").value.length > 15)
+	{
+		alert("IMSI is incorrect, and length must be less than 16!");
+		document.getElementById("IMSI").select();
+		return false;
+	}
+		
+	return true;
+}
+
+function savesms()
+{
+    document.forms[0].action="/goform/EiaisSmsRecord";
+	document.forms[0].submit();
+}
+
+function CsvExport()
+{
+	window.location.href="sms_recv.csv.gz";
+}
+
+function doDelData()
+{
+    if(window.confirm("Are you sure to clear all sms records?"))
+    {
+        document.forms[0].action="/goform/EiaSmsRecvClear";
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+function text_focus(text_id)
+{
+	var h = document.getElementById('Content'+text_id).scrollHeight;
+	var hpx = h+'px';
+	document.getElementById('Content'+text_id).style.height=hpx;
+}
+
+function text_blur(text_id)
+{
+	document.getElementById('Content'+text_id).style.height=40+'px';
+}
+</script>
+</head>
+<body onLoad="MM_CalllJS('8','255','2025/8/25 00:00:00','2025/8/25 23:59:59','0');">
+<form action="/goform/EiaSmsRecvFilter" method="post" name="EiaSmsRecvFilter" id="EiaSmsRecvFilter">
+  <table width="900px" border=0 align="center" cellpadding=0  cellspacing=0>
+   <tr class="title">
+    <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+    <td>SMS Inbox</td>
+    <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+   </tr>
+  </table>
+  <table width="900px" align="center" class="TB"> 
+  <tr width="100%" class="letra12">
+  <td width="10%" align="right">Save File</td>
+   <td>
+       <input name="SaveSMS" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input name="SaveSMS" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+   </td>
+     <td align="right"><input class="button" type="submit" name="save" value="save" onclick="return savesms();"></td>
+   </tr> 
+  <tr width="100%" class="letra12">
+        <td width="10%" align="right">Start Date :</td>
+        <td width="20%" align="left" nowrap>
+		<script language="JavaScript" type="text/JavaScript">
+        document.write("<select name='StartYear' class='list' id='StartYear' onChange='mouse_click();'>");
+        for (var i=2000; i<2100; i++)
+        {
+            document.write("<option value='"+i+"' id='OptionYear"+i+"'>"+i+"</option>");
+        }
+        document.write("</select> Year&nbsp;&nbsp;");
+		 
+        document.write("<select name='StartMonth' class='list' id='StartMonth' onChange='mouse_click();'>");
+        for (var i=1; i<=12; i++)
+        {
+            document.write("<option value='"+i+"' id='OptionMonth"+i+"'>"+i+"</option>");
+        }
+        document.write("</select> Month&nbsp;&nbsp;");
+        
+		document.write("<select name='StartDay' class='list' id='StartDay'>");
+        for (var i=1; i<31;i++)
+        {
+            document.write("<option value='"+i+"' id='OptionDay"+i+"'>"+i+"&nbsp;&nbsp;</option>");
+        }
+        document.write("</select> Day&nbsp;&nbsp;");
+				
+        </script>
+       </td>
+   <td width="15%" align="right">Select Port</td>
+       <td width="20%">
+       <script language="JavaScript" type="text/JavaScript">
+		var i,total;
+		document.write("<select name='SelectPort' class='list' id='SelectPort'>");
+		for(i=0; i<"8"; i++)
+		{
+			document.write("<option id='idPort"+i+"' value='"+i+"'>Port "+i+"</option>");
+		}
+        document.write("<option id='idPort"+255+"' value='"+255+"'>All</option>");		
+		document.write("</select>");
+		document.forms[0].SelectPort.value = 255;
+		</script>	   
+	   </td> 
+       <td width="15%" align="right">Number</td>
+       <td width="20%"><input name="SmsNumber" class="text" id="SmsNumber" value="" size="16" maxlength="31"></td>         
+     </tr>
+      <tr width="100%" class="letra12">
+        <td width="10%" align="right">End Date :</td>
+        <td width="20%" align="left" nowrap>
+		<script language="JavaScript" type="text/JavaScript">
+        document.write("<select name='EndYear' class='list' id='EndYear' onChange='mouse_click();'>");
+        for (var i=2000; i<2100; i++)
+        {
+            document.write("<option value='"+i+"' id='OptionYear"+i+"'>"+i+"</option>");
+        }
+        document.write("</select> Year&nbsp;&nbsp;");
+		
+        document.write("<select name='EndMonth' class='list' id='EndMonth' onChange='mouse_click();'>");
+        for (var i=1; i<=12; i++)
+        {
+            document.write("<option value='"+i+"' id='OptionMonth"+i+"'>"+i+"</option>");
+        }
+        document.write("</select> Month&nbsp;&nbsp;");
+        
+		document.write("<select name='EndDay' class='list' id='EndDay'>");
+        for (var i=1; i<31; i++)
+        {
+            document.write("<option value='"+i+"' id='OptionDay"+i+"'>"+i+"&nbsp;&nbsp;</option>");
+        }
+        document.write("</select> Day&nbsp;&nbsp;");
+		
+		</script></td>
+     <td>&nbsp;</td>
+     <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+	 <tr>
+	   <td align="right">IMSI :</td>
+	   <td><input class="text" name="IMSI" id="IMSI" value="" maxlength="31" size="16"></td>
+	   <td colspan="4"></td>
+	 </tr>
+     <tr>
+      <td align="right">Report Export</td>
+      <td align="center"><input class="button" type="button" value="Export" onClick="CsvExport();"></td> 
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td align="center"><input class="button" type="submit" name="filter" value="Refresh" onclick="return form_check();"></td>
+	 <td align="center"><input class="button" type="submit" name="delete" value="Clear" onclick="return doDelData();">		     </td> 
+     </tr>
+  </table>           
+	<table class="table_data" align="center" width="900px">
+    <tr class="thead" align="center">
+	    <td width="5%">Port</td>
+		<td width="14%">IMSI</td>
+        <td width="14%">Number</td>
+		<td width="17%">Date,Time</td>
+		<td width="50%">SMS Content</td>
+	 </tr>
+     <script>
+         document.write(" ");
+ 	 </script>
+</table> 
+<div style="width:700px; margin:auto">    
+ <p align="left">
+Total:&nbsp;0 entries&nbsp;&nbsp;16 entries/page&nbsp;&nbsp;1/0 page
+ <input type="hidden" name="curpage" id="curpage" value=""> 
+ <select name="page" class="alist" id="page"  onChange="doRefresh();">
+ <script>
+ 	var total = parseInt('0');
+	var currentpage =parseInt('1');
+	var Page = document.getElementById("page");
+	Page.length = total;
+	for (var i = 0; i <Page.length; i ++)
+	{
+	  	//Page.options[i] =new Option("page "+(i+1), ""+i);
+		Page.options[i].text = "Page "+ (i + 1);
+		Page.options[i].value = ""+ i;
+		Page.options[i].selected = false;
+	}
+	
+	if (total==0)
+	{		
+		Page.disabled = true;
+	}
+	else
+	{
+		Page.options[currentpage-1].selected = true;	
+	}
+	
+	function doRefresh()
+	{
+		document.forms[0].action="/goform/EiaSmsRecvChange";
+		for (i = 0; i < total; i++)
+		{
+			if (document.forms[0].page.options[i].selected == true)
+			{
+				document.forms[0].curpage.value = ""+i;
+				break;
+			}
+		}
+		document.forms[0].submit();
+	}	
+ </script>
+ </select>  			
+ </p>
+</div>
+<p></p>
+<p>&nbsp;</p>
+</form>
+</body>
+</html>

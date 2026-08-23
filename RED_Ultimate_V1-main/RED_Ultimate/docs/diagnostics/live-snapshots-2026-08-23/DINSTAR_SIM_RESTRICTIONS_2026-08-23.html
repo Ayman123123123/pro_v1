@@ -1,0 +1,1172 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Overview</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+    var g_IsMultiPort = 0;
+    var obj_jsonFirst;
+    var row_IsMultiPort_Flag = new Array();
+    var indexIsMultiPort = new Array();
+    var simIndex = new Array();
+    var flag_first = 0;
+
+    function MM_callJS()
+    {
+        g_IsMultiPort = parseInt('0',10);
+        refresh_hide_info();
+        AutoRefreshOverviewInfo();
+        window.setInterval("AutoRefreshOverviewInfo()", 10000);
+    }
+
+    function ReTestDigit(szname)
+    {
+        var renumber = /^\d{1,6}(\.(\d{0,4})){0,1}$/;
+
+        if(renumber.test(szname) == false)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    function EnableSelect()
+    {
+        var flag = 0;
+        var str = "E_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(row_IsMultiPort_Flag[i] == 1
+                && document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function DisableSelect()
+    {
+        var flag = 0;
+        var str = "D_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(row_IsMultiPort_Flag[i] == 1
+                && document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ResetTime()
+    {
+        var flag = 0;
+        var str = "R_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(row_IsMultiPort_Flag[i] == 1
+                && document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ResetMonthly()
+    {
+        var flag = 0;
+        var str = "MR_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function SetMonthly()
+    {
+        var flag = 0;
+        var str = "MS_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+
+        if(document.getElementById('idMonth').value.length == 0
+            || ReTestDigit(document.getElementById('idMonth').value) == false
+            || Math.ceil(parseFloat(document.getElementById('idMonth').value)) > 400000)
+        {
+            document.getElementById('idMonth').select();
+            alert("Please input Monthly credits correctly!");
+            return false;
+        }
+
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function change_status(index, status)
+    {
+        var stre = "E_";
+        var strd = "D_";
+        if(status)
+        {
+            stre = stre + simIndex[index];
+            document.getElementById("SubText").value = stre;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            strd = strd + simIndex[index];
+            document.getElementById("SubText").value = strd;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+    }
+
+    function ResetTotal()
+    {
+        var flag = 0;
+        var str = "AR_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function SetTotal()
+    {
+        var flag = 0;
+        var str = "AS_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(document.getElementById('idTotal').value.length == 0
+            || ReTestDigit(document.getElementById('idTotal').value) == false
+            || Math.ceil(parseFloat(document.getElementById('idTotal').value)) > 400000)
+        {
+            document.getElementById('idTotal').select();
+            alert("Please input total credits correctly!");
+            return false;
+        }
+
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ResetDaily()
+    {
+        var flag = 0;
+        var str = "BR_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function SetDaily()
+    {
+        var flag = 0;
+        var str = "BS_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+
+        if(document.getElementById('idDay').value.length == 0
+            || ReTestDigit(document.getElementById('idDay').value) == false
+            || Math.ceil(parseFloat(document.getElementById('idDay').value)) > 400000)
+        {
+            document.getElementById('idDay').select();
+            alert("Please input daily credits correctly!");
+            return false;
+        }
+
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ResetCallsLimit()
+    {
+        var flag = 0;
+        var str = "L_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ResetConnectedLimit()
+    {
+        var flag = 0;
+        var str = "N_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+function ResetHourlyConnectedLimit()
+{
+	var flag = 0;
+	var str = "J_";
+    var rowLen = document.getElementById("OverviewInfo").rows.length;
+    var i=0;
+    for(i = 0; i < rowLen; i++)
+    {
+        if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+        {
+            flag = 1;
+            str = str + simIndex[i] + "_";
+        }
+    }
+	if(flag)
+	{
+        str = str.substr(0, str.length - 1);
+	    document.getElementById("SubText").value = str;
+		document.forms[0].target = "hidefrm";
+	    document.forms[0].submit();	
+	}
+	else
+	{
+	    alert("Please select one port at least!");	
+	}
+}
+
+    function ClearBalance()
+    {
+        var flag = 0;
+        var str = "C_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function ClearBalance2()
+    {
+        var flag = 0;
+        var str = "G_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function force(index)
+    {
+        var stre = "H_";
+        stre = stre + simIndex[index];
+        document.getElementById("SubText").value = stre;
+        document.forms[0].target = "hidefrm";
+        document.forms[0].submit();
+    }
+
+    function ResetHourCallsLimit()
+    {
+        var flag = 0;
+        var str = "I_";
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        for(i = 0; i < rowLen; i++)
+        {
+            if(document.getElementById("indexRow"+i).cells[0].childNodes[0].checked == true)
+            {
+                flag = 1;
+                str = str + simIndex[i] + "_";
+            }
+        }
+        if(flag)
+        {
+            str = str.substr(0, str.length - 1);
+            document.getElementById("SubText").value = str;
+            document.forms[0].target = "hidefrm";
+            document.forms[0].submit();
+        }
+        else
+        {
+            alert("Please select one port at least!");
+        }
+    }
+
+    function CheckAll()
+    {
+        document.getElementById("IndexAAll").checked = false;
+        document.getElementById("IndexBAll").checked = false;
+        document.getElementById("IndexCAll").checked = false;
+        document.getElementById("IndexDAll").checked = false;
+        var rowLen = document.getElementById("OverviewInfo").rows.length;
+        var i=0;
+        if(document.getElementById("IndexAll").checked == true)
+        {
+            for(i = 0; i < rowLen; i++)
+            {
+                document.getElementById("indexRow"+i).cells[0].childNodes[0].checked = true;
+            }
+        }
+        else if(document.getElementById("IndexAll").checked == false)
+        {
+            for(i = 0; i < rowLen; i++)
+            {
+                document.getElementById("indexRow"+i).cells[0].childNodes[0].checked = false;
+            }
+        }
+    }
+
+    function refresh_hide_info()
+    {
+        if(g_IsMultiPort == 1)
+        {
+            document.getElementById("tdStatus").style.display = "";
+            document.getElementById("tdRunTime").style.display = "";
+            document.getElementById("tdEnDisSlect").style.display = "";
+            document.getElementById("tdResetTime").style.display = "";
+            document.getElementById("tdMulti").style.display = "";
+            document.getElementById("checkABCD").style.display = "";
+            document.getElementById("tableNotes").style.display = "";
+        }
+        else if(g_IsMultiPort == 0)
+        {
+
+            document.getElementById("tdStatus").style.display = "none";
+            document.getElementById("tdRunTime").style.display = "none";
+            document.getElementById("tdEnDisSlect").style.display = "none";
+            document.getElementById("tdResetTime").style.display = "none";
+            document.getElementById("tdMulti").style.display = "none";
+            document.getElementById("checkABCD").style.display = "none";
+            document.getElementById("tableNotes").style.display = "none";
+        }
+    }
+    function createxmlHttpRequest()
+    {
+        if(window.ActiveXObject)
+        {
+            xmlHttp = new ActiveXObject("Microsoft.XMLHTTP");
+        }
+        else if(window.XMLHttpRequest)
+        {
+            xmlHttp = new XMLHttpRequest();
+        }
+    }
+
+    function doRequestUsingGet(url,para,fn)
+    {
+        createxmlHttpRequest();
+        url += "?"+para+"timestamp="+new Date().getTime();
+        xmlHttp.open("GET",url);
+        xmlHttp.onreadystatechange = fn;
+        xmlHttp.send(null);
+    }
+
+    function handleStateChange()
+    {
+        var jsonValueStr;
+        if(xmlHttp.readyState==4 && xmlHttp.status == 200)
+        {
+            jsonValueStr = xmlHttp.responseText;
+            if(flag_first == 0)
+            {
+                obj_jsonFirst = eval('('+jsonValueStr+')');
+                flag_first = 1;
+                pageFirstInfo(jsonValueStr);
+            }
+            else if (flag_first == 1)
+            {
+                changePageInfo(jsonValueStr);
+            }
+        }
+    }
+
+    function portStatF(info) {
+        var numInfo = parseInt(info ,10);
+        switch(numInfo)
+        {
+            case 0: return "Idle";
+                break;
+            case 1: return "Processing";
+                break;
+            case 2: return "Ringing";
+                break;
+            case 3: return "Processing";
+                break;
+            case 4: return "Active";
+                break;
+            case 5: return "Alerting";
+                break;
+            case 6: return "Call Waiting";
+                break;
+            case 7: return "Call holding";
+                break;
+            case 8:return "No SIM Card";
+                break;
+            case 9:return "No UIM Card";
+                break;
+            case 10: return "No USIM Card";
+                break;
+            case 11: return "PIN Wrong";
+                break;
+            case 12: return "PUK Required";
+                break;
+            case 13: return "Mobile Unregistered";
+                break;
+            case 14: return "No Balance";
+                break;
+            case 15: return "Mobile Blocked";
+                break;
+            case 16: return "Mobile Registered";
+                break;
+            case 17: return "searching network";
+                break;
+            case 18: return "Power Off";
+                break;
+            case 19: return "Unknown";
+                break;
+            case 99: return " ";
+                break;
+            default: return " ";
+                break;
+        }
+    }
+
+    function pageFirstInfo(jsonValueStr)
+    {
+        var obj_Json = eval('('+jsonValueStr+')');
+        var i = 0, j = 0;
+        var numRowF = 0;
+        var htmInfo = "";
+        var errNum;
+        var rowIsMPNum = 0;
+        if(obj_Json.length == 0)
+        {
+            if(g_IsMultiPort == 1)
+            {
+                htmInfo += "<tr align=\"center\" bgcolor='white'>\r\n";
+                for(errNum = 0; errNum < 14; errNum++)
+                {
+                    htmInfo +="<td> </td>";
+                }
+                htmInfo += "</tr>\r\n";
+            }
+            else if(g_IsMultiPort == 0)
+            {
+                htmInfo += "<tr align=\"center\" bgcolor='white'>\r\n";
+                for(errNum = 0; errNum < 12; errNum++)
+                {
+                    htmInfo +="<td> </td>";
+                }
+                htmInfo += "</tr>\r\n";
+            }
+            flag_first = 1;
+            document.getElementById("OverviewInfo").innerHTML=htmInfo;
+            return;
+        }
+        for(i = 0; i < obj_Json.length; i++)
+        {
+            var jsonson = obj_Json[i];
+            if(parseInt(jsonson.PortMode ,10) == 1)
+            {
+                var jsonsonCh = jsonson.datas;
+                for(j = 0; j < jsonsonCh.length; j++)
+                {
+                    var infoGL = jsonsonCh[j];
+                    if(numRowF % 2 == 0)
+                    {
+                        htmInfo += "<tr align=\"center\" id='indexRow"+numRowF+"'>\r\n";
+                    }
+                    else
+                    {
+                        htmInfo += "<tr align=\"center\" bgcolor='white' id='indexRow"+numRowF+"'>\r\n";
+                    }
+                    htmInfo += "<td><input type='checkbox'></td>\r\n";
+                    htmInfo += "<td><a href='javascript:force("+numRowF+");' class='nodeco'>"+infoGL.sim+"</a></td>\r\n";
+                    var simFlag = parseInt(infoGL.simStatus,10);
+                    switch (simFlag)
+                    {
+                        case 1:
+                            htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/special.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'></td>\r\n";
+                            break;
+                        case 2:
+                            htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/workingH.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'></td>\r\n";
+                            break;
+                        case 3:
+                            htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/working.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'></td>\r\n";
+                            break;
+                        case 4:
+                            htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/enable.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'></td>\r\n";
+                            break;
+                        case 5:
+                            htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/special.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'></td>\r\n";
+                            break;
+                        case 6:
+                            if(infoGL.scIndex == "0")
+                            {
+                                htmInfo += "<td><img class=\"image_button\" name='Status" + numRowF + "' src=\"image/unable.png\" id='Status" + numRowF + "' onClick='change_status(" + numRowF + ", 0);'></td>\r\n";
+                            }
+                            else
+                            {
+                                htmInfo += "<td><img class=\"image_button\" name='Status" + numRowF + "' src=\"image/unable"+infoGL.scIndex+".png\" id='Status" + numRowF + "' onClick='change_status(" + numRowF + ", 0);'></td>\r\n";
+                            }
+                            break;
+                        case 7:
+                            if(infoGL.scIndex == "0")
+                            {
+                                htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/disable.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 1);'></td>\r\n";
+                            }
+                            else
+                            {
+                                htmInfo +="<td><img class=\"image_button\" name='Status"+numRowF+"' src=\"image/disable"+infoGL.scIndex+".png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 1);'></td>\r\n";
+                            }
+                            break;
+                    }
+                    htmInfo +="<td>"+portStatF(infoGL.portStatus)+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.info+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.number+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.LMB+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.CaBa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.ToCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.MonCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DaCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DaCa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.HoCa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DCC+"</td>\r\n";
+					htmInfo +="<td>"+infoGL.HCC+"</td>\r\n";
+                    htmInfo += "</tr>\r\n";
+                    row_IsMultiPort_Flag[numRowF] = 1;
+                    indexIsMultiPort[rowIsMPNum] = numRowF;
+                    simIndex[numRowF] = infoGL.sim;
+                    rowIsMPNum++;
+                    numRowF++;
+                }
+            }
+            else if(parseInt(jsonson.PortMode ,10) == 2)
+            {
+                var jsonsonCh = jsonson.datas;
+                for(j = 0; j < jsonsonCh.length; j++)
+                {
+                    var infoGL = jsonsonCh[j];
+                    if(numRowF % 2 == 0)
+                    {
+                        htmInfo +=  "<tr align=\"center\" id='indexRow"+numRowF+"'>\r\n";
+                    }
+                    else
+                    {
+                        htmInfo += "<tr align=\"center\" bgcolor='white' id='indexRow"+numRowF+"'>\r\n";
+                    }
+                    htmInfo += "<td><input type='checkbox'></td>\r\n";
+                    htmInfo += "<td>"+infoGL.sim+"</td>\r\n";
+                    if(g_IsMultiPort == 1)
+                    {
+                        htmInfo +="<td></td>\r\n";
+                    }
+                    htmInfo +="<td>"+portStatF(infoGL.portStatus)+"</td>\r\n";
+                    if(g_IsMultiPort == 1)
+                    {
+                        htmInfo +="<td></td>\r\n";
+                    }
+                    htmInfo +="<td>"+infoGL.number+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.LMB+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.CaBa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.ToCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.MonCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DaCr+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DaCa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.HoCa+"</td>\r\n";
+                    htmInfo +="<td>"+infoGL.DCC+"</td>\r\n";
+					htmInfo +="<td>"+infoGL.HCC+"</td>\r\n";
+                    htmInfo += "</tr>\r\n";
+                    row_IsMultiPort_Flag[numRowF] = 0;
+                    simIndex[numRowF] = infoGL.sim;
+                    numRowF++;
+                }
+            }
+        }
+        flag_first = 1;
+        document.getElementById("OverviewInfo").innerHTML=htmInfo;
+        return;
+    }
+
+    function changePageInfo(jsonValueStr)
+    {
+        var obj_Json = eval('('+jsonValueStr+')');
+        if(obj_Json.length == 0)
+        {
+            return;
+        }
+        var numRowF = 0, i = 0, j = 0;
+        for(i = 0; i < obj_Json.length; i++)
+        {
+            var jsonson = obj_Json[i];
+            if(parseInt(jsonson.PortMode ,10) == 1)
+            {
+                var jsonsonCh = jsonson.datas;
+                for(j = 0; j < jsonsonCh.length; j++)
+                {
+                    var infoGL = jsonsonCh[j];
+                    var rowID=document.getElementById("indexRow"+numRowF);
+                    //rowID.cells[1].childNodes[0].innerHTML =infoGL.sim;
+                    var simFlag = parseInt(infoGL.simStatus,10);
+                    switch (simFlag)
+                    {
+                        case 1:
+                            rowID.cells[2].childNodes[0].src = "image/special.png";//.innerHTML = "<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/special.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                            rowID.cells[2].childNodes[0].onclick = function(){
+                                var idImage = parseInt(this.id.replace("Status",""));
+                                change_status(idImage, 0);
+                            };
+                            break;
+                        case 2:
+                            rowID.cells[2].childNodes[0].src="image/workingH.png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/workingH.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                            rowID.cells[2].childNodes[0].onclick = function(){
+                                var idImage = parseInt(this.id.replace("Status",""));
+                                change_status(idImage, 0);
+                            };
+                            break;
+                        case 3:
+                            rowID.cells[2].childNodes[0].src="image/working.png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/working.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                            rowID.cells[2].childNodes[0].onclick = function(){
+                                var idImage = parseInt(this.id.replace("Status",""));
+                                change_status(idImage, 0);
+                            };
+                            break;
+                        case 4:
+                            rowID.cells[2].childNodes[0].src="image/enable.png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/enable.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                            rowID.cells[2].childNodes[0].onclick = function(){
+                                var idImage = parseInt(this.id.replace("Status",""));
+                                change_status(idImage, 0);
+                            };
+                            break;
+                        case 5:
+                            rowID.cells[2].childNodes[0].src="image/special.png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/special.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                            rowID.cells[2].childNodes[0].onclick = function(){
+                                var idImage = parseInt(this.id.replace("Status",""));
+                                change_status(idImage, 0);
+                            };
+                            break;
+                        case 6:
+                            if(infoGL.scIndex == "0")
+                            {
+                                rowID.cells[2].childNodes[0].src="image/unable.png";//.innerHTML = "<img class=\"image_button\" name='Status" + numRowF + "' src=\"image/unable.png\" id='Status" + numRowF + "' onClick='change_status(" + numRowF + ", 0);'>";
+                                rowID.cells[2].childNodes[0].onclick = function(){
+                                    var idImage = parseInt(this.id.replace("Status",""));
+                                    change_status(idImage, 0);
+                                };
+                            }
+                            else
+                            {
+                                rowID.cells[2].childNodes[0].src="image/unable"+infoGL.scIndex+".png";//.innerHTML = "<img class=\"image_button\" name='Status" + numRowF + "' src=\"image/unable"+infoGL.scIndex+".png\" id='Status" + numRowF + "' onClick='change_status(" + numRowF + ", 0);'>";
+                                rowID.cells[2].childNodes[0].onclick = function(){
+                                    var idImage = parseInt(this.id.replace("Status",""));
+                                    change_status(idImage, 0);
+                                };
+                            }
+                            break;
+                        case 7:
+                            if(infoGL.scIndex == "0")
+                            {
+                                rowID.cells[2].childNodes[0].src="image/disable.png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/disable.png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                                rowID.cells[2].childNodes[0].onclick = function(){
+                                    var idImage = parseInt(this.id.replace("Status",""));
+                                    change_status(idImage, 1);
+                                };
+                            }
+                            else
+                            {
+                                rowID.cells[2].childNodes[0].src="image/disable"+infoGL.scIndex+".png";//.innerHTML ="<img class=\"image_button\" name='Status"+numRowF+"' src=\"image/disable"+infoGL.scIndex+".png\" id='Status"+numRowF+"' onClick='change_status("+numRowF+", 0);'>";
+                                rowID.cells[2].childNodes[0].onclick = function(){
+                                    var idImage = parseInt(this.id.replace("Status",""));
+                                    change_status(idImage, 1);
+                                };
+                            }
+                            break;
+                    }
+                    rowID.cells[3].innerHTML = portStatF(infoGL.portStatus);
+                    rowID.cells[4].innerHTML = infoGL.info;
+                    rowID.cells[5].innerHTML = infoGL.number;
+                    rowID.cells[6].innerHTML = infoGL.LMB;
+                    rowID.cells[7].innerHTML = infoGL.CaBa;
+                    rowID.cells[8].innerHTML = infoGL.ToCr;
+                    rowID.cells[9].innerHTML = infoGL.MonCr;
+                    rowID.cells[10].innerHTML = infoGL.DaCr;
+                    rowID.cells[11].innerHTML = infoGL.DaCa;
+                    rowID.cells[12].innerHTML = infoGL.HoCa;
+                    rowID.cells[13].innerHTML = infoGL.DCC;
+					rowID.cells[14].innerHTML = infoGL.HCC;
+                    numRowF++;
+                }
+            }
+            else if(parseInt(jsonson.PortMode ,10) == 2)
+            {
+                var jsonsonCh = jsonson.datas;
+                for(j = 0; j < jsonsonCh.length; j++)
+                {
+                    var infoGL = jsonsonCh[j];
+                    var rowID=document.getElementById("indexRow"+numRowF);
+                    //rowID.cells[1].innerHTML = infoGL.sim;
+                    if(g_IsMultiPort == 1)
+                    {
+                        rowID.cells[3].innerHTML = portStatF(infoGL.portStatus);
+                        rowID.cells[5].innerHTML = infoGL.number;
+                        rowID.cells[6].innerHTML = infoGL.LMB;
+                        rowID.cells[7].innerHTML = infoGL.CaBa;
+                        rowID.cells[8].innerHTML = infoGL.ToCr;
+                        rowID.cells[9].innerHTML = infoGL.MonCr;
+                        rowID.cells[10].innerHTML = infoGL.DaCr;
+                        rowID.cells[11].innerHTML = infoGL.DaCa;
+                        rowID.cells[12].innerHTML = infoGL.HoCa;
+                        rowID.cells[13].innerHTML = infoGL.DCC;
+						rowID.cells[14].innerHTML = infoGL.HCC;
+                    }
+                    else if(g_IsMultiPort == 0)
+                    {
+                        rowID.cells[2].innerHTML = portStatF(infoGL.portStatus);
+                        rowID.cells[3].innerHTML = infoGL.number;
+                        rowID.cells[4].innerHTML = infoGL.LMB;
+                        rowID.cells[5].innerHTML = infoGL.CaBa;
+                        rowID.cells[6].innerHTML = infoGL.ToCr;
+                        rowID.cells[7].innerHTML = infoGL.MonCr;
+                        rowID.cells[8].innerHTML = infoGL.DaCr;
+                        rowID.cells[9].innerHTML = infoGL.DaCa;
+                        rowID.cells[10].innerHTML = infoGL.HoCa;
+                        rowID.cells[11].innerHTML = infoGL.DCC;
+						rowID.cells[12].innerHTML = infoGL.HCC;
+                    }
+                    numRowF++;
+                }
+            }
+        }
+    }
+
+    function AutoRefreshOverviewInfo()
+    {
+        para = "";
+        url = "enHBSimInfo.htm";
+        doRequestUsingGet(url,para,handleStateChange);
+    }
+
+    function selectPort(index, type)
+    {
+        if(document.getElementById("IndexAll").checked)
+        {
+            var rowLen = document.getElementById("OverviewInfo").rows.length;
+            var i=0;
+            for(i = 0; i < rowLen; i++)
+            {
+                document.getElementById("indexRow"+i).cells[0].childNodes[0].checked = false;
+            }
+            document.getElementById("IndexAll").checked = false;
+        }
+        var lenAll = row_IsMultiPort_Flag.length;
+        var i = 0;
+        if(lenAll == 0)
+        {
+            return;
+        }
+        var len = indexIsMultiPort.length;
+        var statFlag = false;
+        if(document.getElementById("Index"+type+"All").checked == true)
+        {
+            statFlag = true;
+        }
+        else if(document.getElementById("Index"+type+"All").checked == false)
+        {
+            statFlag = false;
+        }
+        for(i = index; i < len; i += 4)
+        {
+            document.getElementById("indexRow"+indexIsMultiPort[i]).cells[0].childNodes[0].checked = statFlag;
+        }
+    }
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form action="/goform/EiaHBSIM" method="post" name="EiaHBSIM" id="EiaHBSIM">
+<input type="hidden" name="SubText" id="SubText" value="">
+<iframe id="hidefrm" name="hidefrm" style="display:none" height="0"></iframe>
+ <table width="1100px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Overview</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+
+<table class='TB' width="1100px" align="center" cellpadding="5" cellspacing="1">
+  <tr class="thead" align="center">
+      <td rowspan="2" width="4%"></td>
+      <td rowspan="2" width="5%">SIM</td>
+      <td rowspan="2" width="5%" id="tdStatus">Status</td>
+      <td rowspan="2" width="10%" id="portStatus">Port Status</td>
+      <td rowspan="2" width="18%" id="tdRunTime">Run Time(m)/Call Count/Call Duration(m)/SMS Count</td>
+      <td rowspan="2" width="12%">Phone Number</td>
+      <td rowspan="2" width="12%">Last Matched Balance</td>
+      <td rowspan="2" width="9%" id="tdCbalance">Calculated Balance</td>
+      <td colspan="3" width="8%" id="tdTCredit">Credits</td>
+      <td colspan="2" width="8%">Remain Calls</td>
+	  <td colspan="2" width="8%">Remain Connected</td>
+  </tr>
+    <tr class="thead" align="center">
+        <td>Total</td>
+        <td>Monthly</td>
+        <td>Daily</td>
+        <td>Daily</td>
+        <td>Counts/Min</td>
+		<td>Daily</td>
+        <td>Counts/Min</td>
+    </tr>
+  
+  <tbody id="OverviewInfo">
+  </tbody>
+  
+  <tfoot>
+  <tr align="center">
+      <td><input name='IndexAll' type='checkbox' id='IndexAll' onClick="CheckAll();"></td>
+      <td>All</td>
+      <td id="tdEnDisSlect" style="display:none"><img class="image_button" name='idEnableSelect' src="image/enable.png" id='idEnableSelect' onClick='EnableSelect();'>
+          <img class="image_button" name='idDisableSelect' src="image/disable.png" id='idDisableSelect' onClick='DisableSelect();'></td>
+      <td> </td>
+      <td id="tdResetTime" style="display:none"><input name='idResetTime'  class='button' type='button' id='idResetTime' value='Reset' onClick='ResetTime();'></td>
+      <td><div style="display:none"><input class="atext" id="CurrPageMultiPortEnable" name="CurrPageMultiPortEnable"></div></td>
+      <td><input name='idClearBalance'  class='button' type='button' id='idClearBalance' value='Clear' onClick='ClearBalance();'></td>
+      <td><input name='idClearBalance2'  class='button' type='button' id='idClearBalance2' value='Clear' onClick='ClearBalance2();'></td>
+      <td><input name='idResetTotal'  class='button' type='button' id='idResetTotal' value='Reset' onClick='ResetTotal();'></td>
+      <td><input name='idResetMonthly'  class='button' type='button' id='idResetMonthly' value='Reset' onClick='ResetMonthly();'></td>
+   	  <td><input name='idResetDaily'  class='button' type='button' id='idResetDaily' value='Reset' onClick='ResetDaily();'></td>
+      <td><input name='idResetCallsLimit'  class='button' type='button' id='idResetCallsLimit' value='Reset' onClick='ResetCallsLimit();'></td>
+	  <td><input name='idResetHourCallsLimit'  class='button' type='button' id='idResetHourCallsLimit' value='Reset' onClick='ResetHourCallsLimit();'></td>
+	  <td><input name='idResetConnectedLimit'  class='button' type='button' id='idResetConnectedLimit' value='Reset' onClick='ResetConnectedLimit();'></td>
+	  <td><input name='idResetHourlyConnectedLimit'  class='button' type='button' id='idResetHourlyConnectedLimit' value='Reset' onClick='ResetHourlyConnectedLimit();'></td>
+  </tr>  
+  
+  <tr align="center">
+      <td colspan="6" ALIGN="left">
+          <div name="checkABCD" id="checkABCD" style="display: none">
+              <input name='IndexAAll' type='checkbox' id='IndexAAll' onclick="selectPort(0,'A')">A&nbsp
+              <input name='IndexBAll' type='checkbox' id='IndexBAll' onclick="selectPort(1,'B')">B&nbsp
+              <input name='IndexCAll' type='checkbox' id='IndexCAll' onclick="selectPort(2,'C')">C&nbsp
+              <input name='IndexDAll' type='checkbox' id='IndexDAll' onclick="selectPort(3,'D')">D&nbsp
+          </div>
+      </td>
+		<td colspan=2 id="tdMulti" style="display:none"></td>
+		<td>
+			<input name='idSetTotal'  class='button' type='button' id='idS1etTotal' value='Set' onClick='SetTotal();'>
+			<input type="class" name='idTotal' id='idTotal' size="4" value="">
+		</td>
+		<td>
+			<input name='idSetMonthly'  class='button' type='button' id='idSetMonthly' value='Set' onClick='SetMonthly();'>
+			<input type="class" name='idMonth' id='idMonth' size="4" value="">
+		</td>
+		<td>
+			<input name='idSetDaily'  class='button' type='button' id='idSetDaily' value='Set' onClick='SetDaily();'>
+			<input type="class" name='idDay' id='idDay' size="4" value="">
+		</td>
+		<td></td>
+		<td></td>
+	</tr> 
+	</tfoot>
+</table>
+</form>
+<br><br>
+<table width="1050px" align="center" cellpadding="0" cellspacing="0" id="tableNotes" style="display:none">
+  <tr>
+   <td width="5%"> </td>
+   <td width="3%" align="center" class="notes"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">Notes:&nbsp;</td>
+   <td width="3%" align="center" class="notes">1.</td>
+   <td class="notes">SIM Status: </td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/disableU.png">: Disable (by User manually)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/disableE.png">: Disable (Exception: low ASR/ACD, call fail, GSM code, USSD fail)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/disableL.png">: Disable (Low balance)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/disableT.png">: Disable (register Timeout)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/enable.png">: Enable</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/working.png">: Working (normal mode)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/workingH.png">: Working (auto call related to Auto Generation is ongoing)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/unableC.png">: Unavailable (total Credits or daily Credits or monthly Credits or Daily/Duration Remain Calls/Connected has been used up)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/unableN.png">: Unavailable (Balance has been used up)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"><img src="image/special.png">: Recharge Mode(under recharge mode, the SIM slot that is in use can not be automatically switched by setting rules)</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes">2.</td>
+   <td class="notes">Click a SIM index, then its corresponding SIM slot will enter recharge mode and stay at the mode for 10 minutes. </td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">Under recharge mode, this SIM slot continues to be in use and will not be switched to other SIM slots.  </td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">&nbsp;</td>
+  </tr>
+</table>
+<br><br><br>
+
+</body>
+</html>
+

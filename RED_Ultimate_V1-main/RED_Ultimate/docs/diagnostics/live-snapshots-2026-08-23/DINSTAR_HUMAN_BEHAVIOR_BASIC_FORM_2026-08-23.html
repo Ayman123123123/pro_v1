@@ -1,0 +1,1085 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Balance Check - Modify Rule</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+    var duration_time_count = 2;
+    var str_array = new Array("First","Second")
+function MM_callJS()
+{
+	var tmp, obj, i;
+	var str = new Array(); 
+	var num, call_num_length;
+	
+	tmp = '{fst:"0",fet:"0",sst:"0",set:"0",enable:"off",autocall:"off",autocalldigit:"3",mincall:"",maxcall:"",prefixtoadd:"",digitdelete:"",sendsms:"off",processmode:"5",devonline:"off",mininterval:"", maxinterval:"",byduration:"off",callduration:"",bycalls:"off",calls:"",byanswer:"off",answer:"",autocallout:"off",autocallnum:"",retrycount:"0",send_gsm_net:"off",randomcontent1:"",randomcontent2:"",randomcontent3:"",randomcontent4:"",randomcontent5:"",randomcontent6:"",randomcontent7:"",randomcontent8:"",randomcontent9:"",randomcontent10:"",gsm_net_http_url_0:"",gsm_net_http_url_1:"",gsm_net_http_url_2:"",gsm_net_http_url_3:"",gsm_net_http_url_4:""}';
+	obj = eval('('+tmp+')');
+
+	if(typeof(obj)!="object")
+	{
+		alert("Unexpect Error!!!");
+		return;
+	}
+	
+	if(obj.enable == "on")
+	{
+		document.forms[0].AutoEnable.checked = true;		
+	}
+	else
+	{
+		document.forms[0].AutoEnable.checked = false;		
+	}
+    document.getElementById("duration_time_0").options[Math.floor(parseInt(obj.fst, 10) / 60)].selected = true
+    document.getElementById("duration_time_1").options[(parseInt(obj.fst, 10) % 60)].selected = true
+    document.getElementById("duration_time_2").options[Math.floor(parseInt(obj.fet, 10) / 60)].selected = true
+    document.getElementById("duration_time_3").options[(parseInt(obj.fet, 10) % 60)].selected = true
+    document.getElementById("duration_time_4").options[Math.floor(parseInt(obj.sst, 10) / 60)].selected = true
+    document.getElementById("duration_time_5").options[(parseInt(obj.sst, 10) % 60)].selected = true
+    document.getElementById("duration_time_6").options[Math.floor(parseInt(obj.set, 10) / 60)].selected = true
+    document.getElementById("duration_time_7").options[(parseInt(obj.set, 10) % 60)].selected = true
+	if(obj.autocall == "on")
+	{
+		document.forms[0].AutoCall.checked = true;		
+	}
+	else
+	{
+		document.forms[0].AutoCall.checked = false;		
+	}
+	
+	call_num_length = document.getElementById("AutoCallNum_all");
+	
+	num = parseInt(obj.autocalldigit) - 3;
+	call_num_length[num].selected = true;
+	
+	document.forms[0].PrefixToAdd.value = obj.prefixtoadd;
+	document.forms[0].DigitDelete.value = obj.digitdelete;
+	document.forms[0].MinCallDuration.value = obj.mincall;
+	document.forms[0].MaxCallDuration.value = obj.maxcall;
+	if(obj.sendsms == "on")
+	{
+		document.forms[0].SendSms.checked = true;		
+	}
+	else
+	{
+		document.forms[0].SendSms.checked = false;		
+	}
+	document.getElementById("ProcessMode").value = obj.processmode
+
+	str[1] = obj.randomcontent1;
+	str[2] = obj.randomcontent2;
+	str[3] = obj.randomcontent3;
+	str[4] = obj.randomcontent4;
+	str[5] = obj.randomcontent5;
+	str[6] = obj.randomcontent6;
+	str[7] = obj.randomcontent7;
+	str[8] = obj.randomcontent8;
+	str[9] = obj.randomcontent9;
+	str[10] = obj.randomcontent10;
+	str[11] = "Sorry,I will call you later.";
+	str[12] = "I am busy now.";
+	str[13] = "I can not come to the phone.";
+	for(i=1;i<11;i++)
+	{
+		if(str[i] != "")
+		{
+			document.getElementById("RandomContent"+i).value=str[i];
+		}
+		else
+		{
+			if(i < 4)
+			{
+				document.getElementById("RandomContent"+i).value = str[i+10];
+			}			
+		}
+	}
+	
+	str[0] = obj.gsm_net_http_url_0;
+	str[1] = obj.gsm_net_http_url_1;
+	str[2] = obj.gsm_net_http_url_2;
+	str[3] = obj.gsm_net_http_url_3;
+	str[4] = obj.gsm_net_http_url_4;
+	if(obj.send_gsm_net == "on")
+	{
+		document.forms[0].SendGsmNet.checked = true;
+	}
+	else
+	{
+		document.forms[0].SendGsmNet.checked = false;
+	}
+	
+	for(i=1; i<=5; i++)
+	{
+		document.getElementById("RandomGsmHttpUrl"+i).value = str[i-1];
+	}
+	
+	if(obj.devonline == "on")
+	{
+		document.forms[0].ByDevOnlineTime.checked = true;		
+	}
+	else
+	{
+		document.forms[0].ByDevOnlineTime.checked = false;		
+	}
+	document.forms[0].MinInterval.value = obj.mininterval;
+	document.forms[0].MaxInterval.value = obj.maxinterval;
+	if(obj.byduration == "on")
+	{
+		document.forms[0].TotalCallDurations.checked = true;		
+	}
+	else
+	{
+		document.forms[0].TotalCallDurations.checked = false;		
+	}
+	document.forms[0].CallDurations.value = obj.callduration;
+	if(obj.bycalls == "on")
+	{
+		document.forms[0].ByConsecutiveCalls.checked = true;		
+	}
+	else
+	{
+		document.forms[0].ByConsecutiveCalls.checked = false;		
+	}
+	document.forms[0].ConsecutiveCalls.value = obj.calls;
+	if(obj.byanswer == "on")
+	{
+		document.forms[0].ByAnswerCalls.checked = true;		
+	}
+	else
+	{
+		document.forms[0].ByAnswerCalls.checked = false;		
+	}
+	document.forms[0].AnswerCalls.value = obj.answer;
+	
+	if(obj.autocallout == "on")
+	{
+		document.forms[0].AutoCallOut.checked = true;		
+	}
+	else
+	{
+		document.forms[0].AutoCallOut.checked = false;		
+	}
+	document.forms[0].AutoCallOutNum.value = obj.autocallnum;
+	document.forms[0].RetryCount.value = parseInt(obj.retrycount);
+
+	mouse_click();
+}
+
+function mouse_click()
+{
+	var i;
+	
+	if(document.forms[0].AutoEnable.checked)
+    {
+		document.getElementById("id_ProcessMode").style.display=""
+        document.getElementById("id_duration").style.display=""
+        for(var i=0; i< duration_time_count; i++)
+        {
+            document.getElementById("id_duration_"+i).style.display=""
+        }
+	    document.getElementById('id_basic').style.display = "";
+		document.getElementById('id_AutoCallEn').style.display = "";
+		document.getElementById('id_AutoCallOut').style.display = "";
+		if(document.forms[0].AutoCallOut.checked)
+		{
+			document.getElementById('id_NumbersFile').style.display = "";
+			document.getElementById('id_AutoCallOutNum').style.display = "";
+			document.getElementById('id_RetryCount').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_NumbersFile').style.display = "none";
+			document.getElementById('id_AutoCallOutNum').style.display = "none";
+			document.getElementById('id_RetryCount').style.display = "none";
+		}
+		document.getElementById('id_AutoCall').style.display = "";
+		
+		if(document.forms[0].AutoCall.checked)
+		{
+			document.getElementById("id_AutoCallNum").style.display = "";
+		}
+		else
+		{
+			document.getElementById("id_AutoCallNum").style.display = "none";
+		}
+		
+		document.getElementById('id_PrefixToAdd').style.display = "";
+		document.getElementById('id_DigitDelete').style.display = "";
+		
+		if(document.forms[0].AutoCall.checked
+		|| document.forms[0].AutoCallOut.checked)
+    	{
+			document.getElementById('id_MinCallDuration').style.display = "";
+			document.getElementById('id_MaxCallDuration').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_MinCallDuration').style.display = "none";
+			document.getElementById('id_MaxCallDuration').style.display = "none";
+		}
+		
+		document.getElementById('id_SendSms').style.display = "";
+		if(document.forms[0].SendSms.checked)
+    	{
+			for(i=1;i<11;i++)
+			{
+				document.getElementById('id_RandomContent'+i).style.display = "";
+			}
+		}
+		else
+		{
+			for(i=1;i<11;i++)
+			{
+				document.getElementById('id_RandomContent'+i).style.display = "none";
+			}
+		}
+		
+		document.getElementById('id_SendGsmNet').style.display = "";
+		if(document.forms[0].SendGsmNet.checked)
+		{
+			for(i=1; i<=5; i++)
+			{
+				document.getElementById('id_RandomGsmHttpUrl'+i).style.display = "";
+			}
+		}
+		else
+		{
+			for(i=1; i<=5; i++)
+			{
+				document.getElementById('id_RandomGsmHttpUrl'+i).style.display = "none";
+			}
+		}
+		
+		document.getElementById('id_Conditions').style.display = "";
+		document.getElementById('id_ByDevOnlineTime').style.display = "";
+		if(document.forms[0].ByDevOnlineTime.checked)
+    	{
+			document.getElementById('id_MinInterval').style.display = "";
+			document.getElementById('id_MaxInterval').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_MinInterval').style.display = "none";
+			document.getElementById('id_MaxInterval').style.display = "none";
+		}
+		
+		document.getElementById('id_TotalCallDurations').style.display = "";
+		if(document.forms[0].TotalCallDurations.checked)
+    	{
+			document.getElementById('id_CallDurations').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_CallDurations').style.display = "none";
+		}
+		
+		document.getElementById('id_ByConsecutiveCalls').style.display = "";
+		if(document.forms[0].ByConsecutiveCalls.checked)
+    	{
+			document.getElementById('id_ConsecutiveCalls').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_ConsecutiveCalls').style.display = "none";
+		}
+		
+		document.getElementById('id_ByAnswerCalls').style.display = "";
+		if(document.forms[0].ByAnswerCalls.checked)
+    	{
+			document.getElementById('id_AnswerCalls').style.display = "";
+		}
+		else
+		{
+			document.getElementById('id_AnswerCalls').style.display = "none";
+		}
+	}
+	else
+    {
+		document.getElementById("id_ProcessMode").style.display="none"
+        document.getElementById("id_duration").style.display="none"
+        for(var i=0; i< duration_time_count; i++)
+        {
+            document.getElementById("id_duration_"+i).style.display="none"
+        }
+	    document.getElementById('id_basic').style.display = "none";
+		document.getElementById('id_AutoCallEn').style.display = "none";
+		document.getElementById('id_AutoCallOut').style.display = "none";
+		document.getElementById('id_NumbersFile').style.display = "none";
+		document.getElementById('id_AutoCallOutNum').style.display = "none";
+		document.getElementById('id_RetryCount').style.display = "none";
+		document.getElementById('id_AutoCall').style.display = "none";
+		document.getElementById('id_PrefixToAdd').style.display = "none";
+		document.getElementById('id_DigitDelete').style.display = "none";
+		document.getElementById('id_MinCallDuration').style.display = "none";
+		document.getElementById('id_MaxCallDuration').style.display = "none";
+		document.getElementById('id_SendSms').style.display = "none";
+		document.getElementById("id_AutoCallNum").style.display = "none";
+		for(i=1;i<11;i++)
+		{
+			document.getElementById('id_RandomContent'+i).style.display = "none";
+		}
+		
+		document.getElementById('id_SendGsmNet').style.display = "none";
+		for(i=1; i<=5; i++)
+		{
+			document.getElementById('id_RandomGsmHttpUrl'+i).style.display = "none";
+		}
+		
+		document.getElementById('id_Conditions').style.display = "none";
+		document.getElementById('id_ByDevOnlineTime').style.display = "none";
+		document.getElementById('id_MinInterval').style.display = "none";
+		document.getElementById('id_MaxInterval').style.display = "none";
+		document.getElementById('id_TotalCallDurations').style.display = "none";
+		document.getElementById('id_CallDurations').style.display = "none";
+		document.getElementById('id_ByConsecutiveCalls').style.display = "none";
+		document.getElementById('id_ConsecutiveCalls').style.display = "none";
+		document.getElementById('id_ByAnswerCalls').style.display = "none";
+		document.getElementById('id_AnswerCalls').style.display = "none";
+	}
+}
+
+function CallOutNumValueCheck(szname)
+{
+	var renumber = /^\+?\d{1,22}(,(\+?\d{1,22})){0,199}$/;
+
+	if(renumber.test(szname) == false)
+	{
+		return false;
+	}
+	
+	return true;
+}
+function check_duration_no_overlapped()
+{
+	var first_start_array = new Array(new Array(),new Array())
+    for(var i = 0; i < duration_time_count; i++)
+	{
+        var first_hour_start =parseInt(document.getElementById("duration_time_"+(4 * i)).value, 10)
+        var first_minute_start = parseInt(document.getElementById("duration_time_"+(4 * i + 1)).value, 10)
+        var first_hour_end = parseInt(document.getElementById("duration_time_"+(4 * i + 2)).value, 10)
+        var first_minute_end = parseInt(document.getElementById("duration_time_"+(4 * i + 3)).value, 10)
+        first_start_array[i][0] =first_hour_start * 60 + first_minute_start
+        first_start_array[i][1]= first_hour_end * 60 + first_minute_end
+	}
+	for(var i = 0; i < duration_time_count; i++)
+	{
+        for(var j = i+1; j < duration_time_count; j++)
+		{
+			if(first_start_array[i][0] > first_start_array[j][1]
+			|| first_start_array[i][1] < first_start_array[j][0])
+			{
+				continue
+			}
+			else
+			{
+                return false
+			}
+		}
+	}
+	return true
+}
+function form_check()
+{
+	var url,i, flag = 0;
+	var PrefixStr;
+	var re = /^((\+\d{1,31})|(\d{0,32}))$/,  re2 = /^\d{0,2}$/;
+	
+	if(document.forms[0].AutoEnable.checked)
+    {
+        var flag_count = 0
+        //判断第一时段
+        for(var i = 0; i < duration_time_count; i++)
+        {
+            if(document.getElementById("duration_time_"+(4 * i)).value != "0"
+                || document.getElementById("duration_time_"+(4 * i +1)).value != "0"
+                || document.getElementById("duration_time_"+(4 * i + 2)).value != "0"
+                || document.getElementById("duration_time_"+(4 * i + 3)).value != "0")
+            {
+                var first_hour_start =parseInt(document.getElementById("duration_time_"+(4 * i)).value, 10)
+                var first_minute_start = parseInt(document.getElementById("duration_time_"+(4 * i + 1)).value, 10)
+                var first_hour_end = parseInt(document.getElementById("duration_time_"+(4 * i + 2)).value, 10)
+                var first_minute_end = parseInt(document.getElementById("duration_time_"+(4 * i + 3)).value, 10)
+                if((first_hour_start * 60 + first_minute_start) < (first_hour_end * 60 + first_minute_end))
+                {
+                    flag_count++;
+                }
+                else
+                {
+                    alert("The Duration of "+(i+1)+" config err！")
+                    return false
+                }
+            }
+        }
+        if(flag_count > 1)
+        {
+            if(check_duration_no_overlapped() == false)
+            {
+                alert("The one time of duration is same as others！")
+                return false
+            }
+        }
+
+        if(document.forms[0].AutoCall.checked != true
+		&& document.forms[0].SendSms.checked != true
+		&& document.forms[0].AutoCallOut.checked != true
+		&& document.forms[0].SendGsmNet.checked != true)
+		{
+			alert("Basic Settings should select one or more at least!");
+			document.forms[0].AutoCall.select();
+			return false;
+		}
+				
+		if(document.forms[0].AutoCall.checked
+		|| document.forms[0].AutoCallOut.checked)
+    	{
+			if(document.forms[0].DigitDelete.value > 32
+			||!re2.test(document.forms[0].DigitDelete.value))
+			{
+				alert("Please enter a number between 0 and 32!");
+        		document.forms[0].DigitDelete.select();
+        		return false;
+			}
+			
+			PrefixStr = document.getElementById("PrefixToAdd").value;
+			if(!re.test(PrefixStr))
+			{
+				alert("Please input correct number!");
+				document.forms[0].PrefixToAdd.select();
+				return false;
+			}
+			
+			if(!is_number(document.forms[0].MinCallDuration.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].MinCallDuration.select();
+        		return false;
+    		}
+			
+			if(!is_number(document.forms[0].MaxCallDuration.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].MaxCallDuration.select();
+        		return false;
+    		}
+			
+			if(parseInt(document.forms[0].MinCallDuration.value) 
+				> parseInt(document.forms[0].MaxCallDuration.value))	
+			{
+				alert("Min Call Duration can not large than Max Call Duration!");
+        		document.forms[0].MinCallDuration.select();
+        		return false;
+			}	
+		}
+		
+		if(document.forms[0].SendSms.checked)
+    	{
+			if(document.forms[0].RandomContent1.value.length>63)
+			{
+				alert("Random Content-1 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent1.select();
+				return false;
+			}
+		
+			if(document.forms[0].RandomContent2.value.length>63)
+			{
+				alert("Random Content-2 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent2.select();
+				return false;
+			}
+		
+			if(document.forms[0].RandomContent3.value.length>63)
+			{
+				alert("Random Content-3 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent3.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent4.value.length>63)
+			{
+				alert("Random Content-4 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent4.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent5.value.length>63)
+			{
+				alert("Random Content-5 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent5.select();
+				return false;
+			}
+		
+			if(document.forms[0].RandomContent6.value.length>63)
+			{
+				alert("Random Content-6 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent6.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent7.value.length>63)
+			{
+				alert("Random Content-7 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent7.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent8.value.length>63)
+			{
+				alert("Random Content-8 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent8.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent9.value.length>63)
+			{
+				alert("Random Content-9 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent9.select();
+				return false;
+			}
+			
+			if(document.forms[0].RandomContent10.value.length>63)
+			{
+				alert("Random Content-10 is incorrect, and input length must be less than 63!");
+				document.forms[0].RandomContent10.select();
+				return false;
+			}
+		}
+		
+		if(document.forms[0].SendGsmNet.checked)
+		{
+			for(i=1; i<=5; i++)
+			{
+				url = document.getElementById("RandomGsmHttpUrl"+i).value;
+				if(url.length > 0)
+				{
+					flag = 1;
+					if(IsValidHttpUrl(url, 1) == false)
+					{
+						alert("Please input the correct URL!");
+						document.getElementById("RandomGsmHttpUrl"+i).select();
+						return false;
+					}
+				}
+			}
+			
+			if(flag == 0)
+			{
+				alert("Please input the URL!");
+				return false;
+			}
+		}
+		
+		if(document.forms[0].ByDevOnlineTime.checked != true
+		&& document.forms[0].TotalCallDurations.checked != true
+		&& document.forms[0].ByConsecutiveCalls.checked != true
+		&& document.forms[0].ByAnswerCalls.checked != true)
+		{
+			alert("Conditions Settings should select one or more at least!");
+			document.forms[0].ByDevOnlineTime.select();
+			return false;
+		}
+		
+		if(document.forms[0].ByDevOnlineTime.checked)
+    	{
+			if(!is_number(document.forms[0].MinInterval.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].MinInterval.select();
+        		return false;
+    		}
+			
+			if(!is_number(document.forms[0].MaxInterval.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].MaxInterval.select();
+        		return false;
+    		}	
+			
+			if(parseInt(document.forms[0].MinInterval.value) > parseInt(document.forms[0].MaxInterval.value))	
+			{
+				alert("Min Interval can not large than Max Interval!");
+        		document.forms[0].MinInterval.select();
+        		return false;
+			}	
+		}
+		
+		if(document.forms[0].TotalCallDurations.checked)
+    	{
+			if(!is_number(document.forms[0].CallDurations.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].CallDurations.select();
+        		return false;
+    		}	
+		}
+		
+		if(document.forms[0].ByConsecutiveCalls.checked)
+    	{
+			if(!is_number(document.forms[0].ConsecutiveCalls.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].ConsecutiveCalls.select();
+        		return false;
+    		}	
+		}
+		if(document.forms[0].ByAnswerCalls.checked)
+    	{
+			if(!is_number(document.forms[0].AnswerCalls.value,1,65535))
+    		{
+        		alert("Please enter a number between 1 and 65535!");
+        		document.forms[0].AnswerCalls.select();
+        		return false;
+    		}	
+		}
+		
+		if(document.forms[0].AutoCallOut.checked)
+		{
+			if(document.forms[0].AutoCallOutNum.value.length > 600)
+			{
+				alert("The length of 'Called Number' should not he greater than 600 bytes!");
+				document.forms[0].AutoCallOutNum.select();
+				return false;
+			}
+			
+			if(CallOutNumValueCheck(document.forms[0].AutoCallOutNum.value) == false)
+			{
+				alert("Please input the 'Called Number' value correctly, and each length could not be more than 23!");	
+				document.forms[0].AutoCallOutNum.select();
+				return false;
+			}
+		}
+	}	
+	
+	return true;
+}
+
+function readfiles() 
+{
+	var files = document.getElementById('NumbersFile').files;
+	if (!files.length)
+	{
+		alert('Please select a file!');
+		return;
+	}
+	var file = files[0];
+	var reader = new FileReader();
+
+	reader.onloadend = function(evt) {
+		if (evt.target.readyState == FileReader.DONE) 
+		{
+			document.getElementById('byte_content').textContent = evt.target.result;				
+		}
+	};
+
+	//read file;
+	reader.readAsBinaryString(file);
+	reader.onload=function(e){
+		var str = this.result;
+		document.getElementById("AutoCallOutNum").value = str;
+	}
+	return;
+}
+</script>
+</head>
+<body onLoad="MM_callJS();">
+<form action="/goform/EiaSetHBAutoGeneration" method="post" name="EiaSetHBAutoGeneration" id="EiaSetHBAutoGeneration">
+<table width="600px" border=0 align="center" cellpadding=0 cellspacing=0>
+ <tr class="title">
+  <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+  <td>Auto Generation</td>
+  <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+ </tr>
+</table>
+<table width="600px" align="center" class="TB" cellpadding=0 cellspacing=0>
+ <tr>
+  <td class="swidth">&nbsp;</td>
+  <td>
+    <table width="100%" cellpadding=1 cellspacing=0>
+	  <tr>
+		 <td width="20%">&nbsp;</td>
+		 <td width="40%">&nbsp;</td>
+         <td width="40%">&nbsp;</td>
+	  </tr>
+	  <tr>
+       <td class="td_title">Enable</td>
+	   <td colspan="2"><input type="checkbox" id='AutoEnable' name="AutoEnable" onClick="mouse_click();"></td>
+	  </tr>
+		<tr id="id_duration" style='display: none'>
+			<td class="td_title">Duration Settings</td>
+			<td colspan="2"></td>
+		</tr>
+		<script>
+            var str=""
+            for(var i=0; i < duration_time_count; i++)
+            {
+                str = str + "<tr id='id_duration_"+i+"' style='display: none'>"
+                str = str + "<td> </td>"
+                str = str +"<td>"
+                str_array
+                str = str + str_array[i] +" Duration:"
+                str = str +"</td>"
+                str = str +"<td>"
+                str = str + "<select id=\"duration_time_"+ 4*i +"\" name=\"duration_time_" + 4*i + "\">"
+                for(var j=0; j < 24; j++)
+                {
+                    str = str + "<option value='"+j+"'>" +j+ "</option>"
+                }
+                str = str + "</select>"
+                str = str + ":"
+                str = str + "<select id=\"duration_time_"+(4*i+1)+"\" name=\"duration_time_"+(4*i+1)+"\">"
+                for(var j=0; j < 60; j++)
+                {
+                    str = str + "<option value='"+j+"'>" +j+ "</option>"
+                }
+                str = str + "</select>"
+                str = str + "&nbsp;&nbsp;"
+                str = str + "--"
+                str = str +"&nbsp;&nbsp;"
+
+                str = str + "<select id=\"duration_time_"+ (4*i+2)+"\" name=\"duration_time_" + (4*i+2) + "\">"
+                for(var j=0; j < 24; j++)
+                {
+                    str = str + "<option value='"+j+"'>" +j+ "</option>"
+                }
+                str = str + "</select>"
+                str = str + ":"
+                str = str + "<select id=\"duration_time_"+(4*i+3)+"\" name=\"duration_time_"+(4*i+3)+"\">"
+                for(var j=0; j < 60; j++)
+                {
+                    str = str + "<option value='"+j+"'>" +j+ "</option>"
+                }
+                str = str + "</select>"
+
+                str = str +"</td>"
+                str = str +"</tr>"
+            }
+            document.write(str)
+		</script>
+	  <tr id='id_basic' style='display:none'>
+	    <td class="td_title">Basic Settings</td>
+	    <td colspan="2">&nbsp;</td>
+	  </tr>  
+	  <tr id='id_PrefixToAdd' style='display:none'>
+		<td>&nbsp;</td>
+	    <td> Prefix to Add:</td>
+	    <td>
+        <input class="atext" id="PrefixToAdd" name="PrefixToAdd" style="width:50%;" maxlength="16" size="5" value="" >
+        </td>
+	  </tr>
+	  <tr id='id_DigitDelete' style='display:none'>
+		<td>&nbsp;</td>
+	    <td> Digits to be Deleted:</td>
+	    <td>
+        <input class="atext" id="DigitDelete" name="DigitDelete" style="width:50%;" maxlength="3" size="5" value="" >
+        </td>
+	  </tr>
+	<tr id='id_ProcessMode' style='display:none'>
+		<td>&nbsp;</td>
+		<td>Lock Status Auto:</td>
+		<td>
+			<select id="ProcessMode" name="ProcessMode" class="list" style="width:49%">
+				<option value="0">Forever</option>
+				<option value="1">1 Minute</option>
+				<option value="2">2 Minutes</option>
+				<option value="3">3 Minutes</option>
+				<option value="4">4 Minutes</option>
+				<option value="5">5 Minutes</option>
+			</select>
+		</td>
+	</tr>
+
+      <tr id='id_AutoCallEn' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td class="td_title">Auto Call:</td>
+	    <td>&nbsp;</td>
+	  </tr>
+	  <tr id='id_AutoCall' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Called By Other Ports</td>
+	    <td>
+			<input type="checkbox" id='AutoCall' name="AutoCall" onClick="mouse_click();">
+        </td>
+	  </tr>
+	  <tr id='id_AutoCallNum' style='display:none'>
+		<td>&nbsp;</td>
+	    <td>Number Length</td>
+	    <td>
+		<script language="JavaScript" type="text/JavaScript">
+			var i;
+			document.write("<select style='width:40px' class='list' id='AutoCallNum_all' name='AutoCallNum_all' >");
+			for(i=3; i<13;i++)
+			{
+				document.write("<option id='AutoCallNum"+i+"' value='"+i+"'>"+i+"</option>");
+			}
+			document.write("</select>");
+		</script>
+        digits</td>
+	  </tr>
+	  <tr id='id_AutoCallOut' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Call Out</td>
+	    <td>
+			<input type="checkbox" id='AutoCallOut' name="AutoCallOut" onClick="mouse_click();">
+        </td>
+	  </tr>
+	  <tr id="id_NumbersFile" style="display:none">
+	    <td>&nbsp;</td>  
+        <td>Import Numbers</td>     
+        <td>
+			<input name="NumbersFile" id="NumbersFile" type="file" size="12"  onchange="readfiles();">
+		</td>
+      </tr> 
+	  <tr id='id_AutoCallOutNum' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Called Numbers:</td>
+	    <td>
+			<textarea class="text" id="AutoCallOutNum"  name="AutoCallOutNum" rows="2" cols="30"></textarea>
+		</td>
+	  </tr>
+	  <tr id='id_RetryCount' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Number of retries after call failure:</td>
+	    <td>
+			<script language="JavaScript" type="text/JavaScript">
+				document.write("<select name='RetryCount' class='alist' id='RetryCount' style='width:30%;'>");
+				for (var i=0; i < 4; i++)
+				{
+					document.write("<option value='"+i+"' id='idIndex"+i+"'>"+i+"</option>");
+				}
+				document.write("</select>");
+			</script>
+		</td>
+	  </tr>
+
+      <tr id='id_MinCallDuration' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Min Call Duration:</td>
+	    <td>
+        <input class="atext" id="MinCallDuration" name="MinCallDuration" style="width:45%;" maxlength="5" size="24" value="" >
+        seconds
+        </td>
+	  </tr> 
+      <tr id='id_MaxCallDuration' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Max Call Duration:</td>
+	    <td>
+        <input class="atext" id="MaxCallDuration" name="MaxCallDuration" style="width:45%;" maxlength="5" size="24" value="" >
+        seconds
+        </td>
+	  </tr> 
+      <tr id='id_SendSms' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td class="td_title">Auto Send SMS:</td>
+	    <td>
+        <input type="checkbox" id='SendSms' name="SendSms" onClick="mouse_click();">
+        </td>
+	  </tr>   
+      <tr id='id_RandomContent1' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-1:</td>
+	    <td>
+        <input class="atext" id="RandomContent1" name="RandomContent1" style="width:80%;" maxlength="63" size="21" onblur="if(!this.value){this.value='Sorry,I will call you later.';this.flag=undefined;}else{this.flag='true'};return true;"     onfocus="if(this.value=='Sorry,I will call you later.'&&!this.flag)this.value='';return true;" value="Sorry,I will call you later." >
+        </td>
+	  </tr>
+      <tr id='id_RandomContent2' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-2:</td>
+	    <td>
+        <input class="atext" id="RandomContent2" name="RandomContent2" style="width:80%;" maxlength="63" size="21" onblur="if(!this.value){this.value='I am busy now.';this.flag=undefined;}else{this.flag='true'};return true;"     onfocus="if(this.value=='I am busy now.'&&!this.flag)this.value='';return true;" value="I am busy now." >
+        </td>
+	  </tr>
+      <tr id='id_RandomContent3' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-3:</td>
+	    <td>
+        <input class="atext" id="RandomContent3" name="RandomContent3" style="width:80%;" maxlength="63" size="21" onblur="if(!this.value){this.value='I can not come to the phone.';this.flag=undefined;}else{this.flag='true'};return true;"     onfocus="if(this.value=='I can not come to the phone.'&&!this.flag)this.value='';return true;" value="I can not come to the phone." >
+        </td>
+	  </tr>
+      <tr id='id_RandomContent4' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-4:</td>
+	    <td>
+        <input class="atext" id="RandomContent4" name="RandomContent4" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr>
+      <tr id='id_RandomContent5' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-5:</td>
+	    <td>
+        <input class="atext" id="RandomContent5" name="RandomContent5" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr> 
+      <tr id='id_RandomContent6' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-6:</td>
+	    <td>
+        <input class="atext" id="RandomContent6" name="RandomContent6" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr>  
+      <tr id='id_RandomContent7' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-7:</td>
+	    <td>
+        <input class="atext" id="RandomContent7" name="RandomContent7" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr>  
+      <tr id='id_RandomContent8' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-8:</td>
+	    <td>
+        <input class="atext" id="RandomContent8" name="RandomContent8" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr>
+      <tr id='id_RandomContent9' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-9:</td>
+	    <td>
+        <input class="atext" id="RandomContent9" name="RandomContent9" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr>  
+      <tr id='id_RandomContent10' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>Random Content-10:</td>
+	    <td>
+        <input class="atext" id="RandomContent10" name="RandomContent10" style="width:80%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr> 
+	<tr id='id_SendGsmNet' style='display:none'>
+		<td>&nbsp;</td>
+	    <td class="td_title">Auto Internet access:</td>
+	    <td>
+        <input type="checkbox" id='SendGsmNet' name="SendGsmNet" onClick="mouse_click();">
+        </td>
+	  </tr>
+	  <tr id='id_RandomGsmHttpUrl1' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>URL-1:</td>
+	    <td>
+        <input class="atext" id="RandomGsmHttpUrl1" name="RandomGsmHttpUrl1" style="width:80%;" maxlength="128" size="21" value="" >
+        </td>
+	  </tr> 
+	  <tr id='id_RandomGsmHttpUrl2' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>URL-2:</td>
+	    <td>
+        <input class="atext" id="RandomGsmHttpUrl2" name="RandomGsmHttpUrl2" style="width:80%;" maxlength="128" size="21" value="" >
+        </td>
+	  </tr> 
+	  <tr id='id_RandomGsmHttpUrl3' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>URL-3:</td>
+	    <td>
+        <input class="atext" id="RandomGsmHttpUrl3" name="RandomGsmHttpUrl3" style="width:80%;" maxlength="128" size="21" value="" >
+        </td>
+	  </tr> 
+	  <tr id='id_RandomGsmHttpUrl4' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>URL-4:</td>
+	    <td>
+        <input class="atext" id="RandomGsmHttpUrl4" name="RandomGsmHttpUrl4" style="width:80%;" maxlength="128" size="21" value="" >
+        </td>
+	  </tr> 
+	  <tr id='id_RandomGsmHttpUrl5' style='display:none'>
+      	<td>&nbsp;</td>
+	    <td>URL-5:</td>
+	    <td>
+        <input class="atext" id="RandomGsmHttpUrl5" name="RandomGsmHttpUrl5" style="width:80%;" maxlength="128" size="21" value="" >
+        </td>
+	  </tr> 
+      <tr id='id_Conditions' style='display:none'>
+	    <td class="td_title" colspan="3">Conditions Settings</td>    
+	  </tr>  
+      <tr id='id_ByDevOnlineTime' style='display:none'>
+      	 <td>&nbsp;</td>
+         <td class="td_title">By Device Online Time: </td>
+         <td><input type="checkbox" id='ByDevOnlineTime' name="ByDevOnlineTime" onClick="mouse_click();"></td>
+      </tr>
+      <tr id='id_MinInterval' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Min Interval:</td>
+	    <td>
+        <input class="atext" id="MinInterval" name="MinInterval" style="width:45%;" maxlength="5" size="24" value="" >
+        minutes
+        </td>
+	  </tr> 
+      <tr id='id_MaxInterval' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Max Interval:</td>
+	    <td>
+        <input class="atext" id="MaxInterval" name="MaxInterval" style="width:45%;" maxlength="5" size="24" value="" >
+        minutes</td>
+	  </tr> 
+      <tr id='id_TotalCallDurations' style='display:none'>
+      	 <td>&nbsp;</td>
+         <td class="td_title">By Total Call Durations:</td>
+         <td>
+         <input type="checkbox" id='TotalCallDurations' name="TotalCallDurations" onClick="mouse_click()"> 
+         </td>
+      </tr>
+      <tr id='id_CallDurations' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Call Duration:</td>
+	    <td>
+        <input class="atext" id="CallDurations" name="CallDurations" style="width:45%;" maxlength="5" size="24" value="" >
+        minutes</td>
+	  </tr> 
+      <tr id='id_ByConsecutiveCalls' style='display:none'>
+      	 <td>&nbsp;</td>
+         <td class="td_title">By Consecutive Calls:</td>
+         <td>
+         <input type="checkbox" id='ByConsecutiveCalls' name="ByConsecutiveCalls" onClick="mouse_click()"> 
+         </td>
+      </tr>
+      <tr id='id_ConsecutiveCalls' style='display:none'>
+        <td>&nbsp;</td>
+	    <td> Consecutive Calls:</td>
+	    <td>
+        <input class="atext" id="ConsecutiveCalls" name="ConsecutiveCalls" style="width:45%;" maxlength="5" size="24" value="" ></td>
+	  </tr>
+	  <tr id='id_ByAnswerCalls' style='display:none'>
+			<td>&nbsp;</td>
+			  <td class="td_title">By Answer Calls:</td>
+			  <td>
+				  <input type="checkbox" id='ByAnswerCalls' name="ByAnswerCalls" onClick="mouse_click()"> 
+			  </td>
+		</tr>
+		<tr id='id_AnswerCalls' style='display:none'>
+			<td>&nbsp;</td>
+			<td> Answer Calls:</td>
+			<td>
+			<input class="atext" id="AnswerCalls" name="AnswerCalls" style="width:45%;" maxlength="5" size="24" value="" ></td>
+		</tr>
+      <tr>
+		 <td>&nbsp;</td>
+		 <td>&nbsp;</td>
+         <td>&nbsp;</td>
+	  </tr> 
+	</table>
+  </td>
+  <td class="swidth">&nbsp;</td>
+ </tr>
+ </table>
+<p align="center">
+<input name="Ok"  class="button" type="submit" id="Ok" value="Save" onClick="return form_check();">
+</p>
+<p>
+	<table width="600px" align="center" cellpadding="0" cellspacing="0">
+		<tr>
+			<td width="15%"> </td>
+			<td>&nbsp;</td>
+		</tr>
+		<tr>
+			<td align="right" class="notes">Notes:&nbsp;</td>
+			<td class="notes">1.When the selected condition is met, call will be made or SMS will be sent automatically.</td>
+		</tr> 
+		<tr>
+			<td>&nbsp;</td>
+			<td class="notes">2.The maximum length of called number cannot be greater than 600 bytes, and called numbers should be separated by ",".</td>
+		</tr> 		
+	</table>
+</p>
+</form>
+</body>
+</html>

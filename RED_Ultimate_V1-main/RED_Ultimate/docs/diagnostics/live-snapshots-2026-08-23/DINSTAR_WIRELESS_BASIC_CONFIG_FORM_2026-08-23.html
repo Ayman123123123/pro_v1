@@ -1,0 +1,832 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>Basic Configuration</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var SmppPsw = 'd41d8cd98f00b204e9800998ecf8427e';
+var IsBusiness = 'yes';
+function MM_callJS(ATAPIEnable)
+{	
+	if(ATAPIEnable)
+	{
+		document.getElementById("idATAPI").style.display = "inline";
+	}
+	else
+	{
+		document.getElementById("idATAPI").style.display = "none";
+	}
+	mouse_click();
+
+}
+
+function mouse_click()
+{		
+	if (document.forms[0].RemoteCall[0].checked
+        || document.forms[0].RemoteCall[2].checked)
+	{
+		document.getElementById("idCallerAddr").style.display = "none";
+		document.getElementById("idCallerPort").style.display = "none";
+		document.getElementById("idCallerID").style.display = "none";
+		document.getElementById("idCallerPsw").style.display = "none";
+		document.getElementById("idSmsReportMode").style.display = "none";
+
+        document.getElementById("SMPPMessageIdMode").style.display = "none";
+        document.getElementById("SMPPDestAddrMode").style.display = "none";        
+		document.getElementById("SMPPCacheTheRequest").style.display = "none";
+        document.getElementById("SMPPsendState").style.display = "none";
+        document.getElementById("SMPPdelivered").style.display = "none";
+        document.getElementById("SMPPdelivered2Dest").style.display = "none";
+        document.getElementById("SMPPdeleted").style.display = "none";
+        document.getElementById("SMPPrejected").style.display = "none";
+        document.getElementById("SMPPotherOBJ").style.display = "none";
+        document.getElementById("noline").style.display = "none";
+	}
+    
+    if (document.forms[0].RemoteCall[2].checked)
+    {
+	    document.getElementById("idCallbackBlock").style.display = "";
+        if(document.getElementById("Callback").checked == false)
+        {
+            document.getElementById("idPushMethodBlock").style.display = "none";
+            document.getElementById("idAdvancedBlock").style.display = "none";
+            document.getElementById("idCallbackUrlBlock").style.display = "none";
+            document.getElementById("idCallbackEmailBlock").style.display = "none";
+            document.getElementById("idCallbackEmailTitleBlock").style.display = "none";
+            document.getElementById("idCallbackUsernameBlock").style.display = "none";
+            document.getElementById("idCallbackPasswordBlock").style.display = "none";
+            document.getElementById("idCallbackCountBlock").style.display = "none";
+            document.getElementById("idCallbackIntervalBlock").style.display = "none";
+            document.getElementById("idCallbackSmsPathBlock").style.display = "none";
+            document.getElementById("idCallbackUssdPathBlock").style.display = "none";
+            document.getElementById("idCallbackSmsResultBlock").style.display = "none";
+            document.getElementById("idCallbackDeliverStatusBlock").style.display = "none";
+            document.getElementById("idCallbackMissedCallBlock").style.display = "none";
+			document.getElementById("idCallbackregisterstatusBlock").style.display = "none";
+			document.getElementById("idCallCdr").style.display = "none";
+			document.getElementById("idCallDevice").style.display = "none";
+            document.getElementById("idAbnromal").style.display = "none";
+        }
+        else
+        {
+            document.getElementById("idAdvancedBlock").style.display = "";
+            document.getElementById("idPushMethodBlock").style.display = "";
+            if(document.getElementById("method").value == "0")
+            {
+                document.getElementById("idCallbackUrlBlock").style.display = "";
+                document.getElementById("idCallbackEmailBlock").style.display = "none";
+                document.getElementById("idCallbackEmailTitleBlock").style.display = "none";
+            }
+            else
+            {
+                document.getElementById("idCallbackUrlBlock").style.display = "none";
+                document.getElementById("idCallbackEmailBlock").style.display = "";
+                document.getElementById("idCallbackEmailTitleBlock").style.display = "";
+            }
+            document.getElementById("idCallbackSmsPathBlock").style.display = "";
+            document.getElementById("idCallbackUssdPathBlock").style.display = "";
+            document.getElementById("idCallbackSmsResultBlock").style.display = "";
+            document.getElementById("idCallbackDeliverStatusBlock").style.display = "";
+            document.getElementById("idCallbackMissedCallBlock").style.display = "";
+			document.getElementById("idCallbackregisterstatusBlock").style.display = "";
+			document.getElementById("idCallCdr").style.display = "";
+			document.getElementById("idCallDevice").style.display = "";
+            document.getElementById("idAbnromal").style.display = "";
+            if(document.getElementById("advanced").checked)
+            {            
+                document.getElementById("idCallbackUsernameBlock").style.display = "";
+                document.getElementById("idCallbackPasswordBlock").style.display = "";
+                document.getElementById("idCallbackCountBlock").style.display = "";
+                document.getElementById("idCallbackIntervalBlock").style.display = "";
+            }
+            else
+            {
+                document.getElementById("idCallbackUsernameBlock").style.display = "none";
+                document.getElementById("idCallbackPasswordBlock").style.display = "none";
+                document.getElementById("idCallbackCountBlock").style.display = "none";
+                document.getElementById("idCallbackIntervalBlock").style.display = "none";
+            }
+        }
+    }
+    else
+    {
+		document.getElementById("idCallbackBlock").style.display = "none";
+        document.getElementById("idAdvancedBlock").style.display = "none";
+        document.getElementById("idPushMethodBlock").style.display = "none";
+        document.getElementById("idCallbackUrlBlock").style.display = "none";
+        document.getElementById("idCallbackEmailBlock").style.display = "none";
+        document.getElementById("idCallbackEmailTitleBlock").style.display = "none";
+        document.getElementById("idCallbackUsernameBlock").style.display = "none";
+        document.getElementById("idCallbackPasswordBlock").style.display = "none";
+        document.getElementById("idCallbackCountBlock").style.display = "none";
+        document.getElementById("idCallbackIntervalBlock").style.display = "none";
+        document.getElementById("idCallbackSmsPathBlock").style.display = "none";
+        document.getElementById("idCallbackUssdPathBlock").style.display = "none";
+        document.getElementById("idCallbackSmsResultBlock").style.display = "none";
+        document.getElementById("idCallbackDeliverStatusBlock").style.display = "none";
+        document.getElementById("idCallbackMissedCallBlock").style.display = "none";
+		document.getElementById("idCallbackregisterstatusBlock").style.display = "none";
+		document.getElementById("idCallCdr").style.display = "none";
+		document.getElementById("idCallDevice").style.display = "none";
+        document.getElementById("idAbnromal").style.display = "none";
+    }
+	
+	if (document.forms[0].RemoteCall[1].checked)
+	{
+		document.getElementById("idCallerAddr").style.display = "";
+		document.getElementById("idCallerPort").style.display = "";
+		document.getElementById("idCallerID").style.display = "";
+		document.getElementById("idCallerPsw").style.display = "";
+		document.getElementById("idSmsReportMode").style.display = "";
+		document.getElementById("tdListenPort").innerHTML = "API Server Port";
+		document.getElementById("tdUserPsw").innerHTML = "API User Password";
+
+        document.getElementById("SMPPMessageIdMode").style.display = "none";
+        document.getElementById("SMPPDestAddrMode").style.display = "none";  
+		document.getElementById("SMPPCacheTheRequest").style.display = "none";
+        document.getElementById("SMPPsendState").style.display = "none";
+        document.getElementById("SMPPdelivered").style.display = "none";
+        document.getElementById("SMPPdelivered2Dest").style.display = "none";
+        document.getElementById("SMPPdeleted").style.display = "none";
+        document.getElementById("SMPPrejected").style.display = "none";
+        document.getElementById("SMPPotherOBJ").style.display = "none";
+        document.getElementById("noline").style.display = "none";
+	}
+	
+	if(document.forms[0].RemoteCall[3].checked)
+	{
+	    document.getElementById("idCallerAddr").style.display = "none";
+		document.getElementById("idCallerPort").style.display = "";
+		document.getElementById("idCallerID").style.display = "none";
+		document.getElementById("idCallerPsw").style.display = "";
+		document.getElementById("idSmsReportMode").style.display = "none";
+		document.getElementById("tdListenPort").innerHTML = "API Listen Port";
+		document.getElementById("tdUserPsw").innerHTML = "API User Password";
+
+        document.getElementById("SMPPMessageIdMode").style.display = "none";
+        document.getElementById("SMPPDestAddrMode").style.display = "none";  
+		document.getElementById("SMPPCacheTheRequest").style.display = "none";
+        document.getElementById("SMPPsendState").style.display = "none";
+        document.getElementById("SMPPdelivered").style.display = "none";
+        document.getElementById("SMPPdelivered2Dest").style.display = "none";
+        document.getElementById("SMPPdeleted").style.display = "none";
+        document.getElementById("SMPPrejected").style.display = "none";
+        document.getElementById("SMPPotherOBJ").style.display = "none";
+        document.getElementById("noline").style.display = "none";
+	}
+	
+	if(document.forms[0].RemoteCall[4].checked)
+	{
+		document.getElementById("idCallerAddr").style.display = "none";
+		document.getElementById("idCallerPort").style.display = "";
+		document.getElementById("idCallerID").style.display = "none";
+		document.getElementById("idCallerPsw").style.display = "";
+		document.getElementById("idSmsReportMode").style.display = "none";
+		document.getElementById("idSmppTmr").style.display = "";
+		document.getElementById("tdListenPort").innerHTML = "SMPP Listen Port";
+		document.getElementById("tdUserPsw").innerHTML = "SMPP User Password";
+
+        document.getElementById("SMPPMessageIdMode").style.display = "";
+        document.getElementById("SMPPDestAddrMode").style.display = "";
+		document.getElementById("SMPPCacheTheRequest").style.display = "";
+        document.getElementById("SMPPsendState").style.display = "";
+        document.getElementById("SMPPdelivered").style.display = "";
+        document.getElementById("SMPPdelivered2Dest").style.display = "";
+        document.getElementById("SMPPdeleted").style.display = "";
+        document.getElementById("SMPPrejected").style.display = "";
+        document.getElementById("SMPPotherOBJ").style.display = "";
+        document.getElementById("noline").style.display = "";
+	}
+	else
+	{
+		document.getElementById("idSmppTmr").style.display = "none";
+	}
+	
+	var SimMode = document.getElementById("SimMode");
+	
+	if(SimMode.options[0].selected == true)
+	{
+	    document.getElementById("trWorkMode").style.display = "none";
+	}
+	else
+	{
+	    document.getElementById("trWorkMode").style.display = "";
+	}
+	
+	if(IsBusiness == "yes" && "no" != "yes")
+	{
+		document.getElementById("id_SimMode").style.display = "none";
+		document.getElementById("trWorkMode").style.display = "none";
+	}
+}
+
+function form_check()
+{
+	var re =/^\d{1,4}$/;
+	var re1 = /^\d+$/;
+	if (document.forms[0].RemoteCall[1].checked)
+	{
+		if(!is_ipaddr(document.forms[0].CallerAddr.value))
+		{
+			alert("'Caller IP Address' is incorrect, please enter another one(e.g. 192.168.0.1)!");
+			document.forms[0].CallerAddr.select();
+			return false;
+		}
+		
+		if(!is_number(document.forms[0].CallerPort.value,0,65535))
+		{
+			alert("'Caller Port' is incorrect, please enter a number between 0 and 65535!");
+			document.forms[0].CallerPort.select();
+			return false;
+		}
+		
+		if(document.forms[0].CallerID.value.length>15
+		   || document.forms[0].CallerID.value.length==0)
+		{
+		    alert("API user ID is incorrect, and input length must be less than 16 and more than 0!");
+		    document.forms[0].CallerPort.select();
+		    return false;
+	    }
+
+		if (document.forms[0].CallerPsw.value.length != 32)
+		{
+			if(document.forms[0].CallerPsw.value.length>15
+			   || document.forms[0].CallerPsw.value.length==0)
+			{
+				alert("API Password is incorrect, and input length must less be than 16 and more than 0!");
+				document.forms[0].CallerPsw.select();
+				return false;
+			}
+		}
+	}
+	var SimMode = document.getElementById("SimMode");
+	if(SimMode.options[2].selected == true)//simbank mode
+    {
+		parent.menuFrame.document.getElementById("idWIASimCfg").style.display = "none";
+		parent.menuFrame.document.getElementById("id_Simbox").style.display = "none";
+		parent.menuFrame.document.getElementById("id_simbox_stat").style.display = "none";
+	}
+	else if(SimMode.options[1].selected == true)//simbox mode
+    {
+		parent.menuFrame.document.getElementById("id_Simbox").style.display = "";
+		parent.menuFrame.document.getElementById("idWIASimCfg").style.display = "none";
+		parent.menuFrame.document.getElementById("id_simbox_stat").style.display = "";
+	}
+	else // local
+	{
+		parent.menuFrame.document.getElementById("id_Simbox").style.display = "none";
+		parent.menuFrame.document.getElementById("idWIASimCfg").style.display = "";
+		parent.menuFrame.document.getElementById("id_simbox_stat").style.display = "none";
+	}
+    
+	if (document.forms[0].RemoteCall[2].checked && document.getElementById("Callback").checked)
+    {
+        // check url
+        if(document.getElementById("method").value == "0")
+        {
+            url = document.getElementById("url").value;
+            if(url.length == 0 || url.length > 127 || !IsValidHttpUrl(url, 1))
+            {
+                alert("please input a valid url!");
+                document.getElementById("url").select();
+                return false;
+            }
+        }
+        else
+        {
+            email = document.getElementById("email").value;
+            if(url.length == 0 || url.length > 127)
+            {
+                alert("please input a valid email!");
+                document.getElementById("email").select();
+                return false;
+            }
+            title = document.getElementById("title").value;
+            if(url.length == 0 || url.length > 127)
+            {
+                alert("please input a valid title!");
+                document.getElementById("title").select();
+                return false;
+            }
+        }
+        
+        username = document.getElementById("Username").value;
+        password = document.getElementById("Password").value;
+        
+        if((username.length == 0 && password.length != 0))
+        {
+            alert("please input the username!");
+            document.getElementById("Username").select();
+            return false;
+        }        
+        else if(username.length != 0 && password.length == 0)
+        {
+            alert("please input the password!");
+            document.getElementById("Password").select();
+            return false;
+        }
+        
+        // check username
+        if(username.length != 0 && !IsValidSimpleDescription(username))
+        {
+            alert("Usernames can only contain letters, digits and common symbol!");
+            document.getElementById("Username").select();
+            return false;
+        }
+        
+        // check password
+        if(password.length != 0 && !IsValidSimpleDescription(password))
+        {
+            alert("Password can only contain letters, digits and common symbol!");
+            document.getElementById("Password").select();
+            return false;
+        }        
+        
+        // check interval
+        interval = document.getElementById("interval").value;
+        if(!is_number(interval, 0, 60))
+        {
+            alert("please input a number between 0 and 60!");
+            document.getElementById("interval").select();
+            return false;
+        }
+    }
+	
+	if(document.forms[0].RemoteCall[4].checked)
+	{
+		if(re1.test(document.forms[0].CallerPort.value) == false
+		 || !is_number(document.forms[0].CallerPort.value,1024,65535))
+		{
+			alert("'Caller Port' is incorrect, please enter a number between 1024 and 65535!");
+			document.forms[0].CallerPort.select();
+			return false;
+		}
+		
+		if (document.forms[0].CallerPsw.value.length != 32)
+		{
+			if((document.forms[0].CallerPsw.value.length>8
+			   || document.forms[0].CallerPsw.value.length==0)
+			   && document.forms[0].CallerPsw.value != SmppPsw)
+			{
+				alert("SMPP Password is incorrect, and input length must be less than 9 and more than 0!");
+				document.forms[0].CallerPsw.select();
+				return false;
+			}
+		}
+		
+		if(re.test(document.forms[0].SmppTmr.value) == false)
+		{
+			alert("'SMPP Inactivity Timer' is incorrect, please enter a number between 0 and 9999!");
+			document.forms[0].SmppTmr.select();
+			return false;
+		}
+	}
+    if(document.forms[0].RemoteCall[4].checked)
+    {
+        if(document.getElementById("SMPPdeliveredTxt").value.length <= 0)
+        {
+            alert("The err code length of Message is received by peer can't less than 0!");
+            return false;
+        }
+        if(document.getElementById("SMPPdelivered2DestTxt").value.length <= 0)
+        {
+            alert("The err code length of Message is sent can't less than 0!");
+
+            return false;
+        }
+        if(document.getElementById("SMPPdeletedTxt").value.length <= 0)
+        {
+            alert("The err code length of Message be deleted can't less than 0!");
+            return false;
+        }
+        if(document.getElementById("SMPPrejectedTxt").value.length <= 0)
+        {
+            alert("The err code length of Message in a rejected state can't less than 0!");
+            return false;
+        }
+        if(document.getElementById("SMPPotherOBJTxt").value.length <= 0)
+        {
+            alert("The err code length of Message undeliverable can't less than 0!");
+            return false;
+        }
+    }
+	return true;
+}
+
+function onChangeType()
+{
+	value = document.getElementById("CallerPsw").value;
+	if (document.getElementById("CallerPsw").type == "password")
+	{
+		document.getElementById("PasswordSpace").innerHTML = "<input class='text' id='CallerPsw' type='text' maxlength='15' name='CallerPsw' size='18' />";
+		document.getElementById("showpassword").value = "Hide Password";
+	}
+	else
+	{
+		document.getElementById("PasswordSpace").innerHTML = "<input class='text' id='CallerPsw' type='password' maxlength='15' name='CallerPsw' size='18' />";
+		document.getElementById("showpassword").value = "Show Password";
+	}
+	document.getElementById("CallerPsw").value = value;
+}
+
+</script>
+</head>
+<body onLoad="MM_callJS(1)">
+<form action="/goform/WIABasicCfg" method="post" name="WIABasicCfg" id="WIABasicCfg">
+ <table width="70%" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Basic Configuration</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="70%" align="center" class="TB">
+  <tr>
+   <td width="5%">&nbsp;</td>
+   <td>
+    <table id="idWIATbl0" width="100%" cellpadding="0"  cellspacing="0">
+     <tr>
+      <td width="35%">&nbsp;</td>
+      <td width="65%">&nbsp;</td>      
+     </tr>	 	
+
+	 
+<tr id="id_SimMode">
+		<td>SIM Mode</td>
+		<td>
+		  <table cellpadding=0 cellspacing=0 width="100%">
+			<tr>
+			<td>
+			<select name="SimMode" class="list" id="SimMode" onChange="mouse_click();">
+				<option value="0" selected>Local</option>
+				<option value="2" >SIM Bank&nbsp;</option>
+			</select>
+			</td>
+			
+			</tr>
+		  </table>
+		</td>
+	  </tr>             
+	  <tr id="trWorkMode" style="display:none">
+		<td>
+		Debug Mode
+		</td>
+		<td>
+		  <table cellpadding=0 cellspacing=0 width="100%">
+			<tr>
+			<td>
+			<select name="WorkMode" class="list" id="WorkMode" onChange="mouse_click();">
+				<option value="3" >Off&nbsp;</option>
+				<option value="0" >Mode1&nbsp;</option>
+				<option value="1" >Mode2&nbsp;</option>
+				<option value="2" >Mode3&nbsp;</option>
+			</select>
+			</td>
+			</tr>
+		  </table>
+		</td>
+	  </tr>
+  
+	<tr>
+	<td colspan="2">
+	&nbsp;
+	</td>
+	</tr>
+	 
+     <tr>
+      <td >API</td>
+      <td>
+       <input id="RemoteCall" name="RemoteCall" type="radio" value="0" onClick="mouse_click();" >
+       Disable
+       <input id="RemoteCall" name="RemoteCall" type="radio" value="1" onClick="mouse_click();" >
+       Old Version
+       <input id="RemoteCall" name="RemoteCall" type="radio" value="2" onClick="mouse_click();" checked>
+       New Version
+	   <div id="idATAPI" style="display:inline;">
+       <input id="RemoteCall" name="RemoteCall" type="radio" value="3" onClick="mouse_click();" >
+       AT
+	   </div>
+	   <input id="RemoteCall" name="RemoteCall" type="radio" value="4" onclick="mouse_click();" >
+	   SMPP
+	  </td>
+     </tr>
+     <tr id="idCallerAddr" style="display:none">
+       <td >API Server Address</td>
+       <td>
+        <input class="text" id="CallerAddr" maxlength="15" name="CallerAddr" size="18" value="0.0.0.0">
+       </td>       
+     </tr>
+     <tr id="idCallerPort" style="display:none">
+       <td  id="tdListenPort">API Server Port</td>
+	   <td>
+       <input class="text" id="CallerPort" maxlength="5" name="CallerPort" size="18" value="0">
+      </td>
+     </tr>
+     <tr id="idCallerID" style="display:none">
+       <td >API User ID</td>
+       <td>
+         <input class="text" id="CallerID" maxlength="15" name="CallerID" size="18" value="" >
+	   </td>
+     </tr> 
+     <tr id="idCallerPsw" style="display:none">
+       <td id="tdUserPsw">API User Password</td>
+       <td>
+		 <span id="PasswordSpace">
+           <input class="text" id="CallerPsw" type="password" maxlength="15" name="CallerPsw" size="18" value="d41d8cd98f00b204e9800998ecf8427e">
+		 </span>
+		 <input type="button" class="button" id="showpassword" value="Show Password" onClick="onChangeType()" />
+	   </td>
+     </tr> 
+	 <tr id="idSmppTmr" style="display:none">
+		<td id="tdSmppTmr">SMPP Inactivity Timer</td>
+		<td>
+			<input class="text" id="SmppTmr" maxlength="15" name="SmppTmr" size="18" value="10" > min(s)
+			Note: "0" means disable.
+		</td>
+	 </tr>
+     <tr id="idSmsReportMode" style="display:none">
+	 <td >Sms Report Filter</td>
+      <td>
+       <input id="SmsReport" name="SmsReport" type="radio" value="0" onClick="mouse_click();" checked>
+       No
+       <input id="SmsReport" name="SmsReport" type="radio" value="1" onClick="mouse_click();" >
+       Yes
+	  </td>
+	  </tr>
+     <tr id="idCallbackBlock"  style="display:none">
+       <td >Push Event</td>
+       <td><input id="Callback" name="Callback" type="checkbox"   onClick="mouse_click();" />
+       </td>
+     </tr>
+     <tr id="idPushMethodBlock"  style="display:none">
+       <td >Push Method</td>
+       <td><select name="method" class="list" id="method" onChange="mouse_click();">
+           <option value="0" selected>http</option>
+           <option value="1" >email</option>
+       </td>
+     </tr>  
+     <tr id="idCallbackUrlBlock"  style="display:none">
+       <td >URL</td>
+       <td><input id="url" name="url" type="text" maxlength="127" size="54" class="text" value="" />
+       </td>
+     </tr>
+     <tr id="idCallbackEmailBlock"  style="display:none">
+       <td >Email</td>
+       <td><input id="email" name="email" type="text" maxlength="127" size="54" class="text" value="" />
+       </td>
+     </tr>
+     <tr id="idCallbackEmailTitleBlock"  style="display:none">
+       <td >Email Title</td>
+       <td><input id="title" name="title" type="text" maxlength="127" size="54" class="text" value="Event report" />
+       </td>
+     </tr>
+     <tr id="idCallbackSmsPathBlock"  style="display:none">
+       <td >Push SMS</td>
+       <td><input id="sms" name="sms" type="checkbox"  />
+       </td>
+     </tr>
+     <tr id="idCallbackUssdPathBlock"  style="display:none">
+       <td >Push USSD</td>
+       <td><input id="ussd" name="ussd" type="checkbox"  />
+       </td>
+     </tr>
+     <tr id="idCallbackSmsResultBlock"  style="display:none">
+       <td >Push SMS Result</td>
+       <td><input id="sms_result" name="sms_result" type="checkbox"  />
+       </td>
+     </tr>
+     <tr id="idCallbackDeliverStatusBlock"  style="display:none">
+       <td >Push SMS Deliever Status</td>
+       <td><input id="sms_deliver_status" name="sms_deliver_status" type="checkbox"  />
+       </td>
+     </tr>
+     <tr id="idCallbackMissedCallBlock"  style="display:none">
+       <td >Push Missed Call</td>
+       <td><input id="missed_call" name="missed_call" type="checkbox"  />
+       </td>
+     </tr>
+	 <tr id="idCallbackregisterstatusBlock"  style="display:none">
+       <td >Push Register Status</td>
+       <td><input id="sim_register_status" name="sim_register_status" type="checkbox"  />
+       </td>
+     </tr>
+	 <tr id="idCallCdr"  style="display:none">
+       <td >Push CDR</td>
+       <td><input id="CallCdr" name="CallCdr" type="checkbox"  />
+       </td>
+     </tr>
+	 <tr id="idCallDevice"  style="display:none">
+       <td >Push Device</td>
+       <td><input id="CallDevice" name="CallDevice" type="checkbox"  />
+       </td>
+     </tr>
+     <tr id="idAbnromal" style="display:none">
+        <td>Push Abnormal</td>
+        <td>
+            <input id="Abnormal" name="Abnormal" type="checkbox"  />
+        </td>
+     </tr>
+     <tr id="idAdvancedBlock"  style="display:none">
+       <td >Advanced Setting</td>
+       <td><input id="advanced" name="advanced" type="checkbox"  onClick="mouse_click();" />
+       </td>
+     </tr>
+     <tr id="idCallbackUsernameBlock"  style="display:none">
+       <td >Username</td>
+       <td><input id="Username" name="Username" type="text" maxlength="31" size="54" value="" class="text" />
+       </td>
+     </tr>
+     <tr id="idCallbackPasswordBlock"  style="display:none">
+       <td >Password</td>
+       <td><input id="Password" name="Password" type="password" maxlength="31" size="54" value="" class="text" />
+       </td>
+     </tr>
+     <tr id="idCallbackCountBlock"  style="display:none">
+       <td >Retry Count</td>
+       <td><select name="retry" class="list" id="Callback" onChange="mouse_click();">
+           <option value="0" >0</option>
+           <option value="1" >1</option>
+           <option value="2" selected>2</option>
+           <option value="3" >3</option>
+           <option value="4" >4</option>
+           <option value="5" >5</option>
+       </td>
+     </tr>  
+     <tr id="idCallbackIntervalBlock"  style="display:none">
+       <td >Retry Interval(0~60 seconds)</td>
+       <td><input id="interval" name="interval" type="text" maxlength="2" size="54" class="text" value="30" />second(s)
+       </td>
+     </tr>
+        <tr id="SMPPMessageIdMode">
+            <td >Message ID mode</td>
+            <td>
+                <select name="message_id_mode" class="list" id="message_id_mode">
+                    <option value="0" >Decimal</option>
+                    <option value="1" selected>UUID</option>
+                </select>
+            </td>
+        </tr>
+        <tr id="SMPPDestAddrMode">
+            <td >Destination Address in Deliver_sm</td>
+            <td>
+                <select name="dest_addr_mode" class="list" id="dest_addr_mode">
+                    <option value="0" selected>Address of SME</option>
+                    <option value="1" >Port</option>
+                    <option value="2" >IMSI</option>
+                </select>
+            </td>
+        </tr>
+		<tr id="SMPPCacheTheRequest">
+			<td >Cache the SMPP Requests</td>
+            <td>
+				<select name="SmppCache" class="list" id="SmppCache" onChange="mouse_click();">
+					<option value="0" >Disable</option>
+					<option value="1" selected>Enable</option>
+				</select>
+            </td>
+		</tr>
+     <tr >
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>
+
+        <tr id="SMPPsendState"><td>SMPP States Config</td></tr>
+        <tr id="SMPPdelivered">
+            <td>Message is received by peer</td>
+            <td>
+                <select name="SMPPdeliveredSel" class="list" id="SMPPdeliveredSel">
+                    <option value="ACCEPTD" selected>ACCEPTD</option>
+                    <option value="DELIVRD" >DELIVRD</option>
+                    <option value="DELETED" >DELETED</option>
+                    <option value="REJECTD" >REJECTD</option>
+                    <option value="UNDELIV" >UNDELIV</option>
+                </select>
+                <input id="SMPPdeliveredTxt" name="SMPPdeliveredTxt" class="text" style="width: 50px" maxlength="3" value="006" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr id="SMPPdelivered2Dest">
+            <td >Message is sent</td>
+            <td>
+                <select name="SMPPdelivered2DestSel" class="list" id="SMPPdelivered2DestSel">
+                    <option value="ACCEPTD" >ACCEPTD</option>
+                    <option value="DELIVRD" selected>DELIVRD</option>
+                    <option value="DELETED" >DELETED</option>
+                    <option value="REJECTD" >REJECTD</option>
+                    <option value="UNDELIV" >UNDELIV</option>
+                </select>
+                <input id="SMPPdelivered2DestTxt" name="SMPPdelivered2DestTxt" class="text"  style="width: 50px" maxlength="3" value="002" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr id="SMPPdeleted">
+            <td >Message be deleted</td>
+            <td>
+                <select name="SMPPdeletedSel" class="list" id="SMPPdeletedSel">
+                    <option value="ACCEPTD" >ACCEPTD</option>
+                    <option value="DELIVRD" >DELIVRD</option>
+                    <option value="DELETED" selected>DELETED</option>
+                    <option value="REJECTD" >REJECTD</option>
+                    <option value="UNDELIV" >UNDELIV</option>
+                </select>
+                <input id="SMPPdeletedTxt" name="SMPPdeletedTxt" class="text" style="width: 50px" maxlength="3" value="004" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr id="SMPPrejected">
+            <td >Message in a rejected state</td>
+            <td>
+                <select name="SMPPrejectedSel" class="list" id="SMPPrejectedSel">
+                    <option value="ACCEPTD" >ACCEPTD</option>
+                    <option value="DELIVRD" >DELIVRD</option>
+                    <option value="DELETED" >DELETED</option>
+                    <option value="REJECTD" selected>REJECTD</option>
+                    <option value="UNDELIV" >UNDELIV</option>
+                </select>
+                <input id="SMPPrejectedTxt" name="SMPPrejectedTxt" class="text" style="width: 50px" maxlength="3" value="008" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr id="SMPPotherOBJ">
+            <td >Message undeliverable</td>
+            <td>
+                <select name="SMPPotherOBJSel" class="list" id="SMPPotherOBJSel">
+                    <option value="ACCEPTD" >ACCEPTD</option>
+                    <option value="DELIVRD" >DELIVRD</option>
+                    <option value="DELETED" >DELETED</option>
+                    <option value="REJECTD" >REJECTD</option>
+                    <option value="UNDELIV" selected>UNDELIV</option>
+                </select>
+                <input id="SMPPotherOBJTxt" name="SMPPotherOBJTxt" class="text" style="width: 50px" maxlength="3" value="005" oninput="value=value.replace(/[^0-9]/g,'')">
+            </td>
+        </tr>
+        <tr id="noline">
+            <td>&nbsp;</td>
+            <td>&nbsp; </td>
+        </tr>
+
+       <tr>
+       <td >USSD Default Encoding </td>
+       <td>
+	     <select name="USSDEncoding" class="list" id="USSDEncoding">
+          <option id="USSDEncoding1" value="0" selected>UCS2</option>
+          <option id="USSDEncoding2" value="1" >ASCII</option>		
+         </select>		   
+	   </td>
+       </tr>
+       
+       <tr >
+      <td >GSM Audio Coding</td>
+       <td>
+	     <select name="VoiceQuality" class="list" id="VoiceQuality" onChange="mouse_click();">
+		  <option value="0" selected>AUTO</option>
+		  <option value="1" >FR</option>
+		  <option value="2" >HR</option>
+		  <option value="3" >EFR</option>
+		  <option value="4" >AMR_FR</option>
+		  <option value="5" >AMR_HR</option>
+		  <option value="6" >FR and EFR</option>
+		  <option value="7" >EFR and FR</option>
+         </select></td>	
+         </tr>
+	<tr>
+		<td>VoLTE</td>
+		<td>
+			<select name="VOLTEswitch" class="list" id="VOLTEswitch" onChange="mouse_click();">
+			  <option value="0" >DISABLE</option>
+			  <option value="1" selected>AUTO</option>
+              <option value="2" >ENABLE</option>
+			</select>
+		</td>	
+    </tr> 
+     <tr>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+     </tr>	 	 	 
+	</table>
+   </td>
+   <td width="5%">&nbsp;</td>
+  </tr>
+ </table>
+
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();">
+ </p>
+ <p>&nbsp;</p>
+<p>
+<table width="600px" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="15%"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">Notes:&nbsp;</td>
+   <td class="notes">1. After enabling/disabling the VoLTE, you need to restart the module to take effect.</td>
+  </tr>  
+</table>
+</p>
+</form>
+</body>
+</html>
+

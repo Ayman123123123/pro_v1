@@ -1,0 +1,324 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>SysInfo</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<style>
+	.tdcss5{text-decoration:underline;cursor:pointer;} 
+</style>
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+
+var viewMode = 1;
+var oldViewMode = 0;
+function doRefresh()
+{
+	AutoRefreshMobileInfo();
+}
+
+function MM_callJS() 
+{		
+	AutoRefreshMobileInfo();
+	window.setInterval("AutoRefreshMobileInfo()", 5000);
+}
+
+function handleStateChange()
+{
+	if(xmlHttp.readyState==4 && xmlHttp.status == 200)
+	{
+        obj      = eval(xmlHttp.responseText);
+        if(oldViewMode != viewMode || document.getElementById("idMobileTable").rows.length != obj.length)
+        {
+            draw_table_header();
+            draw_table_body(obj);
+            oldViewMode = viewMode;
+        }
+        fill_table(obj);
+        
+	}
+	else if (xmlHttp.status == 302)
+    {
+        parent.location = "enLogin.htm";
+    }
+}
+
+function AutoRefreshMobileInfo()
+{
+	para = "";
+	url = "/WebGetPortInfoAll";
+	doRequestUsingGet(url,para,handleStateChange);
+}
+
+function Sim_Restart(PortID)
+{
+	var Port;
+	Port = parseInt(PortID);
+	document.getElementById("PortNo").value = Port;
+	document.forms[0].action="/goform/SimGotoRestart";
+	document.forms[0].submit();
+	return true;
+}
+
+function draw_table_header()
+{
+    if(viewMode == 0)
+    {    
+        document.getElementById("idWIATbl2").style.width = '1160px';
+        document.getElementById("idWIATbl3").style.width = '1160px';
+        document.getElementById("MobileInfo").removeChild(document.getElementById("idMobileTable"));
+        
+        var table=document.createElement("table");
+        table.width = "100%";
+        table.id = "idMobileTable";
+        table.className = "content";
+        table.cellPadding = "0";
+        table.cellSpacing = "0";
+        
+        var header = table.insertRow(0);  
+        header.innerHTML =  "<td width='3%' align='center' class='thead'>Port</td>"
+                           + "<td width='7%'>Type</td>"
+                           + "<td width='7%'>Network</td>"
+                           + "<td width='11%'>IMEI</td>"
+                           + "<td width='10%'>Status</td>"
+                           + "<td width='4%'>Signal</td>"
+                           + "<td width='10%'>Call Status</td>"  
+                           + "<td width='14%'>ICCID</td>"
+                           + "<td width='11%'>IMSI</td>"
+                           + "<td width='5%'>Operator</td>"
+                           + "<td width='6%'>Call Limit</td>"
+                           + "<td width='4%'>ASR</td>"
+                           + "<td width='4%'>ACD</td>"
+                           + "<td width='4%'>PDD</td>";
+        
+        document.getElementById("MobileInfo").append(table);
+    }
+    else
+    {
+        document.getElementById("idWIATbl2").style.width = '750px';
+        document.getElementById("idWIATbl3").style.width = '750px';
+        document.getElementById("MobileInfo").removeChild(document.getElementById("idMobileTable"));
+        
+        var table=document.createElement("table");
+        table.width = "100%";
+        table.className = "content";
+        table.id = "idMobileTable";
+        table.cellPadding = "0";
+        table.cellSpacing = "0";
+        
+        var header = table.insertRow(0);
+        header.innerHTML =  "<td width='8%' align='center'>Port</td>"
+                           + "<td width='10%'>Type</td>"
+                           + "<td width='18%'>IMEI</td>"
+                           + "<td width='18%'>IMSI</td>"
+                           + "<td width='16%'>Status</td>"
+                           + "<td width='6%'>Signal</td>"
+                           + "<td width='14%'>Call Status</td>"
+                           + "<td width='10%'>Call Limit</td>";
+        
+        document.getElementById("MobileInfo").append(table);
+    }
+}
+
+function is_multi_sim(port)
+{
+    var re = /^\d.*[A-D]$/;
+    
+    if(re.test(port) == false)
+    {
+        return false;
+    }
+    else
+    {
+        return true;
+    }
+}
+function draw_table_body(info)
+{
+    var table = document.getElementById("idMobileTable");
+    if(viewMode == 0)
+    {
+        for(var i = 0; i < info.length; i++)
+        {
+            var row = table.insertRow(i+1);                           
+            row.innerHTML =  "<td id='" + info[i].port + "port' align='center'>" + info[i].port +"</td>"
+                               + "<td id='" + info[i].port + "type'>" + "</td>"
+                               + "<td id='" + info[i].port + "network'>" + "</td>"
+                               + "<td id='" + info[i].port + "imei'>" + "</td>"
+                               + "<td id='" + info[i].port + "status'>" + "</td>"
+                               + "<td id='" + info[i].port + "signal'>" + "</td>"
+                               + "<td id='" + info[i].port + "call_status'>" + "</td>"  
+                               + "<td id='" + info[i].port + "iccid'>" + "</td>"
+                               + "<td id='" + info[i].port + "imsi'>" + "</td>"
+                               + "<td id='" + info[i].port + "operator'>" + "</td>"
+                               + "<td id='" + info[i].port + "call_limit'>" + "</td>"
+                               + "<td id='" + info[i].port + "asr'>" + "</td>"
+                               + "<td id='" + info[i].port + "acd'>" + "</td>"
+                               + "<td id='" + info[i].port + "pdd'>" + "</td>";
+        }
+    }
+    else
+    {
+        j = 1;
+        for(var i = 0; i < info.length; i++)
+        {
+            if(info[i].port == "Total")
+            {
+                continue;
+            }
+            if(!is_multi_sim(info[i].port))
+            {
+                var row = table.insertRow(j);
+                row.innerHTML =  "<td id='" + info[i].port + "port' align='center'>" + info[i].port +"</td>"
+                                   + "<td id='" + info[i].port + "type'>" + "</td>"
+                                   + "<td id='" + info[i].port + "imei'>" + "</td>"
+                                   + "<td id='" + info[i].port + "imsi'>" + "</td>"
+                                   + "<td id='" + info[i].port + "status'>" + "</td>"
+                                   + "<td id='" + info[i].port + "signal'>" + "</td>"
+                                   + "<td id='" + info[i].port + "call_status'>" + "</td>"
+                                   + "<td id='" + info[i].port + "call_limit'>" + "</td>";  
+                j += 1;
+            }
+        }
+    }
+}
+
+function fill_table(info)
+{
+    var table = document.getElementById("idMobileTable");
+    if(viewMode == 0)
+    {
+        for(var i = 0; i < info.length; i++)
+        {    
+            if(info[i].port == "Total")
+            {
+                document.getElementById(info[i].port+'asr').innerHTML = info[i].asr;
+                document.getElementById(info[i].port+'acd').innerHTML = info[i].acd;
+                continue;
+            }
+            if(!is_multi_sim(info[i].port))
+            {
+                document.getElementById(info[i].port+'type').innerHTML = info[i].type; 
+                document.getElementById(info[i].port+'imei').innerHTML = info[i].imei;
+                var status = document.getElementById(info[i].port+'status');
+                if(info[i].status == 'NO_SIM_LINK')
+                {
+                    status.innerHTML = "No USIM Card";
+                    status.className = "tdcss5";
+                    port = info[i].port;
+                    status.onclick = function(){
+                            Sim_Restart(port);
+                    };
+                }
+                else
+                {
+                    status.innerHTML = info[i].status;
+                } 
+                document.getElementById(info[i].port+'signal').innerHTML = "<img src='image/signal"+ info[i].signal +".gif'>"; 
+                document.getElementById(info[i].port+'call_status').innerHTML = info[i].call_status;
+                document.getElementById(info[i].port+'network').innerHTML = info[i].network; 
+                document.getElementById(info[i].port+'operator').innerHTML = info[i].operator; 
+            }
+            else
+            {       
+                if(info[i].status != "")
+                {
+                    document.getElementById(info[i].port+'status').innerHTML = "<img src='image/" + info[i].status + ".png'>"; 
+                }
+            }
+            document.getElementById(info[i].port+'iccid').innerHTML = info[i].iccid; 
+            document.getElementById(info[i].port+'imsi').innerHTML = info[i].imsi; 
+            document.getElementById(info[i].port+'asr').innerHTML = info[i].asr;
+            document.getElementById(info[i].port+'acd').innerHTML = info[i].acd;
+            document.getElementById(info[i].port+'pdd').innerHTML = info[i].pdd;
+            if(info[i].call_limit == "Restricted")
+            {
+                document.getElementById(info[i].port+'call_limit').innerHTML = "<a href='enHBSim.htm'>" + info[i].call_limit + "</a>";
+            }
+            else
+            {
+                document.getElementById(info[i].port+'call_limit').innerHTML = info[i].call_limit;
+            }
+        }
+    }
+    else
+    {
+        for(var i = 0; i < info.length; i++)
+        {
+            if(info[i].port == "Total")
+            {
+                continue;
+            }
+            if(!is_multi_sim(info[i].port))
+            {
+                document.getElementById(info[i].port+'type').innerHTML = info[i].type; 
+                document.getElementById(info[i].port+'imei').innerHTML = info[i].imei; 
+                document.getElementById(info[i].port+'imsi').innerHTML = info[i].imsi; 
+                var status = document.getElementById(info[i].port+'status');
+                if(info[i].status == 'NO_SIM_LINK')
+                {
+                    status.innerHTML = "No USIM Card";
+                    status.className = "tdcss5";
+                    port = info[i].port;
+                    status.onclick = function(){
+                            Sim_Restart(port);
+                    };
+                }
+                else
+                {
+                    status.innerHTML = info[i].status;
+                } 
+                document.getElementById(info[i].port+'signal').innerHTML = "<img src='image/signal"+ info[i].signal +".gif'>";                
+                document.getElementById(info[i].port+'call_status').innerHTML = info[i].call_status;
+                if(info[i].call_limit == "Restricted")
+                {
+                    document.getElementById(info[i].port+'call_limit').innerHTML = "<a href='enHBSim.htm'>" + info[i].call_limit + "</a>";
+                }
+                else
+                {
+                    document.getElementById(info[i].port+'call_limit').innerHTML = info[i].call_limit;
+                }
+            }
+        }
+    }
+}
+
+function changeMode()
+{
+    viewMode = 1 - viewMode;
+    AutoRefreshMobileInfo();
+}
+</script>
+</head>
+<body  onLoad="MM_callJS()">
+<form>
+	<input type="hidden" name="PortNo" id="PortNo" value="">
+</form>
+
+<table id="idWIATbl2" width="750px" border=0 align="center" cellpadding=0 cellspacing=0>
+ <tr class="title">
+  <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+  <td>Mobile Information</td>
+  <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+ </tr>
+</table>
+<table id="idWIATbl3" width="750px" align="center" class="TB">
+ <tr>
+  <td >
+   <div id="MobileInfo">
+   <table id="idMobileTable" width="100%" cellpadding="0" cellspacing="0">        
+ </table>
+ </div>
+ </td>
+ </tr>
+</table>
+
+ <p align="center">
+   <input name="idChangeMode" id="idChangeMode" class="button" type="button" value="ChangeView" onClick="return changeMode();">
+   <input name="Refresh"  class="button" type="button" id="Refresh" value="Refresh" onClick="return doRefresh();">
+ </p>
+</body>
+</html>
+

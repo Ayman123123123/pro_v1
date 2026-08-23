@@ -1,0 +1,325 @@
+=== pjsip show endpoints ===
+
+ Endpoint:  <Endpoint/CID.....................................>  <State.....>  <Channels.>
+    I/OAuth:  <AuthId/UserName...........................................................>
+        Aor:  <Aor............................................>  <MaxContact>
+      Contact:  <Aor/ContactUri..........................> <Hash....> <Status> <RTT(ms)..>
+  Transport:  <TransportId........>  <Type>  <cos>  <tos>  <BindAddress..................>
+   Identify:  <Identify/Endpoint.........................................................>
+        Match:  <criteria.........................>
+    Channel:  <ChannelId......................................>  <State.....>  <Time.....>
+        Exten: <DialedExten...........>  CLCID: <ConnectedLineCID.......>
+==========================================================================================
+
+ Endpoint:  0                                                    Not in use    0 of inf
+        Aor:  0                                                  5
+      Contact:  0/sip:0@192.168.11.3:5060;transport=UDP    b0a464cdf8 Avail         4.752
+
+ Endpoint:  1                                                    Not in use    0 of inf
+        Aor:  1                                                  5
+      Contact:  1/sip:1@192.168.11.3:5061;transport=UDP    397229ad32 Avail         5.254
+
+ Endpoint:  2                                                    Not in use    0 of inf
+        Aor:  2                                                  5
+      Contact:  2/sip:2@192.168.11.2:5062;transport=UDP    8d562e09a0 Avail        57.971
+      Contact:  2/sip:2@192.168.11.3:5062;transport=UDP    d695610f0d Avail         4.186
+
+ Endpoint:  3                                                    Not in use    0 of inf
+        Aor:  3                                                  5
+      Contact:  3/sip:3@192.168.11.2:5063;transport=UDP    50a4cd4e5f Avail        61.396
+      Contact:  3/sip:3@192.168.11.3:5063;transport=UDP    89d78a6ff8 Avail         7.715
+
+ Endpoint:  4                                                    Not in use    0 of inf
+        Aor:  4                                                  5
+      Contact:  4/sip:4@192.168.11.3:5064;transport=UDP    08ef60f16a Avail        13.339
+      Contact:  4/sip:4@192.168.11.2:5064;transport=UDP    cfae5f8478 Avail        58.780
+
+ Endpoint:  5                                                    Not in use    0 of inf
+        Aor:  5                                                  5
+      Contact:  5/sip:5@192.168.11.3:5065;transport=UDP    ba8d670164 Avail         5.555
+
+ Endpoint:  6                                                    Not in use    0 of inf
+        Aor:  6                                                  5
+      Contact:  6/sip:6@192.168.11.3:5066;transport=UDP    bbfc621028 Avail         5.884
+
+ Endpoint:  7                                                    Not in use    0 of inf
+        Aor:  7                                                  5
+      Contact:  7/sip:7@192.168.11.3:5067;transport=UDP    06295c2042 Avail        14.874
+      Contact:  7/sip:7@192.168.11.2:5067;transport=UDP    2642cf77b1 Avail         5.269
+
+ Endpoint:  anonymous                                            Unavailable   0 of inf
+
+ Endpoint:  dinstar-gateway                                      Not in use    0 of inf
+        Aor:  dinstar-gw-192-168-11-2                            0
+      Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:5 ee98bdc39c NonQual        -nan
+  Transport:  transport-udp             udp      0      0  0.0.0.0:5060
+
+ Endpoint:  dinstar-gw-192-168-11-2                              Not in use    0 of inf
+        Aor:  dinstar-gw-192-168-11-2                            0
+      Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:5 ee98bdc39c NonQual        -nan
+  Transport:  transport-udp             udp      0      0  0.0.0.0:5060
+   Identify:  dinstar-gw-192-168-11-2/dinstar-gw-192-168-11-2
+        Match: 192.168.11.2/32
+
+ Endpoint:  dinstar-gw-192-168-11-3                              Not in use    0 of inf
+        Aor:  dinstar-gw-192-168-11-3                            0
+      Contact:  dinstar-gw-192-168-11-3/sip:192.168.11.3:5 16d10c085d NonQual        -nan
+  Transport:  transport-udp             udp      0      0  0.0.0.0:5060
+   Identify:  dinstar-gw-192-168-11-3/dinstar-gw-192-168-11-3
+        Match: 192.168.11.3/32
+
+ Endpoint:  red-webrtc-client                                    Unavailable   0 of inf
+     InAuth:  red-webrtc-client/red-webrtc-client
+        Aor:  red-webrtc-client                                  5
+
+
+Objects found: 13
+
+
+=== pjsip show contacts ===
+
+  Contact:  <Aor/ContactUri..............................> <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+  Contact:  0/sip:0@192.168.11.3:5060;transport=UDP        b0a464cdf8 Avail         4.752
+  Contact:  1/sip:1@192.168.11.2:5061;transport=UDP        2166cc3d7a Avail       105.304
+  Contact:  1/sip:1@192.168.11.3:5061;transport=UDP        397229ad32 Avail         4.835
+  Contact:  2/sip:2@192.168.11.2:5062;transport=UDP        8d562e09a0 Avail        57.971
+  Contact:  2/sip:2@192.168.11.3:5062;transport=UDP        d695610f0d Avail         4.186
+  Contact:  3/sip:3@192.168.11.2:5063;transport=UDP        50a4cd4e5f Avail        61.396
+  Contact:  3/sip:3@192.168.11.3:5063;transport=UDP        89d78a6ff8 Avail         7.715
+  Contact:  4/sip:4@192.168.11.2:5064;transport=UDP        cfae5f8478 Avail        58.780
+  Contact:  4/sip:4@192.168.11.3:5064;transport=UDP        08ef60f16a Avail        13.339
+  Contact:  5/sip:5@192.168.11.3:5065;transport=UDP        ba8d670164 Avail         5.555
+  Contact:  6/sip:6@192.168.11.3:5066;transport=UDP        bbfc621028 Avail         5.884
+  Contact:  7/sip:7@192.168.11.2:5067;transport=UDP        2642cf77b1 Avail         5.269
+  Contact:  7/sip:7@192.168.11.3:5067;transport=UDP        06295c2042 Avail        14.874
+  Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:5062  ee98bdc39c NonQual        -nan
+  Contact:  dinstar-gw-192-168-11-3/sip:192.168.11.3:5062  16d10c085d NonQual        -nan
+
+Objects found: 15
+
+
+=== pjsip show aors ===
+
+      Aor:  <Aor..............................................>  <MaxContact>
+    Contact:  <Aor/ContactUri............................> <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+      Aor:  0                                                    5
+    Contact:  0/sip:0@192.168.11.3:5060;transport=UDP      b0a464cdf8 Avail         4.752
+
+      Aor:  1                                                    5
+    Contact:  1/sip:1@192.168.11.2:5061;transport=UDP      2166cc3d7a Avail       105.304
+    Contact:  1/sip:1@192.168.11.3:5061;transport=UDP      397229ad32 Avail         4.835
+
+      Aor:  2                                                    5
+    Contact:  2/sip:2@192.168.11.2:5062;transport=UDP      8d562e09a0 Avail        57.971
+    Contact:  2/sip:2@192.168.11.3:5062;transport=UDP      d695610f0d Avail         4.186
+
+      Aor:  3                                                    5
+    Contact:  3/sip:3@192.168.11.2:5063;transport=UDP      50a4cd4e5f Avail        61.396
+    Contact:  3/sip:3@192.168.11.3:5063;transport=UDP      89d78a6ff8 Avail         7.715
+
+      Aor:  4                                                    5
+    Contact:  4/sip:4@192.168.11.3:5064;transport=UDP      08ef60f16a Avail        13.339
+    Contact:  4/sip:4@192.168.11.2:5064;transport=UDP      cfae5f8478 Avail        58.780
+
+      Aor:  5                                                    5
+    Contact:  5/sip:5@192.168.11.3:5065;transport=UDP      ba8d670164 Avail         5.555
+
+      Aor:  6                                                    5
+    Contact:  6/sip:6@192.168.11.3:5066;transport=UDP      bbfc621028 Avail         5.884
+
+      Aor:  7                                                    5
+    Contact:  7/sip:7@192.168.11.3:5067;transport=UDP      06295c2042 Avail        14.874
+    Contact:  7/sip:7@192.168.11.2:5067;transport=UDP      2642cf77b1 Avail         5.269
+
+      Aor:  dinstar-gw-192-168-11-2                              0
+    Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:506 ee98bdc39c NonQual        -nan
+
+      Aor:  dinstar-gw-192-168-11-3                              0
+    Contact:  dinstar-gw-192-168-11-3/sip:192.168.11.3:506 16d10c085d NonQual        -nan
+
+      Aor:  red-webrtc-client                                    5
+
+
+Objects found: 11
+
+
+=== pjsip show identifies ===
+
+ Identify:  <Identify/Endpoint...........................................................>
+      Match:  <criteria...........................>
+==========================================================================================
+
+ Identify:  dinstar-gw-192-168-11-2/dinstar-gw-192-168-11-2
+      Match: 192.168.11.2/32
+
+ Identify:  dinstar-gw-192-168-11-3/dinstar-gw-192-168-11-3
+      Match: 192.168.11.3/32
+
+
+Objects found: 2
+
+
+=== pjsip show endpoint red-webrtc-client ===
+
+ Endpoint:  <Endpoint/CID.....................................>  <State.....>  <Channels.>
+    I/OAuth:  <AuthId/UserName...........................................................>
+        Aor:  <Aor............................................>  <MaxContact>
+      Contact:  <Aor/ContactUri..........................> <Hash....> <Status> <RTT(ms)..>
+  Transport:  <TransportId........>  <Type>  <cos>  <tos>  <BindAddress..................>
+   Identify:  <Identify/Endpoint.........................................................>
+        Match:  <criteria.........................>
+    Channel:  <ChannelId......................................>  <State.....>  <Time.....>
+        Exten: <DialedExten...........>  CLCID: <ConnectedLineCID.......>
+==========================================================================================
+
+ Endpoint:  red-webrtc-client                                    Unavailable   0 of inf
+     InAuth:  red-webrtc-client/red-webrtc-client
+        Aor:  red-webrtc-client                                  5
+
+
+ ParameterName                      : ParameterValue
+ ===================================================================================================
+ 100rel                             : yes
+ accept_multiple_sdp_answers        : false
+ accountcode                        : 
+ acl                                : 
+ aggregate_mwi                      : true
+ allow                              : (opus|alaw|ulaw)
+ allow_overlap                      : true
+ allow_subscribe                    : true
+ allow_transfer                     : true
+ allow_unauthenticated_options      : false
+ aors                               : red-webrtc-client
+ asymmetric_rtp_codec               : false
+ auth                               : red-webrtc-client
+ bind_rtp_to_media_address          : false
+ bundle                             : true
+ call_group                         : 
+ callerid                           : <unknown>
+ callerid_privacy                   : allowed_not_screened
+ callerid_tag                       : 
+ codec_prefs_incoming_answer        : prefer:pending, operation:intersect, keep:all, transcode:allow
+ codec_prefs_incoming_offer         : prefer:pending, operation:intersect, keep:all, transcode:allow
+ codec_prefs_outgoing_answer        : prefer:pending, operation:intersect, keep:all, transcode:allow
+ codec_prefs_outgoing_offer         : prefer:pending, operation:union, keep:all, transcode:allow
+ connected_line_method              : invite
+ contact_acl                        : 
+ context                            : from-red-client-webrtc
+ cos_audio                          : 0
+ cos_video                          : 0
+ device_state_busy_at               : 0
+ direct_media                       : false
+ direct_media_glare_mitigation      : none
+ direct_media_method                : invite
+ disable_direct_media_on_nat        : false
+ dtls_auto_generate_cert            : Yes
+ dtls_ca_file                       : 
+ dtls_ca_path                       : 
+ dtls_cert_file                     : 
+ dtls_cipher                        : 
+ dtls_fingerprint                   : SHA-256
+ dtls_private_key                   : 
+ dtls_rekey                         : 0
+ dtls_setup                         : actpass
+ dtls_verify                        : Fingerprint
+ dtmf_mode                          : rfc4733
+ fax_detect                         : false
+ fax_detect_timeout                 : 0
+ follow_early_media_fork            : true
+ follow_redirect_methods            : 
+ force_avp                          : false
+ force_rport                        : true
+ from_domain                        : 
+ from_user                          : 
+ g726_non_standard                  : false
+ geoloc_incoming_call_profile       : 
+ geoloc_outgoing_call_profile       : 
+ ice_support                        : true
+ identify_by                        : username,ip
+ ignore_183_without_sdp             : false
+ inband_progress                    : false
+ incoming_call_offer_pref           : local
+ incoming_mwi_mailbox               : 
+ language                           : 
+ mailboxes                          : 
+ max_audio_streams                  : 1
+ max_video_streams                  : 1
+ media_address                      : 192.168.11.20
+ media_encryption                   : dtls
+ media_encryption_optimistic        : false
+ media_use_received_transport       : true
+ message_context                    : 
+ moh_passthrough                    : false
+ moh_suggest                        : default
+ mwi_from_user                      : 
+ mwi_subscribe_replaces_unsolicited : no
+ named_call_group                   : 
+ named_pickup_group                 : 
+ notify_early_inuse_ringing         : false
+ one_touch_recording                : false
+ outbound_auth                      : 
+ outbound_proxy                     : 
+ outgoing_call_offer_pref           : remote_merge
+ overlap_context                    : 
+ pickup_group                       : 
+ preferred_codec_only               : false
+ record_off_feature                 : automixmon
+ record_on_feature                  : automixmon
+ redirect_method                    : user
+ refer_blind_progress               : true
+ rewrite_contact                    : true
+ rpid_immediate                     : false
+ rtcp_mux                           : true
+ rtp_engine                         : asterisk
+ rtp_ipv6                           : false
+ rtp_keepalive                      : 0
+ rtp_port_end                       : 0
+ rtp_port_start                     : 0
+ rtp_symmetric                      : true
+ rtp_timeout                        : 0
+ rtp_timeout_hold                   : 0
+ sdp_owner                          : -
+ sdp_session                        : Asterisk
+ security_negotiation               : no
+ send_aoc                           : false
+ send_connected_line                : yes
+ send_diversion                     : true
+ send_history_info                  : false
+ send_pai                           : false
+ send_rpid                          : false
+ set_var                            : 
+ srtp_tag_32                        : false
+ stir_shaken                        : no
+ stir_shaken_profile                : 
+ sub_min_expiry                     : 0
+ subscribe_context                  : 
+ suppress_moh_on_sendonly           : false
+ suppress_q850_reason_headers       : false
+ t38_bind_udptl_to_media_address    : false
+ t38_udptl                          : false
+ t38_udptl_ec                       : none
+ t38_udptl_ipv6                     : false
+ t38_udptl_maxdatagram              : 0
+ t38_udptl_nat                      : false
+ tenantid                           : 
+ timers                             : yes
+ timers_min_se                      : 90
+ timers_sess_expires                : 1800
+ tone_zone                          : 
+ tos_audio                          : 0
+ tos_video                          : 0
+ transport                          : 
+ trust_connected_line               : yes
+ trust_id_inbound                   : false
+ trust_id_outbound                  : false
+ use_avpf                           : true
+ use_ptime                          : false
+ user_eq_phone                      : false
+ voicemail_extension                : 
+ webrtc                             : yes
+
+

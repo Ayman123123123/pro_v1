@@ -1,0 +1,400 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>Phone Number Learning - Add Rule</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var TableSize = 8;
+var DebugFlag = 0;
+function MM_callJS(strIndexMap)
+{
+	var i;	
+	if (strIndexMap != "")
+	{				
+		var sel = document.getElementById("Index");
+		for (i=0; i < TableSize; i++)
+		{
+			if (strIndexMap.charAt(i) == '1')
+			{
+				var idSel = document.getElementById("idIndex"+i);
+				sel.remove(idSel.index);
+			}
+		}
+	}	
+	
+	mouse_click();
+}
+
+function DebugGoto()
+{
+	//location.href = "enHBPhoneNumberTest.htm";
+	if(DebugFlag == 0)
+	{
+	    DebugFlag = 1;
+		document.getElementById("DebugButton").value = "Test End";	
+		document.getElementById("trMatchingTest").style.display = "";
+	}
+	else
+	{
+		DebugFlag = 0;
+		document.getElementById("DebugButton").value = "Matching Test";	
+		document.getElementById("trMatchingTest").style.display = "none";
+	}
+}
+
+function mouse_click()
+{
+	if(document.getElementById('Method').value == 0)
+    {
+	    document.getElementById('id_Encoding').style.display = "";
+	}
+	else
+    {
+	    document.getElementById('id_Encoding').style.display = "none";
+	}
+    
+	if(document.getElementById('Method').value == 1)
+    {
+	    document.getElementById('trDest').style.display = "none";
+		document.getElementById('trSrc').style.display = "none";
+	}
+	else
+    {
+	    document.getElementById('trDest').style.display = "";	
+		document.getElementById('trSrc').style.display = "";
+	}
+}
+
+function ReTestNumber(szname)
+{
+	var renumber = /^\+?[\d\*#]+$/;
+
+	if(renumber.test(szname) == false)
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+function ReTestASCII(szname)
+{
+	var reascii = /[^\da-zA-Z\s`~!@#\$%\^&\*\(\)\-_=\+\{\}\[\];:'"\\|,\<\.\>\/\?]+/;
+
+	if(reascii.test(szname) == true)
+	{
+		return false;	
+	}
+	return true;
+}
+
+function form_check()
+{
+	if(document.getElementById('Method').value != 1)
+	{
+	    if(ReTestNumber(document.getElementById('Dest').value) == false)
+		{
+			document.getElementById('Dest').select();
+		    alert("Please input the correct number!");	
+			return false;
+		}	
+	}
+	if(document.getElementById('Text').value.length == 0 && document.getElementById('Method').value != 2)
+	{
+		document.getElementById('Text').select();
+		alert("Please input the Send Text!");	
+        return false;
+	}
+	if(ReTestASCII(document.getElementById('Key').value) == false && document.getElementById('Key').value.length > 21)
+	{
+		document.getElementById('Key').select();
+	    alert("Including special character, 'Key Words' length is up to 21!");
+		return false;	
+	}
+	if(ReTestASCII(document.getElementById('Text').value) == false && document.getElementById('Text').value.length > 21)
+	{
+		document.getElementById('Text').select();
+	    alert("Including special character, 'Send Text' length is up to 21!");
+		return false;	
+	}
+
+  	if (document.forms[0].RmFromLeft.value >31)
+  	{
+    	alert( "Please input the correct number, not be greater than 31!");
+    	document.forms[0].RmFromLeft.select();
+    	return false;       
+  	}
+			
+	var called_prefix = document.getElementById("AddPrefix").value;
+	if(false == isRegDigitPrefix(called_prefix))
+	{
+		alert("'Prefix to Add' is incorrect!");
+		return false;			
+	}			
+	if (document.forms[0].CalledPrefix.value.length > 15)
+	{
+		alert("'Prefix to Add' is incorrect, input length must be less than 15!");
+		document.forms[0].CalledPrefix.select();
+	    return false;
+	}
+
+	return true;
+}
+
+function form_reset()
+{
+	document.getElementById("HBPhoneNumberRuleAdd").reset();
+	mouse_click();
+}
+</script>
+</head>
+<body onLoad="MM_callJS('00000000');">
+<form action="/goform/HBPhoneNumberRuleAdd" method="post" name="HBPhoneNumberRuleAdd" id="HBPhoneNumberRuleAdd">
+<table width="600px" border=0 align="center" cellpadding=0 cellspacing=0>
+ <tr class="title">
+  <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+  <td>Phone Number Learning - Add Rule</td>
+  <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+ </tr>
+</table>
+<table width="600px" align="center" class="TB" cellpadding=0 cellspacing=0>
+ <tr>
+  <td class="swidth">&nbsp;</td>
+  <td>
+    <table width="100%" cellpadding=1 cellspacing=0>
+	  <tr>
+		 <td width="50%">&nbsp;</td>
+		 <td width="50%">&nbsp;</td>
+	  </tr>
+	  <tr>
+      <script language="JavaScript" type="text/JavaScript">
+	  	document.write("<td>Index</td>");		
+		document.write("<td><select name='Index' class='alist' id='Index' style='width:45%;' onChange='mouse_click();'>");
+		for (var i=0; i < TableSize; i++)
+		{
+			document.write("<option value='"+i+"' id='idIndex"+i+"'>"+i+"</option>");
+		}
+		document.write("</select></td>");
+	  </script>
+	  </tr>  
+	  <tr>
+	    <td>Type</td>
+	    <td>
+        <select name="Method" class="list" id="Method"  style="width:45%;" onChange="mouse_click()">
+        <option value="0" selected>SMS</option>
+		<option value="1" >USSD</option>
+        <option value="2" >Call</option>
+        </select>
+        </td>
+	  </tr>
+	  <tr id='id_Encoding'>
+	    <td>Encoding</td>
+	    <td>
+			<select name="Encoding" class="list" id="Encoding"  style="width:45%;">
+			<option value="0" selected>UCS2</option>
+			<option value="1" >GSM 7bit</option>
+			</select>
+        </td>
+	  </tr>                        
+      <tr id='trDest'>
+	    <td>Dest Number</td>
+	    <td>
+        <input class="atext" id="Dest" name="Dest" style="width:45%;" maxlength="23" size="21" value="" >
+        </td>
+	  </tr>  
+      <tr>
+	    <td>Send Text</td>
+	    <td>
+        <input class="atext" id="Text" name="Text" style="width:45%;" maxlength="63" size="21" value="" >
+        </td>
+	  </tr> 
+      <tr id='trSrc'>
+	    <td>Check SMS From Number</td>
+	    <td>
+        <input class="atext" id="Src" name="Src" style="width:45%;" maxlength="23" size="21" value="" oninput="value=value.replace(/[\u4E00-\u9FA5\s]/g,'')">
+        </td>
+	  </tr> 
+      <tr>
+	    <td>Keywords</td>
+	    <td>
+        <input class="atext" id="Key" name="Key" style="width:45%;" maxlength="63" size="21" value="" >&nbsp;
+        <input name='DebugButton'  class='button' height="" type='button' id='DebugButton' value='Matching Test' onClick='DebugGoto();'>
+        </td>
+	  </tr>  
+      <tr id="trMatchingTest" style="display:none">
+	    <td colspan="2">
+            <iframe name="idMatchingTest" id="idMatchingTest" src="enHBPhoneNumberTest.htm" marginwidth="0" marginheight="0" style="padding:0" scrolling="no" frameborder="0" width="100%" height="80px"></iframe>
+        </td>
+	  </tr> 
+	  <tr>
+	    <td>Write Phone Number to SIM card</td>
+	    <td>
+       <input id="IsWRSim" name="IsWRSim" type="radio" value="0" onClick="mouse_click();" >
+       No
+       <input id="IsWRSim" name="IsWRSim" type="radio" value="1" onClick="mouse_click();" checked>
+       Yes       
+        </td>
+	  </tr>
+    <tr id="idStripLeft">
+            <td>Stripped Digits from Left</td>
+            <td><input class="atext" id="RmFromLeft" name="RmFromLeft" style="width:75%;" maxlength="2" size="20" value="" onClick="mouse_click();"></td>
+    </tr>      
+    <tr>
+            <td>Prefix to Add</td>
+            <td><input class="atext" id="AddPrefix" name="AddPrefix" style="width:75%;" maxlength="15" size="20" value="" onClick="mouse_click();"></td>
+    </tr>     
+	  <tr>
+	    <td>Port Group</td>
+	    <td><select name='PortGroup' class='alist' id='PortGroup' style='width:30%;'>
+            <option value='0' id='idDestPortGroup0'>0 &lt;default&gt;</option>
+            </select> 
+        </td>
+	  </tr>
+      <tr>
+		 <td>&nbsp;</td>
+		 <td>&nbsp;</td>
+	  </tr>   
+	</table>
+  </td>
+  <td class="swidth">&nbsp;</td>
+ </tr>
+ </table>
+<p align="center">
+<input name="Ok"  class="button" type="submit" id="Ok" value="Save" onClick="return form_check();">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Reset"  class="button" type="button" id="Reset" value="Reset" onClick="form_reset();">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Cancel"  class="button" type="button" id="Cancel" value="Cancel" onClick="javascript:window.history.go(-1);">
+</p>
+</form>
+<p>
+<table width="600px" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="20%"> </td>
+   <td width="3%" align="center" class="notes"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">About Key Words:&nbsp;</td>
+   <td width="3%" align="center" class="notes">1.</td>
+   <td class="notes">You can input multiple keywords and special symbol like "[E], [T], [*], [N]". </td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">Space is also avalable.</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes">2.</td>
+   <td class="notes">[E] is used to match Enter. e.g. "number is[E]" is used to match the number under line "number is".</td>
+  </tr>  
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes">3.</td>
+   <td class="notes">[T] is used to match Table character.</td>
+  </tr> 
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes">4.</td>
+   <td class="notes">[*] is userd to match anything betwen the keywords.</td>
+  </tr> 
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">e.g.  "number is[*]number is " is used to match the number after the second keyword "number is ".</td>
+  </tr> 
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes">5.</td>
+   <td class="notes">[N] is used to match the number at the specify position.</td>
+  </tr>  
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">e.g. "number is [*]number is [N], abc" is used to match "456" in SMS "number is 123 and number is 456, abcdefg...".</td>
+  </tr> 
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes">6.</td>
+   <td class="notes">It can match the number after a keyword or in front of a keyword.</td>
+  </tr> 
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">It is depending on the position of the [N] symbol.If the [N] symbol is follow close behind a keyword, it match a number after the keyword. If a keyword is follow close behind the [N] symbol, the [N] sysbol match a number in front of the keyword. Normally, we use [*][N] to match a number in front of the keyword.</td>
+  </tr>   
+  <tr>
+   <td align="right" class="notes">&nbsp;</td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">e.g. "is number 1[*][N] is number 2" is used to match "456" in SMS "123 is number 1 and 456 is number 2".</td>
+  </tr>  
+</table>
+
+<table width="600px" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="20%"> </td>
+   <td width="0%" align="center" class="notes"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">About Send Text:&nbsp;</td>
+   <td width="3%" align="center" class="notes">1.</td>
+   <td class="notes">When you using the "Call" type, the send text can be null or the DTMF number</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes"> you want to dial after call out.</td>
+  </tr>
+ <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes">2.</td>
+   <td class="notes">The DTMF number's format is "pN,Number". Among them, "N" is the waiting seconds.</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">e.g. If we want to call 10086 and after 8 seconds we dial 1, then after 8 senconds we dial 1 again, at last,we wait 15 seconds and dial 2. The setting should be as follow.</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">Dest Number: 10086.</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">Send Text: p8,1,p8,1,p15,2
+  .</td>
+  </tr>
+</table>
+<table width="600px" align="center" cellpadding="0" cellspacing="0">
+  <tr>
+   <td width="20%"> </td>
+   <td width="0%" align="center" class="notes"> </td>
+   <td>&nbsp;</td>
+  </tr>
+  <tr>
+   <td align="right" class="notes">About Write SIM Card:</td>
+   <td width="3%" align="center" class="notes">1.</td>
+   <td class="notes">It is available only if the sim card support it.</td>
+  </tr>
+ <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes">2.</td>
+   <td class="notes">When matching a phone number, the device will write it to SIM card automaticly. </td>
+  </tr>
+  <tr>
+   <td align="right" class="notes"></td>
+   <td width="3%" align="center" class="notes"></td>
+   <td class="notes">Please do not pull out the SIM card at the moment.</td>
+  </tr>
+</table>
+
+</body>
+</html>

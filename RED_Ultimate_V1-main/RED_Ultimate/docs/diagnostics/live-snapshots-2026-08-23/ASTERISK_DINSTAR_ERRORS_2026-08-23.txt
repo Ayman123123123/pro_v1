@@ -1,0 +1,1 @@
+# No matching DINSTAR/SIP/RTP error lines in the last 1500 Asterisk log entries.

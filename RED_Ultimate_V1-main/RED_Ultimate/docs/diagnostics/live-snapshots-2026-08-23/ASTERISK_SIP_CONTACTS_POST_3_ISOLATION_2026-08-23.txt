@@ -1,0 +1,24 @@
+
+  Contact:  <Aor/ContactUri..............................> <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+  Contact:  0/sip:0@192.168.11.2:5060;transport=UDP        2515c768a1 Avail        56.751
+  Contact:  0/sip:0@192.168.11.3:5060;transport=UDP        b0a464cdf8 Avail        95.420
+  Contact:  1/sip:1@192.168.11.2:5061;transport=UDP        2166cc3d7a Avail        58.584
+  Contact:  1/sip:1@192.168.11.3:5061;transport=UDP        397229ad32 Avail         5.051
+  Contact:  2/sip:2@192.168.11.2:5062;transport=UDP        8d562e09a0 Avail        57.641
+  Contact:  2/sip:2@192.168.11.3:5062;transport=UDP        d695610f0d Avail        41.547
+  Contact:  3/sip:3@192.168.11.2:5063;transport=UDP        50a4cd4e5f Avail        24.036
+  Contact:  3/sip:3@192.168.11.3:5063;transport=UDP        89d78a6ff8 Avail        23.414
+  Contact:  4/sip:4@192.168.11.2:5064;transport=UDP        cfae5f8478 Avail         5.813
+  Contact:  4/sip:4@192.168.11.3:5064;transport=UDP        08ef60f16a Avail         5.149
+  Contact:  5/sip:5@192.168.11.2:5065;transport=UDP        9ab984e32f Avail        58.920
+  Contact:  5/sip:5@192.168.11.3:5065;transport=UDP        ba8d670164 Avail         4.703
+  Contact:  6/sip:6@192.168.11.2:5066;transport=UDP        2ec7173307 Avail        57.081
+  Contact:  6/sip:6@192.168.11.3:5066;transport=UDP        bbfc621028 Avail         4.886
+  Contact:  7/sip:7@192.168.11.2:5067;transport=UDP        2642cf77b1 Avail         5.706
+  Contact:  7/sip:7@192.168.11.3:5067;transport=UDP        06295c2042 Avail         5.313
+  Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:5062  ee98bdc39c NonQual        -nan
+
+Objects found: 17
+

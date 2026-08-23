@@ -1,0 +1,47 @@
+/etc/asterisk/extensions.conf:6:;   [from-dinstar]           ΓåÉ ┘à┘â╪º┘ä┘à╪º╪¬ ┘ê╪º╪▒╪»╪⌐ ┘à┘å GSM ΓåÆ UserEvent ΓåÆ ╪º┘å╪¬╪╕╪º╪▒
+/etc/asterisk/extensions.conf:8:;   [from-dinstar-dtmf]      ΓåÉ ╪¬┘à╪▒┘è╪▒ DTMF ╪ú╪½┘å╪º╪í ┘à┘â╪º┘ä┘à╪⌐ ┘å╪┤╪╖╪⌐
+/etc/asterisk/extensions.conf:16:DEFAULT_GW=dinstar-gateway
+/etc/asterisk/extensions.conf:30:;   to DINSTAR, and from-dinstar inbound waiting), use Progress() which
+/etc/asterisk/extensions.conf:97:; ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä╪╡╪º╪»╪▒╪⌐ ╪Ñ┘ä┘ë ╪¿┘ê╪º╪¿╪º╪¬ DINSTAR
+/etc/asterisk/extensions.conf:106: same => n,Set(CDR(userfield)=RED_DINSTAR:${GW}:${RED_CALL_ID}:${RED_SIM_NUMBER})
+/etc/asterisk/extensions.conf:117:  same => n,Dial(PJSIP/${EXTEN}@${GW},${DIAL_TIMEOUT},KU(from-dinstar-dtmf))
+/etc/asterisk/extensions.conf:122:; ΓöÇΓöÇΓöÇ from-dinstar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+/etc/asterisk/extensions.conf:123:; ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä┘ê╪º╪▒╪»╪⌐ ┘à┘å ╪┤╪¿┘â╪⌐ GSM ╪╣╪¿╪▒ ╪ú┘è ╪¿┘ê╪º╪¿╪⌐ DINSTAR
+/etc/asterisk/extensions.conf:128:[from-dinstar]
+/etc/asterisk/extensions.conf:131: same => n,Set(CDR(userfield)=INCOMING_DINSTAR:${CHANNEL(endpoint)})
+/etc/asterisk/extensions.conf:136:  same => n,UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:${EXTEN},Context:from-dinstar)
+/etc/asterisk/extensions.conf:153:  same => n,Set(CDR(userfield)=INCOMING_DINSTAR:${CHANNEL(endpoint)})
+/etc/asterisk/extensions.conf:154:  same => n,UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:s,Context:from-dinstar)
+/etc/asterisk/extensions.conf:161:; ╪¼╪│╪▒ ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä┘ê╪º╪▒╪»╪⌐ ┘à┘å DINSTAR ╪Ñ┘ä┘ë ╪╣┘à┘è┘ä WebRTC (╪º┘ä╪¬╪╖╪¿┘è┘é)
+/etc/asterisk/extensions.conf:162:; PstnManager.acceptIncomingCall() ┘è┘Å╪╣┘è╪» ╪¬┘ê╪¼┘è┘ç ┘é┘å╪º╪⌐ DINSTAR ╪Ñ┘ä┘ë ┘ç┘å╪º
+/etc/asterisk/extensions.conf:186:; ΓöÇΓöÇΓöÇ from-dinstar-dtmf ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+/etc/asterisk/extensions.conf:189:[from-dinstar-dtmf]
+/etc/asterisk/extensions.conf:215:; ╪º┘ä┘à╪│╪¬╪«╪»┘à ┘è╪¬╪╡┘ä ╪¿┘Ç Asterisk ╪╣╪¿╪▒ WSS╪î ┘ê┘è┘Å╪¡┘ê┘æ┘ä ┘ä┘ä┘Ç DINSTAR
+/etc/asterisk/extensions.conf:223:   ; ╪▒╪¿╪╖ ╪º┘ä┘à┘â╪º┘ä┘à╪⌐: WebRTC ΓåÉ Asterisk ΓåÆ DINSTAR
+/etc/asterisk/extensions.conf:224:   same => n,NoOp(Bridging WebRTC call to DINSTAR: ${EXTEN} via ${GW})
+/etc/asterisk/extensions.conf:231:   same => n,Dial(PJSIP/${EXTEN}@${GW},${DIAL_TIMEOUT},KU(from-dinstar-dtmf))
+/etc/asterisk/pjsip.conf:22:[dinstar-gw-192-168-11-2]
+/etc/asterisk/pjsip.conf:27:[dinstar-gw-192-168-11-2]
+/etc/asterisk/pjsip.conf:29:context=from-dinstar
+/etc/asterisk/pjsip.conf:37:aors=dinstar-gw-192-168-11-2
+/etc/asterisk/pjsip.conf:40:[dinstar-gw-192-168-11-2]
+/etc/asterisk/pjsip.conf:42:endpoint=dinstar-gw-192-168-11-2
+/etc/asterisk/pjsip.conf:48:[dinstar-gw-192-168-11-3]
+/etc/asterisk/pjsip.conf:53:[dinstar-gw-192-168-11-3]
+/etc/asterisk/pjsip.conf:55:context=from-dinstar
+/etc/asterisk/pjsip.conf:63:aors=dinstar-gw-192-168-11-3
+/etc/asterisk/pjsip.conf:66:[dinstar-gw-192-168-11-3]
+/etc/asterisk/pjsip.conf:68:endpoint=dinstar-gw-192-168-11-3
+/etc/asterisk/pjsip.conf:71:[dinstar-gateway]
+/etc/asterisk/pjsip.conf:73:context=from-dinstar
+/etc/asterisk/pjsip.conf:81:aors=dinstar-gw-192-168-11-2
+/etc/asterisk/pjsip.conf:95:context=from-dinstar
+/etc/asterisk/pjsip.conf:113:context=from-dinstar
+/etc/asterisk/pjsip.conf:131:context=from-dinstar
+/etc/asterisk/pjsip.conf:149:context=from-dinstar
+/etc/asterisk/pjsip.conf:167:context=from-dinstar
+/etc/asterisk/pjsip.conf:185:context=from-dinstar
+/etc/asterisk/pjsip.conf:203:context=from-dinstar
+/etc/asterisk/pjsip.conf:221:context=from-dinstar
+/etc/asterisk/queues.conf:574:;member => Local/1000@default,0,John Smith,PJSIP/1000
+/etc/asterisk/queues.conf:575:;member => Local/2000@default,0,Lorem Ipsum,PJSIP/2000,no

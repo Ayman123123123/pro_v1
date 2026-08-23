@@ -1,0 +1,467 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>Syslog</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript">
+function clearspace(str)
+{
+	while(str.indexOf(" ")!=-1){
+		str=str.replace(" ","");
+	}
+	return  str;
+}
+function ipverify(ip_string){
+	var c;
+	var n = 0;
+	var ch = ".0123456789";
+	if (ip_string.length < 7 || ip_string.length > 15)
+		return false;
+	for (var i = 0; i < ip_string.length; i++){
+		c = ip_string.charAt(i);
+		if (ch.indexOf(c) == -1)
+			return false;
+		else{
+			if (c == '.'){
+				if(ip_string.charAt(i+1) != '.')
+					n++;
+				else
+					return false;
+			}		
+		}
+	}
+	if (n != 3)
+		return false;
+	if (ip_string.indexOf('.') == 0 || ip_string.lastIndexOf('.') == (ip_string.length - 1))
+		return false; 
+		
+	szarray = [0,0,0,0];
+	var remain;
+	var i;
+	for(i = 0; i < 3; i++){
+		var n = ip_string.indexOf('.');
+		szarray[i] = ip_string.substring(0,n);
+		remain = ip_string.substring(n+1);
+		ip_string = remain;
+	}
+	szarray[3] = remain;
+	for(i = 0; i < 4; i++){
+		if (szarray[i] < 0 || szarray[i] > 255){
+			return false;
+		}
+	}		
+	return true;	
+}
+function is_ipaddr(ip_string){
+	if(ip_string.length == 0){
+		return false;
+	}
+	if (!ipverify(ip_string)){
+		return false;
+	}	
+	return true;
+}
+
+function is_number(num_string,nMin,nMax){
+	var c;
+	var ch = "-0123456789";
+	if(num_string.length == 0){
+		return false;
+	}
+	for (var i = 0; i < num_string.length; i++){
+		c = num_string.charAt(i);
+		if (ch.indexOf(c) == -1)
+			return false;
+	}
+	if(parseInt(num_string) < nMin || parseInt(num_string) > nMax)
+		return false;
+	return true;
+}
+function charCompare_length_limit(szname,limit){
+	var c;
+	var ch = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.<>,[]{}?/+=|\\'\":;~!#$%()` & ";
+	if(szname.length > limit)
+		return false;
+	for (var i = 0; i < szname.length; i++){
+		c = szname.charAt(i);
+		if (ch.indexOf(c) == -1){
+				return false;
+		}
+	}
+	return true;
+}
+function is_string_length_limit(name_string, limit){
+	if(name_string.length == 0){
+		return false;
+	}
+	if(!charCompare_length_limit(name_string,limit)){
+		return false;
+	}
+	else
+		return true;
+}
+function MM_callJS()
+{
+	var tmp,obj,tmp2,obj2;
+
+	mouse_click();
+	
+	tmp = '{module:"syslog",syslog_enable:"on",address:"192.168.11.131",port:"514",syslog_level:"7",syslog_signal:"on",syslog_media:"on",syslog_system:"on",syslog_management:"on",syslog_cdr:"off"}';
+	obj = eval('('+tmp+')');
+
+	if(typeof(obj)!="object"
+	||obj.module!='syslog')
+	{
+		alert("Unexpect Error!!!");
+		return;
+	}
+	
+	if(obj.syslog_enable == "on"){
+		document.forms[0].SyslogEnable.checked = true;
+	}else{
+		document.forms[0].SyslogEnable.checked = false;
+	}
+	document.forms[0].SyslogServer.value = obj.address;
+	document.forms[0].SyslogPort.value = obj.port;
+	document.forms[0].SyslogLevel.value = obj.syslog_level;
+
+	if(obj.syslog_signal == "on"){
+		document.forms[0].signal.checked = true;
+	}else{
+		document.forms[0].signal.checked = false;
+	}
+	
+	if(obj.syslog_media == "on"){
+		document.forms[0].media.checked = true;
+	}else{
+		document.forms[0].media.checked = false;
+	}
+		
+	if(obj.syslog_system == "on"){
+		document.forms[0].system.checked = true;
+	}else{
+		document.forms[0].system.checked = false;
+	}
+	
+	if(obj.syslog_management == "on"){
+		document.forms[0].management.checked = true;
+	}else{
+		document.forms[0].management.checked = false;
+	}
+	
+	if(obj.syslog_cdr == "on"){
+		document.forms[0].SendCDR.checked = true;
+	}else{
+		document.forms[0].SendCDR.checked = false;
+	}
+	
+	tmp2 = '{module:"serverlog",serverlog_enable:"off",address:"",port:"514",serverlog_level:"-1",serverlog_signal:"off",serverlog_media:"off",serverlog_system:"off",serverlog_management:"off"}';
+	obj2 = eval('('+tmp2+')');
+	if(typeof(obj2)!="object"
+	||obj2.module!='serverlog')
+	{
+		alert("Unexpect Error!!!");
+		return;
+	}
+	if(obj2.serverlog_enable == "on"){
+		document.forms[0].ServerLogEnable.checked = true;
+	}else{
+		document.forms[0].ServerLogEnable.checked = false;
+	}
+	document.forms[0].ServerLogServer.value = obj2.address;
+	document.forms[0].ServerLogPort.value = obj2.port;
+	document.forms[0].ServerLogLevel.value = obj2.serverlog_level;
+	if(obj2.serverlog_signal == "on"){
+		document.forms[0].ServerLogSignal.checked = true;
+	}else{
+		document.forms[0].ServerLogSignal.checked = false;
+	}
+	if(obj2.serverlog_media == "on"){
+		document.forms[0].ServerLogMedia.checked = true;
+	}else{
+		document.forms[0].ServerLogMedia.checked = false;
+	}
+	if(obj2.serverlog_system == "on"){
+		document.forms[0].ServerLogSystem.checked = true;
+	}else{
+		document.forms[0].ServerLogSystem.checked = false;
+	}
+	if(obj2.serverlog_management == "on"){
+		document.forms[0].ServerLogManagement.checked = true;
+	}else{
+		document.forms[0].ServerLogManagement.checked = false;
+
+	}
+	mouse_click();
+}
+
+function mouse_click()
+{
+	if(document.getElementById("SyslogEnable").checked == true)
+	{
+		document.getElementById("idSyslogAddr").style.display="";
+		document.getElementById("idSyslogLevel").style.display="";
+		document.getElementById("idSyslogPort").style.display="";
+		document.getElementById("idSignal").style.display="";
+		document.getElementById("idMedia").style.display="";
+		document.getElementById("idSystem").style.display="";
+		document.getElementById("idManagement").style.display="";
+		document.getElementById("idSendCDR").style.display="";
+	}
+	else
+	{
+		document.getElementById("idSyslogAddr").style.display="none";
+		document.getElementById("idSyslogLevel").style.display="none";
+		document.getElementById("idSyslogPort").style.display="none";
+		document.getElementById("idSignal").style.display="none";
+		document.getElementById("idMedia").style.display="none";
+		document.getElementById("idSystem").style.display="none";
+		document.getElementById("idManagement").style.display="none";
+		document.getElementById("idSendCDR").style.display="none";		
+	}
+	if(document.getElementById("ServerLogEnable").checked == true)
+	{
+		document.getElementById("idServerLogAddr").style.display="";
+		document.getElementById("idServerLogPort").style.display="";
+		document.getElementById("idServerLogLevel").style.display="";
+		document.getElementById("idServerLogSignal").style.display="";
+		document.getElementById("idServerLogMedia").style.display="";
+		document.getElementById("idServerLogSystem").style.display="";
+		document.getElementById("idServerLogManagement").style.display="";
+	}
+	else
+	{
+		document.getElementById("idServerLogAddr").style.display="none";
+		document.getElementById("idServerLogPort").style.display="none";
+		document.getElementById("idServerLogLevel").style.display="none";
+		document.getElementById("idServerLogSignal").style.display="none";
+		document.getElementById("idServerLogMedia").style.display="none";
+		document.getElementById("idServerLogSystem").style.display="none";
+		document.getElementById("idServerLogManagement").style.display="none";
+	}
+	
+	document.getElementById("idServerLogTbl").style.display="none";
+}
+function form_check()
+{
+	document.forms[0].SyslogServer.value = clearspace(document.forms[0].SyslogServer.value);
+	document.forms[0].SyslogPort.value = clearspace(document.forms[0].SyslogPort.value);
+	
+	if(document.getElementById("SyslogEnable").checked == true)
+	{
+		if(document.forms[0].SyslogServer.value.length != 0)
+		{
+			if(!is_string_length_limit(document.forms[0].SyslogServer.value,63))
+			{
+				alert("'Server address' is incorrect!");
+				document.forms[0].SyslogServer.select();
+				return false;
+			}
+						
+			if(!is_number(document.forms[0].SyslogPort.value,0,65535))
+			{
+				alert("Please enter a number between 0 and 65535!");
+				document.forms[0].SyslogPort.select();
+				return false;
+			}
+		}
+		else
+		{
+			alert("Please input 'Server Address'!");
+			document.forms[0].SyslogServer.select();
+			return false;			
+		}
+	}
+	
+
+	return true;
+}
+
+function DisableAll() 
+{ 
+	var arr = document.getElementsByTagName("input");
+	for(var i=0; i<arr.length; i++)
+	{
+		arr[i].disabled = true;
+	}
+
+	arr = document.getElementsByTagName("select");
+	for(i=0; i<arr.length; i++)
+	{
+		arr[i].disabled = true;
+	}	
+}
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form action="/goform/Syslog" method="post" name="SyslogCfg" id="SyslogCfg" onSubmit="return form_check();">
+ <table width="700px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Syslog</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+<table width="700px" align="center" class="TB">
+  <tr>
+    <td width="5%">&nbsp;</td>
+    <td>
+      <table cellpadding="1" cellspacing="0" width="100%" class="context">
+        <tr>
+          <td width="5%">&nbsp;</td>
+          <td width="60%">&nbsp;</td>
+          <td width="35%">&nbsp;</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>Local Syslog</td>
+          <td>
+            <input id="SyslogEnable" name="SyslogEnable" type="checkbox" onClick="mouse_click();" >Enable
+          </td>
+        </tr>
+        <tr id="idSyslogAddr" style="display:none">
+          <td>&nbsp;</td>
+          <td>Server Address</td>
+          <td>
+            <input class="atext" id="SyslogServer" maxlength="63" name="SyslogServer" style="width:75%" value="">
+          </td>
+        </tr>
+        <tr id="idSyslogPort" style="display:none">
+          <td>&nbsp;</td>
+          <td>Server Port</td>
+          <td>
+            <input class="atext" id="SyslogPort" maxlength="5" name="SyslogPort" style="width:75%" value="">
+          </td>
+        </tr>		
+        <tr id="idSyslogLevel" style="display:none">
+          <td>&nbsp;</td>
+          <td>Syslog Level</td>
+          <td>
+            <select name="SyslogLevel" class="alist" style="width:79.5%" id="SyslogLevel">
+              <option value="0" >EMERG</option>
+			  <option value="1" >ALERT</option>
+			  <option value="2" >CRIT</option>
+			  <option value="3" >ERROR</option>
+			  <option value="4" >WARNING</option>
+			  <option value="5" >NOTICE</option>
+			  <option value="6" >INFO</option>
+			  <option value="7" >DEBUG</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idSignal" style="display:none">
+          <td>&nbsp;</td>
+          <td>Signal Log</td>
+          <td><input type="checkbox" id="signal" name="signal">Enable</td>        
+        </tr>
+        <tr id="idMedia" style="display:none">
+          <td>&nbsp;</td>
+          <td>Media Log</td>
+          <td><input type="checkbox" id="media" name="media">Enable</td>        
+        </tr>
+        <tr id="idSystem" style="display:none">
+          <td>&nbsp;</td>
+          <td>System Log</td>
+          <td><input type="checkbox" id="system" name="system">Enable</td>        
+        </tr>
+        <tr id="idManagement" style="display:none">
+          <td>&nbsp;</td>
+          <td>Management Log</td>
+          <td><input type="checkbox" id="management" name="management">Enable</td>        
+        </tr>  
+        <tr id="idSendCDR" style="display:none">
+          <td>&nbsp;</td>
+          <td>Send CDR</td>
+          <td>
+            <input type="checkbox" id="SendCDR" name="SendCDR" >Enable</td>
+        </tr>
+       <tr>
+          <td colspan="3">&nbsp;</td>
+        </tr>
+      </table>
+    <td width="5%">&nbsp;</td>
+  </tr>
+  <tr id="idServerLogTbl">
+  <td width="5%">&nbsp;</td>
+    <td>
+      <table cellpadding="0" cellspacing="0" width="100%" class="context">
+        <tr>
+          <td width="5%">&nbsp;</td>
+          <td width="60%">&nbsp;</td>
+          <td width="35%">&nbsp;</td>
+        </tr>
+        <tr>
+          <td>&nbsp;</td>
+          <td>Server Syslog</td>
+          <td>
+            <input id="ServerLogEnable" name="ServerLogEnable" type="checkbox" disabled="true">Enable
+          </td>
+        </tr>
+        <tr id="idServerLogAddr" style="display:none">
+          <td>&nbsp;</td>
+          <td>Server Address</td>
+          <td>
+            <input class="text" id="ServerLogServer" maxlength="31" name="ServerLogServer" size="18" value="" disabled="true">
+          </td>
+        </tr>
+        <tr id="idServerLogPort" style="display:none">
+          <td>&nbsp;</td>
+          <td>Server Port</td>
+          <td>
+            <input class="text" id="ServerLogPort" maxlength="5" name="ServerLogPort"  size="18" value="" disabled="true">
+          </td>
+        </tr>
+        <tr id="idServerLogLevel" style="display:none">
+          <td>&nbsp;</td>
+          <td>Syslog Level</td>
+          <td>
+            <select name="ServerLogLevel" class="list" id="ServerLogLevel" disabled="true">
+              <option value="0" >EMERG</option>
+			  <option value="1" >ALERT</option>
+			  <option value="2" >CRIT</option>
+			  <option value="3" >ERROR</option>
+			  <option value="4" >WARNING</option>
+			  <option value="5" >NOTICE</option>
+			  <option value="6" >INFO</option>
+			  <option value="7" >DEBUG</option>
+            </select>
+          </td>
+        </tr>
+        <tr id="idServerLogSignal" style="display:none">
+          <td>&nbsp;</td>
+          <td>Signal Log</td>
+          <td><input type="checkbox" id="ServerLogSignal" name="ServerLogSignal" disabled="true">Enable</td>
+        </tr>
+        <tr id="idServerLogMedia" style="display:none">
+          <td>&nbsp;</td>
+          <td>Media Log</td>
+          <td><input type="checkbox" id="ServerLogMedia" name="ServerLogMedia" disabled="true">Enable</td>
+        </tr>
+        <tr id="idServerLogSystem" style="display:none">
+          <td>&nbsp;</td>
+          <td>System Log</td>
+          <td><input type="checkbox" id="ServerLogSystem" name="ServerLogSystem" disabled="true">Enable</td>
+        </tr>
+        <tr id="idServerLogManagement" style="display:none">
+          <td>&nbsp;</td>
+          <td>Management Log</td>
+          <td><input type="checkbox" id="ServerLogManagement" name="ServerLogManagement" disabled="true">Enable</td>
+        </tr>
+        <tr>
+          <td colspan="3">&nbsp;</td>
+        </tr>
+      </table>
+    <td width="5%">&nbsp;</td>
+  </tr>
+</table>
+ <p id='idSave' style='display:' align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save">
+ </p>
+<p>&nbsp;</p>
+</form>
+</body>
+</html>
+

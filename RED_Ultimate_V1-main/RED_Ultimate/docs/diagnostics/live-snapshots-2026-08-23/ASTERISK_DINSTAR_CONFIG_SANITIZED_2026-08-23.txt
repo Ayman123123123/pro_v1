@@ -1,0 +1,486 @@
+=== /etc/asterisk/pjsip.conf lines 1-250 ===
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0
+external_media_address=192.168.11.20
+external_signaling_address=192.168.11.20
+local_net=10.0.0.0/8
+local_net=172.16.0.0/12
+local_net=192.168.0.0/16
+local_net=127.0.0.0/8
+
+[anonymous]
+type=endpoint
+context=from-untrusted
+disallow=all
+allow=alaw,ulaw
+allow_subscribe=no
+
+; ┘à┘å┘ü╪░ ╪º┘ä╪º╪¬╪╡╪º┘ä = ╪º┘ä┘à┘å┘ü╪░ ╪º┘ä┘à╪¡┘ä┘è ┘ä┘à┘å┘ü╪░ GSM ┘ê╪¼┘ç╪⌐ ╪º┘ä┘à╪│╪º╪▒ (╪º┘ä┘à┘å┘ü╪░ 2 -> 5062):
+; ┘à╪¡╪▒┘â ╪º┘ä┘à╪│╪º╪▒╪º╪¬ ┘ü┘è ╪º┘ä╪¿┘ê╪º╪¿╪⌐ ┘è┘é╪¿┘ä ┘à┘â╪º┘ä┘à╪º╪¬ IP->Tel ┘ü┘é╪╖ ╪╣┘ä┘ë ┘à┘é╪¿╪│ ╪º┘ä┘à┘å┘ü╪░ ╪º┘ä┘ê╪¼┘ç╪⌐
+; (┘ä╪º ╪╣┘ä┘ë ┘à┘é╪¿╪│ ╪º┘ä╪¬╪▒┘å┘â 5060)╪î ┘ü┘â┘ä ┘à┘â╪º┘ä┘à╪⌐ ╪º┘ä┘ë 5060 ╪¬╪▒┘ü╪╢ 503.
+[dinstar-gw-192-168-11-2]
+type=aor
+contact=sip:192.168.11.2:5062
+; qualify_frequency=30
+
+[dinstar-gw-192-168-11-2]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+from_user=1000000
+aors=dinstar-gw-192-168-11-2
+transport=transport-udp
+
+[dinstar-gw-192-168-11-2]
+type=identify
+endpoint=dinstar-gw-192-168-11-2
+match=192.168.11.2
+
+; ┘à┘å┘ü╪░ ╪º┘ä╪º╪¬╪╡╪º┘ä = ╪º┘ä┘à┘å┘ü╪░ ╪º┘ä┘à╪¡┘ä┘è ┘ä┘à┘å┘ü╪░ GSM ┘ê╪¼┘ç╪⌐ ╪º┘ä┘à╪│╪º╪▒ (╪º┘ä┘à┘å┘ü╪░ 2 -> 5062):
+; ┘à╪¡╪▒┘â ╪º┘ä┘à╪│╪º╪▒╪º╪¬ ┘ü┘è ╪º┘ä╪¿┘ê╪º╪¿╪⌐ ┘è┘é╪¿┘ä ┘à┘â╪º┘ä┘à╪º╪¬ IP->Tel ┘ü┘é╪╖ ╪╣┘ä┘ë ┘à┘é╪¿╪│ ╪º┘ä┘à┘å┘ü╪░ ╪º┘ä┘ê╪¼┘ç╪⌐
+; (┘ä╪º ╪╣┘ä┘ë ┘à┘é╪¿╪│ ╪º┘ä╪¬╪▒┘å┘â 5060)╪î ┘ü┘â┘ä ┘à┘â╪º┘ä┘à╪⌐ ╪º┘ä┘ë 5060 ╪¬╪▒┘ü╪╢ 503.
+[dinstar-gw-192-168-11-3]
+type=aor
+contact=sip:192.168.11.3:5062
+; qualify_frequency=30
+
+[dinstar-gw-192-168-11-3]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+from_user=1000000
+aors=dinstar-gw-192-168-11-3
+transport=transport-udp
+
+[dinstar-gw-192-168-11-3]
+type=identify
+endpoint=dinstar-gw-192-168-11-3
+match=192.168.11.3
+
+[dinstar-gateway]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
+from_user=1000000
+aors=dinstar-gw-192-168-11-2
+transport=transport-udp
+;disable_nat_qualify=yes
+
+[0]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[0]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=0
+
+[1]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[1]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=1
+
+[2]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[2]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=2
+
+[3]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[3]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=3
+
+[4]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[4]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=4
+
+[5]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[5]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=5
+
+[6]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[6]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=6
+
+[7]
+type=aor
+max_contacts=5
+remove_existing=yes
+qualify_frequency=30
+maximum_expiration=300
+minimum_expiration=60
+
+[7]
+type=endpoint
+context=from-dinstar
+disallow=all
+allow=alaw,ulaw,gsm
+direct_media=no
+force_rport=yes
+rewrite_contact=no
+aors=7
+
+[transport-ws]
+type=transport
+protocol=ws
+bind=0.0.0.0:8089
+
+[transport-wss]
+type=transport
+protocol=wss
+bind=0.0.0.0:8090
+
+[red-webrtc-client]
+type=aor
+max_contacts=5
+remove_existing=yes
+default_expiration=120
+minimum_expiration=60
+maximum_expiration=3600
+
+[red-webrtc-client]
+type=auth
+auth_type=userpass
+password=***REDACTED***
+=== /etc/asterisk/extensions.conf lines 1-250 ===
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+; RED Sovereign ΓÇö Asterisk Dialplan v3
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+; ╪º┘ä╪│┘è╪º┘é╪º╪¬:
+;   [from-red-backend]       ΓåÉ ┘à┘â╪º┘ä┘à╪º╪¬ ╪╡╪º╪»╪▒╪⌐ ┘à┘å ╪º┘ä╪¬╪╖╪¿┘è┘é ╪Ñ┘ä┘ë GSM (╪╣╪¿╪▒ AMI)
+;   [from-dinstar]           ΓåÉ ┘à┘â╪º┘ä┘à╪º╪¬ ┘ê╪º╪▒╪»╪⌐ ┘à┘å GSM ΓåÆ UserEvent ΓåÆ ╪º┘å╪¬╪╕╪º╪▒
+;   [from-incoming-bridge]   ΓåÉ ╪¼╪│╪▒ ╪º┘ä┘à┘â╪º┘ä┘à╪⌐ ╪º┘ä┘ê╪º╪▒╪»╪⌐ ╪¿╪╣╪» ┘é╪¿┘ê┘ä ╪º┘ä┘à╪│╪¬╪«╪»┘à
+;   [from-dinstar-dtmf]      ΓåÉ ╪¬┘à╪▒┘è╪▒ DTMF ╪ú╪½┘å╪º╪í ┘à┘â╪º┘ä┘à╪⌐ ┘å╪┤╪╖╪⌐
+;   [from-untrusted]         ΓåÉ ╪▒┘ü╪╢ ╪ú┘è ┘à┘â╪º┘ä┘à╪⌐ ╪║┘è╪▒ ┘à┘Å┘ü┘ê┘Ä┘æ╪╢╪⌐
+;   [from-red-client]        ΓåÉ ┘à┘å╪╣ ╪º┘ä╪º┘ä╪¬┘ü╪º┘ü ╪º┘ä┘à╪¿╪º╪┤╪▒ ╪╣┘ä┘ë ╪º┘ä╪¡╪» ╪º┘ä┘è┘ê┘à┘è
+;   [from-red-client-webrtc] ΓåÉ ┘à┘â╪º┘ä┘à╪º╪¬ PSTN ╪º┘ä╪╡╪º╪»╪▒╪⌐ ┘à┘å ╪º┘ä╪¬╪╖╪¿┘è┘é ╪╣╪¿╪▒ WebRTC
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+; ΓöÇΓöÇΓöÇ Globals ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+[globals]
+DEFAULT_GW=dinstar-gateway
+DIAL_TIMEOUT=60
+RING_TIMEOUT=40
+
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+; LEGENDARY PER-PROVIDER RINGTONE STRATEGY (Yemen operators)
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+; Yemen numbering plan (YemenNumberPlan.kt / YemeniOperatorDetector.kt):
+;   70x ΓåÆ ┘ê╪º┘è Y Telecom      | 71x ΓåÆ ╪│╪¿╪ú┘ü┘ê┘å Sabafon
+;   73x ΓåÆ ┘è┘ê YOU (MTN pre-2021) | 77x/78x ΓåÆ ┘è┘à┘å ┘à┘ê╪¿╪º┘è┘ä Yemen Mobile
+;   10x ΓåÆ ┘è┘à┘å ┘ü┘ê╪▒╪¼┘è (data, not GSM) | 1x-5x ΓåÆ ╪½╪º╪¿╪¬ PSTN
+;
+; PROFESSIONAL PSTN APPROACH ΓÇö PASS-THROUGH:
+;   For ALL PSTN legs (from-red-backend, from-red-client-webrtc outbound
+;   to DINSTAR, and from-dinstar inbound waiting), use Progress() which
+;   sends 183 Session Progress WITH SDP. This passes through the REAL
+;   carrier ringback tone from Sabafon/YOU/YemenMobile ΓÇö caller hears the
+;   operator's actual network ring, not a synthetic local tone. This is the
+;   preferred, legendary fix.
+;
+;   NEVER use Ringing() (180 without SDP) for PSTN-terminated calls ΓÇö it
+;   GENERATES local tone from indications.conf and hides carrier early media.
+;
+;   Ringing() is kept ONLY for pure WebRTC-to-WebRTC internal calls where
+;   there is no PSTN trunk to provide ringback.
+;
+; FALLBACK PER-PROVIDER LOCAL TONES (when passthrough impossible):
+;   indications.conf defines sub-zones:
+;     [ye-sabafon]  425 Hz | [ye-you] 400 Hz | [ye-yemobile] 440 Hz | [ye-ytelecom] 420 Hz
+;   Switch before Ringing() via CHANNEL(tone_zone):
+;     same => n,Gosub(ye-operator-tone,s,1(${EXTEN}))
+;   or inline:
+;     same => n,ExecIf($["${EXTEN:0:2}"="71"]?Set(CHANNEL(tone_zone)=ye-sabafon))
+;   Context [ye-operator-tone] below handles +967/00967/0 prefix stripping and sets
+;   tone_zone accordingly. Default remains [ye] (country=ye) for unknown prefixes.
+; ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+; ΓöÇΓöÇΓöÇ ye-operator-tone ΓÇö per-provider tone_zone selector (Gosub) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; Usage: Gosub(ye-operator-tone,s,1(${EXTEN})) before Ringing()
+; Sets CHANNEL(tone_zone) to ye-sabafon / ye-you / ye-yemobile / ye-ytelecom
+; Preference: Progress() passthrough is better ΓÇö this is fallback only.
+; Normalizes +967, 00967, 967, 0 prefixes before prefix check.
+[ye-operator-tone]
+exten => s,1,NoOp(Select Yemen operator tone for ${ARG1})
+  same => n,Set(_RAWNUM=${ARG1})
+  same => n,Set(_NUM=${FILTER(0123456789+${_RAWNUM})})
+  ; strip +967 / 00967 / 967 / 0
+  same => n,ExecIf($["${_NUM:0:4}"="+967"]?Set(_NUM=${_NUM:4}))
+  same => n,ExecIf($["${_NUM:0:5}"="00967"]?Set(_NUM=${_NUM:5}))
+  same => n,ExecIf($["${_NUM:0:3}"="967"]?Set(_NUM=${_NUM:3}))
+  same => n,ExecIf($["${_NUM:0:1}"="0"]?Set(_NUM=${_NUM:1}))
+  same => n,GotoIf($["${_NUM:0:2}"="70"]?ytelecom)
+  same => n,GotoIf($["${_NUM:0:2}"="71"]?sabafon)
+  same => n,GotoIf($["${_NUM:0:2}"="73"]?you)
+  same => n,GotoIf($["${_NUM:0:2}"="77"]?yemobile)
+  same => n,GotoIf($["${_NUM:0:2}"="78"]?yemobile)
+  same => n,Set(CHANNEL(tone_zone)=ye)
+  same => n,Return()
+  same => n(ytelecom),Set(CHANNEL(tone_zone)=ye-ytelecom)
+  same => n,Return()
+  same => n(sabafon),Set(CHANNEL(tone_zone)=ye-sabafon)
+  same => n,Return()
+  same => n(you),Set(CHANNEL(tone_zone)=ye-you)
+  same => n,Return()
+  same => n(yemobile),Set(CHANNEL(tone_zone)=ye-yemobile)
+  same => n,Return()
+; Alternative entry for direct EXTEN pattern match (without Gosub)
+exten => _70X.,1,Set(CHANNEL(tone_zone)=ye-ytelecom)
+  same => n,Return()
+exten => _71X.,1,Set(CHANNEL(tone_zone)=ye-sabafon)
+  same => n,Return()
+exten => _73X.,1,Set(CHANNEL(tone_zone)=ye-you)
+  same => n,Return()
+exten => _77X.,1,Set(CHANNEL(tone_zone)=ye-yemobile)
+  same => n,Return()
+exten => _78X.,1,Set(CHANNEL(tone_zone)=ye-yemobile)
+  same => n,Return()
+exten => _X.,1,Set(CHANNEL(tone_zone)=ye)
+  same => n,Return()
+
+; ΓöÇΓöÇΓöÇ from-red-backend ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä╪╡╪º╪»╪▒╪⌐ ╪Ñ┘ä┘ë ╪¿┘ê╪º╪¿╪º╪¬ DINSTAR
+; ┘è┘Å┘å╪┤╪ª AMI ┘é┘å┘ê╪º╪¬ Local ┘ü┘è ┘ç╪░╪º ╪º┘ä╪│┘è╪º┘é ╪¡╪╡╪▒┘ï╪º.
+; ╪º┘ä╪«╪º╪»┘à ┘ç┘ê ┘à┘å ┘è╪¬╪¡┘é┘é ┘à┘å ╪º┘ä╪▒┘é┘à ╪º┘ä┘è┘à┘å┘è ┘ê┘à┘å ╪º┘ä╪¡╪» ╪º┘ä┘è┘ê┘à┘è ┘ê╪╡┘ä╪º╪¡┘è╪⌐ PSTN.
+[from-red-backend]
+exten => _X.,1,NoOp(RED PSTN outbound: ${EXTEN} / callId=${RED_CALL_ID} sim=${RED_SIM_NUMBER})
+ same => n,Set(GW=${IF($["${RED_GW}" != ""]?${RED_GW}:${DEFAULT_GW})})
+  ; ╪¡╪º╪▒╪│: ┘ä╪º ┘å╪│┘à╪¡ ╪Ñ┘ä╪º ╪¿╪ú╪│┘à╪º╪í ┘å╪╕╪▒╪º╪í ╪¿╪│┘è╪╖╪⌐ ┘ä┘à┘å╪╣ ╪¡┘é┘å ┘ê╪¼┘ç╪⌐ ╪ú╪«╪▒┘ë
+ same => n,GotoIf($["${REGEX("^[A-Za-z0-9_-]+$" ${GW})}" = "0"]?badgw)
+  ; ╪¬╪│╪¼┘è┘ä callId ┘ü┘è CDR userfield ┘ä┘ä╪▒╪¿╪╖ ╪¿╪│╪¼┘ä ┘é╪º╪╣╪»╪⌐ ╪º┘ä╪¿┘è╪º┘å╪º╪¬
+ same => n,Set(CDR(userfield)=RED_DINSTAR:${GW}:${RED_CALL_ID}:${RED_SIM_NUMBER})
+  ; ╪¬╪╡╪»┘è╪▒ callId ┘â┘à╪¬╪║┘è┘æ╪▒ ┘é┘å╪º╪⌐ ΓÇö ┘è┘é╪▒╪ñ┘ç DinstarEventListener ╪╣╪¿╪▒ VarSet
+ same => n,Set(RED_CALL_ID=${RED_CALL_ID})
+   ; ╪Ñ╪╕┘ç╪º╪▒ ╪▒┘é┘à ╪º┘ä╪┤╪▒┘è╪¡╪⌐ ╪º┘ä╪¡┘é┘è┘é┘è ┘ä┘ä┘à╪│╪¬┘ä┘à ╪º┘ä╪«╪º╪▒╪¼┘è (1:1 ╪»╪º╪ª┘à)
+  same => n,ExecIf($["${RED_SIM_NUMBER}" != ""]?Set(CALLERID(num)=${RED_SIM_NUMBER}))
+  same => n,ExecIf($["${RED_SIM_NUMBER}" != ""]?Set(CALLERID(ani)=${RED_SIM_NUMBER}))
+   ; PSTN outbound: carrier ringback is passed through via Dial early media.
+   ; Do NOT generate local tone ΓÇö Progress() passthrough is automatic in Dial.
+   ; For local testing without trunk, uncomment next line for per-provider tone:
+   ; same => n,Gosub(ye-operator-tone,s,1(${EXTEN}))
+   ; ╪Ñ╪▒╪│╪º┘ä ╪º┘ä┘à┘â╪º┘ä┘à╪⌐ ΓÇö K=call-waiting, U=subroutine for DTMF forwarding
+  same => n,Dial(PJSIP/${EXTEN}@${GW},${DIAL_TIMEOUT},KU(from-dinstar-dtmf))
+ same => n,Hangup()
+ same => n(badgw),NoOp(Rejected malformed gateway name: ${GW})
+ same => n,Hangup(21)
+
+; ΓöÇΓöÇΓöÇ from-dinstar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä┘ê╪º╪▒╪»╪⌐ ┘à┘å ╪┤╪¿┘â╪⌐ GSM ╪╣╪¿╪▒ ╪ú┘è ╪¿┘ê╪º╪¿╪⌐ DINSTAR
+; ╪º┘ä╪«╪╖┘ê╪⌐ 1: UserEvent ┘è┘Å┘å╪¿┘æ┘ç ╪º┘ä╪«╪º╪»┘à ΓåÆ ┘è┘Å broadcast ┘ä┘ä┘à╪│╪¬╪«╪»┘à ╪╣╪¿╪▒ WebSocket
+; ╪º┘ä╪«╪╖┘ê╪⌐ 2: ╪º┘ä┘à╪│╪¬╪«╪»┘à ┘è╪╢╪║╪╖ "┘é╪¿┘ê┘ä" ΓåÆ Backend ┘è┘Å╪╣┘è╪» ╪¬┘ê╪¼┘è┘ç ╪º┘ä┘é┘å╪º╪⌐ ╪Ñ┘ä┘ë from-incoming-bridge
+; ╪º┘ä╪«╪╖┘ê╪⌐ 3: from-incoming-bridge ┘è┘Å╪¼╪▒┘è Dial ┘ä┘Ç WebRTC client ΓåÆ ╪¼╪│╪▒ ╪º┘ä┘à┘â╪º┘ä┘à╪⌐
+; ΓÜá∩╕Å ┘ä╪º ┘å┘Å╪║┘ä┘é ╪º┘ä┘é┘å╪º╪⌐ ┘ç┘å╪º ΓÇö ┘å┘å╪¬╪╕╪▒ Redirect ┘à┘å Backend
+[from-dinstar]
+exten => _X.,1,NoOp(Incoming GSM call from ${CALLERID(num)} on port ${EXTEN} via ${CHANNEL(endpoint)})
+ ; ╪¬╪│╪¼┘è┘ä ╪¿┘è╪º┘å╪º╪¬ ╪º┘ä┘à┘â╪º┘ä┘à╪⌐ ╪º┘ä┘ê╪º╪▒╪»╪⌐
+ same => n,Set(CDR(userfield)=INCOMING_DINSTAR:${CHANNEL(endpoint)})
+ same => n,Set(CDR(accountcode)=${CALLERID(num)})
+  ; ╪Ñ╪▒╪│╪º┘ä UserEvent ┘è┘Å┘ä╪¬┘é╪╖┘ç DinstarEventListener ┘ü┘è ╪º┘ä╪«╪º╪»┘à
+  ; ╪º╪│╪¬╪«╪»┘à ╪ú╪│┘à╪º╪í ManagerEvent ╪º┘ä┘é┘è╪º╪│┘è╪⌐: ┘à┘â╪¬╪¿╪⌐ Asterisk-Java ┘ä╪º ╪¬┘â╪┤┘ü
+  ; ╪º╪│┘à UserEvent ╪ú┘ê ╪º┘ä╪¡┘é┘ê┘ä ╪º┘ä┘à╪«╪╡╪╡╪⌐ CallerID/Port/Gateway.
+  same => n,UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:${EXTEN},Context:from-dinstar)
+  ; ΓÜá∩╕Å asterisk-java ┘è┘Å╪│┘é╪╖ UserEvent ╪º┘ä┘à╪«╪╡╪╡ ╪¿╪╡┘à╪¬ (┘à┘Å╪½╪¿╪¬ ╪¡┘è╪º┘ï) ΓÇö ╪º┘ä┘à╪│╪º╪▒
+  ; ╪º┘ä╪ú╪│╪º╪│┘è ╪º┘ä┘à┘ê╪½┘ê┘é: ╪º╪│╪¬╪»╪╣╪º╪í HTTP ╪»╪º╪«┘ä┘è ┘à╪¿╪º╪┤╪▒ ┘ä┘ä╪«╪º╪»┘à ╪╣╪¿╪▒ ╪┤╪¿┘â╪⌐ Docker.
+  ; ΓÜá∩╕Å asterisk-java ┘è┘Å╪│┘é╪╖ UserEvent ╪º┘ä┘à╪«╪╡╪╡ ╪¿╪╡┘à╪¬ (┘à┘Å╪½╪¿╪¬ ╪¡┘è╪º┘ï) ΓÇö ╪º┘ä┘à╪│╪º╪▒
+  ; ╪º┘ä╪ú╪│╪º╪│┘è ╪º┘ä┘à┘ê╪½┘ê┘é: ╪│┘â╪▒╪¿╪¬ ╪¼╪│╪▒ ┘è╪│╪¬┘é╪¿┘ä ┘à╪╣╪º┘à┘ä╪º╪¬ ┘à┘ê╪╢╪╣┘è╪⌐ ┘å╪╕┘è┘ü╪⌐ (╪¿┘ä╪º ╪º┘é╪¬╪¿╪º╪│
+  ; JSON ┘à╪╢┘à┘å) ┘ê┘è┘å╪º╪»┘è HTTP ╪º┘ä╪»╪º╪«┘ä┘è ┘ä┘ä╪«╪º╪»┘à ╪╣╪¿╪▒ ╪┤╪¿┘â╪⌐ Docker.
+  same => n,System(/usr/local/bin/pstn-incoming.sh "${CALLERID(num)}" "${EXTEN}" "${CHANNEL(name)}")
+  ; ╪Ñ╪┤╪º╪▒╪⌐ ┘à╪¿┘â╪▒╪⌐ ┘ä┘ä┘à╪¬╪╡┘ä GSM ΓÇö Progress ┘è╪▒╪│┘ä 183 Session Progress ╪¿┘ä╪º Answer (┘ä╪º ╪º╪¡╪¬╪│╪º╪¿ ╪¿┘ä╪º ╪Ñ╪¼╪º╪¿╪⌐)
+  same => n,Progress()
+  ; ╪º┘å╪¬╪╕╪º╪▒ Redirect ┘à┘å Backend (╪¡╪» ╪ú┘é╪╡┘ë RING_TIMEOUT ╪½╪º┘å┘è╪⌐ ΓÇö ┘à╪¡╪º╪░╪º╪⌐ ┘à╪╣ CallRingPolicy 45s / TTL 120s)
+  same => n,Wait(${RING_TIMEOUT})
+  ; ╪Ñ╪░╪º ┘ä┘à ┘è┘Å╪▒┘Ä╪» ╪ú┘ê ┘ä┘à ┘è┘Å╪╣╪º╪» ╪¬┘ê╪¼┘è┘ç ΓÇö ╪Ñ┘å┘ç╪º╪í ╪º┘ä┘à┘â╪º┘ä┘à╪⌐
+  same => n,NoOp(Call from ${CALLERID(num)} unanswered after ${RING_TIMEOUT}s)
+  same => n,Hangup()
+
+; ╪º┘à╪¬╪»╪º╪» s ┘ä┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪¿╪»┘ê┘å ╪▒┘é┘à ┘à╪¡╪»╪»
+exten => s,1,NoOp(Incoming GSM call from ${CALLERID(num)} - no extension)
+  same => n,Set(CDR(userfield)=INCOMING_DINSTAR:${CHANNEL(endpoint)})
+  same => n,UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:s,Context:from-dinstar)
+  same => n,System(/usr/local/bin/pstn-incoming.sh "${CALLERID(num)}" "s" "${CHANNEL(name)}")
+  same => n,Progress()
+  same => n,Wait(${RING_TIMEOUT})
+  same => n,Hangup()
+
+; ΓöÇΓöÇΓöÇ from-incoming-bridge ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ╪¼╪│╪▒ ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ╪º┘ä┘ê╪º╪▒╪»╪⌐ ┘à┘å DINSTAR ╪Ñ┘ä┘ë ╪╣┘à┘è┘ä WebRTC (╪º┘ä╪¬╪╖╪¿┘è┘é)
+; PstnManager.acceptIncomingCall() ┘è┘Å╪╣┘è╪» ╪¬┘ê╪¼┘è┘ç ┘é┘å╪º╪⌐ DINSTAR ╪Ñ┘ä┘ë ┘ç┘å╪º
+; exten = "s" ┘ä╪ú┘å RedirectAction ┘è╪│╪¬╪«╪»┘à s ┘â╪º┘à╪¬╪»╪º╪» ╪º┘ü╪¬╪▒╪º╪╢┘è
+; legendary fix: Progress() (183 with SDP) not Ringing() (180) ΓÇö for GSM
+; inbound legs we do NOT generate local synthetic ring; Progress() lets the
+; GSM caller keep hearing early media while WebRTC Dial proceeds. If you
+; MUST generate local per-provider tone (no trunk / WebRTC-only test),
+; uncomment Gosub line below to set CHANNEL(tone_zone)=ye-* before Ringing():
+;   same => n,Gosub(ye-operator-tone,s,1(${CALLERID(num)}))
+;   same => n,Ringing()
+; But for PSTN-terminated bridge, Progress() passthrough is preferred and
+; per-provider tones in indications.conf are fallback only (see ye-* zones).
+[from-incoming-bridge]
+exten => s,1,NoOp(Bridging incoming GSM call to WebRTC client)
+  same => n,Set(CDR(userfield)=INCOMING_BRIDGE)
+  ; ╪Ñ╪▒╪│╪º┘ä 183 Progress ┘ä┘ä┘à╪¬╪╡┘ä GSM ╪ú╪½┘å╪º╪í ╪º╪¬╪╡╪º┘ä WebRTC ╪º┘ä╪»╪º╪«┘ä┘è (early media
+  ; ┘à╪╣ SDP ΓÇö ┘è┘à╪▒┘æ╪▒ ╪º┘ä┘å╪║┘à╪⌐ ╪º┘ä╪¡┘é┘è┘é┘è╪⌐ ╪¿╪»┘ä ╪¬┘ê┘ä┘è╪» ┘å╪║┘à╪⌐ ┘à╪¡┘ä┘è╪⌐. Ringing() ┘è┘Å╪│╪¬╪«╪»┘à
+  ; ┘ü┘é╪╖ ┘ä┘à┘â╪º┘ä┘à╪º╪¬ WebRTC-to-WebRTC ╪º┘ä╪«╪º┘ä╪╡╪⌐ ╪¿┘ä╪º trunk).
+  same => n,Progress()
+  ; Fallback per-provider local tone (uncomment if you need synthetic ring):
+  ; same => n,Gosub(ye-operator-tone,s,1(${CALLERID(num)}))
+  ; same => n,Ringing()
+  same => n,Dial(PJSIP/red-webrtc-client,${DIAL_TIMEOUT},tT)
+  same => n,Hangup()
+
+; ΓöÇΓöÇΓöÇ from-dinstar-dtmf ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ╪│┘è╪º┘é ┘à╪╣╪º┘ä╪¼╪⌐ DTMF ╪ú╪½┘å╪º╪í ┘à┘â╪º┘ä┘à╪⌐ ┘å╪┤╪╖╪⌐ (┘ä╪Ñ╪▒╪│╪º┘ä ╪ú╪▒┘é╪º┘à ╪╣╪¿╪▒ ╪º┘ä╪┤╪¿┘â╪⌐)
+; ┘è┘Å╪│╪¬╪«╪»┘Ä┘à ╪╣╪¿╪▒ ╪«┘è╪º╪▒ U() ┘ü┘è Dial() ┘à┘å from-red-backend
+[from-dinstar-dtmf]
+exten => s,1,Return()
+exten => _[0-9*#],1,NoOp(DTMF ${EXTEN} from backend during active call)
+ same => n,SendDTMF(${EXTEN})
+ same => n,Return()
+
+; ΓöÇΓöÇΓöÇ from-untrusted ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ╪º┘ä┘à┘â╪º┘ä┘à╪º╪¬ ┘à┘å ┘å╪╕┘è╪▒ ╪║┘è╪▒ ┘à╪╣╪▒┘ê┘ü ΓÇö ╪¬╪▒┘ü╪╢ ╪»╪º╪ª┘à┘ï╪º
+; ╪º┘ä┘å╪╕┘è╪▒ [anonymous] ┘ü┘è pjsip.conf ┘è╪┤┘è╪▒ ╪Ñ┘ä┘ë ┘ç┘å╪º.
+[from-untrusted]
+exten => _[0-9*#+].,1,NoOp(Rejected anonymous SIP call to ${EXTEN} from ${CALLERID(num)})
+ same => n,Set(CDR(userfield)=REJECTED_ANONYMOUS)
+ same => n,Hangup(21)
+exten => s,1,NoOp(Rejected anonymous SIP call with no extension)
+ same => n,Hangup(21)
+exten => i,1,Hangup(21)
+exten => h,1,Hangup()
+
+; ΓöÇΓöÇΓöÇ from-red-client ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ┘à┘å╪╣ ┘à╪¡╪º┘ê┘ä╪⌐ ╪º┘ä╪º┘ä╪¬┘ü╪º┘ü ╪º┘ä┘à╪¿╪º╪┤╪▒ ┘à┘å ╪╣┘à┘è┘ä SIP ╪╣┘ä┘ë ╪º┘ä╪¡╪» ╪º┘ä┘è┘ê┘à┘è ┘ê╪º┘ä╪¬┘ü┘ê┘è╪╢
+[from-red-client]
+exten => _X.,1,NoOp(Blocked direct client PSTN attempt from ${CALLERID(num)})
+ same => n,Hangup(21)
+
+; ΓöÇΓöÇΓöÇ from-red-client-webrtc ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+; ┘à┘â╪º┘ä┘à╪º╪¬ PSTN ╪º┘ä╪╡╪º╪»╪▒╪⌐ ┘à┘å ╪º┘ä╪¬╪╖╪¿┘è┘é ╪╣╪¿╪▒ WebRTC
+; ╪º┘ä┘à╪│╪¬╪«╪»┘à ┘è╪¬╪╡┘ä ╪¿┘Ç Asterisk ╪╣╪¿╪▒ WSS╪î ┘ê┘è┘Å╪¡┘ê┘æ┘ä ┘ä┘ä┘Ç DINSTAR
+[from-red-client-webrtc]
+exten => _X.,1,NoOp(WebRTC PSTN call from app: ${EXTEN} caller=${CALLERID(num)})
+ ; ╪¬╪│╪¼┘è┘ä CDR
+ same => n,Set(CDR(userfield)=WEBRTC_PSTN:${CALLERID(num)})
+ ; ╪¬╪¡╪»┘è╪» Gateway ΓÇö ┘è┘à┘â┘å ╪¬┘à╪▒┘è╪▒┘ç ╪╣╪¿╪▒ PJSIP_HEADER ┘à┘å Backend
+ same => n,Set(GW=${IF($["${RED_GW}" != ""]?${RED_GW}:${DEFAULT_GW})})
+ same => n,GotoIf($["${REGEX("^[A-Za-z0-9_-]+$" ${GW})}" = "0"]?badgw)
+   ; ╪▒╪¿╪╖ ╪º┘ä┘à┘â╪º┘ä┘à╪⌐: WebRTC ΓåÉ Asterisk ΓåÆ DINSTAR
+   same => n,NoOp(Bridging WebRTC call to DINSTAR: ${EXTEN} via ${GW})
+   ; ╪Ñ╪┤╪º╪▒╪⌐ ┘à╪¿┘â╪▒╪⌐ ┘ä┘ä┘à╪¬╪╡┘ä WebRTC ╪ú╪½┘å╪º╪í Dial ╪º┘ä╪«╪º╪▒╪¼┘è (183 Progress WITH SDP)
+   ; legendary PSTN fix: Progress() passes real Yemen carrier ringback
+   ; (Sabafon/YOU/YemenMobile). Ringing() (180) would generate synthetic
+   ; local tone and hide carrier early media ΓÇö use ONLY for WebRTC-to-WebRTC.
+   ; For local fallback tone without trunk: Gosub(ye-operator-tone,s,1(${EXTEN})) then Ringing().
+   same => n,Progress()
+   same => n,Dial(PJSIP/${EXTEN}@${GW},${DIAL_TIMEOUT},KU(from-dinstar-dtmf))
+ same => n,Hangup()
+ same => n(badgw),NoOp(Rejected malformed gateway name: ${GW})
+ same => n,Hangup(21)

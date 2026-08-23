@@ -1,0 +1,177 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<meta http-equiv="pragma" content="no-cache">
+<title>ModuleLog</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+var g_status;
+
+function module_log_download()
+{
+	window.location.href="module_log.tar.gz";
+}
+
+function Process_Handle()
+{
+	var status;
+	var text;
+	var cfg_file_type;
+	var i_cfg_file_type;
+	
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{    
+		text = xmlHttp.responseText;
+		
+		obj = eval('('+text+')');
+	
+		status = obj.status;
+		
+		g_status = parseInt(status);
+		if(1 == g_status)
+		{
+			document.getElementById("ModuleLogStatus").value = "RECORDING";			
+		}
+		else if (2 == g_status)
+		{
+			document.getElementById("ModuleLogStatus").value = "PACKING";
+		}
+		else if (3 == g_status)
+		{
+			document.getElementById("ModuleLogStatus").value = "FINISH";
+		}
+		else
+		{
+			document.getElementById("ModuleLogStatus").value = "IDLE";
+		}		
+
+		cfg_file_type=obj.cfg_file_type;
+		
+		i_cfg_file_type=parseInt(cfg_file_type);
+		if(i_cfg_file_type==1)
+		{
+			document.getElementById("Select").options[1].selected = true;
+		}
+		else
+		{
+			document.getElementById("Select").options[0].selected = true;
+		}
+	}
+}
+
+function doProcess()
+{
+	var para;
+	var url;
+	para = "";
+	url = "/EiaGetModuleLogStatus";
+	doRequestUsingGet(url, para, Process_Handle);
+	return true;
+}
+
+function MM_callJS()
+{
+	doProcess();
+	window.setInterval("doProcess()", 5000);
+}
+
+function module_log_start()
+{
+	if(g_status != 1)
+	{
+		if(!is_number(document.forms[0].Port.value,0,63))
+		{
+			alert('"Port" is incorrect, please enter a number between 0 and 63!');
+			document.forms[0].Port.select();
+			return false;
+		}
+	}
+    return true;
+}
+
+function module_log_stop()
+{
+	document.getElementById("ModuleLogStatus").value = "PACKING";
+	document.forms[0].action="/goform/ModuleLogStop";
+	document.forms[0].submit();
+}
+
+</script>
+</head>
+<body onLoad="MM_callJS()">
+	<form action="/goform/ModuleLogStart" method="post" name="ModuleLogStart" id="ModuleLogStart">
+		<table width="700px" border=0 align="center" cellpadding=0 cellspacing=0>
+		  <tr class="title">
+		   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+		   <td>Module Log</td>
+		   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+		  </tr>
+		</table>
+		
+		<table width="700px" align="center" class="TB">
+		  <tr>
+			<td width="5%">&nbsp;</td>
+			
+			<td>
+			  <table cellpadding="1" cellspacing="0" width="100%" class="context">
+				<tr>
+				  <td width="5%">&nbsp;</td>
+				  <td width="60%">&nbsp;</td>
+				  <td width="35%">&nbsp;</td>
+				</tr>
+				
+				<tr>
+				  <td>&nbsp;</td>
+				  <td>Status</td>
+				  <td>
+					<input class="text" id="ModuleLogStatus" name="ModuleLogStatus" type="text" style="background:transparent; border:none; padding:0;" readonly value="IDLE"></input>
+				  </td>
+				</tr>	
+				
+				<tr>
+				  <td>&nbsp;</td>
+				  <td>Port</td>
+				  <td>
+					<input class="text" id="Port" name="Port" type="text" style="text-align:left" maxlength="2" size="2" value="0"></input>
+				  </td>
+				</tr> 
+
+				<tr>
+				  <td>&nbsp;</td>
+				  <td>log type</td>
+				  <td>
+				  	<select id="Select" name="Select" class="list">
+						<option value="0">general log</option>
+						<option value="1">audio log</option>
+					</select>
+				  </td>
+				</tr> 
+				
+				<tr>
+					<td>&nbsp;</td>
+					<td>Action</td>
+					<td>
+						<input class="button" id="Start" name="Start" type="submit" value="Start" onClick="return module_log_start();"></input>
+						&nbsp;
+						<input class="button" id="Stop" name="Stop" type="button" value="Stop" onClick="module_log_stop();"></input>
+						&nbsp;
+						<input class="button" id="Download" name="Download" type="button" value="Download" onClick="module_log_download();"></input>
+					</td>
+				</tr>
+				
+				<tr>
+				  <td colspan="3">&nbsp;</td>
+				</tr>
+			  </table>
+			</td>  
+			
+			<td width="5%">&nbsp;</td>
+		  </tr>
+		</table>
+	</form>
+</body>
+</html>
+

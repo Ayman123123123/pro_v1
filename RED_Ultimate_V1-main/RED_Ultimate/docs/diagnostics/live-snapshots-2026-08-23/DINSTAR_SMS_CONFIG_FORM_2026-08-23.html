@@ -1,0 +1,440 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="pragma" content="no-cache">
+<title>SMS Settings</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var g_totalPort = parseInt('8');
+function MM_callJS()
+{
+	var tmp, obj;
+	
+	tmp = '{module:"smscfg",sms_email_enable:"off",destemail1:"",destemail2:"",destemail3:"",title:"",email_sms_enable:"off",rcvcycle:"",rcvkey:"",bind_mail2port:"off",sms_sending_port:"0"}';
+	obj = eval('('+tmp+')');
+	
+	if(typeof(obj)!="object"
+	||obj.module!='smscfg')
+	{
+		alert("Unexpect Error!!!");
+		return;
+	}
+	
+	if(obj.sms_email_enable == "on")
+	{
+		document.forms[0].Sms2EmailEn.checked = true;
+	}
+	else
+	{
+		document.forms[0].Sms2EmailEn.checked = false;
+	}
+	
+	document.forms[0].DesEmailAddr1.value = obj.destemail1;
+	document.forms[0].DesEmailAddr2.value = obj.destemail2;
+	document.forms[0].DesEmailAddr3.value = obj.destemail3;
+	document.forms[0].EmailTitle.value = obj.title;
+
+	//email to sms
+	if(obj.email_sms_enable == "on")
+	{
+		document.forms[0].Email2SmsEn.checked = true;
+	}
+	else
+	{
+		document.forms[0].Email2SmsEn.checked = false;
+	}
+	
+	document.forms[0].RcvCheckCycle.value = obj.rcvcycle;
+	document.forms[0].RcvEmailKey.value = obj.rcvkey;
+	
+	if(obj.bind_mail2port == "on")
+	{
+		document.forms[0].BindMail2Port.checked = true;
+		document.getElementById("SmsSendingPort").options[parseInt(obj.sms_sending_port)].selected = true;
+	}
+	else
+	{
+		document.forms[0].BindMail2Port.checked = false;
+		document.getElementById("SmsSendingPort").options[0].selected = true;
+	}
+
+	mouse_click();			
+}
+
+function mouse_click()
+{
+	if(document.getElementById("Sms2EmailEn").checked == true)
+	{
+		document.getElementById("id_DesEmailAddr1").style.display = "";
+		document.getElementById("id_DesEmailAddr2").style.display = "";
+		document.getElementById("id_DesEmailAddr3").style.display = "";
+		document.getElementById("id_EmailTitle").style.display = "";
+		document.getElementById("id_Header").style.display = "";		
+	}
+	else
+	{
+		document.getElementById("id_DesEmailAddr1").style.display = "none";
+		document.getElementById("id_DesEmailAddr2").style.display = "none";
+		document.getElementById("id_DesEmailAddr3").style.display = "none";
+		document.getElementById("id_EmailTitle").style.display = "none";
+		document.getElementById("id_Header").style.display = "none";
+	}
+		
+	if(document.getElementById("Email2SmsEn").checked == true)
+	{
+		document.getElementById("id_RcvCheckCycle").style.display = "";
+		document.getElementById("id_RcvEmailKey").style.display = "";
+		document.getElementById("id_SmsSendingPort").style.display = "";
+	}
+	else
+	{
+		document.getElementById("id_RcvCheckCycle").style.display = "none";
+		document.getElementById("id_RcvEmailKey").style.display = "none";
+		document.getElementById("id_SmsSendingPort").style.display = "none";
+	}
+	
+	if(document.forms[0].BindMail2Port.checked == true)
+	{
+		document.getElementById("id_DesEmailAddr1").style.display = "none";
+		document.getElementById("id_DesEmailAddr2").style.display = "none";
+		document.getElementById("id_DesEmailAddr3").style.display = "none";
+		
+		document.getElementById("id_mailboxbindport").style.display = "";
+	}
+	else
+	{
+		document.getElementById("id_mailboxbindport").style.display = "none";
+	}
+	
+	return true;
+}
+
+function form_check()
+{
+	var Addr1, Addr2, Addr3;
+	Addr1 = document.forms[0].DesEmailAddr1.value;
+	Addr2 = document.forms[0].DesEmailAddr2.value;
+	Addr3 = document.forms[0].DesEmailAddr3.value;
+	
+	if(document.getElementById("Sms2EmailEn").checked == true)
+	{
+		if(document.forms[0].BindMail2Port.checked == false)
+		{
+			if(Addr1.length == 0 
+			&& Addr2.length == 0
+			&& Addr3.length == 0)
+			{
+				alert("Please input at least one 'Destination Email Address'!");
+				document.forms[0].DesEmailAddr1.select();
+				return false;
+			}
+			
+			if(Addr1.length > 31)
+			{
+				alert("'Destination Email Address 1' is incorrect!");
+				document.forms[0].DesEmailAddr1.select();
+				return false;
+			}
+			
+			if(Addr1 != 0 && IsValidEmail(Addr1) == false)
+			{
+				alert("'Destination Email Address 1' is incorrect!");
+				document.forms[0].DesEmailAddr1.select();
+				return false;
+			}	
+			
+			if(Addr2.length > 31)
+			{
+				alert("'Destination Email Address 2' is incorrect!");
+				document.forms[0].DesEmailAddr2.select();
+				return false;
+			}
+			if(Addr2 != 0 && IsValidEmail(Addr2) == false)
+			{
+				alert("'Destination Email Address 2' is incorrect!");
+				document.forms[0].DesEmailAddr2.select();
+				return false;
+			}	
+			
+			if(Addr3.length > 31)
+			{
+				alert("'Destination Email Address 3' is incorrect!");
+				document.forms[0].DesEmailAddr3.select();
+				return false;
+			}
+			
+			if(Addr3 != 0 && IsValidEmail(Addr3) == false)
+			{
+				alert("'Destination Email Address 3' is incorrect!");
+				document.forms[0].DesEmailAddr3.select();
+				return false;
+			}
+		}			
+				
+		if(document.forms[0].EmailTitle.value.length == 0
+		|| document.forms[0].EmailTitle.value.length > 127)
+		{
+			alert("'Title' is incorrect!");
+			document.forms[0].EmailTitle.select();
+			return false;
+		}
+	}
+
+	if(document.getElementById("Email2SmsEn").checked == true)
+	{		
+		if(is_number(document.getElementById("RcvCheckCycle").value, 1, 60) == false)
+	    {
+		    alert("'Check Email Every' is incorrect!");
+			document.forms[0].RcvCheckCycle.select();
+			return false;
+		}
+		
+		if(document.forms[0].RcvEmailKey.value.length == 0
+		    || document.forms[0].RcvEmailKey.value.length > 127)
+		{
+			alert("'Subject' is incorrect!");
+			document.forms[0].RcvEmailKey.select();
+			return false;
+		}
+	}
+	
+	if(document.forms[0].BindMail2Port.checked == true)
+	{
+		var mail_addr = new Array();
+		for(i=0;i<g_totalPort;i++)
+		{
+			mail_addr[i] = document.getElementById("MailBindPort"+i).value;
+			if(mail_addr[i].length != 0 
+				&& (mail_addr[i].length > 31
+					|| IsValidEmail(mail_addr[i]) == false))
+			{
+				alert("'Mail Bind Port'"+ i +" is incorrect!");
+				document.getElementById("MailBindPort"+i).select();
+				return false;
+			}
+		}
+	}
+	else
+	{
+		if(document.getElementById("SmsSendingPort").value == 1)
+		{
+			alert("'Sms Sending Port' is incorrect, 'mailbox bind port' not enable!");
+			document.forms[0].SmsSendingPort.select();
+			return false;
+		}
+	}
+	
+	return true;
+}
+
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form action="/goform/WIASMSCfg" method="post" name="WIASMSCfg" id="WIASMSCfg">
+ <table width="900px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>SMS Settings</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="900px" align="center" class="TB">
+  <tr>
+   <td width="5%">&nbsp;</td>
+   <td>
+    <table width="100%"  cellspacing="0" cellpadding="0">
+     <tr>
+      <td width="30%">&nbsp;</td>
+      <td width="70%">&nbsp;</td>
+     </tr> 
+	 <tr >
+      <td class="td_title">SMS Resend After Failure</td>
+      <td>
+		<select id="max_resnd" name="max_resnd" class="list">
+			<option value="0" selected >0</option>
+			<option value="1"  >1</option>
+			<option value="2"  >2</option>
+			<option value="3"  >3</option>
+		</select>
+	  </td>
+     </tr>
+     <tr>
+      <td width="30%">&nbsp;</td>
+      <td width="70%">&nbsp;</td>
+     </tr> 
+	 <tr>
+		<td class="td_title">Bind Mail to Port</td>
+    	<td><input name="BindMail2Port" type="checkbox" id="BindMail2Port" onclick="mouse_click();">Enable</td>
+     </tr>
+	 <tr id="id_mailboxbindport">
+		<td class="td_title">Port Bind Email Address</td>
+		<td>
+			<table width="100%"  cellspacing="0" cellpadding="0">
+				<tr>
+					<td width="10%">Port</td>
+					<td width="40%">Email</td>
+					<td width="10%">Port</td>
+					<td width="40%">Email</td>
+				</tr>
+				<tr>
+<td>0</td>
+<td><input class="atext" id="MailBindPort0" maxlength="31" name="MailBindPort0" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+<td>1</td>
+<td><input class="atext" id="MailBindPort1" maxlength="31" name="MailBindPort1" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+</tr>
+<tr>
+<td>2</td>
+<td><input class="atext" id="MailBindPort2" maxlength="31" name="MailBindPort2" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+<td>3</td>
+<td><input class="atext" id="MailBindPort3" maxlength="31" name="MailBindPort3" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+</tr>
+<tr>
+<td>4</td>
+<td><input class="atext" id="MailBindPort4" maxlength="31" name="MailBindPort4" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+<td>5</td>
+<td><input class="atext" id="MailBindPort5" maxlength="31" name="MailBindPort5" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+</tr>
+<tr>
+<td>6</td>
+<td><input class="atext" id="MailBindPort6" maxlength="31" name="MailBindPort6" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+<td>7</td>
+<td><input class="atext" id="MailBindPort7" maxlength="31" name="MailBindPort7" size="18" value="" oninput="value=value.replace(/[ ]/g,'')" ></td>
+</tr>
+
+			</table>
+		</td>
+	 </tr>
+	 <tr>
+       <td colspan="2">&nbsp;</td>
+     </tr>
+     <tr>
+      <td class="td_title">SMS to Email</td>
+    	<td><input name="Sms2EmailEn" type="checkbox" id="Sms2EmailEn" onclick="mouse_click();">Enable</td>
+     </tr>
+     <tr id="id_DesEmailAddr1">
+       <td>Destination Email Address 1</td>
+       <td>
+         <input class="atext" id="DesEmailAddr1" maxlength="31" name="DesEmailAddr1" size="18" value="" oninput="value=value.replace(/[ ]/g,'')">
+	   </td>
+     </tr>
+     <tr id="id_DesEmailAddr2">
+       <td>Destination Email Address 2</td>
+       <td>
+         <input class="atext" id="DesEmailAddr2" maxlength="31" name="DesEmailAddr2" size="18" value="" oninput="value=value.replace(/[ ]/g,'')">
+	   </td>
+     </tr>
+     <tr id="id_DesEmailAddr3">
+       <td>Destination Email Address 3</td>
+       <td>
+         <input class="atext" id="DesEmailAddr3" maxlength="31" name="DesEmailAddr3" size="18" value="" oninput="value=value.replace(/[ ]/g,'')">
+	   </td>
+     </tr>
+     <tr id="id_EmailTitle">
+       <td>Title</td>
+       <td>
+         <input class="atext" id="EmailTitle" maxlength="127" name="EmailTitle" size="18" value="">
+	   </td>
+     </tr>
+     <tr id="id_Header">
+       <td>Content Include</td>
+       <td>
+		<select id="header_option" name="header_option" class="list">
+			<option value="0"  >None</option>
+			<option value="1" selected >IP</option>
+			<option value="2"  >MAC</option>
+			<option value="4"  >SN</option>
+		</select>
+	   </td>
+     </tr>
+	 <tr>
+       <td colspan="2">&nbsp;</td>
+     </tr>
+	 
+     <tr>
+      <td class="td_title">Email to SMS</td>
+      <td><input name="Email2SmsEn" type="checkbox" id="Email2SmsEn" onclick="mouse_click();">Enable</td>
+     </tr>
+	 
+	 <tr id="id_SmsSendingPort">
+      <td>SMS Sending Port</td>
+      <td>
+		<select id="SmsSendingPort" name="SmsSendingPort" class="list">
+			<option value="0" >Content</option>
+			<option value="1" >Bind Mailbox</option>
+		</select>
+	  </td>
+     </tr>
+	 
+	 <tr id="id_RcvCheckCycle">
+       <td>Check Email Every</td>
+       <td>
+         <input class="atext" id="RcvCheckCycle" maxlength="9" name="RcvCheckCycle" size="18" value="">&nbsp; Minutes(Up to 60)
+	   </td>
+     </tr>
+     <tr id="id_RcvEmailKey">
+       <td>Subject</td>
+       <td>
+         <input class="atext" id="RcvEmailKey" maxlength="127" name="RcvEmailKey" size="18" value="">
+	   </td>
+     </tr>
+     <tr>
+       <td colspan="2">&nbsp;</td>
+     </tr>
+	 <tr>
+		<td colspan="2">
+		  <a href="enEmailParam.htm" />Email Account Setting
+		</td>
+	 </tr>
+	 <tr>
+       <td colspan="2">&nbsp;</td>
+     </tr>
+    </table>
+   </td>
+   <td width="5%">&nbsp;</td>
+  </tr>
+ </table>
+ <p align="center">
+  <input class="button" id="ok" name="ok" type="submit" value="Save" onClick="return form_check();">
+ </p>
+ <p>&nbsp;</p>
+ <p>
+ <table width="600px" align="center" cellpadding="0" cellspacing="0">
+  <tr align="left">
+   <td class="notes" width="15%"></td>
+   <td class="notes">Notes:</td>
+   <td class="notes">1. "Email To SMS" only supports character sets of UTF8 and ASCII.</td>
+  </tr>
+  <tr>
+   <td class="notes" width="15%"></td>
+   <td class="notes"></td>
+   <td class="notes">It is recommended to use the "Plain Text Mode" (if there exists) when you intends to</td>
+  </tr>
+  <tr>
+   <td class="notes" width="15%"></td>
+   <td class="notes"></td>
+   <td class="notes">send an email, or to check whether you have chosen “using UNICODE to send email” </td>
+  </tr>
+  <tr>
+   <td class="notes" width="15%"></td>
+   <td class="notes"></td>
+   <td class="notes">in the mailbox setting.</td>
+  </tr>
+  <tr>
+   <td class="notes" width="15%"></td>
+   <td class="notes"></td>
+   <td class="notes">2. It is suggested that the text length of an email should be no more than 300 </td>
+  </tr>
+  <tr>
+   <td class="notes" width="15%"></td>
+   <td class="notes"></td>
+   <td class="notes"> characters. Email download may fail in case of excessive text length.</td>
+  </tr>
+</table>
+
+</form>
+</body>
+</html>
+

@@ -1,0 +1,284 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=gb2312">
+<meta http-equiv="pragma" content="no-cache">
+<title>Phone Number Config</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="javascript" type="text/javascript">
+var totalport = 8;
+var Result_Array = new Array(totalport);
+var g_Result = 1;
+var g_Is_Set_Number_End = 0;
+function MM_callJS()
+{
+	var tmp1 = '{port:[0,0,0,0,0,0,0,0]}';
+	var IsSetEnd = '1';
+	var tmp3 = '[["","","",""],["","","",""],["","","",""],["","","",""],["","","",""],["","","",""],["","","",""],["","","",""]]';
+	var tmp4 = '{port:[1,1,1,1,1,1,1,1]}';
+	var obj1 = eval('('+tmp1+')');
+	var obj3 = eval('('+tmp3+')');
+	var obj2 = eval('('+tmp4+')');
+	
+	var i,j, Number;
+
+	var IsPortSwitch = obj1.port;
+	var IsPortEnable = obj2.port;
+	for(i=0; i<totalport; i++)
+	{
+		Number = obj3[i];
+		//�Ƿ���һģ�࿨
+		if(IsPortSwitch[i] == 0)
+		{
+			document.getElementById("Slot0"+i).disabled = false;
+			document.getElementById("Slot1"+i).disabled = true;
+			document.getElementById("Slot2"+i).disabled = true;
+			document.getElementById("Slot3"+i).disabled = true;
+			document.getElementById("Slot0"+i).value = Number[0];
+			document.getElementById("Slot1"+i).value = "";
+			document.getElementById("Slot2"+i).value = "";
+			document.getElementById("Slot3"+i).value = "";
+			//�÷�һģ�࿨�ܷ����ú���
+			if(IsPortEnable[i] == 0)
+			{
+				document.getElementById("Slot0"+i).disabled = true;
+				document.getElementById("Slot0"+i).value = "";
+			}
+		}
+		else
+		{
+			for(j=0; j<4; j++)
+			{
+				document.getElementById("Slot"+j+i).value = Number[j];
+			}
+		}
+		
+	}
+	getResult();
+
+	//�ж����ú�������Ƿ����
+	if(IsSetEnd == false)
+	{
+		document.getElementById("setnumber").disabled = true;
+	}
+}
+
+function SetNumberPro()
+{
+	var g_current_port = 0;
+	var g_current_slot = 0;
+	var text, Number;
+	g_Result = 1;
+	
+	while(g_current_port<totalport)
+	{
+		while(g_current_slot < 4)
+		{
+			Number = document.getElementById("Slot"+g_current_slot+g_current_port).value;
+			if(Number != "")
+			{
+				if(document.getElementById("SlotResult"+g_current_slot+g_current_port).innerHTML == "")
+				{
+					g_Result = 0;
+					
+					if(g_Is_Set_Number_End == 1)
+					{
+						document.getElementById("SlotResult"+g_current_slot+g_current_port).innerHTML = "X";
+					}
+				}
+			}
+			g_current_slot++;
+		}
+		
+		g_current_port++;
+		g_current_slot = 0;
+	}
+	
+	//�������ʱ��Ϊ10���� ��ʱ������������ý���
+	if( g_Result == 1 || g_Is_Set_Number_End == 1)
+	{	
+		document.getElementById("setnumber").disabled = false;
+		g_Is_Set_Number_End = 0;
+		Result_Array.length = 0;
+	}
+	else
+	{
+		setTimeout(getResult, 5000);
+	}
+	
+	return false;
+}
+
+function setNumberResult(Number, i, j)
+{
+	switch(Number[j])
+	{
+		case 1:
+			document.getElementById("SlotResult" +j +i).innerHTML = '��';
+			break;
+		case 2:
+			document.getElementById("SlotResult" +j +i).innerHTML = 'X';
+			break;
+		case 3:
+			document.getElementById("SlotResult" +j +i).innerHTML = 'O';
+			break;
+		default:
+			document.getElementById("SlotResult" +j +i).innerHTML = '';
+			break;
+	}
+}
+
+function getSetNumberResult()
+{
+	var slot, tmp, i, j, Number, obj;
+	
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{
+		//���óɹ��ˣ�����������
+		tmp = xmlHttp.responseText;
+		obj = eval('('+tmp+')');
+		
+		Result_Array = obj.Array;
+		g_Is_Set_Number_End = obj.IsEnd;
+		
+		for(i=0; i<totalport; i++)
+		{
+			Number = Result_Array[i];
+			for(j=0; j<4; j++)
+			{
+				if(document.getElementById("Slot"+j+i).value != "")
+				{
+					setNumberResult(Number, i, j);
+				}
+			}
+		}
+
+		SetNumberPro();
+	}
+	return true;
+}
+
+
+function getResult()
+{
+	url = "/get_batch_number_result";
+	doRequestUsingGet(url,null, getSetNumberResult);
+}
+
+function resultCallback()
+{
+	if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+	{
+		//SetNumberPro();
+		getResult();
+	}
+	return true;
+}
+function Setting()
+{
+	var i,j,numStr;
+	var NumArray ,Number_Array;
+	
+	Number_Array = new Array(totalport);
+	for(i=0; i<totalport; i++)
+	{
+		for(j=0; j<4; j++)
+		{
+			numStr = document.getElementById("Slot"+j+i).value;
+			
+			if( !(numStr == 'c' || numStr == 'C') && !is_number_string(numStr, 0 ,23))
+			{
+				alert("Please input the correct number!");
+				document.getElementById("Slot"+j+i).select();
+				return false;
+			}
+			document.getElementById("SlotResult"+j+i).innerHTML = '';
+		}
+		
+		Number_Array[i] = new Array(4);
+		NumArray = Number_Array[i];
+		
+		for(j=0; j<4; j++)
+		{
+			NumArray[j]= document.getElementById("Slot"+j+i).value;
+		}
+	}
+	
+	var tmp = JSON.stringify(Number_Array);
+	var param = "data="+ tmp;
+
+	url = "/set_batch_number";
+	
+	doRequestUsingPost(url, param, resultCallback);
+	document.getElementById("setnumber").disabled = true;
+
+	return true;
+}
+</script>
+</head>
+<body onLoad="MM_callJS()">
+<form  method="post" name="WIACallForwardCfg" id="WIACallForwardCfg">
+ <table width="700px" border=0 align="center" cellpadding=0 cellspacing=0>
+  <tr class="title">
+   <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+   <td>Phone Number Config</td>
+   <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+  </tr>
+ </table>
+ <table width="700px" align="center" class="TB">
+	<tr width="100%" align="center">
+		<td width="8%">Port</td>
+		<td width="18%">SlotA</td>
+		<td width="5%"></td>
+		<td width="18%">SlotB</td> 
+		<td width="5%"></td>
+		<td width="18%">SlotC</td>
+		<td width="5%"></td>
+		<td width="18%">SlotD</td>
+		<td width="5%"></td>
+	</tr>
+	<script language="JavaScript" type="text/JavaScript">
+		var total = 8;
+		var i, eachline;
+		for(i=0; i<total; i++)
+		{
+			eachline = "<tr align='center'>"
+					+"<td>"+i+"</td>"
+					+"<td width='18%'><input type='text' id='Slot0"+i+"' name='Slot0"+i+"' style='width:130px' maxlength='23'></td> <td><label id='SlotResult0"+i+"' ></label></td>"																								
+					+"<td width='18%'><input type='text' id='Slot1"+i+"' name='Slot1"+i+"' style='width:130px' maxlength='23'></td> <td><label id='SlotResult1"+i+"'></label></td>"
+					+"<td width='18%'><input type='text' id='Slot2"+i+"' name='Slot2"+i+"' style='width:130px' maxlength='23'></td> <td><label id='SlotResult2"+i+"'></label></td>"
+					+"<td width='18%'><input type='text' id='Slot3"+i+"' name='Slot3"+i+"' style='width:130px' maxlength='23'></td> <td><label id='SlotResult3"+i+"'></label></td>"
+					+"</tr>";
+			document.write(eachline);
+		}
+
+	</script>
+	 
+ </table>
+		
+ </form>
+ </br>
+ 
+  <table width="700px" align="center" cellpadding="0" cellspacing="0">
+	<tr width="100%" align="center">
+		<td width="45%" align = "right">
+			<input type="button" id="setnumber" onclick="Setting();" value="SET" />
+		</td>
+		<td>
+		</td>
+	</tr>
+	
+	<tr><td></td><td></br></td></tr>
+ </table>
+ </br>
+<table width="600px" align="center" cellpadding="0" cellspacing="0">
+	<tr >
+	   <td width="30%" align="right" class="notes">NOTE:&nbsp;</td>
+	   <td class="notes"> 1.Input 'c' or 'C' to delete the phone number of the corresponding card.</td>
+	   <td>
+	</tr>
+ </table>
+ </body>
+ </html>
