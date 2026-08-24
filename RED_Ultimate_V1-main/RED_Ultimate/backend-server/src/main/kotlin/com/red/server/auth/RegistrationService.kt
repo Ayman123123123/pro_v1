@@ -1,4 +1,4 @@
-package com.red.server.auth
+﻿package com.red.server.auth
 
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus

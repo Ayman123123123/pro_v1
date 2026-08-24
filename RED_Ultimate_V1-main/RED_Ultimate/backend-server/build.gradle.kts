@@ -31,7 +31,11 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     // Kotlin
+    // ⚠️ وحدتان: 2.x لخدمات legacy التي تحقن com.fasterxml ObjectMapper،
+    // و3.x (tools.jackson) لأن Spring Boot 4 يستخدم Jackson 3 في محوّلات HTTP —
+    // بدونه لا تُحترم قيم Kotlin الافتراضية في DTOs (فشل 400 MALFORMED_JSON عند حذف أي حقل اختياري).
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // PSTN / Asterisk

@@ -73,7 +73,7 @@ class ContactService(
         }
         return allowed.associateWith { redId ->
             val online = (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
-            PresenceInfo(online, if (online) System.currentTimeMillis() else lastSeenMap[redId])
+            PresenceInfo(online, if (online) System.currentTimeMillis() else lastSeenMap[redId]?.toEpochMilli())
         }
     }
 

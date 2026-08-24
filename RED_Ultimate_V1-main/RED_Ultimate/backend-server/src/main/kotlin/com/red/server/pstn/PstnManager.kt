@@ -1,4 +1,4 @@
-package com.red.server.pstn
+﻿package com.red.server.pstn
 
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
@@ -24,20 +24,20 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * مدير اتصال Asterisk AMI.
+ * Ù…Ø¯ÙŠØ± Ø§ØªØµØ§Ù„ Asterisk AMI.
  *
- * ## تحسينات هذه النسخة
+ * ## ØªØ­Ø³ÙŠÙ†Ø§Øª Ù‡Ø°Ù‡ Ø§Ù„Ù†Ø³Ø®Ø©
  *
- * 1. **Heartbeat حقيقي**: `@Scheduled` كل 30 ثانية يُرسل `PingAction`
- *    للتحقق الفعلي من الاتصال — لا يكتفي بوجود الكائن (connection != null).
+ * 1. **Heartbeat Ø­Ù‚ÙŠÙ‚ÙŠ**: `@Scheduled` ÙƒÙ„ 30 Ø«Ø§Ù†ÙŠØ© ÙŠÙØ±Ø³Ù„ `PingAction`
+ *    Ù„Ù„ØªØ­Ù‚Ù‚ Ø§Ù„ÙØ¹Ù„ÙŠ Ù…Ù† Ø§Ù„Ø§ØªØµØ§Ù„ â€” Ù„Ø§ ÙŠÙƒØªÙÙŠ Ø¨ÙˆØ¬ÙˆØ¯ Ø§Ù„ÙƒØ§Ø¦Ù† (connection != null).
  *
- * 2. **إعادة اتصال تلقائية مع Exponential Backoff**:
- *    - اكتشاف انقطاع Heartbeat → إلغاء الاتصال الحالي → إعادة المحاولة
- *    - حد أقصى 60 ثانية بين المحاولات
+ * 2. **Ø¥Ø¹Ø§Ø¯Ø© Ø§ØªØµØ§Ù„ ØªÙ„Ù‚Ø§Ø¦ÙŠØ© Ù…Ø¹ Exponential Backoff**:
+ *    - Ø§ÙƒØªØ´Ø§Ù Ø§Ù†Ù‚Ø·Ø§Ø¹ Heartbeat â†’ Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø­Ø§Ù„ÙŠ â†’ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©
+ *    - Ø­Ø¯ Ø£Ù‚ØµÙ‰ 60 Ø«Ø§Ù†ÙŠØ© Ø¨ÙŠÙ† Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø§Øª
  *
- * 3. **Timeout حقيقي للـ sendAction**: يمنع تعليق الخيط للأبد.
+ * 3. **Timeout Ø­Ù‚ÙŠÙ‚ÙŠ Ù„Ù„Ù€ sendAction**: ÙŠÙ…Ù†Ø¹ ØªØ¹Ù„ÙŠÙ‚ Ø§Ù„Ø®ÙŠØ· Ù„Ù„Ø£Ø¨Ø¯.
  *
- * 4. **@PostConstruct**: يتصل عند بدء التطبيق بدل الانتظار حتى أول مكالمة.
+ * 4. **@PostConstruct**: ÙŠØªØµÙ„ Ø¹Ù†Ø¯ Ø¨Ø¯Ø¡ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¨Ø¯Ù„ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø± Ø­ØªÙ‰ Ø£ÙˆÙ„ Ù…ÙƒØ§Ù„Ù…Ø©.
  */
 @Service
 class PstnManager(
@@ -54,6 +54,7 @@ class PstnManager(
         private val RECONNECT_DELAYS = longArrayOf(2_000, 5_000, 10_000, 20_000, 30_000, 60_000)
     }
 
+    private val learningExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "pstn-learning").apply { isDaemon = true } }
     private val connectionLock = ReentrantLock()
     @Volatile private var connection: DefaultManagerConnection? = null
     @Volatile private var consecutiveHeartbeatFailures = 0
@@ -64,15 +65,15 @@ class PstnManager(
             Thread(r, "pstn-ami-reconnect").apply { isDaemon = true }
         }
         @Volatile private var reconnectFuture: ScheduledFuture<*>? = null
-    /** آخر قناة AMI فعلية لكل callId، يربطها DinstarEventListener عند VarSet. */
+    /** Ø¢Ø®Ø± Ù‚Ù†Ø§Ø© AMI ÙØ¹Ù„ÙŠØ© Ù„ÙƒÙ„ callIdØŒ ÙŠØ±Ø¨Ø·Ù‡Ø§ DinstarEventListener Ø¹Ù†Ø¯ VarSet. */
     private val callChannels = ConcurrentHashMap<String, String>()
 
-    // ── Startup ────────────────────────────────────────────────────────────
+    // â”€â”€ Startup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @PostConstruct
     fun startup() {
         if (amiPassword.isBlank()) {
-            log.warn("ASTERISK_AMI_PASSWORD not configured — PSTN disabled")
+            log.warn("ASTERISK_AMI_PASSWORD not configured â€” PSTN disabled")
             return
         }
         try {
@@ -82,18 +83,18 @@ class PstnManager(
         }
     }
 
-    // ── Heartbeat ──────────────────────────────────────────────────────────
+    // â”€â”€ Heartbeat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
-     * Heartbeat scheduler — يُشغَّل من Spring `@EnableScheduling`.
-     * يُرسل Ping إلى Asterisk AMI ويكتشف الانقطاع الفعلي.
+     * Heartbeat scheduler â€” ÙŠÙØ´ØºÙŽÙ‘Ù„ Ù…Ù† Spring `@EnableScheduling`.
+     * ÙŠÙØ±Ø³Ù„ Ping Ø¥Ù„Ù‰ Asterisk AMI ÙˆÙŠÙƒØªØ´Ù Ø§Ù„Ø§Ù†Ù‚Ø·Ø§Ø¹ Ø§Ù„ÙØ¹Ù„ÙŠ.
      *
-     * لن يُشغَّل إذا لم تُضَف `@EnableScheduling` على Configuration.
+     * Ù„Ù† ÙŠÙØ´ØºÙŽÙ‘Ù„ Ø¥Ø°Ø§ Ù„Ù… ØªÙØ¶ÙŽÙ `@EnableScheduling` Ø¹Ù„Ù‰ Configuration.
      */
     @Scheduled(fixedDelayString = "\${red.pstn.heartbeat-interval-ms:30000}")
     fun heartbeat() {
         val conn = connection ?: run {
-            log.debug("AMI connection null — attempting reconnect")
+            log.debug("AMI connection null â€” attempting reconnect")
             reconnectWithBackoff()
             return
         }
@@ -117,7 +118,7 @@ class PstnManager(
         consecutiveHeartbeatFailures++
         log.warn("AMI heartbeat failed ({}/3): {}", consecutiveHeartbeatFailures, reason)
         if (consecutiveHeartbeatFailures >= 2) {
-            log.error("AMI connection appears dead — forcing reconnect")
+            log.error("AMI connection appears dead â€” forcing reconnect")
             connectionLock.withLock {
                 runCatching { connection?.logoff() }
                 connection = null
@@ -147,7 +148,7 @@ class PstnManager(
         )
     }
 
-    // ── Connection ─────────────────────────────────────────────────────────
+    // â”€â”€ Connection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private fun ensureConnected(): DefaultManagerConnection {
         connection?.let { existing ->
@@ -160,7 +161,7 @@ class PstnManager(
             log.info("Connecting to Asterisk AMI at {}...", amiHost)
 
             val conn = DefaultManagerConnection(amiHost, amiUser, amiPassword).apply {
-                // asterisk-java يعرّف هذه كـ setter بلا getter — تُستدعى كدوال لا كخصائص في Kotlin
+                // asterisk-java ÙŠØ¹Ø±Ù‘Ù Ù‡Ø°Ù‡ ÙƒÙ€ setter Ø¨Ù„Ø§ getter â€” ØªÙØ³ØªØ¯Ø¹Ù‰ ÙƒØ¯ÙˆØ§Ù„ Ù„Ø§ ÙƒØ®ØµØ§Ø¦Øµ ÙÙŠ Kotlin
                 setSocketTimeout(actionTimeoutMs.toInt())
                 // Read timeout must far exceed the heartbeat interval.
                 // asterisk-java's ManagerReaderImpl has its own SO_TIMEOUT which causes
@@ -181,16 +182,16 @@ class PstnManager(
         }
     }
 
-    // ── Dial ───────────────────────────────────────────────────────────────
+    // â”€â”€ Dial â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**
-     * إخراج مكالمة عبر Asterisk إلى بوابة DINSTAR.
+     * Ø¥Ø®Ø±Ø§Ø¬ Ù…ÙƒØ§Ù„Ù…Ø© Ø¹Ø¨Ø± Asterisk Ø¥Ù„Ù‰ Ø¨ÙˆØ§Ø¨Ø© DINSTAR.
      *
-     * @param phoneNumber رقم الوجهة — مُتحقَّق منه (أرقام فقط + علامة دولية)
-     * @param pjsipEndpoint اسم نظير PJSIP — مُتحقَّق منه ضد الحقن
-     * @param portIndex فهرس المنفذ داخل البوابة الاختيارية — يُستخدم لتوجيه
-     *                  الاتصال إلى شريحة SIM محددة. -1 يعني التلقائي.
-     * @return correlationId يُستخدَم كـ callId في قاعدة البيانات
+     * @param phoneNumber Ø±Ù‚Ù… Ø§Ù„ÙˆØ¬Ù‡Ø© â€” Ù…ÙØªØ­Ù‚ÙŽÙ‘Ù‚ Ù…Ù†Ù‡ (Ø£Ø±Ù‚Ø§Ù… ÙÙ‚Ø· + Ø¹Ù„Ø§Ù…Ø© Ø¯ÙˆÙ„ÙŠØ©)
+     * @param pjsipEndpoint Ø§Ø³Ù… Ù†Ø¸ÙŠØ± PJSIP â€” Ù…ÙØªØ­Ù‚ÙŽÙ‘Ù‚ Ù…Ù†Ù‡ Ø¶Ø¯ Ø§Ù„Ø­Ù‚Ù†
+     * @param portIndex ÙÙ‡Ø±Ø³ Ø§Ù„Ù…Ù†ÙØ° Ø¯Ø§Ø®Ù„ Ø§Ù„Ø¨ÙˆØ§Ø¨Ø© Ø§Ù„Ø§Ø®ØªÙŠØ§Ø±ÙŠØ© â€” ÙŠÙØ³ØªØ®Ø¯Ù… Ù„ØªÙˆØ¬ÙŠÙ‡
+     *                  Ø§Ù„Ø§ØªØµØ§Ù„ Ø¥Ù„Ù‰ Ø´Ø±ÙŠØ­Ø© SIM Ù…Ø­Ø¯Ø¯Ø©. -1 ÙŠØ¹Ù†ÙŠ Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠ.
+     * @return correlationId ÙŠÙØ³ØªØ®Ø¯ÙŽÙ… ÙƒÙ€ callId ÙÙŠ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª
      */
     fun dialGsm(
         phoneNumber: String,
@@ -202,7 +203,7 @@ class PstnManager(
         require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
 
         val correlationId = UUID.randomUUID().toString()
-        // إظهار رقم الشريحة الحقيقي للمستلم الخارجي — بدل "RED SOVEREIGN" العام
+        // Ø¥Ø¸Ù‡Ø§Ø± Ø±Ù‚Ù… Ø§Ù„Ø´Ø±ÙŠØ­Ø© Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ Ù„Ù„Ù…Ø³ØªÙ„Ù… Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠ â€” Ø¨Ø¯Ù„ "RED SOVEREIGN" Ø§Ù„Ø¹Ø§Ù…
         val effectiveCallerId = callerSimNumber?.filter { it.isDigit() }?.takeIf { it.length in 6..15 } ?: "RED SOVEREIGN"
         val action = OriginateAction().apply {
             actionId = correlationId
@@ -216,7 +217,7 @@ class PstnManager(
             setVariable("RED_PORT_INDEX", portIndex.toString())
             // Expose correlationId for DinstarEventListener binding
             setVariable("RED_CALL_ID", correlationId)
-            // رقم الشريحة الحقيقي — يستخدمه extensions.conf لضبط CALLERID(num)
+            // Ø±Ù‚Ù… Ø§Ù„Ø´Ø±ÙŠØ­Ø© Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ â€” ÙŠØ³ØªØ®Ø¯Ù…Ù‡ extensions.conf Ù„Ø¶Ø¨Ø· CALLERID(num)
             if (callerSimNumber != null) {
                 setVariable("RED_SIM_NUMBER", callerSimNumber.filter { it.isDigit() })
             }
@@ -257,7 +258,24 @@ class PstnManager(
         )
     }
 
-    /** يسجل DinstarEventListener القناة الفعلية التي أنشأها Asterisk لكل callId. */
+    /** ÙŠØ³Ø¬Ù„ DinstarEventListener Ø§Ù„Ù‚Ù†Ø§Ø© Ø§Ù„ÙØ¹Ù„ÙŠØ© Ø§Ù„ØªÙŠ Ø£Ù†Ø´Ø£Ù‡Ø§ Asterisk Ù„ÙƒÙ„ callId. */
+
+    /**
+     * مكالمة تعلّم رقم (Phone Number Learning — Call mode):
+     * originate عبر الترنك الافتراضي ثم إنهاء تلقائي بعد [waitSeconds].
+     * الغرض أن تُصدر الشريحة اتصالاً حقيقياً فيلتقط الجهاز CLIP الرقم.
+     */
+    @Throws(IllegalStateException::class)
+    fun dialGsm(phoneNumber: String, waitSeconds: Int): String {
+        val correlationId = dialGsm(phoneNumber)
+        val safeWait = waitSeconds.coerceIn(5, 300)
+        learningExecutor.schedule({
+            runCatching { hangupCall(correlationId) }
+                .onFailure { log.warn("Learning call {} auto-hangup failed: {}", correlationId, it.message) }
+        }, safeWait.toLong(), TimeUnit.SECONDS)
+        log.info("Learning call {} scheduled auto-hangup in {}s", correlationId, safeWait)
+        return correlationId
+    }
     fun bindChannel(callId: String, channel: String) {
         if (callId.isNotBlank() && channel.isNotBlank()) callChannels[callId] = channel
     }
@@ -267,8 +285,8 @@ class PstnManager(
     }
 
     /**
-     * ينهي قناة AMI بالاسم الصريح — يستخدمه رفض المكالمة الواردة لتحرير
-     * منفذ GSM فوراً بدل تركها تستهلك Wait(RING_TIMEOUT) كاملة.
+     * ÙŠÙ†Ù‡ÙŠ Ù‚Ù†Ø§Ø© AMI Ø¨Ø§Ù„Ø§Ø³Ù… Ø§Ù„ØµØ±ÙŠØ­ â€” ÙŠØ³ØªØ®Ø¯Ù…Ù‡ Ø±ÙØ¶ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„ÙˆØ§Ø±Ø¯Ø© Ù„ØªØ­Ø±ÙŠØ±
+     * Ù…Ù†ÙØ° GSM ÙÙˆØ±Ø§Ù‹ Ø¨Ø¯Ù„ ØªØ±ÙƒÙ‡Ø§ ØªØ³ØªÙ‡Ù„Ùƒ Wait(RING_TIMEOUT) ÙƒØ§Ù…Ù„Ø©.
      */
     fun hangupChannel(channel: String): Boolean = try {
         val response = ensureConnected().sendAction(HangupAction(channel), actionTimeoutMs)
@@ -282,9 +300,9 @@ class PstnManager(
     }
 
     /**
-     * ينهي مكالمة PSTN باستعمال callId الموثق في Redis/المتحكم. لا يستخدم
-     * CoreShowChannels لأن إصدار Asterisk-Java الحالي لا يعيد قائمة أحداث
-     * عبر sendAction؛ القناة تُلتقط عند VarSet(RED_CALL_ID).
+     * ÙŠÙ†Ù‡ÙŠ Ù…ÙƒØ§Ù„Ù…Ø© PSTN Ø¨Ø§Ø³ØªØ¹Ù…Ø§Ù„ callId Ø§Ù„Ù…ÙˆØ«Ù‚ ÙÙŠ Redis/Ø§Ù„Ù…ØªØ­ÙƒÙ…. Ù„Ø§ ÙŠØ³ØªØ®Ø¯Ù…
+     * CoreShowChannels Ù„Ø£Ù† Ø¥ØµØ¯Ø§Ø± Asterisk-Java Ø§Ù„Ø­Ø§Ù„ÙŠ Ù„Ø§ ÙŠØ¹ÙŠØ¯ Ù‚Ø§Ø¦Ù…Ø© Ø£Ø­Ø¯Ø§Ø«
+     * Ø¹Ø¨Ø± sendActionØ› Ø§Ù„Ù‚Ù†Ø§Ø© ØªÙÙ„ØªÙ‚Ø· Ø¹Ù†Ø¯ VarSet(RED_CALL_ID).
      */
     fun hangupCall(callId: String): Boolean {
         val targetChannel = callChannels[callId]
@@ -309,7 +327,7 @@ class PstnManager(
     }
 
     /**
-     * هل الاتصال بـ Asterisk سليم؟ يُستخدَم في health endpoint.
+     * Ù‡Ù„ Ø§Ù„Ø§ØªØµØ§Ù„ Ø¨Ù€ Asterisk Ø³Ù„ÙŠÙ…ØŸ ÙŠÙØ³ØªØ®Ø¯ÙŽÙ… ÙÙŠ health endpoint.
      */
     fun isConnected(): Boolean = connection != null && consecutiveHeartbeatFailures < 2
 

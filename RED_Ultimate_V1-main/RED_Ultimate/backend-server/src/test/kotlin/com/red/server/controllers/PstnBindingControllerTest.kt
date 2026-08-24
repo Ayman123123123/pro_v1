@@ -1,4 +1,4 @@
-package com.red.server.controllers
+﻿package com.red.server.controllers
 
 import com.red.server.audit.AuditService
 import com.red.server.auth.model.AccountStatus
@@ -93,7 +93,7 @@ class PstnBindingControllerTest {
 
     private fun auth(userId: UUID) = UsernamePasswordAuthenticationToken(userId.toString(), null, emptyList())
 
-    // ── reconcile detects mismatch when liveNumber != bound number ──
+    // â”€â”€ reconcile detects mismatch when liveNumber != bound number â”€â”€
 
     @Test
     fun `reconcile detects mismatch when liveNumber differs from bound number`() {
@@ -102,9 +102,9 @@ class PstnBindingControllerTest {
         val livePorts = listOf(mapOf<String, Any?>(
             "index" to 0,
             "number" to "712065000",
-            "numberMasked" to "••••5000",
+            "numberMasked" to "â€¢â€¢â€¢â€¢5000",
             "imsi" to "4210155555000",
-            "imsiMasked" to "••••5000",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢5000",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -143,7 +143,7 @@ class PstnBindingControllerTest {
             "number" to null,
             "numberMasked" to null,
             "imsi" to "4210112345678",
-            "imsiMasked" to "••••5678",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢5678",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -175,9 +175,9 @@ class PstnBindingControllerTest {
         val livePorts = listOf(mapOf<String, Any?>(
             "index" to 5,
             "number" to "712064924",
-            "numberMasked" to "••••4924",
+            "numberMasked" to "â€¢â€¢â€¢â€¢4924",
             "imsi" to "4210111114924",
-            "imsiMasked" to "••••4924",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢4924",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -205,7 +205,7 @@ class PstnBindingControllerTest {
         val livePortsSim = listOf(mapOf<String, Any?>(
             "index" to 0,
             "number" to null,
-            "imsiMasked" to "••••1234",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢1234",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -244,7 +244,7 @@ class PstnBindingControllerTest {
         val livePorts = listOf(mapOf<String, Any?>(
             "index" to 0,
             "number" to "712065805",
-            "imsiMasked" to "••••5805",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢5805",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -268,7 +268,7 @@ class PstnBindingControllerTest {
         val livePorts = listOf(mapOf<String, Any?>(
             "index" to 1,
             "number" to null,
-            "imsiMasked" to "••••2242",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢2242",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -295,7 +295,7 @@ class PstnBindingControllerTest {
         val livePorts = listOf(mapOf<String, Any?>(
             "index" to 0,
             "number" to "712065805",
-            "imsiMasked" to "••••5805",
+            "imsiMasked" to "â€¢â€¢â€¢â€¢5805",
             "operator" to "Sabafon",
             "signalUsable" to true,
             "status" to "REGISTER_OK"
@@ -311,7 +311,7 @@ class PstnBindingControllerTest {
         assertNull(ports[0]["learnInstruction"])
     }
 
-    // ── bulk rejects duplicate port within batch (422) ──
+    // â”€â”€ bulk rejects duplicate port within batch (422) â”€â”€
 
     @Test
     fun `bulk rejects duplicate port within batch`() {
@@ -399,7 +399,7 @@ class PstnBindingControllerTest {
         assertEquals(2, response.body?.get("count"))
         verify(users).save(eq(u1))
         verify(users).save(eq(u2))
-        // audit each — 2 bindings = 2 audit records
+        // audit each â€” 2 bindings = 2 audit records
         verify(audit, org.mockito.kotlin.times(2)).record(eq(actorId), eq("PSTN_SIM_BOUND"), any(), any())
     }
 
@@ -456,15 +456,15 @@ class PstnBindingControllerTest {
         assertTrue(details.any { it["error"] == "NUMBER_ALREADY_BOUND" })
     }
 
-    // ── V35 unique index file check ──
+    // â”€â”€ V35 unique index file check â”€â”€
 
     @Test
-    fun `V35 migration creates partial unique index on pstn_number`() {
+    fun `V38 migration creates partial unique index on pstn_number`() {
         // Resolve migration file regardless of working directory
         val candidates = listOf(
-            Paths.get("src/main/resources/db/migration/V35__Pstn_Number_Unique_And_Reconcile.sql"),
-            Paths.get("backend-server/src/main/resources/db/migration/V35__Pstn_Number_Unique_And_Reconcile.sql"),
-            Paths.get("C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/resources/db/migration/V35__Pstn_Number_Unique_And_Reconcile.sql")
+            Paths.get("src/main/resources/db/migration/V38__Pstn_Number_Unique_And_Reconcile.sql"),
+            Paths.get("backend-server/src/main/resources/db/migration/V38__Pstn_Number_Unique_And_Reconcile.sql"),
+            Paths.get("C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/resources/db/migration/V38__Pstn_Number_Unique_And_Reconcile.sql")
         )
         val path = candidates.firstOrNull { Files.exists(it) }
             ?: fail("V35 migration file not found; checked: $candidates")

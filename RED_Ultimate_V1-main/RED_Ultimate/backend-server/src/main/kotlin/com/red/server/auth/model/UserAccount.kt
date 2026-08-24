@@ -51,7 +51,7 @@ class UserAccount(
     var rejectionReason: String? = null,
 
     @Column(name = "last_seen")
-    var lastSeen: Long? = null,
+    var lastSeen: Instant? = null,
 
     @Column(name = "pstn_enabled", nullable = false)
     var pstnEnabled: Boolean = false,

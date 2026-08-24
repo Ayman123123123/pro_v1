@@ -406,6 +406,13 @@ class DinstarHardwareService(
     /** Get Device Status — POST /api/get_status */
     fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
 
+    fun probeHumanBehaviorEndpoints(): Map<String, Any?> {
+        val candidates = listOf("/api/get_number_learning","/api/get_human_behavior","/api/get_global_params","/api/get_parameters","/api/get_config","/api/get_system_info")
+        val results = candidates.associateWith { path ->
+            runCatching { val url = baseUrl(activeHost).newBuilder().addPathSegments(path.removePrefix("/")).build(); client.newCall(Request.Builder().url(url).get().header("Accept", "application/json").build()).execute().use { it.code } }.getOrElse { -1 }
+        }
+        return mapOf("host" to activeHost, "reachable" to results.filterValues { it == 200 || (it in 400..499 && it != 404) }.keys, "details" to results)
+    }
     fun recordOperation(actorId: UUID, operation: String, port: Int?, status: String, details: Map<String, Any?> = emptyMap()) {
         require(status in setOf("REQUESTED", "SUCCEEDED", "FAILED", "REJECTED"))
         jdbc.update(

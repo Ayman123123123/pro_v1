@@ -37,7 +37,7 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
-    baseline-version: "32"
+    baseline-version: "0"
     validate-on-migrate: false
     # Windows Docker often reports Postgres healthy before it accepts JDBC.
     connect-retries: 30
@@ -80,6 +80,8 @@ red:
   dinstar:
     # false = no hardware / Docker cannot see the LAN box. IP calls stay on.
     enabled: ${DINSTAR_ENABLED:false}
+    number-learning:
+      auto-enabled: true
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
     # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع. (192.168.11.2 هو DINSTAR UC2000-VE الحقيقي، .1 هو الراوتر)
     ip: ${DINSTAR_IP:192.168.11.2}

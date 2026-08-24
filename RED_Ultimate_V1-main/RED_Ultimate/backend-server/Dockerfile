@@ -38,8 +38,10 @@ USER gradle
 WORKDIR /build
 
 ENV GRADLE_OPTS="-Dorg.gradle.dependency.verification=lenient"
-RUN --mount=type=cache,target=/home/gradle/.gradle,uid=1000,gid=1000,mode=0755,sharing=locked \
-    gradle :bootJar --no-daemon -x test --stacktrace
+# Keep this command compatible with the legacy Docker builder available on the
+# local Windows host. BuildKit cache mounts are an optimization only; removing
+# the mount does not change the produced Spring Boot artifact.
+RUN gradle :bootJar --no-daemon -x test --stacktrace
 
 FROM ${RUNTIME_BASE} AS runtime
 
