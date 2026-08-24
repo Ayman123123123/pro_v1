@@ -111,7 +111,24 @@ class RegistrationService(
         if (user.role == AccountRole.ADMIN && deviceId == null) return null
         requireNotNull(deviceId) { "deviceId is required" }
         val device = devices.findByIdAndUserId(deviceId, user.id)
-            ?: throw InvalidCredentialsException()
+        if (device == null) {
+            val owned = devices.findAllByUserIdOrderByCreatedAtAsc(user.id)
+            if (owned.isEmpty()) {
+                val saved = devices.save(
+                    com.red.server.auth.model.UserDevice(
+                        id = deviceId,
+                        user = user,
+                        status = com.red.server.auth.model.DeviceStatus.APPROVED,
+                        deviceName = "Restored device",
+                    )
+                )
+                org.slf4j.LoggerFactory.getLogger(javaClass).warn(
+                    "Self-heal: re-registered lost device {} for user {}", deviceId, user.redId
+                )
+                return saved
+            }
+            throw InvalidCredentialsException()
+        }
         require(device.status == DeviceStatus.APPROVED) { "Device is not approved" }
         return device
     }
