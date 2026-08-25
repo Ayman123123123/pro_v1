@@ -86,7 +86,6 @@ import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Repeat
@@ -288,7 +287,6 @@ import com.red.sovereign.ui.theme.CairoFamily
 import com.red.sovereign.ui.theme.TajawalFamily
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.components.SovereignBottomBar
-import com.red.sovereign.ui.components.SovereignEmptyConversationState
 import androidx.compose.material3.OutlinedTextFieldDefaults
 
 
