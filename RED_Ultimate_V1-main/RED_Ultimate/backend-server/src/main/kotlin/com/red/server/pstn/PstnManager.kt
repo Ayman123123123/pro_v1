@@ -73,7 +73,7 @@ class PstnManager(
     @PostConstruct
     fun startup() {
         if (amiPassword.isBlank()) {
-            log.warn("ASTERISK_AMI_PASSWORD not configured â€” PSTN disabled")
+            log.warn("ASTERISK_AMI_PASSWORD not configured — PSTN disabled")
             return
         }
         try {
@@ -94,7 +94,7 @@ class PstnManager(
     @Scheduled(fixedDelayString = "\${red.pstn.heartbeat-interval-ms:30000}")
     fun heartbeat() {
         val conn = connection ?: run {
-            log.debug("AMI connection null â€” attempting reconnect")
+            log.debug("AMI connection null — attempting reconnect")
             reconnectWithBackoff()
             return
         }
@@ -118,7 +118,7 @@ class PstnManager(
         consecutiveHeartbeatFailures++
         log.warn("AMI heartbeat failed ({}/3): {}", consecutiveHeartbeatFailures, reason)
         if (consecutiveHeartbeatFailures >= 2) {
-            log.error("AMI connection appears dead â€” forcing reconnect")
+            log.error("AMI connection appears dead — forcing reconnect")
             connectionLock.withLock {
                 runCatching { connection?.logoff() }
                 connection = null
@@ -258,8 +258,6 @@ class PstnManager(
         )
     }
 
-    /** يسجل DinstarEventListener القناة الفعلية التي أنشأها Asterisk لكل callId. */
-
     /**
      * مكالمة تعلّم رقم (Phone Number Learning — Call mode):
      * originate عبر الترنك الافتراضي ثم إنهاء تلقائي بعد [waitSeconds].
@@ -276,6 +274,7 @@ class PstnManager(
         log.info("Learning call {} scheduled auto-hangup in {}s", correlationId, safeWait)
         return correlationId
     }
+
     fun bindChannel(callId: String, channel: String) {
         if (callId.isNotBlank() && channel.isNotBlank()) callChannels[callId] = channel
     }

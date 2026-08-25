@@ -1,7 +1,7 @@
 name: red-sovereign
 
-# إعادة تشغيل pstn-gateway على مضيف بلا /dev/ttyUSB* (Windows Docker Desktop).
-# تُزال devices من الخدمة، ويُبقي كل شيء آخر مطابقًا لـ docker-compose.yml.
+# PSTN Gateway فقط — وضع IP بحت مع DINSTAR UC2000-VE
+# لا يحتاج chan_dongle أو USB — الاتصال عبر SIP trunk على الشبكة المحلية
 services:
   pstn-gateway:
     build: ./pstn-asterisk
@@ -16,8 +16,8 @@ services:
           cpus: '0.5'
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
-      - DINSTAR_IPS=${DINSTAR_IPS:-192.168.11.1}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
+      - DINSTAR_IPS=${DINSTAR_IPS:-192.168.11.2}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
       - DINSTAR_USB_DEVICES=${DINSTAR_USB_DEVICES:-}
@@ -26,10 +26,10 @@ services:
       - EXTERNAL_SIGNALING_ADDRESS=${TURN_PUBLIC_HOST:-}
       - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - ASTERISK_WSS_PORT=8089
-      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-webrtc-secret}
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-secret-token}
     ports:
       - "5060:5060/udp"
-      - "8089:8088"
+      - "8089:8089/tcp"
       - "10000-10100:10000-10100/udp"
     expose: ["5038"]
     healthcheck:

@@ -1,14 +1,14 @@
-package com.red.sovereign.calls
+﻿package com.red.sovereign.calls
 
 import kotlinx.serialization.Serializable
 import org.webrtc.IceCandidate
 
 /**
- * إشارة المكالمة الموحدة — متوافقة مع YounesCallService / GroupCallService / Backend.
+ * Ø¥Ø´Ø§Ø±Ø© Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ù…ÙˆØ­Ø¯Ø© â€” Ù…ØªÙˆØ§ÙÙ‚Ø© Ù…Ø¹ YounesCallService / GroupCallService / Backend.
  *
- * ⚠️ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
- * وليس callType — يحميه CallSignalPositionalContractTest. البناء المسمّى
- * مفضَّل دائماً، لكن أي بناء موضعي قديم يسلك السلوك الصحيح الآن.
+ * âš ï¸ Ø¹Ù‚Ø¯ Ø§Ù„Ù…ÙˆØ§Ø¶Ø¹: Ø§Ù„ÙˆØ³ÙŠØ· Ø§Ù„Ø«Ø§Ù†ÙŠ Ø§Ù„Ù…ÙˆØ¶Ø¹ÙŠ Ù‡Ùˆ Ø¯Ø§Ø¦Ù…Ø§Ù‹ targetUserId (Ù‡ÙˆÙŠØ© Ø§Ù„Ù…Ø³ØªÙ„Ù…)
+ * ÙˆÙ„ÙŠØ³ callType â€” ÙŠØ­Ù…ÙŠÙ‡ CallSignalPositionalContractTest. Ø§Ù„Ø¨Ù†Ø§Ø¡ Ø§Ù„Ù…Ø³Ù…Ù‘Ù‰
+ * Ù…ÙØ¶ÙŽÙ‘Ù„ Ø¯Ø§Ø¦Ù…Ø§Ù‹ØŒ Ù„ÙƒÙ† Ø£ÙŠ Ø¨Ù†Ø§Ø¡ Ù…ÙˆØ¶Ø¹ÙŠ Ù‚Ø¯ÙŠÙ… ÙŠØ³Ù„Ùƒ Ø§Ù„Ø³Ù„ÙˆÙƒ Ø§Ù„ØµØ­ÙŠØ­ Ø§Ù„Ø¢Ù†.
  */
 @Serializable
 data class CallSignal(
@@ -50,6 +50,7 @@ data class CallSignal(
         const val RESUME = "RESUME"
         const val MUTE = "MUTE"
         const val UNMUTE = "UNMUTE"
+        const val USE_MESH = "USE_MESH"
         const val GROUP_CALL_INVITE = "GROUP_CALL_INVITE"
         const val GROUP_CALL_ACCEPT = "GROUP_CALL_ACCEPT"
         const val GROUP_CALL_DECLINE = "GROUP_CALL_DECLINE"

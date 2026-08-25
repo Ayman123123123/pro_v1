@@ -24,8 +24,10 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('../..', import.meta.url).pathname;
+// Convert file URLs correctly on Windows; pathname alone yields `/C:/...`.
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const APP_SRC = join(ROOT, 'red-app/src/main');
 const SECURITY_CONFIG = join(
   ROOT,
@@ -58,7 +60,19 @@ const ADMIN_BY_DESIGN = new Map([
   ['/api/admin/content/polls:p', 'media/PollsApi'],
   ['/api/admin/content/polls/:p', 'media/PollsApi'],
   ['/api/admin/content/polls/:p/close', 'media/PollsApi'],
+
+  // Dinstar/AdminViewModel is reachable only from the guarded admin surface.
+  ['/api/admin/dinstar/ports/:p/reset', 'features/dinstar'],
+  ['/api/admin/dinstar/ports/:p/ussd', 'features/dinstar'],
+  ['/api/master/admin/hardware/dinstar/action', 'features/admin'],
+  ['/api/master/admin/system/stats', 'features/admin'],
+  ['/api/master/admin/users/pending', 'features/admin'],
 ]);
+
+// Events/Polls intentionally share an `/api/admin/content` namespace, but
+// SecurityConfig grants authenticated access to read/RSVP/vote routes before
+// the broad ADMIN rule. Their write actions remain UI-gated by isAdmin.
+const METHOD_SCOPED_MEDIA = new Set(['media/EventsApi', 'media/PollsApi']);
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
@@ -153,6 +167,7 @@ for (const [path, files] of [...called].sort()) {
 // فهي واجهة إدارية مقصودة ولا تُعتبر تسربًا لمستخدم عادي.
 const wired = [];
 for (const [, owner] of ADMIN_BY_DESIGN) {
+  if (METHOD_SCOPED_MEDIA.has(owner)) continue;
   const pkg = owner.split('/')[0];
   const symbol = owner.split('/')[1];
   if (!symbol) continue;

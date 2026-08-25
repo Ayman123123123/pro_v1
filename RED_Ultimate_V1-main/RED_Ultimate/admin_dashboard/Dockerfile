@@ -1,7 +1,7 @@
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Admin Dashboard — Modern Unified Build (16 pages)
-# Stage 1: Node.js 24 LTS — Build production bundle (Vite + React 19 + antd 6)
-# Stage 2: Nginx 1.28 — Serve SPA with security headers & immutable caching
+# Stage 1: Node.js 24 — Build production bundle (Vite + React 19 + antd 6)
+# Stage 2: Nginx 1.29 — Serve SPA with security headers & immutable caching
 # ══════════════════════════════════════════════════════════════════
 # Builds the MODERN unified dashboard (App.tsx 16 pages) — old _archive is never bundled
 # Verified: npm ci + vite build → 5447 modules → dist with code-split chunks
@@ -18,7 +18,7 @@ COPY . .
 # Production build is strict: TypeScript check + Vite bundle.
 RUN npm run build
 
-FROM nginx:1.28-alpine
+FROM nginx:1.29-alpine
 LABEL maintainer="YOUNES Sovereign" \
       description="YOUNES Master Admin — Unified 16-page dashboard (RTL dark, antd, echarts)" \
       version="1.0.0"

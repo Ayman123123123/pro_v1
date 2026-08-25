@@ -1,4 +1,4 @@
-package com.red.sovereign.calls
+﻿package com.red.sovereign.calls
 
 import android.content.Context
 import com.red.sovereign.auth.ApiResult
@@ -43,6 +43,7 @@ class MeshRtcSession(
     interface Events {
         fun onLocalDescription(peerId: String, description: SessionDescription)
         fun onIceCandidate(peerId: String, candidate: IceCandidate)
+        fun onRemoteAudio(track: AudioTrack) {}
         fun onRemoteVideo(peerId: String, track: VideoTrack)
         fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
@@ -177,6 +178,54 @@ class MeshRtcSession(
         (capturer as? org.webrtc.CameraVideoCapturer)?.switchCamera(null)
     }
 
+    // ── Screen Share للـ Mesh (لكل الأقران) ──
+    private var screenHelper: ScreenShareHelper? = null
+    private var screenTrack: VideoTrack? = null
+    var isScreenSharing: Boolean = false; private set
+
+    fun startScreenShare(permissionData: android.content.Intent): VideoTrack? {
+        if (isScreenSharing) return screenTrack
+        runCatching { capturer?.stopCapture() }
+        val helper = ScreenShareHelper(context, egl.eglBaseContext, factory)
+        val track = helper.start(permissionData, 1280, 720, 24) ?: return null
+        screenHelper = helper
+        screenTrack = track
+        isScreenSharing = true
+        localVideoTrack = track
+        // استبدل المسار لكل الأقران
+        peers.values.forEach { slot ->
+            // أزل القديم وأضف الجديد
+            slot.peer?.let { pc ->
+                // ابحث عن مرسل الفيديو القديم
+                pc.senders.firstOrNull { it.track()?.kind() == "video" }?.let { pc.removeTrack(it) }
+                pc.addTrack(track, listOf("younes-mesh"))
+            }
+        }
+        peers.keys.forEach { offerTo(it) }
+        android.util.Log.d("MeshRtcSession", "startScreenShare success track=${track.id()} peers=${peers.size}")
+        return track
+    }
+
+    fun stopScreenShare(): VideoTrack? {
+        if (!isScreenSharing) return null
+        runCatching { screenHelper?.stop() }
+        screenHelper = null
+        screenTrack?.dispose()
+        screenTrack = null
+        isScreenSharing = false
+        val newTrack = if (mediaKind.wantsVideo && cameraRequested) createVideoTrack() else null
+        localVideoTrack = newTrack
+        peers.values.forEach { slot ->
+            slot.peer?.let { pc ->
+                pc.senders.firstOrNull { it.track()?.kind() == "video" }?.let { pc.removeTrack(it) }
+                if (newTrack != null) pc.addTrack(newTrack, listOf("younes-mesh"))
+            }
+        }
+        peers.keys.forEach { offerTo(it) }
+        android.util.Log.d("MeshRtcSession", "stopScreenShare reverted camera=${newTrack?.id()}")
+        return newTrack
+    }
+
     fun restartIce() {
         peers.values.forEach { slot ->
             val constraints = MediaConstraints().apply {
@@ -208,6 +257,7 @@ class MeshRtcSession(
     }
 
     fun release() {
+        runCatching { screenHelper?.stop() }; screenHelper = null; screenTrack = null
         peers.keys.toList().forEach(::detachPeer)
         runCatching { capturer?.stopCapture() }
         capturer?.dispose()
@@ -231,31 +281,62 @@ class MeshRtcSession(
     private suspend fun loadIce(): IceConfigurationDto? = withContext(Dispatchers.IO) {
         val client = AuthorizedApiClient(TokenStore(context))
         val json = Json { ignoreUnknownKeys = true }
-        when (val response = client.request("GET", "/api/calls/ice-servers")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()
-            is ApiResult.Error -> null
+        repeat(3) { attempt ->
+            when (val response = client.request("GET", "/api/calls/ice-servers")) {
+                is ApiResult.Success -> runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()?.let { return@withContext it }
+                is ApiResult.Error -> android.util.Log.w("MeshRtcSession", "loadIce attempt ${attempt + 1} failed: ${response.message}")
+            }
+            if (attempt < 2) kotlinx.coroutines.delay(400)
         }
+        null
     }
 
     private fun createVideoTrack(): VideoTrack? {
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
             != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
+            android.util.Log.w("MeshRtcSession", "createVideoTrack: CAMERA permission not granted")
             events.onCameraUnavailable()
             return null
         }
         return runCatching {
             val enumerator = Camera2Enumerator(context)
-            val selected = enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let { enumerator.createCapturer(it, null) }
-                ?: enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
-                ?: return null
+            val deviceNames = enumerator.deviceNames
+            android.util.Log.d("MeshRtcSession", "createVideoTrack: devices=$deviceNames")
+            if (deviceNames.isEmpty()) {
+                android.util.Log.e("MeshRtcSession", "createVideoTrack: no camera devices found")
+                events.onCameraUnavailable()
+                return null
+            }
+            val selected = deviceNames.firstOrNull(enumerator::isFrontFacing)?.let { enumerator.createCapturer(it, null) }
+                ?: deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
+                ?: run { android.util.Log.e("MeshRtcSession", "createVideoTrack: failed to create capturer"); events.onCameraUnavailable(); return null }
             capturer = selected
             videoSource = factory.createVideoSource(false)
             textureHelper = SurfaceTextureHelper.create("YounesMeshCamera", egl.eglBaseContext)
             selected.initialize(textureHelper, context, videoSource?.capturerObserver)
-            selected.startCapture(640, 480, 24)
+            // محاولة بدقات متعددة — بعض الأجهزة لا تدعم 640x480 أو تفشل بسبب حرارة
+            var started = false
+            val attempts = listOf(Triple(640, 480, 24), Triple(640, 360, 24), Triple(320, 240, 15))
+            for ((w, h, fps) in attempts) {
+                try {
+                    selected.startCapture(w, h, fps)
+                    started = true
+                    android.util.Log.d("MeshRtcSession", "createVideoTrack: startCapture success ${w}x${h}@${fps}")
+                    break
+                } catch (e: Exception) {
+                    android.util.Log.w("MeshRtcSession", "createVideoTrack: startCapture ${w}x${h} failed: ${e.message}")
+                    runCatching { selected.stopCapture() }
+                }
+            }
+            if (!started) {
+                android.util.Log.e("MeshRtcSession", "createVideoTrack: all startCapture attempts failed")
+                events.onCameraUnavailable()
+                return null
+            }
             factory.createVideoTrack("younes-mesh-video", videoSource).apply { setEnabled(cameraRequested) }
         }.onFailure {
+            android.util.Log.e("MeshRtcSession", "createVideoTrack: exception ${it.message}", it)
             events.onCameraUnavailable()
             runCatching { capturer?.stopCapture() }
         }.getOrNull()
@@ -316,12 +397,18 @@ class MeshRtcSession(
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
             override fun onIceCandidate(candidate: IceCandidate) = events.onIceCandidate(peerId, candidate)
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
-            override fun onAddStream(stream: MediaStream) = Unit
+            override fun onAddStream(stream: MediaStream) {
+                stream.audioTracks.forEach { it.setEnabled(true); events.onRemoteAudio(it) }
+                stream.videoTracks.forEach { it.setEnabled(true); events.onRemoteVideo(peerId, it) }
+            }
             override fun onRemoveStream(stream: MediaStream) = Unit
             override fun onDataChannel(channel: DataChannel) = Unit
             override fun onRenegotiationNeeded() = Unit
             override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
-                (receiver.track() as? VideoTrack)?.let { events.onRemoteVideo(peerId, it) }
+                when (val track = receiver.track()) {
+                    is VideoTrack -> events.onRemoteVideo(peerId, track)
+                    is AudioTrack -> { track.setEnabled(true); events.onRemoteAudio(track) }
+                }
             }
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
                 events.onConnectionState(peerId, newState)

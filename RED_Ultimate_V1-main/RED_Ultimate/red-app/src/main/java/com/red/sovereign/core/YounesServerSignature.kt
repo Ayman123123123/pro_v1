@@ -10,6 +10,8 @@ import java.net.URI
  */
 object YounesServerSignature {
     const val VERSION = "1.0.0-YOUNES"
+    const val DEFAULT_PORT = 8088
+    const val DEFAULT_HTTPS_PORT = 8443
 
     private val HEALTH_READY = Regex("\\\"status\\\"\\s*:\\s*\\\"(UP|HEALTHY|DEGRADED)\\\"", RegexOption.IGNORE_CASE)
     private val YOUNES_MARK = Regex(
@@ -41,7 +43,7 @@ object YounesServerSignature {
         uri.host?.takeIf { it.isNotBlank() }
     }.getOrNull()
 
-    fun portOf(value: String, fallback: Int = 8088): Int = runCatching {
+    fun portOf(value: String, fallback: Int = DEFAULT_PORT): Int = runCatching {
         val trimmed = value.trim()
         val uri = if (trimmed.contains("://")) URI(trimmed) else URI("http://$trimmed")
         uri.port.takeIf { it > 0 } ?: fallback
@@ -55,12 +57,25 @@ object YounesServerSignature {
             val resolved = if (uri.port > 0) uri.port else port
             return URI(uri.scheme, null, host, resolved, null, null, null).toString().trimEnd('/')
         }
-        val scheme = if (port == 443 || port == 8443) "https" else "http"
+        val scheme = if (port == 443 || port == DEFAULT_HTTPS_PORT) "https" else "http"
         return "$scheme://$raw:$port"
     }
 
     fun ports(preferred: Int): List<Int> {
-        val primary = if (preferred > 0) preferred else 8088
-        return linkedSetOf(primary, 8088, 8443).toList()
+        val primary = if (preferred > 0) preferred else DEFAULT_PORT
+        return linkedSetOf(primary, DEFAULT_PORT, DEFAULT_HTTPS_PORT).toList()
+    }
+    
+    /** إنشاء URL كامل من IP/مضيف فقط */
+    fun buildUrl(host: String, port: Int = DEFAULT_PORT): String {
+        val scheme = if (port == 443 || port == DEFAULT_HTTPS_PORT) "https" else "http"
+        return "$scheme://$host:$port"
+    }
+    
+    /** استخراج IP/مضيف وبورت من URL للعرض */
+    fun parseForDisplay(url: String): Pair<String, Int> {
+        val host = hostOf(url) ?: "غير معروف"
+        val port = portOf(url)
+        return host to port
     }
 }

@@ -12,10 +12,10 @@ import java.util.UUID
 class DinstarController(private val hardware: DinstarHardwareService, private val audit: AuditService) {
 
     @GetMapping("/status")
-    fun status(): List<Map<String, Any?>> = hardware.getHardwareStatus()
+    fun status() = hardware.getHardwareStatus()
 
     @GetMapping("/discover")
-    fun discover(): Map<String, Any?> = hardware.discoverGateway()
+    fun discover() = hardware.discoverGateway()
 
     @GetMapping("/capabilities")
     fun capabilities() = hardware.capabilities()
@@ -31,15 +31,6 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
         hardware.recordOperation(actor, "PORT_MODULE_RESET", port, "SUCCEEDED")
         audit.record(actor, "DINSTAR_PORT_RESET", port.toString())
         return result
-    }
-
-    /** تفعيل "تعلّم الرقم" يدوياً لمنفذ بعينه من لوحة الإدارة. */
-    @PostMapping("/ports/{port}/learning")
-    fun triggerLearning(@PathVariable port: Int, authentication: Authentication): ResponseEntity<Map<String, Any?>> {
-        val actor = UUID.fromString(authentication.name)
-        val ok = hardware.triggerNumberLearning(port)
-        audit.record(actor, "DINSTAR_NUMBER_LEARNING_TRIGGERED", port.toString(), mapOf("success" to ok))
-        return ResponseEntity.ok(mapOf("success" to ok, "port" to port))
     }
 
     @PostMapping("/ports/{port}/ussd")
@@ -95,6 +86,23 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
     /** Device status — POST /api/get_status */
     @GetMapping("/device-status")
     fun deviceStatus(): Map<String, Any?> = hardware.getDeviceStatus()
+
+    @GetMapping("/cdr/export")
+    fun cdrExport(): ResponseEntity<ByteArray> {
+        val raw = hardware.queryCdr()
+        val list = (raw["cdr"] as? List<Map<String, Any?>>) ?: (raw["query"] as? List<Map<String, Any?>>) ?: emptyList()
+        val csv = buildString {
+            appendLine("port,direction,source_number,destination_number,start_date,duration,call_result")
+            list.forEach { r ->
+                fun esc(v: Any?) = "\"${(v?.toString() ?: "").replace("\"", "\"\"")}\""
+                appendLine(listOf(r["port"], r["direction"], esc(r["source_number"]), esc(r["destination_number"]), r["start_date"], r["duration"], esc(r["call_result"])).joinToString(","))
+            }
+        }.toByteArray(Charsets.UTF_8)
+        return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment; filename=\"cdr-${java.time.LocalDate.now()}.csv\"")
+            .header("Content-Type", "text/csv; charset=utf-8")
+            .body(csv)
+    }
 
     /** Voice always follows the authorized Asterisk route. */
     @PostMapping("/dial")

@@ -3,24 +3,20 @@ package com.red.server.admin.controller
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
 import com.red.server.admin.service.AdminService
-import com.red.server.auth.RedApprovalService
-import com.red.server.auth.model.AccountRole
-import com.red.server.auth.model.AccountStatus
+import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
-import com.red.server.auth.repository.searchForAdmin
-import com.red.server.auth.UserAccountResponse
-import com.red.server.auth.toResponse
-import com.red.server.services.DinstarFleetService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
-import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 import java.time.Instant
-import java.time.LocalDate
 import java.util.UUID
 
+/**
+ * 🛡️ Admin V2 Controller - APIs شاملة للوحة الإدارة
+ * يغطي: Audit, Analytics, Users, Calls, DINSTAR, Reports, Media, Security, Announcements, Backups
+ */
 @RestController
 @RequestMapping("/api/admin")
 class AdminV2Controller(
@@ -33,150 +29,54 @@ class AdminV2Controller(
     private val featureFlags: FeatureFlagRepository,
     private val userReports: UserReportRepository,
     private val announcements: SystemAnnouncementRepository,
-    private val backups: BackupHistoryRepository,
-    private val approval: RedApprovalService,
-    private val redis: RedisTemplate<String, String>,
-    private val fleet: DinstarFleetService
+    private val backups: BackupHistoryRepository
 ) {
-
+    // ━━━━━━━━━━━━━━━━ 📊 Dashboard & Analytics ━━━━━━━━━━━━━━━━
     @GetMapping("/dashboard/summary")
-    fun getDashboardSummary(): ResponseEntity<Map<String, Any>> {
-        return ResponseEntity.ok(runCatching {
-            val analytics = service.calculateCurrentAnalytics()
-            mapOf(
-                "analytics" to analytics,
-                "pendingReports" to service.countPendingReports(),
-                "recentCriticalAlerts" to service.getRecentCritical().size,
-                "generatedAt" to Instant.now()
-            )
-        }.getOrElse { mapOf("error" to (it.message ?: "Unknown error")) })
-    }
-
-    /** صحة النظام (آخر 5 دقائق) — عقد Dashboard.getSystemHealth */
-    @GetMapping("/health")
-    fun getHealth(): List<SystemHealth> = service.getRecentHealth()
-
-    /** قياسات لحظية — عقد Dashboard.getRealtimeMetrics */
-    @GetMapping("/metrics/realtime")
-    fun realtime(): Map<String, Any> {
-        val a = service.calculateCurrentAnalytics()
-        val online = redis.opsForZSet()?.zCard("red:presence:index") ?: 0L
-        val latestByComponent = health.findAll()
-            .groupBy { it.component }
-            .mapValues { (_, checks) -> checks.maxByOrNull { it.lastCheckAt }!! }
-        return mapOf(
-            "users" to mapOf(
-                "total" to (a["totalUsers"] ?: 0),
-                "pending" to (a["pendingUsers"] ?: 0),
-                "approved" to (a["approvedUsers"] ?: 0),
-                "banned" to (a["bannedUsers"] ?: 0),
-                "online" to online
-            ),
-            "health" to latestByComponent,
-            "timestamp" to Instant.now()
-        )
-    }
-
-    /** سلاسل تحليلات يومية في مدى زمني (افتراضي: آخر 7 أيام) — عقد Dashboard.getSystemAnalytics */
-    @GetMapping("/analytics")
-    fun analytics(
-        @RequestParam(required = false) start: LocalDate? = null,
-        @RequestParam(required = false) end: LocalDate? = null
-    ): List<SystemAnalytics> {
-        val to = end ?: LocalDate.now()
-        val from = start ?: to.minusDays(6)
-        return analytics.findByStatDateBetweenOrderByStatDateDesc(from, to).sortedBy { it.statDate }
-    }
-
-    // ━━━━━━ Admin Sessions ━━━━━━
-    @GetMapping("/sessions")
-    fun sessions(): List<AdminSession> = service.getAllActiveSessions()
-
-    @PostMapping("/sessions/{sessionId}/terminate")
-    fun terminateSession(@PathVariable sessionId: UUID, @RequestBody body: Map<String, String>): ResponseEntity<Map<String, Any>> {
-        service.terminateSession(sessionId, body["reason"] ?: "MANUAL")
-        return ResponseEntity.ok(mapOf("terminated" to true))
-    }
-
-    // ━━━━━━ Announcements ━━━━━━
-    @GetMapping("/announcements")
-    fun announcements(@RequestParam(required = false) published: Boolean?): List<SystemAnnouncement> =
-        service.getAnnouncements(published)
-
-    @PostMapping("/announcements")
-    fun createAnnouncement(@RequestBody body: Map<String, Any>, authentication: Authentication): ResponseEntity<Any> {
+    fun getDashboardSummary(authentication: Authentication): ResponseEntity<Map<String, Any>> {
         val adminId = UUID.fromString(authentication.name)
-        val showFrom = (body["showFrom"] as? String)?.let { Instant.parse(it) } ?: Instant.now()
-        val showUntil = (body["showUntil"] as? String)?.let { Instant.parse(it) }
-        val created = service.createAnnouncement(
-            title = requireNotNull(body["title"] as? String) { "title required" },
-            body = requireNotNull(body["body"] as? String) { "body required" },
-            type = body["type"] as? String ?: "INFO",
-            targetAudience = body["targetAudience"] as? String ?: "ALL",
-            priority = (body["priority"] as? Number)?.toInt() ?: 0,
-            isDismissible = body["isDismissible"] as? Boolean ?: true,
-            adminId = adminId,
-            showFrom = showFrom,
-            showUntil = showUntil
-        )
-        return ResponseEntity.ok(created)
-    }
+        val analytics = service.calculateCurrentAnalytics()
+        val pendingReports = service.countPendingReports()
+        val recentCritical = service.getRecentCritical()
+        val degradedHealth = service.getDegradedComponents()
+        val activeBackups = service.getRecentBackups().filter { it.status == "IN_PROGRESS" }.size
 
-    @PostMapping("/announcements/{id}/publish")
-    fun publishAnnouncement(@PathVariable id: UUID, authentication: Authentication): ResponseEntity<Any> =
-        service.publishAnnouncement(id, UUID.fromString(authentication.name))
-            ?.let { ResponseEntity.ok(it) }
-            ?: ResponseEntity.notFound().build()
-
-    @DeleteMapping("/announcements/{id}")
-    fun deleteAnnouncement(@PathVariable id: UUID): ResponseEntity<Map<String, Any>> =
-        if (service.deleteAnnouncement(id)) ResponseEntity.ok(mapOf("deleted" to true))
-        else ResponseEntity.notFound().build()
-
-    // ━━━━━━ Backups ━━━━━━
-    @GetMapping("/backups")
-    fun backups(@RequestParam(defaultValue = "0") page: Int, @RequestParam(defaultValue = "20") size: Int): ResponseEntity<Map<String, Any>> {
-        val safeSize = size.coerceIn(1, 100)
-        val paged = service.getBackups(PageRequest.of(page, safeSize))
         return ResponseEntity.ok(mapOf(
-            "content" to paged.content,
-            "page" to paged.number,
-            "size" to paged.size,
-            "totalElements" to paged.totalElements,
-            "totalPages" to paged.totalPages
+            "analytics" to analytics,
+            "pendingReports" to pendingReports,
+            "recentCriticalAlerts" to recentCritical.size,
+            "degradedComponents" to degradedHealth.size,
+            "activeBackups" to activeBackups,
+            "generatedAt" to Instant.now()
         ))
     }
 
-    @PostMapping("/backups")
-    fun startBackup(@RequestBody body: Map<String, String>): ResponseEntity<Map<String, Any>> =
-        ResponseEntity.status(501).body(mapOf(
-            "error" to "BACKUP_OPERATOR_WORKFLOW_REQUIRED",
-            "message" to "Backups run on the Docker host via scripts/backup-platform.sh; the web process never holds the Docker socket."
-        ))
-
-    @PostMapping("/backups/{backupId}/restore")
-    fun restoreBackup(@PathVariable backupId: UUID, @RequestBody body: Map<String, String>): ResponseEntity<Map<String, Any>> =
-        ResponseEntity.status(501).body(mapOf(
-            "error" to "RESTORE_OPERATOR_WORKFLOW_REQUIRED",
-            "message" to "Restores run on the Docker host via scripts/restore-platform.sh."
-        ))
-
-    @DeleteMapping("/backups/{backupId}")
-    fun deleteBackup(@PathVariable backupId: UUID): ResponseEntity<Map<String, Any>> =
-        if (service.deleteBackup(backupId)) ResponseEntity.ok(mapOf("deleted" to true))
-        else ResponseEntity.notFound().build()
-
-    // ━━━━━━ Feature Flags ━━━━━━
-    @GetMapping("/feature-flags")
-    fun featureFlags(): List<FeatureFlag> = service.getFeatureFlags()
-
-    @PutMapping("/feature-flags/{name}")
-    fun updateFeatureFlag(@PathVariable name: String, @RequestBody body: Map<String, Any>, authentication: Authentication): ResponseEntity<Any> {
-        val updated = service.updateFeatureFlag(name, UUID.fromString(authentication.name), body)
-            ?: return ResponseEntity.notFound().build()
-        return ResponseEntity.ok(updated)
+    @GetMapping("/analytics")
+    fun getAnalytics(
+        @RequestParam start: String,
+        @RequestParam end: String
+    ): ResponseEntity<List<SystemAnalytics>> {
+        val startDate = java.time.LocalDate.parse(start)
+        val endDate = java.time.LocalDate.parse(end)
+        return ResponseEntity.ok(service.getAnalytics(startDate, endDate))
     }
 
+    @GetMapping("/health")
+    fun getHealth(): ResponseEntity<List<SystemHealth>> =
+        ResponseEntity.ok(service.getRecentHealth())
+
+    @GetMapping("/metrics/realtime")
+    fun getRealtimeMetrics(): ResponseEntity<Map<String, Any>> {
+        val analytics = service.calculateCurrentAnalytics()
+        val health = service.getRecentHealth()
+        return ResponseEntity.ok(mapOf(
+            "users" to analytics,
+            "health" to health.associateBy { it.component },
+            "timestamp" to Instant.now()
+        ))
+    }
+
+    // ━━━━━━━━━━━━━━━━ 👥 Users Management ━━━━━━━━━━━━━━━━
     @GetMapping("/users")
     fun getUsers(
         @RequestParam(required = false) page: Int = 0,
@@ -188,30 +88,39 @@ class AdminV2Controller(
         @RequestParam(required = false) sortDir: String? = "desc",
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val safeSize = size.coerceIn(1, 100)
-        val safeSort = sortBy?.takeIf { it in setOf("createdAt", "updatedAt", "username", "displayName", "redId", "status") } ?: "createdAt"
-        val direction = if (sortDir?.lowercase() == "asc") Sort.Direction.ASC else Sort.Direction.DESC
-        val pageable = PageRequest.of(page, safeSize, direction, safeSort)
+        val pageable = PageRequest.of(page, size, Sort.Direction.fromString(sortDir ?: "desc"), sortBy ?: "createdAt")
+        val allUsers = users.findAll(pageable)
 
-        val parsedStatus = status?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            runCatching { AccountStatus.valueOf(it.uppercase()) }.getOrNull()
+        val filtered = allUsers.content.filter { user ->
+            (status == null || user.status.name == status) &&
+            (role == null || user.role.name == role) &&
+            (search == null || user.username.contains(search, ignoreCase = true) ||
+                user.displayName.contains(search, ignoreCase = true) ||
+                user.redId.contains(search, ignoreCase = true))
         }
-        val parsedRole = role?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            runCatching { AccountRole.valueOf(it.uppercase()) }.getOrNull()
-        }
-        val normalizedSearch = search?.trim()?.takeIf { it.length >= 2 }
 
-        val allUsers = users.searchForAdmin(parsedStatus, parsedRole, normalizedSearch, pageable)
-
-        val fleetMap = fleet.listGateways().associateBy { it.id }
-        val dtoContent = allUsers.content.map {
-            it.toResponse(emptyList()).copy(
-                pstnGatewayHost = it.pstnGatewayId?.let { gid -> fleetMap[gid]?.host }
-            )
-        }
+        val adminId = UUID.fromString(authentication.name)
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USERS_LISTED",
+            category = "USER",
+            description = "Listed users with filters: status=$status, role=$role, search=$search"
+        )
 
         return ResponseEntity.ok(mapOf(
-            "content" to dtoContent,
+            "content" to filtered.map { user -> mapOf(
+                "id" to user.id,
+                "redId" to user.redId,
+                "username" to user.username,
+                "displayName" to user.displayName,
+                "status" to user.status.name,
+                "role" to user.role.name,
+                "pstnEnabled" to user.pstnEnabled,
+                "createdAt" to user.createdAt,
+                "approvedAt" to user.approvedAt,
+                "lastSeen" to user.lastSeen
+            )},
             "page" to page,
             "size" to size,
             "totalElements" to allUsers.totalElements,
@@ -219,203 +128,567 @@ class AdminV2Controller(
         ))
     }
 
-    @PostMapping("/users/{userId}/approve")
-    fun approveUser(@PathVariable userId: String, authentication: Authentication): ResponseEntity<*> {
-        val updated = approval.processAction(UUID.fromString(userId), AccountStatus.APPROVED, null, UUID.fromString(authentication.name))
-        return ResponseEntity.ok(updated)
-    }
-
-    @PostMapping("/users/{userId}/ban")
-    fun banUser(@PathVariable userId: String, @RequestBody body: Map<String, String>, authentication: Authentication): ResponseEntity<*> {
-        val updated = approval.processAction(UUID.fromString(userId), AccountStatus.BANNED, body["reason"], UUID.fromString(authentication.name))
-        return ResponseEntity.ok(updated)
-    }
-
     @GetMapping("/users/{userId}")
-    fun getUser(@PathVariable userId: UUID): ResponseEntity<Any> {
-        val user = users.findById(userId).orElse(null) ?: return ResponseEntity.notFound().build()
-        return ResponseEntity.ok(user.toResponse(emptyList()))
+    fun getUserDetail(
+        @PathVariable userId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val adminId = UUID.fromString(authentication.name)
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_DETAIL_VIEWED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId
+        )
+        return ResponseEntity.ok(mapOf<String, Any>(
+            "id" to (user.id?.toString() ?: ""),
+            "redId" to user.redId,
+            "username" to user.username,
+            "displayName" to user.displayName,
+            "status" to user.status.name,
+            "role" to user.role.name,
+            "pstnEnabled" to user.pstnEnabled,
+            "pstnDailyLimit" to user.pstnDailyLimit,
+            "createdAt" to user.createdAt,
+            "approvedAt" to (user.approvedAt ?: Instant.MIN),
+            "approvedBy" to (user.approvedBy?.toString() ?: ""),
+            "rejectionReason" to (user.rejectionReason ?: ""),
+            "lastSeen" to (user.lastSeen ?: Instant.MIN)
+        ))
+    }
+
+    @PostMapping("/users/{userId}/approve")
+    fun approveUser(
+        @PathVariable userId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        user.status = com.red.server.auth.model.AccountStatus.APPROVED
+        user.approvedAt = Instant.now()
+        user.approvedBy = adminId
+        users.save(user)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_APPROVED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            description = "Approved user ${user.username}"
+        )
+        return ResponseEntity.ok(mapOf("success" to true, "user" to mapOf("id" to user.id, "status" to user.status.name)))
     }
 
     @PostMapping("/users/{userId}/reject")
     fun rejectUser(
-        @PathVariable userId: UUID,
-        @RequestBody body: Map<String, String>,
+        @PathVariable userId: String,
+        @RequestBody(required = false) body: Map<String, String?> = emptyMap(),
         authentication: Authentication
-    ): ResponseEntity<*> = ResponseEntity.ok(
-        approval.processAction(userId, AccountStatus.REJECTED, body["reason"], UUID.fromString(authentication.name))
-    )
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        user.status = com.red.server.auth.model.AccountStatus.REJECTED
+        user.rejectionReason = body["reason"]
+        users.save(user)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_REJECTED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            description = "Rejected user ${user.username}: ${body["reason"]}"
+        )
+        return ResponseEntity.ok(mapOf("success" to true))
+    }
+
+    @PostMapping("/users/{userId}/ban")
+    fun banUser(
+        @PathVariable userId: String,
+        @RequestBody body: Map<String, Any?>,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        user.status = com.red.server.auth.model.AccountStatus.BANNED
+        users.save(user)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_BANNED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            description = "Banned user ${user.username}: ${body["reason"]}",
+            severity = "WARNING"
+        )
+        return ResponseEntity.ok(mapOf("success" to true))
+    }
 
     @PostMapping("/users/{userId}/unban")
-    fun unbanUser(@PathVariable userId: UUID, authentication: Authentication): ResponseEntity<*> = ResponseEntity.ok(
-        approval.processAction(userId, AccountStatus.APPROVED, null, UUID.fromString(authentication.name))
-    )
+    fun unbanUser(
+        @PathVariable userId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        user.status = com.red.server.auth.model.AccountStatus.APPROVED
+        users.save(user)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_UNBANNED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId
+        )
+        return ResponseEntity.ok(mapOf("success" to true))
+    }
 
     @PutMapping("/users/{userId}/role")
-    fun updateUserRole(
-        @PathVariable userId: UUID,
+    fun promoteUser(
+        @PathVariable userId: String,
         @RequestBody body: Map<String, String>,
         authentication: Authentication
-    ): ResponseEntity<Any> {
-        val actor = UUID.fromString(authentication.name)
-        require(actor != userId) { "Administrators cannot change their own role" }
-        val role = runCatching { AccountRole.valueOf(body["role"].orEmpty().trim().uppercase()) }
-            .getOrElse { return ResponseEntity.badRequest().body(mapOf("error" to "Invalid role")) }
-        val user = users.findById(userId).orElse(null) ?: return ResponseEntity.notFound().build()
-        user.role = role
-        user.updatedAt = Instant.now()
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val newRole = com.red.server.auth.model.AccountRole.valueOf(body["role"] ?: "USER")
+        user.role = newRole
         users.save(user)
-        service.recordAudit(actor, authentication.name, "UPDATE_USER_ROLE", "AUTH", "USER", userId.toString(), metadata = mapOf("role" to role.name))
-        return ResponseEntity.ok(user.toResponse(emptyList()))
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "USER_PROMOTED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            description = "Changed role to ${newRole.name}"
+        )
+        return ResponseEntity.ok(mapOf("success" to true))
     }
+
+    // ملاحظة معمارية: تفعيل PSTN/Dinstar أُزيل من هنا عمداً — كان يتعارض في خرائط Spring
+    // مع PUT /api/admin/users/pstn (PstnAuthorizationController) وبسلوك منحرف
+    // (لا يصفّر الحد اليومي عند التعطيل). المصدر الوحيد الآن: PstnAuthorizationService.
 
     @DeleteMapping("/users/{userId}")
     fun deleteUser(
-        @PathVariable userId: UUID,
-        @RequestParam(defaultValue = "false") hard: Boolean,
+        @PathVariable userId: String,
+        @RequestParam(required = false) hard: Boolean = false,
         authentication: Authentication
-    ): ResponseEntity<Any> {
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val user = users.findById(UUID.fromString(userId)).orElse(null)
+            ?: return ResponseEntity.notFound().build()
         if (hard) {
-            return ResponseEntity.status(501).body(mapOf(
-                "error" to "HARD_DELETE_REQUIRES_OPERATOR_WORKFLOW",
-                "message" to "Use the audited retention workflow; direct database deletion is disabled."
-            ))
+            users.delete(user)
+        } else {
+            user.status = com.red.server.auth.model.AccountStatus.BANNED
+            users.save(user)
         }
-        val updated = approval.processAction(
-            userId,
-            AccountStatus.REJECTED,
-            "ADMIN_SOFT_DELETE",
-            UUID.fromString(authentication.name)
+
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = if (hard) "USER_DELETED" else "USER_BANNED",
+            category = "USER",
+            targetType = "USER",
+            targetId = userId,
+            severity = "WARNING"
         )
-        return ResponseEntity.ok(mapOf("deleted" to true, "softDeleted" to true, "user" to updated))
+        return ResponseEntity.ok(mapOf("success" to true))
     }
 
-    // ━━━━━━ Audit Log ━━━━━━
+    // ━━━━━━━━━━━━━━━━ 🛡️ Audit Log ━━━━━━━━━━━━━━━━
     @GetMapping("/audit")
-    fun getAuditLog(
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "50") size: Int,
-        @RequestParam(required = false) adminId: String?,
-        @RequestParam(required = false) action: String?,
-        @RequestParam(required = false) category: String?,
-        @RequestParam(required = false) severity: String?,
-        @RequestParam(required = false) startDate: String?,
-        @RequestParam(required = false) endDate: String?
-    ): ResponseEntity<Map<String, Any>> {
-        val safeSize = size.coerceIn(1, 100)
-        val pageable = PageRequest.of(page, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
-
-        val spec = org.springframework.data.jpa.domain.Specification<com.red.server.admin.model.AdminAuditLog> { root, _, cb ->
-            val predicates = mutableListOf<jakarta.persistence.criteria.Predicate>()
-            adminId?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                runCatching { UUID.fromString(it) }.getOrNull()?.let { uid ->
-                    predicates.add(cb.equal(root.get<UUID>("adminId"), uid))
-                }
-            }
-            action?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                predicates.add(cb.equal(root.get<String>("action"), it))
-            }
-            category?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                predicates.add(cb.equal(root.get<String>("category"), it))
-            }
-            severity?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                predicates.add(cb.equal(root.get<String>("severity"), it))
-            }
-            startDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                runCatching { Instant.parse(it) }.getOrNull()?.let { s ->
-                    predicates.add(cb.greaterThanOrEqualTo(root.get<Instant>("createdAt"), s))
-                }
-            }
-            endDate?.trim()?.takeIf { it.isNotEmpty() }?.let {
-                runCatching { Instant.parse(it) }.getOrNull()?.let { e ->
-                    predicates.add(cb.lessThanOrEqualTo(root.get<Instant>("createdAt"), e))
-                }
-            }
-            if (predicates.isEmpty()) null else cb.and(*predicates.toTypedArray())
+    fun getAudit(
+        @RequestParam(required = false) page: Int = 0,
+        @RequestParam(required = false) size: Int = 50,
+        @RequestParam(required = false) adminId: String? = null,
+        @RequestParam(required = false) action: String? = null,
+        @RequestParam(required = false) category: String? = null,
+        @RequestParam(required = false) severity: String? = null
+    ): ResponseEntity<*> {
+        val pageable = PageRequest.of(page, size)
+        val result = when {
+            adminId != null -> service.getAuditByAdmin(UUID.fromString(adminId), pageable)
+            action != null -> service.getAuditByAction(action, pageable)
+            category != null -> service.getAuditByCategory(category, pageable)
+            severity != null -> auditLog.findBySeverityOrderByCreatedAtDesc(severity, pageable)
+            else -> service.getAuditLog(pageable)
         }
-        val paged = auditLog.findAll(spec, pageable)
-
-        return ResponseEntity.ok(mapOf(
-            "content" to paged.content,
-            "page" to page,
-            "size" to safeSize,
-            "totalElements" to paged.totalElements,
-            "totalPages" to paged.totalPages
-        ))
+        return ResponseEntity.ok(result)
     }
 
     @GetMapping("/security/alerts")
     fun getSecurityAlerts(
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "50") size: Int,
-        @RequestParam(required = false) severity: String?
-    ): ResponseEntity<Map<String, Any>> {
-        val safeSize = size.coerceIn(1, 100)
-        val pageable = PageRequest.of(page, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
-
-        val paged = if (severity?.trim()?.isNotEmpty() == true) {
+        @RequestParam(required = false) page: Int = 0,
+        @RequestParam(required = false) size: Int = 50,
+        @RequestParam(required = false) severity: String? = null
+    ): ResponseEntity<*> {
+        val pageable = PageRequest.of(page, size)
+        val result = if (severity != null) {
             auditLog.findBySeverityOrderByCreatedAtDesc(severity, pageable)
         } else {
             auditLog.findAll(pageable)
         }
-
-        return ResponseEntity.ok(mapOf(
-            "content" to paged.content,
-            "page" to page,
-            "size" to safeSize,
-            "totalElements" to paged.totalElements,
-            "totalPages" to paged.totalPages
-        ))
+        return ResponseEntity.ok(result)
     }
 
-    // ━━━━━━ User Reports ━━━━━━
+    @GetMapping("/audit/export")
+    fun exportAudit(
+        @RequestParam(required = false) adminId: String? = null,
+        @RequestParam(required = false) action: String? = null,
+        @RequestParam(required = false) category: String? = null,
+        @RequestParam(required = false) severity: String? = null,
+        @RequestParam(required = false) format: String = "csv"
+    ): ResponseEntity<ByteArray> {
+        val pageable = PageRequest.of(0, 10000)
+        val page = when {
+            adminId != null -> service.getAuditByAdmin(UUID.fromString(adminId), pageable)
+            action != null -> service.getAuditByAction(action, pageable)
+            category != null -> service.getAuditByCategory(category, pageable)
+            severity != null -> auditLog.findBySeverityOrderByCreatedAtDesc(severity, pageable)
+            else -> service.getAuditLog(pageable)
+        } as org.springframework.data.domain.Page<*>
+        val csv = buildString {
+            appendLine("id,adminId,action,category,severity,targetType,targetId,createdAt,description")
+            page.content.forEach { entry ->
+                val e = entry as com.red.server.admin.model.AdminAuditLog
+                fun esc(v: String?) = "\"${(v ?: "").replace("\"", "\"\"")}\""
+                appendLine(listOf(
+                    e.id, e.adminId, esc(e.action), esc(e.category), esc(e.severity),
+                    esc(e.targetType), esc(e.targetId), e.createdAt, esc(e.description)
+                ).joinToString(","))
+            }
+        }.toByteArray(Charsets.UTF_8)
+        return ResponseEntity.ok()
+            .header("Content-Disposition", "attachment; filename=\"audit-${java.time.LocalDate.now()}.csv\"")
+            .header("Content-Type", "text/csv; charset=utf-8")
+            .body(csv)
+    }
+
+    // ━━━━━━━━━━━━━━━━ 🖥️ Admin Sessions ━━━━━━━━━━━━━━━━
+    @GetMapping("/sessions")
+    fun getAdminSessions(
+        @RequestParam(required = false) adminId: String? = null
+    ): ResponseEntity<List<AdminSession>> {
+        val sessions = if (adminId != null) {
+            service.getActiveSessions(UUID.fromString(adminId))
+        } else {
+            service.getAllActiveSessions()
+        }
+        return ResponseEntity.ok(sessions)
+    }
+
+    @PostMapping("/sessions/{sessionId}/terminate")
+    fun terminateSession(
+        @PathVariable sessionId: String,
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        service.terminateSession(UUID.fromString(sessionId), body["reason"] ?: "ADMIN_ACTION")
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "SESSION_TERMINATED",
+            category = "SECURITY",
+            targetType = "SESSION",
+            targetId = sessionId,
+            severity = "WARNING"
+        )
+        return ResponseEntity.ok(mapOf("success" to true))
+    }
+
+    @PostMapping("/sessions/cleanup")
+    fun cleanupSessions(authentication: Authentication): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val count = service.cleanupExpiredSessions()
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "SESSIONS_CLEANED",
+            category = "SYSTEM",
+            description = "Cleaned up $count expired sessions"
+        )
+        return ResponseEntity.ok(mapOf("cleanedCount" to count))
+    }
+
+    // ━━━━━━━━━━━━━━━━ 🚩 Feature Flags ━━━━━━━━━━━━━━━━
+    @GetMapping("/feature-flags")
+    fun getFeatureFlags(): ResponseEntity<List<FeatureFlag>> =
+        ResponseEntity.ok(service.getFeatureFlags())
+
+    @PutMapping("/feature-flags/{name}")
+    fun updateFeatureFlag(
+        @PathVariable name: String,
+        @RequestBody body: Map<String, Any?>,
+        authentication: Authentication
+    ): ResponseEntity<FeatureFlag> {
+        val adminId = UUID.fromString(authentication.name)
+        val updated = service.updateFeatureFlag(name, adminId, body)
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "FEATURE_FLAG_UPDATED",
+            category = "SYSTEM",
+            targetType = "FEATURE_FLAG",
+            targetId = name,
+            description = "Updated feature flag: ${body.keys}"
+        )
+        return ResponseEntity.ok(updated ?: FeatureFlag().apply { flagName = "NOT_FOUND" })
+    }
+
+    // ━━━━━━━━━━━━━━━━ 🚨 User Reports ━━━━━━━━━━━━━━━━
     @GetMapping("/reports")
     fun getReports(
         @RequestParam(required = false) page: Int = 0,
         @RequestParam(required = false) size: Int = 50,
-        @RequestParam(required = false) status: String? = null
-    ): ResponseEntity<Map<String, Any>> {
-        val safeSize = size.coerceIn(1, 100)
-        val paged = service.getReports(status, PageRequest.of(page, safeSize))
-        return ResponseEntity.ok(mapOf(
-            "content" to paged.content,
-            "page" to paged.number,
-            "size" to paged.size,
-            "totalElements" to paged.totalElements,
-            "totalPages" to paged.totalPages
-        ))
+        @RequestParam(required = false) status: String? = null,
+        @RequestParam(required = false) category: String? = null,
+        @RequestParam(required = false) assignedToMe: Boolean = false
+    ): ResponseEntity<*> {
+        val pageable = PageRequest.of(page, size)
+        val adminId = try {
+            org.springframework.security.core.context.SecurityContextHolder.getContext().authentication?.name?.let { UUID.fromString(it) }
+        } catch (_: Exception) { null }
+        val result = when {
+            assignedToMe && adminId != null && status != null ->
+                service.getReportsForAdmin(adminId, status, pageable)
+            status != null -> service.getReports(status, pageable)
+            else -> service.getReports(null, pageable)
+        }
+        return ResponseEntity.ok(result)
     }
 
     @PostMapping("/reports/{reportId}/resolve")
     fun resolveReport(
-        @PathVariable reportId: UUID,
+        @PathVariable reportId: String,
         @RequestBody body: Map<String, String>,
         authentication: Authentication
-    ): ResponseEntity<*> {
-        val resolution = body["resolution"] ?: return ResponseEntity.badRequest().body(mapOf("error" to "Resolution required"))
+    ): ResponseEntity<UserReport> {
         val adminId = UUID.fromString(authentication.name)
-        val updated = service.resolveReport(reportId, adminId, resolution, body["notes"])
-        return if (updated != null) ResponseEntity.ok(updated) else ResponseEntity.notFound().build<Any>()
+        val updated = service.resolveReport(
+            reportId = UUID.fromString(reportId),
+            adminId = adminId,
+            resolution = body["resolution"] ?: "NO_ACTION",
+            notes = body["notes"]
+        )
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "REPORT_RESOLVED",
+            category = "MODERATION",
+            targetType = "REPORT",
+            targetId = reportId,
+            description = "Resolution: ${body["resolution"]}"
+        )
+        return ResponseEntity.ok(updated ?: UserReport())
     }
 
     @PostMapping("/reports/{reportId}/dismiss")
     fun dismissReport(
-        @PathVariable reportId: UUID,
+        @PathVariable reportId: String,
         @RequestBody body: Map<String, String>,
         authentication: Authentication
-    ): ResponseEntity<*> {
+    ): ResponseEntity<UserReport> {
         val adminId = UUID.fromString(authentication.name)
-        val updated = service.dismissReport(reportId, adminId, body["notes"])
-        return if (updated != null) ResponseEntity.ok(updated) else ResponseEntity.notFound().build<Any>()
+        val updated = service.dismissReport(
+            reportId = UUID.fromString(reportId),
+            adminId = adminId,
+            notes = body["notes"]
+        )
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "REPORT_DISMISSED",
+            category = "MODERATION",
+            targetType = "REPORT",
+            targetId = reportId
+        )
+        return ResponseEntity.ok(updated ?: UserReport())
     }
 
     @PostMapping("/reports/{reportId}/assign")
     fun assignReport(
-        @PathVariable reportId: UUID,
+        @PathVariable reportId: String,
+        @RequestBody body: Map<String, String>,
         authentication: Authentication
-    ): ResponseEntity<*> {
+    ): ResponseEntity<UserReport> {
         val adminId = UUID.fromString(authentication.name)
-        val updated = service.assignReport(reportId, adminId)
-        return if (updated != null) ResponseEntity.ok(updated) else ResponseEntity.notFound().build<Any>()
+        val targetAdmin = body["adminId"]?.let { UUID.fromString(it) } ?: adminId
+        val updated = service.assignReport(UUID.fromString(reportId), targetAdmin)
+        return ResponseEntity.ok(updated ?: UserReport())
+    }
+
+    // ━━━━━━━━━━━━━━━━ 📢 Announcements ━━━━━━━━━━━━━━━━
+    @GetMapping("/announcements")
+    fun getAnnouncements(
+        @RequestParam(required = false) published: Boolean? = null
+    ): ResponseEntity<List<SystemAnnouncement>> =
+        ResponseEntity.ok(service.getAnnouncements(published))
+
+    @PostMapping("/announcements")
+    fun createAnnouncement(
+        @RequestBody body: Map<String, Any?>,
+        authentication: Authentication
+    ): ResponseEntity<SystemAnnouncement> {
+        val adminId = UUID.fromString(authentication.name)
+        val ann = service.createAnnouncement(
+            title = body["title"] as String,
+            body = body["body"] as String,
+            type = body["type"] as? String ?: "INFO",
+            targetAudience = body["targetAudience"] as? String ?: "ALL",
+            priority = (body["priority"] as? Number)?.toInt() ?: 0,
+            isDismissible = body["isDismissible"] as? Boolean ?: true,
+            adminId = adminId
+        )
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "ANNOUNCEMENT_CREATED",
+            category = "SYSTEM",
+            targetType = "ANNOUNCEMENT",
+            targetId = ann.id.toString(),
+            description = ann.title
+        )
+        return ResponseEntity.ok(ann)
+    }
+
+    @PostMapping("/announcements/{id}/publish")
+    fun publishAnnouncement(
+        @PathVariable id: String,
+        authentication: Authentication
+    ): ResponseEntity<SystemAnnouncement> {
+        val adminId = UUID.fromString(authentication.name)
+        val ann = service.publishAnnouncement(UUID.fromString(id), adminId)
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "ANNOUNCEMENT_PUBLISHED",
+            category = "SYSTEM",
+            targetType = "ANNOUNCEMENT",
+            targetId = id
+        )
+        return ResponseEntity.ok(ann ?: SystemAnnouncement())
+    }
+
+    @DeleteMapping("/announcements/{id}")
+    fun deleteAnnouncement(
+        @PathVariable id: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val success = service.deleteAnnouncement(UUID.fromString(id))
+        if (success) {
+            service.recordAudit(
+                adminId = adminId,
+                adminUsername = authentication.principal.toString(),
+                action = "ANNOUNCEMENT_DELETED",
+                category = "SYSTEM",
+                targetType = "ANNOUNCEMENT",
+                targetId = id,
+                severity = "WARNING"
+            )
+        }
+        return ResponseEntity.ok(mapOf("success" to success))
+    }
+
+    // ━━━━━━━━━━━━━━━━ 💾 Backups ━━━━━━━━━━━━━━━━
+    @GetMapping("/backups")
+    fun getBackups(
+        @RequestParam(required = false) page: Int = 0,
+        @RequestParam(required = false) size: Int = 20
+    ): ResponseEntity<Map<String, Any>> {
+        val pageable = PageRequest.of(page, size)
+        val result = service.getBackups(pageable)
+        return ResponseEntity.ok(mapOf(
+            "content" to result.content,
+            "page" to page,
+            "size" to size,
+            "totalElements" to result.totalElements,
+            "totalPages" to result.totalPages
+        ))
+    }
+
+    @PostMapping("/backups")
+    fun createBackup(
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): ResponseEntity<BackupHistory> {
+        val adminId = UUID.fromString(authentication.name)
+        val type = body["type"] ?: "FULL"
+        val backup = service.startBackup(type, adminId, body["notes"])
+        service.recordAudit(
+            adminId = adminId,
+            adminUsername = authentication.principal.toString(),
+            action = "BACKUP_STARTED",
+            category = "SYSTEM",
+            targetType = "BACKUP",
+            targetId = backup.id.toString(),
+            description = "Started $type backup"
+        )
+        return ResponseEntity.ok(backup)
+    }
+
+    @PostMapping("/backups/{backupId}/restore")
+    fun restoreBackup(
+        @PathVariable backupId: String,
+        @RequestBody body: Map<String, String>,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val confirmCode = body["confirmCode"] ?: ""
+        val success = service.restoreBackup(UUID.fromString(backupId), confirmCode)
+        if (success) {
+            service.recordAudit(
+                adminId = adminId,
+                adminUsername = authentication.principal.toString(),
+                action = "BACKUP_RESTORED",
+                category = "SYSTEM",
+                targetType = "BACKUP",
+                targetId = backupId,
+                severity = "CRITICAL"
+            )
+        }
+        return ResponseEntity.ok(mapOf("success" to success))
+    }
+
+    @DeleteMapping("/backups/{backupId}")
+    fun deleteBackup(
+        @PathVariable backupId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val adminId = UUID.fromString(authentication.name)
+        val success = service.deleteBackup(UUID.fromString(backupId))
+        if (success) {
+            service.recordAudit(
+                adminId = adminId,
+                adminUsername = authentication.principal.toString(),
+                action = "BACKUP_DELETED",
+                category = "SYSTEM",
+                targetType = "BACKUP",
+                targetId = backupId,
+                severity = "WARNING"
+            )
+        }
+        return ResponseEntity.ok(mapOf("success" to success))
     }
 }

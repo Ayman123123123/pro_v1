@@ -1,46 +1,48 @@
 package com.red.sovereign.features.calls
 
 import android.content.Context
+import android.util.Log
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 
-/**
- * YOUNES VoIP Engine
- * Configures WebRTC for 1080p Video (AV1/VP9) and Hi-Fi Audio (Opus).
- * ICE servers are fetched dynamically from the backend (/api/calls/ice-servers)
- * and should NOT be hardcoded.
- */
 class VoipEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "RED.VoipEngine"
-        // Default fallback STUN — production must use backend-provided ICE
         private const val FALLBACK_STUN = "stun:stun.l.google.com:19302"
     }
 
     private val rootEglBase: EglBase = EglBase.create()
 
+    @Volatile
+    private var _factory: PeerConnectionFactory? = null
+
     var iceServers: List<PeerConnection.IceServer> = listOf(
         PeerConnection.IceServer.builder(FALLBACK_STUN).createIceServer()
     )
 
-    val factory: PeerConnectionFactory by lazy {
-        val encoderFactory = DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true)
-        val decoderFactory = DefaultVideoDecoderFactory(rootEglBase.eglBaseContext)
+    val factory: PeerConnectionFactory
+        get() = _factory ?: synchronized(this) {
+            _factory ?: createFactory().also { _factory = it }
+        }
 
-        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
-            .setSampleRate(48000)
-            .setUseHardwareAcousticEchoCanceler(true)
-            .setUseHardwareNoiseSuppressor(true)
-            .createAudioDeviceModule()
-
+    private fun createFactory(): PeerConnectionFactory {
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions.builder(context)
                 .setEnableInternalTracer(true)
                 .createInitializationOptions()
         )
 
-        PeerConnectionFactory.builder()
+        val encoderFactory = DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true)
+        val decoderFactory = DefaultVideoDecoderFactory(rootEglBase.eglBaseContext)
+
+        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setSampleRate(48000)
+            .setUseHardwareAcousticEchoCanceler(false)
+            .setUseHardwareNoiseSuppressor(false)
+            .createAudioDeviceModule()
+
+        return PeerConnectionFactory.builder()
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .setAudioDeviceModule(audioDeviceModule)
@@ -57,10 +59,28 @@ class VoipEngine(private val context: Context) {
 
     fun getEglContext() = rootEglBase.eglBaseContext
 
-    /**
-     * Update ICE servers from backend response.
-     * Call this after fetching /api/calls/ice-servers.
-     */
+    fun getLocalVideoTrack(): VideoTrack? {
+        return try {
+            val videoCapturer = Camera2Enumerator(context).let { enumerator ->
+                enumerator.deviceNames.firstOrNull { enumerator.isBackFacing(it) }
+                    ?.let { enumerator.createCapturer(it, null) }
+                    ?: enumerator.deviceNames.firstOrNull()?.let { enumerator.createCapturer(it, null) }
+            } ?: return null
+
+            val surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase.eglBaseContext)
+            val videoSource = factory.createVideoSource(videoCapturer.isScreencast)
+            videoCapturer.initialize(surfaceTextureHelper, context, videoSource.capturerObserver)
+            videoCapturer.startCapture(1920, 1080, 30)
+
+            val videoTrack = factory.createVideoTrack("ARDARD0", videoSource)
+            videoTrack.setEnabled(true)
+            videoTrack
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create local video track", e)
+            null
+        }
+    }
+
     fun updateIceServers(servers: List<Pair<String, Triple<String?, String?, String?>>>) {
         iceServers = servers.map { (url, creds) ->
             val builder = PeerConnection.IceServer.builder(url)
@@ -70,5 +90,20 @@ class VoipEngine(private val context: Context) {
         }.ifEmpty {
             listOf(PeerConnection.IceServer.builder(FALLBACK_STUN).createIceServer())
         }
+    }
+
+    fun dispose() {
+        try {
+            _factory?.dispose()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disposing factory", e)
+        }
+        _factory = null
+        try {
+            rootEglBase.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing EglBase", e)
+        }
+        Log.i(TAG, "VoipEngine disposed")
     }
 }

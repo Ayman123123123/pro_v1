@@ -85,7 +85,7 @@ class MainActivity : FragmentActivity() {
         }
 
         // Private messages, recovery codes and device identity must not leak through screenshots
-        // or the Android recent-apps thumbnail. A user-controlled exception can be added for public feed export later.
+        // or the Android recent-apps thumbnail.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         SettingsRuntime.initialize(application)
         enableEdgeToEdge()
@@ -96,16 +96,15 @@ class MainActivity : FragmentActivity() {
                 YounesTheme(highContrast = preferences.highContrast) {
                     SovereignBackground {
                         val state = authViewModel.state
-                        LaunchedEffect(state is AuthState.Authenticated) {
+                        LaunchedEffect(state) {
                             if (state is AuthState.Authenticated) {
                                 requestNecessaryPermissions()
                                 startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
-
                                 if (!pstnObserverRegistered) {
                                     ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
                                     pstnObserverRegistered = true
                                 }
-                            } else {
+                            } else if (state !is AuthState.Loading) {
                                 startupCoordinator.onLoggedOut(this@MainActivity)
                             }
                         }

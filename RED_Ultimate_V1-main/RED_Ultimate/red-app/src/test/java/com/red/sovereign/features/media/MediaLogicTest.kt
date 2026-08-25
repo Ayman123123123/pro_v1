@@ -124,7 +124,7 @@ class MediaLogicTest {
              "mimeType":"application/pdf","size":2048,"sha256":"abc",
              "key":"AAA=","nonce":"BBB="}
         """.trimIndent()
-        val m = parseManifest(json, Json { ignoreUnknownKeys = true })
+        val m = parseManifest(msg(json), Json { ignoreUnknownKeys = true })
         assertNotNull(m)
         assertEquals("تقرير.pdf", m!!.name)
         assertEquals("application/pdf", m.mimeType)
@@ -135,12 +135,12 @@ class MediaLogicTest {
     fun `manifest tolerates unknown fields`() {
         val json = """{"objectKey":"k","url":"u","name":"f.zip","mimeType":"application/zip",
                         "size":9,"sha256":"d","key":"k1","nonce":"n1","futureField":123}"""
-        assertNotNull(parseManifest(json, Json { ignoreUnknownKeys = true }))
+        assertNotNull(parseManifest(msg(json), Json { ignoreUnknownKeys = true }))
     }
 
     @Test
     fun `manifest rejects garbage and plain text`() {
-        assertNull(parseManifest("not json at all", Json { ignoreUnknownKeys = true }))
-        assertNull(parseManifest("""{"foo":1}""", Json { ignoreUnknownKeys = true }))
+        assertNull(parseManifest(msg("not json at all"), Json { ignoreUnknownKeys = true }))
+        assertNull(parseManifest(msg("""{"foo":1}"""), Json { ignoreUnknownKeys = true }))
     }
 }

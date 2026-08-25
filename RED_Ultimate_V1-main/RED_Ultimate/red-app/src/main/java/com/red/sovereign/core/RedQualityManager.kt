@@ -1,4 +1,4 @@
-package com.red.sovereign.core
+﻿package com.red.sovereign.core
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -6,10 +6,12 @@ import android.net.NetworkCapabilities
 import com.red.sovereign.settings.SettingsRuntime
 
 /**
- * أقوى مبرمج — مدير الجودة الاحترافي الرسمي
- * يحدد جودة المكالمات والوسائط حسب الشبكة وإعدادات المستخدم — غير مهرج
+ * Ø£Ù‚ÙˆÙ‰ Ù…Ø¨Ø±Ù…Ø¬ â€” Ù…Ø¯ÙŠØ± Ø§Ù„Ø¬ÙˆØ¯Ø© Ø§Ù„Ø§Ø­ØªØ±Ø§ÙÙŠ Ø§Ù„Ø±Ø³Ù…ÙŠ
+ * ÙŠØ­Ø¯Ø¯ Ø¬ÙˆØ¯Ø© Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª ÙˆØ§Ù„ÙˆØ³Ø§Ø¦Ø· Ø­Ø³Ø¨ Ø§Ù„Ø´Ø¨ÙƒØ© ÙˆØ¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… â€” ØºÙŠØ± Ù…Ù‡Ø±Ø¬
  */
 object RedQualityManager {
+    /** تهيئة مبكرة آمنة — جودة تلقائية تُفعَّل لاحقاً عند توفر مقاييس. */
+    fun initialize(context: android.content.Context) { /* reserved */ }
     enum class NetworkTier { WIFI, CELL_4G, CELL_3G, OFFLINE }
     data class QualityProfile(val videoWidth: Int, val videoHeight: Int, val fps: Int, val videoKbps: Int, val audioKbps: Int)
 

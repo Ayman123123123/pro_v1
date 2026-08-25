@@ -301,14 +301,14 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(SovereignScreen.DASHBOARD) }
     var selectedGroupId by remember { mutableStateOf<String?>(null) }
-    var section by remember { mutableStateOf(MainSection.CHATS) } // Ø§Ù„Ø£ÙØ¶Ù„ Ù…Ù† ÙˆØ§ØªØ³Ø§Ø¨: Ø§Ù„Ø¯Ø±Ø¯Ø´Ø§Øª Ø£ÙˆÙ„Ø§Ù‹ (Ø§Ù„Ø£ÙƒØ«Ø± Ø§Ø³ØªØ®Ø¯Ø§Ù…Ø§Ù‹)
-    // ðŸ”— ÙØªØ­ Ù…Ø­Ø§Ø¯Ø«Ø© Ø®Ø§ØµØ© Ù…Ù† Ù‚Ø§Ø¦Ù…Ø© Ø£Ø¹Ø¶Ø§Ø¡ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø£Ùˆ Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„ (ÙŠØªØºØ°Ù‰ Ø¹Ù„Ù‰ deepLinkSender ÙÙŠ ChatHubScreen)
+    var section by remember { mutableStateOf(MainSection.CHATS) } // الأفضل من واتساب: الدردشات أولاً (الأكثر استخداماً)
+    // 🔗 فتح محادثة خاصة من قائمة أعضاء المجموعة أو جهات الاتصال (يتغذى على deepLinkSender في ChatHubScreen)
     var pendingChatTarget by remember { mutableStateOf<String?>(null) }
-    // ðŸ”” Auto-switch to CALLS tab when call starts/ringing â€” fixes "Ù„Ø§ ØªØ¸Ù‡Ø± Ø§Ù„ØªØ¨ÙˆÙŠØ¨Ø© Ø§Ù„ØµØ­ÙŠØ­Ø©"
+    // 🔔 Auto-switch to CALLS tab when call starts/ringing — fixes "لا تظهر التبويبة الصحيحة"
     androidx.compose.runtime.LaunchedEffect(CallRuntime.state) {
         if (CallRuntime.state !is CallUiState.Idle) section = MainSection.CALLS
     }
-    // ðŸ§¹ Ù…Ø³Ø­ pendingChatTarget Ø¨Ø¹Ø¯ ÙØªØ­ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ø­ØªÙ‰ Ù„Ø§ ÙŠÙØ¹Ø§Ø¯ ÙØªØ­Ù‡Ø§ Ø¹Ù†Ø¯ Ø§Ù„ØªØ¨Ø¯ÙŠÙ„ Ø¨ÙŠÙ† Ø§Ù„ØªØ¨ÙˆÙŠØ¨Ø§Øª
+    // 🧹 مسح pendingChatTarget بعد فتح المحادثة حتى لا يُعاد فتحها عند التبديل بين التبويبات
     androidx.compose.runtime.LaunchedEffect(pendingChatTarget, section) {
         if (pendingChatTarget != null && section == MainSection.CHATS) {
             kotlinx.coroutines.delay(600)
@@ -355,7 +355,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     val callHistory: CallHistoryViewModel = viewModel()
     val createStoryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
 
-    // â—€ï¸ Ø²Ø± Ø§Ù„Ø±Ø¬ÙˆØ¹ â€” Ù„Ø§ ÙŠØ®Ø±Ø¬ Ù…Ù† Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ù…Ø¨Ø§Ø´Ø±Ø©ØŒ Ø¨Ù„ ÙŠØªÙ†Ù‚Ù„ Ù‡Ø±Ù…ÙŠØ§Ù‹ (ÙˆØ§ØªØ³Ø§Ø¨)
+    // ◀️ زر الرجوع — لا يخرج من التطبيق مباشرة، بل يتنقل هرمياً (واتساب)
     val activity = LocalContext.current as? android.app.Activity
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -373,7 +373,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     activity?.finish()
                 } else {
                     lastBackPress = now
-                    android.widget.Toast.makeText(context, "Ø§Ø¶ØºØ· Ù…Ø±Ø© Ø£Ø®Ø±Ù‰ Ù„Ù„Ø®Ø±ÙˆØ¬", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "اضغط مرة أخرى للخروج", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -460,25 +460,25 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     containerColor = YounesEmerald,
                     contentColor = Color(0xFF002117),
                     shape = RoundedCornerShape(18.dp)
-                ) { Icon(Icons.Default.Chat, "Ø¯Ø±Ø¯Ø´Ø© Ø¬Ø¯ÙŠØ¯Ø©") }
+                ) { Icon(Icons.Default.Chat, "دردشة جديدة") }
                 MainSection.GROUPS -> FloatingActionButton(
                     onClick = { currentScreen = SovereignScreen.CREATE_GROUP },
                     containerColor = YounesEmerald,
                     contentColor = Color(0xFF002117),
                     shape = RoundedCornerShape(18.dp)
-                ) { Icon(Icons.Default.GroupAdd, "Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¬Ø¯ÙŠØ¯Ø©") }
+                ) { Icon(Icons.Default.GroupAdd, "مجموعة جديدة") }
                 MainSection.CALLS -> FloatingActionButton(
                     onClick = { showCallDialer = true },
                     containerColor = YounesEmerald,
                     contentColor = Color(0xFF002117),
                     shape = RoundedCornerShape(18.dp)
-                ) { Icon(Icons.Default.Dialpad, "Ø§ØªØµØ§Ù„ Ø¬Ø¯ÙŠØ¯") }
+                ) { Icon(Icons.Default.Dialpad, "اتصال جديد") }
                 MainSection.HOME -> FloatingActionButton(
                     onClick = { showCreate = true },
                     containerColor = YounesEmerald,
                     contentColor = Color(0xFF002117),
                     shape = RoundedCornerShape(18.dp)
-                ) { Icon(Icons.Default.Add, "Ø¥Ù†Ø´Ø§Ø¡") }
+                ) { Icon(Icons.Default.Add, "إنشاء") }
                 else -> {}
             }
         },
@@ -539,14 +539,14 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
 
-    // ðŸ”§ Ø¥ØµÙ„Ø§Ø­ Ø§Ù„Ø¹ÙŠØ¨: dialer Ù„Ø¥Ø¯Ø®Ø§Ù„ RED ID ÙˆØ§Ù„Ø§ØªØµØ§Ù„ 1-1 ØµÙˆØª/ÙÙŠØ¯ÙŠÙˆ (Ø¨Ø¯Ù„ ØªØ­ÙˆÙŠÙ„ Ù„Ù€ DINSTAR)
+    // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
     if (showCallDialer) {
         AlertDialog(
             onDismissRequest = { showCallDialer = false; dialerRedId = ""; dialerVideo = false },
-            title = { Text("Ù…ÙƒØ§Ù„Ù…Ø© Ø¬Ø¯ÙŠØ¯Ø© Ø¹Ø¨Ø± ÙŠÙˆÙ†Ø³") },
+            title = { Text("مكالمة جديدة عبر يونس") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Ø£Ø¯Ø®Ù„ Ù…Ø¹Ø±Ù‘Ù ÙŠÙˆÙ†Ø³ Ù„Ù„Ø§ØªØµØ§Ù„ Ø¨Ù‡ Ù…Ø¨Ø§Ø´Ø±Ø©:\nÙ…Ø«Ø§Ù„: ${YounesId.PLACEHOLDER}", color = Color.Gray, fontSize = 12.sp)
+                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: ${YounesId.PLACEHOLDER}", color = Color.Gray, fontSize = 12.sp)
                     OutlinedTextField(
                         value = dialerRedId,
                         onValueChange = { dialerRedId = YounesId.normalizeInput(it) },
@@ -556,7 +556,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(checked = dialerVideo, onCheckedChange = { dialerVideo = it })
-                        Text("Ù…ÙƒØ§Ù„Ù…Ø© ÙÙŠØ¯ÙŠÙˆ", fontSize = 14.sp)
+                        Text("مكالمة فيديو", fontSize = 14.sp)
                     }
                     val valid = dialerRedId.matches(RED_ID_PATTERN)
                     if (dialerRedId.isNotBlank() && !valid) {
@@ -581,22 +581,22 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                         pendingDialerVideo = video
                         dialerCallPermissions.launch(perms)
                     }
-                ) { Text(if (dialerVideo) "Ø§ØªØµØ§Ù„ ÙÙŠØ¯ÙŠÙˆ" else "Ø§ØªØµØ§Ù„ ØµÙˆØªÙŠ") }
+                ) { Text(if (dialerVideo) "اتصال فيديو" else "اتصال صوتي") }
             },
-            dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            dismissButton = { TextButton({ showCallDialer = false; dialerRedId = ""; dialerVideo = false }) { Text("إلغاء") } }
         )
     }
 
-    // ðŸ”´ Ø­ÙˆØ§Ø± Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø¨Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø± â€” Ø®Ø§Øµ Ø¨ÙƒÙ„Ù…Ø© Ø³Ø± Ø£Ùˆ Ø¹Ø§Ù… + Ø¯Ø¹ÙˆØ© Ø£ØµØ¯Ù‚Ø§Ø¡
+    // 🔴 حوار إنشاء البث المباشر — خاص بكلمة سر أو عام + دعوة أصدقاء
     if (showLiveCreateDialog) {
         val livePermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             val camOk = grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
             val micOk = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (camOk && micOk) {
-                val titleFinal = liveTitle.trim().ifBlank { "Ø¨Ø« Ù…Ø¨Ø§Ø´Ø± ${account.username}" }
+                val titleFinal = liveTitle.trim().ifBlank { "بث مباشر ${account.username}" }
                 val pw = if (liveIsPrivate) livePassword.trim().takeIf { it.isNotBlank() } else null
                 if (liveIsPrivate && pw.isNullOrBlank()) {
-                    android.widget.Toast.makeText(context, "Ø£Ø¯Ø®Ù„ ÙƒÙ„Ù…Ø© Ø³Ø± Ù„Ù„Ø¨Ø« Ø§Ù„Ø®Ø§Øµ", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(context, "أدخل كلمة سر للبث الخاص", android.widget.Toast.LENGTH_SHORT).show()
                     return@rememberLauncherForActivityResult
                 }
                 showLiveCreateDialog = false
@@ -606,21 +606,21 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
         }
         AlertDialog(
             onDismissRequest = { showLiveCreateDialog = false; livePassword = "" },
-            title = { Text("Ø¨Ø¯Ø¡ Ø¨Ø« Ù…Ø¨Ø§Ø´Ø± ðŸ”´", fontWeight = FontWeight.Bold) },
+            title = { Text("بدء بث مباشر 🔴", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = liveTitle,
                         onValueChange = { liveTitle = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ø¨Ø« (Ø§Ø®ØªÙŠØ§Ø±ÙŠ)") },
+                        placeholder = { Text("عنوان البث (اختياري)") },
                         singleLine = true
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         Icon(if (liveIsPrivate) Icons.Filled.Lock else Icons.Filled.Public, null, tint = if (liveIsPrivate) Color(0xFFE53935) else YounesEmerald)
                         Column(Modifier.weight(1f)) {
-                            Text(if (liveIsPrivate) "Ø¨Ø« Ø®Ø§Øµ Ø¨ÙƒÙ„Ù…Ø© Ø³Ø±" else "Ø¨Ø« Ø¹Ø§Ù… (Ø¨Ø¯ÙˆÙ† ÙƒÙ„Ù…Ø© Ø³Ø±)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text(if (liveIsPrivate) "Ø§Ù„Ù…Ø´Ø§Ù‡Ø¯ÙˆÙ† ÙŠØ­ØªØ§Ø¬ÙˆÙ† ÙƒÙ„Ù…Ø© Ø§Ù„Ø³Ø±" else "ÙŠÙ…ÙƒÙ† Ù„Ù„Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù…Ø´Ø§Ù‡Ø¯Ø©", fontSize = 11.sp, color = Color.Gray)
+                            Text(if (liveIsPrivate) "بث خاص بكلمة سر" else "بث عام (بدون كلمة سر)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Text(if (liveIsPrivate) "المشاهدون يحتاجون كلمة السر" else "يمكن للجميع المشاهدة", fontSize = 11.sp, color = Color.Gray)
                         }
                         Switch(checked = liveIsPrivate, onCheckedChange = { liveIsPrivate = it })
                     }
@@ -629,18 +629,18 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                             value = livePassword,
                             onValueChange = { livePassword = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("ÙƒÙ„Ù…Ø© Ø§Ù„Ø³Ø±") },
+                            placeholder = { Text("كلمة السر") },
                             singleLine = true,
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                         )
                     }
-                    Text("Ø³ÙŠØªÙ…ÙƒÙ† Ø§Ù„Ø£ØµØ¯Ù‚Ø§Ø¡ Ù…Ù† Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù… Ø¹Ø¨Ø± Ø¯Ø¹ÙˆØ© Ø£Ùˆ Ø±Ø§Ø¨Ø· younes://livestream/<id>", fontSize = 11.sp, color = Color.Gray)
+                    Text("سيتمكن الأصدقاء من الانضمام عبر دعوة أو رابط younes://livestream/<id>", fontSize = 11.sp, color = Color.Gray)
                 }
             },
             confirmButton = {
-                Button(onClick = { livePermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("Ø¨Ø¯Ø¡ Ø§Ù„Ø¨Ø«") }
+                Button(onClick = { livePermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("بدء البث") }
             },
-            dismissButton = { TextButton({ showLiveCreateDialog = false; livePassword = "" }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            dismissButton = { TextButton({ showLiveCreateDialog = false; livePassword = "" }) { Text("إلغاء") } }
         )
     }
 }
@@ -653,20 +653,20 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
 ) {
     Image(
         painterResource(R.drawable.younes_icon_master),
-        contentDescription = "ÙŠÙˆÙ†Ø³",
+        contentDescription = "يونس",
         modifier = Modifier.size(if (compact) 34.dp else 40.dp).clip(RoundedCornerShape(12.dp)),
         contentScale = ContentScale.Crop
     )
     Column(Modifier.weight(1f).padding(start = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("ÙŠÙˆÙ†Ø³ â€¢ @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // ðŸ›¡ï¸ Ù…Ø¤Ø´Ø± Ø­Ø§Ù„Ø© Ø§Ù„Ù†Ø¸Ø§Ù… (PSTN/GSM) Ø¨Ø¬Ø§Ù†Ø¨ Ø§Ù„Ø§Ø³Ù… Ù„ØªØ¹Ø²ÙŠØ² Ø§Ù„Ø´Ø¹ÙˆØ± Ø¨Ø§Ù„Ø³ÙŠØ§Ø¯Ø© ÙˆØ§Ù„ØªØ­ÙƒÙ…
+            Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // 🛡️ مؤشر حالة النظام (PSTN/GSM) بجانب الاسم لتعزيز الشعور بالسيادة والتحكم
             PstnStatusIndicator(modifier = Modifier.scale(0.85f))
         }
         Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
-    IconButton(onSearch) { Icon(Icons.Default.Search, "Ø§Ù„Ø¨Ø­Ø« Ø§Ù„Ø´Ø§Ù…Ù„") }
-    IconButton(onSettings) { Icon(Icons.Default.Settings, "Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª") }
+    IconButton(onSearch) { Icon(Icons.Default.Search, "البحث الشامل") }
+    IconButton(onSettings) { Icon(Icons.Default.Settings, "الإعدادات") }
 }
 
 @Composable
@@ -683,13 +683,13 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             LazyRow(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { StoryCircle(if (stories.state == StoryState.Uploading) "ÙŠØ±ÙØ¹â€¦" else "Ù‚ØµØªÙƒ", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
-                items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " â€¢ ${story.viewCount}" else "", false) { stories.open(story) } }
+                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
+                items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
             }
         }
         item {
             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Ù„Ùƒ", "Ø£ØµØ¯Ù‚Ø§Ø¦ÙŠ", "Ø§Ù„ÙŠÙ…Ù†").forEachIndexed { i, title ->
+                listOf("لك", "أصدقائي", "اليمن").forEachIndexed { i, title ->
                     FilterChip(filter == i, {
                         filter = i
                         feed.load(when (i) { 1 -> "FRIENDS"; 2 -> "YEMEN"; else -> null })
@@ -700,15 +700,15 @@ private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, st
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar("Ø£"); Text("Ù…Ø§Ø°Ø§ ÙŠØ­Ø¯Ø« ÙÙŠ ÙŠÙˆÙ†Ø³ØŸ", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
+                    Avatar("أ"); Text("ماذا يحدث في يونس؟", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
                 }
             }
         }
         if (feed.state is FeedState.Message) item { (feed.state as? FeedState.Message)?.let { Text(it.text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) } }
         when {
             feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
-            feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ù†Ø¨Ø¶ ÙŠÙˆÙ†Ø³", it.message) } }
-            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "Ø§Ø¨Ø¯Ø£ Ù…Ø¬ØªÙ…Ø¹ ÙŠÙˆÙ†Ø³", "Ø§ÙƒØªØ¨ Ø£ÙˆÙ„ Ù…Ù†Ø´ÙˆØ± Ù…Ø­Ù„ÙŠ. Ø§Ù„Ù†Ø¸Ø§Ù… ÙŠØ¯Ø¹Ù… Ø§Ù„Ø³Ù„Ø§Ø³Ù„ ÙˆØ§Ù„Ø§Ù‚ØªØ¨Ø§Ø³Ø§Øª ÙˆØ§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§ØªØŒ Ø¨ÙŠÙ†Ù…Ø§ Ø§Ù„Ù…Ø­ØªÙˆÙ‰ Ø§Ù„Ø®Ø§Øµ ÙŠÙ†ØªØ¸Ø± ØªØ´ÙÙŠØ± E2EE.") }
+            feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", it.message) } }
+            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
             else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
@@ -1020,7 +1020,7 @@ private fun ChatHubScreen(
     var name by remember { mutableStateOf("") }
     var groupDescription by remember { mutableStateOf("") }
     val decrypted = remember { mutableStateListOf<DecryptedMessage>() }
-    // â—€ï¸ Ø±Ø¬ÙˆØ¹ Ù‡Ø±Ù…ÙŠ Ø¯Ø§Ø®Ù„ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø§Øª â€” ÙŠØºÙ„Ù‚ Ø§Ù„Ø·Ø¨Ù‚Ø§Øª Ù‚Ø¨Ù„ Ø§Ù„Ø®Ø±ÙˆØ¬ Ù…Ù† Ø§Ù„ØªØ·Ø¨ÙŠÙ‚
+    // ◀️ رجوع هرمي داخل المحادثات — يغلق الطبقات قبل الخروج من التطبيق
     BackHandler(enabled = target.isNotBlank() || groupConversationId != null || showDirectory || showMessageSearch || showMediaGallery || showGroupMediaGallery || selectedContact != null || showJoinGroup || manageGroupId != null || selectedChatMessage != null || showDisappearingDialog || showGroupDisappearingDialog || showGroupAttachmentSheet || showEmoji || showStickers || showGroupEmoji || showGroupStickers || showGroupPollDialog) {
         when {
             selectedChatMessage != null -> selectedChatMessage = null
@@ -1045,8 +1045,8 @@ private fun ChatHubScreen(
     val pinApi = remember { PinsApi(com.red.sovereign.auth.AuthorizedApiClient(com.red.sovereign.auth.TokenStore(context))) }
     var messageInfo by remember { mutableStateOf<DecryptedMessage?>(null) }
     val editedMessageIds = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
-    // Ù…Ø²Ø§Ù…Ù†Ø© ØªØ«Ø¨ÙŠØª Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…Ø¹ Ø§Ù„Ø®Ø§Ø¯Ù… â€” Ø¹Ù†Ø¯ ÙØªØ­Ù‡Ø§ Ø«Ù… ÙƒÙ„ 30 Ø«Ø§Ù†ÙŠØ©
-    // (ÙŠÙ„ØªÙ‚Ø· ØªØ«Ø¨ÙŠØªØ§Øª Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡ Ø§Ù„Ø¢Ø®Ø±ÙŠÙ† Ø£Ø«Ù†Ø§Ø¡ Ø¨Ù‚Ø§Ø¦Ùƒ ÙÙŠ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©)
+    // مزامنة تثبيت رسائل المجموعة مع الخادم — عند فتحها ثم كل 30 ثانية
+    // (يلتقط تثبيتات الأعضاء الآخرين أثناء بقائك في المحادثة)
     androidx.compose.runtime.LaunchedEffect(groupConversationId) {
         while (groupConversationId != null) {
             when (val r = pinApi.listForGroup(groupConversationId.orEmpty())) {
@@ -1067,7 +1067,7 @@ private fun ChatHubScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val repository = remember { com.red.sovereign.core.database.LocalRepository(context) }
     val localMessages = remember { com.red.sovereign.core.MessageStore(context) }
-    // ÙƒØªÙ… Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©: ÙŠÙÙ‚Ø±Ø£ Ù…Ù† Ø§Ù„ØªÙØ¶ÙŠÙ„Ø§Øª Ø§Ù„Ù…Ø­Ù„ÙŠØ© Ø¹Ù†Ø¯ ÙØªØ­ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©
+    // كتم المجموعة: يُقرأ من التفضيلات المحلية عند فتح المجموعة
     var groupMuted by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(groupConversationId) {
         groupMuted = if (groupConversationId != null) {
@@ -1077,7 +1077,7 @@ private fun ChatHubScreen(
             ?.let(localMessages::conversationDisappearingDuration)
             ?.takeIf { it > 0L }
     }
-    // Ø¥Ø¹Ø§Ø¯Ø© Ø¨Ù†Ø§Ø¡ Ø£ØµÙˆØ§Øª Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹ Ù…Ù† Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø­Ù„ÙŠ Ø¹Ù†Ø¯ ÙØªØ­ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©
+    // إعادة بناء أصوات الاستطلاع من السجل المحلي عند فتح المجموعة
     androidx.compose.runtime.LaunchedEffect(groupConversationId, decrypted.size) {
         if (groupConversationId != null) {
             decrypted.filter { it.type == "RICH_TEXT" && it.conversationId == groupConversationId }.forEach { item ->
@@ -1090,7 +1090,7 @@ private fun ChatHubScreen(
         }
     }
     val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
-    // ðŸ“¥ Ø§Ø³ØªØ¹Ø§Ø¯Ø© Ø¹Ø¯Ø§Ø¯Ø§Øª ØºÙŠØ± Ø§Ù„Ù…Ù‚Ø±ÙˆØ¡ Ø§Ù„Ù…Ø­ÙÙˆØ¸Ø© (ØªÙ†Ø¬Ùˆ Ù…Ù† Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªØ´ØºÙŠÙ„) â€” Ù…Ø§ Ù„Ù… ØªÙƒÙ† Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ù…ÙØªÙˆØ­Ø© Ø­Ø§Ù„ÙŠØ§Ù‹
+    // 📥 استعادة عدادات غير المقروء المحفوظة (تنجو من إعادة التشغيل) — ما لم تكن المحادثة مفتوحة حالياً
     androidx.compose.runtime.LaunchedEffect(conversations.size, target, groupConversationId) {
         val openConv = groupConversationId ?: target.takeIf { it.isNotBlank() }?.let { conversationId(account.redId, it) }
         val groupIds = groups.groups.map(com.red.sovereign.groups.Group::id).toSet()
@@ -3030,19 +3030,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     if (showNewCallDialog) {
         AlertDialog(
             onDismissRequest = { showNewCallDialog = false; newCallTargetInput = "" },
-            title = { Text("Ù…ÙƒØ§Ù„Ù…Ø© Ø¬Ø¯ÙŠØ¯Ø© Ù…Ø´ÙØ±Ø© E2EE ðŸ“ž") },
+            title = { Text("مكالمة جديدة مشفرة E2EE 📞") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Ø£Ø¯Ø®Ù„ Ù…Ø¹Ø±Ù‘Ù ÙŠÙˆÙ†Ø³ Ø£Ùˆ Ø§Ø®ØªØ± Ù…Ù† Ø¬Ù‡Ø§Øª Ø§ØªØµØ§Ù„Ùƒ Ù„Ù„Ø§ØªØµØ§Ù„ Ø§Ù„ÙÙˆØ±ÙŠ:", color = Color.Gray, fontSize = 13.sp)
+                    Text("أدخل معرّف يونس أو اختر من جهات اتصالك للاتصال الفوري:", color = Color.Gray, fontSize = 13.sp)
                     OutlinedTextField(
                         value = newCallTargetInput,
                         onValueChange = { newCallTargetInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Ù…Ø¹Ø±Ù ÙŠÙˆÙ†Ø³ (Ù…Ø«Ø§Ù„: 10001)") },
+                        placeholder = { Text("معرّف يونس (مثال: 10001)") },
                         singleLine = true
                     )
                     if (contacts.isNotEmpty()) {
-                        Text("Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø³Ø±ÙŠØ¹Ø©:", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("جهات الاتصال السريعة:", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             val filtered = contacts.filter {
                                 newCallTargetInput.isBlank() || it.displayName.contains(newCallTargetInput, true) || it.redId.contains(newCallTargetInput) || it.username.contains(newCallTargetInput, true)
@@ -3057,7 +3057,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                                 ) {
                                     Column(Modifier.weight(1f)) {
                                         Text(contact.displayName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        Text("@${contact.username} Â· ${contact.redId}", color = Color.Gray, fontSize = 11.sp)
+                                        Text("@${contact.username} · ${contact.redId}", color = Color.Gray, fontSize = 11.sp)
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(
@@ -3067,7 +3067,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                                             },
                                             modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.Call, "ØµÙˆØª", tint = YounesEmerald, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Call, "صوت", tint = YounesEmerald, modifier = Modifier.size(18.dp))
                                         }
                                         IconButton(
                                             onClick = {
@@ -3076,7 +3076,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                                             },
                                             modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.Videocam, "ÙÙŠØ¯ÙŠÙˆ", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Videocam, "فيديو", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -3096,7 +3096,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) {
-                        Text("ØµÙˆØªÙŠØ©")
+                        Text("صوتية")
                     }
                     Button(
                         onClick = {
@@ -3107,13 +3107,13 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         },
                         enabled = newCallTargetInput.trim().isNotBlank()
                     ) {
-                        Text("ÙÙŠØ¯ÙŠÙˆ")
+                        Text("فيديو")
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showNewCallDialog = false; newCallTargetInput = "" }) {
-                    Text("Ø¥Ù„ØºØ§Ø¡")
+                    Text("إلغاء")
                 }
             }
         )
@@ -3122,15 +3122,15 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
     if (showPublicStreamsSearchDialog) {
         AlertDialog(
             onDismissRequest = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" },
-            title = { Text("Ø§ÙƒØªØ´Ø§Ù Ø§Ù„Ø¨Ø«ÙˆØ« Ø§Ù„Ø¹Ø§Ù…Ø© ÙˆØ§Ù„Ù…Ø³Ø§Ø­Ø§Øª ðŸŒ") },
+            title = { Text("اكتشاف البثوث العامة والمساحات 🌐") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Ø§Ø¨Ø­Ø« Ø¹Ù† Ø¨Ø« Ù…Ø¨Ø§Ø´Ø± Ø¹Ø§Ù… Ø£Ùˆ Ù…Ø³Ø§Ø­Ø© ØµÙˆØªÙŠØ© Ø¨Ø§Ø³Ù… Ø§Ù„Ø¨Ø« Ø£Ùˆ Ø§Ù„Ù…ÙØ¨Ø«:", color = Color.Gray, fontSize = 13.sp)
+                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = Color.Gray, fontSize = 13.sp)
                     OutlinedTextField(
                         value = publicStreamSearchQuery,
                         onValueChange = { publicStreamSearchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Ø§Ø³Ù… Ø§Ù„Ø¨Ø« Ø£Ùˆ Ø§Ø³Ù… Ø§Ù„Ø´Ø®Øµ Ø£Ùˆ Ø§Ù„Ù…Ø¹Ø±Ù‘Ù") },
+                        placeholder = { Text("اسم البث أو اسم الشخص أو المعرّف") },
                         singleLine = true
                     )
                 }
@@ -3144,12 +3144,12 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         publicStreamSearchQuery = ""
                     }
                 ) {
-                    Text("Ø§Ù†Ø¶Ù…Ø§Ù… Ù„Ù„Ø¨Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø±")
+                    Text("انضمام للبث المباشر")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPublicStreamsSearchDialog = false; publicStreamSearchQuery = "" }) {
-                    Text("Ø¥Ù„ØºØ§Ø¡")
+                    Text("إلغاء")
                 }
             }
         )

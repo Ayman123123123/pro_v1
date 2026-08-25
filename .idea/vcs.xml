@@ -2,5 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/_red_ultimate_verify" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/github-git-partial-20260819-220630" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/github-git-partial-clone" vcs="Git" />
   </component>
 </project>

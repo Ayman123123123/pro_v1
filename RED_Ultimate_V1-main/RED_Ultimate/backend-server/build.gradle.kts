@@ -1,8 +1,8 @@
 plugins {
-    kotlin("jvm") version "2.3.21"
-    kotlin("plugin.spring") version "2.3.21"
-    kotlin("plugin.jpa") version "2.3.21"
-    id("org.springframework.boot") version "4.0.7"
+    kotlin("jvm") version "2.2.21"
+    kotlin("plugin.spring") version "2.2.21"
+    kotlin("plugin.jpa") version "2.2.21"
+    id("org.springframework.boot") version "3.5.16"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -13,6 +13,14 @@ java {
     sourceCompatibility = JavaVersion.VERSION_21
 }
 
+repositories {
+    mavenCentral()
+    google()
+    maven { url = uri("https://repo1.maven.org/maven2/") }
+    maven { url = uri("https://maven.aliyun.com/repository/public") }
+    maven { url = uri("https://repo.spring.io/milestone") }
+}
+
 dependencies {
     // Spring Boot Starters
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -21,7 +29,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // Database
@@ -31,11 +38,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     // Kotlin
-    // ⚠️ وحدتان: 2.x لخدمات legacy التي تحقن com.fasterxml ObjectMapper،
-    // و3.x (tools.jackson) لأن Spring Boot 4 يستخدم Jackson 3 في محوّلات HTTP —
-    // بدونه لا تُحترم قيم Kotlin الافتراضية في DTOs (فشل 400 MALFORMED_JSON عند حذف أي حقل اختياري).
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // PSTN / Asterisk
@@ -49,8 +52,7 @@ dependencies {
 
     // Local S3-compatible object storage
     implementation("io.minio:minio:8.6.0")
-    implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.4")
+    implementation("org.jsoup:jsoup:1.18.1") // LinkCard Open Graph
 
     // OkHttp for Dinstar API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -76,14 +78,4 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-}
-
-// Produce one deterministic runtime artifact. Disabling the plain JVM JAR also
-// prevents Docker COPY globs from selecting two different files accidentally.
-tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
-    archiveFileName.set("red-backend.jar")
-}
-
-tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
-    enabled = false
 }

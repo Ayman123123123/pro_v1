@@ -13,21 +13,24 @@ class RedVoipMaster @Inject constructor(
 
     private var pc: PeerConnection? = null
 
-    /**
-     * بدء مكالمة فيديو 1080p AV1
-     */
     fun startSecureCall(targetId: String) {
+        pc?.close()
+        pc = null
+
         val observer = object : PeerConnection.Observer {
             override fun onIceCandidate(candidate: IceCandidate) {
                 mediasoupClient.sendIce(candidate)
             }
             override fun onTrack(transceiver: RtpTransceiver) {
-                // الربط مع الواجهة (SurfaceViewRenderer)
+                Log.i(TAG, "onTrack received")
             }
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
                 Log.i(TAG, "PeerConnection state: $state")
+                if (state == PeerConnection.PeerConnectionState.DISCONNECTED ||
+                    state == PeerConnection.PeerConnectionState.FAILED) {
+                    endCall()
+                }
             }
-            // تنفيذ باقي الـ ObserverMethods إلزامي
             override fun onSignalingChange(s: PeerConnection.SignalingState?) {}
             override fun onIceConnectionChange(s: PeerConnection.IceConnectionState?) {}
             override fun onIceConnectionReceivingChange(b: Boolean) {}
@@ -41,16 +44,32 @@ class RedVoipMaster @Inject constructor(
         }
 
         pc = voipEngine.createPeerConnection(observer)
-        
-        // ضبط ترميز AV1/VP9 لـ 1080p
+
         pc?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
+                if (desc == null) {
+                    Log.e(TAG, "createOffer returned null SDP")
+                    endCall()
+                    return
+                }
                 pc?.setLocalDescription(this, desc)
-                mediasoupClient.sendOffer(desc!!)
+                mediasoupClient.sendOffer(desc)
             }
             override fun onSetSuccess() {}
-            override fun onCreateFailure(s: String?) {}
-            override fun onSetFailure(s: String?) {}
+            override fun onCreateFailure(s: String?) {
+                Log.e(TAG, "SDP createOffer failed: $s")
+                endCall()
+            }
+            override fun onSetFailure(s: String?) {
+                Log.e(TAG, "SDP setLocalDescription failed: $s")
+                endCall()
+            }
         }, MediaConstraints())
+    }
+
+    fun endCall() {
+        pc?.close()
+        pc = null
+        Log.i(TAG, "Call ended, PeerConnection released")
     }
 }

@@ -10,8 +10,11 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+// URL.pathname turns Windows drive letters into `/C:/...`, which made
+// `join()` produce `C:\\C:\\...` on the local Windows host.
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const DASHBOARD_SRC = join(ROOT, 'src');
 const BACKEND_SRC = join(ROOT, '../backend-server/src/main/kotlin');
 

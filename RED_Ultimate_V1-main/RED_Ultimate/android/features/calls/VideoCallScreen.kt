@@ -17,21 +17,31 @@ import org.webrtc.SurfaceViewRenderer
 fun VideoCallScreen(
     remoteName: String,
     voipEngine: VoipEngine,
-    onEndCall: () -> Unit
+    onEndCall: () -> Unit,
+    onToggleMic: () -> Unit = {},
+    onToggleCamera: () -> Unit = {}
 ) {
+    var isMicOn by remember { mutableStateOf(true) }
+    var isCameraOn by remember { mutableStateOf(true) }
+
+    val remoteRenderer = remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    val localRenderer = remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // 1. Remote Video (Background)
         AndroidView(
             factory = { context ->
-                SurfaceViewRenderer(it).apply {
+                SurfaceViewRenderer(context).apply {
                     init(voipEngine.getEglContext(), null)
                     setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                    remoteRenderer.value = this
                 }
+            },
+            update = { renderer ->
+                remoteRenderer.value = renderer
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Local Preview (Floating)
         Surface(
             modifier = Modifier.size(120.dp, 180.dp).align(Alignment.TopEnd).padding(16.dp),
             color = Color.DarkGray,
@@ -39,24 +49,62 @@ fun VideoCallScreen(
         ) {
             AndroidView(
                 factory = { context ->
-                    SurfaceViewRenderer(it).apply {
+                    SurfaceViewRenderer(context).apply {
                         init(voipEngine.getEglContext(), null)
                         setMirror(true)
+                        localRenderer.value = this
                     }
+                },
+                update = { renderer ->
+                    localRenderer.value = renderer
                 }
             )
         }
 
-        // 3. Call Controls
+        Text(
+            text = remoteName,
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
+        )
+
         Row(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            IconButton(onClick = {}) { Icon(Icons.Default.Mic, null, tint = Color.White) }
+            FilledIconButton(
+                onClick = {
+                    isMicOn = !isMicOn
+                    onToggleMic()
+                },
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (isMicOn) Color.DarkGray else Color.Red
+                )
+            ) {
+                Icon(
+                    if (isMicOn) Icons.Default.Mic else Icons.Default.MicOff,
+                    null,
+                    tint = Color.White
+                )
+            }
             FloatingActionButton(onClick = onEndCall, containerColor = Color.Red) {
                 Icon(Icons.Default.CallEnd, null, tint = Color.White)
             }
-            IconButton(onClick = {}) { Icon(Icons.Default.Videocam, null, tint = Color.White) }
+            FilledIconButton(
+                onClick = {
+                    isCameraOn = !isCameraOn
+                    onToggleCamera()
+                },
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (isCameraOn) Color.DarkGray else Color.Red
+                )
+            ) {
+                Icon(
+                    if (isCameraOn) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                    null,
+                    tint = Color.White
+                )
+            }
         }
     }
 }

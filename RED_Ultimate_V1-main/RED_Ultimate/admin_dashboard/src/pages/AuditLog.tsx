@@ -6,7 +6,7 @@ import {
 import {
   AuditOutlined, ReloadOutlined, SearchOutlined, UserOutlined,
   ClockCircleOutlined, ExclamationCircleOutlined, CheckCircleOutlined,
-  WarningOutlined, CodeOutlined
+  WarningOutlined, CodeOutlined, DownloadOutlined
 } from '@ant-design/icons';
 import { getAuditLog, getSecurityAlerts } from '../api';
 
@@ -104,7 +104,21 @@ export default function AuditLog() {
     }
   };
 
-  useEffect(() => { void load(); void loadAlerts(); }, [categoryFilter, adminFilter, page]);
+  const exportCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (categoryFilter) params.set('category', categoryFilter);
+      if (adminFilter) params.set('adminId', adminFilter);
+      const res = await fetch(`/api/admin/audit/export?${params.toString()}`, { headers: { Authorization: `Bearer ${localStorage.getItem('red_admin_token') || ''}` } });
+      if (!res.ok) throw new Error('فشل التصدير');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `audit-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+      message.success('تم تصدير السجل');
+    } catch (e: any) { message.error(e.message); }
+  };
+
+  useEffect(() => { load(); loadAlerts(); }, [categoryFilter, page]);
 
   const columns = [
     {
@@ -286,11 +300,12 @@ export default function AuditLog() {
           <Search
             placeholder="بحث بـ Admin ID"
             allowClear
-            onSearch={(v) => { setAdminFilter(v); setPage(0); }}
+            onSearch={(v) => { setAdminFilter(v); load(); }}
             style={{ width: 300 }}
             prefix={<SearchOutlined />}
           />
           <Button icon={<ReloadOutlined />} onClick={load}>تحديث</Button>
+          <Button icon={<DownloadOutlined />} onClick={exportCsv}>تصدير CSV</Button>
         </Space>
       </Card>
 

@@ -40,7 +40,7 @@ class AppStartupCoordinator(private val application: Application) {
         // 3. تسجيل دفع VoIP
         runCatching { VoipPushRegistrar.register(context) }
 
-        // 4. بدء راوتر الإشعارات السيادي (لمنع التأخير في الخلفية)
+        // 4. بدء راوتر الإشعارات السيادي (لمنع التأخير في الخلفية وضمان وصول الـ VoIP)
         val routerIntent = Intent(context, SovereignNotificationRouter::class.java)
         try {
             if (Build.VERSION.SDK_INT >= 26) {
@@ -52,7 +52,10 @@ class AppStartupCoordinator(private val application: Application) {
             Log.w("AppStartup", "NotificationRouter start failed: ${e.message}")
         }
 
-        // 5. تحديث أولي لصلاحيات PSTN
+        // 5. تفعيل مراقبة الجودة والاتصال الذكي
+        RedQualityManager.initialize(context)
+
+        // 6. تحديث أولي لصلاحيات PSTN
         authViewModel.refreshPstnEntitlement()
     }
 

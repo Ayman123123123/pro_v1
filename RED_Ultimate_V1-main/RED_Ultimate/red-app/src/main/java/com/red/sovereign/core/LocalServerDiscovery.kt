@@ -1,4 +1,4 @@
-package com.red.sovereign.core
+﻿package com.red.sovereign.core
 
 import android.content.Context
 import android.net.nsd.NsdManager
@@ -21,14 +21,14 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * اكتشاف خادم يونس على الشبكة المحلية.
+ * Ø§ÙƒØªØ´Ø§Ù Ø®Ø§Ø¯Ù… ÙŠÙˆÙ†Ø³ Ø¹Ù„Ù‰ Ø§Ù„Ø´Ø¨ÙƒØ© Ø§Ù„Ù…Ø­Ù„ÙŠØ©.
  *
- * العطل السابق: `SecureOkHttpClient.build(connectTimeout = 800)` يفسر الرقم **ثواني**
- * لا ملي ثانية، ثم يُمسح النطاق /24 كاملًا (254 عنوانًا) دفعتين دفعتين مع `awaitAll`.
- * النتيجة: شاشة «جارٍ الاتصال بالسيرفر» لعشرات الثواني أو دقائق.
+ * Ø§Ù„Ø¹Ø·Ù„ Ø§Ù„Ø³Ø§Ø¨Ù‚: `SecureOkHttpClient.build(connectTimeout = 800)` ÙŠÙØ³Ø± Ø§Ù„Ø±Ù‚Ù… **Ø«ÙˆØ§Ù†ÙŠ**
+ * Ù„Ø§ Ù…Ù„ÙŠ Ø«Ø§Ù†ÙŠØ©ØŒ Ø«Ù… ÙŠÙÙ…Ø³Ø­ Ø§Ù„Ù†Ø·Ø§Ù‚ /24 ÙƒØ§Ù…Ù„Ù‹Ø§ (254 Ø¹Ù†ÙˆØ§Ù†Ù‹Ø§) Ø¯ÙØ¹ØªÙŠÙ† Ø¯ÙØ¹ØªÙŠÙ† Ù…Ø¹ `awaitAll`.
+ * Ø§Ù„Ù†ØªÙŠØ¬Ø©: Ø´Ø§Ø´Ø© Â«Ø¬Ø§Ø±Ù Ø§Ù„Ø§ØªØµØ§Ù„ Ø¨Ø§Ù„Ø³ÙŠØ±ÙØ±Â» Ù„Ø¹Ø´Ø±Ø§Øª Ø§Ù„Ø«ÙˆØ§Ù†ÙŠ Ø£Ùˆ Ø¯Ù‚Ø§Ø¦Ù‚.
  *
- * المسار السريع يجرب العناوين المعروفة ومنفذ الإنتاج 8088 خلال أقل من ثانيتين
- * ويعود فور أول نجاح. لا يُقبل خادم Node على 8080.
+ * Ø§Ù„Ù…Ø³Ø§Ø± Ø§Ù„Ø³Ø±ÙŠØ¹ ÙŠØ¬Ø±Ø¨ Ø§Ù„Ø¹Ù†Ø§ÙˆÙŠÙ† Ø§Ù„Ù…Ø¹Ø±ÙˆÙØ© ÙˆÙ…Ù†ÙØ° Ø§Ù„Ø¥Ù†ØªØ§Ø¬ 8088 Ø®Ù„Ø§Ù„ Ø£Ù‚Ù„ Ù…Ù† Ø«Ø§Ù†ÙŠØªÙŠÙ†
+ * ÙˆÙŠØ¹ÙˆØ¯ ÙÙˆØ± Ø£ÙˆÙ„ Ù†Ø¬Ø§Ø­. Ù„Ø§ ÙŠÙÙ‚Ø¨Ù„ Ø®Ø§Ø¯Ù… Node Ø¹Ù„Ù‰ 8080.
  */
 class LocalServerDiscovery(private val context: Context) {
     enum class Mode { FAST, THOROUGH }
@@ -43,7 +43,7 @@ class LocalServerDiscovery(private val context: Context) {
         .followSslRedirects(false)
         .build()
 
-    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً — يعيد العنوان المقبول أو null. */
+    /** ØªØ­Ù‚Ù‚ ØµØ±ÙŠØ­ Ù…Ù† Ø¹Ù†ÙˆØ§Ù† ÙŠÙØ¯Ø®Ù„Ù‡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙŠØ¯ÙˆÙŠØ§Ù‹ â€” ÙŠØ¹ÙŠØ¯ Ø§Ù„Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ù…Ù‚Ø¨ÙˆÙ„ Ø£Ùˆ null. */
     suspend fun verifyExplicit(base: String): String? = withContext(Dispatchers.IO) {
         val normalized = base.trim().ifBlank { return@withContext null }
         val withScheme = if (normalized.contains("://")) normalized else "http://$normalized"
@@ -52,7 +52,7 @@ class LocalServerDiscovery(private val context: Context) {
 
     suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
         val known = knownBases()
-        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين — اكتشاف سريع ثم شامل لاحقاً.
+        // ÙƒØ§Ù† Ø§Ù„Ø´Ø±Ø· ÙŠÙ…Ø±Ø± FAST_BUDGET_MS ÙÙŠ Ø§Ù„Ø­Ø§Ù„ØªÙŠÙ† â€” Ø§ÙƒØªØ´Ø§Ù Ø³Ø±ÙŠØ¹ Ø«Ù… Ø´Ø§Ù…Ù„ Ù„Ø§Ø­Ù‚Ø§Ù‹.
         firstVerified(known, FAST_BUDGET_MS)?.let { found ->
             ServerEndpoint.update(context, found)
             return@withContext ApiResult.Success(200, found)
@@ -80,7 +80,7 @@ class LocalServerDiscovery(private val context: Context) {
         val normalized = base.trimEnd('/')
         val healthCall = client.newCall(Request.Builder().url("$normalized/health").get().build())
         val health = healthCall.execute().use { response ->
-            // 503 مع جسم يونس يعني أن العملية حيّة والتبعيات لم تكتمل بعد.
+            // 503 Ù…Ø¹ Ø¬Ø³Ù… ÙŠÙˆÙ†Ø³ ÙŠØ¹Ù†ÙŠ Ø£Ù† Ø§Ù„Ø¹Ù…Ù„ÙŠØ© Ø­ÙŠÙ‘Ø© ÙˆØ§Ù„ØªØ¨Ø¹ÙŠØ§Øª Ù„Ù… ØªÙƒØªÙ…Ù„ Ø¨Ø¹Ø¯.
             if (response.code !in 200..599) return null
             response.body?.string().orEmpty()
         }
@@ -122,7 +122,7 @@ class LocalServerDiscovery(private val context: Context) {
         val seeds = listOf(
             ServerEndpoint.url(),
             BuildConfig.RED_SERVER_URL,
-            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) — عنوان تطوير قياسي وليس IP LAN حقيقي.
+            // 10.0.2.2 Ù‡Ùˆ alias Ù„Ù…Ø¶ÙŠÙ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ (Android Emulator) â€” Ø¹Ù†ÙˆØ§Ù† ØªØ·ÙˆÙŠØ± Ù‚ÙŠØ§Ø³ÙŠ ÙˆÙ„ÙŠØ³ IP LAN Ø­Ù‚ÙŠÙ‚ÙŠ.
             "http://10.0.2.2:8088",
         )
         seeds.forEach { seed ->
@@ -160,7 +160,7 @@ class LocalServerDiscovery(private val context: Context) {
             }
         }
 
-        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف — مفيد عند وجود توجيه بين الشبكتين.
+        // Ù…Ø³Ø­ Ø´Ø¨ÙƒØ© Ø§Ù„Ø®Ø§Ø¯Ù… Ø§Ù„Ù…Ø¹Ø±ÙˆÙØ© (Ù…Ù† BuildConfig) Ø­ØªÙ‰ Ù„Ùˆ Ø§Ø®ØªÙ„ÙØª Ø¹Ù† Ø´Ø¨ÙƒØ© Ø§Ù„Ù‡Ø§ØªÙ â€” Ù…ÙÙŠØ¯ Ø¹Ù†Ø¯ ÙˆØ¬ÙˆØ¯ ØªÙˆØ¬ÙŠÙ‡ Ø¨ÙŠÙ† Ø§Ù„Ø´Ø¨ÙƒØªÙŠÙ†.
         val knownHost = YounesServerSignature.hostOf(BuildConfig.RED_SERVER_URL)
         if (knownHost != null && knownHost != lastKnown) {
             val parts = knownHost.split('.').map { it.toIntOrNull() }
@@ -230,5 +230,37 @@ nsdManager.stopServiceDiscovery(listener)
         const val THOROUGH_BUDGET_MS = 3_200L
         const val MDNS_BUDGET_MS = 1_200L
         const val MAX_PARALLEL = 16
+    }
+    /** يتحقق من إدخال المستخدم (host | host:port | رابط كامل) ويعيد الرابط الموثوق. */
+    fun verifyUserInput(input: String): ApiResult<String> {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return ApiResult.Error(code = null, message = "أدخل عنوان الخادم")
+        val host = com.red.sovereign.core.YounesServerSignature.hostOf(trimmed)
+            ?: return ApiResult.Error(code = null, message = "عنوان غير صالح")
+        val preferred = com.red.sovereign.core.YounesServerSignature.portOf(trimmed)
+        val ports = linkedSetOf(preferred,
+            com.red.sovereign.core.YounesServerSignature.DEFAULT_PORT,
+            com.red.sovereign.core.YounesServerSignature.DEFAULT_HTTPS_PORT)
+        for (pt in ports) {
+            val base = com.red.sovereign.core.YounesServerSignature.buildUrl(host, pt)
+            verify(base)?.let { return ApiResult.Success(code = 200, value = it) }
+        }
+        return ApiResult.Error(code = null, message = "لا يوجد خادم RED صالح على $host")
+    }
+
+    /** فحص سريع للمرشح المعروف: العنوان الحالي ثم بوابة LAN الافتراضية. */
+    fun quickVerifyKnown(): String? {
+        ServerEndpoint.url().takeIf { it.isNotBlank() }?.let { cur ->
+            verify(cur)?.let { return it }
+        }
+        val ip = runCatching {
+            java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+                .flatMap { nif -> nif.inetAddresses.asSequence() }
+                .filterIsInstance<java.net.Inet4Address>()
+                .firstOrNull { !it.isLoopbackAddress }
+                ?.hostAddress
+        }.getOrNull() ?: return null
+        val base = com.red.sovereign.core.YounesServerSignature.buildUrl(ip, 8088)
+        return verify(base)
     }
 }

@@ -1,4 +1,4 @@
-package com.red.sovereign.calls
+﻿package com.red.sovereign.calls
 
 import android.content.Context
 import com.red.sovereign.auth.ApiResult
@@ -58,8 +58,8 @@ data class NetworkStats(
 
     companion object {
         /**
-         * تصنيف الجودة بناء على RTT وفقدان الحزم. الـ thresholds مأخوذة من توصيات WebRTC
-         * للجودة الممتازة / الجيدة / المقبولة / السيئة.
+         * ØªØµÙ†ÙŠÙ Ø§Ù„Ø¬ÙˆØ¯Ø© Ø¨Ù†Ø§Ø¡ Ø¹Ù„Ù‰ RTT ÙˆÙÙ‚Ø¯Ø§Ù† Ø§Ù„Ø­Ø²Ù…. Ø§Ù„Ù€ thresholds Ù…Ø£Ø®ÙˆØ°Ø© Ù…Ù† ØªÙˆØµÙŠØ§Øª WebRTC
+         * Ù„Ù„Ø¬ÙˆØ¯Ø© Ø§Ù„Ù…Ù…ØªØ§Ø²Ø© / Ø§Ù„Ø¬ÙŠØ¯Ø© / Ø§Ù„Ù…Ù‚Ø¨ÙˆÙ„Ø© / Ø§Ù„Ø³ÙŠØ¦Ø©.
          */
         fun classify(rttMs: Long, lossPct: Double, availableKbps: Long = 0): Quality {
             if (rttMs == 0L && availableKbps == 0L) return Quality.UNKNOWN
@@ -72,8 +72,8 @@ data class NetworkStats(
         }
 
         /**
-         * يختار maxBitrate وmaxFramerate بناءً على الجودة المكتشفة.
-         * الـ "Profile" ثابت لكن نطبقه ديناميكياً بناءً على الإحصائيات.
+         * ÙŠØ®ØªØ§Ø± maxBitrate ÙˆmaxFramerate Ø¨Ù†Ø§Ø¡Ù‹ Ø¹Ù„Ù‰ Ø§Ù„Ø¬ÙˆØ¯Ø© Ø§Ù„Ù…ÙƒØªØ´ÙØ©.
+         * Ø§Ù„Ù€ "Profile" Ø«Ø§Ø¨Øª Ù„ÙƒÙ† Ù†Ø·Ø¨Ù‚Ù‡ Ø¯ÙŠÙ†Ø§Ù…ÙŠÙƒÙŠØ§Ù‹ Ø¨Ù†Ø§Ø¡Ù‹ Ø¹Ù„Ù‰ Ø§Ù„Ø¥Ø­ØµØ§Ø¦ÙŠØ§Øª.
          */
         fun recommendBitrate(quality: Quality): BitrateProfile = when (quality) {
             Quality.UNKNOWN -> BitrateProfile.STANDARD
@@ -90,7 +90,7 @@ data class NetworkStats(
         val videoWidth: Int,
         val videoHeight: Int
     ) {
-        AUDIO_ONLY(0, 0, 0, 0),    // نوقف الفيديو
+        AUDIO_ONLY(0, 0, 0, 0),    // Ù†ÙˆÙ‚Ù Ø§Ù„ÙÙŠØ¯ÙŠÙˆ
         LOW(200, 15, 320, 240),     // 240p @ 15fps
         STANDARD(800, 24, 640, 480), // 480p @ 24fps
         HD(1800, 30, 1280, 720)    // 720p @ 30fps
@@ -98,14 +98,14 @@ data class NetworkStats(
 }
 
 /**
- * WebRtcEngine — المحرك الأساسي للمكالمات.
- * يتضمن:
- * - Audio constraints كاملة (AEC, NS, AGC, HighPass, Stereo, TypingNoise)
+ * WebRtcEngine â€” Ø§Ù„Ù…Ø­Ø±Ùƒ Ø§Ù„Ø£Ø³Ø§Ø³ÙŠ Ù„Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª.
+ * ÙŠØªØ¶Ù…Ù†:
+ * - Audio constraints ÙƒØ§Ù…Ù„Ø© (AEC, NS, AGC, HighPass, Stereo, TypingNoise)
  * - Hardware vs Software AEC toggle
- * - Video simulcast (3 طبقات: HD, SD, LD)
- * - Adaptive bitrate بناءً على NetworkStats
- * - Connection state machine كامل
- * - ICE servers من backend (HMAC time-limited)
+ * - Video simulcast (3 Ø·Ø¨Ù‚Ø§Øª: HD, SD, LD)
+ * - Adaptive bitrate Ø¨Ù†Ø§Ø¡Ù‹ Ø¹Ù„Ù‰ NetworkStats
+ * - Connection state machine ÙƒØ§Ù…Ù„
+ * - ICE servers Ù…Ù† backend (HMAC time-limited)
  */
 class WebRtcEngine(private val context: Context, private val events: Events) {
     interface Events {
@@ -115,7 +115,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
-        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — المكالمة تستمر صوتياً ويُعلم المستخدم. */
+        /** Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ ØºÙŠØ± Ù…ØªØ§Ø­Ø© (Ø¥Ø°Ù† Ù…Ø±ÙÙˆØ¶/ÙØ´Ù„ ÙØªØ­) â€” Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© ØªØ³ØªÙ…Ø± ØµÙˆØªÙŠØ§Ù‹ ÙˆÙŠÙØ¹Ù„Ù… Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…. */
         fun onCameraUnavailable() {
             android.util.Log.w("WebRtcEngine", "Camera unavailable - call continues in audio-only mode")
         }
@@ -168,14 +168,14 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     var localMedia: LocalMedia? = null; private set
     var lastLocalSdp: String? = null; private set
 
-    // الإعدادات الحالية
+    // Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ø­Ø§Ù„ÙŠØ©
     private var currentBitrateProfile: NetworkStats.BitrateProfile = NetworkStats.BitrateProfile.STANDARD
     private var cameraRequestedByUser: Boolean = true
     private var hasVideo: Boolean = false
     private var svcEnabled: Boolean = false
     private var mediaKind: CallMediaKind = CallMediaKind.VOICE
     private var lastStats: NetworkStats = NetworkStats()
-    // تتبع تفاضلي لمعدل البايتات — نحسب kbps الحقيقي كفرق بين دورتين ÷ الزمن
+    // ØªØªØ¨Ø¹ ØªÙØ§Ø¶Ù„ÙŠ Ù„Ù…Ø¹Ø¯Ù„ Ø§Ù„Ø¨Ø§ÙŠØªØ§Øª â€” Ù†Ø­Ø³Ø¨ kbps Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ ÙƒÙØ±Ù‚ Ø¨ÙŠÙ† Ø¯ÙˆØ±ØªÙŠÙ† Ã· Ø§Ù„Ø²Ù…Ù†
     private var lastBytesReceived: Long = 0L
     private var lastStatsElapsedMs: Long = 0L
 
@@ -187,7 +187,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     init {
         WebRtcBootstrap.ensure(context)
-        // Encoder/decoder factories مع hardware acceleration حيث متاح
+        // Encoder/decoder factories Ù…Ø¹ hardware acceleration Ø­ÙŠØ« Ù…ØªØ§Ø­
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDevice)
             .setVideoEncoderFactory(
@@ -198,9 +198,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     /**
-     * ينشئ PeerConnection مع ICE servers و media tracks.
-     * @param video true إذا مكالمة فيديو
-     * @param simulcastEnabled true لإرسال 3 طبقات (HD/SD/LD) — يقلل الـ bandwidth للـ SFU
+     * ÙŠÙ†Ø´Ø¦ PeerConnection Ù…Ø¹ ICE servers Ùˆ media tracks.
+     * @param video true Ø¥Ø°Ø§ Ù…ÙƒØ§Ù„Ù…Ø© ÙÙŠØ¯ÙŠÙˆ
+     * @param simulcastEnabled true Ù„Ø¥Ø±Ø³Ø§Ù„ 3 Ø·Ø¨Ù‚Ø§Øª (HD/SD/LD) â€” ÙŠÙ‚Ù„Ù„ Ø§Ù„Ù€ bandwidth Ù„Ù„Ù€ SFU
      */
     suspend fun create(video: Boolean, simulcastEnabled: Boolean = true, svc: Boolean = false): ApiResult<Unit> {
         val kind = when {
@@ -221,7 +221,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
         val pc = created
 
-        // Audio constraints كاملة — AEC, NS, AGC, HighPass, Stereo, TypingNoise
+        // Audio constraints ÙƒØ§Ù…Ù„Ø© â€” AEC, NS, AGC, HighPass, Stereo, TypingNoise
         val audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
@@ -253,9 +253,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     /**
-     * PeerConnection للاستقبال فقط (SFU consume): بدون أي tracks محلية.
-     * يُستخدم في مسار media-sfu لاستقبال بث الأعضاء الآخرين — نفس ICE servers
-     * ونفس إعدادات السياسة، ويُحدَّث mediaKind لضبط constraints الإجابة (answer).
+     * PeerConnection Ù„Ù„Ø§Ø³ØªÙ‚Ø¨Ø§Ù„ ÙÙ‚Ø· (SFU consume): Ø¨Ø¯ÙˆÙ† Ø£ÙŠ tracks Ù…Ø­Ù„ÙŠØ©.
+     * ÙŠÙØ³ØªØ®Ø¯Ù… ÙÙŠ Ù…Ø³Ø§Ø± media-sfu Ù„Ø§Ø³ØªÙ‚Ø¨Ø§Ù„ Ø¨Ø« Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡ Ø§Ù„Ø¢Ø®Ø±ÙŠÙ† â€” Ù†ÙØ³ ICE servers
+     * ÙˆÙ†ÙØ³ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ø³ÙŠØ§Ø³Ø©ØŒ ÙˆÙŠÙØ­Ø¯ÙŽÙ‘Ø« mediaKind Ù„Ø¶Ø¨Ø· constraints Ø§Ù„Ø¥Ø¬Ø§Ø¨Ø© (answer).
      */
     suspend fun createReceiverOnly(kind: CallMediaKind): ApiResult<Unit> {
         mediaKind = kind
@@ -268,12 +268,12 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     /**
-     * إعادة محاولة فتح الكاميرا بعد فشل سابق (إذن مرفوض ثم مُنح من الإعدادات،
-     * أو خلل مؤقت في الأجهزة). تُضاف مسار الفيديو إلى الاتصال القائم وتُطلب إعادة تفاوض.
-     * @return true إذا أصبح الفيديو المحلي متاحاً.
+     * Ø¥Ø¹Ø§Ø¯Ø© Ù…Ø­Ø§ÙˆÙ„Ø© ÙØªØ­ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ø¨Ø¹Ø¯ ÙØ´Ù„ Ø³Ø§Ø¨Ù‚ (Ø¥Ø°Ù† Ù…Ø±ÙÙˆØ¶ Ø«Ù… Ù…ÙÙ†Ø­ Ù…Ù† Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§ØªØŒ
+     * Ø£Ùˆ Ø®Ù„Ù„ Ù…Ø¤Ù‚Øª ÙÙŠ Ø§Ù„Ø£Ø¬Ù‡Ø²Ø©). ØªÙØ¶Ø§Ù Ù…Ø³Ø§Ø± Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ø¥Ù„Ù‰ Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ù‚Ø§Ø¦Ù… ÙˆØªÙØ·Ù„Ø¨ Ø¥Ø¹Ø§Ø¯Ø© ØªÙØ§ÙˆØ¶.
+     * @return true Ø¥Ø°Ø§ Ø£ØµØ¨Ø­ Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ø§Ù„Ù…Ø­Ù„ÙŠ Ù…ØªØ§Ø­Ø§Ù‹.
      */
     fun retryCamera(): Boolean {
-        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن — تُسجَّل الرغبة أولاً
+        // Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© ØªØ¹Ù†ÙŠ Ø£Ù† Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙŠØ±ÙŠØ¯ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ø§Ù„Ø¢Ù† â€” ØªÙØ³Ø¬ÙŽÙ‘Ù„ Ø§Ù„Ø±ØºØ¨Ø© Ø£ÙˆÙ„Ø§Ù‹
         cameraRequestedByUser = true
         if (capturer != null || localMedia?.videoTrack != null) return true
         val pc = peer ?: return false
@@ -309,7 +309,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             iceTransportsType = PeerConnection.IceTransportsType.ALL
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
-            // استخدام unified plan + multi-stream
+            // Ø§Ø³ØªØ®Ø¯Ø§Ù… unified plan + multi-stream
             keyType = PeerConnection.KeyType.ECDSA
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
             iceCandidatePoolSize = 2
@@ -321,9 +321,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     /**
-     * تضبط أولوية الكوديكس عبر RtpTransceiver.setCodecPreferences.
-     * المكالمات الفردية 1:1 -> تفضيل H.264 (تسريع عتادي وتقليل حرارة الجهاز واستهلاك البطارية).
-     * المؤتمرات والجماعي -> تفضيل VP9 / VP9-SVC (توفير البنطاق العريض وطبقات الجودة التكيفية).
+     * ØªØ¶Ø¨Ø· Ø£ÙˆÙ„ÙˆÙŠØ© Ø§Ù„ÙƒÙˆØ¯ÙŠÙƒØ³ Ø¹Ø¨Ø± RtpTransceiver.setCodecPreferences.
+     * Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª Ø§Ù„ÙØ±Ø¯ÙŠØ© 1:1 -> ØªÙØ¶ÙŠÙ„ H.264 (ØªØ³Ø±ÙŠØ¹ Ø¹ØªØ§Ø¯ÙŠ ÙˆØªÙ‚Ù„ÙŠÙ„ Ø­Ø±Ø§Ø±Ø© Ø§Ù„Ø¬Ù‡Ø§Ø² ÙˆØ§Ø³ØªÙ‡Ù„Ø§Ùƒ Ø§Ù„Ø¨Ø·Ø§Ø±ÙŠØ©).
+     * Ø§Ù„Ù…Ø¤ØªÙ…Ø±Ø§Øª ÙˆØ§Ù„Ø¬Ù…Ø§Ø¹ÙŠ -> ØªÙØ¶ÙŠÙ„ VP9 / VP9-SVC (ØªÙˆÙÙŠØ± Ø§Ù„Ø¨Ù†Ø·Ø§Ù‚ Ø§Ù„Ø¹Ø±ÙŠØ¶ ÙˆØ·Ø¨Ù‚Ø§Øª Ø§Ù„Ø¬ÙˆØ¯Ø© Ø§Ù„ØªÙƒÙŠÙÙŠØ©).
      */
     private fun applyCodecPreferences(kind: CallMediaKind) {
         val pc = peer ?: return
@@ -362,8 +362,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     /**
-     * يطبق Simulcast على video track: 3 طبقات بقدرات مختلفة.
-     * الـ SFU/Receiver يختار أفضل طبقة حسب الشبكة.
+     * ÙŠØ·Ø¨Ù‚ Simulcast Ø¹Ù„Ù‰ video track: 3 Ø·Ø¨Ù‚Ø§Øª Ø¨Ù‚Ø¯Ø±Ø§Øª Ù…Ø®ØªÙ„ÙØ©.
+     * Ø§Ù„Ù€ SFU/Receiver ÙŠØ®ØªØ§Ø± Ø£ÙØ¶Ù„ Ø·Ø¨Ù‚Ø© Ø­Ø³Ø¨ Ø§Ù„Ø´Ø¨ÙƒØ©.
      */
     private fun applySimulcast(sender: RtpSender?, profile: NetworkStats.BitrateProfile, svcEnabled: Boolean = false) {
         val s = sender ?: return
@@ -411,6 +411,35 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     fun setRemote(description: SessionDescription, after: (() -> Unit)? = null) = peer?.setRemoteDescription(sdpObserver(after = after), description)
     fun addIce(candidate: IceCandidate) { peer?.addIceCandidate(candidate) }
+
+    // ── مشاركة الشاشة (Zoom-style) ───────────────────────────────
+    private var screenCapturer: org.webrtc.VideoCapturer? = null
+    private var screenSource: VideoSource? = null
+
+    fun startScreenShare(intentData: android.content.Intent): VideoTrack? = try {
+        val capturer = org.webrtc.ScreenCapturerAndroid(
+            intentData,
+            object : android.media.projection.MediaProjection.Callback() {
+                override fun onStop() = Unit
+            }
+        )
+        val src = factory.createVideoSource(true)
+        capturer.initialize(
+            org.webrtc.SurfaceTextureHelper.create("engine-screen", egl.eglBaseContext),
+            context,
+            src.capturerObserver
+        )
+        capturer.startCapture(1280, 720, 15)
+        screenCapturer = capturer
+        screenSource = src
+        factory.createVideoTrack("screenshare-engine", src)
+    } catch (_: Exception) { null }
+
+    fun stopScreenShare(): VideoTrack? = try {
+        runCatching { screenCapturer?.stopCapture() }
+        screenCapturer?.dispose(); screenCapturer = null
+        null
+    } catch (_: Exception) { null }
     fun setMicrophoneEnabled(enabled: Boolean) { localMedia?.audioTrack?.setEnabled(enabled) }
     fun setCameraEnabled(enabled: Boolean) {
         cameraRequestedByUser = enabled
@@ -419,8 +448,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     fun switchCamera() { (capturer as? org.webrtc.CameraVideoCapturer)?.switchCamera(null) }
 
     /**
-     * Adaptive bitrate: يضبط الـ simulcast بناءً على جودة الشبكة.
-     * يستدعى من الـ service بعد كل stats poll.
+     * Adaptive bitrate: ÙŠØ¶Ø¨Ø· Ø§Ù„Ù€ simulcast Ø¨Ù†Ø§Ø¡Ù‹ Ø¹Ù„Ù‰ Ø¬ÙˆØ¯Ø© Ø§Ù„Ø´Ø¨ÙƒØ©.
+     * ÙŠØ³ØªØ¯Ø¹Ù‰ Ù…Ù† Ø§Ù„Ù€ service Ø¨Ø¹Ø¯ ÙƒÙ„ stats poll.
      */
     fun applyAdaptiveBitrate(stats: NetworkStats) {
         lastStats = stats
@@ -470,7 +499,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                             jitter = ((stat.members["jitter"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
                             fps = (stat.members["framesPerSecond"] as? Number)?.toInt() ?: 0
                         }
-                        // سعة الشبكة الفعلية تُقرأ من زوج المرشحين الحالي — وليس من تقرير الطرف البعيد
+                        // Ø³Ø¹Ø© Ø§Ù„Ø´Ø¨ÙƒØ© Ø§Ù„ÙØ¹Ù„ÙŠØ© ØªÙÙ‚Ø±Ø£ Ù…Ù† Ø²ÙˆØ¬ Ø§Ù„Ù…Ø±Ø´Ø­ÙŠÙ† Ø§Ù„Ø­Ø§Ù„ÙŠ â€” ÙˆÙ„ÙŠØ³ Ù…Ù† ØªÙ‚Ø±ÙŠØ± Ø§Ù„Ø·Ø±Ù Ø§Ù„Ø¨Ø¹ÙŠØ¯
                         "candidate-pair" -> {
                             val isSelected = (stat.members["selected"] as? Boolean) ?: false
                             if (isSelected) {
@@ -481,7 +510,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                 }
                 val total = packetsLost + packetsReceived
                 val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
-                // معدل الحزمة الفعلي: فرق البايتات بين الدورتين ÷ الزمن المنقضي (kbps)
+                // Ù…Ø¹Ø¯Ù„ Ø§Ù„Ø­Ø²Ù…Ø© Ø§Ù„ÙØ¹Ù„ÙŠ: ÙØ±Ù‚ Ø§Ù„Ø¨Ø§ÙŠØªØ§Øª Ø¨ÙŠÙ† Ø§Ù„Ø¯ÙˆØ±ØªÙŠÙ† Ã· Ø§Ù„Ø²Ù…Ù† Ø§Ù„Ù…Ù†Ù‚Ø¶ÙŠ (kbps)
                 val nowMs = System.currentTimeMillis()
                 val elapsedMs = nowMs - (lastStatsElapsedMs.takeIf { it > 0L } ?: nowMs)
                 lastStatsElapsedMs = nowMs
@@ -493,7 +522,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                 val quality = NetworkStats.classify(rtt, lossPct, availableBitrate / 1000L)
                 val ns = NetworkStats(rtt, lossPct, kbps, availableBitrate / 1000L, jitter, fps, quality)
                 events.onNetworkStats(ns)
-                // تطبيق adaptive bitrate تلقائياً
+                // ØªØ·Ø¨ÙŠÙ‚ adaptive bitrate ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹
                 applyAdaptiveBitrate(ns)
             }
         })
@@ -504,7 +533,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         localMedia?.audioTrack?.dispose(); localMedia?.videoTrack?.dispose()
         audioSource?.dispose(); videoSource?.dispose(); audioSource = null; videoSource = null
         peer?.close(); peer?.dispose(); peer = null; localMedia = null
-        // factory و audioDevice و egl ثقيلة — لا نحذفها كل مكالمة (Singleton). تُحفظ لإعادة الاستخدام
+        // factory Ùˆ audioDevice Ùˆ egl Ø«Ù‚ÙŠÙ„Ø© â€” Ù„Ø§ Ù†Ø­Ø°ÙÙ‡Ø§ ÙƒÙ„ Ù…ÙƒØ§Ù„Ù…Ø© (Singleton). ØªÙØ­ÙØ¸ Ù„Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…
     }
 
     private suspend fun loadIce(): IceConfigurationDto? = withContext(Dispatchers.IO) {
@@ -518,7 +547,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     private fun createVideoTrack(): VideoTrack? {
-        // إذن الكاميرا غير ممنوح → لا نحاول أبداً (Camera2Enumerator قد يرمي SecurityException)
+        // Ø¥Ø°Ù† Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ ØºÙŠØ± Ù…Ù…Ù†ÙˆØ­ â†’ Ù„Ø§ Ù†Ø­Ø§ÙˆÙ„ Ø£Ø¨Ø¯Ø§Ù‹ (Camera2Enumerator Ù‚Ø¯ ÙŠØ±Ù…ÙŠ SecurityException)
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
             != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {

@@ -5,14 +5,13 @@ import {
   Tooltip, Typography, message,
 } from 'antd';
 import {
-  ApiOutlined, AuditOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
+  ApiOutlined, DeleteOutlined, DisconnectOutlined, HistoryOutlined, MessageOutlined,
   PlusOutlined, RadarChartOutlined, ReloadOutlined, SafetyCertificateOutlined, SignalFilled,
-  ToolOutlined, PhoneOutlined, WarningOutlined,
+  ToolOutlined, PhoneOutlined,
 } from '@ant-design/icons';
-import {
-  apiFetch, bindSim, unbindSim, getPstnEligibleUsers, updateSimInventory, type SimInventoryUpdate,
-} from '../api';
+import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
+import NumberLearningCard from './NumberLearningCard';
 
 /**
  * صفحة بوابات DINSTAR — أسطول UC2000-VE.
@@ -25,8 +24,7 @@ type Port = {
   index: number; radioType?: string; status?: string; callState?: string;
   signal?: number | null; signalRaw?: number | null; signalDbm?: number | null;
   signalUsable?: boolean; signalLabel?: string; gprs?: string;
-  number?: string; numberMasked?: string; imsi?: string; imsiMasked?: string; iccid?: string; iccidMasked?: string; operator?: string;
-  boundRedId?: string; boundUsername?: string;
+  numberMasked?: string; imsiMasked?: string; iccidMasked?: string; operator?: string;
 };
 type Gateway = {
   id: string; name: string; model: string; host: string; scheme: string; apiPort: number;
@@ -131,23 +129,8 @@ export default function DinstarControl() {
   const [routeResult, setRouteResult] = useState<any>(null);
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null);
-  const [reconcileLoading, setReconcileLoading] = useState(false);
-  const [reconcileResult, setReconcileResult] = useState<any | null>(null);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
-  const [bindOpen, setBindOpen] = useState(false);
-  const [bindPort, setBindPort] = useState<number | null>(null);
-  const [bindGwId, setBindGwId] = useState<string | null>(null);
-  const [bindGwHost, setBindGwGwHost] = useState('');
-  const [eligibleUsers, setEligibleUsers] = useState<any[]>([]);
-  const [binding, setBinding] = useState(false);
-  const [invOpen, setInvOpen] = useState(false);
-  const [invPort, setInvPort] = useState<number | null>(null);
-  const [invGwId, setInvGwId] = useState<string | null>(null);
-  const [invSaving, setInvSaving] = useState(false);
   const [form] = Form.useForm();
   const [routeForm] = Form.useForm();
-  const [bindForm] = Form.useForm();
-  const [invForm] = Form.useForm();
 
   const json = async (r: Response) => {
     const b = await r.json().catch(() => ({}));
@@ -189,43 +172,6 @@ export default function DinstarControl() {
         .map((p) => ({ host: gateway.host, index: p.index, raw: p.signalRaw })),
     );
   }, [fleetPorts]);
-
-  /** منافذ تحتاج تعلّم الرقم: مسجّلة + إشارة صالحة لكن number فارغ (Sabafon — يحتاج Phone Number Learning) */
-  const needsNumberLearningPorts = useMemo(() => {
-    if (!fleetPorts) return [];
-    return fleetPorts.gateways.flatMap(({ gateway, ports }) =>
-      ports
-        .filter((p) => isRegistered(p.status) && !!p.signalUsable && !p.number)
-        .map((p) => ({ host: gateway.host, gatewayId: gateway.id, index: p.index, operator: p.operator, imsiMasked: p.imsiMasked })),
-    );
-  }, [fleetPorts]);
-
-  const runReconcile = useCallback(async () => {
-    setReconcileLoading(true);
-    try {
-      const b = await json(await apiFetch('/api/admin/dinstar/bindings/reconcile'));
-      setReconcileResult(b);
-      setReconcileOpen(true);
-      const s = (b as any)?.summary;
-      if (s) {
-        if (s.mismatched > 0 || s.orphanBindings > 0) message.warning(`يوجد ${s.mismatched} تضارب و ${s.orphanBindings} ربط يتيم`);
-        else if (s.ok > 0) message.success(`المطابقة سليمة — ${s.ok} منفذ مطابق`);
-        else message.info('لا توجد مطابقات — تحقق من الربط');
-      }
-    } catch (e: any) {
-      message.error(e.message || 'تعذر التحقق من الربط');
-    } finally {
-      setReconcileLoading(false);
-    }
-  }, []);
-
-  const triggerLearning = async (port: number) => {
-    try {
-      await json(await apiFetch(`/api/admin/dinstar/ports/${port}/learning`, { method: 'POST' }));
-      message.success(`أُرسل طلب تعلّم الرقم للمنفذ ${port + 1} (Call Mode)`);
-      setTimeout(load, 2000);
-    } catch (e: any) { message.error(e.message); }
-  };
 
   const resetPort = (gatewayHost: string, port: number) =>
     Modal.confirm({
@@ -410,114 +356,18 @@ export default function DinstarControl() {
     }
   };
 
-  const openBind = async (gwId: string, host: string, port: number, currentUser?: string) => {
-    setBindGwId(gwId);
-    setBindGwGwHost(host);
-    setBindPort(port);
-    bindForm.setFieldsValue({ userId: currentUser || undefined });
-    setBindOpen(true);
-    try {
-      const users = await getPstnEligibleUsers();
-      setEligibleUsers(users);
-    } catch (e: any) {
-      message.error('تعذر تحميل قائمة المستخدمين المؤهلين');
-    }
-  };
-
-  const doBind = async () => {
-    if (bindGwId === null || bindPort === null) return;
-    setBinding(true);
-    try {
-      const { userId, number } = await bindForm.validateFields();
-      if (!userId) {
-        // Unbind case
-        const portKey = `${bindGwId}#${bindPort}`;
-        const existing = fleetPorts?.gateways.find(g => g.gateway.id === bindGwId)?.ports.find(p => p.index === bindPort);
-        if (existing?.boundRedId) {
-          // We need the internal UUID to unbind. PstnUser type has it.
-          // For now, let's find the user in eligibleUsers or just call bind with null.
-          // Backend bind supports updating to another user or 409 if exists.
-          // PstnBindingController DELETE /{userId} is the explicit unbind.
-        }
-        message.warning('اختر مستخدماً للربط أو استخدم فك الارتباط الصريح');
-        return;
-      }
-      await bindSim(userId, bindGwId, bindPort, number);
-      message.success('تم ربط الشريحة بالمستخدم بنجاح');
-      setBindOpen(false);
-      load();
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error(e.message || 'فشل عملية الربط');
-    } finally {
-      setBinding(false);
-    }
-  };
-
-  const doUnbind = async (userId: string, redId: string) => {
-    Modal.confirm({
-      title: `فك ارتباط ${redId}؟`,
-      content: 'لن يتمكن هذا المستخدم من استخدام هذه الشريحة (CLIP) بعد الآن.',
-      okType: 'danger',
-      onOk: async () => {
-        try {
-          await unbindSim(userId);
-          message.success('تم فك الارتباط');
-          load();
-        } catch (e: any) { message.error(e.message); }
-      }
-    });
-  };
-
-  const openInventory = (gwId: string, port: Port) => {
-    setInvGwId(gwId);
-    setInvPort(port.index);
-    invForm.setFieldsValue({
-      simLabel: '', // TODO: fetch existing if any
-      operatorLabel: port.operator || '',
-      verificationState: 'UNVERIFIED',
-      notes: ''
-    });
-    setInvOpen(true);
-  };
-
-  const doSaveInventory = async () => {
-    if (invGwId === null || invPort === null) return;
-    setInvSaving(true);
-    try {
-      const values = await invForm.validateFields();
-      await updateSimInventory(invGwId, invPort, values as SimInventoryUpdate);
-      message.success('تم تحديث بيانات المخزون بنجاح');
-      setInvOpen(false);
-      load();
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error(e.message || 'فشل تحديث المخزون');
-    } finally {
-      setInvSaving(false);
-    }
-  };
-
   const renderPort = (gateway: Gateway, port: Port) => {
     const label = SIGNAL_LABEL[port.signalLabel || 'NO_SIGNAL'] || SIGNAL_LABEL.NO_SIGNAL;
     const measured = port.signalDbm != null;
-    const needsLearning = isRegistered(port.status) && !!port.signalUsable && !port.number;
     return (
       <Col xs={24} sm={12} lg={6} key={`${gateway.id}-${port.index}`}>
         <Card
           size="small"
           title={`SIM ${port.index + 1}`}
           extra={
-            <Space size={4}>
-              {needsLearning && (
-                <Tooltip title="الرقم فارغ رغم وجود الشريحة — فعّل Phone Number Learning من واجهة الجهاز (Human Behavior → Phone Number Learning). راجع docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md — نمط Call موصى به لـ Sabafon.">
-                  <Tag color="orange" icon={<WarningOutlined />}>يحتاج تعلّم الرقم</Tag>
-                </Tooltip>
-              )}
-              <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
-                {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
-              </Tag>
-            </Space>
+            <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
+              {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
+            </Tag>
           }
         >
           <div style={{ textAlign: 'center' }}>
@@ -545,62 +395,12 @@ export default function DinstarControl() {
           </div>
           <Descriptions column={1} size="small" style={{ marginTop: 8 }}>
             <Descriptions.Item label="المشغل">
-              <Tag color={resolveOp(port.operator).clr} style={{ fontWeight: 600, fontSize: 12, padding: '2px 10px' }}>{resolveOp(port.operator).ar}</Tag>
+              <Tag color={resolveOp(port.operator).clr}>{resolveOp(port.operator).ar}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="الرقم">
-              {port.number ? (
-                <Space>
-                  <Typography.Text copyable style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1677ff' }}>{port.number}</Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>({port.numberMasked})</Typography.Text>
-                </Space>
-              ) : port.numberMasked ? (
-                <Typography.Text copyable style={{ fontFamily: 'monospace' }}>{port.numberMasked}</Typography.Text>
-              ) : needsLearning ? (
-                <Tooltip title="الرقم فارغ رغم التسجيل والإشارة — الحل: Human Behavior → Phone Number Learning (نمط Call موصى به لـ Sabafon). راجع docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md">
-                  <Tag color="warning" icon={<WarningOutlined />}>يحتاج تعلّم الرقم</Tag>
-                </Tooltip>
-              ) : (
-                <Tag color="default">غير معروف</Tag>
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="IMSI">
-              {port.imsi ? (
-                <Typography.Text copyable style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.imsi}</Typography.Text>
-              ) : port.imsiMasked ? (
-                <Space>
-                  <Typography.Text style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.imsiMasked}</Typography.Text>
-                  <Tooltip title="IMSI الكامل مخفي للخصوصية — يظهر للأدمن فقط عند الحاجة"><Tag>مخفي</Tag></Tooltip>
-                </Space>
-              ) : (
-                '—'
-              )}
-            </Descriptions.Item>
-            {port.iccid && (
-              <Descriptions.Item label="ICCID">
-                <Typography.Text copyable style={{ fontFamily: 'monospace', fontSize: 11 }}>{port.iccid}</Typography.Text>
-              </Descriptions.Item>
-            )}
-            <Descriptions.Item label="الحساب المالك">
-              {port.boundUsername ? (
-                <Space size={4} wrap>
-                  <Tag color="purple" style={{ fontWeight: 600 }}>{port.boundUsername}</Tag>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>#{port.boundRedId}</Typography.Text>
-                  <Button size="small" type="link" danger onClick={() => {
-                    // We need the internal UUID which isn't in Port type currently.
-                    // Let's assume boundRedId is enough for a lookup or update the API to include it.
-                    // Actually, the reconcile logic shows we need the userId.
-                    message.info('استخدم صفحة إدارة PSTN لفك الارتباط حالياً أو Reconcile');
-                  }}>فك</Button>
-                </Space>
-              ) : (
-                <Space>
-                  <Tag color="default">غير مرتبط</Tag>
-                  <Button size="small" type="link" onClick={() => openBind(gateway.id, gateway.host, port.index)}>ربط</Button>
-                </Space>
-              )}
-            </Descriptions.Item>
+            <Descriptions.Item label="الرقم">{port.numberMasked || 'غير معروف'}</Descriptions.Item>
+            <Descriptions.Item label="IMSI">{port.imsiMasked || '—'}</Descriptions.Item>
           </Descriptions>
-          <Space style={{ marginTop: 6 }} wrap>
+          <Space style={{ marginTop: 6 }}>
             <Button
               type="primary" size="small" icon={<PhoneOutlined />}
               disabled={!isRegistered(port.status) || !port.signalUsable}
@@ -611,14 +411,8 @@ export default function DinstarControl() {
             <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget(port.index); setUssd(''); }}>
               USSD
             </Button>
-            <Button size="small" icon={<HistoryOutlined />} onClick={() => triggerLearning(port.index)}>
-              تعلّم
-            </Button>
-            <Button size="small" icon={<SafetyCertificateOutlined />} onClick={() => openInventory(gateway.id, port)}>
-              جرد
-            </Button>
             <Button size="small" danger icon={<ToolOutlined />} onClick={() => resetPort(gateway.host, port.index)}>
-              إعادة
+              إعادة تشغيل
             </Button>
           </Space>
         </Card>
@@ -636,9 +430,6 @@ export default function DinstarControl() {
           </Typography.Text>
         </div>
         <Space>
-          <Tooltip title="يقارن أرقام الشرائح الحية (get_port_info) مع ربط PSTN في القاعدة ويكشف التضارب واحتياج Number Learning">
-            <Button icon={<AuditOutlined />} loading={reconcileLoading} onClick={runReconcile}>تحقق من الربط</Button>
-          </Tooltip>
           <Button icon={<RadarChartOutlined />} onClick={() => { setRouteResult(null); setRouteOpen(true); }}>
             اختبار التوجيه
           </Button>
@@ -677,28 +468,6 @@ export default function DinstarControl() {
         />
       )}
 
-      {needsNumberLearningPorts.length > 0 && (
-        <Alert
-          type="warning" showIcon style={{ marginBottom: 14 }}
-          message={`${needsNumberLearningPorts.length} شريحة مسجّلة بإشارة صالحة لكن رقمها فارغ — تحتاج تعلّم الرقم`}
-          description={
-            <>
-              الحقل <code>number</code> فارغ في <code>get_port_info</code> رغم التسجيل والإشارة — حال Sabafon الافتراضي قبل تفعيل Phone Number Learning.{' '}
-              افتح واجهة الجهاز: <Typography.Text strong>Human Behavior → Phone Number Learning</Typography.Text> واختر <Tag color="green">Call</Tag> لكل المنافذ (موصى به — يتعلم 8 أرقام داخليًا عبر CLIP بدون USSD).
-              التفاصيل الكاملة مع لقطات توضيحية:{' '}
-              <Typography.Text code>docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md</Typography.Text>{' '}
-              — بعد الحفظ اضغط <Button size="small" onClick={runReconcile} loading={reconcileLoading}>تحقق من الربط</Button> ليظهر <code>liveNumber</code> مملوءًا.
-              <br />
-              المنافذ: {needsNumberLearningPorts.map((d) => `${d.host}#${d.index + 1}(${resolveOp(d.operator).ar}${d.imsiMasked ? ` · ${d.imsiMasked}` : ''})`).join('، ')}
-              <br />
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                بدائل: USSD (<code>*121#</code> + Keyword) أو SMS — لكن USSD لمعرفة الرقم غير موثق في Sabafon. كذلك فعّل <code>Auto CLIP Routing</code> و <code>Auto Update SIM Number</code> كميزتين مرتبطتين.
-              </Typography.Text>
-            </>
-          }
-        />
-      )}
-
       <Alert
         style={{ marginBottom: 14 }} type="info" showIcon
         message="مسار الصوت"
@@ -723,13 +492,13 @@ export default function DinstarControl() {
           columns={[
             { title: 'الاسم', dataIndex: 'name' },
             { title: 'الطراز', dataIndex: 'model', render: (m: string) => <Tag color="blue">{m}</Tag> },
-            { title: 'العنوان', render: (_: any, g: Gateway) => `${g.scheme}://${g.host}:${g.apiPort}` },
+            { title: 'العنوان', render: (_, g: Gateway) => `${g.scheme}://${g.host}:${g.apiPort}` },
             { title: 'المنافذ', dataIndex: 'portCount', align: 'center' as const },
             { title: 'الموقع', dataIndex: 'siteLabel', render: (v?: string) => v || '—' },
             { title: 'نظير PJSIP', dataIndex: 'pjsipEndpoint', render: (v?: string) => <code>{v || '—'}</code> },
             {
               title: 'الحالة',
-              render: (_: any, g: Gateway) => {
+              render: (_, g: Gateway) => {
                 const h = HEALTH[g.healthState] || HEALTH.UNKNOWN;
                 return <Space><Badge status={h.badge} text={h.ar} />{!g.enabled && <Tag>معطّلة</Tag>}</Space>;
               },
@@ -737,7 +506,7 @@ export default function DinstarControl() {
             { title: 'الأولوية', dataIndex: 'routingPriority', align: 'center' as const },
             {
               title: 'إجراءات',
-              render: (_: any, g: Gateway) => (
+              render: (_, g: Gateway) => (
                 <Space>
                   <Button size="small" icon={<DisconnectOutlined />} onClick={() => toggleGateway(g)}>
                     {g.enabled ? 'تعطيل' : 'تفعيل'}
@@ -786,8 +555,8 @@ export default function DinstarControl() {
           columns={[
             { title: 'المنفذ', dataIndex: 'port' },
             { title: 'الاتجاه', dataIndex: 'direction' },
-            { title: 'الرقم', render: (_: any, r: any) => r.callee || r.destination_number || '—' },
-            { title: 'البدء', render: (_: any, r: any) => r.startTime || r.start_date || '—' },
+            { title: 'الرقم', render: (_, r: any) => r.callee || r.destination_number || '—' },
+            { title: 'البدء', render: (_, r: any) => r.startTime || r.start_date || '—' },
             { title: 'المدة', dataIndex: 'duration' },
             { title: 'الحالة', dataIndex: 'status' },
           ]}
@@ -991,57 +760,6 @@ export default function DinstarControl() {
         ))}
       </Modal>
 
-      {/* ── Reconcile ── */}
-      <Modal title="تحقق من الربط — المطابقة الحية vs القاعدة" open={reconcileOpen} onCancel={() => setReconcileOpen(false)} footer={[<Button key="close" onClick={() => setReconcileOpen(false)}>إغلاق</Button>, <Button key="reload" type="primary" loading={reconcileLoading} onClick={runReconcile}>تحديث</Button>]} width={900}>
-        {!reconcileResult ? (
-          <Empty description="لا توجد نتيجة بعد — اضغط تحديث" />
-        ) : (
-          <>
-            {(() => {
-              const s = (reconcileResult as any)?.summary;
-              return s ? (
-                <Row gutter={[8, 8]} style={{ marginBottom: 12 }}>
-                  <Col span={4}><Card size="small"><Statistic title="الإجمالي" value={s.totalPorts} /></Card></Col>
-                  <Col span={4}><Card size="small"><Statistic title="مربوط" value={s.boundPorts} /></Card></Col>
-                  <Col span={4}><Card size="small"><Statistic title="مطابق" value={s.ok} valueStyle={{ color: '#00C896' }} /></Card></Col>
-                  <Col span={4}><Card size="small"><Statistic title="تضارب" value={s.mismatched} valueStyle={{ color: s.mismatched ? '#F5222D' : undefined }} /></Card></Col>
-                  <Col span={4}><Card size="small"><Statistic title="يتيم" value={s.orphanBindings} valueStyle={{ color: s.orphanBindings ? '#FA8C16' : undefined }} /></Card></Col>
-                  <Col span={4}><Card size="small"><Statistic title="بلا ربط وبه SIM" value={s.unboundWithSim} valueStyle={{ color: s.unboundWithSim ? '#FA8C16' : undefined }} /></Card></Col>
-                </Row>
-              ) : null;
-            })()}
-            {(reconcileResult as any)?.learnInstruction && (
-              <Alert type="info" showIcon style={{ marginBottom: 12 }} message="تعليمات تعلّم الرقم" description={<><Typography.Text code>{(reconcileResult as any).learnInstruction}</Typography.Text><br /><Typography.Text type="secondary" style={{ fontSize: 12 }}>المسار: Human Behavior → Phone Number Learning — التفاصيل في docs/diagnostics/DINSTAR_NUMBER_LEARNING_GUIDE_AR.md (نمط Call موصى به لـ Sabafon).</Typography.Text></>} />
-            )}
-            <Table
-              size="small" pagination={{ pageSize: 8, hideOnSinglePage: true }}
-              dataSource={((reconcileResult as any)?.ports || []) as any[]}
-              rowKey={(r: any) => `${r.gatewayId}#${r.index}`}
-              columns={[
-                { title: '#', dataIndex: 'index', width: 50, render: (v: number) => v + 1 },
-                { title: 'المضيف', dataIndex: 'host', width: 130 },
-                { title: 'الرقم الحي', dataIndex: 'liveNumber', render: (v: string | null) => v ? <Tag color="blue" style={{ fontFamily: 'monospace' }}>{v}</Tag> : <Tag color="orange" icon={<WarningOutlined />}>فارغ</Tag> },
-                { title: 'IMSI/مقنّع', dataIndex: 'imsiLast4', render: (v: string | null, r: any) => v ? `••••${v}` : (r.liveNumberMasked || '—') },
-                { title: 'المشغل', dataIndex: 'operator', render: (v: string) => <Tag color={resolveOp(v).clr}>{resolveOp(v).ar}</Tag> },
-                { title: 'المربوط', dataIndex: 'boundRedId', render: (v: string | null, r: any) => v ? <><Tag color="purple">{v}</Tag><br /><span style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.boundNumber || '—'}</span></> : <Tag>غير مربوط</Tag> },
-                { title: 'الحالة', dataIndex: 'suggestedAction', width: 160, render: (v: string, r: any) => {
-                  const needs = r.needsNumberLearning;
-                  if (v === 'MISMATCH') return <Tag color="red">تضارب</Tag>;
-                  if (v === 'ORPHAN_BINDING_NEEDS_CLEAR') return <Tag color="red">يتيم — يحتاج فك</Tag>;
-                  if (v === 'UNBOUND_HAS_SIM') return <Tag color="orange">بلا ربط وبه SIM</Tag>;
-                  if (needs) return <Tag color="orange" icon={<WarningOutlined />}>يحتاج تعلّم</Tag>;
-                  return <Tag color="green">مطابق</Tag>;
-                } },
-                { title: 'السبب', dataIndex: 'reason', ellipsis: true, render: (v: string) => <Tooltip title={v}><span style={{ fontSize: 11 }}>{v}</span></Tooltip> },
-              ]}
-            />
-            <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 8 }}>
-              المصدر: <code>GET /api/admin/dinstar/bindings/reconcile</code> — يقارن <code>liveNumber</code> من <code>get_port_info</code> مع <code>pstn_number</code> في القاعدة. <code>GET /api/admin/dinstar/bindings/discover</code> يعيد نفس البيانات + <code>learnable/learnInstruction</code>.
-            </Typography.Paragraph>
-          </>
-        )}
-      </Modal>
-
       {/* ── USSD ── */}
       <Modal open={ussdTarget != null} title={`USSD — SIM ${(ussdTarget ?? 0) + 1}`}
         onCancel={() => setUssdTarget(null)} onOk={sendUssd}
@@ -1069,89 +787,7 @@ export default function DinstarControl() {
             message={`أُطلقت: ${dialResult.status} · المنفذ ${(dialResult.slot ?? 0) + 1} · callId ${dialResult.callId}`} />
         )}
       </Modal>
-
-      {/* ── ربط شريحة بمستخدم ── */}
-      <Modal
-        title={`ربط شريحة بمستخدم — المنفذ ${(bindPort ?? 0) + 1} @ ${bindGwHost}`}
-        open={bindOpen}
-        onCancel={() => setBindOpen(false)}
-        onOk={doBind}
-        confirmLoading={binding}
-        okText="حفظ الربط"
-        cancelText="إلغاء"
-      >
-        <Form form={bindForm} layout="vertical">
-          <Form.Item name="userId" label="المستخدم المستهدف" rules={[{ required: true, message: 'اختر مستخدماً' }]}>
-            <Select
-              showSearch
-              placeholder="ابحث عن مستخدم (الاسم أو معرّف RED)"
-              optionFilterProp="children"
-              options={eligibleUsers.map(u => ({
-                value: u.userId,
-                label: `${u.displayName} (@${u.username}) — ${u.redId}`
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="number"
-            label="رقم الهاتف (CLIP)"
-            tooltip="الرقم الفعلي للشريحة. يُستخدم للتحقق ولإظهاره كـ Caller ID للمستلم."
-          >
-            <Input placeholder="مثال: 712064924" />
-          </Form.Item>
-          <Alert
-            type="info"
-            showIcon
-            message="الربط الدائم"
-            description="عند ربط مستخدم بمنفذ، ستخرج كافة مكالماته من هذا المنفذ حصرًا، وستوجه المكالمات الواردة لهذا المنفذ إليه مباشرة."
-          />
-        </Form>
-      </Modal>
-
-      {/* ── جرد الشريحة ── */}
-      <Modal
-        title={`جرد الشريحة — المنفذ ${(invPort ?? 0) + 1}`}
-        open={invOpen}
-        onCancel={() => setInvOpen(false)}
-        onOk={doSaveInventory}
-        confirmLoading={invSaving}
-        okText="حفظ البيانات"
-        cancelText="إلغاء"
-      >
-        <Form form={invForm} layout="vertical">
-          <Form.Item name="simLabel" label="تسمية الشريحة" tooltip="اسم وصفي (مثلاً: رقم الطوارئ 1)">
-            <Input placeholder="أدخل اسماً اختيارياً" />
-          </Form.Item>
-          <Form.Item name="operatorLabel" label="تسمية المشغل" tooltip="تجاوز كشف المشغل التلقائي">
-            <Input placeholder="مثلاً: Sabafon North" />
-          </Form.Item>
-          <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="verificationState" label="حالة التحقق" rules={[{ required: true }]}>
-                <Select options={[
-                  { value: 'UNVERIFIED', label: 'غير محقق' },
-                  { value: 'VERIFIED', label: 'محقق' },
-                  { value: 'LEARNED', label: 'تم تعلمه آلياً' },
-                  { value: 'FAILED', label: 'فشل التحقق' },
-                ]} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="verificationMethod" label="طريقة التحقق">
-                <Select allowClear options={[
-                  { value: 'MANUAL', label: 'يدوي' },
-                  { value: 'USSD', label: 'USSD' },
-                  { value: 'SMS_KEYWORD', label: 'SMS Keyword' },
-                  { value: 'CALL_LOOP', label: 'Call Loop' },
-                ]} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="notes" label="ملاحظات فنية">
-            <Input.TextArea rows={2} placeholder="أي معلومات إضافية عن هذه الشريحة" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <NumberLearningCard />
     </div>
   );
 }
