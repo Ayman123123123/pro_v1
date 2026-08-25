@@ -1,80 +1,38 @@
-# خطة التوحيد الأسطوري الشامل (Ultimate Consolidation Plan)
+# خطة تنفيذ "الاكتمال الأسطوري" (Legendary Completeness) لـ RED Ultimate
 
-الهدف هو دمج أفضل العناصر من كافة النسخ المتوفرة (المجلد الرئيسي، نسخة التحقق `_red_ultimate_verify` والنسخ التاريخية) لإنشاء النسخة الأكثر اكتمالاً وحداثة وشمولية لمشروع RED Ultimate.
+تهدف هذه الخطة إلى دمج كافة الميزات السيادية (Sovereign) مع النواة الأساسية للتطبيق (Signal-based) لضمان الحصول على نسخة متكاملة وشاملة.
 
-## Proposed Changes
+## التغييرات المقترحة
 
-### [Android App - red-app]
+### 1. توحيد تطبيق الأندرويد (Android Consolidation)
 
-تحديث المكونات الأساسية لضمان استقرار المكالمات وشمولية الاختبارات.
+- **[تعديل] [settings.gradle.kts](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/settings.gradle.kts)**: جعل مجلد `app/` هو الموديول الرئيسي `:app` بدلاً من `red-app/`.
+- **[تعديل] [AndroidManifest.xml](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/app/src/main/AndroidManifest.xml)**: دمج كافة الخدمات والـ Receivers السيادية (PSTN, VoIP, NotificationRouter).
+- **[تعديل] [MainActivity.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/app/src/main/java/org/thoughtcrime/securesms/MainActivity.kt)**:
+    - استدعاء `RedConnector.autoBind()` عند التشغيل.
+    - دمج منطق `AppLock` السيادي مع نظام قفل الشاشة الحالي.
+    - توجيه إشعارات الـ VoIP السيادية إلى مصلحة المكالمات الصحيحة.
 
-#### [MODIFY] [MeshRtcSession.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/MeshRtcSession.kt)
-استبدال النسخة الحالية بالنسخة "الأسطورية" الموجودة في `_red_ultimate_verify` والتي تدعم:
-- نظام محاولات ذكي (Retries) لخوادم ICE.
-- دقات فيديو تكيفية (Multiple Resolutions).
-- إصلاحات مشاركة الشاشة المتقدمة.
+### 2. بروتوكول الرسائل المتقدم (Advanced Messaging Protocol)
 
-#### [NEW] [MediaLogicTest.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/test/java/com/red/sovereign/features/media/MediaLogicTest.kt)
-استعادة ملف الاختبارات الشامل للوسائط الموجود في نسخة التحقق وغير الموجود في النسخة الحالية.
+- **[تم التنفيذ] [red_protocol.proto](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/shared-proto/src/main/proto/red_protocol.proto)**: تم إضافة دعم `StickerRED` و `PollRED` و `ReactionRED`.
+- **[تعديل] [MessageService.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/messaging/MessageService.kt)**: تفعيل دعم أنواع الرسائل الجديدة في الخادم.
 
-### [Backend Server]
+### 3. إدارة المحتوى (Content Management)
 
-التأكد من أن الباكند يحتوي على كافة مسارات الـ API (أكثر من 210 مسار) وأحدث منطق لـ PSTN.
+- **[تعديل] [ContentController.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/admin/controller/ContentController.kt)**: إضافة الـ Endpoints اللازمة لإدارة حزم الملصقات (Stickers) والاستطلاعات (Polls).
 
-#### [MODIFY] [PstnManager.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt)
-دمج تحسينات إدارة القنوات من نسخة التحقق، مع الحفاظ على ميزات "Number Learning" المتقدمة الموجودة في النسخة الحالية.
+### 4. نظام Dinstar المتقدم
 
-#### [MODIFY] [DinstarFleetController.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/controllers/DinstarFleetController.kt)
-تحديث مسارات التحكم لتتوافق مع الواجهة البرمجية الأسطورية الموحدة.
+- **[تعديل] [NumberLearningService.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/dinstar/NumberLearningService.kt)**: التأكد من دمج منطق تعلم الأرقام المتقدم لضمان استقرار الخدمة في المناطق الضعيفة.
 
-### [Admin Dashboard - red-admin-dashboard]
+## خطة التحقق (Verification Plan)
 
-تحويل لوحة التحكم إلى النسخة الأكثر احترافية مع دعم كامل لخصائص الـ PSTN المتقدمة.
+### الاختبارات الآلية
+- تشغيل `./gradlew :app:assembleDebug` للتأكد من سلامة دمج الأندرويد.
+- تشغيل `npm run build` في `admin_dashboard` للتأكد من سلامة الواجهة.
 
-#### [MODIFY] [DinstarControl.tsx](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/DinstarControl.tsx)
-دمج الميزات من كلا النسختين:
-- الرسوم البيانية التفاعلية لحالة المنافذ (من نسخة التحقق).
-- نظام "Number Learning" والتحكم العميق (من النسخة الحالية).
-
-#### [NEW] [SecurityDashboard.tsx](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/SecurityDashboard.tsx)
-إضافة شاشة مراقبة الأمان والشهادات الموجودة في نسخة التحقق.
-
-### [Infrastructure & Proto]
-
-#### [MODIFY] [nginx.conf](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/nginx.conf)
-تحديث إعدادات البروكسي لتدعم الـ WebSockets بشكل أكثر استقراراً (Keep-alive timeouts).
-
-#### [SYNC] [red_protocol.proto](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/shared-proto/src/main/proto/red_protocol.proto)
-التأكد من تطابق البروتوكول تماماً بين كافة الأطراف لتجنب أخطاء التسلسل (Serialization).
-
-### [Documentation & Diagnostics]
-
-استعادة كافة ملفات السجلات والتوثيق "التافهة" والصغيرة لضمان اكتمال الأرشيف.
-
-#### [NEW] [diagnostics/](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/docs/diagnostics/)
-نسخ كافة سجلات البناء والاختبارات (logs) من نسخة التحقق إلى المجلد الرئيسي.
-
-## User Review Required
-
-> [!IMPORTANT]
-> دمج ملف `DinstarControl.tsx` يتطلب حذراً كبيراً لأن النسخة الحالية تحتوي على منطق "Number Learning" معقد قد لا يكون موجوداً في نسخة التحقق. سأقوم بالدمج يدوياً لضمان عدم ضياع أي ميزة.
-
-> [!WARNING]
-> تحديث `nginx.conf` قد يتطلب إعادة تشغيل حاويات Docker، مما قد يسبب انقطاعاً مؤقتاً في الخدمة أثناء التجربة.
-
-## Open Questions
-
-- هل هناك أي ملفات "Secret" أو مفاتيح تشفير (Keys) في مجلد `_red_ultimate_verify` يجب نقلها أيضاً، أم نكتفي بالكود المصدري؟
-- هل تفضل تشغيل عملية الدمج بشكل تلقائي (Scripted) أم أقوم بكل خطوة يدوياً مع التحقق؟
-
-## Verification Plan
-
-### Automated Tests
-- تشغيل `./gradlew :app:compileDebugKotlin` للتأكد من سلامة كود الأندرويد بعد الدمج.
-- تشغيل اختبارات الباكند `./gradlew :backend-server:test`.
-- تشغيل `npm run build` في مجلد `admin_dashboard` للتأكد من سلامة كود الـ React.
-
-### Manual Verification
-- الدخول إلى لوحة التحكم والتأكد من ظهور كافة القوائم (بما في ذلك Dinstar و Security).
-- إجراء مكالمة تجريبية للتأكد من استقرار `MeshRtcSession`.
-- فحص سجلات NGINX للتأكد من استقرار اتصالات الـ WebSocket.
+### التحقق اليدوي
+- فحص ظهور تبويبات الملصقات والاستطلاعات في لوحة التحكم.
+- فحص عمل الـ AppLock عند تشغيل التطبيق.
+- التأكد من قدرة التطبيق على استقبال إشعارات الـ VoIP.

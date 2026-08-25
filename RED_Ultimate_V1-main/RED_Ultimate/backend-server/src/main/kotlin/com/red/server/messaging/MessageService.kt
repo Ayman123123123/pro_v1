@@ -242,7 +242,7 @@ class MessageService(
         // تكرار النمط بصياغة محلية هو ما سمح سابقًا بتباين القبول
         // بين الوحدات (بادئة مقبولة هنا مرفوضة هناك).
         private val RED_ID = Regex(RedIdGenerator.PATTERN)
-        private val TYPES = setOf("TEXT", "RICH_TEXT", "IMAGE", "VIDEO", "AUDIO", "VOICE", "FILE", "SYSTEM", "GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
+        private val TYPES = setOf("TEXT", "RICH_TEXT", "IMAGE", "VIDEO", "AUDIO", "VOICE", "FILE", "STICKER", "POLL", "SYSTEM", "GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
         private val GROUP_TYPES = setOf("GROUP_KEY_DISTRIBUTION", "GROUP_MESSAGE")
     }
 }
