@@ -85,7 +85,7 @@ class DinstarFleetController(
         val result = fleet.probeHost(host, port, scheme)
             ?: return ResponseEntity.ok(mapOf(
                 "reachable" to false,
-                "message" to "No response from gateway"
+                "message" to "لا توجد استجابة get_port_info مصادَقة على $scheme://$host:$port"
             ))
 
         return ResponseEntity.ok(mapOf(
@@ -187,8 +187,6 @@ class DinstarFleetController(
                 "online" to gateways.count { it.healthState == "ONLINE" },
                 "ports" to allPorts.size,
                 "registered" to allPorts.count {
-                    // القيمة الخام من الجهاز قد تكون REGISTER_OK أو
-                    // REGISTERED/Mobile Registered — كلها مسجّل.
                     val s = it["status"]?.toString()?.trim().orEmpty()
                     s.equals("REGISTERED", true) || s.equals("REGISTER_OK", true) ||
                         s.equals("Mobile Registered", true)

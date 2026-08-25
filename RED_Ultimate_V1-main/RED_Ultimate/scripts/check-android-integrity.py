@@ -239,22 +239,54 @@ check(
 )
 
 # 19. Mongo indexes للنماذج الاجتماعية (تحسين وقائي ضد collection scans)
-mongo_docs = (BACKEND / "database/SovereignMongoDocuments.kt").read_text(encoding="utf-8")
-check(
-    "Backend: StoryReaction.storyId و userId مُفهرسان (@Indexed)",
-    bool(_re.search(r'data class StoryReaction\(.*?@Indexed val storyId', mongo_docs, _re.DOTALL)),
-    "StoryReaction بلا فهرس على storyId/userId ⇒ collection scan عند الاستعلام المستقبلي",
+# الأصناف الثلاثة التالية لا تُعرَّف في SovereignMongoDocuments.kt إطلاقًا
+# بل في PostModels.kt وStoryModels.kt، فكانت هذه الفحوص ترسب أبدًا مهما
+# أُضيفت الفهارس — فحصٌ لا يمكن إرضاؤه لا يحرس شيئًا. تُقرأ الآن من
+# ملفات التعريف الفعلية مجتمعةً.
+mongo_docs = "\n".join(
+    (BACKEND / part).read_text(encoding="utf-8")
+    for part in (
+        "database/SovereignMongoDocuments.kt",
+        "social/PostModels.kt",
+        "stories/StoryModels.kt",
+    )
+    if (BACKEND / part).is_file()
 )
-check(
-    "Backend: PostReaction.postId و userId مُفهرسان (@Indexed)",
-    bool(_re.search(r'data class PostReaction\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
-    "PostReaction بلا فهرس على postId/userId ⇒ collection scan",
-)
-check(
-    "Backend: PollVote (Mongo) مُفهرس على postId/userId/optionId",
-    bool(_re.search(r'data class PollVote\(.*?@Indexed val postId', mongo_docs, _re.DOTALL)),
-    "PollVote (Mongo) بلا فهرس ⇒ collection scan",
-)
+def _indexed_fields(source: str, cls: str) -> set:
+    """يُعيد الحقول المُعلَّمة @Indexed داخل تعريف صنف واحد فقط.
+
+    الصياغة السابقة كانت `data class X\\(.*?@Indexed val y` مع DOTALL،
+    وهي تقفز عبر الملف كلّه حتى تجد @Indexed في **صنف لاحق** فتنجح
+    وإن كان الصنف المقصود بلا فهرس البتّة. أي أنها تمرّ على كود معطوب.
+    هنا يُقتطع تعريف الصنف عند قوسه الختامي أولًا، فلا تتسرّب المطابقة.
+    """
+    m = _re.search(r'data class ' + cls + r'\(', source)
+    if not m:
+        return set()
+    i, depth = m.end() - 1, 0
+    for i in range(m.end() - 1, len(source)):
+        if source[i] == '(':
+            depth += 1
+        elif source[i] == ')':
+            depth -= 1
+            if depth == 0:
+                break
+    body = source[m.end():i]
+    return set(_re.findall(r'@Indexed\s+val\s+(\w+)', body))
+
+
+for _cls, _fields in (
+    ("StoryReaction", {"storyId", "userId"}),
+    ("PostReaction", {"postId", "userId"}),
+    ("PollVote", {"postId", "userId", "optionId"}),
+):
+    _found = _indexed_fields(mongo_docs, _cls)
+    _missing = _fields - _found
+    check(
+        f"Backend: {_cls} مُفهرس على {'/'.join(sorted(_fields))}",
+        not _missing,
+        f"{_cls} بلا فهرس على {'/'.join(sorted(_missing))} ⇒ collection scan",
+    )
 
 # ─── 20. مصفوفة Android الحديثة — منع خلط الإصدارات وDSL القديمة ───────
 catalog = tomllib.loads((ROOT / "gradle/libs.versions.toml").read_text(encoding="utf-8"))
@@ -391,7 +423,23 @@ check("RED_SKIP_BUILD_LOGIC: لا مرجع إلى included build الغائب", 
 for task_name in ("androidCheck", "backendCheck", "qualityGate"):
     check(f"Gradle task: {task_name} متاحة", f'tasks.register("{task_name}")' in root_build or f'tasks.register<Exec>("{task_name}")' in root_build, "لا تخفِ بوابات الجودة عند تحسين سرعة assemble")
 
-dashboard_source = (RED_APP / "ui/RedDashboard.kt").read_text(encoding="utf-8")
+# تقسيم الواجهة (UI_SPLIT_2026-08-19) نقل شاشات ومكوّنات من
+# RedDashboard.kt إلى ملفات مستقلة. والفحوص التالية تصف **سلوكًا** لا
+# موضعَ ملف، فقراءتها من RedDashboard وحده جعلتها ترسب على كودٍ سليم
+# لمجرّد أنه انتقل. تُقرأ الآن من ملفات الواجهة مجتمعةً: يبقى الفحص
+# صادقًا إن نُقلت الدالة مرة أخرى، ويرسب فعلًا إن حُذف السلوك.
+_UI_PARTS = [
+    "ui/RedDashboard.kt",
+    "ui/FeedScreens.kt",
+    "ui/MessageContent.kt",
+    "ui/InboxChrome.kt",
+    "ui/ChatHeaderActions.kt",
+]
+dashboard_source = "\n".join(
+    (RED_APP / part).read_text(encoding="utf-8")
+    for part in _UI_PARTS
+    if (RED_APP / part).is_file()
+)
 stories_screen_source = (RED_APP / "ui/StoriesScreen.kt").read_text(encoding="utf-8")
 communities_source = (RED_APP / "features/communities/CommunitiesScreen.kt").read_text(encoding="utf-8")
 explore_source = (RED_APP / "features/explore/RedExploreScreen.kt").read_text(encoding="utf-8")
@@ -402,7 +450,7 @@ check("Dashboard: Communities تستلم TokenStore", "CommunitiesScreen(tokens 
 check("Dashboard: زر الدردشة لا يشير إلى state داخلية", "MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }" in dashboard_source, "showDirectory تخص ChatHubScreen وليست في Dashboard")
 check("Stories: Text وVoice في when المغلقة", all(f"is StoryViewerState.{kind} -> viewer.story" in stories_screen_source for kind in ("Text", "Voice")), "sealed when ناقصة وتمنع التصريف")
 check("Stories: callbacks حقيقية للتفاعل والرد", "onReact: (Story, String) -> Unit" in stories_screen_source and "onReply: (Story, String) -> Unit" in stories_screen_source, "لا تعتمد على ViewModel غير موجود في scope")
-check("VoiceMessage: معلّمة Composable", re.search(r"@Composable\s+private fun VoiceMessage", dashboard_source) is not None, "الدالة تستدعي remember/Text")
+check("VoiceMessage: معلّمة Composable", re.search(r"@Composable\s+(?:private|internal|public)?\s*fun VoiceMessage", dashboard_source) is not None, "الدالة تستدعي remember/Text")
 check("Communities: المغادرة مفعلة", "community.isJoined -> OutlinedButton(onClick = onLeave)" in communities_source, "زر منضم المعطل كان يمنع leave API")
 check("Explore: بيانات API وليست fixtures", "/api/livestream/public" in explore_source and "/api/conference/public" in explore_source and "LiveStreamItem(" not in explore_source, "فعّل الاستكشاف عبر backend")
 check("Call quality: RedQualityManager موصول بـ WebRTC", "RedQualityManager.videoProfile(context)" in webrtc_source and "applyEffectiveCameraState" in webrtc_source, "مدير الجودة كان orphan")

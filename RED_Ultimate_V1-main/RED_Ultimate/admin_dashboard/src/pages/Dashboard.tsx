@@ -103,7 +103,7 @@ export default function Dashboard() {
   };
 
   const userChart: ChartOption = {
-    title: { text: 'المستخدمون النشطون', textStyle: { color: '#00E6A0' } },
+    title: { text: 'المستخدمون النشطون', textStyle: { color: '#14D89B' } },
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
@@ -114,7 +114,7 @@ export default function Dashboard() {
         type: 'line',
         data: rows.map(a => a.totalUsers),
         smooth: true,
-        itemStyle: { color: '#00E6A0' },
+        itemStyle: { color: '#14D89B' },
         areaStyle: { color: 'rgba(0,230,160,0.2)' },
       },
       {
@@ -122,22 +122,22 @@ export default function Dashboard() {
         type: 'line',
         data: rows.map(a => a.newUsers),
         smooth: true,
-        itemStyle: { color: '#35CBE0' },
+        itemStyle: { color: '#4FC3F7' },
       },
     ],
   };
 
   const messageChart: ChartOption = {
-    title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#00E6A0' } },
+    title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#14D89B' } },
     tooltip: { trigger: 'axis' },
     legend: { data: ['رسائل', 'مكالمات', 'رسائل صوتية'], textStyle: { color: '#fff' } },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
     yAxis: { type: 'value' },
     series: [
-      { name: 'رسائل', type: 'bar', data: rows.map(a => a.messagesSent), itemStyle: { color: '#00E6A0' } },
-      { name: 'مكالمات', type: 'bar', data: rows.map(a => a.callsTotal), itemStyle: { color: '#E8B84A' } },
-      { name: 'رسائل صوتية', type: 'line', data: rows.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#35CBE0' } },
+      { name: 'رسائل', type: 'bar', data: rows.map(a => a.messagesSent), itemStyle: { color: '#14D89B' } },
+      { name: 'مكالمات', type: 'bar', data: rows.map(a => a.callsTotal), itemStyle: { color: '#E0A83C' } },
+      { name: 'رسائل صوتية', type: 'line', data: rows.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#4FC3F7' } },
     ],
   };
 
@@ -145,7 +145,7 @@ export default function Dashboard() {
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       {/* Header */}
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <ThunderboltOutlined /> لوحة الإدارة السيادية
         </Title>
         <Text type="secondary">
@@ -153,6 +153,19 @@ export default function Dashboard() {
           {realtime && <Tag color="green" style={{ marginRight: 12 }}>مباشر</Tag>}
         </Text>
       </div>
+
+      {(summary as any)?.partial && (
+        <Alert
+          type="warning"
+          showIcon
+          message="اللوحة تعمل ببيانات جزئية"
+          description={
+            Object.entries(((summary as any).errors || {}) as Record<string, string>)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join(' · ') || 'تعذر جزء من الاستعلامات. أعد تشغيل الخادم بعد التحديث إن استمر الصفر.'
+          }
+        />
+      )}
 
       {/* Critical Alerts */}
       {summary && (summary.recentCriticalAlerts > 0 || summary.degradedComponents > 0) && (
@@ -184,8 +197,8 @@ export default function Dashboard() {
               <Statistic
                 title="إجمالي المستخدمين"
                 value={summary.analytics.totalUsers ?? 0}
-                prefix={<TeamOutlined style={{ color: '#00E6A0' }} />}
-                valueStyle={{ color: '#00E6A0' }}
+                prefix={<TeamOutlined style={{ color: '#14D89B' }} />}
+                valueStyle={{ color: '#14D89B' }}
               />
               <Text type="secondary">+{summary.analytics.newUsers24h ?? 0} آخر 24 ساعة</Text>
             </Card>
@@ -195,15 +208,15 @@ export default function Dashboard() {
               <Statistic
                 title="في انتظار الموافقة"
                 value={summary.analytics.pendingUsers ?? 0}
-                prefix={<UserAddOutlined style={{ color: '#E8B84A' }} />}
-                valueStyle={{ color: '#E8B84A' }}
+                prefix={<UserAddOutlined style={{ color: '#E0A83C' }} />}
+                valueStyle={{ color: '#E0A83C' }}
               />
               {summary.analytics.approvalRate != null && (
                 <Progress
                   percent={Number(summary.analytics.approvalRate.toFixed(1))}
                   size="small"
                   showInfo={false}
-                  strokeColor="#E8B84A"
+                  strokeColor="#E0A83C"
                 />
               )}
             </Card>
@@ -213,8 +226,8 @@ export default function Dashboard() {
               <Statistic
                 title="البلاغات المعلقة"
                 value={Number(summary.pendingReports)}
-                prefix={<AlertOutlined style={{ color: '#FF6B6B' }} />}
-                valueStyle={{ color: '#FF6B6B' }}
+                prefix={<AlertOutlined style={{ color: '#FF5A5F' }} />}
+                valueStyle={{ color: '#FF5A5F' }}
               />
               <Text type="secondary">تحتاج مراجعة</Text>
             </Card>
@@ -224,8 +237,8 @@ export default function Dashboard() {
               <Statistic
                 title="المستخدمون المحظورون"
                 value={summary.analytics.bannedUsers ?? 0}
-                prefix={<WarningOutlined style={{ color: '#FF6B6B' }} />}
-                valueStyle={{ color: '#FF6B6B' }}
+                prefix={<WarningOutlined style={{ color: '#FF5A5F' }} />}
+                valueStyle={{ color: '#FF5A5F' }}
               />
             </Card>
           </Col>
@@ -298,16 +311,16 @@ export default function Dashboard() {
               <Statistic
                 title="التخزين المستخدم"
                 value={formatBytes(rows[rows.length - 1]?.storageUsedBytes ?? 0)}
-                prefix={<DatabaseOutlined style={{ color: '#35CBE0' }} />}
-                valueStyle={{ color: '#35CBE0' }}
+                prefix={<DatabaseOutlined style={{ color: '#4FC3F7' }} />}
+                valueStyle={{ color: '#4FC3F7' }}
               />
             </Col>
             <Col xs={24} md={12}>
               <Statistic
                 title="رصيد DINSTAR المتبقي"
                 value={rows[rows.length - 1]?.dinstarBalanceRemaining ?? 0}
-                prefix={<DollarOutlined style={{ color: '#E8B84A' }} />}
-                valueStyle={{ color: '#E8B84A' }}
+                prefix={<DollarOutlined style={{ color: '#E0A83C' }} />}
+                valueStyle={{ color: '#E0A83C' }}
                 suffix="ريال"
               />
             </Col>

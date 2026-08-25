@@ -28,6 +28,17 @@ class AuthApi(
     suspend fun refresh(token: String): ApiResult<RefreshResponse> =
         post("/api/auth/refresh", json.encodeToString(RefreshRequest(token))) { json.decodeFromString<RefreshResponse>(it) }
 
+    suspend fun logout(request: LogoutRequest): ApiResult<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val http = Request.Builder().url(ServerEndpoint.url() + "/api/auth/logout")
+                .post(json.encodeToString(request).toRequestBody(JSON)).header("Accept", "application/json").build()
+            client.newCall(http).execute().use { response ->
+                if (response.isSuccessful) ApiResult.Success(response.code, Unit)
+                else ApiResult.Error(response.code, "HTTP_${response.code}")
+            }
+        }.getOrElse { ApiResult.Error(null, it.message ?: "NETWORK_ERROR") }
+    }
+
     suspend fun recover(request: PasswordRecoveryRequest): ApiResult<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val http = Request.Builder().url(ServerEndpoint.url() + "/api/auth/recover")

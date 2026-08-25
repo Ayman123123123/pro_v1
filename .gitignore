@@ -19,7 +19,7 @@ RED_Ultimate_V1-main/RED_Ultimate/.gradle_user_home/
 .gradle_user_home/
 pro-backup-before-sync/
 
-# Local-only build/session artifacts (untracked 2026-08-18)
+# Local-only build/session artifacts
 app.jar
 .gradle_home/
 .android_home/
@@ -30,7 +30,25 @@ dinstar_cookies.txt
 
 # External agent scratch/plans
 .kilo/
-[dependencies]
-.gradle_home/
-*.jar
-*.war
+
+# AI Studio export scratch
+aistudio-export/node_modules/
+aistudio-export/dist/
+
+# ─────────────────────────────────────────────────────────────
+# أسرار — لا تُرفع أبداً (JWT/TURN secrets, keystores, .env)
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.template
+**/keystore.properties
+*.jks
+*.keystore
+secrets.properties
+
+# ضجيج تصحيح الأخطاء المحلي
+build_errors*.txt
+logcat.txt
+recovered.txt
+test_results.txt

@@ -1,8 +1,5 @@
 package com.red.sovereign.calls
 
-import android.content.Context
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,24 +19,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CallMade
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.SignalCellular4Bar
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.VideoCameraBack
-import androidx.compose.material.icons.filled.VideoCameraFront
 import androidx.compose.material.icons.filled.VideoCall
 import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,37 +65,76 @@ import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesEmerald
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
-/** مراحل اتصال PSTN المعروضة للمستخدم في شاشة المكالمة */
-enum class ConnectionStage(val label: String, val description: String, val icon: ImageVector, val color: Color) {
-    BRIDGING("Connecting to SIP Server", "Establishing WebSocket SIP connection to Asterisk", Icons.Filled.CloudQueue, AqyalGold),
-    REGISTERING("Registering SIP Account", "Authenticating with SIP credentials", Icons.Filled.VerifiedUser, AqyalGold),
-    INVITING("Placing Call", "Sending SIP INVITE via Asterisk", Icons.Filled.CallMade, AqyalGold),
-    TURN_CONNECTING("Connecting TURN Server", "Establishing media relay via TURN/STUN", Icons.Filled.Router, YounesEmerald),
-    RINGING("Ringing", "Call is ringing on remote side", Icons.Filled.PhoneInTalk, AqyalGold),
-    CONNECTED("Connected", "Media path established - call active", Icons.Filled.Call, YounesEmerald)
+/**
+ * مراحل اتصال PSTN المعروضة للمستخدم أثناء تأسيس المكالمة.
+ *
+ * تجعل المسار مرئيًّا بدل «جارٍ الاتصال» المبهمة: تسجيل SIP، ثم جسر
+ * الوسائط عبر TURN، ثم INVITE عبر Asterisk، ثم الرنين على شبكة GSM.
+ */
+enum class ConnectionStage(
+    val label: String,
+    val description: String,
+    val icon: ImageVector,
+    val color: Color
+) {
+    BRIDGING(
+        "جارٍ الاتصال بخادم SIP",
+        "تأسيس اتصال WebSocket SIP مع Asterisk",
+        Icons.Filled.CloudQueue,
+        AqyalGold
+    ),
+    REGISTERING(
+        "جارٍ تسجيل حساب SIP",
+        "التحقق من بيانات اعتماد SIP",
+        Icons.Filled.VerifiedUser,
+        AqyalGold
+    ),
+    INVITING(
+        "جارٍ إجراء المكالمة",
+        "إرسال SIP INVITE عبر Asterisk",
+        Icons.Filled.CallMade,
+        AqyalGold
+    ),
+    TURN_CONNECTING(
+        "جارٍ الاتصال بخادم TURN",
+        "تأسيس ترحيل الوسائط عبر TURN/STUN",
+        Icons.Filled.Router,
+        YounesEmerald
+    ),
+    RINGING(
+        "يرنّ",
+        "الهاتف يرنّ على الطرف الآخر",
+        Icons.Filled.PhoneInTalk,
+        AqyalGold
+    ),
+    CONNECTED(
+        "متصل",
+        "تأسّس مسار الوسائط — المكالمة نشطة",
+        Icons.Filled.Call,
+        YounesEmerald
+    )
 }
 
 /**
- * Material 3 Expressive PSTN Call Screen
- * Shows clear connection stages: WebSocket SIP → TURN → Asterisk → GSM
+ * شاشة مكالمة PSTN الفاخرة بأسلوب Material 3 Expressive.
+ *
+ * تعرض مراحل الاتصال بوضوح: WebSocket SIP ← TURN ← Asterisk ← GSM،
+ * مع مقاييس الجودة الحيّة، والعدّاد اليومي، ولوحة مفاتيح DTMF.
  */
 @Composable
 fun Material3ExpressivePstnCallScreen(
     status: PstnCallStatus,
+    number: String = "",
     metrics: CallMetrics = CallMetrics(),
-    callerNumber: String? = null,
     onMuteToggle: (Boolean) -> Unit = {},
     onSpeakerToggle: (Boolean) -> Unit = {},
     onKeypadToggle: () -> Unit = {},
     onHoldToggle: (Boolean) -> Unit = {},
     onRecordToggle: (Boolean) -> Unit = {},
     onVideoToggle: (Boolean) -> Unit = {},
+    onDtmfDigit: (String) -> Unit = {},
     onHangup: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
@@ -113,11 +147,9 @@ fun Material3ExpressivePstnCallScreen(
     var dialedDigits by remember { mutableStateOf("") }
     var elapsedMs by remember { mutableLongStateOf(0L) }
     var callStartTime by remember { mutableLongStateOf(0L) }
-    var connectionStage by remember { mutableStateOf(ConnectionStage.BRIDGING) }
-    var animatedProgress by remember { mutableStateOf(0f) }
-    var pulseAnimation by remember { mutableStateOf(1f) }
+    var pulseAnimation by remember { mutableFloatStateOf(1f) }
 
-    // Determine current stage from status
+    // المرحلة الحالية مشتقّة من الحالة الواردة — لا حالة موازية تتفرّع
     val currentStage = when (status) {
         PstnCallStatus.REGISTERING -> ConnectionStage.REGISTERING
         PstnCallStatus.BRIDGING -> ConnectionStage.BRIDGING
@@ -127,26 +159,29 @@ fun Material3ExpressivePstnCallScreen(
         else -> ConnectionStage.BRIDGING
     }
 
-    // Pulse animation for connecting states
-    LaunchedEffect(connectionStage) {
-        if (connectionStage != ConnectionStage.CONNECTED) {
+    // نبض بصري أثناء مراحل التأسيس فقط
+    LaunchedEffect(currentStage) {
+        if (currentStage != ConnectionStage.CONNECTED) {
             while (true) {
                 delay(1000)
                 pulseAnimation = if (pulseAnimation == 1f) 0.7f else 1f
             }
+        } else {
+            pulseAnimation = 1f
         }
     }
 
-    // Call timer
     LaunchedEffect(status) {
         when (status) {
             PstnCallStatus.ACTIVE -> {
                 if (callStartTime == 0L) callStartTime = System.currentTimeMillis()
             }
+
             PstnCallStatus.IDLE, PstnCallStatus.ENDED -> {
                 callStartTime = 0L
                 elapsedMs = 0L
             }
+
             else -> Unit
         }
     }
@@ -173,17 +208,14 @@ fun Material3ExpressivePstnCallScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top bar with connection stage indicator
             ConnectionStageHeader(stage = currentStage, pulseAnimation = pulseAnimation)
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Main content - Avatar + Status + Timer
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Avatar with pulse animation
                 Box(
                     modifier = Modifier
                         .size(120.dp)
@@ -210,7 +242,26 @@ fun Material3ExpressivePstnCallScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Stage label
+                // الرقم المطلوب ومشغّله — أهمّ معلومة في شاشة مكالمة
+                // هاتفية، وكانت غائبة تماماً قبل الوصل.
+                if (number.isNotBlank()) {
+                    Text(
+                        text = number,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        letterSpacing = 1.sp
+                    )
+                    YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
+                        Text(
+                            text = "${op.name} · ${op.technology}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = op.brandColor
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 Text(
                     text = currentStage.label,
                     style = MaterialTheme.typography.headlineSmall,
@@ -218,42 +269,6 @@ fun Material3ExpressivePstnCallScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // رقم الطرف البعيد + شارة المشغل اليمني (أسطوري: هوية فورية)
-                if (!callerNumber.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    val opInfo = remember(callerNumber) {
-                        runCatching { com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(callerNumber) }.getOrNull()
-                    }
-                    Text(
-                        text = callerNumber,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        letterSpacing = 1.sp
-                    )
-                    if (opInfo != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(opInfo.brandColor)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = opInfo.name,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                // Stage description
                 Text(
                     text = currentStage.description,
                     style = MaterialTheme.typography.bodyMedium,
@@ -262,10 +277,9 @@ fun Material3ExpressivePstnCallScreen(
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
 
-                // Call timer when active
                 if (status == PstnCallStatus.ACTIVE) {
                     Text(
-                        text = formatDuration(elapsedMs),
+                        text = formatPstnDuration(elapsedMs),
                         fontSize = 56.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -276,19 +290,16 @@ fun Material3ExpressivePstnCallScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Call quality indicator when active
             if (status == PstnCallStatus.ACTIVE) {
                 CallQualityCard(metrics = metrics)
             }
 
-            // Daily limit progress
             if (metrics.dailyLimit > 0) {
                 DailyLimitCard(metrics = metrics)
             }
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Control buttons
             if (status != PstnCallStatus.IDLE && status != PstnCallStatus.ENDED) {
                 CallControlPanel(
                     isMuted = isMuted,
@@ -304,9 +315,12 @@ fun Material3ExpressivePstnCallScreen(
                     onHoldToggle = { isHeld = it; onHoldToggle(it) },
                     onRecordToggle = { isRecording = it; onRecordToggle(it) },
                     onVideoToggle = { isVideoEnabled = it; onVideoToggle(it) },
-                    onKeypadToggle = { showKeypad = !showKeypad },
-                    onDigitPress = { dialedDigits += it },
-                    onDigitDelete = { if (dialedDigits.isNotEmpty()) dialedDigits = dialedDigits.dropLast(1) },
+                    onKeypadToggle = { showKeypad = !showKeypad; onKeypadToggle() },
+                    onKeypadClose = { showKeypad = false },
+                    onDigitPress = { dialedDigits += it; onDtmfDigit(it) },
+                    onDigitDelete = {
+                        if (dialedDigits.isNotEmpty()) dialedDigits = dialedDigits.dropLast(1)
+                    },
                     onHangup = onHangup
                 )
             } else {
@@ -362,19 +376,20 @@ private fun ConnectionStageHeader(
 private fun CallQualityCard(metrics: CallMetrics) {
     val (quality, qualityColor) = when {
         metrics.jitterMs < 30 && metrics.packetLossPercent < 1f && metrics.roundTripMs < 150 ->
-            "Excellent" to YounesEmerald
+            "ممتازة" to YounesEmerald
+
         metrics.jitterMs < 50 && metrics.packetLossPercent < 3f && metrics.roundTripMs < 300 ->
-            "Good" to AqyalGold
+            "جيدة" to AqyalGold
+
         metrics.jitterMs < 80 && metrics.packetLossPercent < 5f ->
-            "Fair" to Color(0xFFFF9800)
+            "مقبولة" to Color(0xFFFF9800)
+
         else ->
-            "Poor" to Color(0xFFF44336)
+            "ضعيفة" to Color(0xFFF44336)
     }
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = SovereignColors.SurfaceCard
-        ),
+        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -392,17 +407,17 @@ private fun CallQualityCard(metrics: CallMetrics) {
                 tint = qualityColor
             )
             Spacer(modifier = Modifier.width(12.dp))
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Call Quality: $quality",
+                    text = "جودة المكالمة: $quality",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                     color = qualityColor
                 )
                 Text(
-                    text = "Jitter ${"%.0f".format(metrics.jitterMs)}ms  •  Loss ${"%.1f".format(metrics.packetLossPercent)}%  •  RTT ${"%.0f".format(metrics.roundTripMs)}ms",
+                    text = "تذبذب ${"%.0f".format(metrics.jitterMs)}ms  •  " +
+                        "فقد ${"%.1f".format(metrics.packetLossPercent)}%  •  " +
+                        "ذهاب وإياب ${"%.0f".format(metrics.roundTripMs)}ms",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -416,15 +431,15 @@ private fun DailyLimitCard(metrics: CallMetrics) {
     val progress = (metrics.usedToday.toFloat() / metrics.dailyLimit).coerceIn(0f, 1f)
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = SovereignColors.SurfaceCard
-        ),
+        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceCard),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -432,7 +447,7 @@ private fun DailyLimitCard(metrics: CallMetrics) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Daily PSTN Limit",
+                    text = "الحد اليومي للمكالمات الهاتفية",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -444,7 +459,7 @@ private fun DailyLimitCard(metrics: CallMetrics) {
                 )
             }
             LinearProgressIndicator(
-                progress = progress,
+                progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
@@ -472,27 +487,26 @@ private fun CallControlPanel(
     onRecordToggle: (Boolean) -> Unit,
     onVideoToggle: (Boolean) -> Unit,
     onKeypadToggle: () -> Unit,
+    onKeypadClose: () -> Unit,
     onDigitPress: (String) -> Unit,
     onDigitDelete: () -> Unit,
     onHangup: () -> Unit
 ) {
-    // Keypad overlay
     if (showKeypad) {
         KeypadOverlay(
             dialedDigits = dialedDigits,
             onDigitPress = onDigitPress,
             onDigitDelete = onDigitDelete,
-            onClose = { /* handled by parent */ }
+            onClose = onKeypadClose
         )
     }
 
-    // Main control buttons
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Primary row: Mute, Speaker, Hold, Record
+        // الصف الأول: كتم، مكبر، تعليق، تسجيل
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -500,7 +514,7 @@ private fun CallControlPanel(
         ) {
             ExpressiveCallButton(
                 icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-                label = if (isMuted) "Unmute" else "Mute",
+                label = if (isMuted) "إلغاء الكتم" else "كتم",
                 isActive = isMuted,
                 activeColor = Color(0xFFF44336),
                 enabled = status == PstnCallStatus.ACTIVE,
@@ -509,7 +523,7 @@ private fun CallControlPanel(
 
             ExpressiveCallButton(
                 icon = if (isSpeaker) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                label = if (isSpeaker) "Earpiece" else "Speaker",
+                label = if (isSpeaker) "سماعة الأذن" else "مكبر الصوت",
                 isActive = isSpeaker,
                 activeColor = AqyalGold,
                 enabled = status == PstnCallStatus.ACTIVE,
@@ -518,7 +532,7 @@ private fun CallControlPanel(
 
             ExpressiveCallButton(
                 icon = Icons.Filled.Pause,
-                label = if (isHeld) "Resume" else "Hold",
+                label = if (isHeld) "استئناف" else "تعليق",
                 isActive = isHeld,
                 activeColor = Color(0xFFFF9800),
                 enabled = status == PstnCallStatus.ACTIVE,
@@ -527,15 +541,15 @@ private fun CallControlPanel(
 
             ExpressiveCallButton(
                 icon = if (isRecording) Icons.Filled.PlayArrow else Icons.Filled.Mic,
-                label = if (isRecording) "Stop Rec" else "Record",
+                label = if (isRecording) "إيقاف التسجيل" else "تسجيل",
                 isActive = isRecording,
                 activeColor = Color(0xFFF44336),
                 enabled = status == PstnCallStatus.ACTIVE,
                 onClick = { onRecordToggle(!isRecording) }
             )
-            }
+        }
 
-        // Secondary row: Keypad, Video, Hangup
+        // الصف الثاني: لوحة المفاتيح، الفيديو، الإنهاء
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -545,7 +559,7 @@ private fun CallControlPanel(
         ) {
             ExpressiveCallButton(
                 icon = Icons.Filled.Keyboard,
-                label = if (showKeypad) "Hide Keypad" else "Keypad",
+                label = if (showKeypad) "إخفاء اللوحة" else "لوحة المفاتيح",
                 isActive = showKeypad,
                 activeColor = AqyalGold,
                 enabled = true,
@@ -554,17 +568,16 @@ private fun CallControlPanel(
 
             ExpressiveCallButton(
                 icon = if (isVideoEnabled) Icons.Filled.VideocamOff else Icons.Filled.VideoCall,
-                label = if (isVideoEnabled) "Video Off" else "Video",
+                label = if (isVideoEnabled) "إيقاف الفيديو" else "فيديو",
                 isActive = isVideoEnabled,
                 activeColor = YounesEmerald,
                 enabled = status == PstnCallStatus.ACTIVE,
-                onClick = { /* video toggle */ }
+                onClick = { onVideoToggle(!isVideoEnabled) }
             )
 
-            // Hangup button - prominent
             ExpressiveCallButton(
                 icon = Icons.Filled.CallEnd,
-                label = "End Call",
+                label = "إنهاء المكالمة",
                 isActive = true,
                 activeColor = Color(0xFFF44336),
                 isDestructive = true,
@@ -585,15 +598,17 @@ private fun ExpressiveCallButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val bgColor = if (isDestructive) {
-        if (enabled) Color(0xFFF44336) else Color(0xFFF44336).copy(alpha = 0.4f)
-    } else if (isActive) {
-        if (enabled) activeColor else activeColor.copy(alpha = 0.4f)
-    } else {
-        if (enabled) SovereignColors.SurfaceCard else SovereignColors.SurfaceCard.copy(alpha = 0.4f)
+    val bgColor = when {
+        isDestructive -> Color(0xFFF44336).copy(alpha = if (enabled) 1f else 0.4f)
+        isActive -> activeColor.copy(alpha = if (enabled) 1f else 0.4f)
+        else -> SovereignColors.SurfaceCard.copy(alpha = if (enabled) 1f else 0.4f)
     }
 
-    val tintColor = if (isDestructive || isActive) Color.White else MaterialTheme.colorScheme.onSurface
+    val tintColor = if (isDestructive || isActive) {
+        Color.White
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -606,9 +621,7 @@ private fun ExpressiveCallButton(
                 .size(72.dp)
                 .clip(CircleShape)
                 .background(bgColor),
-            colors = IconButtonDefaults.iconButtonColors(
-                contentColor = tintColor
-            )
+            colors = IconButtonDefaults.iconButtonColors(contentColor = tintColor)
         ) {
             Icon(
                 imageVector = icon,
@@ -619,7 +632,8 @@ private fun ExpressiveCallButton(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            color = MaterialTheme.colorScheme.onSurface
+                .copy(alpha = if (enabled) 1f else 0.3f),
             fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
         )
     }
@@ -642,20 +656,18 @@ private fun KeypadOverlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp)
-                .padding(horizontal = 16.dp, vertical = 24.dp),
+                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .padding(bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Display dialed digits
             Text(
-                text = if (dialedDigits.isEmpty()) "Enter DTMF" else dialedDigits,
+                text = dialedDigits.ifEmpty { "أدخل نغمات DTMF" },
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
-            // Keypad
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -665,22 +677,22 @@ private fun KeypadOverlay(
                     listOf("4", "5", "6"),
                     listOf("7", "8", "9"),
                     listOf("*", "0", "#"),
-                    listOf("⌫")
+                    listOf(DELETE_KEY)
                 ).forEach { row ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         row.forEach { key ->
-                            val isDelete = key == "⌫"
+                            val isDelete = key == DELETE_KEY
                             Text(
-                                text = if (isDelete) "" else key,
+                                text = key,
                                 modifier = Modifier
                                     .size(if (isDelete) 72.dp else 64.dp)
-                                    .fillMaxWidth()
                                     .clip(CircleShape)
                                     .background(
-                                        if (isDelete) Color(0xFFF44336).copy(alpha = 0.8f)
-                                        else Color.White.copy(alpha = 0.15f)
+                                        if (isDelete) {
+                                            Color(0xFFF44336).copy(alpha = 0.8f)
+                                        } else {
+                                            Color.White.copy(alpha = 0.15f)
+                                        }
                                     )
                                     .clickable {
                                         if (isDelete) onDigitDelete() else onDigitPress(key)
@@ -696,7 +708,6 @@ private fun KeypadOverlay(
                 }
             }
 
-            // Close button
             IconButton(
                 onClick = onClose,
                 modifier = Modifier
@@ -707,7 +718,7 @@ private fun KeypadOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
-                    contentDescription = "Close Keypad",
+                    contentDescription = "إغلاق لوحة المفاتيح",
                     modifier = Modifier.size(24.dp),
                     tint = Color.White
                 )
@@ -716,9 +727,5 @@ private fun KeypadOverlay(
     }
 }
 
-private fun formatDuration(millis: Long): String {
-    val totalSeconds = (millis / 1000).toInt()
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%02d:%02d".format(minutes, seconds)
-}
+/** مفتاح المسح في لوحة DTMF. */
+private const val DELETE_KEY = "\u232B"

@@ -74,6 +74,8 @@ class YounesApplication : Application() {
         } catch (_: Exception) {}
         // Ù‚Ù†ÙˆØ§Øª Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª â€” Ù…Ø·Ù„ÙˆØ¨Ø© Ù„Ù€ RedConnectionService Ùˆ YounesCallService
         createNotificationChannels()
+        // تنظيف دوري للقصص المنتهية — بدونه تتراكم صفوفها في القاعدة بلا حد
+        com.red.sovereign.core.workers.StoryCleanupWorker.enqueue(this)
     }
 
     private fun createNotificationChannels() {

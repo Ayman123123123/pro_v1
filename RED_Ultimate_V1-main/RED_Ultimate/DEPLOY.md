@@ -17,7 +17,7 @@ docker-compose up -d --build
 - **Dumin Monitor:** Check SIM status in the Admin Panel.
 
 ## 4. App Distribution
-- Build the APK from the `app-android` folder.
+- Build the APK from the `red-app` folder (Gradle module `:app`).
 - Distribute to your users via the local server's internal link.
 
 ## 5. Security

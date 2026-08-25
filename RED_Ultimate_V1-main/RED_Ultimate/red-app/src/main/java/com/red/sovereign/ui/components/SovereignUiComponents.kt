@@ -1,26 +1,45 @@
 package com.red.sovereign.ui.components
 
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -37,11 +56,16 @@ import com.red.sovereign.ui.theme.SovereignGradients
 import kotlin.math.sin
 
 /**
- * 💎 YOUNES Sovereign UI Components — Master Library for Luxury Dark & Glass Design
+ * مكتبة مكوّنات يونس السيادية — الأساس الموحّد للتصميم الداكن الزجاجي الفاخر.
+ *
+ * كل مكوّن هنا عديم الحالة (stateless) ويأخذ ألوانه من `SovereignColors`
+ * حتى يبقى تغيير الهوية البصرية في ملف واحد.
  */
 
 /**
- * بطاقة زجاجية فاخرة بتأثير Glassmorphism مع حواف متوهجة وظلال عميقة.
+ * بطاقة زجاجية فاخرة بتأثير Glassmorphism مع حواف متدرّجة وظلال عميقة.
+ *
+ * تتقلّص قليلًا عند الضغط لإعطاء إحساس لمسي، وذلك فقط عند تمرير [onClick].
  */
 @Composable
 fun SovereignGlassCard(
@@ -72,7 +96,9 @@ fun SovereignGlassCard(
                         indication = null,
                         onClick = onClick
                     )
-                } else Modifier
+                } else {
+                    Modifier
+                }
             ),
         color = backgroundColor,
         shadowElevation = 8.dp,
@@ -86,7 +112,7 @@ fun SovereignGlassCard(
 }
 
 /**
- * زر نيون سيادي تفاعلي مع ارتداد انسيابي وتدرج لوني براق.
+ * زر نيون سيادي تفاعلي بارتداد انسيابي وتدرّج لوني براق.
  */
 @Composable
 fun SovereignNeonButton(
@@ -112,8 +138,18 @@ fun SovereignNeonButton(
             .height(height)
             .scale(scale)
             .clip(RoundedCornerShape(height / 2))
-            .background(if (enabled) gradient else Brush.linearGradient(listOf(Color(0xFF2A374A), Color(0xFF1E293B))))
-            .border(1.dp, Color.White.copy(alpha = if (enabled) 0.25f else 0.05f), RoundedCornerShape(height / 2))
+            .background(
+                if (enabled) {
+                    gradient
+                } else {
+                    Brush.linearGradient(listOf(Color(0xFF2A374A), Color(0xFF1E293B)))
+                }
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = if (enabled) 0.25f else 0.05f),
+                shape = RoundedCornerShape(height / 2)
+            )
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -147,7 +183,7 @@ fun SovereignNeonButton(
 }
 
 /**
- * شارة حالة حية بنابض متوهج ومتحرك (Live Pulsing Badge).
+ * شارة حالة حيّة بنبض متوهّج متحرّك (Live Pulsing Badge).
  */
 @Composable
 fun SovereignStatusBadge(
@@ -186,7 +222,12 @@ fun SovereignStatusBadge(
             )
             Spacer(Modifier.width(6.dp))
             if (icon != null) {
-                Icon(icon, null, tint = textColor, modifier = Modifier.size(12.dp))
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(12.dp)
+                )
                 Spacer(Modifier.width(4.dp))
             }
             Text(
@@ -200,7 +241,8 @@ fun SovereignStatusBadge(
 }
 
 /**
- * محاكي وموجات صوتية حية (Soundwave Visualizer) لعرض التحدث في المكالمات والـ PTT.
+ * محاكي موجات صوتية حيّة (Soundwave Visualizer) لعرض التحدّث في المكالمات
+ * والرسائل الصوتية وزر الضغط للتحدّث (PTT).
  */
 @Composable
 fun SovereignWaveVisualizer(
@@ -230,7 +272,9 @@ fun SovereignWaveVisualizer(
             val normalizedHeight = if (isSpeaking) {
                 val wave = sin(phase + (i.toFloat() * 0.5f))
                 0.25f + (0.75f * ((wave + 1f) / 2f))
-            } else 0.15f
+            } else {
+                0.15f
+            }
 
             val currentHeight = size.height * normalizedHeight
             val left = i * (barWidth + gap)
@@ -247,7 +291,8 @@ fun SovereignWaveVisualizer(
 }
 
 /**
- * إطار صورة شخصية (Avatar) محاط بحلقات التشفير السيادي E2EE وحالة الاتصال.
+ * إطار صورة شخصية (Avatar) محاط بحلقة ذهبية، مع شارة التشفير التام E2EE
+ * أو مؤشّر الاتصال المباشر.
  */
 @Composable
 fun SovereignAvatarRing(
@@ -262,28 +307,24 @@ fun SovereignAvatarRing(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        // الحلقة الخارجية المتوهجة
+        // الحلقة الخارجية المتوهّجة مع الحرف الأول من الاسم
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
                 .border(2.dp, ringColor, CircleShape)
-                .background(SovereignColors.SurfaceCard)
+                .background(SovereignColors.SurfaceCard),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = initial.take(1),
-                    color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = (size.value * 0.38f).sp
-                )
-            }
+            Text(
+                text = initial.take(1),
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                fontSize = (size.value * 0.38f).sp
+            )
         }
 
-        // شارة التشفير أو الحالة النشطة
+        // شارة التشفير، وإلا مؤشّر الحالة النشطة
         if (isEncrypted) {
             Box(
                 modifier = Modifier
@@ -296,7 +337,7 @@ fun SovereignAvatarRing(
             ) {
                 Icon(
                     imageVector = Icons.Default.Lock,
-                    contentDescription = "مشفر",
+                    contentDescription = "مشفَّر",
                     tint = Color.Black,
                     modifier = Modifier.size(9.dp)
                 )
@@ -315,25 +356,36 @@ fun SovereignAvatarRing(
 }
 
 /**
- * شارة المشغل اليمني الذكية (Sabafon, Yemen Mobile, YOU, Y-Telecom).
+ * شارة المشغّل اليمني الذكية (سبأفون، يمن موبايل، يو، واي).
+ *
+ * البادئات مأخوذة من [YemenOperator] وهي المصدر الوحيد للحقيقة؛ لا تُكتب
+ * الأرقام يدويًا هنا حتى لا يتكرّر خطأ الجداول المتوازية.
  */
 @Composable
 fun SovereignOperatorBadge(
     operator: YemenOperator,
     modifier: Modifier = Modifier
 ) {
-    val (bgGradient, label) = when (operator) {
-        YemenOperator.SABAFON -> SovereignGradients.danger to "سبأفون 71"
-        YemenOperator.YEMEN_MOBILE -> SovereignGradients.emerald to "يمن موبايل 77/78"
-        YemenOperator.YOU -> SovereignGradients.gold to "يو 73"
-        YemenOperator.Y_TELECOM -> SovereignGradients.cyan to "واي 70"
-        YemenOperator.UNKNOWN -> Brush.linearGradient(listOf(Color(0xFF475569), Color(0xFF334155))) to "هاتف محلي"
+    val gradient = when (operator) {
+        YemenOperator.SABAFON -> SovereignGradients.danger
+        YemenOperator.YEMEN_MOBILE -> SovereignGradients.emerald
+        YemenOperator.YOU -> SovereignGradients.gold
+        YemenOperator.Y_TELECOM -> SovereignGradients.cyan
+        YemenOperator.UNKNOWN -> Brush.linearGradient(
+            listOf(Color(0xFF475569), Color(0xFF334155))
+        )
+    }
+
+    val label = if (operator == YemenOperator.UNKNOWN) {
+        operator.arabicName
+    } else {
+        "${operator.arabicName} ${operator.prefixes.sorted().joinToString("/")}"
     }
 
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(bgGradient),
+            .background(gradient),
         color = Color.Transparent
     ) {
         Text(

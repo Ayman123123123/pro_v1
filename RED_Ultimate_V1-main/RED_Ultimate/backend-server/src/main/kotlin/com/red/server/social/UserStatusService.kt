@@ -4,6 +4,7 @@ import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -21,7 +22,8 @@ import java.util.concurrent.TimeUnit
 @Service
 class UserStatusService(
     private val redis: RedisTemplate<String, String>,
-    private val users: UserAccountRepository
+    private val users: UserAccountRepository,
+    private val jdbc: JdbcTemplate
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -124,48 +126,80 @@ class UserStatusService(
     // ─── الخصوصية ───
 
     fun getPrivacySettings(userId: String): PrivacySettingsResponse {
-        val key = PRIVACY_PREFIX + (resolveAccount(userId)?.redId ?: userId)
-        val data = redis.opsForHash<String, String>().entries(key)
-
-        return PrivacySettingsResponse(
-            lastSeen = data["lastSeen"] ?: "EVERYONE",
-            onlineStatus = data["onlineStatus"] ?: "EVERYONE",
-            profilePhoto = data["profilePhoto"] ?: "EVERYONE",
-            about = data["about"] ?: "EVERYONE",
-            status = data["status"] ?: "CONTACTS",
-            readReceipts = data["readReceipts"] ?: "EVERYONE",
-            calls = data["calls"] ?: "CONTACTS",
-            groups = data["groups"] ?: "EVERYONE",
-            liveLocation = data["liveLocation"] ?: "NOBODY"
-        )
+        val account = resolveAccount(userId) ?: return defaultPrivacySettings()
+        return jdbc.query(
+            """SELECT last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location
+               FROM user_privacy_settings WHERE user_id = ?""",
+            { rs, _ ->
+                PrivacySettingsResponse(
+                    lastSeen = rs.getString("last_seen"),
+                    onlineStatus = rs.getString("online_status"),
+                    profilePhoto = rs.getString("profile_photo"),
+                    about = rs.getString("about"),
+                    status = rs.getString("status"),
+                    readReceipts = rs.getString("read_receipts"),
+                    calls = rs.getString("calls"),
+                    groups = rs.getString("groups_add"),
+                    liveLocation = rs.getString("live_location")
+                )
+            },
+            account.id
+        ).firstOrNull() ?: defaultPrivacySettings()
     }
 
     fun updatePrivacySettings(userId: String, request: PrivacySettingsRequest): PrivacySettingsResponse {
-        val key = PRIVACY_PREFIX + (resolveAccount(userId)?.redId ?: userId)
+        val account = resolveAccount(userId) ?: throw NoSuchElementException("User not found")
+        val validScopes = setOf("EVERYONE", "CONTACTS", "CONTACTS_EXCEPT", "ONLY_SHARE_WITH", "NOBODY")
+        fun validated(field: String, requested: String?, current: String): String = requested?.also {
+            require(it in validScopes) { "قيمة $field غير صالحة: $it (المسموح: $validScopes)" }
+        } ?: current
+
+        val current = getPrivacySettings(account.redId)
+        val updated = PrivacySettingsResponse(
+            lastSeen = validated("lastSeen", request.lastSeen, current.lastSeen),
+            onlineStatus = validated("onlineStatus", request.onlineStatus, current.onlineStatus),
+            profilePhoto = validated("profilePhoto", request.profilePhoto, current.profilePhoto),
+            about = validated("about", request.about, current.about),
+            status = validated("status", request.status, current.status),
+            readReceipts = validated("readReceipts", request.readReceipts, current.readReceipts),
+            calls = validated("calls", request.calls, current.calls),
+            groups = validated("groups", request.groups, current.groups),
+            liveLocation = validated("liveLocation", request.liveLocation, current.liveLocation)
+        )
+
+        jdbc.update(
+            """INSERT INTO user_privacy_settings
+               (user_id, last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT (user_id) DO UPDATE SET
+                 last_seen = EXCLUDED.last_seen, online_status = EXCLUDED.online_status,
+                 profile_photo = EXCLUDED.profile_photo, about = EXCLUDED.about, status = EXCLUDED.status,
+                 read_receipts = EXCLUDED.read_receipts, calls = EXCLUDED.calls, groups_add = EXCLUDED.groups_add,
+                 live_location = EXCLUDED.live_location""",
+            account.id, updated.lastSeen, updated.onlineStatus, updated.profilePhoto, updated.about, updated.status,
+            updated.readReceipts, updated.calls, updated.groups, updated.liveLocation
+        )
+
+        val key = PRIVACY_PREFIX + account.redId
         val ops = redis.opsForHash<String, String>()
+        ops.put(key, "lastSeen", updated.lastSeen)
+        ops.put(key, "onlineStatus", updated.onlineStatus)
+        ops.put(key, "profilePhoto", updated.profilePhoto)
+        ops.put(key, "about", updated.about)
+        ops.put(key, "status", updated.status)
+        ops.put(key, "readReceipts", updated.readReceipts)
+        ops.put(key, "calls", updated.calls)
+        ops.put(key, "groups", updated.groups)
+        ops.put(key, "liveLocation", updated.liveLocation)
 
-        // validation for every value
-        val validScopes = setOf("EVERYONE", "CONTACTS", "NOBODY")
-        fun putIfValid(field: String, value: String?) {
-            value?.let {
-                require(it in validScopes) { "قيمة $field غير صالحة: $it (المسموح: $validScopes)" }
-                ops.put(key, field, it)
-            }
-        }
-
-        putIfValid("lastSeen", request.lastSeen)
-        putIfValid("onlineStatus", request.onlineStatus)
-        putIfValid("profilePhoto", request.profilePhoto)
-        putIfValid("about", request.about)
-        putIfValid("status", request.status)
-        putIfValid("readReceipts", request.readReceipts)
-        putIfValid("calls", request.calls)
-        putIfValid("groups", request.groups)
-        putIfValid("liveLocation", request.liveLocation)
-
-        log.info("Privacy settings updated for {}", userId)
-        return getPrivacySettings(userId)
+        log.info("Privacy settings updated for {}", account.redId)
+        return updated
     }
+
+    private fun defaultPrivacySettings() = PrivacySettingsResponse(
+        lastSeen = "EVERYONE", onlineStatus = "EVERYONE", profilePhoto = "EVERYONE", about = "EVERYONE",
+        status = "CONTACTS", readReceipts = "EVERYONE", calls = "CONTACTS", groups = "EVERYONE", liveLocation = "NOBODY"
+    )
 
     // ─── جهات الاتصال المتصلة ───
 

@@ -18,9 +18,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/pstn")
 class PstnCallController(
-    private val calls: PstnCallService,
-    private val loadBalancer: DinstarLoadBalancer,
-    private val pstnManager: PstnManager
+    private val calls: PstnCallService
 ) {
     @PostMapping("/calls")
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<Any> {
@@ -41,35 +39,17 @@ class PstnCallController(
     }
 
     /**
-     * إنهاء مكالمة — يُحرّر المنفذ في Load Balancer.
+     * إنهاء مكالمة هاتف يمني — لا يقبل منفذًا من العميل.
      *
-     * ⚠️ الأمان: لا يُحرَّر إلا المنفذ المرتبط فعلياً بمكالمة المستخدم نفسه
-     * (يُربط في لحظة النداء). منعاً لأي مستخدم من تحرير منافذ الغير أو
-     * إعادة ضبط عدّادات الاستخدام عبر الأسطول.
-     * يتم التحقق من callId لمنع التلاعب.
+     * كان المنفذ يُقرأ من جسم الطلب — أي يختاره العميل — ويُحرَّر بلا
+     * تحديد بوابة، فيُحرِّر منفذًا يحمل الرقم نفسه في بوابة أخرى؛ ولم
+     * يكن هناك تحقق من الهوية أصلًا. الآن يحتفظ الخادم بالبوابة
+     * والمنفذ اللذين خصصهما، وتتحقق الخدمة من ملكية سجل المكالمة قبل
+     * التحرير، وتُنهي قيد المتتبِّع، وتُسقِط ساق GSM عبر AMI في الوقت نفسه.
      */
     @PostMapping("/calls/{callId}/hangup")
-    fun hangup(@PathVariable callId: String, @RequestBody body: Map<String, Int>?, authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        val userId = UUID.fromString(authentication.name)
-        val bound = calls.resolveActiveCall(userId)
-            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "NO_ACTIVE_PSTN_CALL"))
-
-        if (bound.first != callId) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "CALL_ID_MISMATCH"))
-        }
-
-        val requestedPort = body?.get("port") ?: -1
-        if (requestedPort >= 0 && requestedPort != bound.second) {
-            // منفذ مقدَّم لا يخصّ هذه المكالمة — نرفض بدل تحرير منفذ اعتباطي.
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PORT_MISMATCH"))
-        }
-
-        loadBalancer.releasePort(bound.third, bound.second)
-        // Actually hang up the GSM leg via AMI — without this the GSM side keeps ringing
-        runCatching { pstnManager.hangupCall(bound.first) }
-        calls.clearActive(userId)
-        return ResponseEntity.ok(mapOf("status" to "HUNG_UP", "callId" to callId, "port" to bound.second))
-    }
+    fun hangup(@PathVariable callId: String, authentication: Authentication): ResponseEntity<PstnHangupResponse> =
+        ResponseEntity.ok(calls.hangup(UUID.fromString(authentication.name), callId))
 
     /**
      * حالة المكالمات النشطة عبر PSTN للمستخدم الحالي.

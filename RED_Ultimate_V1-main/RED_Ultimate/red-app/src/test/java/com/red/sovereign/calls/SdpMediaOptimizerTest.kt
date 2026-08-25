@@ -36,8 +36,10 @@ class SdpMediaOptimizerTest {
 
     @Test fun `conference prefers VP9 on the video m-line`() {
         val sdp = SdpMediaOptimizer.optimize(sample, CallMediaKind.CONFERENCE)
-        assertTrue(sdp.contains("m=video 9 UDP/TLS/RTP/SAVPF 96 98").not())
-        assertTrue(Regex("m=video 9 UDP/TLS/RTP/SAVPF 100 96").containsMatchIn(sdp.replace("\r", "")))
+        assertTrue(
+            Regex("m=video 9 UDP/TLS/RTP/SAVPF 100 96 98")
+                .containsMatchIn(sdp.replace("\r", "")),
+        )
     }
 
     @Test fun `one to one video prefers H264`() {

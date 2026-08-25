@@ -55,13 +55,21 @@ class LocalRepository(context: Context) {
         }
     }
     fun getActiveConversations(): Flow<List<ConversationEntity>> = dao.getActiveConversations()
+    fun getArchivedConversations(): Flow<List<ConversationEntity>> = dao.getArchivedConversations()
+    fun getAllConversations(): Flow<List<ConversationEntity>> = dao.getAllConversations()
     suspend fun getConversation(id: String) = dao.getConversation(id)
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, pinned)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
     suspend fun setMutedUntil(id: String, until: Long) = dao.setMutedUntil(id, until)
+    suspend fun clearUnread(id: String) = dao.clearUnread(id)
+    suspend fun setUnreadCount(id: String, count: Int) = dao.setUnreadCount(id, count.coerceAtLeast(0))
 
     // --- Contacts ---
     suspend fun saveContacts(contacts: List<ContactEntity>) = dao.insertContacts(contacts)
+    suspend fun replaceContacts(contacts: List<ContactEntity>) {
+        dao.clearContacts()
+        if (contacts.isNotEmpty()) dao.insertContacts(contacts)
+    }
     fun getFriends(): Flow<List<ContactEntity>> = dao.getFriends()
 
     // --- Groups ---
@@ -85,11 +93,23 @@ class LocalRepository(context: Context) {
     suspend fun deleteDraft(convId: String) = dao.deleteDraft(convId)
 
     // --- Search ---
+    /**
+     * بحث احتياطي داخل محادثة. المسار المفضَّل هو [FtsSearchManager]
+     * لأنه مفهرس ويطبّع الحركات؛ هذا مسحٌ كامل للجدول.
+     *
+     * `%` و`_` محرفا بدل في `LIKE`، فلو مرّا كما هما لطابق بحثُ
+     * المستخدم عن «%» **كلَّ** رسائل المحادثة بدل أن يجد لا شيء
+     * (مقيس). لذا يُهرَّبان مع `\` نفسها — والترتيب مقصود: تهريب
+     * الشرطة المائلة **أولًا** وإلا ضوعف تهريبُ ما بعدها.
+     */
     suspend fun search(convId: String, query: String): List<LocalHistoryEntity> {
-        if (query.isBlank()) return emptyList()
-        // searchMessages يبحث في local_history (النص المفكوك المخزن محليًا بعد فك التشفير).
-        // في بيئة إنتاج، يُضاف فهرس FTS منفصل للنص المفكوك.
-        return dao.searchMessages(convId, "%${query.trim()}%")
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return emptyList()
+        val escaped = trimmed
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        return dao.searchMessages(convId, "%$escaped%")
     }
 
     // --- Delete ---

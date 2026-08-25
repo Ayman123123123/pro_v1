@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Card, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Select, Space, Table, Tag, Typography, message } from 'antd';
 import { apiFetch } from '../../api';
+
+type ReportStatus = 'OPEN' | 'REVIEWING' | 'RESOLVED' | 'DISMISSED';
 
 type Report = {
   id: string;
@@ -16,12 +18,13 @@ export default function ModerationTab() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState<ReportStatus>('OPEN');
 
-  const load = async () => {
+  const load = async (nextStatus: ReportStatus = status) => {
     setLoading(true);
     setError('');
     try {
-      const r = await apiFetch('/api/admin/moderation/reports?status=OPEN');
+      const r = await apiFetch(`/api/admin/moderation/reports?status=${nextStatus}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const body = await r.json();
       setReports(Array.isArray(body) ? body : []);
@@ -33,20 +36,39 @@ export default function ModerationTab() {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(status); }, [status]);
 
-  const resolve = async (id: string, status: 'RESOLVED' | 'DISMISSED') => {
-    const r = await apiFetch(`/api/admin/moderation/reports/${id}?status=${status}`, { method: 'PATCH' });
+  const updateStatus = async (id: string, nextStatus: Exclude<ReportStatus, 'OPEN'>) => {
+    const r = await apiFetch(`/api/admin/moderation/reports/${id}?status=${nextStatus}`, { method: 'PATCH' });
     if (!r.ok) {
       message.error(`HTTP ${r.status}`);
       return;
     }
-    message.success(status === 'RESOLVED' ? 'تمت معالجة البلاغ' : 'تم رفض البلاغ');
+    const success = nextStatus === 'REVIEWING' ? 'نُقل البلاغ إلى المراجعة' : nextStatus === 'RESOLVED' ? 'تمت معالجة البلاغ' : 'تم رفض البلاغ';
+    message.success(success);
     void load();
   };
 
   return (
-    <Card title="الثقة والسلامة" extra={<Button onClick={load} loading={loading}>تحديث</Button>}>
+    <Card
+      title="الثقة والسلامة"
+      extra={
+        <Space>
+          <Select<ReportStatus>
+            value={status}
+            onChange={setStatus}
+            style={{ minWidth: 150 }}
+            options={[
+              { value: 'OPEN', label: 'مفتوحة' },
+              { value: 'REVIEWING', label: 'تحت المراجعة' },
+              { value: 'RESOLVED', label: 'تمت المعالجة' },
+              { value: 'DISMISSED', label: 'مرفوضة' },
+            ]}
+          />
+          <Button onClick={() => void load()} loading={loading}>تحديث</Button>
+        </Space>
+      }
+    >
       <Typography.Paragraph type="secondary">
         بلاغات المستخدمين الحقيقية؛ لا تُنفذ عقوبة تلقائية دون مراجعة مسؤول.
       </Typography.Paragraph>
@@ -66,8 +88,9 @@ export default function ModerationTab() {
             title: 'الإجراء',
             render: (_: unknown, r: Report) => (
               <Space>
-                <Button type="primary" onClick={() => resolve(r.id, 'RESOLVED')}>تمت المعالجة</Button>
-                <Button onClick={() => resolve(r.id, 'DISMISSED')}>رفض البلاغ</Button>
+                {r.status === 'OPEN' && <Button onClick={() => updateStatus(r.id, 'REVIEWING')}>بدء المراجعة</Button>}
+                {(r.status === 'OPEN' || r.status === 'REVIEWING') && <Button type="primary" onClick={() => updateStatus(r.id, 'RESOLVED')}>تمت المعالجة</Button>}
+                {(r.status === 'OPEN' || r.status === 'REVIEWING') && <Button danger onClick={() => updateStatus(r.id, 'DISMISSED')}>رفض البلاغ</Button>}
               </Space>
             ),
           },

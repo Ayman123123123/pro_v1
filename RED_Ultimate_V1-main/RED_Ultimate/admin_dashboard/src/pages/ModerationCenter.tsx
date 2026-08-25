@@ -8,7 +8,7 @@ import ModerationTab from './tabs/ModerationTab';
 export default function ModerationCenter() {
   return (
     <div>
-      <Typography.Title level={2} style={{color:'#00E6A0', margin:0}}><SafetyCertificateOutlined /> الإشراف السريع — موحد</Typography.Title>
+      <Typography.Title level={2} style={{color:'#14D89B', margin:0}}><SafetyCertificateOutlined /> الإشراف السريع — موحد</Typography.Title>
       <Typography.Text type="secondary">بلاغات مفتوحة — مدموج من ModerationTab القديمة — الآن صفحة مستقلة بالشكل الجديد — بيانات حية من /api/admin/moderation/reports?status=OPEN</Typography.Text>
       <Alert type="info" showIcon style={{margin:'16px 0'}} message="البلاغات الحقيقية فقط — لا عقوبة تلقائية دون مراجعة — الصفحة المتقدمة: مراقبة المحتوى (Reports)" />
       <Card style={{marginTop:16}}>

@@ -12,10 +12,17 @@ import java.util.UUID
 
 // ━━━━━━━━━━━━━━━━ Polls ━━━━━━━━━━━━━━━━
 interface PollRepository : JpaRepository<Poll, UUID> {
-    fun findByCreatorIdOrderByCreatedAtDesc(creatorId: UUID, pageable: Pageable): Page<Poll>
-    fun findByStatusOrderByCreatedAtDesc(status: String, pageable: Pageable): Page<Poll>
-    fun findByTargetGroupIdAndStatusOrderByCreatedAtDesc(targetGroupId: UUID, status: String, pageable: Pageable): Page<Poll>
-    fun findByTargetUserIdOrderByCreatedAtDesc(targetUserId: UUID, pageable: Pageable): Page<Poll>
+    @Query("SELECT p FROM Poll p WHERE p.creatorId = :creatorId ORDER BY p.createdAt DESC")
+    fun findByCreatorIdOrderByCreatedAtDesc(@Param("creatorId") creatorId: UUID, pageable: Pageable): Page<Poll>
+
+    @Query("SELECT p FROM Poll p WHERE p.status = :status ORDER BY p.createdAt DESC")
+    fun findByStatusOrderByCreatedAtDesc(@Param("status") status: String, pageable: Pageable): Page<Poll>
+
+    @Query("SELECT p FROM Poll p WHERE p.targetGroupId = :targetGroupId AND p.status = :status ORDER BY p.createdAt DESC")
+    fun findByTargetGroupIdAndStatusOrderByCreatedAtDesc(@Param("targetGroupId") targetGroupId: UUID, @Param("status") status: String, pageable: Pageable): Page<Poll>
+
+    @Query("SELECT p FROM Poll p WHERE p.targetUserId = :targetUserId ORDER BY p.createdAt DESC")
+    fun findByTargetUserIdOrderByCreatedAtDesc(@Param("targetUserId") targetUserId: UUID, pageable: Pageable): Page<Poll>
 
     @Query("SELECT p FROM Poll p WHERE p.status = 'ACTIVE' AND p.endsAt > :now ORDER BY p.createdAt DESC")
     fun findActivePolls(@Param("now") now: Instant): List<Poll>

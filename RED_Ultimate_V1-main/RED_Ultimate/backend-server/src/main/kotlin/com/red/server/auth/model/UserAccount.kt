@@ -35,10 +35,10 @@ class UserAccount(
     @Column(nullable = false, length = 20)
     var role: AccountRole = AccountRole.USER,
 
-    @Column(name = "created_at", nullable = false)
+    @field:Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
 
-    @Column(name = "updated_at", nullable = false)
+    @field:Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now(),
 
     @Column(name = "approved_at")

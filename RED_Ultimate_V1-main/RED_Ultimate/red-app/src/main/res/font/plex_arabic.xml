@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  عائلة الخط الرسمية — IBM Plex Sans Arabic (SIL OFL 1.1).
+
+  مضمَّنة في الحزمة لا مجلوبة من Google Fonts عبر الشبكة: المزوّد
+  يتطلب خدمات Google Play ونفاذًا إلى الإنترنت، وعند تعذّر أيهما —
+  وهو الغالب على شبكات اليمن — يرتدّ النص إلى خط النظام الافتراضي
+  فتنهار الهوية البصرية وتختلف مقاسات الأسطر بين جهاز وآخر.
+
+  ولماذا عائلة واحدة ثنائية النص بدل خطّين: واجهات هذا التطبيق تخلط
+  العربية بالأرقام اللاتينية في كل شاشة تقريبًا (معرّف RED، أرقام
+  الهواتف، مدد المكالمات). خلط خط عربي بخط لاتيني مستقل يُظهر
+  اختلافًا في ارتفاع السن ووزن الحروف داخل السطر الواحد. عائلة
+  IBM Plex ثنائية النص مصمَّمة لتتناسب حروفها اللاتينية والعربية.
+-->
+<font-family xmlns:app="http://schemas.android.com/apk/res-auto">
+    <font
+        app:font="@font/plex_arabic_regular"
+        app:fontStyle="normal"
+        app:fontWeight="400" />
+    <font
+        app:font="@font/plex_arabic_medium"
+        app:fontStyle="normal"
+        app:fontWeight="500" />
+    <font
+        app:font="@font/plex_arabic_semibold"
+        app:fontStyle="normal"
+        app:fontWeight="600" />
+    <font
+        app:font="@font/plex_arabic_bold"
+        app:fontStyle="normal"
+        app:fontWeight="700" />
+</font-family>

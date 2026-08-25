@@ -247,7 +247,7 @@ export default function Reports() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#00E6A0', margin: 0 }}>
+        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
           <AlertOutlined /> مراقبة المحتوى
         </Title>
         <Text type="secondary">مراجعة البلاغات واتخاذ الإجراءات المناسبة</Text>
@@ -261,7 +261,7 @@ export default function Reports() {
               title="معلقة"
               value={stats.pending}
               prefix={<ExclamationCircleOutlined />}
-              valueStyle={{ color: '#E8B84A' }}
+              valueStyle={{ color: '#E0A83C' }}
             />
           </Card>
         </Col>
@@ -291,7 +291,7 @@ export default function Reports() {
               title="اليوم"
               value={stats.today}
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#35CBE0' }}
+              valueStyle={{ color: '#4FC3F7' }}
             />
           </Card>
         </Col>

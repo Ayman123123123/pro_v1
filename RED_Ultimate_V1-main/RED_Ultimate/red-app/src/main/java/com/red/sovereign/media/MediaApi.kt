@@ -25,13 +25,18 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
 
     suspend fun download(path: String, maximumBytes: Int = 25 * 1024 * 1024): ApiResult<ByteArray> {
         require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
-        val tmp = File.createTempFile("media-down-", ".bin", context.cacheDir)
-        return when (val result = client.download(path, tmp)) {
-            is ApiResult.Error -> result
-            is ApiResult.Success -> {
-                if (tmp.length() > maximumBytes) ApiResult.Error(413, "MEDIA_TOO_LARGE")
-                else ApiResult.Success(200, tmp.readBytes())
+        val temporary = File.createTempFile("media-download-", ".bin", context.cacheDir)
+        return try {
+            when (val result = client.download(path, temporary)) {
+                is ApiResult.Success -> {
+                    val bytes = result.value.readBytes()
+                    if (bytes.size > maximumBytes) ApiResult.Error(413, "MEDIA_TOO_LARGE")
+                    else ApiResult.Success(result.code, bytes)
+                }
+                is ApiResult.Error -> result
             }
+        } finally {
+            temporary.delete()
         }
     }
 

@@ -1,23 +1,31 @@
 package com.red.sovereign.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,16 +34,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.R
-import com.red.sovereign.ui.theme.*
+import com.red.sovereign.ui.theme.SovereignColors
 
 /**
- * 👑 Sovereign Top Bar — Glassmorphism Header with E2EE Status & Fast Actions
+ * الشريط العلوي السيادي — رأس زجاجي يعرض الهوية وحالة التشفير التام
+ * والإجراءات السريعة (بحث، إعدادات).
  */
 @Composable
 fun SovereignTopBar(
@@ -44,15 +52,17 @@ fun SovereignTopBar(
     onSettings: () -> Unit,
     onSearch: () -> Unit,
     onProfileClick: () -> Unit = {},
-    isEncrypted: Boolean = true,
-    compact: Boolean = false
+    isEncrypted: Boolean = true
 ) {
     val dimens = rememberAdaptiveDimens()
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = dimens.contentHorizontalPadding, vertical = dimens.headerVerticalPadding)
+            .padding(
+                horizontal = dimens.contentHorizontalPadding,
+                vertical = dimens.headerVerticalPadding
+            )
             .clip(RoundedCornerShape(22.dp))
             .border(
                 width = 1.dp,
@@ -75,7 +85,7 @@ fun SovereignTopBar(
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // الأفاتار مع حلقة ذهبية
+            // الصورة الشخصية داخل حلقة ذهبية
             Box(
                 modifier = Modifier
                     .size(dimens.avatarSize)
@@ -86,7 +96,7 @@ fun SovereignTopBar(
             ) {
                 Image(
                     painter = painterResource(R.drawable.younes_icon_master),
-                    contentDescription = "يونس",
+                    contentDescription = "الملف الشخصي",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )
@@ -102,7 +112,7 @@ fun SovereignTopBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (username.isNotBlank()) username else "يونس السيادي",
+                        text = username.ifBlank { "يونس السيادي" },
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
@@ -114,7 +124,7 @@ fun SovereignTopBar(
                     Spacer(Modifier.width(4.dp))
                     Icon(
                         imageVector = Icons.Default.Verified,
-                        contentDescription = "موثق سيادياً",
+                        contentDescription = "موثَّق سياديًّا",
                         tint = SovereignColors.GoldNeon,
                         modifier = Modifier.size(16.dp)
                     )
@@ -124,25 +134,29 @@ fun SovereignTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 2.dp)
                 ) {
-                    // مؤشر الأمان والتشفير (E2EE Shield)
+                    // مؤشّر الأمان والتشفير التام بين الطرفين
                     if (isEncrypted) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(SovereignColors.Emerald.copy(alpha = 0.15f))
-                                .border(0.8.dp, SovereignColors.EmeraldNeon.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                .border(
+                                    width = 0.8.dp,
+                                    color = SovereignColors.EmeraldNeon.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(6.dp)
+                                )
                                 .padding(horizontal = 5.dp, vertical = 1.5.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.Lock,
-                                    contentDescription = "مشفر",
+                                    contentDescription = null,
                                     tint = SovereignColors.EmeraldNeon,
                                     modifier = Modifier.size(10.dp)
                                 )
                                 Spacer(Modifier.width(3.dp))
                                 Text(
-                                    text = "E2EE مشفر",
+                                    text = "مشفَّر E2EE",
                                     color = SovereignColors.EmeraldNeon,
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.ExtraBold
@@ -165,7 +179,7 @@ fun SovereignTopBar(
                 }
             }
 
-            // أزرار البحث والإعدادات السريعة بتأثير زجاجي متطور
+            // أزرار البحث والإعدادات السريعة
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)

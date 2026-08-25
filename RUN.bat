@@ -5,11 +5,11 @@ title YOUNES Sovereign RED Ultimate V1
 cls
 
 echo ==============================================================================
-echo   YOUNES Sovereign - RED Ultimate V1 - المشغل الموحد لنظام Windows
+echo   🏛️  YOUNES Sovereign — RED Ultimate V1 — التشغيل الفوري على Windows
 echo ==============================================================================
 echo.
 
-rem اكتشاف مجلد المشروع الرئيسي (يقبل المواقع الممكنة)
+rem تحديد جذر المشروع (سواء شُغّل من الجذر أو من داخل مجلد فرعي)
 set "DIR=%~dp0"
 if exist "%DIR%RED_Ultimate\docker-compose.yml" (
     set "ROOT=%DIR%RED_Ultimate"
@@ -21,21 +21,20 @@ if exist "%DIR%RED_Ultimate\docker-compose.yml" (
 
 echo   المشروع: %ROOT%
 echo.
-echo   [1] تشغيل المنصة الكاملة Docker Compose (يفضل لتشغيل كامل المنظومة)
-echo   [2] تشغيل خادم التطوير (الخادم الوهمي + API المحلي)
-echo   [3] لوحة التحكم وحدها (Vite React على 8088)
-echo   [4] فحص بوابات DINSTAR UC2000-VE-8G (192.168.11.1)
-echo   [5] تشغيل الفحوصات الشاملة (11 فحصاً)
+echo   [1] تشغيل المنصة الحقيقية عبر Docker Compose (المسار الوحيد)
+echo   [2] فتح لوحة Vite مقابل Compose على 8088 (بدون SQLite)
+echo   [3] فحص اتصال بوابة DINSTAR UC2000-VE-8G (192.168.11.1)
+echo   [4] الفحص الشامل الآلي
 echo.
-set /p CHOICE="اختر خيار التشغيل [1]: "
+set /p CHOICE="اختر رقم الخيار [1]: "
 if "%CHOICE%"=="" set CHOICE=1
 
 if "%CHOICE%"=="1" (
     echo.
-    echo جاري تشغيل المنصة: تجهيز البيئة + رفع Compose + متابعة التشغيل...
+    echo 🐳 تشغيل آمن: توليد أسرار عشوائية + فحص Compose + انتظار الجاهزية...
     cd /d "%ROOT%"
     where bash >nul 2>&1 || (
-        echo لا يوجد Git Bash لتشغيل سكربت تشغيل البيئة scripts/local-first-run.sh
+        echo ❌ يلزم Git Bash لتشغيل مسار التهيئة الآمن scripts/local-first-run.sh
         pause
         exit /b 1
     )
@@ -43,7 +42,7 @@ if "%CHOICE%"=="1" (
     if "!SERVER_IP!"=="" set "SERVER_IP=127.0.0.1"
     bash scripts/local-first-run.sh --server-ip "!SERVER_IP!"
     if errorlevel 1 (
-        echo فشل التشغيل. راجع سجل التشغيل.
+        echo ❌ فشل التشغيل؛ راجع الخطأ أعلاه.
         pause
         exit /b 1
     )
@@ -53,45 +52,33 @@ if "%CHOICE%"=="1" (
 
 if "%CHOICE%"=="2" (
     echo.
-    echo جاري تشغيل خادم التطوير المحلي...
-    cd /d "%ROOT%"
-    start "RED Mock API" /min python scripts\mock_backend.py
-    cd admin_dashboard
+    echo 🌐 لوحة Vite تتحدث إلى Compose على 8088 — لا خادم Node/SQLite.
+    cd /d "%ROOT%\admin_dashboard"
     call npm install
-    set "RED_API_TARGET=http://127.0.0.1:8080"
-    call npm run dev -- --port 8088
+    set "RED_API_TARGET=http://127.0.0.1:8088"
+    call npm run dev -- --port 5173
     pause
     exit /b
 )
 
 if "%CHOICE%"=="3" (
     echo.
-    echo جاري تشغيل لوحة التحكم...
-    cd /d "%ROOT%\admin_dashboard"
-    call npm install
-    call npm run dev -- --port 8088
+    echo 🔍 فحص الاتصال ببوابة DINSTAR...
+    ping -n 2 192.168.11.1
+    echo.
+    echo 💡 تأكد من ضبط عنوان IP كرت الشبكة المتصل بالبوابة إلى: 192.168.11.22
     pause
     exit /b
 )
 
 if "%CHOICE%"=="4" (
     echo.
-    echo فحص بوابات DINSTAR...
-    ping -n 2 192.168.11.1
-    echo.
-    echo يمكن تغيير عنوان IP البوابة من إعدادات الشبكة على: 192.168.11.22
-    pause
-    exit /b
-)
-
-if "%CHOICE%"=="5" (
-    echo.
-    echo جاري تشغيل الفحوصات الشاملة (11 فحصاً)...
+    echo 🔍 جاري تشغيل الفحص الشامل الآلي (11 فحصًا)...
     cd /d "%ROOT%"
     bash scripts\check-all.sh
     pause
     exit /b
 )
 
-echo خيار غير صالح.
+echo ❌ خيار غير معروف.
 pause

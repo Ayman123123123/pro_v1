@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# RED Ultimate V1 - المشغل الموحد لبيئات Linux/macOS
+# 🚀 RED Ultimate V1 — تشغيل المنظومة على جهازك
 # ==============================================================================
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# تحديد مجلد المشروع الرئيسي (نسخة RED_Ultimate_V1-main/run.sh)
+# عند وجود مجلد المشروع داخل الجذر (مثل RED_Ultimate_V1-main/run.sh)
 if [ -d "$DIR/RED_Ultimate" ]; then
   cd "$DIR/RED_Ultimate"
 elif [ -d "$DIR/RED_Ultimate_V1-main/RED_Ultimate" ]; then
@@ -15,31 +15,32 @@ else
 fi
 
 echo "=============================================================="
-echo "  RED Ultimate V1 - المشغل الموحد للنظام"
+echo "  🏛️  RED Ultimate V1 — تشغيل المنصة على جهازك"
 echo "=============================================================="
-echo "1) تشغيل خادم التطوير (الخادم الوهمي + API)"
-echo "2) تشغيل المنصة الكاملة Docker Compose"
-echo "3) فحص بوابة DINSTAR (192.168.11.1)"
-echo "4) فحص وإصلاح NGINX SSL و HTTPS"
-read -p "اختر خيار التشغيل [1]: " OPT
+echo "1) تشغيل المنصة الحقيقية عبر Docker Compose"
+echo "2) لوحة Vite مقابل Compose على 8088 (بدون SQLite)"
+echo "3) فحص اتصال DINSTAR (192.168.11.1)"
+echo "4) فحص وإصلاح شهادات NGINX SSL و HTTPS"
+read -p "اختر رقم الخيار [1]: " OPT
 OPT=${OPT:-1}
 
 case $OPT in
   1)
-    echo "جاري تشغيل الخادم الوهمي للـ API..."
-    python3 scripts/mock_backend.py &
-    cd admin_dashboard && npm install && npm run dev
+    echo "🐳 تشغيل Docker Compose — Kotlin + PostgreSQL + Mongo + Redis + MinIO"
+    ./scripts/local-first-run.sh ${SERVER_IP:+--server-ip "$SERVER_IP"}
     ;;
   2)
-    echo "جاري تشغيل Docker Compose وتجهيز البيئة والمتابعة..."
-    ./scripts/local-first-run.sh "${SERVER_IP:-}"
+    echo "🌐 لوحة Vite تتحدث إلى http://127.0.0.1:8088 — لا خادم Node/SQLite"
+    cd admin_dashboard
+    npm install
+    RED_API_TARGET="http://127.0.0.1:8088" npm run dev
     ;;
   3)
-    echo "فحص بوابات DINSTAR..."
+    echo "🔍 فحص الاتصال ببوابة DINSTAR..."
     ping -c 3 192.168.11.1 || true
     ;;
   4)
-    echo "فحص وإصلاح NGINX Proxy و TLS..."
+    echo "🔒 فحص وإصلاح شهادات NGINX Proxy و TLS..."
     ./scripts/fix-red-proxy-certs.sh
     ;;
 esac

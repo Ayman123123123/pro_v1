@@ -13,6 +13,14 @@ import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.launch
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        /**
+         * مدى ظهور المنشور الافتراضي — قيمة من `PostVisibility` في الخادم
+         * (`PUBLIC` أو `LOCAL_YEMEN`)، وليست من `FeedScope`.
+         */
+        const val DEFAULT_POST_VISIBILITY = "LOCAL_YEMEN"
+    }
+
     private val api = FeedApi(AuthorizedApiClient(TokenStore(application)))
     private val drafts = DraftsStore(application)
     val posts = mutableStateListOf<Post>()
@@ -34,15 +42,15 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun create(text: String, done: () -> Unit) = viewModelScope.launch {
+    fun create(text: String, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         state = FeedState.Publishing
-        when (val result = api.create(text)) {
+        when (val result = api.create(text, visibility)) {
             is ApiResult.Success -> { posts.add(0, result.value); state = FeedState.Ready; done() }
             is ApiResult.Error -> state = FeedState.Error(result.message)
         }
     }
 
-    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, done: () -> Unit) = viewModelScope.launch {
+    fun createPoll(question: String, options: List<String>, durationHours: Int = 24, visibility: String = "PUBLIC", done: () -> Unit) = viewModelScope.launch {
         val cleanOptions = options.map(String::trim).filter { it.length >= 2 }.distinct().take(6)
         if (question.isBlank() || cleanOptions.size < 2) {
             state = FeedState.Error("اكتب سؤالاً واضحاً وخيارين على الأقل")
@@ -51,7 +59,12 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         state = FeedState.Publishing
         val request = CreatePostRequest(
             text = question.trim(),
-            visibility = scope ?: "LOCAL_YEMEN",
+            // `visibility` هنا قيمة PostVisibility ("PUBLIC" أو "FRIENDS")
+            // يختارها المستخدم من PostVisibilityPicker، لا قيمة FeedScope.
+            // كان الفرع السابق يثبّتها على DEFAULT_POST_VISIBILITY تفاديًا
+            // لعطبٍ قديم يُمرَّر فيه `scope` مكان `visibility`؛ وقد زال
+            // العطب بإضافة المنتقي، فالتثبيت الآن يُلغي اختيار المستخدم.
+            visibility = visibility,
             pollOptions = cleanOptions,
             pollDurationHours = durationHours.coerceIn(1, 168)
         )

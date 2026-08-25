@@ -8,10 +8,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -26,10 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.MainSection
 import com.red.sovereign.ui.theme.SovereignColors
-import com.red.sovereign.ui.theme.SovereignGradients
 
 /**
- * 🚀 Sovereign Floating Acrylic Bottom Navigation Bar
+ * شريط التنقّل السفلي السيادي — سطح أكريليكي عائم بحواف متدرّجة،
+ * يُبرز القسم النشط بتوهّج زمردي وتكبير خفيف.
  */
 @Composable
 fun SovereignBottomBar(
@@ -76,15 +87,23 @@ fun SovereignBottomBar(
             ) {
                 MainSection.entries.forEach { item ->
                     val isSelected = currentSection == item
+
                     val itemColor by animateColorAsState(
-                        targetValue = if (isSelected) SovereignColors.EmeraldNeon else Color(0xFF94A3B8),
+                        targetValue = if (isSelected) {
+                            SovereignColors.EmeraldNeon
+                        } else {
+                            Color(0xFF94A3B8)
+                        },
                         animationSpec = spring(stiffness = Spring.StiffnessLow),
                         label = "BottomBarColor"
                     )
 
                     val itemScale by animateFloatAsState(
                         targetValue = if (isSelected) 1.12f else 1.0f,
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
                         label = "BottomBarScale"
                     )
 
@@ -103,7 +122,11 @@ fun SovereignBottomBar(
                                             SovereignColors.EmeraldDark.copy(alpha = 0.08f)
                                         )
                                     )
-                                } else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                                } else {
+                                    Brush.linearGradient(
+                                        listOf(Color.Transparent, Color.Transparent)
+                                    )
+                                }
                             )
                             .clickable(
                                 interactionSource = interactionSource,
@@ -121,7 +144,13 @@ fun SovereignBottomBar(
                                 imageVector = item.icon,
                                 contentDescription = item.label,
                                 tint = itemColor,
-                                modifier = Modifier.size(if (isSelected) (dimens.primaryIconSize + 3.dp) else dimens.primaryIconSize)
+                                modifier = Modifier.size(
+                                    if (isSelected) {
+                                        dimens.primaryIconSize + 3.dp
+                                    } else {
+                                        dimens.primaryIconSize
+                                    }
+                                )
                             )
                             if (isSelected) {
                                 Text(
@@ -129,7 +158,11 @@ fun SovereignBottomBar(
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.ExtraBold,
                                         color = itemColor,
-                                        fontSize = if (dimens.category == ScreenSizeCategory.COMPACT) 9.5.sp else 10.5.sp
+                                        fontSize = if (dimens.category == ScreenSizeCategory.COMPACT) {
+                                            9.5.sp
+                                        } else {
+                                            10.5.sp
+                                        }
                                     ),
                                     maxLines = 1
                                 )

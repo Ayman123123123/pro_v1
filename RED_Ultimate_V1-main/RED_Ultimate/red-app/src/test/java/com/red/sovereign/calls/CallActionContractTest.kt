@@ -59,6 +59,9 @@ class CallActionContractTest {
             LiveStreamService.ACTION_TOGGLE_VIDEO
         )
         // No overlap between conference and live actions
-        assertTrue("Conference and Live action sets must not overlap", conferenceActions.intersect(liveActions).isEmpty())
+        assertTrue(
+            "Conference and Live action sets must not overlap",
+            conferenceActions.intersect(liveActions).isEmpty(),
+        )
     }
 }

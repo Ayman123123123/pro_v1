@@ -1,4 +1,4 @@
-﻿package com.red.server.pstn
+package com.red.server.pstn
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
@@ -7,7 +7,6 @@ import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-
 import org.springframework.context.event.EventListener
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.scheduling.annotation.Async
@@ -29,22 +28,29 @@ class PstnCallService(
     private val redis: StringRedisTemplate,
     private val pstn: PstnManager,
     private val loadBalancer: DinstarLoadBalancer,
-private val history: CallHistoryService,
+    private val history: CallHistoryService,
+    private val progress: PstnCallProgressTracker,
     @Qualifier("pstnRetryScheduler") private val retryScheduler: ScheduledExecutorService
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
-        /** بادئات المحمول اليمني — مفوَّضة إلى YemenNumberPlan (كانت ناقصة: بلا واي 700-709 وحافة 789). */
-        private val YEMEN_MOBILE_PREFIXES = YemenNumberPlan.MOBILE_PREFIXES_3
+
+        /**
+         * الطول الوطني لرقم المحمول اليمني: بادئة من رقمين + 7 أرقام.
+         *
+         * الهاتف الثابت أقصر (رمز محافظة من رقم واحد + 6–7 أرقام) ولا
+         * تتصل به البوابة عبر شريحة GSM، فيُرفض هنا.
+         */
+        private const val MOBILE_NSN_LENGTH = 9
     }
 
     fun dial(userId: UUID, suppliedNumber: String, slotIndex: Int? = null): PstnCallResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
         require(user.status == AccountStatus.APPROVED) { "Account is not approved" }
         require(user.pstnEnabled && user.pstnDailyLimit > 0) { "PSTN access is not enabled for this account" }
-        
+
         val number = normalizeYemeniNumber(suppliedNumber)
-        
+
         // Rate limiting with Redis atomic counter
         val day = LocalDate.now(ZoneId.of("Asia/Aden"))
         val key = "red:pstn:daily:${user.id}:$day"
@@ -88,6 +94,9 @@ private val history: CallHistoryService,
             val callerSimNumber = user.pstnNumber ?: selection.simNumber
             val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, portIdx, callerSimNumber)
             history.start(user.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
+            // تسجيل المراحل يجب أن يسبق وصول أحداث AMI وإلا تعذّر ربط
+            // القناة بصاحبها وضاعت مراحل المكالمة (ميزة تتبّع المراحل من origin).
+            progress.register(actionId, user.redId, number)
             // ربط المنفذ الفعلي بالمستخدم لضمان أن الإنهاء اللاحق يُحرر
             // منفذ هذه المكالمة فقط، لا أي منفذ اعتباطي عبر الأسطول.
             redis.opsForValue().set(activeKey(user.id), "${actionId}:${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
@@ -149,6 +158,37 @@ private val history: CallHistoryService,
         )
     }
 
+    /**
+     * إنهاء مكالمة PSTN بأمان — اتحاد نسختَي origin والمحلي:
+     * 1) التحقق من الملكية عبر سِجل Redis (callUserKey): لا يُحرِّر
+     *    مستخدمٌ منفذَ مكالمة غيره (تحصين origin، لكن مدعوم بالـRedis
+     *    القابل للتوزيع بدل خريطة داخلية تُفقد عند إعادة التشغيل).
+     * 2) تحرير المنفذ في الموزّع إن كانت المكالمة الجارية هي نفسها.
+     * 3) إسقاط ساق GSM عبر AMI — hangupCall (قدرة محليّة فريدة غابت عن origin).
+     * 4) إنهاء قيد المتتبِّع progress.finishByCallId (ميزة تتبّع origin).
+     * 5) تنظيف حالة Redis كي لا يبقى المستخدم محجوبًا حتى انتهاء المهلة.
+     */
+    fun hangup(userId: UUID, callId: String): PstnHangupResponse {
+        val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
+        // سجل الملكية مصدر الصلاحية؛ callId غير معروف يُعامل كإنهاء متسامح
+        // (مثل origin: الإنهاء المتكرر/المتأخر لا يفشل، لكن ملكية طرف آخر تُرفض).
+        val owner = findUserByCallId(callId)
+        require(owner == null || owner == userId) { "Only the call initiator can release this PSTN route" }
+        history.end(callId, user.redId)
+        val active = resolveActiveCall(userId)
+        val ownsThisCall = active?.first == callId
+        val port = if (ownsThisCall) active!!.second else -1
+        if (ownsThisCall) {
+            loadBalancer.releasePort(active!!.third, active.second)
+        }
+        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛ نُسقط
+        // ساق GSM بأمان (لا يفشل الطلب إن كانت القناة انتهت أصلًا).
+        runCatching { pstn.hangupCall(callId) }
+        progress.finishByCallId(callId)
+        clearActive(userId)
+        return PstnHangupResponse(callId, port, ownsThisCall)
+    }
+
     fun clearActive(userId: UUID) {
         val raw = redis.opsForValue().get(activeKey(userId))
         redis.delete(activeKey(userId))
@@ -165,7 +205,7 @@ private val history: CallHistoryService,
     fun findUserByCallId(callId: String): UUID? =
         redis.opsForValue().get(callUserKey(callId))?.let { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
 
-     private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
+    private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
 
     /**
      * Consumes PstnRetryEvent published by DindarEventListener when a PSTN
@@ -252,12 +292,25 @@ private val history: CallHistoryService,
             else -> compact
         }
         require(local.matches(Regex("^[0-9]{6,12}$"))) { "Only valid Yemeni numbers are allowed" }
-        require(local.substring(0, minOf(3, local.length)) in YEMEN_MOBILE_PREFIXES || local.length >= 9) {
-            "Unrecognized Yemeni mobile prefix"
+
+        // التصنيف يفوَّض إلى DinstarLoadBalancer — المصدر الوحيد لخريطة
+        // بادئات المشغّلين، وهو ما يختار المنفذ فعليًا بعد قليل. جدول
+        // محلي ثانٍ كان يفتح باب التفرّع: النسخة السابقة هنا أغفلت 78
+        // و70 تمامًا فكانت ترفض أرقام يمن موبايل الجديدة وواي.
+        val operator = DinstarLoadBalancer.classifyNumber(local)
+        require(operator != null && operator.isMobile) { "Unrecognized Yemeni mobile prefix" }
+
+        // الشرط السابق كان `... || local.length >= 9`، وكل محمول يمني
+        // تسعة أرقام — فكان الطرف الثاني يُصدّق أي رقم ويُبطل التحقق
+        // من البادئة كليًا.
+        require(local.length == MOBILE_NSN_LENGTH) {
+            "Yemeni mobile numbers are $MOBILE_NSN_LENGTH digits"
         }
         return local
     }
 }
+
+data class PstnHangupResponse(val callId: String, val port: Int, val released: Boolean)
 
 data class PstnCallResponse(
     val callId: String,

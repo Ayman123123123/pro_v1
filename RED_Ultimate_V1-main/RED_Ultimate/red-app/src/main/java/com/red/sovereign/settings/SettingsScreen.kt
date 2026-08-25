@@ -11,15 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Info
@@ -31,8 +30,10 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.VpnKey
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.automirrored.filled.*
-import androidx.compose.material.icons.filled.LocalPhone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -75,7 +76,7 @@ import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 
-private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, ABOUT }
+private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, FOLDERS, STARRED, BLOCKED, ABOUT }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +112,9 @@ fun YounesSettingsSheet(
                 SettingsPage.CALLS -> CallSettings(viewModel)
                 SettingsPage.DEVICES -> DevicesSettings(deviceSettings)
                 SettingsPage.SERVER -> ServerSettings()
+                SettingsPage.FOLDERS -> FolderSettings()
+                SettingsPage.STARRED -> StarredSettings()
+                SettingsPage.BLOCKED -> BlockedSettings()
                 SettingsPage.ABOUT -> AboutSettings()
             }
             Spacer(Modifier.height(28.dp))
@@ -134,9 +138,12 @@ private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onP
         SettingDestination(SettingsPage.CHATS, Icons.AutoMirrored.Filled.Chat, "الدردشات والوسائط", "التنزيل وسرعة الصوت وسلوك المحادثة", Color(0xFF5CC8FF)),
         SettingDestination(SettingsPage.NOTIFICATIONS, Icons.Default.Notifications, "الإشعارات", "الرسائل والمكالمات ومعاينة المحتوى", Color(0xFFFFB65C)),
         SettingDestination(SettingsPage.DATA, Icons.Default.Storage, "البيانات والتخزين", "${formatBytes(cacheBytes)} مستخدمة في cache", Color(0xFF8BC34A)),
-        SettingDestination(SettingsPage.CALLS, Icons.Filled.LocalPhone, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
+        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
         SettingDestination(SettingsPage.DEVICES, Icons.Default.Devices, "الأجهزة والشهادات", "الأجهزة المعتمدة وتنبيهات المفاتيح", Color(0xFFEC7FA9)),
         SettingDestination(SettingsPage.SERVER, Icons.Default.Wifi, "الخادم والشبكة", "Local-first وWireGuard وحالة نقطة الاتصال", Color(0xFF4DD0E1)),
+        SettingDestination(SettingsPage.FOLDERS, Icons.Default.Folder, "مجلدات الدردشة", "تنظيم محلي مثل تلجرام — على الجهاز فقط", Color(0xFF81C784)),
+        SettingDestination(SettingsPage.STARRED, Icons.Default.Star, "الرسائل المميّزة", "الرسائل التي نجّمتها من المحادثة", AqyalGold),
+        SettingDestination(SettingsPage.BLOCKED, Icons.Default.Block, "المحظورون", "من لا يصل إليك برسالة أو مكالمة", Color(0xFFE57373)),
         SettingDestination(SettingsPage.ABOUT, Icons.Default.Info, "حول يونس", "الإصدار والبنية والتراخيص", MaterialTheme.colorScheme.onSurfaceVariant)
     )
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(570.dp)) {
@@ -180,7 +187,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                 }
             }
         }
-        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Filled.LocalPhone) }
+        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
         item {
             Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)
@@ -203,9 +210,18 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun PrivacySettings(vm: SettingsViewModel) = SettingsList {
     item { ToggleSetting("قفل التطبيق بالبصمة", "اطلب بصمة/نمط الجهاز لفتح يونس — مفاتيحك محمية بخطوة إضافية", vm.state.appLockEnabled, vm::setAppLockEnabled) }
-    item { ToggleSetting("إخفاء آخر ظهور", "لا يرى الآخرون متى كنت متصلاً آخر مرة", vm.state.hideLastSeen, vm::setHideLastSeen) }
-    item { ToggleSetting("إيصالات القراءة", "إرسال READ بعد فتح الرسالة", vm.state.readReceipts, vm::setReadReceipts) }
-    item { ToggleSetting("مؤشر الكتابة", "يرسل حدث كتابة أثناء الإدخال ويظهر اسم الكاتب عند كتابته", vm.state.typingIndicators, vm::setTypingIndicators) }
+    item {
+        Text("مهلة إعادة القفل · ${vm.state.lockTimeoutSeconds} ث", fontWeight = FontWeight.SemiBold)
+        Slider(value = vm.state.lockTimeoutSeconds.toFloat(), onValueChange = { vm.setLockTimeoutSeconds(it.toInt()) }, valueRange = 5f..120f, steps = 22)
+    }
+    item { ToggleSetting("إخفاء آخر ظهور", "مثل واتساب: إن أخفيت ظهورك لن ترى ظهور الآخرين", vm.state.hideLastSeen, vm::setHideLastSeen) }
+    item { VisibilityPicker("آخر ظهور والحالة", vm.state.lastSeenVisibility, vm::setLastSeenVisibility) }
+    item { VisibilityPicker("صورة البروفايل", vm.state.profilePhotoVisibility, vm::setProfilePhotoVisibility) }
+    item { VisibilityPicker("النبذة", vm.state.aboutVisibility, vm::setAboutVisibility) }
+    item { VisibilityPicker("من يضيفني لمجموعة", vm.state.whoCanAddToGroups, vm::setWhoCanAddToGroups) }
+    item { VisibilityPicker("من يتصل بي عبر يونس", vm.state.whoCanCall, vm::setWhoCanCall) }
+    item { ToggleSetting("إيصالات القراءة", "إرسال READ بعد فتح الرسالة — إن أوقفتها لن ترى إيصالات الآخرين", vm.state.readReceipts, vm::setReadReceipts) }
+    item { ToggleSetting("مؤشر الكتابة", "أرسل «يكتب…» فقط أثناء الكتابة الفعلية", vm.state.typingIndicators, vm::setTypingIndicators) }
     item { LockedSetting("معاينات الروابط", "متوقفة حتى اكتمال proxy آمن وحماية SSRF وإخفاء عنوان IP") }
     item { LockedSetting("حماية لقطات الشاشة", "مفعلة إجباريًا للمحادثات والمفاتيح الحساسة") }
     item { LockedSetting("مفاتيح الهوية", "تبقى داخل Android Keystore ولا يمكن تصديرها") }
@@ -213,57 +229,12 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun AppearanceSettings(vm: SettingsViewModel) = SettingsList {
     item {
-        Text("ثيم ومظهر التطبيق", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(6.dp))
-        com.red.sovereign.ui.theme.AppThemePreset.entries.forEach { preset ->
-            val isSelected = com.red.sovereign.ui.theme.AppThemeState.currentPreset == preset
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable { com.red.sovereign.ui.theme.AppThemeState.currentPreset = preset },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant
-                ),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Preview color swatch
-                    val dotColor = when (preset) {
-                        com.red.sovereign.ui.theme.AppThemePreset.SOVEREIGN -> Color(0xFF00C98C)
-                        com.red.sovereign.ui.theme.AppThemePreset.TELEGRAM_DARK -> Color(0xFF2AABEE)
-                        com.red.sovereign.ui.theme.AppThemePreset.WHATSAPP_DARK -> Color(0xFF00A884)
-                        com.red.sovereign.ui.theme.AppThemePreset.OLED_BLACK -> Color(0xFF00E676)
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(preset.label, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                        Text(preset.description, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                    }
-                    if (isSelected) {
-                        Icon(Icons.Default.Check, "مفعل", tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
-        }
-    }
-    item {
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
         Text("حجم الخط · ${(vm.state.fontScale * 100).toInt()}%", fontWeight = FontWeight.SemiBold)
         Slider(value = vm.state.fontScale, onValueChange = vm::setFontScale, valueRange = .85f..1.30f, steps = 8)
     }
     item { ToggleSetting("تباين مرتفع", "حدود ونصوص أوضح", vm.state.highContrast, vm::setHighContrast) }
     item { ToggleSetting("واجهة مدمجة", "مسافات أقل للقوائم الطويلة", vm.state.compactMode, vm::setCompactMode) }
-    item { LockedSetting("الحركة الهادئة", "الخلفيات المتحركة والمؤثرات المستمرة معطلة افتراضيًا لحماية التركيز والبطارية") }
+    item { ToggleSetting("تقليل الحركة", "إيقاف الخلفيات المتحركة والمؤثرات المستمرة", vm.state.reduceMotion, vm::setReduceMotion) }
     item { LockedSetting("RTL والعربية", "مفعلة تلقائيًا حسب لغة النظام") }
 }
 
@@ -276,13 +247,17 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     }
     item { Text("سرعة الرسائل الصوتية الافتراضية", fontWeight = FontWeight.SemiBold) }
     item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(1f, 1.5f, 2f).forEach { speed -> AssistChip({ vm.setDefaultPlaybackSpeed(speed) }, { Text("${speed}×") }, leadingIcon = { if (vm.state.defaultPlaybackSpeed == speed) Text("●") }) } } }
+    item { ToggleSetting("Enter للإرسال", "زر الإدخال يرسل الرسالة بدل سطر جديد", vm.state.enterToSend, vm::setEnterToSend) }
+    item { ToggleSetting("حفظ الوسائط في المعرض", "بعد فك التشفير فقط وبموافقتك — الافتراضي مغلق", vm.state.saveMediaToGallery, vm::setSaveMediaToGallery) }
+    item { ToggleSetting("أرشفة المكتوم تلقائياً", "إن كتمت محادثة دائماً تُنقل للأرشيف", vm.state.autoArchiveMuted, vm::setAutoArchiveMuted) }
 }
 
 @Composable private fun NotificationSettings(vm: SettingsViewModel) = SettingsList {
     item { ToggleSetting("إشعارات الرسائل", "تنبيه عند وصول رسالة مشفرة", vm.state.messageNotifications, vm::setMessageNotifications) }
-    item { ToggleSetting("إشعارات المكالمات", "تنبيه عند استقبال مكالمة صوتية أو فيديو", vm.state.callNotifications, vm::setCallNotifications) }
+    item { ToggleSetting("إشعارات المجموعات", "تنبيهات المحادثات الجماعية بشكل مستقل", vm.state.groupNotifications, vm::setGroupNotifications) }
+    item { ToggleSetting("إشعارات المكالمات", "رنين وارد عبر خدمة المكالمات الأمامية", vm.state.callNotifications, vm::setCallNotifications) }
     item { ToggleSetting("إظهار محتوى الرسالة", "غير موصى به على شاشة القفل", vm.state.notificationPreview, vm::setNotificationPreview) }
-    item { InfoCard("قنوات Android", "يمكن ضبط الصوت والاهتزاز من إعدادات نظام Android لكل قناة.", Icons.Default.Notifications) }
+    item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس، مكالمات يونس، DINSTAR.", Icons.Default.Notifications) }
 }
 
 @Composable private fun DataSettings(vm: SettingsViewModel) = SettingsList {
@@ -293,9 +268,9 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 }
 
 @Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
-    item { LockedSetting("توفير بيانات المكالمات", "سيُربط بقيود bitrate وطبقات simulcast بعد اكتمال WebRTC Android") }
-    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Filled.LocalPhone) }
-    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Filled.LocalPhone) }
+    item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
+    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
+    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {
@@ -328,6 +303,82 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { InfoCard("الشفافية", "لا نعرض ميزة غير مكتملة كمكتملة، ولا بيانات أجهزة وهمية.", Icons.Default.Info) }
 }
 
+@Composable private fun FolderSettings() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val org = remember { com.red.sovereign.core.ChatOrganizationStore(context) }
+    var name by remember { mutableStateOf("") }
+    val revision = org.revision
+    val folders = remember(revision) { org.folders() }
+    SettingsList {
+        item { Text("المجلدات تُخزَّن على الجهاز فقط — لا تُرفع للخادم ولا تكسر E2EE.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        item {
+            OutlinedTextField(name, { name = it.take(32) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم مجلد جديد") })
+            Button({ if (name.isNotBlank()) { org.createFolder(name); name = "" } }, Modifier.fillMaxWidth(), enabled = name.isNotBlank() && folders.size < 12) { Text("إنشاء مجلد") }
+        }
+        items(folders, key = { it.id }) { folder ->
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Folder, null, tint = YounesEmerald)
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        Text(folder.name, fontWeight = FontWeight.SemiBold)
+                        Text("${folder.chatIds.size} محادثة", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton({ org.deleteFolder(folder.id) }) { Text("حذف") }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun StarredSettings() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val org = remember { com.red.sovereign.core.ChatOrganizationStore(context) }
+    val revision = org.revision
+    val ids = remember(revision) { org.starredIds() }
+    SettingsList {
+        item { InfoCard("الرسائل المميّزة", if (ids.isEmpty()) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "${ids.size} رسالة محفوظة محلياً", Icons.Default.Star) }
+        items(ids.toList()) { id ->
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(id.take(16), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    TextButton({ org.toggleStarred(id) }) { Text("إزالة") }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun BlockedSettings() {
+    val directory: com.red.sovereign.contacts.DirectoryViewModel = viewModel()
+    SettingsList {
+        item { InfoCard("المحظورون", "الحظر يمنع الرسائل والمكالمات من هذا المعرّف على جهازك والخادم.", Icons.Default.Block) }
+        if (directory.blocked.isEmpty()) item { Text("لا يوجد محظورون حالياً.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        items(directory.blocked) { redId ->
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(redId, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    OutlinedButton({
+                        val profile = directory.contacts.firstOrNull { it.redId == redId }
+                            ?: com.red.sovereign.contacts.PublicRedProfile(redId, redId.takeLast(8), redId)
+                        directory.unblock(profile)
+                    }) { Text("فك الحظر") }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun VisibilityPicker(title: String, current: String, onChange: (String) -> Unit) = Card(Modifier.fillMaxWidth()) {
+    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("EVERYONE" to "الجميع", "CONTACTS" to "الأصدقاء", "NOBODY" to "لا أحد").forEach { (id, label) ->
+                AssistChip({ onChange(id) }, { Text(label) }, leadingIcon = { if (current == id) Text("●") })
+            }
+        }
+    }
+}
+
 @Composable private fun SettingsList(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) = LazyColumn(
     modifier = Modifier.height(570.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content
 )
@@ -354,7 +405,9 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.ACCOUNT -> "الحساب والهوية"; SettingsPage.PRIVACY -> "الخصوصية والأمان"; SettingsPage.APPEARANCE -> "المظهر والوصولية"
     SettingsPage.CHATS -> "الدردشات والوسائط"; SettingsPage.NOTIFICATIONS -> "الإشعارات"; SettingsPage.DATA -> "البيانات والتخزين"
-    SettingsPage.CALLS -> "المكالمات"; SettingsPage.DEVICES -> "الأجهزة والشهادات"; SettingsPage.SERVER -> "الخادم والشبكة"; SettingsPage.ABOUT -> "حول يونس"; SettingsPage.ROOT -> "الإعدادات"
+    SettingsPage.CALLS -> "المكالمات"; SettingsPage.DEVICES -> "الأجهزة والشهادات"; SettingsPage.SERVER -> "الخادم والشبكة"
+    SettingsPage.FOLDERS -> "مجلدات الدردشة"; SettingsPage.STARRED -> "الرسائل المميّزة"; SettingsPage.BLOCKED -> "المحظورون"
+    SettingsPage.ABOUT -> "حول يونس"; SettingsPage.ROOT -> "الإعدادات"
 }
 private fun formatBytes(bytes: Long): String = when { bytes >= 1024L * 1024 -> "%.1f MiB".format(bytes / 1048576.0); bytes >= 1024 -> "%.1f KiB".format(bytes / 1024.0); else -> "$bytes B" }
 private data class SettingDestination(val page: SettingsPage, val icon: ImageVector, val title: String, val detail: String, val color: Color)

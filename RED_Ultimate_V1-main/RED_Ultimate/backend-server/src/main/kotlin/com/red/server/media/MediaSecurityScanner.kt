@@ -69,7 +69,6 @@ class MediaSecurityScanner {
                     header[2] == 0x44.toByte() && header[3] == 0x46.toByte()
 
                 // === تطبيق عام (octet-stream — مُشفّر، لا نتحقق) ===
-                // لا يمكن فحص magic bytes للملف المشفّر؛ يُقيّد الامتداد أعلاه إلى .bin.
                 "application/octet-stream" -> true
 
                 else -> false  // صارم: رفض أي mime غير معروف
@@ -93,21 +92,30 @@ class MediaSecurityScanner {
     }
 
     /**
-     * يتحقق من توقيع MP4/M4A — box "ftyp" ضمن أول bytesRead بايت.
-     * MP4 boxes: 4 bytes size + 4 bytes type ("ftyp", "free", "moov", "mdat", ...).
-     * قد يسبق ftyp صندوق حر (free) أو moov — لذلك نبحث عن "ftyp" في أي موضع
-     * من أول 16 بايت (حتى إصدارات fragmented/سابقة التشذير).
+     * يتحقق من توقيع MP4/M4A — box "ftyp" في أي مكان من أول 16 بايت
+     * MP4 boxes: 4 bytes size + 4 bytes type ("ftyp", "moov", "mdat", etc.)
      */
     private fun validateMp4(header: ByteArray, bytesRead: Int): Boolean {
-        if (bytesRead < 8) return false
+        if (bytesRead < 12) return false
+        // ftyp يجب أن يكون في أول box (offset 4-7)
+        if (header[4] == 0x66.toByte() && header[5] == 0x74.toByte() &&
+            header[6] == 0x79.toByte() && header[7] == 0x70.toByte()) {
+            return true
+        }
+        // أو في box ثانوي (offset 8-11)
+        if (bytesRead >= 12 && header[8] == 0x66.toByte() && header[9] == 0x74.toByte() &&
+            header[10] == 0x79.toByte() && header[11] == 0x70.toByte()) {
+            return true
+        }
+        // fallback: box type في أي موضع ضمن أول 16 بايتًا (بعض الملفات
+        // تبدأ بـ box مثل "free" قبل ftyp — البحث السابق توقف عند 8
+        // فأفوت ftyp في offset 12)
         val f = 0x66.toByte(); val t = 0x74.toByte(); val y = 0x79.toByte(); val p = 0x70.toByte()
-        val last = bytesRead - 4
-        var i = 4
-        while (i <= last) {
+        val limit = minOf(bytesRead, header.size, 16) - 4
+        for (i in 4..limit) {
             if (header[i] == f && header[i + 1] == t && header[i + 2] == y && header[i + 3] == p) {
                 return true
             }
-            i++
         }
         return false
     }
@@ -123,23 +131,24 @@ class MediaSecurityScanner {
 
     /**
      * يتحقق من MP3 — إما ID3v2 tag (0x49 0x44 0x33 = "ID3")
-     * أو MPEG frame sync (11 بت مزامنة: byte0 = 0xFF + أول 3 بتات من byte1).
-     * البتات التالية (version/layer) لا تُرفض إلا إن كانت محجوزة.
+     * أو MPEG frame sync (0xFF 0xFB/0xF3/0xF2)
      */
     private fun validateMp3(header: ByteArray): Boolean {
         // ID3v2
         if (header[0] == 0x49.toByte() && header[1] == 0x44.toByte() && header[2] == 0x33.toByte()) {
             return true
         }
-        if (header.size >= 2 && header[0] == 0xFF.toByte()) {
+        // MPEG audio frame sync: 11 bits set (0xFF) + 3 bits version + 2 bits layer
+        // Layer 3: bits 17-18 = 01 → 0xFA, 0xFB, 0xFC, 0xFD
+        // Layer 2: bits 17-18 = 10 → 0xF4, 0xF5, 0xF6, 0xF7
+        if (header.size >= 2 && header[0] == 0xFF.toByte() && header[1].toInt() and 0xE0 == 0xE0) {
             val second = header[1].toInt() and 0xFF
-            // 11 بت مزامنة: أول 3 بتات من البايت الثاني يجب أن تكون 111
-            if (second and 0xE0 != 0xE0) return false
-            // bits 5-4: layer (00 = محجوز)
-            if ((second shr 4) and 0x03 == 0) return false
-            // bits 7-6: version (01 = محجوز)
-            if ((second shr 6) and 0x03 == 1) return false
-            return true
+            // MPEG audio: bits 5,6 = layer (01=III, 10=II, 11=I)
+            val layer = (second shr 5) and 0x03
+            // bits 3,4 = version (11=MPEG-1، 10=MPEG-2، 00=MPEG-2.5،
+            // 01=محجوز/غير صالح). كان الشرط يرفض 0x18 (MPEG-1) — أي
+            // يرفض 0xFB أكثر صيغ MP3 شيوعًا — بدل رفض المحجوزة 0x08.
+            return layer in 1..3 && (second and 0x18) != 0x08
         }
         return false
     }

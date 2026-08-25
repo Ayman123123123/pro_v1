@@ -1,8 +1,8 @@
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("plugin.spring") version "2.2.21"
-    kotlin("plugin.jpa") version "2.2.21"
-    id("org.springframework.boot") version "3.5.16"
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.jpa") version "2.3.21"
+    id("org.springframework.boot") version "4.0.7"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -29,6 +29,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // Database
@@ -39,6 +40,7 @@ dependencies {
 
     // Kotlin
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // PSTN / Asterisk
@@ -52,7 +54,7 @@ dependencies {
 
     // Local S3-compatible object storage
     implementation("io.minio:minio:8.6.0")
-    implementation("org.jsoup:jsoup:1.18.1") // LinkCard Open Graph
+    implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
 
     // OkHttp for Dinstar API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -78,4 +80,14 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Produce one deterministic runtime artifact. Disabling the plain JVM JAR also
+// prevents Docker COPY globs from selecting two different files accidentally.
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    archiveFileName.set("red-backend.jar")
+}
+
+tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
+    enabled = false
 }

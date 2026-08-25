@@ -23,12 +23,16 @@ class ContactController(private val contacts: ContactService) {
     @GetMapping("/presence/detailed") fun presenceDetailed(@RequestParam ids: String, auth: Authentication) =
         contacts.presenceDetailed(userId(auth), ids.split(',').map(String::trim).filter(String::isNotEmpty))
     @GetMapping("/requests") fun requests(auth: Authentication) = contacts.incoming(userId(auth))
+    @GetMapping("/requests/outgoing") fun outgoing(auth: Authentication) = contacts.outgoing(userId(auth))
     @PostMapping("/requests/{redId}") fun request(@PathVariable redId: String, auth: Authentication) = contacts.request(userId(auth), redId)
     @PostMapping("/requests/{requestId}/accept") fun accept(@PathVariable requestId: UUID, auth: Authentication): ResponseEntity<Void> {
         contacts.resolve(userId(auth), requestId, true); return ResponseEntity.noContent().build()
     }
     @PostMapping("/requests/{requestId}/reject") fun reject(@PathVariable requestId: UUID, auth: Authentication): ResponseEntity<Void> {
         contacts.resolve(userId(auth), requestId, false); return ResponseEntity.noContent().build()
+    }
+    @DeleteMapping("/requests/{requestId}") fun cancel(@PathVariable requestId: UUID, auth: Authentication): ResponseEntity<Void> {
+        contacts.cancel(userId(auth), requestId); return ResponseEntity.noContent().build()
     }
     @DeleteMapping("/{redId}") fun remove(@PathVariable redId: String, auth: Authentication): ResponseEntity<Void> {
         contacts.remove(userId(auth), redId); return ResponseEntity.noContent().build()

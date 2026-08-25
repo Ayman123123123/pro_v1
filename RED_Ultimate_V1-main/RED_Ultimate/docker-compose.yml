@@ -1,22 +1,64 @@
 name: red-sovereign
 
 # ══════════════════════════════════════════════════════════════════
-# 🏛️ YOUNES Sovereign Platform — Docker Compose ULTIMATE
-# PostgreSQL 17.6 + MongoDB 8.4 + Redis 8.2 + MinIO + Spring Boot 3.5 + Nginx 1.29 + MediaSFU + Asterisk + Coturn
+# 🏛️ YOUNES Sovereign Platform — Docker Compose
+# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Asterisk + Coturn
 # ══════════════════════════════════════════════════════════════════
 
 services:
+  # Copies host-owned 0600 authority keys into a Docker-managed volume with the
+  # backend runtime UID. This preserves strict host permissions while allowing
+  # the non-root Java process to read the signing key on native Linux Docker.
+  identity-init:
+    image: alpine:3.21
+    container_name: red-identity-init
+    restart: "no"
+    network_mode: none
+    read_only: true
+    command:
+      - sh
+      - -ec
+      - |
+        private=/source/red_identity_private_key.pem
+        public=/source/red_identity_public_key.pem
+        [ -f "$$private" ] && [ -s "$$private" ] || { echo '[identity] missing private key' >&2; exit 1; }
+        [ -f "$$public" ] && [ -s "$$public" ] || { echo '[identity] missing public key' >&2; exit 1; }
+        cp "$$private" /target/red_identity_private_key.pem.tmp
+        cp "$$public" /target/red_identity_public_key.pem.tmp
+        chown 10001:10001 /target/*.tmp
+        chmod 400 /target/red_identity_private_key.pem.tmp
+        chmod 444 /target/red_identity_public_key.pem.tmp
+        mv -f /target/red_identity_private_key.pem.tmp /target/red_identity_private_key.pem
+        mv -f /target/red_identity_public_key.pem.tmp /target/red_identity_public_key.pem
+        echo '[identity] authority keys staged for non-root backend'
+    volumes:
+      - ./secrets:/source:ro
+      - identity-secrets:/target
+    security_opt:
+      - no-new-privileges:true
+
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
+  # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
+  # Never publish 8080 to the host — that port is reserved for the optional
+  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
       dockerfile: backend-server/Dockerfile
+    image: red-backend:local
     container_name: red-backend
     restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - YOUNES_RUNTIME=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -27,10 +69,9 @@ services:
       - ASTERISK_AMI_USER=red_admin
       - ASTERISK_AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - SPRING_FLYWAY_OUT_OF_ORDER=true
-      - SPRING_FLYWAY_IGNORE_MIGRATION_PATTERNS=*:missing
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
@@ -40,14 +81,33 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
       - RED_IDENTITY_PUBLIC_KEY_PATH=/run/secrets/red_identity_public_key.pem
+      - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
+      - YOUNES_FCM_SERVER_KEY=${YOUNES_FCM_SERVER_KEY:-}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
-      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport
+      - BACKUP_ROOT=/backups
+      # The backend is reachable externally only through our Nginx service. Nginx
+      # replaces (rather than appends) X-Forwarded-For, so trusting it is safe here.
+      - RED_TRUST_X_FORWARDED_FOR=true
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      # Local compose is HTTP on 8088. Secure cookies would be dropped by the browser.
+      # Set RED_ADMIN_COOKIE_SECURE=true only behind real TLS.
+      - RED_ADMIN_COOKIE_SECURE=${RED_ADMIN_COOKIE_SECURE:-false}
+      - JAVA_TOOL_OPTIONS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - ./secrets:/run/secrets:ro
+      - identity-secrets:/run/secrets:ro
+      - backup-data:/backups
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    stop_grace_period: 30s
     depends_on:
+      identity-init: { condition: service_completed_successfully }
       db-postgres: { condition: service_healthy }
       db-mongo: { condition: service_healthy }
       cache-redis: { condition: service_healthy }
@@ -55,23 +115,36 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      timeout: 5s
+      retries: 8
+      # Flyway + JPA validate + first JDBC on Windows Docker regularly exceed 60s.
+      start_period: 180s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 2. VoIP/Conference SFU ━━━━━━━━━━━━
   media-sfu:
     build: ./media-sfu
+    image: red-media-sfu:local
     container_name: red-media-sfu
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
-      - SPRING_FLYWAY_OUT_OF_ORDER=true
-      - SPRING_FLYWAY_IGNORE_MIGRATION_PATTERNS=*:missing
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
+      - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
+      - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
       interval: 30s
@@ -81,9 +154,18 @@ services:
 
   # ━━━━━━━━━━━━ 3. TURN/STUN Relay ━━━━━━━━━━━━
   coturn:
-    image: coturn/coturn
+    image: coturn/coturn:4.6.2-r10
     container_name: red-turn
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    environment:
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
+      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
     command:
       - --no-cli
       - --log-file=stdout
@@ -93,6 +175,7 @@ services:
       - --realm=red.sovereign
       - --min-port=45000
       - --max-port=45050
+      - --external-ip=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-127.0.0.1}}/${TURN_INTERNAL_IP:-}
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
@@ -109,13 +192,23 @@ services:
   # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
   pstn-gateway:
     build: ./pstn-asterisk
+    image: red-pstn-gateway:local
     container_name: red-pstn-gateway
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
+      - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
+      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"
@@ -127,11 +220,20 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 5. PostgreSQL 17 (آمن + أداء، يتطلب نسخاً احتياطياً قبل الترقية الكبرى) ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 5. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━
+  # pg_trgm extension requires superuser on managed Postgres. The migration V* that
+  # creates CREATE EXTENSION IF NOT EXISTS pg_trgm should run only on self-hosted
+  # postgres where admin is superuser (as here). For managed DB, pre-create extension manually.
   db-postgres:
-    image: postgres:17.6
+    image: postgres:16.9-bookworm
     container_name: red-db-sql
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - POSTGRES_DB=red_sovereign
       - POSTGRES_USER=admin
@@ -147,11 +249,17 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 6. MongoDB 8.4 — أحدث LTS ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 6. MongoDB 8 ━━━━━━━━━━━━
   db-mongo:
-    image: mongo:8.4
+    image: mongo:8.0.13-noble
     container_name: red-db-nosql
     restart: unless-stopped
+    mem_limit: 1g
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     environment:
       - MONGO_INITDB_ROOT_USERNAME=red_user
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
@@ -161,15 +269,24 @@ services:
       test: ["CMD-SHELL", "mongosh --quiet --username red_user --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      # First boot on Windows Docker Desktop (slow virtiofs I/O) needs well over
+      # 50s of mongod init; grace it instead of racing dependents into "unhealthy".
+      start_period: 40s
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 7. Redis 8.2 — أحدث LTS ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 7. Redis 7 — volatile-lru to avoid evicting active sessions ━━━━━━━━━━━━
   cache-redis:
-    image: redis:8.2
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    image: redis:7.4.5-bookworm
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru", "--save", "900 1", "--save", "300 10"]
     container_name: red-cache
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes: ["redis-data:/data"]
@@ -180,13 +297,23 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
   minio:
-    image: minio/minio
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: red-storage
     restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     command: server /data --console-address ":9001"
-    ports: ["9000:9000", "9001:9001"]
+    # Management/API ports stay local to the host; public media access must pass
+    # through authenticated backend endpoints, never directly through MinIO.
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       - MINIO_ROOT_USER=redadmin
       - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
@@ -198,19 +325,100 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 9. Nginx Proxy 1.29 + Admin UI ━━━━━━━━━━━━
+  # ━━━━ تهيئة TLS للتطوير ━━━━
+  # الشهادة تُكتب في named volume واحد. قبل إعادة استخدامها نتحقق من:
+  # الصيغة، الصلاحية الزمنية، سلامة المفتاح، والتطابق التشفيري بينهما.
+  certs-init:
+    build:
+      context: .
+      dockerfile: infrastructure/tls-init.Dockerfile
+    image: red-tls-init:local
+    container_name: red-certs-init
+    restart: "no"
+    environment:
+      - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
+    command:
+      - "sh"
+      - "-ec"
+      - |
+        case "$$TLS_SAN_IP" in
+          *[!0-9.]*|'') echo '[tls] TLS_SAN_IP must be an IPv4 address' >&2; exit 1 ;;
+        esac
+        printf '%s\n' "$$TLS_SAN_IP" | awk -F. 'NF != 4 { exit 1 } { for (i=1;i<=4;i++) if ($$i !~ /^[0-9]+$$/ || $$i > 255) exit 1 }' \
+          || { echo '[tls] TLS_SAN_IP must be a valid IPv4 address' >&2; exit 1; }
+        mkdir -p /etc/ssl/red /var/www/certbot
+        cert=/etc/ssl/red/fullchain.pem
+        key=/etc/ssl/red/privkey.pem
+        for path in "$$cert" "$$key"; do
+          if [ -d "$$path" ]; then
+            echo "[tls] removing directory mistaken for a certificate file: $$path"
+            rm -rf "$$path"
+          fi
+        done
+        valid=false
+        if [ -s "$$cert" ] && [ -s "$$key" ] \
+          && openssl x509 -in "$$cert" -noout -checkend 86400 >/dev/null 2>&1 \
+          && openssl pkey -in "$$key" -noout -check >/dev/null 2>&1 \
+          && openssl x509 -in "$$cert" -noout -ext subjectAltName 2>/dev/null | grep -F "IP Address:$$TLS_SAN_IP" >/dev/null; then
+          cert_pub="$$(openssl x509 -in "$$cert" -pubkey -noout | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          key_pub="$$(openssl pkey -in "$$key" -pubout -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)"
+          [ -n "$$cert_pub" ] && [ "$$cert_pub" = "$$key_pub" ] && valid=true
+        fi
+        if [ "$$valid" != true ]; then
+          echo '[tls] generating a new atomic self-signed development certificate'
+          rm -f "$$cert.tmp" "$$key.tmp"
+          openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 825 \
+            -subj '/CN=red.local' \
+            -addext "subjectAltName=DNS:localhost,DNS:red.local,IP:127.0.0.1,IP:$$TLS_SAN_IP" \
+            -keyout "$$key.tmp" \
+            -out "$$cert.tmp"
+          openssl x509 -in "$$cert.tmp" -noout >/dev/null
+          openssl pkey -in "$$key.tmp" -noout -check >/dev/null
+          mv -f "$$key.tmp" "$$key"
+          mv -f "$$cert.tmp" "$$cert"
+        else
+          echo '[tls] existing certificate and private key passed validation'
+        fi
+        chmod 600 "$$key"
+        chmod 644 "$$cert"
+    volumes:
+      - red-certs:/etc/ssl/red
+      - certbot-www:/var/www/certbot
+
+  # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI — pinned + mem limits ━━━━━━━━━━━━
   nginx:
-    image: nginx:1.29-alpine
+    image: nginx:1.28.0-alpine
     container_name: red-proxy
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
     ports: ["${RED_HTTP_PORT:-8088}:80", "${RED_HTTPS_PORT:-8443}:443"]
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./secrets/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
-      - ./secrets/privkey.pem:/etc/ssl/private/privkey.pem:ro
+      - red-certs:/etc/ssl/red:ro
+      - certbot-www:/var/www/certbot:ro
+    # Keep the private key volume read-only in the traffic-serving container.
+    # Generation/repair belongs exclusively to certs-init; Nginx fails fast with
+    # an explicit message instead of attempting an impossible write to a :ro mount.
+    entrypoint:
+      - "/bin/sh"
+      - "-ec"
+      - |
+        for path in /etc/ssl/red/fullchain.pem /etc/ssl/red/privkey.pem; do
+          [ -f "$$path" ] && [ -s "$$path" ] || {
+            echo "[fatal] required TLS file is missing or invalid: $$path" >&2
+            exit 1
+          }
+        done
+        exec nginx -g 'daemon off;'
     depends_on:
       backend: { condition: service_healthy }
       admin-panel: { condition: service_healthy }
+      certs-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -220,8 +428,18 @@ services:
 
   admin-panel:
     build: ./admin_dashboard
+    image: red-admin-ui:local
     container_name: red-admin-ui
     restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -229,11 +447,19 @@ services:
       retries: 3
     networks: ["red-net"]
 
+  # ━━━━━━━━━━━━ 10. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
+  # Host must run chrony/ntpd. Backend health can verify clock skew via /health.
+  # so NTP sync is expected at host level, not container runtime download.
+
 volumes:
   postgres-data:
   mongo-data:
   redis-data:
   minio-data:
+  backup-data:
+  identity-secrets:
+  red-certs:
+  certbot-www:
 
 networks:
   red-net:

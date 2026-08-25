@@ -27,14 +27,9 @@ class PinnedMessageController(private val pins: PinnedMessageService) {
     @PostMapping
     fun pin(@RequestBody req: PinRequest, auth: Authentication): ResponseEntity<Any> {
         val actorId = UUID.fromString(auth.name)
-        // يحتاج RED ID للممثل لإظهاره في الرسالة المثبتة — نستخدم auth.name كـ UUID ثم نجلبه من DB لاحقاً
-        // للتبسيط نمرر الـ RED ID كـ actorId string (سيُحل في الخدمة)
         return try {
             val expiresAt = req.expiresInSeconds?.let { Instant.now().plusSeconds(it) }
-            // نحتاج RED ID — نجلبه من JWT claims أو نستخدم actorId كـ redId مؤقتاً
-            // في النظام الحالي auth.name هو UUID، لكن PinnedMessageService يستخدمه كـ pinnedBy
-            // سنمرر actorId.toString كـ actorRedId للتوافق
-            val res = pins.pin(actorId, actorId.toString(), req.messageUuid, req.conversationId, req.groupId, req.channelId, expiresAt)
+            val res = pins.pin(actorId, req.messageUuid, req.conversationId, req.groupId, req.channelId, expiresAt)
             ResponseEntity.ok(mapOf("success" to true, "pin" to res))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("success" to false, "error" to e.message))
