@@ -348,7 +348,8 @@ class DinstarLoadBalancer(
         return normalized == target.apiName
     }
 
-    private fun normalizeOperator(name: String): String = when {        name.contains("Sabafon", true) || name.contains("سبأفون") -> "Sabafon"
+    private fun normalizeOperator(name: String): String = when {
+        name.contains("Sabafon", true) || name.contains("سبأفون") -> "Sabafon"
         name.contains("MTN", true) || name.contains("YOU", true) || name.contains("يو") -> "YOU"
         name.contains("Yemen", true) && name.contains("Mobile", true) -> "YemenMobile"
         name.contains("يمن موبايل") -> "YemenMobile"
@@ -357,7 +358,8 @@ class DinstarLoadBalancer(
     }
 
     /** تحرير المنفذ بعد انتهاء المكالمة — بحدّ أدنى صفر. */
-    fun releasePort(gatewayId: UUID?, port: Int) {        portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
+    fun releasePort(gatewayId: UUID?, port: Int) {
+        portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
             // بدون هذا الحدّ كان التحرير المزدوج يدفع العدّاد إلى السالب
             // فتبدو الشريحة أبدًا «الأقل استخدامًا» وتُختار دائمًا.
             if (current > 0) current - 1 else 0
