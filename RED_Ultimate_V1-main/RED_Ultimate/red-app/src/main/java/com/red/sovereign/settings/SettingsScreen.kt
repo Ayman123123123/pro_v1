@@ -76,7 +76,7 @@ import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 
-private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, FOLDERS, STARRED, BLOCKED, ABOUT }
+private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, SERVER_ADVANCED, FOLDERS, STARRED, BLOCKED, ABOUT }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,7 +111,10 @@ fun YounesSettingsSheet(
                 SettingsPage.DATA -> DataSettings(viewModel)
                 SettingsPage.CALLS -> CallSettings(viewModel)
                 SettingsPage.DEVICES -> DevicesSettings(deviceSettings)
-                SettingsPage.SERVER -> ServerSettings()
+                SettingsPage.SERVER -> ServerSettings(onAdvanced = { page = SettingsPage.SERVER_ADVANCED })
+                // الشاشة الغنية (اكتشاف تلقائي + إدخال يدوي + تحقق توقيع السلطة)
+                // كانت مكتوبة بالكامل لكن غير موصولة بأي تنقّل، فبقيت كوداً ميتاً.
+                SettingsPage.SERVER_ADVANCED -> SmartServerSettingsScreen(onBack = { page = SettingsPage.SERVER })
                 SettingsPage.FOLDERS -> FolderSettings()
                 SettingsPage.STARRED -> StarredSettings()
                 SettingsPage.BLOCKED -> BlockedSettings()
@@ -290,8 +293,11 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { LockedSetting("تنبيه تغير المفتاح", "يجب إعادة مقارنة Safety Number عند تغير بصمة الجهاز") }
 }
 
-@Composable private fun ServerSettings() = SettingsList {
+@Composable private fun ServerSettings(onAdvanced: () -> Unit) = SettingsList {
     item { InfoCard("نقطة YOUNES الحالية", ServerEndpoint.url(), Icons.Default.Wifi) }
+    item {
+        Button(onAdvanced, Modifier.fillMaxWidth()) { Text("إعدادات الخادم المتقدمة (اكتشاف وإدخال يدوي)") }
+    }
     item { LockedSetting("اكتشاف LAN", "يعمل في Debug ويتحقق من /health وبصمة سلطة الهوية قبل حفظ العنوان") }
     item { LockedSetting("الوصول البعيد", "استخدم WireGuard أو TLS موثقًا؛ لا تفتح HTTP المحلي مباشرة للإنترنت") }
     item { LockedSetting("أسرار الخادم", "لا تُعرض كلمات المرور أو JWT أو مفاتيح السلطة داخل التطبيق") }
@@ -406,6 +412,7 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.ACCOUNT -> "الحساب والهوية"; SettingsPage.PRIVACY -> "الخصوصية والأمان"; SettingsPage.APPEARANCE -> "المظهر والوصولية"
     SettingsPage.CHATS -> "الدردشات والوسائط"; SettingsPage.NOTIFICATIONS -> "الإشعارات"; SettingsPage.DATA -> "البيانات والتخزين"
     SettingsPage.CALLS -> "المكالمات"; SettingsPage.DEVICES -> "الأجهزة والشهادات"; SettingsPage.SERVER -> "الخادم والشبكة"
+    SettingsPage.SERVER_ADVANCED -> "الخادم المتقدم"
     SettingsPage.FOLDERS -> "مجلدات الدردشة"; SettingsPage.STARRED -> "الرسائل المميّزة"; SettingsPage.BLOCKED -> "المحظورون"
     SettingsPage.ABOUT -> "حول يونس"; SettingsPage.ROOT -> "الإعدادات"
 }
