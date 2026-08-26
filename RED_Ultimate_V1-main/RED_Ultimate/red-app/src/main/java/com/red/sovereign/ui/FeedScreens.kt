@@ -139,11 +139,11 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
     // جمهور الحالة يُختار *قبل* منتقي الوسيط: بعد اختيار الصورة يبدأ
     // الرفع فورًا، فلا تبقى فرصة للسؤال عن الجمهور دون رفعٍ يُلغى.
     var showStoryAudience by remember { mutableStateOf(false) }
-    var storyVisibility by remember { mutableStateOf(StoryVisibility.CONTACTS) }
+    var storyVisibility by remember { mutableStateOf(StoryVisibility.CONTACTS) } // String const
     val layout = WindowLayout.current()
     val page = layout.pagePadding
     val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { stories.upload(it, visibility = storyVisibility) }
+        uri?.let { stories.upload(it, visibleTo = storyVisibility) }
     }
     val refreshing = feed.state == FeedState.Loading && feed.posts.isNotEmpty()
     PullToRefreshBox(isRefreshing = refreshing, onRefresh = { feed.refresh() }, modifier = Modifier.fillMaxSize()) {
@@ -188,7 +188,7 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
                 }
             }
             feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات. هذا النبض عام — ليس E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::follow, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
+            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
         }
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -267,6 +267,7 @@ internal fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, s
         )
     }
     val viewer = stories.viewer
+    val context = LocalContext.current
     if (viewer !is StoryViewerState.Closed) {
         val currentStoryId = when (viewer) {
             is StoryViewerState.Loading -> viewer.story.id

@@ -668,136 +668,6 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
 }
 
 @Composable
-private fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: StoryViewModel, onCreate: () -> Unit) {
-    val context = LocalContext.current
-    var filter by remember { mutableIntStateOf(0) }
-    var threadPost by remember { mutableStateOf<Post?>(null) }
-    var quotePost by remember { mutableStateOf<Post?>(null) }
-    var editPost by remember { mutableStateOf<Post?>(null) }
-    var editText by remember { mutableStateOf("") }
-    var replyText by remember { mutableStateOf("") }
-    var quoteText by remember { mutableStateOf("") }
-    val storyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(stories::upload) }
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            LazyRow(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { StoryCircle(if (stories.state == StoryState.Uploading) "يرفع…" else "قصتك", true) { storyPicker.launch(arrayOf("image/*", "video/*")) } }
-                items(stories.stories.sortedBy { it.isViewed }, key = Story::id) { story -> StoryCircle(story.ownerDisplayName + if (story.viewCount > 0) " • ${story.viewCount}" else "", false) { stories.open(story) } }
-            }
-        }
-        item {
-            Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أصدقائي", "اليمن").forEachIndexed { i, title ->
-                    FilterChip(filter == i, {
-                        filter = i
-                        feed.load(when (i) { 1 -> "FRIENDS"; 2 -> "YEMEN"; else -> null })
-                    }, { Text(title) })
-                }
-            }
-        }
-        item {
-            Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp).clickable(onClick = onCreate), colors = CardDefaults.cardColors(containerColor = AqyalSurfaceNavy)) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Avatar("أ"); Text("ماذا يحدث في يونس؟", color = Color.LightGray, modifier = Modifier.weight(1f).padding(horizontal = 12.dp)); Icon(Icons.Default.Add, null, tint = AqyalGold)
-                }
-            }
-        }
-        if (feed.state is FeedState.Message) item { (feed.state as? FeedState.Message)?.let { Text(it.text, color = AqyalGold, modifier = Modifier.padding(horizontal = 18.dp)) } }
-        when {
-            feed.state == FeedState.Loading -> item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }
-            feed.state is FeedState.Error -> item { (feed.state as? FeedState.Error)?.let { EmptyState(Icons.Default.DynamicFeed, "تعذر تحميل نبض يونس", it.message) } }
-            feed.posts.isEmpty() -> item { EmptyState(Icons.Default.DynamicFeed, "ابدأ مجتمع يونس", "اكتب أول منشور محلي. النظام يدعم السلاسل والاقتباسات والاستطلاعات، بينما المحتوى الخاص ينتظر تشفير E2EE.") }
-            else -> items(feed.posts, key = { it.id }) { post -> PostCard(post, account.redId, feed::toggleLike, feed::requestFriend, feed::vote, { threadPost = post; feed.loadThread(post) }, { quotePost = post }, onEdit = { p, t -> editPost = p; editText = t }, onDelete = feed::delete, onHide = feed::hide, onMute = feed::mute, onReport = feed::report) }
-        }
-        item { Spacer(Modifier.height(12.dp)) }
-    }
-    threadPost?.let { root ->
-        AlertDialog(
-            onDismissRequest = { threadPost = null; replyText = ""; feed.closeThread() },
-            title = { Text("Ø³Ù„Ø³Ù„Ø© ÙŠÙˆÙ†Ø³") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    when (val threadState = feed.threadState) {
-                        ThreadState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally), color = AqyalGold)
-                        is ThreadState.Error -> Text(threadState.message, color = MaterialTheme.colorScheme.error)
-                        else -> LazyColumn(Modifier.height(300.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(feed.threadPosts, key = { it.id }) { item ->
-                                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = if (item.id == root.id) AqyalSurfaceRaised else AqyalSurfaceNavy)) {
-                                    Column(Modifier.padding(12.dp)) { Text("@${item.authorUsername} Â· ${item.authorRedId}", color = AqyalCyanGlow, fontSize = 10.sp); Text(item.text) }
-                                }
-                            }
-                        }
-                    }
-                    OutlinedTextField(replyText, { replyText = it }, Modifier.fillMaxWidth(), placeholder = { Text("Ø§ÙƒØªØ¨ Ø±Ø¯Ù‹Ø§ Ø¹Ù„Ù†ÙŠÙ‹Ø§ ÙÙŠ Ù†Ø¨Ø¶ ÙŠÙˆÙ†Ø³â€¦") }, maxLines = 4)
-                    Button({ feed.reply(root, replyText) { replyText = "" } }, Modifier.fillMaxWidth(), enabled = replyText.isNotBlank() && feed.threadState != ThreadState.Publishing) { Text("Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø±Ø¯") }
-                }
-            },
-            confirmButton = { TextButton({ threadPost = null; replyText = ""; feed.closeThread() }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
-        )
-    }
-    quotePost?.let { quoted ->
-        AlertDialog(
-            onDismissRequest = { quotePost = null; quoteText = "" },
-            title = { Text("Ø§Ù‚ØªØ¨Ø§Ø³ Ù…Ù†Ø´ÙˆØ± @${quoted.authorUsername}") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Card { Text(quoted.text, Modifier.padding(12.dp), color = Color.Gray) }; OutlinedTextField(quoteText, { quoteText = it }, Modifier.fillMaxWidth(), label = { Text("ØªØ¹Ù„ÙŠÙ‚Ùƒ") }, maxLines = 5) } },
-            confirmButton = { Button({ feed.quote(quoted, quoteText) { quotePost = null; quoteText = "" } }, enabled = quoteText.isNotBlank() && feed.state != FeedState.Publishing) { Text("Ù†Ø´Ø± Ø§Ù„Ø§Ù‚ØªØ¨Ø§Ø³") } },
-            dismissButton = { TextButton({ quotePost = null; quoteText = "" }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
-        )
-    }
-    editPost?.let { post ->
-        AlertDialog(
-            onDismissRequest = { editPost = null; editText = "" },
-            title = { Text("ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ù…Ù†Ø´ÙˆØ±") },
-            text = { OutlinedTextField(editText, { editText = it }, Modifier.fillMaxWidth(), label = { Text("Ø§Ù„Ù†Øµ Ø§Ù„Ø¬Ø¯ÙŠØ¯") }, maxLines = 7) },
-            confirmButton = { Button({ feed.edit(post, editText) { editPost = null; editText = "" } }, enabled = editText.isNotBlank() && editText != post.text) { Text("Ø­ÙØ¸ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„") } },
-            dismissButton = { TextButton({ editPost = null; editText = "" }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
-        )
-    }
-    val viewer = stories.viewer
-    if (viewer !is StoryViewerState.Closed) {
-        val currentStoryId = when (viewer) {
-            is StoryViewerState.Loading -> viewer.story.id
-            is StoryViewerState.Image -> viewer.story.id
-            is StoryViewerState.Video -> viewer.story.id
-            is StoryViewerState.Text -> viewer.story.id
-            is StoryViewerState.Voice -> viewer.story.id
-            is StoryViewerState.Unsupported -> viewer.story.id
-            is StoryViewerState.Error -> viewer.story.id
-            StoryViewerState.Closed -> ""
-        }
-        StoryFullscreen(
-            viewer = viewer,
-            onClose = stories::closeViewer,
-            onNext = {
-                val idx = stories.stories.indexOfFirst { it.id == currentStoryId }
-                if (idx != -1 && idx < stories.stories.size - 1) {
-                    stories.open(stories.stories[idx + 1])
-                } else {
-                    stories.closeViewer()
-                }
-            },
-            onPrev = {
-                val idx = stories.stories.indexOfFirst { it.id == currentStoryId }
-                if (idx > 0) {
-                    stories.open(stories.stories[idx - 1])
-                } else {
-                    stories.closeViewer()
-                }
-            },
-            onReact = stories::react,
-            onReply = { story, text ->
-                RedConnectionService.sendRichText(
-                    context,
-                    story.ownerRedId,
-                    conversationId(account.redId, story.ownerRedId),
-                    RichMessage(action = "STORY_REPLY", text = text, replyTo = story.id)
-                )
-            }
-        )
-    }
-}
-
-@Composable
 private fun StoryCircle(label: String, own: Boolean, click: () -> Unit) = Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = click)) {
     Box(Modifier.size(66.dp).clip(CircleShape).background(if (own) AqyalGold else AqyalCyanGlow), contentAlignment = Alignment.Center) {
         Box(Modifier.size(58.dp).clip(CircleShape).background(AqyalRoyalBlue), contentAlignment = Alignment.Center) {
@@ -4348,10 +4218,10 @@ private fun EmojiPicker(onEmoji: (String) -> Unit) {
 // Ø£Ø­Ø¯Ù‡Ø§ ÙˆØªØ±ÙØ¶Ù‡ Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©.
 private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
 // Ù†Ø³Ø®Ø© Ø¨Ø¯ÙˆÙ† ^ Ùˆ $ Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…Ù‡Ø§ Ø¯Ø§Ø®Ù„ Ù†Øµ (Ù…Ø«Ù„ @12345)
-private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
+internal val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬Ø§Øª Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©/Ø§Ù„Ù„Ø§ØªÙŠÙ†ÙŠØ©
 // Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬ Ù„Ù€ # autocomplete
-private val EMOJI_CATEGORIES = listOf(
+internal val EMOJI_CATEGORIES = listOf(
     "Ø³Ø±ÙŠØ¹Ø©" to listOf("ðŸ˜€", "ðŸ˜‚", "ðŸ˜", "ðŸ‘", "â¤ï¸", "ðŸ”¥", "ðŸ‘", "ðŸ™", "ðŸŽ‰", "ðŸ˜¢", "ðŸ˜®", "âœ…"),
     "Ø§Ù„ÙˆØ¬ÙˆÙ‡" to listOf("ðŸ˜€", "ðŸ˜ƒ", "ðŸ˜„", "ðŸ˜", "ðŸ˜†", "ðŸ˜…", "ðŸ˜‚", "ðŸ™‚", "ðŸ™ƒ", "ðŸ˜‰", "ðŸ˜Š", "ðŸ¥°", "ðŸ˜", "ðŸ¤©", "ðŸ˜˜", "ðŸ˜‹", "ðŸ˜Ž", "ðŸ¤”", "ðŸ˜´", "ðŸ˜­", "ðŸ˜¡", "ðŸ¥³"),
     "Ø§Ù„Ø¥Ø´Ø§Ø±Ø§Øª" to listOf("ðŸ‘", "ðŸ‘Ž", "ðŸ‘Œ", "âœŒï¸", "ðŸ¤ž", "ðŸ¤Ÿ", "ðŸ¤˜", "ðŸ‘", "ðŸ™Œ", "ðŸ«¶", "ðŸ¤", "ðŸ™", "ðŸ’ª", "ðŸ‘€", "â¤ï¸", "ðŸ’š", "ðŸ’›", "ðŸ’™"),
@@ -4363,7 +4233,7 @@ private val EMOJI_CATEGORIES = listOf(
 )
 private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
 
-private fun conversationId(first: String, second: String): String {
+internal fun conversationId(first: String, second: String): String {
     if (first.isBlank() || second.isBlank()) return "pending-conversation"
     val canonical = listOf(first, second).sorted().joinToString("|")
     return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }.take(32)

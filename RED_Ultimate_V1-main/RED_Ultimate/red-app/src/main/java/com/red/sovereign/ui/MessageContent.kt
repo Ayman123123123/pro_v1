@@ -367,15 +367,15 @@ internal fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMod
     }
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(manifestJson)
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.downloadVoice(item.id, manifestJson)
     }
-    val isDownloaded = when (val current = attachments.state) {
+    val isDownloaded = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> current.name == manifest.name
         is AttachmentState.Exported -> current.name == manifest.name
         else -> false
     }
-    val isDownloading = attachments.state is AttachmentState.Working
-    val downloadedUri = when (val current = attachments.state) {
+    val isDownloading = attachments.getDownloadState(item.id) is AttachmentState.Working
+    val downloadedUri = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> if (current.name == manifest.name) {
             android.net.Uri.fromFile(java.io.File(current.path))
         } else null
@@ -400,11 +400,11 @@ internal fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewMod
             isOutgoing = item.outgoing,
             isDownloaded = isDownloaded,
             isDownloading = isDownloading,
-            onPlayPause = { attachments.download(manifestJson) },
+            onPlayPause = { attachments.downloadVoice(item.id, manifestJson) },
             onSeek = { /* no-op before download */ },
             onSpeedChange = { /* no-op before download */ },
-            onDownload = { attachments.download(manifestJson) },
-            onWaveformTap = { attachments.download(manifestJson) }
+            onDownload = { attachments.downloadVoice(item.id, manifestJson) },
+            onWaveformTap = { attachments.downloadVoice(item.id, manifestJson) }
         )
     }
 }
@@ -420,7 +420,7 @@ internal fun AttachmentMessage(item: DecryptedMessage, attachments: AttachmentVi
     }
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(manifestJson)
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
     }
     when {
         manifest.mimeType.startsWith("image/") -> ImageMessage(item, manifest, attachments)
@@ -435,14 +435,14 @@ internal fun AttachmentMessage(item: DecryptedMessage, attachments: AttachmentVi
 private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
     }
-    val downloaded = when (val current = attachments.state) {
+    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> current.path to current.name
         is AttachmentState.Exported -> current.path to current.name
         else -> null
     }
-    val isWorking = attachments.state is AttachmentState.Working
+    val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
     if (downloaded?.second == manifest.name) {
         val file = java.io.File(downloaded.first)
         val bitmap = remember(file.lastModified()) {
@@ -481,7 +481,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Spacer(Modifier.height(6.dp))
                     Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
                     Text("${formatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                    IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                    IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
                         Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
                             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
                         }
@@ -497,9 +497,9 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
     }
-    val downloaded = when (val current = attachments.state) {
+    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> current.path to current.name
         is AttachmentState.Exported -> current.path to current.name
         else -> null
@@ -508,11 +508,12 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.Black), shape = RoundedCornerShape(16.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) {
                 StoryVideoPlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxSize())
-                Surface(
-                    Modifier.align(Alignment.Center).size(52.dp),
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.55f),
-                    onClick = {
+                Box(
+                    Modifier
+                        .align(Alignment.Center).size(52.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable {
                         val uri = android.net.Uri.fromFile(java.io.File(downloaded.first))
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "video/*")
@@ -521,12 +522,12 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                         runCatching { context.startActivity(intent) }
                     }
                 ) {
-                    Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
+                    Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(34.dp))
                 }
             }
         }
     } else {
-        val isWorking = attachments.state is AttachmentState.Working
+        val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
         Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(16.dp)) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(YounesEmerald.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
@@ -537,7 +538,7 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
-                else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+                else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
                     Icon(Icons.Default.Download, "تنزيل الفيديو", tint = YounesEmerald)
                 }
             }
@@ -550,9 +551,9 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
     }
-    val downloaded = when (val current = attachments.state) {
+    val downloaded = when (val current = attachments.getDownloadState(item.id)) {
         is AttachmentState.Downloaded -> current.path to current.name
         is AttachmentState.Exported -> current.path to current.name
         else -> null
@@ -567,7 +568,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     Text("✓ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
-                VoiceNotePlayer(android.net.Uri.fromFile(java.io.File(downloaded.first)), Modifier.fillMaxWidth())
+                VoiceNotePlayer(uri = android.net.Uri.fromFile(java.io.File(downloaded.first)), modifier = Modifier.fillMaxWidth())
             }
         }
     } else {
@@ -580,7 +581,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     Text("صوت مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
-                IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.state !is AttachmentState.Working) {
+                IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.getDownloadState(item.id) !is AttachmentState.Working) {
                     Icon(Icons.Default.Download, "تنزيل الصوت")
                 }
             }
@@ -593,9 +594,9 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
 private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val context = LocalContext.current
     LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.plaintext.toString(Charsets.UTF_8))
+        if (!item.outgoing && shouldAutoDownload(context, manifest.size)) attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8))
     }
-    val isWorking = attachments.state is AttachmentState.Working
+    val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
     val fileColor = when {
         manifest.mimeType.contains("pdf") -> AqyalCyanGlow
         manifest.mimeType.contains("zip") || manifest.mimeType.contains("compressed") -> AqyalGold
@@ -614,7 +615,7 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
                 Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
             }
             if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
-            else IconButton({ attachments.download(item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
+            else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
                 Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
             }
         }
@@ -632,6 +633,7 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
+@Composable
 internal fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
     Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -771,26 +773,14 @@ internal fun AttachmentSheet(
 // QrScannerSheet وSafetyViewModel بصياغات متباينة، فكان معرّف يقبله
 // أحدها وترفضه الشاشة التالية.
 
-private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // الهاشتاجات العربية/اللاتينية
 
-internal val HASHTAG_PARTIAL = Regex("#[\w\u0600-\u06FF]{2,30}")
+private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
+
+internal val HASHTAG_PARTIAL = Regex("#[\\w\u0600-\u06FF]{2,30}")
 // اسم المستخدم للـ @ autocomplete
 
 internal val USERNAME_PARTIAL = Regex("@([A-Za-z0-9_.]{1,20})$")
 // الهاشتاج لـ # autocomplete
 
-internal val HASHTAG_AUTOCOMPLETE = Regex("#([\w\u0600-\u06FF]{1,20})$")
-
-private val EMOJI_CATEGORIES = listOf(
-    "سريعة" to listOf("😀", "😂", "😍", "👍", "❤️", "🔥", "👏", "🙏", "🎉", "😢", "😮", "✅"),
-    "الوجوه" to listOf("😀", "😃", "😄", "😁", "😆", "😅", "😂", "🙂", "🙃", "😉", "😊", "🥰", "😍", "🤩", "😘", "😋", "😎", "🤔", "😴", "😭", "😡", "🥳"),
-    "الإشارات" to listOf("👍", "👎", "👌", "✌️", "🤞", "🤟", "🤘", "👏", "🙌", "🫶", "🤝", "🙏", "💪", "👀", "❤️", "💚", "💛", "💙"),
-    "الأشياء" to listOf("📱", "💻", "⌚", "📷", "🎥", "🎙️", "🔒", "🔑", "💡", "📌", "📎", "📁", "📄", "📚", "🎁", "🏆", "✅", "⚠️"),
-    "الطبيعة" to listOf("🌙", "☀️", "⭐", "🔥", "🌈", "🌹", "🌿", "🌳", "🌊", "⛰️", "🐪", "🦅", "🐝", "🦋"),
-    "الطعام" to listOf("☕", "🍵", "🥤", "🍞", "🥐", "🍚", "🍗", "🥗", "🍎", "🍉", "🍇", "🍯", "🎂"),
-    "السفر" to listOf("🚗", "🚕", "🚌", "✈️", "🚁", "🚢", "🗺️", "🏠", "🏢", "🏥", "🏫", "🕌", "⛺"),
-    "الرموز" to listOf("✅", "❌", "⚠️", "❗", "❓", "💯", "➕", "➖", "♻️", "🔴", "🟢", "🟡", "🔵", "🇾🇪")
-)
-
-private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
+internal val HASHTAG_AUTOCOMPLETE = Regex("#([\\w\u0600-\u06FF]{1,20})$")
