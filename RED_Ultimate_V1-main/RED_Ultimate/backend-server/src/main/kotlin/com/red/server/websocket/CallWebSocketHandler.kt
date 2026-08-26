@@ -104,6 +104,8 @@ class CallWebSocketHandler(
                     }
                     if (memberId != null) activeCalls.releaseMember(groupCallId, memberId)
                 }
+                // نشاط في الغرفة → جدّد الطابع الزمني حتى لا يُنظَّفها المؤقّت خطأً.
+                groupRooms.computeIfPresent(groupCallId) { _, r -> r.copy(lastActivityAt = Instant.now()) }
                 val outbound = OutgoingCallSignal(groupCallId, source, hostId, type, signal.mode.uppercase(), signal.payload + ("memberStatus" to signal.memberStatus.orEmpty()))
                 val targets = liveSessions(hostId)
                 if (targets.isEmpty()) {
@@ -331,8 +333,11 @@ class CallWebSocketHandler(
     fun deliverGroupCallInvite(groupCallId: String, hostRedId: String, invitees: List<String>, mode: String, payload: Map<String, Any?>) {
         val room = groupRooms[groupCallId] ?: return
         val busy = invitees.filter { activeCalls.isInCall(it) }.toSet()
-        // سجّل الجدد في الغرفة والـ registry
-        groupRooms[groupCallId] = room.copy(members = room.members + invitees.filterNot { it in room.members })
+        // سجّل الجدد في الغرفة والـ registry، وجدّد طابع النشاط (دعوة = نشاط).
+        groupRooms[groupCallId] = room.copy(
+            members = room.members + invitees.filterNot { it in room.members },
+            lastActivityAt = Instant.now()
+        )
         activeCalls.register(groupCallId, listOf(hostRedId) + invitees.filterNot { it in busy })
         val outboundPayload = payload + mapOf("hostName" to (payload["hostName"] ?: ""))
         invitees.forEach { invitee ->
@@ -377,12 +382,13 @@ class CallWebSocketHandler(
         }
         pending.entries.removeIf { it.value.isEmpty() }
         
-        // Clean stale group rooms (no activity for 10 minutes)
+        // Clean stale group rooms (no activity for 10 minutes). GROUP_CALL_END
+        // is the normal cleanup path; this is the safety net for rooms whose
+        // host died/disconnected without sending END — previously this block
+        // returned false unconditionally and leaked every such room forever.
         val staleThreshold = now.minusSeconds(600)
         groupRooms.entries.removeIf { entry ->
-            // In a full implementation, we'd track last activity per room
-            // For now, we rely on GROUP_CALL_END to clean up properly
-            false
+            entry.value.lastActivityAt.isBefore(staleThreshold)
         }
     }
 }
@@ -397,7 +403,13 @@ private data class PendingCallSignal(
 /** غرفة مكالمة جماعية — يوجّه السيرفر بها ردود الأعضاء إلى المضيف والإنهاء للجميع. */
 private data class GroupCallRoom(
     val host: String,
-    val members: List<String>
+    val members: List<String>,
+    /**
+     * آخر لحظة نشاط في الغرفة (إنشاء/دعوة/رد عضو). يُستخدم للتنظيف الكسول
+     * للغرف العالقة عندما لا يصل `GROUP_CALL_END` (تعطّل المضيف/انقطاعه).
+     * بدونه كانت `cleanupStaleGroups` تُعيد `false` دائماً فتتسرّب الغرف.
+     */
+    val lastActivityAt: Instant = Instant.now()
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)

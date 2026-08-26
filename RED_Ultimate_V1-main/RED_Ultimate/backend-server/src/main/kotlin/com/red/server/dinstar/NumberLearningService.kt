@@ -88,7 +88,9 @@ class NumberLearningService(
         intRange("maxIntervalMinutes", "max_interval_minutes", 1, 1440)
         intRange("dailyCapPerPort", "daily_cap_per_port", 1, 100)
         (patch["enabledPorts"] as? String)?.let {
-            require(it.matches(Regex("^([0-7](,[0-7])*)?$"))) { "enabledPorts must be CSV of 0-7 or empty" }
+            // الأسطول يدعم 16 منفذاً (8G + 8T) كبقية النظام؛ كان النمط 0-7 يرفض
+            // نصف المنافذ فتُستبعد شرائح 8..15 من تعلّم الأرقام صامتةً.
+            require(it.matches(Regex("^((1[0-5]|[0-9])(,(1[0-5]|[0-9]))*)?$"))) { "enabledPorts must be CSV of 0-15 or empty" }
             add("enabled_ports", it.trim())
         }
         // SMS mode — comprehensive
@@ -238,7 +240,7 @@ class NumberLearningService(
         if (pool.isEmpty()) return
 
         val enabledPortsRaw = cfg["enabled_ports"]?.toString()?.trim().orEmpty()
-        val ports: List<Int> = if (enabledPortsRaw.isBlank()) (0..7).toList()
+        val ports: List<Int> = if (enabledPortsRaw.isBlank()) (0..15).toList()
         else enabledPortsRaw.split(',').mapNotNull { it.trim().toIntOrNull() }
 
         val cap = (cfg["daily_cap_per_port"] as Number).toInt()
@@ -272,7 +274,7 @@ class NumberLearningService(
         val mode = cfg["mode"]?.toString() ?: "OFF"
         require(mode != "OFF") { "Enable LEARN or MAINTAIN mode first" }
         val targetPort = port ?: 0
-        require(targetPort in 0..7) { "port must be 0-7" }
+        require(targetPort in 0..15) { "port must be 0-15" }
         val cap = (cfg["daily_cap_per_port"] as Number).toInt()
         val today = LocalDate.now(ZONE)
         val used = jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_calls WHERE port=? AND started_at::date=? AND status<>'FAILED'", Long::class.java, targetPort, today) ?: 0L

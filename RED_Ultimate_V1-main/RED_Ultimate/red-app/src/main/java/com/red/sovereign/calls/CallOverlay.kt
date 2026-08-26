@@ -71,6 +71,7 @@ fun YounesCallOverlay() {
     val state = CallRuntime.state
     if (state is CallUiState.Idle) return
     val context = LocalContext.current
+    val declineScope = androidx.compose.runtime.rememberCoroutineScope()
     val mode = when (state) {
         is CallUiState.Incoming -> state.mode
         is CallUiState.Connecting -> state.mode
@@ -277,7 +278,24 @@ fun YounesCallOverlay() {
                                 if (coord?.activeIncoming != null) coord.rejectIncoming()
                                 else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
                             },
-                            onDeclineWithMessage = { msg -> /* TODO: send decline message */ },
+                            onDeclineWithMessage = { msg ->
+                                // رفض المكالمة مع إرسال رسالة SMS للمتصل عبر البوابة —
+                                // كان TODO فارغاً فكان الزر يرفض دون إرسال أي رسالة.
+                                val coord = PstnIncomingCallCoordinator.active
+                                val callerNumber = peer
+                                if (coord?.activeIncoming != null) coord.rejectIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                                val body = msg?.trim().orEmpty()
+                                if (body.isNotEmpty() && callerNumber.isNotBlank()) {
+                                    declineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        runCatching {
+                                            com.red.sovereign.features.sms.SmsApi(
+                                                com.red.sovereign.auth.TokenStore(context)
+                                            ).send(callerNumber, body)
+                                        }
+                                    }
+                                }
+                            },
                             onAcceptVideo = {
                                 // مكالمات PSTN صوتية فقط — القبول يعالجها صوتياً
                                 val coord = PstnIncomingCallCoordinator.active

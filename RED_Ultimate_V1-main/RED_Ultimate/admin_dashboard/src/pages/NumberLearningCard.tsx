@@ -152,8 +152,8 @@ export default function NumberLearningCard() {
               </Form.Item>
             </Col>
             <Col span={8}>
-              <Form.Item label="المنافذ المفعّلة (CSV فارغ=الكل)">
-                <Input placeholder="0,2,5" defaultValue={cfg.enabledPorts} onBlur={e => saveConfig({ enabledPorts: e.target.value.trim() })} />
+              <Form.Item label="المنافذ المفعّلة (CSV فارغ=الكل، 0-15)">
+                <Input placeholder="0,2,5,11" defaultValue={cfg.enabledPorts} onBlur={e => saveConfig({ enabledPorts: e.target.value.trim() })} />
               </Form.Item>
             </Col>
             <Col span={10}>
