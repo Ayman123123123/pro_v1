@@ -1,32 +1,25 @@
 package com.red.server.websocket
 
-import com.red.server.calls.CallHistoryService
-import com.red.server.calls.CallRoute
-import com.red.server.calls.CallType
-import com.red.server.pstn.DinstarEventListener
-import com.red.server.services.DinstarHardwareService
 import org.asteriskjava.manager.event.HangupEvent
-import org.asteriskjava.manager.event.ManagerEvent
 import org.asteriskjava.manager.event.NewStateEvent
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.util.UUID
 
 /**
  * جسر الأحداث من خدمات DINSTAR المختلفة إلى WebSocket.
  *
  * يربط بين:
- * - DinstarHardwareService (أحداث HTTP من البوابة)
- * - DinstarEventListener (أحداث Asterisk AMI)
- * - DinstarWebSocketHandler (الإرسال للعملاء)
+ * - DinstarEventListener (أحداث Asterisk AMI) — المنتِج الفعلي
+ * - DinstarWebSocketHandler (الإرسال للعملاء على `/ws/dinstar`)
  *
- * يستدعى من خدمات الباكند عند حدوث أحداث تستحق البثّ الحي.
+ * موصول الآن من `DinstarEventListener`: `onCallStateChanged` عند كل
+ * `NewStateEvent`، و`onCallEnded` عند `Hangup`. قبل ذلك كان هذا الـbean
+ * يُبنى بلا أي منادٍ فكانت كل دواله كودًا ميتًا ولم تصل حالات القنوات
+ * ولا سجلات CDR الحيّة إلى مراقبي البوابة.
  */
 @Component
 class DinstarEventBridge(
-    private val wsHandler: DinstarWebSocketHandler,
-    private val hardware: DinstarHardwareService,
-    private val callHistory: CallHistoryService
+    private val wsHandler: DinstarWebSocketHandler
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarEventBridge::class.java)
@@ -84,7 +77,8 @@ class DinstarEventBridge(
     }
 
     /**
-     * بثّ حدث استثناء.
+     * بثّ استثناء بوابة (تعذّر وصول/فشل نبضة) لمراقبي `/ws/dinstar`.
+     * موصول من `DinstarHeartbeatService` عند فشل النبضة لبوابة.
      */
     fun onException(type: String, details: Map<String, Any?>) {
         broadcastEvent("DINSTAR_EXCEPTION", mapOf(

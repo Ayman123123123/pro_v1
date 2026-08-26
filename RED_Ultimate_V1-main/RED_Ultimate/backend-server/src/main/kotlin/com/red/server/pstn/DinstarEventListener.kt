@@ -37,7 +37,8 @@ class DinstarEventListener(
     private val objectMapper: ObjectMapper,
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate,
-    private val progress: PstnCallProgressTracker
+    private val progress: PstnCallProgressTracker,
+    @Lazy private val eventBridge: com.red.server.websocket.DinstarEventBridge
 ) : ManagerEventListener {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarEventListener::class.java)
@@ -141,6 +142,12 @@ class DinstarEventListener(
             }
             "Down" -> log.debug("Line {} down", lineNumber)
         }
+
+        // جسر لوحة الإدارة/الأسطول: بثّ حالة القناة الخام على `/ws/dinstar`.
+        // كان DinstarEventBridge bean حيًّا بلا أي منتِج (كل دواله ميتة)، فلم
+        // تصل حالات القنوات إلى مراقبي البوابة إطلاقًا.
+        runCatching { eventBridge.onCallStateChanged(event) }
+            .onFailure { log.debug("dinstar bridge state: {}", it.message) }
     }
 
     private fun handleBridge(event: BridgeEvent) {
@@ -239,6 +246,10 @@ class DinstarEventListener(
         } else {
             log.debug("Could not resolve port for hangup release: channel={} callId={}", channel, callId)
         }
+
+        // سجل CDR حيّ لمراقبي البوابة على `/ws/dinstar` (الجسر كان ميتًا).
+        runCatching { eventBridge.onCallEnded(event) }
+            .onFailure { log.debug("dinstar bridge cdr: {}", it.message) }
 
         // مكالمة فائتة؟ مفتاح الوارد لا يزال موجوداً يعني انتهت المهلة/الرفض
         // من الشبكة دون قبول (القبول يحذف المفتاح). أنهِ السجل وأشعر المالك.

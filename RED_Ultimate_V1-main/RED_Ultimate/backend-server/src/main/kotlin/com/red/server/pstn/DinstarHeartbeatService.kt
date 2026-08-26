@@ -24,7 +24,8 @@ class DinstarHeartbeatService(
     private val hardware: DinstarHardwareService,
     private val loadBalancer: DinstarLoadBalancer,
     @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
-    private val wsBroadcaster: org.springframework.beans.factory.ObjectProvider<com.red.server.websocket.DinstarWebSocketHandler>
+    private val wsBroadcaster: org.springframework.beans.factory.ObjectProvider<com.red.server.websocket.DinstarWebSocketHandler>,
+    private val eventBridge: org.springframework.beans.factory.ObjectProvider<com.red.server.websocket.DinstarEventBridge>
 ) {
     companion object { private val log = LoggerFactory.getLogger(DinstarHeartbeatService::class.java) }
 
@@ -66,6 +67,10 @@ class DinstarHeartbeatService(
                             loadBalancer.releasePort(gw.id, idx)
                         }
                     }
+                    // جسر حالة المنفذ لمراقبي `/ws/dinstar` (كان الجسر بلا منتِج).
+                    eventBridge.ifAvailable { bridge ->
+                        runCatching { bridge.onPortStatusChanged(gw.host, idx, port) }
+                    }
                 }
                 val recovered = lastReachable.put(gw.host, true) == false
                 if (recovered) log.info("DINSTAR gateway {} is reachable again", gw.host)
@@ -74,6 +79,15 @@ class DinstarHeartbeatService(
                 wsBroadcaster.ifAvailable { it.broadcastPortStatus() }
             } catch (e: Exception) {
                 fleet.markFailure(gw.id, e.message ?: "heartbeat failed")
+                // أبلغ مراقبي `/ws/dinstar` بالانقطاع فورًا بدل انتظار قراءة اللوق.
+                eventBridge.ifAvailable { bridge ->
+                    runCatching {
+                        bridge.onException(
+                            "GATEWAY_UNREACHABLE",
+                            mapOf("gatewayHost" to gw.host, "gatewayId" to gw.id.toString(), "error" to (e.message ?: "heartbeat failed"))
+                        )
+                    }
+                }
                 val firstFailure = lastReachable.put(gw.host, false) != false
                 val last = lastWarnAt[gw.host]
                 val quiet = last != null && Duration.between(last, Instant.now()).toMinutes() < 5
