@@ -227,7 +227,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onSignal(signal: CallSignal) {
         // إشارات المكالمة الجماعية تُوجّه إلى GroupCallService عبر مقبسه الخاص —
         // يتجاهلها مستمع المكالمات الفردية حتى لا يعتبرها مكالمة واردة 1:1.
-        if (signal.groupCallId != null && signal.type != "GROUP_CALL_INVITE") return
+        // ZOOM_INVITE استثناء: مثل GROUP_CALL_INVITE يحمل groupCallId لكنه يجب
+        // أن يُطلق رنين اجتماع Zoom الوارد، وإلا بقي المدعوّون لا يُخطَرون أبداً.
+        if (signal.groupCallId != null && signal.type != "GROUP_CALL_INVITE" && signal.type != "ZOOM_INVITE") return
         when (signal.type) {
             "OFFER", "RENEGOTIATE" -> {
                 if (isRenegotiation(signal)) {
@@ -331,6 +333,31 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 if (current is GroupCallUiState.IncomingGroup && current.groupCallId == gId) {
                     GroupCallRuntime.state = GroupCallUiState.Ended
                     stopForeground(STOP_FOREGROUND_REMOVE)
+                }
+            }
+            "ZOOM_INVITE" -> {
+                // دعوة اجتماع Zoom وارد — يُطلق رنين ZoomGroupCallService (كان الحدث
+                // يُرسله المضيف لكن لا مستقبِل له، فلم يُخطَر المدعوّون قط).
+                val gId = signal.groupCallId ?: signal.callId.orEmpty()
+                val myId = TokenStore(this).redId.orEmpty()
+                ZoomGroupCallService.notifyIncoming(
+                    this,
+                    gId,
+                    myId,
+                    signal.sourceUserId.orEmpty(),
+                    signal.payload["hostName"] ?: signal.sourceUserId.orEmpty(),
+                    (signal.payload["isVideo"] == "true") || signal.mode == "VIDEO",
+                    signal.payload["title"] ?: "",
+                    signal.inviteeIds.filter { it != myId }
+                )
+            }
+            "ZOOM_END" -> {
+                val gId = signal.groupCallId ?: signal.callId.orEmpty()
+                val current = ZoomRuntime.state
+                val incomingMatches = current is ZoomUiState.Incoming && current.meetingId == gId
+                val ringingMatches = current is ZoomUiState.Ringing && current.meetingId == gId
+                if (incomingMatches || ringingMatches) {
+                    ZoomGroupCallService.decline(this, gId)
                 }
             }
             "CONFERENCE_INVITE" -> {

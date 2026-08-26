@@ -19,9 +19,16 @@ fun UnifiedCallOverlays() {
     val groupState = GroupCallRuntime.state
     val confState  = ConferenceRuntime.state
     val liveState  = LiveStreamRuntime.state
+    val zoomState  = ZoomRuntime.state
 
     when {
         callState  !is CallUiState.Idle && !CallRuntime.isMinimized -> YounesCallOverlay()
+        // Zoom (اجتماعات مستقلة حتى 100 مشارك) — كان الـoverlay مكتملاً لكنه
+        // غير معروض في أي مكان فبقيت الميزة كلها كوداً ميتاً. يُعرض عند وجود
+        // اجتماع نشط/وارد وغير مُصغَّر، بنفس نمط «واجهة واحدة في كل لحظة».
+        zoomState  !is ZoomUiState.Idle
+            && zoomState !is ZoomUiState.Ended
+            && !ZoomRuntime.isMinimized -> ZoomGroupCallOverlay()
         groupState !is GroupCallUiState.Idle
 
             && groupState !is GroupCallUiState.Ended -> GroupCallOverlay()

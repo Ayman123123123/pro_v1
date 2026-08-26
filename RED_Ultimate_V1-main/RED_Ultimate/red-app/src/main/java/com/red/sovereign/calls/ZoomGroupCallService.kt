@@ -261,6 +261,20 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 val track = mesh?.stopScreenShare() ?: engine?.stopScreenShare()
                 ZoomRuntime.localVideo=track; ZoomRuntime.isScreenSharing=false; if(track==null) ZoomRuntime.isVideoEnabled=false
             }
+            ACTION_START_RECORDING -> {
+                // تسجيل اجتماع Zoom مشفَّر AES-GCM — كان الـoverlay يرسل هذا الأمر
+                // لكن الخدمة لم تعالجه فبقي recordingManager ميتاً والزر بلا أثر.
+                // يعيد استخدام نفس محرّك التسجيل الموحّد (CallRecordingManager) الذي
+                // يعمل فعلاً في GroupCallService، بموافقة صريحة لا تُفترض.
+                if (recordingManager == null && meetingId.isNotBlank()) {
+                    recordingManager = CallRecordingManager(this, meetingId)
+                }
+                ZoomRuntime.isRecording = recordingManager?.start(consentGranted = true) == true
+            }
+            ACTION_STOP_RECORDING -> {
+                scope.launch { recordingManager?.stop(); recordingManager = null }
+                ZoomRuntime.isRecording = false
+            }
             ACTION_ADD_PARTICIPANT -> {
                 val newIds = intent.getStringArrayListExtra(EXTRA_INVITEE_IDS) ?: arrayListOf()
                 val newNames = intent.getStringArrayListExtra(EXTRA_INVITEE_NAMES) ?: arrayListOf()
@@ -581,6 +595,8 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         const val ACTION_ADD_PARTICIPANT = "com.red.sovereign.zoom.ADD_PARTICIPANT"
         const val ACTION_START_SCREEN_SHARE = "com.red.sovereign.zoom.START_SCREEN_SHARE"
         const val ACTION_STOP_SCREEN_SHARE = "com.red.sovereign.zoom.STOP_SCREEN_SHARE"
+        const val ACTION_START_RECORDING = "com.red.sovereign.zoom.START_RECORDING"
+        const val ACTION_STOP_RECORDING = "com.red.sovereign.zoom.STOP_RECORDING"
         const val ACTION_TOGGLE_LOCK = "com.red.sovereign.zoom.TOGGLE_LOCK"
         const val ACTION_TOGGLE_WAITING_ROOM = "com.red.sovereign.zoom.TOGGLE_WAITING"
         const val ACTION_CREATE_POLL = "com.red.sovereign.zoom.CREATE_POLL"
