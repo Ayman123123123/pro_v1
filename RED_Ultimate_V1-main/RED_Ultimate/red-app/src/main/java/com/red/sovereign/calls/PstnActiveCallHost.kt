@@ -48,7 +48,7 @@ fun PstnActiveCallHost(
             PstnWebRtcManager.PstnCallState.ACTIVE -> PstnCallStatus.ACTIVE
             else -> PstnCallStatus.ENDED
         },
-        callerNumber = manager.remoteNumber,
+        number = manager.remoteNumber ?: "",
         onMuteToggle = { muted ->
             runCatching { manager.isMuted = muted }
         },

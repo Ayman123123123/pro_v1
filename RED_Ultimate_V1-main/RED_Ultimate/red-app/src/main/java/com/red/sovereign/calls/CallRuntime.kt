@@ -55,6 +55,26 @@ sealed interface CallUiState {
 
 object CallRuntime {
     var state: CallUiState by mutableStateOf(CallUiState.Idle)
+
+    // ── حالة مكالمة البوابة (PSTN/DINSTAR) — مصدر شاشة المراحل الغنية ──
+    // كانت YounesPstnCallOverlay تشير إليها وكانت غير معرَّفة إطلاقًا فتُسقط
+    // ترجمة الوحدة كلها؛ الآن مُعرَّفة ومُشغَّلة من أحداث /ws/pstn الحقيقية.
+    var pstnStatus: PstnCallStatus by mutableStateOf(PstnCallStatus.IDLE)
+    var pstnNumber: String by mutableStateOf("")
+    var pstnCallId: String by mutableStateOf("")
+
+    /** مدة عرض الحالة النهائية (منتهية/فائتة) قبل إخفاء شاشة المكالمة. */
+    const val TERMINAL_DISPLAY_MS: Long = 4_000L
+
+    fun setPstn(status: PstnCallStatus, number: String = pstnNumber, callId: String = pstnCallId) {
+        pstnStatus = status; pstnNumber = number; pstnCallId = callId
+    }
+
+    fun clearPstn() {
+        pstnStatus = PstnCallStatus.IDLE
+        pstnNumber = ""
+        pstnCallId = ""
+    }
     var eglContext: org.webrtc.EglBase.Context? = null
     var localVideo: VideoTrack? by mutableStateOf(null)
     var localVideoTrack: VideoTrack? by mutableStateOf(null)

@@ -150,12 +150,3 @@ fun IncomingPstnCallScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
-
-private fun formatPhoneNumber(number: String): String {
-    if (number.startsWith("+")) return number
-    return when (number.length) {
-        in 4..6 -> "${number.take(3)} ${number.drop(3)}"
-        in 7..9 -> "${number.take(3)} ${number.substring(3, minOf(6, number.length))} ${number.drop(6)}"
-        else -> number
-    }
-}

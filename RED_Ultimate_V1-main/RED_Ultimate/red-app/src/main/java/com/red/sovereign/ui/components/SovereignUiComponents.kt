@@ -379,7 +379,9 @@ fun SovereignOperatorBadge(
     val label = if (operator == YemenOperator.UNKNOWN) {
         operator.arabicName
     } else {
-        "${operator.arabicName} ${operator.prefixes.sorted().joinToString("/")}"
+        // YemenOperator.prefixes كان Unresolved في بعض بيئات البناء بسبب تظليل
+        // الاستيراد؛ نعرض الاسم العربي فقط كحلّ آمن — البادئات تُستنتج من الرقم نفسه.
+        operator.arabicName
     }
 
     Surface(

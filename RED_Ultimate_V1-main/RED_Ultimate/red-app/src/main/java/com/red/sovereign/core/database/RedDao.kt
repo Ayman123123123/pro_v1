@@ -169,9 +169,6 @@ interface RedDao {
     @Query("SELECT COUNT(*) FROM local_history WHERE conversationId = :convId AND outgoing = 0 AND createdAt > :since")
     suspend fun countIncomingSince(convId: String, since: Long): Int
 
-    @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :convId")
-    suspend fun clearUnread(convId: String)
-
     @Query("SELECT * FROM local_history WHERE id = :id LIMIT 1")
     suspend fun getLocalHistoryEntry(id: String): LocalHistoryEntity?
 

@@ -291,14 +291,3 @@ private fun DialKey(
 }
 
 // ─── Utils ─────────────────────────────────────────────────────────────────
-
-private fun formatPhoneNumber(number: String): String {
-    if (number.isEmpty()) return "أدخل الرقم المطلوب..."
-    if (number.startsWith("+")) return number
-    return when (number.length) {
-        in 1..3 -> number
-        in 4..6 -> "${number.take(3)} ${number.drop(3)}"
-        in 7..9 -> "${number.take(3)} ${number.substring(3, minOf(6, number.length))} ${number.drop(6)}"
-        else -> "${number.take(3)} ${number.substring(3, 6)} ${number.drop(6)}"
-    }
-}

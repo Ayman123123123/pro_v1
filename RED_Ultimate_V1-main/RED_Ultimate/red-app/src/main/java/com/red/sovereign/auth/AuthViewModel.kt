@@ -355,7 +355,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         val result = api.me()
         if (result is ApiResult.Success) {
             val user = result.value
-            tokens.store.put("pstn_enabled", user.pstnEnabled.toString())
+            tokens.savePstnEnabled(user.pstnEnabled)
             // تحديث AuthState الحالي إن كان مصادقاً
             state = when (val current = state) {
                 is AuthState.Authenticated -> current.copy(pstnEnabled = user.pstnEnabled)

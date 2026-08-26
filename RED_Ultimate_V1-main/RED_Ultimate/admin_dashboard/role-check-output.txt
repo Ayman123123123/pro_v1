@@ -1,0 +1,43 @@
+
+> red-admin-dashboard@1.0.0 check:roles
+> node scripts/check-app-roles.mjs
+
+
+≡ƒöÉ ╪¬╪╖╪º╪¿┘é ╪º┘ä╪╡┘ä╪º╪¡┘è╪º╪¬: red-app Γåö SecurityConfig
+
+  ╪ú┘å┘à╪º╪╖ ADMIN ┘ü┘è SecurityConfig: 6
+  ┘à╪│╪º╪▒╪º╪¬ ┘è╪│╪¬╪»╪╣┘è┘ç╪º ╪º┘ä╪¬╪╖╪¿┘è┘é: 111
+  ╪º╪│╪¬╪½┘å╪º╪í╪º╪¬ ┘à╪╣┘ä┘å╪⌐: 11
+
+Γ¥î ╪º╪│╪¬╪½┘å╪º╪í ╪Ñ╪»╪º╪▒┘è ╪╡╪º╪▒ ┘à╪▒╪¿┘ê╪╖┘ï╪º ╪¿┘ê╪º╪¼┘ç╪⌐ ┘ü┘è ╪º┘ä╪¬╪╖╪¿┘è┘é:
+
+  ΓÇó media/EventsApi ΓÇö ┘è┘Å╪┤╪º╪▒ ╪Ñ┘ä┘è┘ç ┘à┘å ╪«╪º╪▒╪¼ ╪¡╪▓┘à╪¬┘ç
+    ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è ╪│┘è╪╡┘ä ╪Ñ┘ä┘ë ┘à╪│╪º╪▒ ADMIN ┘ê┘è╪¡╪╡┘ä ╪╣┘ä┘ë 403.
+    ╪º┘ä┘é╪▒╪º╪▒ ╪º┘ä┘à╪╖┘ä┘ê╪¿: ╪»┘ê╪▒ ╪╡╪▒┘è╪¡ ╪»╪º╪«┘ä ╪º┘ä╪¬╪╖╪¿┘è┘é ╪ú┘ê ┘à╪│╪º╪▒ ╪╣╪º┘à ╪¿╪»┘è┘ä.
+
+  ΓÇó media/PollsApi ΓÇö ┘è┘Å╪┤╪º╪▒ ╪Ñ┘ä┘è┘ç ┘à┘å ╪«╪º╪▒╪¼ ╪¡╪▓┘à╪¬┘ç
+    ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è ╪│┘è╪╡┘ä ╪Ñ┘ä┘ë ┘à╪│╪º╪▒ ADMIN ┘ê┘è╪¡╪╡┘ä ╪╣┘ä┘ë 403.
+    ╪º┘ä┘é╪▒╪º╪▒ ╪º┘ä┘à╪╖┘ä┘ê╪¿: ╪»┘ê╪▒ ╪╡╪▒┘è╪¡ ╪»╪º╪«┘ä ╪º┘ä╪¬╪╖╪¿┘è┘é ╪ú┘ê ┘à╪│╪º╪▒ ╪╣╪º┘à ╪¿╪»┘è┘ä.
+
+Γ¥î 5 ┘à╪│╪º╪▒ ╪Ñ╪»╪º╪▒┘è ┘è╪│╪¬╪»╪╣┘è┘ç ╪º┘ä╪¬╪╖╪¿┘è┘é ╪¿┘ä╪º ╪º╪│╪¬╪½┘å╪º╪í ┘à╪╣┘ä┘å:
+
+  ΓÇó /api/admin/dinstar/ports/:p/reset
+    ┘è╪¬╪╖┘ä╪¿ ADMIN ┘ü┘è SecurityConfig ┘ê┘ä┘à ┘è┘Å╪╣┘ä┘å ╪º╪│╪¬╪½┘å╪º╪í┘ï ΓÇö ╪│┘è╪╣┘è╪» 403 ┘ä┘â┘ä ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è
+    ┘ü┘è: java\com\red\sovereign\features\dinstar\DinstarViewModel.kt
+
+  ΓÇó /api/admin/dinstar/ports/:p/ussd
+    ┘è╪¬╪╖┘ä╪¿ ADMIN ┘ü┘è SecurityConfig ┘ê┘ä┘à ┘è┘Å╪╣┘ä┘å ╪º╪│╪¬╪½┘å╪º╪í┘ï ΓÇö ╪│┘è╪╣┘è╪» 403 ┘ä┘â┘ä ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è
+    ┘ü┘è: java\com\red\sovereign\features\dinstar\DinstarViewModel.kt
+
+  ΓÇó /api/master/admin/hardware/dinstar/action
+    ┘è╪¬╪╖┘ä╪¿ ADMIN ┘ü┘è SecurityConfig ┘ê┘ä┘à ┘è┘Å╪╣┘ä┘å ╪º╪│╪¬╪½┘å╪º╪í┘ï ΓÇö ╪│┘è╪╣┘è╪» 403 ┘ä┘â┘ä ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è
+    ┘ü┘è: java\com\red\sovereign\features\admin\AdminViewModel.kt
+
+  ΓÇó /api/master/admin/system/stats
+    ┘è╪¬╪╖┘ä╪¿ ADMIN ┘ü┘è SecurityConfig ┘ê┘ä┘à ┘è┘Å╪╣┘ä┘å ╪º╪│╪¬╪½┘å╪º╪í┘ï ΓÇö ╪│┘è╪╣┘è╪» 403 ┘ä┘â┘ä ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è
+    ┘ü┘è: java\com\red\sovereign\features\admin\AdminViewModel.kt
+
+  ΓÇó /api/master/admin/users/pending
+    ┘è╪¬╪╖┘ä╪¿ ADMIN ┘ü┘è SecurityConfig ┘ê┘ä┘à ┘è┘Å╪╣┘ä┘å ╪º╪│╪¬╪½┘å╪º╪í┘ï ΓÇö ╪│┘è╪╣┘è╪» 403 ┘ä┘â┘ä ┘à╪│╪¬╪«╪»┘à ╪╣╪º╪»┘è
+    ┘ü┘è: java\com\red\sovereign\features\admin\AdminViewModel.kt
+

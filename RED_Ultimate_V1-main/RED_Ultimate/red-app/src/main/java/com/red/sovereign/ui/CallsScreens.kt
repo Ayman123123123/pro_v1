@@ -61,9 +61,11 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +90,7 @@ import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
 import java.util.UUID
 
+@Composable
 internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, onExplore: () -> Unit, onPstn: () -> Unit = {}) {
     var filter by remember { mutableStateOf("الكل") }
     var showNewCallDialog by remember { mutableStateOf(false) }
@@ -111,10 +114,12 @@ internal fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel
         Text("الفردي يرن. المؤتمر والمساحة والبث أزرار مستقلة هنا — ليست أزرار الدردشة.", color = Color.LightGray, fontSize = 13.sp)
         Spacer(Modifier.height(12.dp))
         CallsHubLaunchers(
-            onPrivateCall = { showNewCallDialog = true },
+            onNewCall = { showNewCallDialog = true },
+            onGroupCallPicker = { showNewCallDialog = true },
             onConference = { showJoinDialog = true },
-            onLive = { showLiveDialog = true },
             onSpace = { showSpaceDialog = true },
+            onLive = { showLiveDialog = true },
+            onScheduledCalls = { },
             onExplore = onExplore,
             onPstn = onPstn
         )
@@ -408,7 +413,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
             "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
             "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
             "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-            else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+            else -> if (call.peerId.matches(Regex(com.red.sovereign.core.YounesId.PATTERN)) && call.route != "DINSTAR") {
                 YounesCallService.start(context, call.peerId, call.type == "VIDEO")
             }
         }
@@ -526,11 +531,13 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
         Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
         when (val state = viewModel.pstnState) {
             PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
+            PstnState.Bridging, PstnState.Registering, PstnState.Ringing -> Text("جارٍ الاتصال…", color = AqyalGold)
+            is PstnState.Incoming -> Text("مكالمة واردة من ${state.fromNumber}", color = AqyalGold)
             is PstnState.Started -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("بدأ الاتصال · ${state.usedToday}/${state.dailyLimit} اليوم", color = AqyalGold)
                 // 📴 زر إنهاء فعلي — يستدعي POST /api/pstn/calls/{callId}/hangup ويحرّر منفذ GSM
                 OutlinedButton(
-                    onClick = { viewModel.hangupPstn(state.callId) },
+                    onClick = { viewModel.hangupPstn() },
                     colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Icon(Icons.Default.Call, null, tint = MaterialTheme.colorScheme.error); Text(" إنهاء المكالمة") }
             }
@@ -540,5 +547,3 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable

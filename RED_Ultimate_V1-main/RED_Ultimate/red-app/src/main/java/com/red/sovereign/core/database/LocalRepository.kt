@@ -144,7 +144,6 @@ class LocalRepository(context: Context) {
     suspend fun countIncomingSince(convId: String, since: Long): Int = dao.countIncomingSince(convId, since)
 
     /** تصفير عداد غير المقروء عند فتح المحادثة. */
-    suspend fun clearUnread(convId: String) = dao.clearUnread(convId)
 
     /** جلب سجل واحد — للتحقق من ملكية التعديل/الحذف قبل تطبيقهما. */
     suspend fun getLocalHistoryEntry(id: String) = dao.getLocalHistoryEntry(id)

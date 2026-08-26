@@ -1085,3 +1085,91 @@ export async function getPstnUsers(): Promise<any> {
   const res = await apiFetch('/api/admin/users');
   return res.json();
 }
+
+// ━━━━━━━━━━━━━━━━ 👥 Groups (Admin) — /api/admin/social/groups ━━━━━━━━━━━━━━━━
+export interface AdminGroup {
+  id: string;
+  name: string;
+  description?: string;
+  ownerRedId: string;
+  avatarUrl?: string;
+  memberCount: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+export interface AdminGroupMember {
+  userId: string;
+  redId: string;
+  username: string;
+  role: string;
+  joinedAt: string;
+}
+export interface AdminGroupDetails {
+  id: string;
+  name: string;
+  description?: string;
+  ownerRedId: string;
+  avatarUrl?: string;
+  createdAt: string;
+  updatedAt?: string;
+  members: AdminGroupMember[];
+}
+export async function getGroupsOverview(): Promise<{ totalGroups: number; totalMembers: number; avgMembersPerGroup: number; createdToday: number }> {
+  return writeJson(await apiFetch('/api/admin/social/groups/overview'));
+}
+export async function getAdminGroups(params: { q?: string; page?: number; size?: number } = {}): Promise<PageResponse<AdminGroup>> {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set('q', params.q);
+  if (params.page !== undefined) sp.set('page', String(params.page));
+  if (params.size !== undefined) sp.set('size', String(params.size));
+  const data = await writeJson(await apiFetch(`/api/admin/social/groups?${sp}`));
+  return asPage<AdminGroup>(data);
+}
+export async function getAdminGroupDetails(groupId: string): Promise<AdminGroupDetails> {
+  return writeJson(await apiFetch(`/api/admin/social/groups/${groupId}`));
+}
+export async function deleteAdminGroup(groupId: string) {
+  return writeJson(await apiFetch(`/api/admin/social/groups/${groupId}`, { method: 'DELETE' }));
+}
+export async function removeGroupMember(groupId: string, userId: string) {
+  return writeJson(await apiFetch(`/api/admin/social/groups/${groupId}/members/${userId}`, { method: 'DELETE' }));
+}
+// Aliases used by some pages
+export const getAdminGroup = getAdminGroupDetails;
+export const getGroupsOverviewAlias = getGroupsOverview;
+
+// ━━━━━━━━━━━━━━━━ 📝 Posts (Admin) — /api/admin/social/posts ━━━━━━━━━━━━━━━━
+export interface AdminPost {
+  id: string;
+  authorRedId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  text: string;
+  visibility: string;
+  kind: string;
+  mediaCount: number;
+  hashtags: string[];
+  reactionCounts: Record<string, number>;
+  replyCount: number;
+  repostCount: number;
+  createdAt: string;
+  deleted?: boolean;
+}
+export async function getPostsOverview(): Promise<{ totalPosts: number; createdToday: number; deletedPosts: number; polls: number }> {
+  return writeJson(await apiFetch('/api/admin/social/posts/overview'));
+}
+export async function getAdminPosts(params: { q?: string; includeDeleted?: boolean; page?: number; size?: number } = {}): Promise<PageResponse<AdminPost>> {
+  const sp = new URLSearchParams();
+  if (params.q) sp.set('q', params.q);
+  if (params.includeDeleted !== undefined) sp.set('includeDeleted', String(params.includeDeleted));
+  if (params.page !== undefined) sp.set('page', String(params.page));
+  if (params.size !== undefined) sp.set('size', String(params.size));
+  const data = await writeJson(await apiFetch(`/api/admin/social/posts?${sp}`));
+  return asPage<AdminPost>(data);
+}
+export async function deleteAdminPost(postId: string) {
+  return writeJson(await apiFetch(`/api/admin/social/posts/${postId}`, { method: 'DELETE' }));
+}
+export async function restoreAdminPost(postId: string) {
+  return writeJson(await apiFetch(`/api/admin/social/posts/${postId}/restore`, { method: 'POST' }));
+}

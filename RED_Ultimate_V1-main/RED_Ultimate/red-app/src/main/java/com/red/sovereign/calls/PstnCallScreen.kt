@@ -46,26 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
-enum class PstnCallStatus {
-    IDLE,
-    REGISTERING,
-    BRIDGING,
-    INVITING,
-    RINGING,
-    ACTIVE,
-    ENDED,
-    ERROR
-}
-
-data class CallMetrics(
-    val jitterMs: Float = 0f,
-    val packetLossPercent: Float = 0f,
-    val roundTripMs: Float = 0f,
-    val errors: List<String> = emptyList(),
-    val dailyLimit: Int = 1000,
-    val usedToday: Int = 0
-)
-
 private fun formatDuration(millis: Long): String {
     val totalSeconds = (millis / 1000).toInt()
     val minutes = totalSeconds / 60

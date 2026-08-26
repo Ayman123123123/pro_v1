@@ -40,7 +40,7 @@ fun YounesPstnCallOverlay() {
     // شاشة ميتة ولا تختفي النتيجة قبل أن يقرأها.
     LaunchedEffect(status) {
         if (status == PstnCallStatus.ENDED) {
-            delay(CallUiState.TERMINAL_DISPLAY_MS)
+            delay(CallRuntime.TERMINAL_DISPLAY_MS)
             if (CallRuntime.pstnStatus == PstnCallStatus.ENDED) CallRuntime.clearPstn()
         }
     }

@@ -3555,7 +3555,7 @@ private fun CreateSheet(
 
 @Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = Color.Gray, fontSize = 12.sp) } } }
 
-@Composable private fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
+@Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
 /**
  * Ù…Ø®Ø²Ù† ØªØµÙˆÙŠØªØ§Øª Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (E2EE): pollId -> (Ù…ØµÙˆØª -> ÙÙ‡Ø±Ø³ Ø§Ù„Ø®ÙŠØ§Ø±).
  * ØªÙØ­Ø¯ÙŽÙ‘Ø« Ù…Ù† Ø±Ø³Ø§Ø¦Ù„ POLL_VOTE Ø§Ù„ÙˆØ§Ø±Ø¯Ø©ØŒ ÙˆØªÙÙ‚Ø±Ø£Ù‡Ø§ Ø¨Ø·Ø§Ù‚Ø§Øª Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹.
@@ -4343,44 +4343,6 @@ private fun EmojiPicker(onEmoji: (String) -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AttachmentSheet(
-    onCamera: () -> Unit,
-    onGallery: () -> Unit,
-    onDocument: () -> Unit,
-    onDismiss: () -> Unit
-) = ModalBottomSheet(
-    onDismissRequest = onDismiss,
-    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-    containerColor = MaterialTheme.colorScheme.surface
-) {
-    Column(Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Ø¥Ø±ÙØ§Ù‚", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        HorizontalDivider()
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f).clickable(onClick = { onCamera(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Camera, null, tint = YounesEmerald, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(4.dp))
-                Text("Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§", fontWeight = FontWeight.Medium)
-                Text("Ø§Ù„ØªÙ‚Ø· ØµÙˆØ±Ø© Ø£Ùˆ ÙÙŠØ¯ÙŠÙˆ", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-            Column(Modifier.weight(1f).clickable(onClick = { onGallery(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Photo, null, tint = AqyalCyanGlow, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(4.dp))
-                Text("Ø§Ù„Ù…Ø¹Ø±Ø¶", fontWeight = FontWeight.Medium)
-                Text("Ø§Ø®ØªØ± Ù…Ù† Ø§Ù„ØµÙˆØ± ÙˆØ§Ù„ÙÙŠØ¯ÙŠÙˆÙ‡Ø§Øª", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-            Column(Modifier.weight(1f).clickable(onClick = { onDocument(); onDismiss() }).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.AutoMirrored.Filled.InsertDriveFile, null, tint = AqyalGold, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(4.dp))
-                Text("Ù…Ù„Ù", fontWeight = FontWeight.Medium)
-                Text("PDFØŒ Ù…Ø³ØªÙ†Ø¯Ø§ØªØŒ Ù…Ø¶ØºÙˆØ·Ø§Øª", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
 // Ù…ØµØ¯Ø± Ø§Ù„Ø­Ù‚ÙŠÙ‚Ø© Ø§Ù„ÙˆØ­ÙŠØ¯: core/YounesId.kt. Ø§Ù„Ù†Ù…Ø· ÙƒØ§Ù† Ù…ÙƒØ±Ù‘Ø±Ù‹Ø§ Ù‡Ù†Ø§ ÙˆÙÙŠ
 // QrScannerSheet ÙˆSafetyViewModel Ø¨ØµÙŠØ§ØºØ§Øª Ù…ØªØ¨Ø§ÙŠÙ†Ø©ØŒ ÙÙƒØ§Ù† Ù…Ø¹Ø±Ù‘Ù ÙŠÙ‚Ø¨Ù„Ù‡
 // Ø£Ø­Ø¯Ù‡Ø§ ÙˆØªØ±ÙØ¶Ù‡ Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©.
@@ -4388,11 +4350,7 @@ private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
 // Ù†Ø³Ø®Ø© Ø¨Ø¯ÙˆÙ† ^ Ùˆ $ Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…Ù‡Ø§ Ø¯Ø§Ø®Ù„ Ù†Øµ (Ù…Ø«Ù„ @12345)
 private val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
 // Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬Ø§Øª Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©/Ø§Ù„Ù„Ø§ØªÙŠÙ†ÙŠØ©
-private val HASHTAG_PARTIAL = Regex("#[\\w\\u0600-\\u06FF]{2,30}")
-// Ø§Ø³Ù… Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ù„Ù„Ù€ @ autocomplete
-private val USERNAME_PARTIAL = Regex("@([A-Za-z0-9_.]{1,20})$")
 // Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬ Ù„Ù€ # autocomplete
-private val HASHTAG_AUTOCOMPLETE = Regex("#([\\w\\u0600-\\u06FF]{1,20})$")
 private val EMOJI_CATEGORIES = listOf(
     "Ø³Ø±ÙŠØ¹Ø©" to listOf("ðŸ˜€", "ðŸ˜‚", "ðŸ˜", "ðŸ‘", "â¤ï¸", "ðŸ”¥", "ðŸ‘", "ðŸ™", "ðŸŽ‰", "ðŸ˜¢", "ðŸ˜®", "âœ…"),
     "Ø§Ù„ÙˆØ¬ÙˆÙ‡" to listOf("ðŸ˜€", "ðŸ˜ƒ", "ðŸ˜„", "ðŸ˜", "ðŸ˜†", "ðŸ˜…", "ðŸ˜‚", "ðŸ™‚", "ðŸ™ƒ", "ðŸ˜‰", "ðŸ˜Š", "ðŸ¥°", "ðŸ˜", "ðŸ¤©", "ðŸ˜˜", "ðŸ˜‹", "ðŸ˜Ž", "ðŸ¤”", "ðŸ˜´", "ðŸ˜­", "ðŸ˜¡", "ðŸ¥³"),
@@ -4423,5 +4381,3 @@ private fun TabButton(selected: Boolean, onClick: () -> Unit, modifier: Modifier
         shape = RoundedCornerShape(12.dp)
     ) { content() }
 }
-
-

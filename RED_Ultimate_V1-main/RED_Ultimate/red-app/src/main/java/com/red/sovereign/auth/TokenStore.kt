@@ -19,6 +19,9 @@ class TokenStore(val context: Context) {
     fun rememberDevice(value: String) = store.put("device_id", value)
     fun saveFcmToken(value: String) = store.put("fcm_token", value)
     fun saveUsername(value: String) = store.put("username", value)
+
+    /** حفظ صلاحية PSTN بعد /api/auth/me — كان AuthViewModel يلمس store الخاص مباشرة. */
+    fun savePstnEnabled(value: Boolean) = store.put("pstn_enabled", value.toString())
     fun rememberPendingLogin(username: String, password: String) {
         store.put("pending_username", username)
         store.put("pending_password", password)
