@@ -131,4 +131,29 @@ class PstnCallProgressTrackerTest {
         assertNull(t.attachChannel("ghost", channel))
         assertEquals(0, t.activeCount())
     }
+
+    @Test
+    fun `التقدّم بالمعرّف المباشر لا يتطلب ربط قناة`() {
+        val t = tracker()
+        t.register(callId, redId, number)
+        // مسار DinstarEventListener الفعلي: callId محلول من Redis، لا حاجة لـ attachChannel
+        assertEquals(Stage.RINGING, t.advanceByCallId(callId, Stage.RINGING)?.stage)
+        assertEquals(Stage.ACTIVE, t.advanceByCallId(callId, Stage.ACTIVE)?.stage)
+    }
+
+    @Test
+    fun `التقدّم بالمعرّف يمنع التراجع والتكرار`() {
+        val t = tracker()
+        t.register(callId, redId, number)
+        t.advanceByCallId(callId, Stage.ACTIVE)
+        assertNull(t.advanceByCallId(callId, Stage.RINGING))
+        assertNull(t.advanceByCallId(callId, Stage.ACTIVE))
+        assertEquals(Stage.ACTIVE, t.find(callId)?.stage)
+    }
+
+    @Test
+    fun `التقدّم بمعرّف غير مسجّل يُهمل بلا استثناء`() {
+        val t = tracker()
+        assertNull(t.advanceByCallId("no-such-call", Stage.RINGING))
+    }
 }

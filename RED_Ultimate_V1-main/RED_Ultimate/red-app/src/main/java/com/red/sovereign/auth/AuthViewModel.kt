@@ -118,21 +118,77 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
     var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
 
+    /**
+     * قناة أحداث الخادم الحيّة لمكالمة PSTN الصادرة عبر `/ws/pstn`.
+     *
+     * مسار SIP في `PstnWebRtcManager` يستشعر RINGING/ANSWERED من إشارة SIP
+     * المحلية، لكنه أعمى عن مراحل قناة GSM الفعلية على البوابة. الخادم صار
+     * يبثّ `PSTN_CALL_EVENT` (RINGING/BRIDGING/ACTIVE/ENDED) من أحداث
+     * Asterisk الحقيقية — وهي المصدر الموثوق لمرحلة الطرف البعيد. نستهلكها
+     * هنا لتصحيح حالة الواجهة حتى لو تأخّرت إشارة SIP أو غابت.
+     */
+    private var pstnEventSocket: com.red.sovereign.features.sms.PstnEventSocket? = null
+    @Volatile private var activePstnCallId: String? = null
+
+    private fun startPstnEventStream() {
+        if (pstnEventSocket != null) return
+        pstnEventSocket = com.red.sovereign.features.sms.PstnEventSocket(
+            tokens = tokens,
+            onEnvelope = ::onPstnServerEvent
+        ).also { it.connect() }
+    }
+
+    private fun stopPstnEventStream() {
+        pstnEventSocket?.disconnect()
+        pstnEventSocket = null
+        activePstnCallId = null
+    }
+
+    /** يحوّل أحداث الخادم إلى انتقالات حالة الواجهة للمكالمة الصادرة الجارية. */
+    private fun onPstnServerEvent(e: com.red.sovereign.features.sms.PstnWsEnvelope) {
+        if (e.type != "PSTN_CALL_EVENT") return
+        val callId = e.callId ?: return
+        // تجاهل أحداث مكالمة أخرى (مثلاً مكالمة سابقة انتهت متأخرة).
+        val current = activePstnCallId
+        if (current != null && callId != current) return
+        val prev = pstnState as? PstnState.Started
+        when (e.event) {
+            "RINGING" -> pstnState = PstnState.Ringing
+            "BRIDGING" -> pstnState = PstnState.Bridging
+            "ACTIVE" -> pstnState = PstnState.Started(
+                callId = callId,
+                usedToday = prev?.usedToday ?: 0,
+                dailyLimit = prev?.dailyLimit ?: 0,
+                answered = true
+            )
+            "ENDED" -> {
+                pstnWebRtc?.release()
+                pstnWebRtc = null
+                pstnState = PstnState.Idle
+                stopPstnEventStream()
+            }
+            else -> Unit
+        }
+    }
+
     fun dialPstn(number: String) = viewModelScope.launch {
         refreshPstnEntitlement()
         pstnState = PstnState.Bridging
+        startPstnEventStream()
         val mgr = com.red.sovereign.calls.PstnWebRtcManager(getApplication())
         pstnWebRtc = mgr
         mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
             override fun onConnected() { pstnState = PstnState.Registering }
             override fun onRinging() { pstnState = PstnState.Ringing }
             override fun onAnswered(usedToday: Int, dailyLimit: Int) {
+                activePstnCallId = mgr.currentCallId
                 pstnState = PstnState.Started(mgr.currentCallId ?: "", usedToday, dailyLimit)
             }
             override fun onHangup(cause: String?) {
                 pstnState = PstnState.Idle
                 pstnWebRtc?.release()
                 pstnWebRtc = null
+                stopPstnEventStream()
             }
             override fun onIncoming(sdp: String, fromNumber: String) {
                 incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
@@ -140,6 +196,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             }
             override fun onError(message: String) {
                 pstnState = PstnState.Error(localize(message))
+                stopPstnEventStream()
             }
         })
     }
@@ -156,6 +213,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         pstnWebRtc = null
         incomingPstnCall = null
         pstnState = PstnState.Idle
+        stopPstnEventStream()
     }
 
     fun hangupPstn() = viewModelScope.launch {
@@ -163,6 +221,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         pstnWebRtc?.release()
         pstnWebRtc = null
         pstnState = PstnState.Idle
+        stopPstnEventStream()
     }
 
     /** كتم/إلغاء كتم الميكروفون في مكالمة PSTN النشطة. */
