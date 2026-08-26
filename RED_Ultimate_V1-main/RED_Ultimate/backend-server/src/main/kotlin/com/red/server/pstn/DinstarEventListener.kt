@@ -36,7 +36,8 @@ class DinstarEventListener(
     @Lazy private val pstnManager: PstnManager,
     private val objectMapper: ObjectMapper,
     private val fleet: DinstarFleetService,
-    private val jdbc: JdbcTemplate
+    private val jdbc: JdbcTemplate,
+    private val progress: PstnCallProgressTracker
 ) : ManagerEventListener {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarEventListener::class.java)
@@ -104,6 +105,11 @@ class DinstarEventListener(
         if (variable == "CALL_ID" || variable == "RED_CALL_ID") {
             redis.opsForValue().set("$CHANNEL_CALLID_PREFIX$channel", value, Duration.ofHours(CHANNEL_TTL_HOURS))
             pstnManager.bindChannel(value, channel)
+            // اربط القناة بالمتتبِّع فور معرفتها — هذا هو المفصل الذي يجعل كل
+            // حدث AMI لاحق (Ringing/Up/Hangup) قابلاً للتوجيه إلى صاحب المكالمة.
+            // كان attachChannel لا يُستدعى من أي مكان فبقيت خريطة القنوات فارغة
+            // ولم تصل مراحل المكالمة الصادرة إلى التطبيق إطلاقاً.
+            runCatching { progress.attachChannel(value, channel) }
             log.debug("Channel {} bound to callId {}", channel, value)
         }
     }
@@ -115,24 +121,58 @@ class DinstarEventListener(
 
         log.info("DINSTAR line {} state -> {} (channel={})", lineNumber, state, channel)
 
+        // حلّ callId لهذه القناة مرة واحدة: مفتاح Redis أولاً (الأدق، مضبوط
+        // من RED_CALL_ID)، ثم تخمين المنفذ كاحتياط أخير.
+        val callId = redis.opsForValue().get("$CHANNEL_CALLID_PREFIX$channel")
+            ?: findCallIdFromPort(extractPortIndex(channel, lineNumber))
+
         when (state) {
+            "Ringing" -> {
+                log.debug("Line {} ringing", lineNumber)
+                callId?.let { emitCallProgress(it, PstnCallProgressTracker.Stage.RINGING, mapOf("port" to lineNumber)) }
+            }
             "Up" -> {
                 log.info("Line {} answered (CONNECTED)", lineNumber)
-                val callId = redis.opsForValue().get("$CHANNEL_CALLID_PREFIX$channel")
-                    ?: findCallIdFromPort(extractPortIndex(channel, lineNumber))
                 if (callId != null) {
                     runCatching { history.answer(callId) }
                         .onFailure { log.warn("Could not mark call {} as answered: {}", callId, it.message) }
+                    emitCallProgress(callId, PstnCallProgressTracker.Stage.ACTIVE, mapOf("port" to lineNumber))
                 }
             }
-            "Ringing" -> log.debug("Line {} ringing", lineNumber)
             "Down" -> log.debug("Line {} down", lineNumber)
         }
     }
 
     private fun handleBridge(event: BridgeEvent) {
         log.debug("Bridge event: channel1={}, channel2={}", event.channel1, event.channel2)
+        // جسر مساري صوت = المكالمة الصادرة دخلت مرحلة BRIDGING. نوجّه الحدث
+        // للطرفين المعروفين إن كان أيّهما مكالمة PSTN صادرة متتبَّعة.
+        listOfNotNull(event.channel1, event.channel2).forEach { ch ->
+            val callId = redis.opsForValue().get("$CHANNEL_CALLID_PREFIX$ch") ?: return@forEach
+            emitCallProgress(callId, PstnCallProgressTracker.Stage.BRIDGING, emptyMap())
+        }
     }
+
+    /**
+     * ينقل مكالمة PSTN صادرة إلى مرحلة جديدة ويبثّها لصاحبها عبر `/ws/pstn`.
+     *
+     * يوحّد الحلقة التي كانت مقطوعة: المتتبِّع كان يملك كل المنطق لكن لم
+     * يُستدعَ، وبابليشر WebSocket (`pushPstnCallEvent`) كان معرَّفاً بلا
+     * منادٍ. هنا يلتقيان: تقدّم محميّ من التراجع ثم بثّ حدث واحد لكل انتقال
+     * فعلي فقط (لأن `advanceByCallId` يُرجع null على التكرار/التراجع).
+     */
+    private fun emitCallProgress(callId: String, stage: PstnCallProgressTracker.Stage, extra: Map<String, Any?>) {
+        val updated = runCatching { progress.advanceByCallId(callId, stage) }.getOrNull() ?: return
+        val accountId = resolveAccountIdForRedId(updated.redId) ?: return
+        val data = LinkedHashMap<String, Any?>(extra)
+        data["number"] = updated.number
+        runCatching { pstnEvents.pushPstnCallEvent(accountId, callId, stage.name, data) }
+            .onFailure { log.debug("Failed to push PSTN progress {} for {}: {}", stage, callId, it.message) }
+    }
+
+    /** يحوّل redId المسجَّل في المتتبِّع إلى معرِّف الحساب (UUID) المطلوب لبثّ WS. */
+    private fun resolveAccountIdForRedId(redId: String): String? =
+        runCatching { users.findByRedId(redId)?.id?.toString() }.getOrNull()
 
     private fun handleHangup(event: HangupEvent) {
         val channel = event.channel ?: return
@@ -146,6 +186,22 @@ class DinstarEventListener(
         val callId = redis.opsForValue().getAndDelete("$CHANNEL_CALLID_PREFIX$channel")
             ?: findCallIdFromPort(extractPortIndex(channel, lineNumber))
         callId?.let { pstnManager.forgetChannel(it) }
+        // أنهِ تتبّع المراحل وابثّ ENDED لصاحب المكالمة قبل تنظيف القيود —
+        // هذا آخر حدث في حلقة المكالمة الصادرة، وبدونه تبقى الواجهة عالقة
+        // على «نشطة/يرنّ» حتى لو أُغلقت القناة فعلاً على الشبكة.
+        callId?.let { id ->
+            val ended = runCatching { progress.finishByCallId(id) }.getOrNull()
+            if (ended != null) {
+                resolveAccountIdForRedId(ended.redId)?.let { acc ->
+                    runCatching {
+                        pstnEvents.pushPstnCallEvent(
+                            acc, id, PstnCallProgressTracker.Stage.ENDED.name,
+                            mapOf("number" to ended.number, "cause" to causeTxt, "failed" to isFailed)
+                        )
+                    }
+                }
+            }
+        }
         // التقاط ربط المكالمة (callId:gatewayId:port) قبل تنظيف مفاتيح Redis —
         // هذا هو مصدر الحقيقة المسجَّل لحظة الاتصال، أدق بكثير من تخمين
         // المنفذ من اسم القناة الذي كان يحرر منفذاً خاطئاً (عدّاد القناة).

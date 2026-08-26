@@ -116,6 +116,23 @@ class PstnCallProgressTracker {
         return updated
     }
 
+    /**
+     * ينقل مكالمة إلى مرحلة جديدة بمعرِّفها المباشر `callId`، لا بالقناة.
+     *
+     * مسار توجيه أحداث AMI الفعلي في `DinstarEventListener` يحلّ `callId`
+     * بآلية مثبَّتة (مفتاح Redis channel→callId، ثم تخمين المنفذ كاحتياط)
+     * أدقّ من مطابقة اسم القناة الخام: قناة الحالة (`Ringing`/`Up`) قد
+     * تختلف عن القناة التي حُفظ عليها المتغيّر `RED_CALL_ID`. لذا يُقاد
+     * التقدّم من `callId` المحلول، بنفس حماية عدم التراجع في [advanceByChannel].
+     */
+    fun advanceByCallId(callId: String, stage: Stage): Entry? {
+        val entry = byCallId[callId] ?: return null
+        if (stage.ordinal <= entry.stage.ordinal) return null
+        val updated = entry.copy(stage = stage, updatedAt = Instant.now())
+        byCallId[callId] = updated
+        return updated
+    }
+
     /** ينهي التتبّع ويحرّر القيود. يُرجع القيد الأخير قبل الإزالة. */
     fun finishByChannel(channel: String): Entry? {
         val callId = channelToCallId.remove(channel) ?: return null
