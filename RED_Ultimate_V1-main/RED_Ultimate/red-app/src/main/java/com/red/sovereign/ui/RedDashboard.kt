@@ -502,9 +502,9 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, directory.contacts, onlineIds = directory.onlineIds.toSet(), myDisplayName = account.username, onExplore = {
+                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
                     currentScreen = SovereignScreen.EXPLORE
-                }, onPstn = { num -> dinstarPrefill = num ?: ""; showDinstar = true })
+                }, onPstn = { dinstarPrefill = ""; showDinstar = true })
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
@@ -3164,6 +3164,7 @@ private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enab
     Text(title, fontSize = 11.sp); if (!enabled) Text("Ù‚ÙŠØ¯ Ø§Ù„Ø±Ø¨Ø·", color = Color.Gray, fontSize = 9.sp)
 }
 
+}
 @Composable
 private fun MoreScreen(
     account: AuthState.Authenticated,
@@ -3424,7 +3425,6 @@ private fun CreateSheet(
 
 @Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = Color.Gray, fontSize = 12.sp) } } }
 
-}
 @Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
 /**
  * Ù…Ø®Ø²Ù† ØªØµÙˆÙŠØªØ§Øª Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (E2EE): pollId -> (Ù…ØµÙˆØª -> ÙÙ‡Ø±Ø³ Ø§Ù„Ø®ÙŠØ§Ø±).
@@ -3444,34 +3444,6 @@ private object PollVoteStore {
         return counts.toList()
     }
     fun myVote(pollId: String, me: String): Int? = votersByPoll[pollId]?.get(me)
-}
-
-private fun resolveRichMessages(source: List<DecryptedMessage>): List<DecryptedMessage> {
-    val visible = linkedMapOf<String, DecryptedMessage>()
-    source.sortedBy(DecryptedMessage::timestamp).forEach { message ->
-        val rich = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-        when {
-            // ðŸ” Ø§Ù„Ø­Ø°Ù: ÙŠØ·Ø¨Ù‚ ÙÙ‚Ø· Ø¥Ù† ÙƒØ§Ù† Ù…ÙØ±Ø³Ù„ Ø£Ù…Ø± Ø§Ù„Ø­Ø°Ù Ù‡Ùˆ Ù…Ø§Ù„Ùƒ Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ø§Ù„Ø£ØµÙ„ÙŠØ© (Ù…Ù†Ø¹ Ø­Ø°Ù Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„ØºÙŠØ±)
-            rich?.action == "DELETE" && rich.deleteOf != null -> {
-                val original = visible[rich.deleteOf]
-                if (original != null && original.senderRedId == message.senderRedId) visible.remove(rich.deleteOf)
-            }
-            // ðŸ” Ø§Ù„ØªØ¹Ø¯ÙŠÙ„: ÙŠØ·Ø¨Ù‚ ÙÙ‚Ø· Ø¹Ù„Ù‰ Ø±Ø³Ø§Ø¦Ù„ Ù…ÙØ±Ø³Ù„ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù†ÙØ³Ù‡
-            rich?.action == "EDIT" && rich.editOf != null -> {
-                val original = visible[rich.editOf]
-                if (original != null && original.senderRedId == message.senderRedId) {
-                    visible[rich.editOf] = original.copy(plaintext = RichMessage.encode(RichMessage(text = rich.text, replyTo = RichMessage.decode(original.plaintext)?.replyTo)))
-                }
-            }
-            // Ø§Ù„ØªÙØ§Ø¹Ù„Ø§Øª Ù„ÙŠØ³Øª Ø±Ø³Ø§Ø¦Ù„ â€” ØªÙØ¹Ø±Ø¶ ÙƒÙ€ chips Ø¹Ø¨Ø± Ø¬Ø¯ÙˆÙ„ message_reactionsØŒ ÙÙ„Ø§ ØªÙØ¯Ø±Ø¬ Ù‡Ù†Ø§
-            rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE" -> Unit
-            // Ø£ØµÙˆØ§Øª Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹ Ù„ÙŠØ³Øª Ø±Ø³Ø§Ø¦Ù„ â€” ØªÙØ³Ø¬ÙŽÙ‘Ù„ ÙÙŠ Ù…Ø®Ø²Ù† Ø§Ù„Ø£ØµÙˆØ§Øª Ù…Ù† Ø¬Ø§Ù…Ø¹Ø§Øª ØºÙŠØ± Ù…ØªØ²Ø§Ù…Ù†Ø© ÙÙ‚Ø·
-            rich?.action == "POLL_VOTE" -> Unit
-            rich?.expiresAt != null && rich.expiresAt <= System.currentTimeMillis() -> Unit
-            else -> visible[message.id] = message
-        }
-    }
-    return visible.values.toList()
 }
 
 /** Ù†Øµ Ø¨Ø­Ø«ÙŠ Ù†Ø¸ÙŠÙ Ù„Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø­Ù„ÙŠ: ÙŠØ³ØªØ¨Ø¹Ø¯ Ø¥Ø¯Ø®Ø§Ù„Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù… ÙˆÙŠÙÙƒ Ø´ÙŠÙØ±Ø© Ø£Ø³Ù…Ø§Ø¡ Ø§Ù„ÙˆØ³Ø§Ø¦Ø·. */
