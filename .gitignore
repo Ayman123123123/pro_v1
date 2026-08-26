@@ -28,8 +28,37 @@ upload-clean/
 cookies.txt
 dinstar_cookies.txt
 
+# نفس القواعد للمسارات المتداخلة: القواعد أعلاه بلا `**/` تطابق الجذر فقط،
+# فبقيت ‎RED_Ultimate_V1-main/RED_Ultimate/.android_home/‎ متتبَّعة بالخطأ
+# (43 ملف كاش SDK)، وكذلك أسرار ‎.env‎/cookies داخل المجلدات الفرعية.
+**/.android_home/
+**/.gradle_home/
+**/.gradle_user_home/
+**/app.jar
+**/cookies.txt
+**/dinstar_cookies.txt
+**/local-maven/
+**/build-tools/*.tar.gz
+**/build-tools/*.zip
+
+# نسخ/لقطات محلية ضخمة (APK + jar + نسخ شجرة كاملة) — لا تُرفع
+_red_ultimate_verify/
+github-git-partial-clone/
+.backup_full_literal_*/
+historical_recovery_audit_*/
+audit_preservation_*/
+
+# سجلات تشخيص محلية مؤرّخة (مخرجات فحص، ليست كوداً)
+ASTERISK_*.txt
+DINSTAR_*.txt
+DINSTAR_*.html
+DINSTAR_*.json
+AUTH_*.txt
+RED_BACKEND_*.txt
+
 # External agent scratch/plans
 .kilo/
+.kimi/
 
 # AI Studio export scratch
 aistudio-export/node_modules/
@@ -42,10 +71,18 @@ aistudio-export/dist/
 .env.*
 !.env.example
 !.env.template
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+**/secrets/
+*.pem
+**/*.pem
 **/keystore.properties
 *.jks
 *.keystore
 secrets.properties
+**/analytics.settings
 
 # ضجيج تصحيح الأخطاء المحلي
 build_errors*.txt
