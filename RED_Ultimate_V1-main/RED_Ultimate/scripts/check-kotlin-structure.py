@@ -40,6 +40,58 @@ TYPOS = [
 ]
 
 
+def _skip_template(text: str, i: int) -> int:
+    """
+    يتجاوز قالبًا `${...}` داخل نصّ Kotlin ويُرجع الفهرس بعد `}` المطابق.
+
+    القالب ليس نصًّا خالصًا: جسمه شيفرة، وقد يحوي نصوصًا فيها اقتباسات
+    مهروبة وأقواسًا معقوفة متداخلة، مثل:
+
+        "\"${(v?.toString() ?: "").replace("\"", "\"\"")}\""
+
+    آلة الحالات البسيطة كانت تُنهي النصّ عند أول `"` داخل القالب، فتعود
+    بقيّة السطر «شيفرةً» فتُحسب أقواسها مرّتين ويظهر عجز وهمي (-1) في
+    ملفات سليمة تمامًا (DinstarController وAdminV2Controller). التجاوز
+    الكامل للقالب يُبقي الميزان صحيحًا لأن ما بداخله متوازن بحدّ ذاته.
+    """
+    n = len(text)
+    i += 2  # يتجاوز "${"
+    depth = 1
+    while i < n and depth > 0:
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if text.startswith('"""', i):
+            i += 3
+            while i < n and not text.startswith('"""', i):
+                i += 1
+            i += 3
+        elif ch == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+        elif ch == "'":
+            i += 1
+            while i < n and text[i] != "'":
+                i += 2 if text[i] == "\\" else 1
+            i += 1
+        elif ch == "/" and nxt == "/":
+            while i < n and text[i] != "\n":
+                i += 1
+        elif ch == "/" and nxt == "*":
+            i += 2
+            while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
+                i += 1
+            i += 2
+        else:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+            i += 1
+    return i
+
+
 def strip_noise(text: str) -> str:
     """
     يجرّد النصوص والتعليقات في **مسحة واحدة** بآلة حالات.
@@ -52,8 +104,9 @@ def strip_noise(text: str) -> str:
     تعليق — مثل `{redId}` في توثيق مسار — تُحسب أقواسًا حقيقية.
 
     آلة الحالات تمرّ محرفًا محرفًا فتعرف في كل لحظة أهي داخل نصّ أم
-    تعليق أم شيفرة، فتُخرج الشيفرة وحدها. وهذا يغطّي قوالب `${...}`
-    لأنها تقع داخل النص فتسقط معه.
+    تعليق أم شيفرة، فتُخرج الشيفرة وحدها. وقوالب `${...}` تُتجاوز
+    كوحدة عبر [_skip_template]، لأن جسمها شيفرة قد تحوي اقتباسات
+    مهروبة تُضلّل آلة الحالات لو عوملت كنصّ عادي.
     """
     out: list[str] = []
     i, n = 0, len(text)
@@ -73,13 +126,22 @@ def strip_noise(text: str) -> str:
             # إلى محتوى النص لا إلى حدّه: `"""he said ""hello""""`
             # صحيح في Kotlin. فيُتجاوز التتابع كاملًا.
             i += 3
-            while i < n and not text.startswith('"""', i):
+            while i < n:
+                if text.startswith("${", i):
+                    i = _skip_template(text, i)
+                    continue
+                if text.startswith('"""', i):
+                    break
                 i += 1
+            i += 3
             while i < n and text[i] == '"':
                 i += 1
         elif ch == '"':
             i += 1
             while i < n and text[i] != '"':
+                if text.startswith("${", i):
+                    i = _skip_template(text, i)
+                    continue
                 i += 2 if text[i] == "\\" else 1
             i += 1
         elif ch == "'":
@@ -164,15 +226,20 @@ def _archived_symbols() -> set[str]:
     if _ARCHIVED_CACHE is not None:
         return _ARCHIVED_CACHE
     archive = ROOT / "red-app/src/main/java/com/red/sovereign/_archive"
+    # يلتقط النمط دوال الامتداد أيضًا (`fun Long.formatCallDuration()`).
+    # النمط السابق طلب أن يلي `fun` اسمُ الدالة مباشرة، فأُغفلت كل دوال
+    # الامتداد من مجموعة «الحيّ» — فظهر `formatCallDuration` كرمز مؤرشف
+    # مكسور رغم أنه معرَّف حيًّا في CallHistoryModels.kt (بلاغ كاذب).
+    fun_re = r"^(?:private |internal |public )?(?:suspend )?fun (?:[\w.<>, ?]+\.)?(\w+)\s*\("
     archived: set[str] = set()
     if archive.exists():
         for path in archive.glob("*.archived"):
             body = path.read_text(encoding="utf-8", errors="ignore")
-            archived |= set(re.findall(r"^(?:private |internal )?fun (\w+)", body, re.M))
+            archived |= set(re.findall(fun_re, body, re.M))
     live: set[str] = set()
     for path in kotlin_files():
         body = path.read_text(encoding="utf-8", errors="ignore")
-        live |= set(re.findall(r"^(?:private |internal )?fun (\w+)", body, re.M))
+        live |= set(re.findall(fun_re, body, re.M))
     _ARCHIVED_CACHE = archived - live
     return _ARCHIVED_CACHE
 
