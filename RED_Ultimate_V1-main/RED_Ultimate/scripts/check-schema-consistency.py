@@ -38,12 +38,30 @@ def db_columns(table: str) -> set[str]:
                     "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "KEY"
                 }:
                     cols.add(line.split()[0])
-        for am in re.finditer(
-            r'ALTER TABLE (?:IF EXISTS )?' + re.escape(table) + r'\s+ADD\s+(?:COLUMN\s+)?(?:IF NOT EXISTS\s+)?([a-z_]+)',
+        # ALTER TABLE ... ADD COLUMN — including the multi-column comma form:
+        #   ALTER TABLE users
+        #       ADD COLUMN IF NOT EXISTS a UUID ...,
+        #       ADD COLUMN IF NOT EXISTS b INT,
+        #       ADD COLUMN IF NOT EXISTS c VARCHAR(20);
+        # Matching only one ADD per ALTER (the previous behaviour) silently missed
+        # every column after the first, so V34's pstn_port_index / pstn_number
+        # looked absent from the schema and failed this gate for a correct DB.
+        for stmt in re.finditer(
+            r'ALTER TABLE (?:IF EXISTS )?' + re.escape(table) + r'\b(.*?);',
             text,
-            re.I,
+            re.I | re.S,
         ):
-            cols.add(am.group(1))
+            for am in re.finditer(
+                r'ADD\s+(?:COLUMN\s+)?(?:IF NOT EXISTS\s+)?([a-z_]+)',
+                stmt.group(1),
+                re.I,
+            ):
+                name = am.group(1)
+                # ADD CONSTRAINT / ADD PRIMARY KEY etc. are not columns.
+                if name.upper() not in {
+                    "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "KEY", "COLUMN"
+                }:
+                    cols.add(name)
     return cols
 
 

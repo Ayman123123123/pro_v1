@@ -2,7 +2,9 @@
 # YOUNES Media SFU — resilient mediasoup worker install.
 # Prebuilt GitHub binary first; local compile without io_uring if the
 # download is blocked (corporate TLS intercept / firewall).
-FROM node:22-bookworm AS builder
+# Node 24 matches package.json "engines": { "node": ">=24" } — the image was on
+# 22 while engines demanded 24, so `npm ci` warned/failed under engine-strict.
+FROM node:24-bookworm AS builder
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -17,7 +19,7 @@ RUN chmod +x install-worker.sh \
     && PYTHON=python3 ./install-worker.sh \
     && npm cache clean --force
 
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates \
