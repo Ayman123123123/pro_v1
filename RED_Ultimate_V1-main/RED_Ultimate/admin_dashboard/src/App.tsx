@@ -57,6 +57,8 @@ const SmsTemplates = lazy(() => import('./pages/SmsTemplates'));
 const PortControl = lazy(() => import('./pages/PortControl'));
 const GroupsManagement = lazy(() => import('./pages/GroupsManagement'));
 const PostsManagement = lazy(() => import('./pages/PostsManagement'));
+const CallHistory = lazy(() => import('./pages/CallHistory'));
+const PstnManagement = lazy(() => import('./pages/PstnManagement'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -82,6 +84,8 @@ type PageKey =
   | 'dinstar-cdr'
   | 'dinstar-sms-templates'
   | 'dinstar-port-control'
+  | 'dinstar-calls'
+  | 'dinstar-pstn-users'
   | 'monitor'
   | 'diagnostics'
   | 'data-overview'
@@ -116,6 +120,8 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'dinstar-cdr', icon: <BarChartOutlined />, label: 'تحليل المكالمات CDR', group: 'sovereign' },
   { key: 'dinstar-sms-templates', icon: <MessageOutlined />, label: 'قوالب SMS', group: 'sovereign' },
   { key: 'dinstar-port-control', icon: <SettingOutlined />, label: 'التحكم بالمنافذ', group: 'sovereign' },
+  { key: 'dinstar-calls', icon: <BarChartOutlined />, label: 'سجل المكالمات', group: 'sovereign' },
+  { key: 'dinstar-pstn-users', icon: <TeamOutlined />, label: 'صلاحيات PSTN', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
 ];
@@ -235,6 +241,8 @@ export default function App() {
       case 'dinstar-cdr': return <CdrAnalysis />;
       case 'dinstar-sms-templates': return <SmsTemplates />;
       case 'dinstar-port-control': return <PortControl />;
+      case 'dinstar-calls': return <CallHistory />;
+      case 'dinstar-pstn-users': return <PstnManagement />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;
     }
