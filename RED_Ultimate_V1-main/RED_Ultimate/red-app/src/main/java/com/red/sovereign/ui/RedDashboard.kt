@@ -1349,7 +1349,6 @@ private fun ChatHubScreen(
                 }
             }
             com.red.sovereign.calls.InlineChatCallBar(peerId = target)
-            }
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
             val conversationMessages = resolveRichMessages(decrypted.filter { it.conversationId == conversation })
             androidx.compose.runtime.LaunchedEffect(conversationMessages.size, target) {
@@ -3425,6 +3424,7 @@ private fun CreateSheet(
 
 @Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = Color.Gray, fontSize = 12.sp) } } }
 
+}
 @Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
 /**
  * Ù…Ø®Ø²Ù† ØªØµÙˆÙŠØªØ§Øª Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (E2EE): pollId -> (Ù…ØµÙˆØª -> ÙÙ‡Ø±Ø³ Ø§Ù„Ø®ÙŠØ§Ø±).
