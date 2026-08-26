@@ -134,6 +134,97 @@ class CallWebSocketHandler(
                 session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
+
+            // ── اجتماعات Zoom المستقلة ──────────────────────────────────────
+            // كانت كل إشارات ZOOM_* تسقط خارج هذا الـwhen فتصل إلى فحص
+            // `targetUserId` (وهو فارغ في الدعوة الجماعية) فتُرفض برسالة
+            // «targetUserId is required». نتيجةً لذلك لم يعمل أي اجتماع Zoom
+            // إطلاقًا: لا دعوة تصل، ولا إنهاء يُبلَّغ، ولا تحكّم مضيف يُنقل.
+            "ZOOM_INVITE" -> {
+                val meetingId = requireCallId(signal)
+                val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }.distinct()
+                require(invitees.isNotEmpty()) { "inviteeIds is required" }
+                val busyInvitees = invitees.filter { activeCalls.isInCall(it) }.toSet()
+                // نفس سجل الغرف: يسمح للخادم بتوجيه الردود والإنهاء وتنظيف العالق.
+                val existing = groupRooms[meetingId]
+                groupRooms[meetingId] = GroupCallRoom(
+                    host = existing?.host ?: source,
+                    members = ((existing?.members ?: emptyList()) + invitees).distinct(),
+                    lastActivityAt = Instant.now()
+                )
+                activeCalls.register(meetingId, listOf(source) + invitees.filterNot { it in busyInvitees })
+                invitees.forEach { invitee ->
+                    if (invitee in busyInvitees) {
+                        val busySignal = OutgoingCallSignal(meetingId, invitee, source, "ZOOM_STATUS", signal.mode.uppercase(), mapOf("memberStatus" to "busy"))
+                        val hostTargets = liveSessions(source)
+                        if (hostTargets.isEmpty()) enqueue(source, busySignal)
+                        else hostTargets.forEach { t -> sendText(t, objectMapper.writeValueAsString(busySignal)) }
+                        return@forEach
+                    }
+                    val outbound = OutgoingCallSignal(meetingId, source, invitee, type, signal.mode.uppercase(), signal.payload)
+                    val targets = liveSessions(invitee)
+                    if (targets.isEmpty()) {
+                        enqueue(invitee, outbound)
+                        notifications.sendVoipPushNotification(invitee, source, meetingId, signal.mode)
+                    } else {
+                        val json = objectMapper.writeValueAsString(outbound)
+                        targets.forEach { t -> sendText(t, json) }
+                    }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to meetingId))))
+                return
+            }
+            "ZOOM_END" -> {
+                val meetingId = requireCallId(signal)
+                val room = groupRooms[meetingId] ?: throw NoSuchElementException("Zoom meeting not found")
+                require(source == room.host) { "Only the meeting host can end it for everyone" }
+                groupRooms.remove(meetingId)
+                activeCalls.unregister(meetingId)
+                dropPending(meetingId)
+                (room.members + room.host).filter { it.isNotBlank() && it != source }.distinct().forEach { memberId ->
+                    val outbound = OutgoingCallSignal(meetingId, source, memberId, type, signal.mode.uppercase(), signal.payload)
+                    val memberTargets = liveSessions(memberId)
+                    if (memberTargets.isEmpty()) enqueue(memberId, outbound)
+                    else memberTargets.forEach { t -> sendText(t, objectMapper.writeValueAsString(outbound)) }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to meetingId))))
+                return
+            }
+            // ردود المشاركين وتحكّم المضيف: تُنقل إلى بقية أعضاء الغرفة كما هي.
+            // المضيف وحده يملك أوامر القفل/قاعة الانتظار/كتم الكل/الغرف الفرعية.
+            "ZOOM_ACCEPT", "ZOOM_DECLINE", "ZOOM_STATUS", "ZOOM_LEAVE",
+            "ZOOM_RAISE_HAND", "ZOOM_LOWER_HAND",
+            "ZOOM_MUTE_ALL", "ZOOM_LOCK", "ZOOM_UNLOCK",
+            "ZOOM_WAITING_ON", "ZOOM_WAITING_OFF",
+            "ZOOM_POLL_CREATE", "ZOOM_POLL_VOTE", "ZOOM_BREAKOUT_CREATE" -> {
+                val meetingId = requireCallId(signal)
+                val room = groupRooms[meetingId] ?: throw NoSuchElementException("Zoom meeting not found")
+                require(source == room.host || source in room.members) { "Only invited meeting members may signal" }
+                if (type in HOST_ONLY_ZOOM_TYPES) {
+                    require(source == room.host) { "Only the meeting host may issue this control" }
+                }
+                if (type == "ZOOM_DECLINE" || type == "ZOOM_LEAVE" || signal.memberStatus == "left" || signal.memberStatus == "no_answer") {
+                    activeCalls.releaseMember(meetingId, source)
+                }
+                groupRooms.computeIfPresent(meetingId) { _, r -> r.copy(lastActivityAt = Instant.now()) }
+                // ردود العضو تذهب للمضيف؛ أوامر المضيف تذهب لكل الأعضاء.
+                val recipients = if (source == room.host) {
+                    room.members.filter { it.isNotBlank() && it != source }
+                } else {
+                    listOf(room.host)
+                }
+                recipients.distinct().forEach { memberId ->
+                    val outbound = OutgoingCallSignal(
+                        meetingId, source, memberId, type, signal.mode.uppercase(),
+                        signal.payload + ("memberStatus" to signal.memberStatus.orEmpty())
+                    )
+                    val memberTargets = liveSessions(memberId)
+                    if (memberTargets.isEmpty()) enqueue(memberId, outbound)
+                    else memberTargets.forEach { t -> sendText(t, objectMapper.writeValueAsString(outbound)) }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to meetingId))))
+                return
+            }
         }
 
         // إشارات غير صحيحة يجب ألا تسقط جلسة WebSocket كاملة. قبل إصلاح Android
@@ -371,6 +462,12 @@ class CallWebSocketHandler(
     companion object {
         private const val PENDING_TTL_SECONDS = 300L
         private val TERMINAL_TYPES = setOf("ANSWER", "REJECT", "END")
+
+        /** أوامر اجتماع Zoom المحصورة بالمضيف — بقيّة الأنواع ردودُ مشاركين. */
+        private val HOST_ONLY_ZOOM_TYPES = setOf(
+            "ZOOM_MUTE_ALL", "ZOOM_LOCK", "ZOOM_UNLOCK",
+            "ZOOM_WAITING_ON", "ZOOM_WAITING_OFF", "ZOOM_BREAKOUT_CREATE"
+        )
     }
 
     /** Clean up stale group rooms and pending signals — called by CallRingExpiryJob. */
