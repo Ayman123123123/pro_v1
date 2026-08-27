@@ -92,7 +92,8 @@ class CdrIngestScheduler(
                 DinstarApiContract.Cdr.INSERT_SQL,
                 gateway.id.toString(), port, java.sql.Timestamp.from(start),
                 answer?.let { java.sql.Timestamp.from(it) },
-                duration, direction, status, src, dst,
+                duration, DinstarApiContract.Cdr.ringSeconds(start, answer),
+                direction, status, src, dst,
                 hangup, gsmCode, codec, rawJson
             )
             if (rows > 0) inserted++

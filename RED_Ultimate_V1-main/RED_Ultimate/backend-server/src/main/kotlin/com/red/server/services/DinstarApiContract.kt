@@ -489,21 +489,44 @@ object DinstarApiContract {
          * ON CONFLICT specification» فتسقط دورة الابتلاع بأكملها ويبقى
          * الجدول فارغًا — وهو ما كان يحدث فعلًا.
          *
+         * `ring_duration_seconds` يُحسَب هنا لا يُقرأ: الجهاز لا يُصدره، لكنه
+         * تعريفًا `answer_date − start_date`. كان العمود صفرًا في كل صفٍّ
+         * (110/110) مع أن طرفَي الطرح موجودان، فيُقرأ كأن كل مكالمة أُجيبت
+         * لحظيًا. غير المُجابة تبقى `NULL`: لا زمن إجابة ولا زمن إنهاء يُصدره
+         * الجهاز، والصفر فيها كذبٌ لا نقصُ بيان.
+         *
+         * `end_time` مُستبعَد: حسابه يفترض أن `duration` زمن تحدُّثٍ لا زمن
+         * مكالمةٍ كاملة، وهو ما لا يُثبته الرد (كل السجلات المُلتقطة مُجابة،
+         * فلا عيّنة تُفرِّق). عمودٌ فارغ أصدق من عمودٍ مبنيٍّ على ظنّ.
+         *
          * `call_type` مُستبعَد عن قصد: افتراضيّه في المخطَّط `'VOICE'`.
          *
          * ترتيب الوسائط: gateway_id, port_index, start_time, answer_time,
-         * duration_seconds, direction, status, caller_number, callee_number,
-         * hangup_cause, gsm_code, codec, raw_data.
+         * duration_seconds, ring_duration_seconds, direction, status,
+         * caller_number, callee_number, hangup_cause, gsm_code, codec, raw_data.
          */
         const val INSERT_SQL: String =
             """INSERT INTO dinstar_cdr
                    (gateway_id, port_index, start_time, answer_time, duration_seconds,
-                    direction, status, caller_number, callee_number,
+                    ring_duration_seconds, direction, status, caller_number, callee_number,
                     hangup_cause, gsm_code, codec, raw_data)
-               VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+               VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
                ON CONFLICT (gateway_id, port_index, start_time, caller_number, callee_number)
                WHERE gateway_id IS NOT NULL AND port_index IS NOT NULL AND start_time IS NOT NULL
                DO NOTHING"""
+
+        /**
+         * زمن الرنين بالثواني — `answer_date − start_date`.
+         *
+         * `null` عند غياب زمن الإجابة: المكالمة لم تُجَب فزمن رنينها غير
+         * معروف، والصفر يُقرأ «أُجيبت فورًا». والسالب مستحيل منطقًا فيُهمَل
+         * (ساعة الجهاز قد تُعدَّل بين الحقلين).
+         */
+        fun ringSeconds(start: java.time.Instant?, answer: java.time.Instant?): Int? {
+            if (start == null || answer == null) return null
+            val gap = java.time.Duration.between(start, answer).seconds
+            return if (gap < 0) null else gap.toInt()
+        }
     }
 
     // ═══════════════════════════════════════════════════════════

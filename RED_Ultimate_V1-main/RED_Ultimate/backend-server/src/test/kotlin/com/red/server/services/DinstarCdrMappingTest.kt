@@ -117,7 +117,7 @@ class DinstarCdrMappingTest {
         val values = Regex("""VALUES\s*\(([^)]*)\)""", RegexOption.IGNORE_CASE)
             .find(sql)!!.groupValues[1]
 
-        assertEquals(13, columns.size, "أعمدة الإدراج: $columns")
+        assertEquals(14, columns.size, "أعمدة الإدراج: $columns")
         assertEquals(
             columns.size, values.count { it == '?' },
             "عدد ? ($values) لا يطابق عدد الأعمدة (${columns.size})"
@@ -125,5 +125,35 @@ class DinstarCdrMappingTest {
 
         // call_type مُستبعَد عن قصد — افتراضيّه 'VOICE' في المخطَّط.
         assertTrue("call_type" !in columns, "call_type يجب أن يُترك لافتراضي المخطَّط")
+    }
+
+    @Test
+    @DisplayName("زمن الرنين يُحسَب من طرفَيه، وغياب الإجابة يعني مجهولًا لا صفرًا")
+    fun ringSecondsDerivation() {
+        val start = java.time.Instant.parse("2026-08-27T14:55:08Z")
+
+        assertAll(
+            // الحالة الشائعة: فرق زمني موجب
+            { assertEquals(3, DinstarApiContract.Cdr.ringSeconds(start, start.plusSeconds(3))) },
+            { assertEquals(0, DinstarApiContract.Cdr.ringSeconds(start, start)) },
+            // بلا زمن إجابة: زمن الرنين غير معروف. الصفر كان يُقرأ «أُجيبت
+            // فورًا» فيُظهر كل مكالمة فاشلة كأنها لحظية الإجابة.
+            { assertNull(DinstarApiContract.Cdr.ringSeconds(start, null)) },
+            { assertNull(DinstarApiContract.Cdr.ringSeconds(null, start)) },
+            { assertNull(DinstarApiContract.Cdr.ringSeconds(null, null)) },
+            // ساعة الجهاز قد تُعدَّل بين الحقلين: السالب مستحيل منطقًا فيُهمَل
+            { assertNull(DinstarApiContract.Cdr.ringSeconds(start, start.minusSeconds(5))) }
+        )
+    }
+
+    @Test
+    @DisplayName("ring_duration_seconds مُدرَج فعلًا في الجملة")
+    fun ringColumnIsInserted() {
+        // العمود كان يُترك لافتراضي المخطَّط (0) في كل صفٍّ مع أن طرفَي الطرح
+        // موجودان، فيُقرأ كأن كل مكالمة أُجيبت لحظيًا.
+        assertTrue(
+            "ring_duration_seconds" in DinstarApiContract.Cdr.INSERT_SQL,
+            "زمن الرنين محسوب لكنه غير مُدرَج: ${DinstarApiContract.Cdr.INSERT_SQL}"
+        )
     }
 }

@@ -150,6 +150,7 @@ class DinstarApiService(
                 java.sql.Timestamp.from(start),
                 answer?.let { java.sql.Timestamp.from(it) },
                 (cdr["duration"] as? Number)?.toInt() ?: 0,
+                DinstarApiContract.Cdr.ringSeconds(start, answer),
                 direction,
                 DinstarApiContract.Cdr.callOutcome(answer != null, hangup),
                 cdr["source_number"]?.toString() ?: "",
