@@ -1487,7 +1487,7 @@ private fun ChatHubScreen(
                                         MessageReactions(
                                             reactions = reactionsByMessage[item.id].orEmpty(),
                                             currentRedId = account.redId,
-                                            onToggle = { emoji ->
+                                            onToggle = { emoji: String ->
                                                 val mine = reactionsByMessage[item.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
                                                 if (mine) RedConnectionService.removeReaction(context, target, conversation, item.id)
                                                 else RedConnectionService.sendReaction(context, target, conversation, item.id, emoji)
@@ -1538,7 +1538,7 @@ private fun ChatHubScreen(
                 }
             }
             if (target.isNotBlank()) {
-                if (showEmoji) EmojiPicker(onEmoji = { messageText += it })
+                if (showEmoji) EmojiPicker(onEmoji = { emoji: String -> messageText += emoji })
                 if (showStickers && target.matches(RED_ID_PATTERN)) {
                     val stickerTokens = remember { com.red.sovereign.auth.TokenStore(context) }
                     com.red.sovereign.media.StickerPicker(
@@ -1655,7 +1655,8 @@ private fun ChatHubScreen(
                     }
                 )
             }
-        } else Column(Modifier.fillMaxSize().padding(14.dp)) {
+        }
+        if (groupConversationId != null) Column(Modifier.fillMaxSize().padding(14.dp)) {
             val openGroup = groups.groups.firstOrNull { it.id == groupConversationId }
             if (openGroup == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1898,14 +1899,7 @@ private fun ChatHubScreen(
                                         Text(message.senderRedId.take(12) + "...", color = nameColors[colorIndex], style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 2.dp))
                                     }
                                     when (message.type) {
-                                        "RICH_TEXT" -> RichTextMessage(
-                                            message, groupMessages,
-                                            myRedId = account.redId,
-                                            onPollVote = { pollId, optionIndex ->
-                                                val vote = RichMessage(action = "POLL_VOTE", pollVoteOf = pollId, pollVoteOption = optionIndex)
-                                                RedConnectionService.sendGroupRichText(context, openGroup, vote)
-                                            }
-                                        )
+                                        "RICH_TEXT" -> RichTextMessage(message, groupMessages)
                                         "FILE", "IMAGE", "VIDEO", "AUDIO" -> AttachmentMessage(message, attachments)
                                         "VOICE" -> VoiceMessage(message, attachments)
                                         "STICKER" -> StickerMessage(message, attachments)
@@ -1924,7 +1918,7 @@ private fun ChatHubScreen(
                                     MessageReactions(
                                         reactions = reactionsByMessage[message.id].orEmpty(),
                                         currentRedId = account.redId,
-                                        onToggle = { emoji ->
+                                        onToggle = { emoji: String ->
                                             val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
                                             if (mine) RedConnectionService.removeGroupReaction(context, openGroup, message.id)
                                             else RedConnectionService.sendGroupReaction(context, openGroup, message.id, emoji)
@@ -1972,7 +1966,7 @@ private fun ChatHubScreen(
                             }
                         }
                 }
-                if (showGroupEmoji) EmojiPicker(onEmoji = { groupMessageText += it })
+                if (showGroupEmoji) EmojiPicker(onEmoji = { emoji: String -> groupMessageText += emoji })
                 if (showGroupStickers) {
                     com.red.sovereign.media.StickerPicker(
                         tokens = com.red.sovereign.auth.TokenStore(context),
@@ -2107,7 +2101,7 @@ private fun ChatHubScreen(
                 }
 
                 // ØªÙØ§Ø¹Ù„ Ø³Ø±ÙŠØ¹ Ø¨Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ â€” Ø£Ø¹Ù„Ù‰ Ø§Ù„Ù‚Ø§Ø¦Ù…Ø© (E2EE)
-                ReactionEmojiBar(onPick = { emoji ->
+                ReactionEmojiBar(onPick = { emoji: String ->
                     val convId = message.conversationId
                     val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
                     if (isGroupMsg) {
@@ -2587,6 +2581,8 @@ private fun ChatHubScreen(
             confirmButton = { TextButton({ messageInfo = null }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
         )
     }
+}
+
 }
 
 @Composable
@@ -3164,7 +3160,6 @@ private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enab
     Text(title, fontSize = 11.sp); if (!enabled) Text("Ù‚ÙŠØ¯ Ø§Ù„Ø±Ø¨Ø·", color = Color.Gray, fontSize = 9.sp)
 }
 
-}
 @Composable
 private fun MoreScreen(
     account: AuthState.Authenticated,
@@ -3462,69 +3457,6 @@ private fun searchDisplayText(entity: com.red.sovereign.core.database.LocalHisto
         else -> text
     }
 }
-
-private fun messageDisplayText(message: DecryptedMessage): String =
-    when (message.type) {
-        "RICH_TEXT" -> RichMessage.decode(message.plaintext)?.text.orEmpty()
-        "GROUP_MESSAGE", "FILE", "IMAGE", "VIDEO", "AUDIO", "VOICE", "STICKER" -> {
-            val text = message.plaintext.toString(Charsets.UTF_8)
-            runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.let { "ðŸ“Ž ${it.name}" }
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.let { "ðŸŽ¤ ${it.name}" }
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { "ðŸ–¼ï¸ ${if (it.emoji.isNotBlank()) it.emoji else "Ù…Ù„ØµÙ‚"}" }
-                ?: text
-        }
-        else -> message.plaintext.toString(Charsets.UTF_8)
-    }
-
-@Composable
-private fun RichTextMessage(
-    message: DecryptedMessage,
-    conversation: List<DecryptedMessage>,
-    myRedId: String? = null,
-    onPollVote: ((String, Int?) -> Unit)? = null
-) {
-    val rich = RichMessage.decode(message.plaintext)
-    if (rich == null) { Text("Ø±Ø³Ø§Ù„Ø© ØºÙŠØ± ØµØ§Ù„Ø­Ø©", color = MaterialTheme.colorScheme.error); return }
-    rich.replyTo?.let { replyId -> conversation.firstOrNull { it.id == replyId }?.let { quoted -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .45f))) { Text(messageDisplayText(quoted), Modifier.padding(7.dp), maxLines = 2, style = MaterialTheme.typography.bodySmall) } } }
-    if (rich.forwardOf != null) Text("Ù…Ø¹Ø§Ø¯ ØªÙˆØ¬ÙŠÙ‡Ù‡Ø§", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-    if (rich.action == "CALL_STARTED") {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-            val isVid = rich.text.contains("ÙÙŠØ¯ÙŠÙˆ")
-            Box(Modifier.size(28.dp).clip(CircleShape).background(if (message.outgoing) Color(0x33000000) else YounesEmerald.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                Icon(if (isVid) Icons.Default.Videocam else Icons.Default.Headset, null, tint = if (message.outgoing) Color(0xFF003023) else YounesEmerald, modifier = Modifier.size(14.dp))
-            }
-            Text("Ù…ÙƒØ§Ù„Ù…Ø© Ù†Ø´Ø·Ø©", style = MaterialTheme.typography.labelSmall, color = if (message.outgoing) Color(0xFF003023) else YounesEmerald, fontWeight = FontWeight.Bold)
-        }
-    }
-
-    val annotated = remember(rich.text, rich.mentions, rich.hashtags) {
-        val t = rich.text
-        val mentions = rich.mentions + RED_ID_PARTIAL.findAll(t).map { it.value }.toList()
-        val hashtags = rich.hashtags + HASHTAG_PARTIAL.findAll(t).map { it.value }.toList()
-        androidx.compose.ui.text.buildAnnotatedString {
-            append(t)
-            mentions.forEach { m -> val idx = t.indexOf(m); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = YounesEmerald, fontWeight = FontWeight.Bold), idx, idx + m.length) }
-            hashtags.forEach { h -> val idx = t.indexOf(h); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = AqyalCyanGlow), idx, idx + h.length) }
-        }
-    }
-    Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
-    rich.poll?.let { poll ->
-        InlinePollCard(poll, isOutgoing = message.outgoing, myRedId = myRedId, onVote = onPollVote)
-    }
-    rich.expiresAt?.let {
-        val remaining = (it - System.currentTimeMillis()).coerceAtLeast(0)
-        val label = when {
-            remaining <= 0 -> "Ø§Ù†ØªÙ‡Øª"
-            remaining < 3600000 -> "${remaining/60000}Ø¯"
-            remaining < 86400000 -> "${remaining/3600000}Ø³"
-            else -> "${remaining/86400000}ÙŠ"
-        }
-        Text("â³ Ù…Ø¤Ù‚ØªØ© â€¢ $label", style = MaterialTheme.typography.labelSmall, color = AqyalGold)
-    }
-    if (rich.mentions.isNotEmpty()) Text("Ø°ÙƒØ±: ${rich.mentions.joinToString()}", style = MaterialTheme.typography.labelSmall, color = YounesEmerald)
-}
-
 @Composable
 private fun InlinePollCard(
     poll: com.red.sovereign.core.InlinePoll,
@@ -3707,112 +3639,6 @@ private fun VoiceWaveform(values: List<Int>, color: Color, modifier: Modifier = 
 }
 
 /** Ø¹Ø±Ø¶ Ø±Ø³Ø§Ù„Ø© Ù…Ù„ØµÙ‚ â€” Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ÙƒØ¨ÙŠØ± ÙƒÙ…Ø¹Ø§ÙŠÙ†Ø© (Ø§Ù„ØµÙˆØ±Ø© Ø§Ù„ÙØ¹Ù„ÙŠØ© ØªÙØ­Ù…Ù‘Ù„ Ø¹Ù†Ø¯ Ø§Ù„ØªÙˆÙØ±). */
-@Composable
-private fun StickerMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
-    val payload = remember(item.id) {
-        runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(item.plaintext.toString(Charsets.UTF_8)) }.getOrNull()
-    }
-    if (payload == null) {
-        Text("Ù…Ù„ØµÙ‚ ØºÙŠØ± ØµØ§Ù„Ø­", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-        return
-    }
-    // ØªØ­Ù…ÙŠÙ„ ØµÙˆØ±Ø© Ø§Ù„Ù…Ù„ØµÙ‚ Ø§Ù„ÙØ¹Ù„ÙŠØ© Ø¹Ø¨Ø± MediaApi (Ø§Ù„Ù…Ù„ØµÙ‚Ø§Øª Ø³ÙŠØ§Ø¯ÙŠØ© ØºÙŠØ± Ù…Ø´ÙÙ‘Ø±Ø© E2EE)
-    val context = LocalContext.current
-    var stickerBitmap by remember(item.id) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(item.id) {
-        if (payload.mediaKey.isNotBlank()) {
-            val tokens = com.red.sovereign.auth.TokenStore(context)
-            val media = com.red.sovereign.media.MediaApi(context, com.red.sovereign.auth.AuthorizedApiClient(tokens))
-            val path = if (payload.mediaKey.startsWith("/api/media/")) payload.mediaKey else "/api/media/$payload.mediaKey"
-            runCatching {
-                when (val r = media.download(path, 10 * 1024 * 1024)) {
-                    is com.red.sovereign.auth.ApiResult.Success -> BitmapFactory.decodeByteArray(r.value, 0, r.value.size)?.asImageBitmap()
-                    is com.red.sovereign.auth.ApiResult.Error -> null
-                }
-            }.getOrNull()?.let { stickerBitmap = it }
-        }
-    }
-    val bitmap = stickerBitmap
-    if (bitmap != null) {
-        Image(
-            bitmap,
-            contentDescription = payload.name ?: "Ù…Ù„ØµÙ‚",
-            modifier = Modifier.size(120.dp).clip(RoundedCornerShape(14.dp))
-        )
-    } else {
-        // Ù…Ø¹Ø§ÙŠÙ†Ø© Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„ØªØ­Ù…ÙŠÙ„ Ø£Ùˆ Ø¹Ù†Ø¯ Ø§Ù„ØªØ¹Ø°Ø±
-        Text(payload.emoji, fontSize = 64.sp)
-    }
-}
-
-@Composable
-private fun VoiceMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
-    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
-    val manifest = remember(manifestJson) { runCatching { ATTACHMENT_JSON.decodeFromString<VoiceManifest>(manifestJson) }.getOrNull() }
-    if (manifest == null) {
-        Text("Ø±Ø³Ø§Ù„Ø© ØµÙˆØªÙŠØ© ØºÙŠØ± ØµØ§Ù„Ø­Ø©", color = MaterialTheme.colorScheme.error)
-        return
-    }
-    val context = LocalContext.current
-    LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (shouldAutoDownload(context, manifest.size)) attachments.downloadVoice(item.id, manifestJson)
-    }
-    val downloadState = attachments.getDownloadState(item.id)
-    val downloadedPath = when (downloadState) {
-        is AttachmentState.Downloaded -> downloadState.path
-        is AttachmentState.Exported -> downloadState.path
-        else -> null
-    }
-    val downloadedFile = downloadedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
-    val isDownloaded = downloadedFile != null
-    val isDownloading = downloadState is AttachmentState.Working
-    val downloadedUri = downloadedFile?.let { android.net.Uri.fromFile(it) }
-
-    if (downloadedUri != null) {
-        // ðŸŽ™ï¸ Ù…Ø´ØºÙ‘Ù„ Ø§Ø­ØªØ±Ø§ÙÙŠ Ù…Ø¹ waveform
-        VoiceNotePlayer(
-            uri = downloadedUri,
-            waveform = manifest.waveform,
-            durationSeconds = manifest.durationSeconds,
-            isOutgoing = item.outgoing,
-            modifier = Modifier.fillMaxWidth()
-        )
-    } else {
-        // ðŸ’¬ ÙÙ‚Ø§Ø¹Ø© Ø§Ø­ØªØ±Ø§ÙÙŠØ© Ù‚Ø¨Ù„ Ø§Ù„ØªÙ†Ø²ÙŠÙ„
-        VoiceBubble(
-            manifest = manifest,
-            isOutgoing = item.outgoing,
-            isDownloaded = isDownloaded,
-            isDownloading = isDownloading,
-            onPlayPause = { attachments.downloadVoice(item.id, manifestJson) },
-            onSeek = { /* no-op before download */ },
-            onSpeedChange = { /* no-op before download */ },
-            onDownload = { attachments.downloadVoice(item.id, manifestJson) },
-            onWaveformTap = { attachments.downloadVoice(item.id, manifestJson) }
-        )
-    }
-}
-
-@Composable
-private fun AttachmentMessage(item: DecryptedMessage, attachments: AttachmentViewModel) {
-    val manifestJson = item.plaintext.toString(Charsets.UTF_8)
-    val manifest = remember(manifestJson) { runCatching { ATTACHMENT_JSON.decodeFromString<AttachmentManifest>(manifestJson) }.getOrNull() }
-    if (manifest == null) {
-        Text("Ù…Ø±ÙÙ‚ Ù…Ø´ÙØ± ØºÙŠØ± ØµØ§Ù„Ø­", color = MaterialTheme.colorScheme.error)
-        return
-    }
-    val context = LocalContext.current
-    LaunchedEffect(item.id, SettingsRuntime.current.autoDownloadWifi, SettingsRuntime.current.autoDownloadMobile) {
-        if (shouldAutoDownload(context, manifest.size)) attachments.download(item.id, manifestJson)
-    }
-    when {
-        manifest.mimeType.startsWith("image/") -> ImageMessage(item, manifest, attachments)
-        manifest.mimeType.startsWith("video/") -> VideoMessage(item, manifest, attachments)
-        manifest.mimeType.startsWith("audio/") -> AudioMessage(item, manifest, attachments)
-        else -> FileMessage(item, manifest, attachments)
-    }
-}
-
 @Composable
 private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val manifestJson = item.plaintext.toString(Charsets.UTF_8)
@@ -4082,22 +3908,6 @@ private fun relativeTime(timestamp: Long): String {
 /** ÙˆÙ‚Øª Ø§Ù„Ø³Ø§Ø¹Ø© Ø¯Ø§Ø®Ù„ Ø§Ù„ÙÙ‚Ø§Ø¹Ø© (Ù…Ø«Ù„ ÙˆØ§ØªØ³Ø§Ø¨: 4:20 Ù… / 11:05 Øµ). */
 private fun formatClockTime(timestamp: Long): String =
     java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(timestamp))
-
-@Composable
-private fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
-    Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(YounesEmerald.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = YounesEmerald, modifier = Modifier.size(22.dp))
-            }
-            Column(Modifier.padding(start = 14.dp)) {
-                Text(title, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            }
-        }
-    }
-}
-
 @Composable
 private fun MessageInfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -4110,81 +3920,7 @@ private fun MessageInfoRow(label: String, value: String) {
  * Ø¹Ø±Ø¶ ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ØªØ­Øª Ø±Ø³Ø§Ù„Ø© (chips Ù…Ø¹ Ø§Ù„Ø¹Ø¯). Ø§Ù„Ø¶ØºØ· Ø¹Ù„Ù‰ Ø¥ÙŠÙ…ÙˆØ¬ÙŠ = toggle
  * (Ø¥Ø²Ø§Ù„Ø© Ø¥Ù† ÙƒØ§Ù† ØªÙØ§Ø¹Ù„ÙƒØŒ Ù„Ø§ Ø´ÙŠØ¡ Ø¥Ù† Ù„Ù… ÙŠÙƒÙ†). E2EE: Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ù…Ø­Ù„ÙŠ ÙÙ‚Ø·.
  */
-@Composable
-private fun MessageReactions(
-    reactions: List<MessageReactionEntity>,
-    currentRedId: String,
-    onToggle: (emoji: String) -> Unit
-) {
-    if (reactions.isEmpty()) return
-    // ØªØ¬Ù…ÙŠØ¹ Ø­Ø³Ø¨ Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ù…Ø¹ Ø§Ù„Ø¹Ø¯ØŒ Ù…Ø±ØªØ¨ ØªÙ†Ø§Ø²Ù„ÙŠØ§Ù‹ Ø­Ø³Ø¨ Ø§Ù„Ø¹Ø¯
-    val grouped = remember(reactions) {
-        reactions.groupBy { it.emoji }
-            .mapValues { it.value.size }
-            .entries.sortedByDescending { it.value }
-            .associate { it.key to it.value }
-    }
-    val myEmoji = remember(reactions, currentRedId) {
-        reactions.firstOrNull { it.senderId == currentRedId }?.emoji
-    }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        items(grouped.entries.toList(), key = { it.key }) { (emoji, count) ->
-            val mine = emoji == myEmoji
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = if (mine) YounesEmerald.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (mine) YounesEmerald else androidx.compose.ui.graphics.Color.Transparent),
-                modifier = Modifier.clickable { onToggle(emoji) }
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(emoji, fontSize = 14.sp)
-                    Text(count.toString(), fontSize = 11.sp, color = if (mine) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = if (mine) FontWeight.Bold else FontWeight.Normal)
-                }
-            }
-        }
-    }
-}
-
 /** Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ø§Ù„Ø³Ø±ÙŠØ¹Ø© Ù„Ù„ØªÙØ§Ø¹Ù„ â€” ØªØ¸Ù‡Ø± Ø£Ø¹Ù„Ù‰ Ù‚Ø§Ø¦Ù…Ø© Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ø±Ø³Ø§Ù„Ø©. */
-@Composable
-private fun ReactionEmojiBar(onPick: (String) -> Unit) {
-    val quick = remember { listOf("ðŸ‘", "â¤ï¸", "ðŸ˜‚", "ðŸ™", "ðŸ”¥", "ðŸ‘", "ðŸ˜®", "ðŸ˜¢", "ðŸŽ‰", "ðŸ’¯") }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-        items(quick) { emoji ->
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(40.dp).clickable { onPick(emoji) }
-            ) {
-                Box(contentAlignment = Alignment.Center) { Text(emoji, fontSize = 22.sp) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmojiPicker(onEmoji: (String) -> Unit) {
-    var category by remember { mutableIntStateOf(0) }
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(horizontal = 8.dp)) {
-                items(EMOJI_CATEGORIES.indices.toList()) { index ->
-                    FilterChip(selected = category == index, onClick = { category = index }, label = { Text(EMOJI_CATEGORIES[index].first) })
-                }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(horizontal = 6.dp)) {
-                items(EMOJI_CATEGORIES[category].second) { emoji ->
-                    TextButton({ onEmoji(emoji) }) { Text(emoji, fontSize = 24.sp) }
-                }
-            }
-        }
-    }
-}
-
 // Ù…ØµØ¯Ø± Ø§Ù„Ø­Ù‚ÙŠÙ‚Ø© Ø§Ù„ÙˆØ­ÙŠØ¯: core/YounesId.kt. Ø§Ù„Ù†Ù…Ø· ÙƒØ§Ù† Ù…ÙƒØ±Ù‘Ø±Ù‹Ø§ Ù‡Ù†Ø§ ÙˆÙÙŠ
 // QrScannerSheet ÙˆSafetyViewModel Ø¨ØµÙŠØ§ØºØ§Øª Ù…ØªØ¨Ø§ÙŠÙ†Ø©ØŒ ÙÙƒØ§Ù† Ù…Ø¹Ø±Ù‘Ù ÙŠÙ‚Ø¨Ù„Ù‡
 // Ø£Ø­Ø¯Ù‡Ø§ ÙˆØªØ±ÙØ¶Ù‡ Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©.
