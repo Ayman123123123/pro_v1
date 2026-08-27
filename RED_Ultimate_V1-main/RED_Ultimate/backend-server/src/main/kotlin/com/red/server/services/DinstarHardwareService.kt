@@ -14,6 +14,7 @@ import okhttp3.CertificatePinner
 import okhttp3.FormBody
 import okhttp3.HttpUrl
 import com.red.server.pstn.DinstarLoadBalancer
+import com.red.server.pstn.YemenNumberPlan
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -856,37 +857,39 @@ class DinstarHardwareService(
     }
 
     /**
-     * تحديد اسم المشغّل، مع تصحيح الأسماء القديمة أو الخاطئة التي تُرجعها
-     * البوابة (MTN ← YOU بعد 2021، HiTel ← YTelecom).
+     * تحديد اسم المشغّل من أدقّ دليل متاح.
      *
-     * جدول البادئات **ليس هنا**: المصدر الوحيد للحقيقة هو
-     * [DinstarLoadBalancer.classifyNumber]. كان هذا الملف يحمل نسخته
-     * الخاصة `YEMEN_OPERATOR_PREFIXES` تطابق بخانتين ثابتتين، فتقرأ
-     * شريحة سبأفون عدن `722…` على أنها `72` وتُسقطها في «غير معروف»؛
-     * فتفشل مطابقة «داخل الشبكة» وتُوجَّه المكالمة عبر شريحة مشغّل آخر
-     * بتعرفة أعلى. التفويض أدناه يمنع تكرار هذا الانحراف.
+     * ## ترتيب الأدلة — من الأقوى إلى الأضعف
+     *
+     * 1. **رقم الشريحة** (`number`) — قاطع حين يوجد، لكنه فارغ حتى يتم
+     *    «تعلّم الرقم»، وهو حال كل المنافذ الثمانية في هذا النشر.
+     * 2. **IMSI** — متاح دائمًا ومستقل عن التعلّم. هذا هو **المسار الفعلي**
+     *    على واجهة HTTP API لأن `get_port_info` **لا تُصدر `operator`
+     *    إطلاقًا** (مُثبت: طلبه بأي اسم يردّ `error_code=400`).
+     * 3. **اسم المشغّل النصي** — تُصدره واجهة الويب وحدها، وأحيانًا كرقم
+     *    خام `"42103"`. يُصحَّح هنا: MTN←YOU (2021)، HiTel←YTelecom.
+     *
+     * جداول البادئات وMNC **ليست هنا**: مصدرهما الوحيد
+     * [com.red.server.pstn.YemenNumberPlan]. كان هذا الملف يحمل نسخته
+     * الخاصة من كلَيهما، فأي تصحيح في أحدهما يترك الآخر معطوبًا.
      */
-    /** Resolve operator name: maps old/wrong names (MTN→YOU, HiTel→YTelecom) to correct Yemen operator */
     private fun resolveOperatorName(apiName: String?, simNumber: String?, imsi: String? = null): String {
-        // First try: use SIM number prefix (most reliable)
+        // 1) رقم الشريحة — الأقوى، لكنه غائب قبل تعلّم الرقم
         if (!simNumber.isNullOrBlank()) {
             DinstarLoadBalancer.classifyNumber(simNumber)?.let { return it.apiName }
         }
-        // Second try: use IMSI MNC (MCC 421 is Yemen) — works even when number is empty
-        if (!imsi.isNullOrBlank() && imsi.length >= 5) {
-            val digits = imsi.filter { it.isDigit() }
-            if (digits.startsWith("421") && digits.length >= 5) {
-                val mnc = digits.substring(3, 5)
-                when (mnc) {
-                    "01" -> return "Sabafon"
-                    "02" -> return "YOU"
-                    "03" -> return "YemenMobile"
-                    "04" -> return "YTelecom"
+        // 2) IMSI — المسار الفعلي على HTTP API (لا يُصدِر operator)
+        YemenNumberPlan.classifyImsi(imsi)?.let { return it.apiName }
+        // 3) الاسم النصي من واجهة الويب، مع تصحيح الأسماء القديمة
+        if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
+            // صيغة PLMN الخام "42103" — تُقرأ كـMCC+MNC لا كاسم
+            apiName.filter { it.isDigit() }.takeIf { it.length == 5 }?.let { plmn ->
+                if (plmn.startsWith(YemenNumberPlan.YEMEN_MCC)) {
+                    val mnc = plmn.substring(3, 5)
+                    return (YemenNumberPlan.OPERATORS_BY_MNC[mnc]
+                        ?: YemenNumberPlan.unmappedYemeniMnc(mnc)).apiName
                 }
             }
-        }
-        // Third try: match API operator name with corrections
-        if (!apiName.isNullOrBlank() && apiName != "UNKNOWN") {
             return when {
                 apiName.contains("Sabafon", ignoreCase = true) -> "Sabafon"
                 apiName.contains("YOU", ignoreCase = true) || apiName.contains("Yemeni Omani", ignoreCase = true) -> "YOU"
@@ -895,10 +898,6 @@ class DinstarHardwareService(
                 apiName.contains("Y Telecom", ignoreCase = true) || apiName == "Y" -> "YTelecom"
                 apiName.contains("HiTel", ignoreCase = true) || apiName.contains("Hi Tel", ignoreCase = true) -> "YTelecom"  // HiTel→YTelecom
                 apiName.contains("Yemen 4G", ignoreCase = true) -> "Yemen4G"
-                apiName.contains("42101", true) -> "Sabafon"
-                apiName.contains("42102", true) -> "YOU"
-                apiName.contains("42103", true) -> "YemenMobile"
-                apiName.contains("42104", true) -> "YTelecom"
                 else -> apiName  // Return as-is if unrecognized
             }
         }

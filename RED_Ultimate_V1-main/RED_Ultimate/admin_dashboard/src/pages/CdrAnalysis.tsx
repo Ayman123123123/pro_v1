@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Button, Card, Col, DatePicker, Descriptions, Empty, Row, Select,
+  Alert, Button, Card, Col, Empty, Row, Select,
   Space, Statistic, Table, Tag, Typography, message,
 } from 'antd';
 import {
-  BarChartOutlined, ClockCircleOutlined, DollarOutlined, PhoneOutlined,
+  ClockCircleOutlined, PhoneOutlined,
   ReloadOutlined, SwapOutlined,
 } from '@ant-design/icons';
 import { apiFetch } from '../api';
@@ -26,11 +26,42 @@ type CdrRecord = {
   portIndex: number;
   direction: string;
   number: string;
+  callerNumber?: string | null;
+  calleeNumber?: string | null;
   startTime: string;
+  answerTime?: string | null;
   duration: number;
+  ringDuration?: number;
   status: string;
+  hangupCause?: string | null;
+  codec?: string | null;
+  gsmCode?: number | null;
   operator: string;
   cost?: number;
+};
+
+/**
+ * ملخّص محسوب في القاعدة على كل الصفوف.
+ *
+ * الحساب في المتصفّح كان يجري على الصفحة المُحمَّلة فقط (500 صفًّا)، فيُعرَض
+ * «إجمالي المكالمات» وهو في الحقيقة إجمالي المعروض. القاعدة ترى كل الصفوف.
+ */
+type CdrSummary = {
+  total: number;
+  answered: number;
+  noAnswer: number;
+  busy: number;
+  failed: number;
+  cancelled: number;
+  inbound: number;
+  outbound: number;
+  totalSeconds: number;
+  billableSeconds: number;
+  avgAnsweredSeconds: number;
+  answerRate: number;
+  totalCostYer: number;
+  firstCallAt?: string | null;
+  lastCallAt?: string | null;
 };
 
 type DailyStats = {
@@ -40,16 +71,24 @@ type DailyStats = {
   succeeded: number;
   failed: number;
 };
-
-const { RangePicker } = DatePicker;
-
 const STATUS_COLORS: Record<string, string> = {
-  COMPLETED: 'success',
   ANSWERED: 'success',
   NO_ANSWER: 'warning',
   BUSY: 'warning',
+  CANCELLED: 'default',
   FAILED: 'error',
-  REJECTED: 'error',
+};
+
+/**
+ * مفردات `dinstar_cdr.status` — نفس قيد CHECK في المخطَّط. الواجهة كانت تعرض
+ * `COMPLETED`/`REJECTED` وهي مفردات نتيجة التوجيه لا حالة المكالمة.
+ */
+const STATUS_LABELS: Record<string, string> = {
+  ANSWERED: 'مُجابة',
+  NO_ANSWER: 'لا رد',
+  BUSY: 'مشغول',
+  CANCELLED: 'ملغاة',
+  FAILED: 'فشل',
 };
 
 const DIRECTION_LABELS: Record<string, string> = {
@@ -59,18 +98,28 @@ const DIRECTION_LABELS: Record<string, string> = {
 
 export default function CdrAnalysis() {
   const [cdr, setCdr] = useState<CdrRecord[]>([]);
+  const [summary, setSummary] = useState<CdrSummary | null>(null);
+  const [daily, setDaily] = useState<DailyStats[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dateRange, setDateRange] = useState<[any, any] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [gatewayFilter, setGatewayFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch('/api/admin/dinstar/cdr/analysis');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      // الملخّص والتوزيع اليومي من القاعدة على كل الصفوف، والجدول عيّنة
+      // أحدثها. طلبها معًا لا متتابعة: التتابع يُظهر أرقامًا من لحظات مختلفة.
+      const [listRes, sumRes, dailyRes] = await Promise.all([
+        apiFetch('/api/admin/dinstar/cdr/analysis'),
+        apiFetch('/api/admin/dinstar/cdr/summary'),
+        apiFetch('/api/admin/dinstar/cdr/daily?days=30'),
+      ]);
+      if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
+      const data = await listRes.json();
       setCdr(Array.isArray(data) ? data : (data.records || []));
+      // فشل الملخّص لا يُفرِّغ الجدول: الجدول وحده مفيد.
+      setSummary(sumRes.ok ? await sumRes.json() : null);
+      setDaily(dailyRes.ok ? await dailyRes.json() : []);
     } catch (e: any) {
       message.error(e.message || 'تعذر تحميل سجل المكالمات');
     } finally {
@@ -80,19 +129,42 @@ export default function CdrAnalysis() {
 
   useEffect(() => { load(); }, [load]);
 
-  // الإحصائيات
+  /**
+   * الإحصاءات المعروضة. تُفضَّل أرقام القاعدة دائمًا؛ وعند تعذّر الملخّص
+   * تُحسَب من الصفوف المُحمَّلة مع تعليم أنها جزئية بدل الإيهام بأنها الكل.
+   */
   const stats = useMemo(() => {
+    if (summary) {
+      return {
+        total: summary.total,
+        succeeded: summary.answered,
+        failed: summary.total - summary.answered,
+        avgDuration: summary.avgAnsweredSeconds,
+        totalCost: summary.totalCostYer,
+        inbound: summary.inbound,
+        outbound: summary.outbound,
+        answerRate: summary.answerRate,
+        partial: false,
+      };
+    }
     const total = cdr.length;
-    const succeeded = cdr.filter((r) => ['COMPLETED', 'ANSWERED'].includes(r.status.toUpperCase())).length;
-    const failed = total - succeeded;
-    const totalDuration = cdr.reduce((s, r) => s + (r.duration || 0), 0);
-    const avgDuration = total > 0 ? Math.round(totalDuration / total) : 0;
-    const totalCost = cdr.reduce((s, r) => s + (r.cost || 0), 0);
-    const inbound = cdr.filter((r) => r.direction === 'INBOUND').length;
-    const outbound = cdr.filter((r) => r.direction === 'OUTBOUND').length;
-
-    return { total, succeeded, failed, avgDuration, totalCost, inbound, outbound };
-  }, [cdr]);
+    const succeeded = cdr.filter((r) => r.status?.toUpperCase() === 'ANSWERED').length;
+    const answeredSeconds = cdr
+      .filter((r) => r.status?.toUpperCase() === 'ANSWERED')
+      .reduce((s, r) => s + (r.duration || 0), 0);
+    return {
+      total,
+      succeeded,
+      failed: total - succeeded,
+      // متوسط المُجابة فقط: إدخال غير المُجابة يسحب المتوسط إلى الصفر.
+      avgDuration: succeeded > 0 ? Math.round(answeredSeconds / succeeded) : 0,
+      totalCost: cdr.reduce((s, r) => s + (r.cost || 0), 0),
+      inbound: cdr.filter((r) => r.direction === 'INBOUND').length,
+      outbound: cdr.filter((r) => r.direction === 'OUTBOUND').length,
+      answerRate: total > 0 ? Math.round((succeeded / total) * 100) : 0,
+      partial: true,
+    };
+  }, [cdr, summary]);
 
   // توزيع المشغلين
   const operatorDist = useMemo(() => {
@@ -146,6 +218,33 @@ export default function CdrAnalysis() {
       // ECharts غير متوفر — نعرض الإحصائيات النصية فقط
     });
   }, []);
+
+  // رسم بياني — المكالمات اليومية (آخر 30 يومًا، مجمَّعة في القاعدة)
+  const dailyChartOption = useMemo(() => {
+    if (!echartsMod || daily.length === 0) return null;
+    return {
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['مُجابة', 'غير مُجابة'] },
+      xAxis: { type: 'category', data: daily.map((d) => d.date) },
+      yAxis: { type: 'value', name: 'عدد المكالمات' },
+      series: [
+        {
+          name: 'مُجابة',
+          type: 'bar',
+          stack: 'calls',
+          data: daily.map((d) => d.succeeded),
+          itemStyle: { color: '#52C41A' },
+        },
+        {
+          name: 'غير مُجابة',
+          type: 'bar',
+          stack: 'calls',
+          data: daily.map((d) => d.failed),
+          itemStyle: { color: '#E0A83C' },
+        },
+      ],
+    };
+  }, [echartsMod, daily]);
 
   // رسم بياني — توزيع المشغلين
   const operatorChartOption = useMemo(() => {
@@ -239,8 +338,8 @@ export default function CdrAnalysis() {
       dataIndex: 'status',
       width: 100,
       render: (v: string) => (
-        <Tag color={STATUS_COLORS[v.toUpperCase()] || 'default'}>
-          {v}
+        <Tag color={STATUS_COLORS[v?.toUpperCase()] || 'default'}>
+          {STATUS_LABELS[v?.toUpperCase()] || v}
         </Tag>
       ),
     },
@@ -248,6 +347,17 @@ export default function CdrAnalysis() {
 
   return (
     <div>
+      {/* تعذّر الملخّص: الأرقام محسوبة من العيّنة المُحمَّلة لا من كل الصفوف */}
+      {stats.partial && cdr.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="الإحصاءات محسوبة من المكالمات المعروضة فقط"
+          description="تعذّر جلب الملخّص من الخادم، فالأرقام أدناه تخصّ العيّنة المُحمَّلة لا كل السجل."
+        />
+      )}
+
       {/* إحصائيات */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8} md={6}>
@@ -263,17 +373,17 @@ export default function CdrAnalysis() {
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
             <Statistic
-              title="ناجحة"
+              title="مُجابة"
               value={stats.succeeded}
               valueStyle={{ color: '#52C41A' }}
-              suffix={`/ ${stats.total > 0 ? Math.round(stats.succeeded / stats.total * 100) : 0}%`}
+              suffix={`/ ${stats.answerRate}%`}
             />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
             <Statistic
-              title="متوسط المدة"
+              title="متوسط مدة المُجابة"
               value={stats.avgDuration}
               prefix={<ClockCircleOutlined />}
               suffix="ث"
@@ -289,6 +399,30 @@ export default function CdrAnalysis() {
               prefix={<SwapOutlined />}
               valueStyle={{ color: '#E0A83C' }}
             />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* المكالمات اليومية */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col xs={24}>
+          <Card title="المكالمات اليومية (آخر 30 يومًا)" size="small">
+            {echartsReady && dailyChartOption
+              ? React.createElement(echartsForReact, { option: dailyChartOption, style: { height: 240 } })
+            : daily.length > 0 ? (
+              <Table
+                size="small"
+                dataSource={daily}
+                columns={[
+                  { title: 'اليوم', dataIndex: 'date' },
+                  { title: 'المكالمات', dataIndex: 'calls', width: 90 },
+                  { title: 'مُجابة', dataIndex: 'succeeded', width: 80 },
+                  { title: 'غير مُجابة', dataIndex: 'failed', width: 90 },
+                ]}
+                pagination={false}
+                rowKey="date"
+              />
+            ) : <Empty description="لا توجد بيانات" />}
           </Card>
         </Col>
       </Row>
@@ -352,13 +486,15 @@ export default function CdrAnalysis() {
               value={statusFilter}
               onChange={setStatusFilter}
               style={{ width: 140 }}
+              // نفس مفردات قيد CHECK على `dinstar_cdr.status`. الخيارات
+              // السابقة (COMPLETED/REJECTED) من مفردات نتيجة التوجيه، فلم
+              // تُطابق صفًّا واحدًا وكان كل تصفية تُفرِّغ الجدول.
               options={[
-                { value: 'COMPLETED', label: 'ناجحة' },
                 { value: 'ANSWERED', label: 'مُجابة' },
                 { value: 'NO_ANSWER', label: 'لا رد' },
                 { value: 'BUSY', label: 'مشغول' },
+                { value: 'CANCELLED', label: 'ملغاة' },
                 { value: 'FAILED', label: 'فشل' },
-                { value: 'REJECTED', label: 'مرفوض' },
               ]}
             />
             <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>تحديث</Button>

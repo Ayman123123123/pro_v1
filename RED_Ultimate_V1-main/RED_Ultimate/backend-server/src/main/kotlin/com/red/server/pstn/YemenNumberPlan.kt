@@ -97,4 +97,68 @@ object YemenNumberPlan {
     /** هل الرقم محمول يمني صالح (بادئة ثلاثية معروفة أو طول كامل)؟ */
     fun isDialableMobile(local: String): Boolean =
         local.substring(0, minOf(3, local.length)) in MOBILE_PREFIXES_3 || local.length >= 9
+
+    // ═══════════════════════════════════════════════════════════════
+    // IMSI → المشغّل (MCC/MNC)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** رمز الدولة المتنقلة لليمن (ITU E.212). */
+    const val YEMEN_MCC = "421"
+
+    /**
+     * رمز الشبكة (MNC) → المشغّل.
+     *
+     * ## لماذا هذا هنا لا في [com.red.server.services.DinstarHardwareService]
+     *
+     * كان الجدول مكتوبًا داخل `resolveOperatorName` كـ`when` مباشر، وهو
+     * **المسار الوحيد** لتحديد المشغّل على واجهة HTTP API: `get_port_info`
+     * **لا يُصدر حقل `operator` إطلاقًا** (مُثبت ميدانيًا — طلبه بأي اسم
+     * `operator/carrier/oper/plmn/network` يردّ `error_code=400`). واجهة
+     * الويب `WebGetPortInfoAll` وحدها تُصدره، وأحيانًا كرقم خام `"42103"`.
+     *
+     * فأي MNC غائب عن الجدول يعني «مشغّل غير معروف» فتفقد المكالمة مطابقة
+     * «داخل الشبكة» وتُوجَّه عبر شريحة مشغّل آخر بتعرفة أعلى — بصمت.
+     *
+     * | MNC | المشغّل | التقنية |
+     * |-----|---------|---------|
+     * | 01  | سبأفون Sabafon | GSM + LTE |
+     * | 02  | يو YOU (MTN حتى 2021) | GSM + LTE |
+     * | 03  | يمن موبايل Yemen Mobile | CDMA2000 + LTE |
+     * | 04  | واي Y Telecom (HiTel سابقًا) | GSM |
+     */
+    val OPERATORS_BY_MNC: Map<String, OperatorInfo> = mapOf(
+        "01" to SABAFON,
+        "02" to OperatorInfo("YOU", "يو", isMobile = true),
+        "03" to YEMEN_MOBILE,
+        "04" to OperatorInfo("YTelecom", "واي", isMobile = true)
+    )
+
+    /**
+     * تصنيف شريحة من IMSI.
+     *
+     * @return المشغّل، أو `null` إن لم يكن IMSI يمنيًا صالحًا، أو
+     *   [unmappedYemeniMnc] لرمز يمني غير مُخطَّط له.
+     *
+     * MNC غير معروف **لا يُطمَس إلى «UNKNOWN»**: يُعاد بمُعرِّف يحمل رقمه
+     * (`YE-MNC-11`) كي يظهر في اللوحة والسجل فيُلاحَظ ويُصنَّف، بدل أن
+     * يختفي بين كل مجهول آخر. رُصد فعليًا `42111` على شرائح LTE في هذا
+     * النشر، وهو غائب عن قائمة MNC الكلاسيكية لليمن.
+     */
+    fun classifyImsi(imsi: String?): OperatorInfo? {
+        val digits = imsi?.filter { it.isDigit() } ?: return null
+        if (digits.length < 5 || !digits.startsWith(YEMEN_MCC)) return null
+        val mnc = digits.substring(3, 5)
+        return OPERATORS_BY_MNC[mnc] ?: unmappedYemeniMnc(mnc)
+    }
+
+    /**
+     * مشغّل يمني برمز شبكة غير مُخطَّط له.
+     *
+     * `isMobile=true` عن قصد: الشريحة **مسجَّلة فعلًا** على شبكة محمول
+     * (وإلا لم يكن لها IMSI مقروء)، فاستبعادها من الترشيح يُهدر منفذًا
+     * صالحًا. ما يُفقَد هو مطابقة «داخل الشبكة» فقط، وهي تحسين تكلفة لا
+     * شرط اتصال.
+     */
+    fun unmappedYemeniMnc(mnc: String): OperatorInfo =
+        OperatorInfo("YE-MNC-$mnc", "مشغّل يمني ($mnc)", isMobile = true)
 }
