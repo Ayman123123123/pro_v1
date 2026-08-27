@@ -61,14 +61,18 @@ class DinstarSignalTest {
         assertEquals(0, values.first(), "‎-113 dBm هو الحد الأدنى")
         assertEquals(100, values.last(), "‎-51 dBm هو الحد الأعلى")
     }
-
     @Test
-    @DisplayName("عتبة الصلاحية تستبعد الإشارة الضعيفة جدًا")
+    @DisplayName("عتبة الصلاحية تستبعد ما دون -112 dBm فقط، و-100 تفصل المفضّل")
     fun usabilityThreshold() {
-        // ‎-100 dBm هو الحد؛ القراءة 6 ⇒ ‎-101 dBm (تحته)، و7 ⇒ ‎-99 dBm (فوقه)
-        assertFalse(DinstarSignal.interpret(6).usable, "‎-101 dBm أضعف من أن تحمل مكالمة")
-        assertTrue(DinstarSignal.interpret(7).usable, "‎-99 dBm مقبولة")
+        // usable = grade != UNUSABLE = dbm >= MIN_VIABLE_DBM (-112): إشارة ضعيفة
+        // تحمل SMS ولا تُستبعد. أما -100 (DEFAULT_MIN_GOOD_DBM) فتفصل GOOD/المفضّل
+        // للمكالمات، ويُعبّر عنها `preferred` لا `usable`.
+        assertTrue(DinstarSignal.interpret(6).usable, "‏-101 dBm ضعيفة لكنها صالحة")
+        assertFalse(DinstarSignal.interpret(6).preferred, "‏-101 dBm دون عتبة المفضّل")
+        assertTrue(DinstarSignal.interpret(7).usable, "‏-99 dBm مقبولة")
+        assertTrue(DinstarSignal.interpret(7).preferred, "‏-99 dBm فوق عتبة المفضّل")
         assertTrue(DinstarSignal.interpret(31).usable)
+        assertFalse(DinstarSignal.interpret(99).usable, "‏99 = لا شبكة")
     }
 
     @Test
@@ -77,8 +81,8 @@ class DinstarSignalTest {
         assertEquals("EXCELLENT", DinstarSignal.interpret(31).label) // ‎-51
         assertEquals("GOOD", DinstarSignal.interpret(20).label)      // ‎-73
         assertEquals("FAIR", DinstarSignal.interpret(12).label)      // ‎-89
-        assertEquals("WEAK", DinstarSignal.interpret(8).label)       // ‎-97
-        assertEquals("UNUSABLE", DinstarSignal.interpret(2).label)   // ‎-109
+        assertEquals("ACCEPTABLE", DinstarSignal.interpret(8).label)       // ‎-97
+        assertEquals("WEAK", DinstarSignal.interpret(2).label)   // ‎-109
     }
 
     @Test
@@ -107,7 +111,7 @@ class DinstarSignalTest {
     @DisplayName("خريطة النتيجة تحمل الحقول التي تعتمدها اللوحة والموزّع")
     fun mapCarriesContract() {
         val map = DinstarSignal.interpret(20).toMap()
-        assertEquals(setOf("signalRaw", "signalDbm", "signal", "signalUsable", "signalLabel"), map.keys)
+        assertEquals(setOf("signalRaw", "signalDbm", "signal", "signalUsable", "signalGrade", "signalLabel"), map.keys)
         assertEquals(20, map["signalRaw"])
         assertEquals(-73, map["signalDbm"])
         assertEquals(true, map["signalUsable"])

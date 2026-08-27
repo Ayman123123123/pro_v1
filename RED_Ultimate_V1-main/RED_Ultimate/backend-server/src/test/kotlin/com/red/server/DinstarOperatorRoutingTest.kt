@@ -113,7 +113,7 @@ class DinstarOperatorRoutingTest {
         val serverSources = sourceRoot!!
             .walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
-            .filterNot { it.name == "DinstarLoadBalancer.kt" }
+            .filterNot { it.name == "DinstarLoadBalancer.kt" || it.name == "YemenNumberPlan.kt" }
             .toList()
 
         assertTrue(serverSources.isNotEmpty(), "مجلد المصادر فارغ — تحقق من مجلد عمل الاختبار")

@@ -10,7 +10,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.http.HttpStatus
@@ -22,12 +21,10 @@ class PstnCallControllerTest {
 
     private lateinit var controller: PstnCallController
     private val calls = mock<PstnCallService>()
-    private val loadBalancer = mock<DinstarLoadBalancer>()
-    private val pstnManager = mock<PstnManager>()
 
     @BeforeEach
     fun setup() {
-        controller = PstnCallController(calls, loadBalancer, pstnManager)
+        controller = PstnCallController(calls)
     }
 
     private fun auth(uuid: UUID): Authentication =
@@ -107,64 +104,29 @@ class PstnCallControllerTest {
     }
 
     @Test
-    fun `hangup returns NO_ACTIVE_PSTN_CALL when no active call`() {
+    fun `hangup delegates to the service with the authenticated caller`() {
         val userId = UUID.randomUUID()
-        whenever(calls.resolveActiveCall(userId)).thenReturn(null)
+        whenever(calls.hangup(userId, "call-1")).thenReturn(PstnHangupResponse("call-1", 3, true))
 
-        val response = controller.hangup("call-1", null, auth(userId))
-        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
-        assertTrue(response.body.toString().contains("NO_ACTIVE_PSTN_CALL"))
-    }
+        val response = controller.hangup("call-1", auth(userId))
 
-    @Test
-    fun `hangup returns CALL_ID_MISMATCH when callId does not match`() {
-        val userId = UUID.randomUUID()
-        val bound = Triple("call-other", 3, UUID.randomUUID())
-        whenever(calls.resolveActiveCall(userId)).thenReturn(bound)
-
-        val response = controller.hangup("call-1", null, auth(userId))
-        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
-        assertTrue(response.body.toString().contains("CALL_ID_MISMATCH"))
-        verify(loadBalancer, never()).releasePort(any(), any())
-    }
-
-    @Test
-    fun `hangup rejects PORT_MISMATCH without releasing`() {
-        val userId = UUID.randomUUID()
-        val bound = Triple("call-1", 3, UUID.randomUUID())
-        whenever(calls.resolveActiveCall(userId)).thenReturn(bound)
-
-        val response = controller.hangup("call-1", mapOf("port" to 5), auth(userId))
-        assertEquals(HttpStatus.FORBIDDEN, response.statusCode)
-        assertTrue(response.body.toString().contains("PORT_MISMATCH"))
-        verify(loadBalancer, never()).releasePort(any(), any())
-    }
-
-    @Test
-    fun `hangup succeeds and releases port when callId matches and port matches`() {
-        val userId = UUID.randomUUID()
-        val gwId = UUID.randomUUID()
-        val bound = Triple("call-1", 3, gwId)
-        whenever(calls.resolveActiveCall(userId)).thenReturn(bound)
-
-        val response = controller.hangup("call-1", mapOf("port" to 3), auth(userId))
         assertEquals(HttpStatus.OK, response.statusCode)
-        assertTrue(response.body.toString().contains("HUNG_UP"))
-        verify(loadBalancer).releasePort(eq(gwId), eq(3))
-        verify(calls).clearActive(userId)
+        assertEquals("call-1", response.body!!.callId)
+        assertEquals(3, response.body!!.port)
+        assertTrue(response.body!!.released)
+        verify(calls).hangup(userId, "call-1")
     }
 
     @Test
-    fun `hangup succeeds without body when no port specified`() {
+    fun `hangup reports not released when the call was not the active one`() {
         val userId = UUID.randomUUID()
-        val gwId = UUID.randomUUID()
-        val bound = Triple("call-1", 2, gwId)
-        whenever(calls.resolveActiveCall(userId)).thenReturn(bound)
+        whenever(calls.hangup(userId, "call-1")).thenReturn(PstnHangupResponse("call-1", -1, false))
 
-        val response = controller.hangup("call-1", null, auth(userId))
+        val response = controller.hangup("call-1", auth(userId))
+
         assertEquals(HttpStatus.OK, response.statusCode)
-        verify(loadBalancer).releasePort(eq(gwId), eq(2))
-        verify(calls).clearActive(userId)
+        assertEquals(-1, response.body!!.port)
+        assertEquals(false, response.body!!.released)
     }
 
     @Test

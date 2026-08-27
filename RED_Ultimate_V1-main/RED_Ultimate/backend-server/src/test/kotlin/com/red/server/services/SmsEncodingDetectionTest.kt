@@ -56,12 +56,19 @@ class SmsEncodingDetectionTest {
         assertEquals("GSM7BIT", detect("[test]{x}|^~\\"))
         assertEquals("GSM7BIT", detect("Cost 10€"))
     }
-
     @Test
-    @DisplayName("اللاتينية الممتدة الواردة في الأبجدية لا تُرقَّى")
+    @DisplayName("اللاتينية الممتدة الواردة في الأبجدية لا تُرقَّى، وما خرج عنها يُرقَّى")
     fun `latin extended in alphabet stays gsm7bit`() {
-        // فحصٌ ساذج بمدى ASCII كان سيرقّي هذه خطأً.
-        assertEquals("GSM7BIT", detect("Café Ørsted Ñandú"))
+        // 3GPP TS 23.038 يُدرج مجموعة محدَّدة من اللاتينية الممتدة فقط:
+        // é ù ì ò Ç Ø ø Å å Æ æ ß É Ä Ö Ñ Ü ä ö ñ ü à — وكلها 7-bit.
+        assertEquals("GSM7BIT", detect("Café Ørsted åäöñü"))
+        assertEquals("GSM7BIT", detect("Ærø ßeta École Çin"))
+
+        // الحروف الكبيرة المُشكَّلة خارج تلك المجموعة: `À` (U+00C0) ليست في
+        // الأبجدية — الموجود هو `à` الصغيرة عند 0x7F وحدها. فترقية النص
+        // إلى UCS2 هي السلوك الصحيح لا عيب: إرسالها كـ7-bit يُفقد الحرف.
+        assertEquals("UCS2", detect("Àande"))
+        assertEquals("UCS2", detect("Œuvre"))
     }
 
     @Test

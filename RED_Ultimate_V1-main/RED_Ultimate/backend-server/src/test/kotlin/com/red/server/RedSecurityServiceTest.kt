@@ -1,49 +1,57 @@
 package com.red.server
 
-import com.red.server.auth.model.AccountRole
-import com.red.server.auth.model.UserAccount
-import com.red.server.auth.repository.UserAccountRepository
-import com.red.server.services.AdminUserIntelligenceService
 import com.red.server.services.RedSecurityService
-import com.red.server.websocket.RedMasterHandler
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import java.util.Optional
+import org.springframework.data.redis.core.RedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import java.util.UUID
 
+/**
+ * RedSecurityService هي ناشر Redis فقط: تبثّ الأمر على القناة ولا تملك
+ * منطق الصلاحيات. التحقق من الأدمن ومنع مسح حسابات ADMIN يعيشان في
+ * AdminUserIntelligenceService/Controller، ولهما اختباراتهما الخاصة.
+ */
 class RedSecurityServiceTest {
-    private val users = mock<UserAccountRepository>()
-    private val intelligence = mock<AdminUserIntelligenceService>()
-    private val messaging = mock<RedMasterHandler>()
-    private val service = RedSecurityService(users, intelligence, messaging)
+    private val redis = mock<RedisTemplate<String, String>>()
+    private val values = mock<ValueOperations<String, String>>()
+    private val service = RedSecurityService(redis)
 
     @Test
-    fun `wipe request is durable and delivered over the authenticated socket`() {
-        val actor = UUID.randomUUID()
-        val user = UserAccount(redId = "71234", username = "target", displayName = "Target")
-        whenever(users.findById(user.id)).thenReturn(Optional.of(user))
-        whenever(intelligence.requestRemoteAppWipe(user.id, actor)).thenReturn(user)
-        whenever(intelligence.pendingRemoteWipeCommand(user.id)).thenReturn("wipe_${user.id}_123")
+    fun `wipe signal is published on the security channel`() {
+        val userId = UUID.randomUUID().toString()
 
-        val result = service.sendWipeSignal(user.id.toString(), actor)
+        val result = service.sendWipeSignal(userId)
 
-        assertEquals("REQUESTED", result["status"])
-        assertEquals(true, result["durable"])
-        verify(messaging).sendRemoteWipe(user.redId, "wipe_${user.id}_123", "ADMIN_REQUESTED_REMOTE_APP_WIPE")
+        assertEquals("SENT", result["status"])
+        assertEquals(userId, result["userId"])
+        assertEquals("WIPE", result["action"])
+        verify(redis).convertAndSend("security:wipe", userId)
     }
 
     @Test
-    fun `administrator accounts cannot be remotely wiped`() {
-        val actor = UUID.randomUUID()
-        val admin = UserAccount(redId = "70001", username = "admin", displayName = "Admin", role = AccountRole.ADMIN)
-        whenever(users.findById(admin.id)).thenReturn(Optional.of(admin))
+    fun `kill switch is published with its reason`() {
+        val result = service.activateKillSwitch("LOST_DEVICE")
 
-        assertThrows(IllegalArgumentException::class.java) {
-            service.sendWipeSignal(admin.id.toString(), actor)
-        }
+        assertEquals("ACTIVATED", result["status"])
+        assertEquals("LOST_DEVICE", result["reason"])
+        verify(redis).convertAndSend("security:kill-switch", "LOST_DEVICE")
+    }
+
+    @Test
+    fun `device status reports blocked state from redis`() {
+        val userId = UUID.randomUUID().toString()
+        whenever(redis.opsForValue()).thenReturn(values)
+        whenever(values.get("security:last-seen:$userId")).thenReturn("1700000000")
+        whenever(values.get("security:blocked:$userId")).thenReturn("true")
+
+        val result = service.getDeviceSecurityStatus(userId)
+
+        assertEquals(userId, result["userId"])
+        assertEquals(true, result["isBlocked"])
+        assertEquals("1700000000", result["lastSeen"])
     }
 }

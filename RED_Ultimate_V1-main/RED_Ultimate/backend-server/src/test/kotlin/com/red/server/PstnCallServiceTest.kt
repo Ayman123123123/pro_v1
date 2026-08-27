@@ -5,6 +5,7 @@ import com.red.server.auth.model.UserAccount
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.calls.CallHistoryService
 import com.red.server.pstn.DinstarLoadBalancer
+import com.red.server.pstn.PstnCallProgressTracker
 import com.red.server.pstn.PstnCallService
 import com.red.server.pstn.PstnManager
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -28,6 +29,7 @@ class PstnCallServiceTest {
     private val pstn = mock<PstnManager>()
     private val loadBalancer = mock<DinstarLoadBalancer>()
     private val history = mock<CallHistoryService>()
+    private val progress = PstnCallProgressTracker()
     private val retryScheduler = mock<ScheduledExecutorService>()
 
     @Test
@@ -48,7 +50,7 @@ class PstnCallServiceTest {
         whenever(values.setIfAbsent(any(), any(), any())).thenReturn(true)
         whenever(loadBalancer.selectPort(any(), anyOrNull())).thenReturn(null)
 
-        val service = PstnCallService(users, redis, pstn, loadBalancer, history, retryScheduler)
+        val service = PstnCallService(users, redis, pstn, loadBalancer, history, progress, retryScheduler)
         assertThrows(IllegalStateException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
@@ -72,7 +74,7 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(3)
 
-        val service = PstnCallService(users, redis, pstn, loadBalancer, history, retryScheduler)
+        val service = PstnCallService(users, redis, pstn, loadBalancer, history, progress, retryScheduler)
         assertThrows(com.red.server.auth.RateLimitExceededException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
