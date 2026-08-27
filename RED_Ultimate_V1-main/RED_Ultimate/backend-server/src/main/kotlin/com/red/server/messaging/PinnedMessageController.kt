@@ -7,10 +7,10 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * ðŸ“Œ ØªØ­ÙƒÙ… ØªØ«Ø¨ÙŠØª Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ â€” V26
- * POST /api/messages/pins â€” ØªØ«Ø¨ÙŠØª
- * DELETE /api/messages/pins/{uuid} â€” Ø¥Ù„ØºØ§Ø¡
- * GET /api/messages/pins?conversationId=... â€” Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ù…Ø«Ø¨ØªØ©
+ * ðŸ“Œ تحكم تثبيت الرسائل â€” V26
+ * POST /api/messages/pins â€” تثبيت
+ * DELETE /api/messages/pins/{uuid} â€” إلغاء
+ * GET /api/messages/pins?conversationId=... â€” قائمة المثبتة
  */
 @RestController
 @RequestMapping("/api/messages/pins")

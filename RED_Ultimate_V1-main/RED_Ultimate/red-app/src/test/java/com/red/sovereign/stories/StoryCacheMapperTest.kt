@@ -17,7 +17,7 @@ class StoryCacheMapperTest {
             caption = "قديم",
             createdAt = "2026-08-21T10:00:00Z",
             expiresAt = "2026-08-22T10:00:00Z",
-            visibleTo = "CONTACTS",
+            visibility = "CONTACTS",
         )
         val cached = StoryEntity(
             id = "story-1",

@@ -21,14 +21,14 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Ø§ÙƒØªØ´Ø§Ù Ø®Ø§Ø¯Ù… ÙŠÙˆÙ†Ø³ Ø¹Ù„Ù‰ Ø§Ù„Ø´Ø¨ÙƒØ© Ø§Ù„Ù…Ø­Ù„ÙŠØ©.
+ * اكتشاف خادم يونس على الشبكة المحلية.
  *
- * Ø§Ù„Ø¹Ø·Ù„ Ø§Ù„Ø³Ø§Ø¨Ù‚: `SecureOkHttpClient.build(connectTimeout = 800)` ÙŠÙØ³Ø± Ø§Ù„Ø±Ù‚Ù… **Ø«ÙˆØ§Ù†ÙŠ**
- * Ù„Ø§ Ù…Ù„ÙŠ Ø«Ø§Ù†ÙŠØ©ØŒ Ø«Ù… ÙŠÙÙ…Ø³Ø­ Ø§Ù„Ù†Ø·Ø§Ù‚ /24 ÙƒØ§Ù…Ù„Ù‹Ø§ (254 Ø¹Ù†ÙˆØ§Ù†Ù‹Ø§) Ø¯ÙØ¹ØªÙŠÙ† Ø¯ÙØ¹ØªÙŠÙ† Ù…Ø¹ `awaitAll`.
- * Ø§Ù„Ù†ØªÙŠØ¬Ø©: Ø´Ø§Ø´Ø© Â«Ø¬Ø§Ø±Ù Ø§Ù„Ø§ØªØµØ§Ù„ Ø¨Ø§Ù„Ø³ÙŠØ±ÙØ±Â» Ù„Ø¹Ø´Ø±Ø§Øª Ø§Ù„Ø«ÙˆØ§Ù†ÙŠ Ø£Ùˆ Ø¯Ù‚Ø§Ø¦Ù‚.
+ * العطل السابق: `SecureOkHttpClient.build(connectTimeout = 800)` يفسر الرقم **ثواني**
+ * لا ملي ثانية، ثم يُمسح النطاق /24 كاملًا (254 عنوانًا) دفعتين دفعتين مع `awaitAll`.
+ * النتيجة: شاشة «جارٍ الاتصال بالسيرفر» لعشرات الثواني أو دقائق.
  *
- * Ø§Ù„Ù…Ø³Ø§Ø± Ø§Ù„Ø³Ø±ÙŠØ¹ ÙŠØ¬Ø±Ø¨ Ø§Ù„Ø¹Ù†Ø§ÙˆÙŠÙ† Ø§Ù„Ù…Ø¹Ø±ÙˆÙØ© ÙˆÙ…Ù†ÙØ° Ø§Ù„Ø¥Ù†ØªØ§Ø¬ 8088 Ø®Ù„Ø§Ù„ Ø£Ù‚Ù„ Ù…Ù† Ø«Ø§Ù†ÙŠØªÙŠÙ†
- * ÙˆÙŠØ¹ÙˆØ¯ ÙÙˆØ± Ø£ÙˆÙ„ Ù†Ø¬Ø§Ø­. Ù„Ø§ ÙŠÙÙ‚Ø¨Ù„ Ø®Ø§Ø¯Ù… Node Ø¹Ù„Ù‰ 8080.
+ * المسار السريع يجرب العناوين المعروفة ومنفذ الإنتاج 8088 خلال أقل من ثانيتين
+ * ويعود فور أول نجاح. لا يُقبل خادم Node على 8080.
  */
 class LocalServerDiscovery(private val context: Context) {
     enum class Mode { FAST, THOROUGH }
@@ -43,7 +43,7 @@ class LocalServerDiscovery(private val context: Context) {
         .followSslRedirects(false)
         .build()
 
-    /** ØªØ­Ù‚Ù‚ ØµØ±ÙŠØ­ Ù…Ù† Ø¹Ù†ÙˆØ§Ù† ÙŠÙØ¯Ø®Ù„Ù‡ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙŠØ¯ÙˆÙŠØ§Ù‹ â€” ÙŠØ¹ÙŠØ¯ Ø§Ù„Ø¹Ù†ÙˆØ§Ù† Ø§Ù„Ù…Ù‚Ø¨ÙˆÙ„ Ø£Ùˆ null. */
+    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً â€” يعيد العنوان المقبول أو null. */
     suspend fun verifyExplicit(base: String): String? = withContext(Dispatchers.IO) {
         val normalized = base.trim().ifBlank { return@withContext null }
         val withScheme = if (normalized.contains("://")) normalized else "http://$normalized"
@@ -52,7 +52,7 @@ class LocalServerDiscovery(private val context: Context) {
 
     suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
         val known = knownBases()
-        // ÙƒØ§Ù† Ø§Ù„Ø´Ø±Ø· ÙŠÙ…Ø±Ø± FAST_BUDGET_MS ÙÙŠ Ø§Ù„Ø­Ø§Ù„ØªÙŠÙ† â€” Ø§ÙƒØªØ´Ø§Ù Ø³Ø±ÙŠØ¹ Ø«Ù… Ø´Ø§Ù…Ù„ Ù„Ø§Ø­Ù‚Ø§Ù‹.
+        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين â€” اكتشاف سريع ثم شامل لاحقاً.
         firstVerified(known, FAST_BUDGET_MS)?.let { found ->
             ServerEndpoint.update(context, found)
             return@withContext ApiResult.Success(200, found)
@@ -80,7 +80,7 @@ class LocalServerDiscovery(private val context: Context) {
         val normalized = base.trimEnd('/')
         val healthCall = client.newCall(Request.Builder().url("$normalized/health").get().build())
         val health = healthCall.execute().use { response ->
-            // 503 Ù…Ø¹ Ø¬Ø³Ù… ÙŠÙˆÙ†Ø³ ÙŠØ¹Ù†ÙŠ Ø£Ù† Ø§Ù„Ø¹Ù…Ù„ÙŠØ© Ø­ÙŠÙ‘Ø© ÙˆØ§Ù„ØªØ¨Ø¹ÙŠØ§Øª Ù„Ù… ØªÙƒØªÙ…Ù„ Ø¨Ø¹Ø¯.
+            // 503 مع جسم يونس يعني أن العملية حيّة والتبعيات لم تكتمل بعد.
             if (response.code !in 200..599) return null
             response.body?.string().orEmpty()
         }
@@ -122,7 +122,7 @@ class LocalServerDiscovery(private val context: Context) {
         val seeds = listOf(
             ServerEndpoint.url(),
             BuildConfig.RED_SERVER_URL,
-            // 10.0.2.2 Ù‡Ùˆ alias Ù„Ù…Ø¶ÙŠÙ Ø§Ù„Ù…Ø­Ø§ÙƒÙŠ (Android Emulator) â€” Ø¹Ù†ÙˆØ§Ù† ØªØ·ÙˆÙŠØ± Ù‚ÙŠØ§Ø³ÙŠ ÙˆÙ„ÙŠØ³ IP LAN Ø­Ù‚ÙŠÙ‚ÙŠ.
+            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) â€” عنوان تطوير قياسي وليس IP LAN حقيقي.
             "http://10.0.2.2:8088",
         )
         seeds.forEach { seed ->
@@ -160,7 +160,7 @@ class LocalServerDiscovery(private val context: Context) {
             }
         }
 
-        // Ù…Ø³Ø­ Ø´Ø¨ÙƒØ© Ø§Ù„Ø®Ø§Ø¯Ù… Ø§Ù„Ù…Ø¹Ø±ÙˆÙØ© (Ù…Ù† BuildConfig) Ø­ØªÙ‰ Ù„Ùˆ Ø§Ø®ØªÙ„ÙØª Ø¹Ù† Ø´Ø¨ÙƒØ© Ø§Ù„Ù‡Ø§ØªÙ â€” Ù…ÙÙŠØ¯ Ø¹Ù†Ø¯ ÙˆØ¬ÙˆØ¯ ØªÙˆØ¬ÙŠÙ‡ Ø¨ÙŠÙ† Ø§Ù„Ø´Ø¨ÙƒØªÙŠÙ†.
+        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف â€” مفيد عند وجود توجيه بين الشبكتين.
         val knownHost = YounesServerSignature.hostOf(BuildConfig.RED_SERVER_URL)
         if (knownHost != null && knownHost != lastKnown) {
             val parts = knownHost.split('.').map { it.toIntOrNull() }

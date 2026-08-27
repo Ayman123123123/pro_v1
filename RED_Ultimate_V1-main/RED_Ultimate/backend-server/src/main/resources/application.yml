@@ -80,7 +80,15 @@ red:
     # false = no hardware / Docker cannot see the LAN box. IP calls stay on.
     enabled: ${DINSTAR_ENABLED:false}
     number-learning:
-      auto-enabled: true
+      # يُرسل SMS مدفوعًا (سبأفون: 10 YER للطلب). كانت القيمة مثبّتة `true`
+      # فتتجاهل RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED=false في .env،
+      # فتُنفق البوابة على ثمانية منافذ كل ساعة بلا إذن. الآن تُقرأ من البيئة
+      # وتبقى معطّلة افتراضيًا.
+      auto-enabled: ${RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED:false}
+      # سقف المحاولات لكل منفذ قبل طلب تدخّل يدوي.
+      max-attempts-per-port: ${RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS:3}
+      # مهلة التهدئة بين محاولتين على المنفذ نفسه (ساعات).
+      cooldown-hours: ${RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS:24}
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
     ip: ${DINSTAR_IP:192.168.11.2}
     ips: ${DINSTAR_IPS:}

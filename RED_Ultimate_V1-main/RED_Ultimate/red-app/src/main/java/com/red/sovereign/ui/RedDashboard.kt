@@ -316,16 +316,16 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
-    // Ø±Ù‚Ù… Ù…ÙØ¹Ø¨Ù‘Ø£ Ù…Ø³Ø¨Ù‚Ù‹Ø§ Ù„Ø´Ø§Ø´Ø© Ø§Ù„Ù‡Ø§ØªÙ â€” ÙŠØµÙ„ Ù…Ù† Ù„ÙˆØ­Ø© Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø³Ø±ÙŠØ¹Ø© ÙƒÙŠ Ù„Ø§ ÙŠÙØ¹Ø§Ø¯ Ø¥Ø¯Ø®Ø§Ù„Ù‡
+    // رقم مُعبّأ مسبقًا لشاشة الهاتف â€” يصل من لوحة الاتصال السريعة كي لا يُعاد إدخاله
     var dinstarPrefill by remember { mutableStateOf("") }
     var chatConversationOpen by remember { mutableStateOf(false) }
-    // ðŸ”§ Ø¥ØµÙ„Ø§Ø­ Ø§Ù„Ø¹ÙŠØ¨: dialer Ø­Ù‚ÙŠÙ‚ÙŠ Ù„Ø¥Ø¯Ø®Ø§Ù„ RED ID ÙˆØ§Ù„Ø§ØªØµØ§Ù„ 1-1 Ù…Ù† CALLS section
+    // ðŸ”§ إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
     var showCallDialer by remember { mutableStateOf(false) }
     var dialerRedId by remember { mutableStateOf("") }
     var dialerVideo by remember { mutableStateOf(false) }
     var pendingDialerTarget by remember { mutableStateOf<String?>(null) }
     var pendingDialerVideo by remember { mutableStateOf(false) }
-    // ðŸ”´ Ø§Ù„Ø¨Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø± â€” Ø®ÙŠØ§Ø± Ø®Ø§Øµ/Ø¹Ø§Ù… Ø¨ÙƒÙ„Ù…Ø© Ø³Ø±
+    // ðŸ”´ البث المباشر â€” خيار خاص/عام بكلمة سر
     var showLiveCreateDialog by remember { mutableStateOf(false) }
     var liveTitle by remember { mutableStateOf("") }
     var liveIsPrivate by remember { mutableStateOf(false) }
@@ -705,27 +705,27 @@ private fun PostCard(
                     Brush.linearGradient(listOf(YounesEmerald, AqyalCyanGlow, AqyalGold))
                 ),
                 contentAlignment = Alignment.Center
-            ) { Text(post.authorDisplayName.take(1).ifBlank { "ÙŠ" }, color = Color(0xFF03120E), fontWeight = FontWeight.Black) }
+            ) { Text(post.authorDisplayName.take(1).ifBlank { "ي" }, color = Color(0xFF03120E), fontWeight = FontWeight.Black) }
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(post.authorDisplayName, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("@${post.authorUsername} Â· ${post.authorRedId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton({ showMenu = true }) { Icon(Icons.Default.MoreVert, "Ø®ÙŠØ§Ø±Ø§Øª") }
+            IconButton({ showMenu = true }) { Icon(Icons.Default.MoreVert, "خيارات") }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 if (post.authorRedId == currentRedId) {
-                    DropdownMenuItem(text = { Text("ØªØ¹Ø¯ÙŠÙ„") }, onClick = { showMenu = false; onEdit(post, post.text) })
-                    DropdownMenuItem(text = { Text("Ø­Ø°Ù") }, onClick = { showMenu = false; onDelete(post) })
+                    DropdownMenuItem(text = { Text("تعديل") }, onClick = { showMenu = false; onEdit(post, post.text) })
+                    DropdownMenuItem(text = { Text("حذف") }, onClick = { showMenu = false; onDelete(post) })
                 } else {
-                    DropdownMenuItem(text = { Text("Ø¥Ø®ÙØ§Ø¡") }, onClick = { showMenu = false; onHide(post) })
-                    DropdownMenuItem(text = { Text("ÙƒØªÙ… @${post.authorUsername}") }, onClick = { showMenu = false; onMute(post) })
-                    DropdownMenuItem(text = { Text("Ø¥Ø¨Ù„Ø§Øº") }, onClick = { showMenu = false; onReport(post) })
+                    DropdownMenuItem(text = { Text("إخفاء") }, onClick = { showMenu = false; onHide(post) })
+                    DropdownMenuItem(text = { Text("كتم @${post.authorUsername}") }, onClick = { showMenu = false; onMute(post) })
+                    DropdownMenuItem(text = { Text("إبلاغ") }, onClick = { showMenu = false; onReport(post) })
                 }
             }
-            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("Ø¥Ø¶Ø§ÙØ© ØµØ¯ÙŠÙ‚") }
+            if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("إضافة صديق") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "Ù†Ø¨Ø¶ Ù…Ø­Ù„ÙŠ" else "Ø¹Ø§Ù…") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
-            AssistChip({}, { Text(if (post.poll != null) "Ø§Ø³ØªØ·Ù„Ø§Ø¹" else if (post.parentId != null) "Ø±Ø¯" else "Ù…Ù†Ø´ÙˆØ±") }, enabled = false)
+            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }
         Text(post.text, fontSize = 17.sp, lineHeight = 25.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -743,12 +743,12 @@ private fun PostCard(
                 }
             }
         }
-        if (post.editedAt != null) Text("ØªÙ… Ø§Ù„ØªØ¹Ø¯ÙŠÙ„", color = Color.Gray, fontSize = 11.sp)
+        if (post.editedAt != null) Text("تم التعديل", color = Color.Gray, fontSize = 11.sp)
         post.quotePostId?.let { quotedId ->
             Card(colors = CardDefaults.cardColors(containerColor = AqyalSurfaceRaised.copy(alpha = .72f))) {
                 Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Repeat, null, tint = AqyalGold, modifier = Modifier.size(18.dp))
-                    Text(" Ø§Ù‚ØªØ¨Ø§Ø³ ÙŠÙˆÙ†Ø³ Â· ${quotedId.take(8)}", color = AqyalGold, fontSize = 12.sp)
+                    Text(" اقتباس يونس Â· ${quotedId.take(8)}", color = AqyalGold, fontSize = 12.sp)
                 }
             }
         }
@@ -774,29 +774,29 @@ private fun PostCard(
                                 color = YounesEmerald,
                                 trackColor = MaterialTheme.colorScheme.surface
                             )
-                            Text("${option.votes} ØµÙˆØª", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                            Text("${option.votes} صوت", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
-                Text("Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø£ØµÙˆØ§Øª: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             PostAction(Icons.Default.FavoriteBorder, "${post.reactionCounts["LIKE"] ?: 0}", true) { onLike(post) }
             PostAction(Icons.AutoMirrored.Filled.Chat, post.replyCount.toString(), true, onThread)
-            PostAction(Icons.Default.Repeat, "Ø§Ù‚ØªØ¨Ø§Ø³", true, onQuote)
-            PostAction(Icons.Default.Share, "Ù…Ø´Ø§Ø±ÙƒØ©", true) {
+            PostAction(Icons.Default.Repeat, "اقتباس", true, onQuote)
+            PostAction(Icons.Default.Share, "مشاركة", true) {
                 val shareText = buildString {
                     append(post.text)
                     if (post.hashtags.isNotEmpty()) append("\n").append(post.hashtags.joinToString(" "))
-                    append("\n\nÙŠÙˆÙ†Ø³ Â· @").append(post.authorUsername)
+                    append("\n\nيونس Â· @").append(post.authorUsername)
                 }
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, shareText)
                 }
-                runCatching { context.startActivity(Intent.createChooser(intent, "Ù…Ø´Ø§Ø±ÙƒØ© Ù…Ù†Ø´ÙˆØ± ÙŠÙˆÙ†Ø³")) }
+                runCatching { context.startActivity(Intent.createChooser(intent, "مشاركة منشور يونس")) }
             }
         }
     }
@@ -831,7 +831,7 @@ private fun ChatHubScreen(
     LaunchedEffect(directory.contacts.size) { directory.refreshPresence() }
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
-    // ÙØªØ­ Ù…Ø­Ø§Ø¯Ø«Ø© Ù…Ù† Ø¥Ø´Ø¹Ø§Ø± Ø±Ø³Ø§Ù„Ø©
+    // فتح محادثة من إشعار رسالة
     LaunchedEffect(deepLinkSender, deepLinkConversation) {
         if (!showGroups && deepLinkSender != null && deepLinkSender.matches(RED_ID_PATTERN)) target = deepLinkSender
     }
@@ -977,14 +977,14 @@ private fun ChatHubScreen(
             }
         }
     }
-    // ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ: messageId -> Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„ØªÙØ§Ø¹Ù„Ø§Øª (Ù„Ù„Ø¹Ø±Ø¶ Ø§Ù„Ø³Ø±ÙŠØ¹ ØªØ­Øª ÙƒÙ„ Ø±Ø³Ø§Ù„Ø©)
+    // تفاعلات الإيموجي: messageId -> قائمة التفاعلات (للعرض السريع تحت كل رسالة)
     val reactionsByMessage = remember { androidx.compose.runtime.mutableStateMapOf<String, List<MessageReactionEntity>>() }
 
     val typingUsers = remember { androidx.compose.runtime.mutableStateMapOf<String, Long>() }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         com.red.sovereign.core.TypingEventBus.events.collect { event ->
             if (SettingsRuntime.current.typingIndicators && event.userId != account.redId) {
-                // Ø§Ù„Ù…ÙØªØ§Ø­ = Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© (Ø®Ø§ØµØ© Ø£Ùˆ Ø¬Ù…Ø§Ø¹ÙŠØ©) â€” ÙŠØ¯Ø¹Ù… Ù…Ø¤Ø´Ø± Ø§Ù„ÙƒØªØ§Ø¨Ø© Ø§Ù„Ø¬Ù…Ø§Ø¹ÙŠ
+                // المفتاح = معرف المحادثة (خاصة أو جماعية) â€” يدعم مؤشر الكتابة الجماعي
                 val key = event.conversationId
                 if (event.isTyping) typingUsers[key] = System.currentTimeMillis() + 5000L
                 else typingUsers.remove(key)
@@ -999,7 +999,7 @@ private fun ChatHubScreen(
             }
         }
     }
-    // ØªØ­Ø¯ÙŠØ« ÙÙˆØ±ÙŠ Ù„Ø¹Ø±Ø¶ Ø§Ù„ØªÙØ§Ø¹Ù„Ø§Øª Ø¹Ù†Ø¯ ÙˆØ±ÙˆØ¯ Ø­Ø¯Ø« E2EE (Ø¥Ø¶Ø§ÙØ©/Ø¥Ø²Ø§Ù„Ø©)
+    // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         ReactionEventBus.events.collect { event ->
             val current = reactionsByMessage[event.messageId].orEmpty()
@@ -1012,7 +1012,7 @@ private fun ChatHubScreen(
             reactionsByMessage[event.messageId] = updated.sortedBy { it.timestamp }
         }
     }
-    // Ø£ØµÙˆØ§Øª Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹ E2EE: ØªÙØ³Ø¬ÙŽÙ‘Ù„ Ù…Ù† Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„ØºÙ†ÙŠØ© Ø§Ù„ÙˆØ§Ø±Ø¯Ø© (POLL_VOTE)
+    // أصوات الاستطلاع E2EE: تُسجَّل من الرسائل الغنية الواردة (POLL_VOTE)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         DecryptedMessageBus.messages.collect { item ->
             if (item.type == "RICH_TEXT") {
@@ -1055,7 +1055,7 @@ private fun ChatHubScreen(
         }
     }
 
-    // ðŸ“ Ù…Ø¤Ø´Ø± Ø§Ù„ÙƒØªØ§Ø¨Ø© Ø§Ù„Ø¬Ù…Ø§Ø¹ÙŠ â€” ÙŠÙØ±Ø³Ù„ Ø¨Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© ÙƒÙ€ target/conversation (Ø§Ù„Ø®Ø§Ø¯Ù… ÙŠØ¨Ø«Ù‡ Ù„Ù„Ø£Ø¹Ø¶Ø§Ø¡)
+    // ðŸ“ مؤشر الكتابة الجماعي â€” يُرسل بمعرف المجموعة كـ target/conversation (الخادم يبثه للأعضاء)
     androidx.compose.runtime.LaunchedEffect(groupMessageText, groupConversationId) {
         val groupId = groupConversationId ?: return@LaunchedEffect
         if (SettingsRuntime.current.typingIndicators) {
@@ -1104,7 +1104,7 @@ private fun ChatHubScreen(
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null && exportingMessageId != null) { attachments.exportTo(exportingMessageId!!, uri); exportingMessageId = null }
     }
-    // ðŸ“Ž Ù…Ø±ÙÙ‚Ø§Øª Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© â€” ØªÙØ±Ø³Ù„ Ø¹Ø¨Ø± Ù…Ø³Ø§Ø± ØªØ´ÙÙŠØ± Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (Sender Keys)
+    // ðŸ“Ž مرفقات المجموعة â€” تُرسل عبر مسار تشفير المجموعة (Sender Keys)
     val groupFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val group = groups.groups.firstOrNull { it.id == groupConversationId }
         if (uri != null && group != null) attachments.sendToGroup(uri, group)
@@ -1148,39 +1148,39 @@ private fun ChatHubScreen(
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingCallVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val cleanTarget = com.red.sovereign.core.YounesId.normalizeInput(target).ifBlank { target }
-        // Ø±ÙØ¶ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ø§ ÙŠÙ…Ù†Ø¹ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© â€” Ù†Ø¨Ø¯Ø£Ù‡Ø§ ØµÙˆØªÙŠØ© Ù…Ø¹ Ø¥Ø¹Ù„Ø§Ù… (Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙŠÙØ¹Ù‘Ù„ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ø§Ø­Ù‚Ø§Ù‹ Ù…Ù† Ø´Ø§Ø±Ø© Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©).
+        // رفض الكاميرا لا يمنع المكالمة â€” نبدأها صوتية مع إعلام (المستخدم يفعّل الكاميرا لاحقاً من شارة إعادة المحاولة).
         if (audioGranted && cleanTarget.isNotBlank()) {
             val startVideo = pendingCallVideo && cameraGranted
             YounesCallService.start(context, cleanTarget, startVideo)
             if (pendingCallVideo && !cameraGranted) {
-                android.widget.Toast.makeText(context, "Ù„Ù… ÙŠÙÙ…Ù†Ø­ Ø¥Ø°Ù† Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ â€” Ø¨Ø¯Ø£Øª Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© ØµÙˆØªÙŠØ©. ÙŠÙ…ÙƒÙ†Ùƒ ØªÙØ¹ÙŠÙ„ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù…Ù† Ø´Ø§Ø´Ø© Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø©.", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا â€” بدأت المكالمة صوتية. يمكنك تفعيل الكاميرا من شاشة المكالمة.", android.widget.Toast.LENGTH_LONG).show()
             }
         }
     }
     var pendingGroupVideo by remember { mutableStateOf(false) }
-    // ðŸ“ž ÙˆØ§ØªØ³Ø§Ø¨: Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª ØªÙ…Ù„Ùƒ ÙÙ‚Ø· Ù…ÙƒØ§Ù„Ù…Ø§Øª ØªØ±Ù† Ø§Ù„Ø¬Ù…ÙŠØ¹ (Ø­ØªÙ‰ 32). Ø§Ù„Ù…Ø³Ø§Ø­Ø§Øª/Ø§Ù„Ù…Ø¤ØªÙ…Ø±Ø§Øª Ù…ÙŠØ²Ø§Øª Ù…Ø³ØªÙ‚Ù„Ø© Ø®Ø§Ø±Ø¬ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª.
+    // ðŸ“ž واتساب: المجموعات تملك فقط مكالمات ترن الجميع (حتى 32). المساحات/المؤتمرات ميزات مستقلة خارج المجموعات.
     val groupCallPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val audioGranted = grants[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val cameraGranted = !pendingGroupVideo || grants[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         val group = groups.groups.firstOrNull { it.id == groupConversationId }
-        // Ø±ÙØ¶ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ø§ ÙŠÙ…Ù†Ø¹ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ø¬Ù…Ø§Ø¹ÙŠØ© â€” ØªØ¨Ø¯Ø£ ØµÙˆØªÙŠØ© Ù…Ø¹ Ø¥Ø¹Ù„Ø§Ù… (ÙˆØ§ØªØ³Ø§Ø¨: ÙŠÙ…ÙƒÙ† ØªØ´ØºÙŠÙ„ Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ù„Ø§Ø­Ù‚Ø§Ù‹)
+        // رفض الكاميرا لا يمنع المكالمة الجماعية â€” تبدأ صوتية مع إعلام (واتساب: يمكن تشغيل الفيديو لاحقاً)
         val effectiveVideo = pendingGroupVideo && cameraGranted
         if (audioGranted && group != null) {
-            // ÙˆØ§ØªØ³Ø§Ø¨: Ø­ØªÙ‰ 32 Ù…Ø´Ø§Ø±ÙƒØ§Ù‹ (2024) Ù„ÙƒÙ„ Ù…Ù† Ø§Ù„ØµÙˆØª ÙˆØ§Ù„ÙÙŠØ¯ÙŠÙˆØ› SFU ÙŠÙˆØ³Ø¹ Ø§Ù„Ø³Ù‚ÙØŒ Mesh ÙŠØªØ±Ø§Ø¬Ø¹ Ù„Ù€ 8
+            // واتساب: حتى 32 مشاركاً (2024) لكل من الصوت والفيديو؛ SFU يوسع السقف، Mesh يتراجع لـ 8
             val inviteeMembers = group.members.filter { it.redId != account.redId }
             if (inviteeMembers.isEmpty()) {
-                android.widget.Toast.makeText(context, "Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ø£Ø¹Ø¶Ø§Ø¡ Ø¢Ø®Ø±ÙˆÙ† Ù„Ù„Ø§ØªØµØ§Ù„ Ø¨Ù‡Ù… ÙÙŠ Ù‡Ø°Ù‡ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, "لا يوجد أعضاء آخرون للاتصال بهم في هذه المجموعة", android.widget.Toast.LENGTH_SHORT).show()
                 return@rememberLauncherForActivityResult
             }
             if (inviteeMembers.size > 32) {
-                android.widget.Toast.makeText(context, "Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© ØªØ¯Ø¹Ù… Ø­ØªÙ‰ 32 Ù…Ø´Ø§Ø±ÙƒØ§Ù‹ (Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¨Ù‡Ø§ ${group.members.size}). Ø³ÙŠØªÙ… Ø§Ù„Ø§ØªØµØ§Ù„ Ø¨Ø£ÙˆÙ„ 32.", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, "مكالمة المجموعة تدعم حتى 32 مشاركاً (المجموعة بها ${group.members.size}). سيتم الاتصال بأول 32.", android.widget.Toast.LENGTH_LONG).show()
             }
             val inviteIds = inviteeMembers.take(32).map { it.redId }
             val inviteNames = inviteeMembers.take(32).map { it.username ?: it.redId.take(8) }
             if (pendingGroupVideo && !cameraGranted) {
-                android.widget.Toast.makeText(context, "Ù„Ù… ÙŠÙÙ…Ù†Ø­ Ø¥Ø°Ù† Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ â€” Ø³ØªØ¨Ø¯Ø£ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© ØµÙˆØªÙŠØ©. ÙŠÙ…ÙƒÙ†Ùƒ ØªÙØ¹ÙŠÙ„ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ø§Ø­Ù‚Ø§Ù‹.", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا â€” ستبدأ المكالمة صوتية. يمكنك تفعيل الكاميرا لاحقاً.", android.widget.Toast.LENGTH_LONG).show()
             }
-            // ÙˆØ§ØªØ³Ø§Ø¨: ÙƒÙ„ Ù…ÙƒØ§Ù„Ù…Ø© Ù…Ø¬Ù…ÙˆØ¹Ø© ØªØ±Ù† Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡ Ù…Ø¨Ø§Ø´Ø±Ø© Ø¹Ø¨Ø± GroupCallService (Mesh/SFU)
+            // واتساب: كل مكالمة مجموعة ترن جميع الأعضاء مباشرة عبر GroupCallService (Mesh/SFU)
             com.red.sovereign.calls.GroupCallService.startGroupCall(
                 context = context,
                 myUserId = account.redId,
@@ -1191,11 +1191,11 @@ private fun ChatHubScreen(
                 groupId = group.id
             )
 
-            // Ø±Ø³Ø§Ù„Ø© Ù†Ø¸Ø§Ù… ÙÙŠ Ø¯Ø±Ø¯Ø´Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© â€” Ù…Ø«Ù„ ÙˆØ§ØªØ³Ø§Ø¨: "Ø¨Ø¯Ø£Øª Ù…ÙƒØ§Ù„Ù…Ø© ØµÙˆØªÙŠØ© Ø¬Ù…Ø§Ø¹ÙŠØ© â€” Ø§Ù†Ù‚Ø± Ù„Ù„Ø§Ù†Ø¶Ù…Ø§Ù…"
-            val title = if (effectiveVideo) "Ù…ÙƒØ§Ù„Ù…Ø© ÙÙŠØ¯ÙŠÙˆ Ø¬Ù…Ø§Ø¹ÙŠØ© ðŸ“¹" else "Ù…ÙƒØ§Ù„Ù…Ø© ØµÙˆØªÙŠØ© Ø¬Ù…Ø§Ø¹ÙŠØ© ðŸ“ž"
+            // رسالة نظام في دردشة المجموعة â€” مثل واتساب: "بدأت مكالمة صوتية جماعية â€” انقر للانضمام"
+            val title = if (effectiveVideo) "مكالمة فيديو جماعية ðŸ“¹" else "مكالمة صوتية جماعية ðŸ“ž"
             val rich = com.red.sovereign.core.RichMessage(
                 action = "CALL_STARTED",
-                text = "Ø¨Ø¯Ø£ $title. ØªØ±Ù† Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡ â€” ÙŠÙ…ÙƒÙ† Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù… Ø­ØªÙ‰ Ø¨Ø¹Ø¯ Ø¨Ø¯Ø¡ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø©."
+                text = "بدأ $title. ترن جميع الأعضاء â€” يمكن الانضمام حتى بعد بدء المكالمة."
             )
             com.red.sovereign.core.RedConnectionService.sendGroupRichText(context, group, rich)
         }
@@ -1204,19 +1204,19 @@ private fun ChatHubScreen(
         decrypted.add(item)
         if (item.type == "RICH_TEXT") {
             RichMessage.decode(item.plaintext)?.let { rich ->
-                // ðŸ” Ø¹Ù„Ø§Ù…Ø© âœï¸ Ù„Ù„Ù…Ø¹Ø¯ÙŽÙ‘Ù„: ÙÙ‚Ø· Ø¥Ù† ÙƒØ§Ù† Ù…ÙØ±Ø³Ù„ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù‡Ùˆ Ù…Ø§Ù„Ùƒ Ø§Ù„Ø±Ø³Ø§Ù„Ø©
+                // ðŸ” علامة âœï¸ للمعدَّل: فقط إن كان مُرسل التعديل هو مالك الرسالة
                 if (rich.action == "EDIT" && rich.editOf != null) {
                     if (decrypted.any { it.id == rich.editOf && it.senderRedId == item.senderRedId }) editedMessageIds[rich.editOf!!] = true
                 }
             }
         }
-        // ØªØªØ¨Ø¹ ØºÙŠØ± Ø§Ù„Ù…Ù‚Ø±ÙˆØ¡ Ù„Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„ÙˆØ§Ø±Ø¯Ø© (Ù…Ø§ Ù„Ù… ØªÙƒÙ† Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©/Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…ÙØªÙˆØ­Ø© Ø­Ø§Ù„ÙŠØ§Ù‹)
+        // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
         if (!item.outgoing) {
             if (item.conversationId.length > 32) {
                 if (item.conversationId != groupConversationId) {
                     groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
                 } else {
-                    // Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…ÙØªÙˆØ­Ø©: ØªØµÙÙŠØ± Ø§Ù„Ø¹Ø¯Ø§Ø¯ Ø§Ù„Ù…Ø­ÙÙˆØ¸ ÙƒÙŠ Ù„Ø§ ÙŠØªØ±Ø§ÙƒÙ… Ø¹Ù†Ø¯ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ÙØªØ­
+                    // المجموعة مفتوحة: تصفير العداد المحفوظ كي لا يتراكم عند إعادة الفتح
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { repository.clearUnread(item.conversationId) }
                 }
             } else {
@@ -1229,7 +1229,7 @@ private fun ChatHubScreen(
         }
         if (!item.outgoing && SettingsRuntime.current.readReceipts) RedConnectionService.markRead(context, item.id, item.sequence)
     } }
-    // Ù…Ù„Ø§Ø­Ø¸Ø©: `val conversation` Ù…Ø¹Ø±Ù‘Ù ÙÙŠ Ø³Ø·Ø± Ø³Ø§Ø¨Ù‚ (ChatHubScreen scope) â€” Ù„Ø§ Ù†Ø¹ÙŠØ¯ Ø­Ø³Ø§Ø¨Ù‡ Ù‡Ù†Ø§
+    // ملاحظة: `val conversation` معرّف في سطر سابق (ChatHubScreen scope) â€” لا نعيد حسابه هنا
     androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
         val conversationToRestore = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
         if (conversationToRestore != null) {
@@ -1241,7 +1241,7 @@ private fun ChatHubScreen(
             }
         }
     }
-    // ØªØ­Ù…ÙŠÙ„ ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ø§Ù„Ù…ÙØªÙˆØ­Ø© Ù…Ù† Ø§Ù„ØªØ®Ø²ÙŠÙ† Ø§Ù„Ù…Ø­Ù„ÙŠ (Ù…Ø´ÙÙ‘Ø±)
+    // تحميل تفاعلات المحادثة المفتوحة من التخزين المحلي (مشفّر)
     androidx.compose.runtime.LaunchedEffect(target, groupConversationId) {
         val convId = groupConversationId ?: target.takeIf(String::isNotBlank)?.let { conversationId(account.redId, it) }
         if (convId != null) {
@@ -1258,7 +1258,7 @@ private fun ChatHubScreen(
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Person, null, tint = AqyalGold)
-                            Text(" Ø·Ù„Ø¨Ø§Øª Ø§Ù„ØµØ¯Ø§Ù‚Ø© Ø§Ù„ÙˆØ§Ø±Ø¯Ø©", color = AqyalGold, fontWeight = FontWeight.Bold)
+                            Text(" طلبات الصداقة الواردة", color = AqyalGold, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.weight(1f))
                             Text("${directory.requests.size}", color = Color.White, modifier = Modifier.background(AqyalGold, CircleShape).padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 12.sp)
                         }
@@ -1270,8 +1270,8 @@ private fun ChatHubScreen(
                                         Text(request.requester.displayName, color = Color.White, fontWeight = FontWeight.SemiBold)
                                         Text("@${request.requester.username} â€¢ ${request.requester.redId.take(12)}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
-                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("Ø±ÙØ¶", color = Color.Gray) }
-                                    Button({ directory.resolve(request, true) }, Modifier.height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("Ù‚Ø¨ÙˆÙ„", color = Color(0xFF002118)) }
+                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("رفض", color = Color.Gray) }
+                                    Button({ directory.resolve(request, true) }, Modifier.height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول", color = Color(0xFF002118)) }
                                 }
                             }
                         }
@@ -1286,10 +1286,10 @@ private fun ChatHubScreen(
             if (target.isBlank()) {
                 if (directory.contacts.isNotEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Ø§Ù„Ø£ØµØ¯Ù‚Ø§Ø¡", color = AqyalGold, fontWeight = FontWeight.Bold)
+                        Text("الأصدقاء", color = AqyalGold, fontWeight = FontWeight.Bold)
                         Text("${directory.contacts.size}", color = Color.White, fontSize = 12.sp, modifier = Modifier.background(AqyalCyanGlow, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp))
                         Spacer(Modifier.weight(1f))
-                        TextButton({ showDirectory = true }) { Text("Ø¥Ø¶Ø§ÙØ© +", color = AqyalGold, fontSize = 12.sp) }
+                        TextButton({ showDirectory = true }) { Text("إضافة +", color = AqyalGold, fontSize = 12.sp) }
                     }
                     val sortedContacts = remember(directory.contacts, conversations, directory) {
                         directory.contacts
@@ -1315,8 +1315,8 @@ private fun ChatHubScreen(
                                     }
                                     Spacer(Modifier.height(6.dp))
                                     Text(person.displayName, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, overflow = TextOverflow.Ellipsis)
-                                    Text(if (online) "Ù…ØªØµÙ„" else "@${person.username}", color = if (online) YounesEmerald else AqyalCyanGlow, maxLines = 1, fontSize = 10.sp)
-                                    IconButton({ selectedContact = person }, Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, "Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„ØµØ¯ÙŠÙ‚", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    Text(if (online) "متصل" else "@${person.username}", color = if (online) YounesEmerald else AqyalCyanGlow, maxLines = 1, fontSize = 10.sp)
+                                    IconButton({ selectedContact = person }, Modifier.size(24.dp)) { Icon(Icons.Default.MoreVert, "إعدادات الصديق", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                                 }
                             }
                         }
@@ -1325,14 +1325,14 @@ private fun ChatHubScreen(
                 Card(Modifier.fillMaxWidth().clickable { showDirectory = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Search, null, tint = YounesEmerald)
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text("Ø¨Ø¯Ø¡ Ù…Ø­Ø§Ø¯Ø«Ø© Ø®Ø§ØµØ©", fontWeight = FontWeight.SemiBold); Text("Ø§Ø¨Ø­Ø« Ø¨Ø§Ù„Ø§Ø³Ù… Ø§Ù„Ø¯Ù‚ÙŠÙ‚ Ø£Ùˆ Ù…Ø¹Ø±Ù‘Ù ÙŠÙˆÙ†Ø³", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text("بدء محادثة خاصة", fontWeight = FontWeight.SemiBold); Text("ابحث بالاسم الدقيق أو معرّف يونس", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             } else {
                 val activePerson = directory.contacts.find { it.redId == target }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton({ target = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Ø§Ù„Ø¹ÙˆØ¯Ø© Ù„Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø¯Ø±Ø¯Ø´Ø§Øª") }
+                    IconButton({ target = "" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة لقائمة الدردشات") }
                     Avatar((activePerson?.displayName ?: target).take(1))
                     Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                         Text(activePerson?.displayName ?: target, fontWeight = FontWeight.SemiBold)
@@ -1385,18 +1385,18 @@ private fun ChatHubScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 chatSearchQuery, { chatSearchQuery = it }, Modifier.fillMaxWidth(),
-                                placeholder = { Text("Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¯Ø±Ø¯Ø´Ø§Øªâ€¦") },
+                                placeholder = { Text("بحث في الدردشات…") },
                                 leadingIcon = { Icon(Icons.Default.Search, null) },
                                 singleLine = true, shape = RoundedCornerShape(14.dp)
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = !chatUnreadFilter, onClick = { chatUnreadFilter = false }, label = { Text("Ø§Ù„ÙƒÙ„") })
-                                FilterChip(selected = chatUnreadFilter, onClick = { chatUnreadFilter = true }, label = { Text("ØºÙŠØ± Ø§Ù„Ù…Ù‚Ø±ÙˆØ¡") })
+                                FilterChip(selected = !chatUnreadFilter, onClick = { chatUnreadFilter = false }, label = { Text("الكل") })
+                                FilterChip(selected = chatUnreadFilter, onClick = { chatUnreadFilter = true }, label = { Text("غير المقروء") })
                             }
                         }
                     }
                     if (filteredConvos.isEmpty() && allConvos.isNotEmpty()) item {
-                        Text("Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…Ø­Ø§Ø¯Ø«Ø§Øª Ù…Ø·Ø§Ø¨Ù‚Ø©", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
+                        Text("لا توجد محادثات مطابقة", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp))
                     }
                     items(filteredConvos, key = { it.id }) { conv ->
                         val unread = chatUnread[conv.id] ?: 0
@@ -1414,12 +1414,12 @@ private fun ChatHubScreen(
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                        if (conv.pinned) { Spacer(Modifier.width(3.dp)); Icon(androidx.compose.material.icons.Icons.Default.Star, "Ù…Ø«Ø¨Øª", tint = Color(0xFFF5C842), modifier = Modifier.size(14.dp)) }
-                                        if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(3.dp)); Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "Ù…ÙƒØªÙˆÙ…", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp)) }
+                                        if (conv.pinned) { Spacer(Modifier.width(3.dp)); Icon(androidx.compose.material.icons.Icons.Default.Star, "مثبت", tint = Color(0xFFF5C842), modifier = Modifier.size(14.dp)) }
+                                        if (conv.mutedUntil > System.currentTimeMillis()) { Spacer(Modifier.width(3.dp)); Icon(androidx.compose.material.icons.Icons.Default.NotificationsOff, "مكتوم", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp)) }
                                     }
                                     val draft = chatDrafts[conv.id]
                                     Text(
-                                        if (draft != null) "Ù…Ø³ÙˆØ¯Ø©: $draft" else (conv.lastMessageText ?: "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø±Ø³Ø§Ø¦Ù„"),
+                                        if (draft != null) "مسودة: $draft" else (conv.lastMessageText ?: "لا توجد رسائل"),
                                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                                         color = if (draft != null) AqyalGold else MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.bodyMedium
@@ -1440,7 +1440,7 @@ private fun ChatHubScreen(
                     SovereignEmptyConversationState()
                 }
                 itemsIndexed(conversationMessages, key = { _, it -> it.id }) { index, item ->
-                    // ÙØ§ØµÙ„ ØªØ§Ø±ÙŠØ® Ø¨ÙŠÙ† Ø§Ù„Ø£ÙŠØ§Ù… (Ù…Ø«Ù„ ÙˆØ§ØªØ³Ø§Ø¨)
+                    // فاصل تاريخ بين الأيام (مثل واتساب)
                     val showDate = index == 0 || !isSameDay(conversationMessages[index - 1].timestamp, item.timestamp)
 
                     Column(Modifier.fillMaxWidth()) {
@@ -1455,7 +1455,7 @@ private fun ChatHubScreen(
 
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start) {
                             if (item.type == "RICH_TEXT" && RichMessage.decode(item.plaintext)?.action == "MESSAGE") {
-                                // âœ¨ Ø§Ø³ØªØ®Ø¯Ø§Ù… ÙÙ‚Ø§Ø¹Ø§Øª Ø§Ù„Ø¯Ø±Ø¯Ø´Ø© Ø§Ù„ÙØ§Ø®Ø±Ø© Ù„Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ù†ØµÙŠØ©
+                                // âœ¨ استخدام فقاعات الدردشة الفاخرة للرسائل النصية
                                 val payload = RichMessage.decode(item.plaintext)
                                 LuxuryChatBubble(
                                     message = payload?.text ?: "",
@@ -1465,7 +1465,7 @@ private fun ChatHubScreen(
                                     onLongClick = { selectedChatMessage = item }
                                 )
                             } else {
-                                // Ø§Ù„Ø­ÙØ§Ø¸ Ø¹Ù„Ù‰ Ø§Ù„ØªØµÙ…ÙŠÙ… Ø§Ù„Ù‚Ø¯ÙŠÙ… Ù„Ù„ÙˆØ³Ø§Ø¦Ø· ÙˆØ§Ù„Ù…Ø±ÙÙ‚Ø§Øª ÙˆØ§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª Ø­Ø§Ù„ÙŠØ§Ù‹
+                                // الحفاظ على التصميم القديم للوسائط والمرفقات والاستطلاعات حالياً
                                 Card(
                                     Modifier.widthIn(max = 320.dp).combinedClickable(onClick = {}, onLongClick = { selectedChatMessage = item }),
                                     colors = CardDefaults.cardColors(containerColor = if (item.outgoing) YounesEmerald.copy(alpha = .82f) else AqyalSurfaceRaised.copy(alpha = .94f)),
@@ -1483,7 +1483,7 @@ private fun ChatHubScreen(
                                             "RICH_TEXT" -> RichTextMessage(item, conversationMessages)
                                             else -> Text(item.plaintext.toString(Charsets.UTF_8), color = if (item.outgoing) Color(0xFF001B14) else Color.White, fontSize = 16.sp)
                                         }
-                                        // ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ØªØ­Øª Ø§Ù„Ø±Ø³Ø§Ù„Ø© (E2EE)
+                                        // تفاعلات الإيموجي تحت الرسالة (E2EE)
                                         MessageReactions(
                                             reactions = reactionsByMessage[item.id].orEmpty(),
                                             currentRedId = account.redId,
@@ -1491,13 +1491,13 @@ private fun ChatHubScreen(
                                                 val mine = reactionsByMessage[item.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
                                                 if (mine) RedConnectionService.removeReaction(context, target, conversation, item.id)
                                                 else RedConnectionService.sendReaction(context, target, conversation, item.id, emoji)
-                                                // ØªØ­Ø¯ÙŠØ« Ù…Ø­Ù„ÙŠ ÙÙˆØ±ÙŠ Ù„Ø§Ø³ØªØ¬Ø§Ø¨Ø© Ø§Ù„ÙˆØ§Ø¬Ù‡Ø© Ù‚Ø¨Ù„ ÙˆØµÙˆÙ„ Ø§Ù„Ø­Ø¯Ø« Ø¹Ø¨Ø± Ø§Ù„Ù€ bus
+                                                // تحديث محلي فوري لاستجابة الواجهة قبل وصول الحدث عبر الـ bus
                                                 val current = reactionsByMessage[item.id].orEmpty()
                                                 val withoutMine = current.filterNot { it.senderId == account.redId }
                                                 reactionsByMessage[item.id] = if (mine) withoutMine else withoutMine + com.red.sovereign.core.database.MessageReactionEntity(item.id, conversation, account.redId, emoji, System.currentTimeMillis())
                                             }
                                         )
-                                        // ðŸ• Ø§Ù„ÙˆÙ‚Øª + Ø¹Ù„Ø§Ù…Ø§Øª Ø§Ù„Ù‚Ø±Ø§Ø¡Ø© Ø¯Ø§Ø®Ù„ Ø§Ù„ÙÙ‚Ø§Ø¹Ø© (Ù†Ù…Ø· ÙˆØ§ØªØ³Ø§Ø¨)
+                                        // ðŸ• الوقت + علامات القراءة داخل الفقاعة (نمط واتساب)
                                         Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                             Text(formatClockTime(item.timestamp), fontSize = 10.sp, color = if (item.outgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
                                             if (editedMessageIds.containsKey(item.id)) Text("âœï¸", fontSize = 10.sp)
@@ -1590,7 +1590,7 @@ private fun ChatHubScreen(
                 }
                 val hashtagQuery = HASHTAG_AUTOCOMPLETE.find(messageText)?.groupValues?.get(1)
                 if (hashtagQuery != null) {
-                    val popular = listOf("Ù…Ù‡Ù…", "ÙŠÙ…Ù†", "ØªÙ‚Ù†ÙŠØ©", "Ø¹Ø§Ù…", "Ø®Ø§Øµ").filter { it.contains(hashtagQuery, ignoreCase = true) }.take(3)
+                    val popular = listOf("مهم", "يمن", "تقنية", "عام", "خاص").filter { it.contains(hashtagQuery, ignoreCase = true) }.take(3)
                     if (popular.isNotEmpty()) {
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
                             Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1602,7 +1602,7 @@ private fun ChatHubScreen(
                     }
                 }
 
-                // ðŸ’¬ Ø´Ø±ÙŠØ· Ø§Ù„Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¹ØµØ±ÙŠ Ø§Ù„Ø°ÙƒÙŠ
+                // ðŸ’¬ شريط الإدخال العصري الذكي
                 SovereignChatInputBar(
                     messageText = messageText,
                     onMessageChange = { messageText = it },
@@ -1660,13 +1660,13 @@ private fun ChatHubScreen(
             val openGroup = groups.groups.firstOrNull { it.id == groupConversationId }
             if (openGroup == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onCreateGroup, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Text(" Ø¥Ù†Ø´Ø§Ø¡") }
-                    OutlinedButton({ showJoinGroup = true }, Modifier.weight(1f)) { Text("Ø§Ù†Ø¶Ù…Ø§Ù… Ø¨Ø¯Ø¹ÙˆØ©") }
+                    Button(onCreateGroup, Modifier.weight(1f)) { Icon(Icons.Default.Add, null); Text(" إنشاء") }
+                    OutlinedButton({ showJoinGroup = true }, Modifier.weight(1f)) { Text("انضمام بدعوة") }
                 }
                 when {
                     groups.state == GroupState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(30.dp))
-                    groups.state is GroupState.Error -> (groups.state as? GroupState.Error)?.let { EmptyState(Icons.Default.Groups, "ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª", it.message) }
-                    groups.groups.isEmpty() -> EmptyState(Icons.Default.Groups, "Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…Ø¬Ù…ÙˆØ¹Ø§Øª", "Ø£Ù†Ø´Ø¦ Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…Ø­Ù„ÙŠØ© Ø¨Ø£Ø¯ÙˆØ§Ø± Ù…Ø§Ù„Ùƒ ÙˆÙ…Ø³Ø¤ÙˆÙ„ ÙˆØ¹Ø¶Ùˆ.")
+                    groups.state is GroupState.Error -> (groups.state as? GroupState.Error)?.let { EmptyState(Icons.Default.Groups, "تعذر تحميل المجموعات", it.message) }
+                    groups.groups.isEmpty() -> EmptyState(Icons.Default.Groups, "لا توجد مجموعات", "أنشئ مجموعة محلية بأدوار مالك ومسؤول وعضو.")
                     else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f).padding(top = 12.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
                             val lastGroupMsg = decrypted.filter { it.conversationId == group.id }.maxByOrNull { it.timestamp }
@@ -1709,8 +1709,8 @@ private fun ChatHubScreen(
                                         Text(
                                             text = lastGroupMsg?.let { msg ->
                                                 val t = messageDisplayText(msg)
-                                                (if (msg.outgoing) "Ø£Ù†Øª: " else "@" + msg.senderRedId.take(8) + ": ") + t
-                                            } ?: groupConvRow?.lastMessageText ?: group.description.orEmpty().ifBlank { "Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…Ø´ÙØ±Ø© Ø¨Ù€ Sender Keys" },
+                                                (if (msg.outgoing) "أنت: " else "@" + msg.senderRedId.take(8) + ": ") + t
+                                            } ?: groupConvRow?.lastMessageText ?: group.description.orEmpty().ifBlank { "مجموعة مشفرة بـ Sender Keys" },
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
@@ -1741,7 +1741,7 @@ private fun ChatHubScreen(
                                                 color = MaterialTheme.colorScheme.surfaceVariant
                                             ) {
                                                 Text(
-                                                    text = "${group.members.size} Ø¹Ø¶Ùˆ",
+                                                    text = "${group.members.size} عضو",
                                                     fontSize = 11.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -1752,15 +1752,15 @@ private fun ChatHubScreen(
                                 }
 
                                 IconButton({ onManageGroup(group.id) }, modifier = Modifier.padding(start = 4.dp)) {
-                                    Icon(Icons.Default.MoreVert, "Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(Icons.Default.MoreVert, "إدارة المجموعة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
                     }
                 }
             } else {
-                // ÙˆØ§ØªØ³Ø§Ø¨: ØªØ±ÙˆÙŠØ³Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© â€” [Ø±Ø¬ÙˆØ¹] [Ø£ÙØ§ØªØ§Ø±+Ø§Ø³Ù…+Ø¹Ø¯Ø¯ Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡] [ðŸ“ž ØµÙˆØª] [ðŸŽ¥ ÙÙŠØ¯ÙŠÙˆ] [â‹®]
-                // Ø§Ù„Ù…Ø¤ØªÙ…Ø±Ø§Øª/Ø§Ù„Ù…Ø³Ø§Ø­Ø§Øª Ø®Ø§Ø±Ø¬ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª ØªÙ…Ø§Ù…Ø§Ù‹ (Ù…ÙŠØ²Ø§Øª Ù…Ø³ØªÙ‚Ù„Ø©)
+                // واتساب: ترويسة المجموعة â€” [رجوع] [أفاتار+اسم+عدد الأعضاء] [ðŸ“ž صوت] [ðŸŽ¥ فيديو] [â‹®]
+                // المؤتمرات/المساحات خارج المجموعات تماماً (ميزات مستقلة)
                 val waGroupCall = GroupCallRuntime.state
                 val waIsActiveForThisGroup = when (waGroupCall) {
                     is GroupCallUiState.Ringing -> waGroupCall.members.isNotEmpty() && GroupCallRuntime.activeGroupId == openGroup.id
@@ -1770,15 +1770,15 @@ private fun ChatHubScreen(
                 }
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Ø§Ù„Ø¹ÙˆØ¯Ø© Ù„Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª") }
+                        IconButton({ groupConversationId = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "العودة للمجموعات") }
                         GroupAvatar(openGroup, groups)
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(openGroup.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val statusText = when {
-                                waGroupCall is GroupCallUiState.Active && GroupCallRuntime.activeGroupId == openGroup.id -> if (waGroupCall.isVideo) "Ù…ÙƒØ§Ù„Ù…Ø© ÙÙŠØ¯ÙŠÙˆ Ø¬Ù…Ø§Ø¹ÙŠØ© Ø¬Ø§Ø±ÙŠØ©" else "Ù…ÙƒØ§Ù„Ù…Ø© ØµÙˆØªÙŠØ© Ø¬Ù…Ø§Ø¹ÙŠØ© Ø¬Ø§Ø±ÙŠØ©"
-                                waGroupCall is GroupCallUiState.Ringing && GroupCallRuntime.activeGroupId == openGroup.id -> "ØªØ±Ù† Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡..."
-                                waGroupCall is GroupCallUiState.IncomingGroup -> "Ù…ÙƒØ§Ù„Ù…Ø© Ø¬Ù…Ø§Ø¹ÙŠØ© ÙˆØ§Ø±Ø¯Ø©"
-                                else -> "${openGroup.members.size} Ø£Ø¹Ø¶Ø§Ø¡ Â· Ù…Ø´ÙÙ‘Ø±Ø© E2EE"
+                                waGroupCall is GroupCallUiState.Active && GroupCallRuntime.activeGroupId == openGroup.id -> if (waGroupCall.isVideo) "مكالمة فيديو جماعية جارية" else "مكالمة صوتية جماعية جارية"
+                                waGroupCall is GroupCallUiState.Ringing && GroupCallRuntime.activeGroupId == openGroup.id -> "ترن الأعضاء..."
+                                waGroupCall is GroupCallUiState.IncomingGroup -> "مكالمة جماعية واردة"
+                                else -> "${openGroup.members.size} أعضاء Â· مشفّرة E2EE"
                             }
                             Text(
                                 statusText,
@@ -1786,7 +1786,7 @@ private fun ChatHubScreen(
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
-                        // ðŸ“ž ÙˆØ§ØªØ³Ø§Ø¨ Ø§Ù„Ù†Ù‚ÙŠ: ÙÙŠØ¯ÙŠÙˆ + ØµÙˆØª ÙÙ‚Ø· â€” Ù„Ø§ Ù…Ø³Ø§Ø­Ø§Øª ÙˆÙ„Ø§ Ù…Ø¤ØªÙ…Ø±Ø§Øª Ù‡Ù†Ø§
+                        // ðŸ“ž واتساب النقي: فيديو + صوت فقط â€” لا مساحات ولا مؤتمرات هنا
                         GroupChatCallActions(
                             onVideoCall = { pendingGroupVideo = true; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)) },
                             onVoiceCall = { pendingGroupVideo = false; groupCallPermissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) },
@@ -1805,7 +1805,7 @@ private fun ChatHubScreen(
                         )
                     }
                 }
-                // Ø´Ø±ÙŠØ· ÙˆØ§ØªØ³Ø§Ø¨ Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø§Ù„Ø¬Ø§Ø±ÙŠØ© â€” Ø§Ù†Ø¶Ù…Ø§Ù…/Ø¹ÙˆØ¯Ø©
+                // شريط واتساب لمكالمة المجموعة الجارية â€” انضمام/عودة
                 if (waIsActiveForThisGroup) {
                     val isVideoActive = (waGroupCall as? GroupCallUiState.Active)?.isVideo == true || (waGroupCall as? GroupCallUiState.Ringing)?.isVideo == true || (waGroupCall as? GroupCallUiState.IncomingGroup)?.isVideo == true
                     val count = when (waGroupCall) {
@@ -1823,14 +1823,14 @@ private fun ChatHubScreen(
                         onJoinOrReturn = {
                             when (waGroupCall) {
                                 is GroupCallUiState.IncomingGroup -> GroupCallService.accept(context, waGroupCall.groupCallId, account.redId, waGroupCall.isVideo)
-                                is GroupCallUiState.Ringing -> {} // Ø§Ù„Ù…Ø¶ÙŠÙ Ø¨Ø§Ù„ÙØ¹Ù„ ÙÙŠ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø©
-                                else -> {} // Active: Ø§Ù„Ø¹ÙˆØ¯Ø© Ø¹Ø¨Ø± Overlay
+                                is GroupCallUiState.Ringing -> {} // المضيف بالفعل في المكالمة
+                                else -> {} // Active: العودة عبر Overlay
                             }
                         }
                     )
                 }
-                // ÙƒÙ„ Ø§Ù„Ø£Ù†ÙˆØ§Ø¹ (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) â€”
-                // ÙˆØ³Ø§Ø¦Ø· Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© ØªÙØ´ÙÙŽÙ‘Ø± Ø¨Ù€ Sender Keys ÙˆØªØµÙ„ Ø¨Ù†ÙˆØ¹Ù‡Ø§ Ø§Ù„Ø£ØµÙ„ÙŠ ÙˆÙ„Ø§ ÙŠØ¬ÙˆØ² Ø§Ø³ØªØ¨Ø¹Ø§Ø¯Ù‡Ø§.
+                // كل الأنواع (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) â€”
+                // وسائط المجموعة تُشفَّر بـ Sender Keys وتصل بنوعها الأصلي ولا يجوز استبعادها.
                 val groupMessages = resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id })
                 androidx.compose.runtime.LaunchedEffect(groupMessages.size, openGroup.id) {
                     if (groupMessages.isNotEmpty()) groupListState.animateScrollToItem(groupMessages.lastIndex)
@@ -1843,19 +1843,19 @@ private fun ChatHubScreen(
                                 Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Star, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
-                                        Text(" Ø±Ø³Ø§Ø¦Ù„ Ù…Ø«Ø¨ØªØ© (${groupPinnedMessages.size})", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                        Text(" رسائل مثبتة (${groupPinnedMessages.size})", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                                     }
                                     groupPinnedMessages.values.forEach { pm ->
                                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                             Text(messageDisplayText(pm), color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                                            IconButton({ groupPinnedMessages.remove(pm.id) }) { Icon(Icons.Default.Close, "Ø¥Ù„ØºØ§Ø¡ ØªØ«Ø¨ÙŠØª", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                            IconButton({ groupPinnedMessages.remove(pm.id) }) { Icon(Icons.Default.Close, "إلغاء تثبيت", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    if (groupMessages.isEmpty()) item { Text("Ù…Ø­Ø§Ø¯Ø«Ø© Ø¬Ù…Ø§Ø¹ÙŠØ© Ù…Ø´ÙØ±Ø© Ø¨Ù€Sender Keys. ÙŠØªØºÙŠØ± Ø§Ù„Ù…ÙØªØ§Ø­ ØªÙ„Ù‚Ø§Ø¦ÙŠÙ‹Ø§ Ø¹Ù†Ø¯ ØªØºÙŠØ± Ø§Ù„Ø¹Ø¶ÙˆÙŠØ©.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
+                    if (groupMessages.isEmpty()) item { Text("محادثة جماعية مشفرة بـSender Keys. يتغير المفتاح تلقائيًا عند تغير العضوية.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
                 itemsIndexed(groupMessages, key = { _, it -> it.id }) { index, message ->
                     val showDate = index == 0 || !isSameDay(groupMessages[index - 1].timestamp, message.timestamp)
 
@@ -1890,7 +1890,7 @@ private fun ChatHubScreen(
                                 ) {
                                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                                     if (!message.outgoing) {
-                                        // Ø£Ù„ÙˆØ§Ù† Ù‡Ø§Ø¯Ø¦Ø© ÙˆÙ…ØªÙ†Ø§Ø³Ù‚Ø© Ù…Ø¹ Ø§Ù„Ù‡ÙˆÙŠØ© (Ù„Ø§ Ù…Ù‡Ø±Ø¬Ø§Ù† Ø£Ù„ÙˆØ§Ù†)
+                                        // ألوان هادئة ومتناسقة مع الهوية (لا مهرجان ألوان)
                                         val nameColors = listOf(
                                             Color(0xFF6FD8B0), Color(0xFF7FB5E0), Color(0xFFF0C674), Color(0xFFC9A7E8),
                                             Color(0xFF8FC7E8), Color(0xFFB5D8A0), Color(0xFFE0B8A0)
@@ -1914,7 +1914,7 @@ private fun ChatHubScreen(
                                         }
                                         else -> Text(message.plaintext.toString(Charsets.UTF_8), color = if (message.outgoing) Color(0xFF002118) else MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
                                     }
-                                    // ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ØªØ­Øª Ø±Ø³Ø§Ù„Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (E2EE Ø¨Ù€ Sender Keys)
+                                    // تفاعلات الإيموجي تحت رسالة المجموعة (E2EE بـ Sender Keys)
                                     MessageReactions(
                                         reactions = reactionsByMessage[message.id].orEmpty(),
                                         currentRedId = account.redId,
@@ -1927,7 +1927,7 @@ private fun ChatHubScreen(
                                             reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + com.red.sovereign.core.database.MessageReactionEntity(message.id, openGroup.id, account.redId, emoji, System.currentTimeMillis())
                                         }
                                     )
-                                    // ðŸ• Ø§Ù„ÙˆÙ‚Øª Ø¯Ø§Ø®Ù„ Ø§Ù„ÙÙ‚Ø§Ø¹Ø© (Ù†Ù…Ø· ÙˆØ§ØªØ³Ø§Ø¨)
+                                    // ðŸ• الوقت داخل الفقاعة (نمط واتساب)
                                     Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Text(formatClockTime(message.timestamp), fontSize = 10.sp, color = if (message.outgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
                                         if (editedMessageIds.containsKey(message.id)) Text("âœï¸", fontSize = 10.sp)
@@ -1947,7 +1947,7 @@ private fun ChatHubScreen(
                     }
                 }
                 }
-                // ðŸ“ Ù…Ø¤Ø´Ø± ÙƒØªØ§Ø¨Ø© Ø¬Ù…Ø§Ø¹ÙŠ (Ø§Ù„Ø®Ø§Ø¯Ù… ÙŠØ¨Ø«Ù‡ Ù„Ù„Ø£Ø¹Ø¶Ø§Ø¡ â€” Ù„Ø§ ÙŠØ¸Ù‡Ø± Ù„ÙƒØ§ØªØ¨ Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ù†ÙØ³Ù‡)
+                // ðŸ“ مؤشر كتابة جماعي (الخادم يبثه للأعضاء â€” لا يظهر لكاتب الرسالة نفسه)
                 if (typingUsers.containsKey(openGroup.id)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             Card(
@@ -1996,7 +1996,7 @@ private fun ChatHubScreen(
                     onDismiss = { showGroupAttachmentSheet = false }
                 )
 
-                // ðŸ’¬ Ø´Ø±ÙŠØ· Ø§Ù„Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¹ØµØ±ÙŠ Ø§Ù„Ø°ÙƒÙŠ Ù„Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©
+                // ðŸ’¬ شريط الإدخال العصري الذكي للمجموعة
                 SovereignChatInputBar(
                     messageText = groupMessageText,
                     onMessageChange = { groupMessageText = it },
@@ -2013,7 +2013,7 @@ private fun ChatHubScreen(
                         if (groupEditingMessageId != null) editedMessageIds[groupEditingMessageId!!] = true
                         groupMessageText = ""; groupReplyToMessage = null; groupEditingMessageId = null; showGroupEmoji = false
                     },
-                    replyPreviewText = groupReplyToMessage?.let { "Ø±Ø¯ Ø¹Ù„Ù‰ ${if (it.outgoing) "Ù†ÙØ³Ùƒ" else it.senderRedId.take(12)}: " + messageDisplayText(it) },
+                    replyPreviewText = groupReplyToMessage?.let { "رد على ${if (it.outgoing) "نفسك" else it.senderRedId.take(12)}: " + messageDisplayText(it) },
                     editingPreviewText = groupEditingMessageId?.let { id -> groupMessages.firstOrNull { it.id == id }?.let { messageDisplayText(it) } },
                     onCancelReplyOrEdit = { groupReplyToMessage = null; groupEditingMessageId = null },
                     disappearingMs = groupDisappearingMs,
@@ -2043,44 +2043,44 @@ private fun ChatHubScreen(
                             groupVoiceMicrophonePermission.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
-                    placeholderText = if (groupEditingMessageId != null) "ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø±Ø³Ø§Ù„Ø©â€¦" else if (groupReplyToMessage != null) "Ø§Ù„Ø±Ø¯ Ø¹Ù„Ù‰ Ø±Ø³Ø§Ù„Ø©â€¦" else "Ø±Ø³Ø§Ù„Ø© Ø¬Ù…Ø§Ø¹ÙŠØ© Ù…Ø´ÙØ±Ø©â€¦"
+                    placeholderText = if (groupEditingMessageId != null) "تعديل الرسالة…" else if (groupReplyToMessage != null) "الرد على رسالة…" else "رسالة جماعية مشفرة…"
                 )
             }
         }
     }
     when (val safetyState = safety.state) {
         SafetyState.Closed -> Unit
-        is SafetyState.Loading -> AlertDialog(onDismissRequest = safety::close, title = { Text("Ø±Ù…Ø² Ø§Ù„Ø£Ù…Ø§Ù†") }, text = { Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }, confirmButton = { TextButton(safety::close) { Text("Ø¥Ù„ØºØ§Ø¡") } })
-        is SafetyState.Error -> AlertDialog(onDismissRequest = safety::close, title = { Text("ØªØ¹Ø°Ø± Ø§Ù„ØªØ­Ù‚Ù‚") }, text = { Text(safetyState.message) }, confirmButton = { TextButton(safety::close) { Text("Ø¥ØºÙ„Ø§Ù‚") } })
+        is SafetyState.Loading -> AlertDialog(onDismissRequest = safety::close, title = { Text("رمز الأمان") }, text = { Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) } }, confirmButton = { TextButton(safety::close) { Text("إلغاء") } })
+        is SafetyState.Error -> AlertDialog(onDismissRequest = safety::close, title = { Text("تعذر التحقق") }, text = { Text(safetyState.message) }, confirmButton = { TextButton(safety::close) { Text("إغلاق") } })
         is SafetyState.Ready -> if (showSafetyScanner) AlertDialog(
             onDismissRequest = { showSafetyScanner = false },
-            title = { Text("Ø§Ù…Ø³Ø­ Ø±Ù…Ø² Ø§Ù„Ø·Ø±Ù Ø§Ù„Ø¢Ø®Ø±") },
+            title = { Text("امسح رمز الطرف الآخر") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.fillMaxWidth().height(360.dp).clip(RoundedCornerShape(16.dp))) {
                         SafetyQrScanner(onCode = { safety.verifyScanned(it); showSafetyScanner = false })
                     }
-                    Text("ØªØªÙ… Ø§Ù„Ù…Ø¹Ø§Ù„Ø¬Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø¬Ù‡Ø§Ø² ÙÙ‚Ø·ØŒ ÙˆÙ„Ø§ ØªÙØ±ÙØ¹ ØµÙˆØ± Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ø¥Ù„Ù‰ Ø§Ù„Ø®Ø§Ø¯Ù….", fontSize = 11.sp, textAlign = TextAlign.Center)
+                    Text("تتم المعالجة على الجهاز فقط، ولا تُرفع صور الكاميرا إلى الخادم.", fontSize = 11.sp, textAlign = TextAlign.Center)
                 }
             },
-            confirmButton = { TextButton({ showSafetyScanner = false }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            confirmButton = { TextButton({ showSafetyScanner = false }) { Text("إلغاء") } }
         ) else AlertDialog(
             onDismissRequest = { safety.clearScanError(); safety.close() },
-            title = { Text(if (safetyState.verified) "ØªÙ… Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ù‡ÙˆÙŠØ©" else "Ù…Ù‚Ø§Ø±Ù†Ø© Ø±Ù…Ø² Ø§Ù„Ø£Ù…Ø§Ù†") },
+            title = { Text(if (safetyState.verified) "تم التحقق من الهوية" else "مقارنة رمز الأمان") },
             text = { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Image(safetyState.qr, "QR Ù„Ø±Ù…Ø² Ø§Ù„Ø£Ù…Ø§Ù†", Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)))
+                Image(safetyState.qr, "QR لرمز الأمان", Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)))
                 Text(safetyState.number, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = AqyalGold)
-                Text("Ø§Ù„Ø¬Ù‡Ø§Ø² ${safetyState.deviceId} Â· ${safetyState.fingerprint.chunked(8).joinToString(" ")}", fontSize = 9.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                Text("الجهاز ${safetyState.deviceId} Â· ${safetyState.fingerprint.chunked(8).joinToString(" ")}", fontSize = 9.sp, color = Color.Gray, textAlign = TextAlign.Center)
                 safetyState.scanError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, textAlign = TextAlign.Center) }
-                Text("Ø§Ù…Ø³Ø­ Ø±Ù…Ø² Ø§Ù„Ø·Ø±Ù Ø§Ù„Ø¢Ø®Ø± ÙˆØ¬Ù‡Ù‹Ø§ Ù„ÙˆØ¬Ù‡ØŒ Ø£Ùˆ Ù‚Ø§Ø±Ù† Ø§Ù„Ø±Ù‚Ù… Ø¹Ø¨Ø± Ù‚Ù†Ø§Ø© Ù…ÙˆØ«ÙˆÙ‚Ø© Ù…Ø³ØªÙ‚Ù„Ø©.", fontSize = 11.sp, textAlign = TextAlign.Center)
+                Text("امسح رمز الطرف الآخر وجهًا لوجه، أو قارن الرقم عبر قناة موثوقة مستقلة.", fontSize = 11.sp, textAlign = TextAlign.Center)
                 if (!safetyState.verified) OutlinedButton({
                     safety.clearScanError()
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showSafetyScanner = true
                     else cameraPermission.launch(Manifest.permission.CAMERA)
-                }, Modifier.fillMaxWidth()) { Icon(Icons.Default.QrCodeScanner, null); Text(" Ù…Ø³Ø­ Ø±Ù…Ø² Ø§Ù„Ø·Ø±Ù Ø§Ù„Ø¢Ø®Ø±") }
+                }, Modifier.fillMaxWidth()) { Icon(Icons.Default.QrCodeScanner, null); Text(" مسح رمز الطرف الآخر") }
             } },
-            confirmButton = { if (!safetyState.verified) Button(safety::markVerified) { Text("Ø§Ù„Ø£Ø±Ù‚Ø§Ù… Ù…ØªØ·Ø§Ø¨Ù‚Ø© ÙŠØ¯ÙˆÙŠÙ‹Ø§") } else TextButton(safety::close) { Text("ØªÙ…") } },
-            dismissButton = { if (!safetyState.verified) TextButton(safety::close) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            confirmButton = { if (!safetyState.verified) Button(safety::markVerified) { Text("الأرقام متطابقة يدويًا") } else TextButton(safety::close) { Text("تم") } },
+            dismissButton = { if (!safetyState.verified) TextButton(safety::close) { Text("إلغاء") } }
         )
     }
     selectedChatMessage?.let { message ->
@@ -2092,15 +2092,15 @@ private fun ChatHubScreen(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Ø§Ù„Ù…Ø¹Ø§ÙŠÙ†Ø©: Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ø§Ù„Ù…Ø­Ø¯Ø¯Ø©
+                // المعاينة: الرسالة المحددة
                 Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(if (message.outgoing) "Ø£Ù†Øª" else (if (isGroupMsg) message.senderRedId.take(12) else "Ø§Ù„Ù…Ø±Ø³Ù„"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(if (message.outgoing) "أنت" else (if (isGroupMsg) message.senderRedId.take(12) else "المرسل"), color = YounesEmerald, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         Text(messageDisplayText(message), color = MaterialTheme.colorScheme.onSurface, fontSize = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
 
-                // ØªÙØ§Ø¹Ù„ Ø³Ø±ÙŠØ¹ Ø¨Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ â€” Ø£Ø¹Ù„Ù‰ Ø§Ù„Ù‚Ø§Ø¦Ù…Ø© (E2EE)
+                // تفاعل سريع بالإيموجي â€” أعلى القائمة (E2EE)
                 ReactionEmojiBar(onPick = { emoji: String ->
                     val convId = message.conversationId
                     val mine = reactionsByMessage[message.id].orEmpty().any { it.emoji == emoji && it.senderId == account.redId }
@@ -2114,38 +2114,38 @@ private fun ChatHubScreen(
                         if (mine) RedConnectionService.removeReaction(context, target, convId, message.id)
                         else RedConnectionService.sendReaction(context, target, convId, message.id, emoji)
                     }
-                    // ØªØ­Ø¯ÙŠØ« Ù…Ø­Ù„ÙŠ ÙÙˆØ±ÙŠ
+                    // تحديث محلي فوري
                     val current = reactionsByMessage[message.id].orEmpty()
                     val withoutMine = current.filterNot { it.senderId == account.redId }
                     reactionsByMessage[message.id] = if (mine) withoutMine else withoutMine + MessageReactionEntity(message.id, convId, account.redId, emoji, System.currentTimeMillis())
                     selectedChatMessage = null
                 })
 
-                MessageActionRow(Icons.Default.Quickreply, "Ø§Ù„Ø±Ø¯", "Ø±Ø¯ Ø¹Ù„Ù‰ Ù‡Ø°Ù‡ Ø§Ù„Ø±Ø³Ø§Ù„Ø©") {
+                MessageActionRow(Icons.Default.Quickreply, "الرد", "رد على هذه الرسالة") {
                     if (isGroupMsg) groupReplyToMessage = message else replyToMessage = message
                     selectedChatMessage = null
                 }
-                MessageActionRow(Icons.Default.Forward, "Ø¥Ø¹Ø§Ø¯Ø© ØªÙˆØ¬ÙŠÙ‡", "Ø£Ø±Ø³Ù„Ù‡Ø§ Ø¥Ù„Ù‰ Ø¬Ù‡Ø© Ø£Ø®Ø±Ù‰") {
+                MessageActionRow(Icons.Default.Forward, "إعادة توجيه", "أرسلها إلى جهة أخرى") {
                     pendingForwardMessage = message; showDirectory = true; selectedChatMessage = null
                 }
                 val messageTextForAction = messageDisplayText(message)
                 if (messageTextForAction.isNotBlank()) {
-                    MessageActionRow(Icons.Default.ContentCopy, "Ù†Ø³Ø®", "Ø§Ù†Ø³Ø® Ø§Ù„Ù†Øµ") {
+                    MessageActionRow(Icons.Default.ContentCopy, "نسخ", "انسخ النص") {
                         val ctx = context
                         val clipboard = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Ø±Ø³Ø§Ù„Ø©", messageTextForAction))
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("رسالة", messageTextForAction))
                         selectedChatMessage = null
                     }
-                    MessageActionRow(Icons.Default.Share, "Ù…Ø´Ø§Ø±ÙƒØ©", "Ø´Ø§Ø±Ùƒ Ø¹Ø¨Ø± ØªØ·Ø¨ÙŠÙ‚Ø§Øª Ø£Ø®Ø±Ù‰") {
+                    MessageActionRow(Icons.Default.Share, "مشاركة", "شارك عبر تطبيقات أخرى") {
                         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                             type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, messageTextForAction)
                         }
-                        runCatching { context.startActivity(android.content.Intent.createChooser(intent, "Ù…Ø´Ø§Ø±ÙƒØ© Ø§Ù„Ø±Ø³Ø§Ù„Ø©").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                        runCatching { context.startActivity(android.content.Intent.createChooser(intent, "مشاركة الرسالة").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
                         selectedChatMessage = null
                     }
                 }
                 if (message.outgoing && message.type == "RICH_TEXT" && payload?.action == "MESSAGE") {
-                    MessageActionRow(Icons.Default.Edit, "ØªØ¹Ø¯ÙŠÙ„", "Ø¹Ø¯Ù‘Ù„ Ø§Ù„Ù†Øµ Ø§Ù„Ù…Ø±Ø³Ù„") {
+                    MessageActionRow(Icons.Default.Edit, "تعديل", "عدّل النص المرسل") {
                         if (isGroupMsg) {
                             groupEditingMessageId = message.id; groupMessageText = payload.text
                         } else {
@@ -2155,14 +2155,14 @@ private fun ChatHubScreen(
                     }
                 }
                 if (message.outgoing) {
-                    MessageActionRow(Icons.Default.Delete, "Ø­Ø°Ù Ù„Ø¯Ù‰ Ø§Ù„Ø¬Ù…ÙŠØ¹", "Ø§Ø­Ø°Ù Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ù„Ø¯Ù‰ Ø§Ù„ÙƒÙ„") {
+                    MessageActionRow(Icons.Default.Delete, "حذف لدى الجميع", "احذف الرسالة لدى الكل") {
                         if (isGroupMsg) {
                             val grp = groups.groups.firstOrNull { it.id == message.conversationId }
                             if (grp != null) RedConnectionService.sendGroupRichText(context, grp, RichMessage(action = "DELETE", deleteOf = message.id))
                         } else {
                             RedConnectionService.sendRichText(context, target, message.conversationId, RichMessage(action = "DELETE", deleteOf = message.id))
                         }
-                        // ØªØ·Ø¨ÙŠÙ‚ Ù…Ø­Ù„ÙŠ ÙÙˆØ±ÙŠ: Ø§Ù„Ø®Ø§Ø¯Ù… Ù„Ø§ ÙŠØ±Ø¯Ù‘Ø¯ Ø£Ù…Ø± Ø§Ù„Ø­Ø°Ù Ø¥Ù„Ù‰ Ù†ÙØ³ Ø§Ù„Ø¬Ù„Ø³Ø© Ø§Ù„ØªÙŠ Ø£Ø±Ø³Ù„ØªÙ‡
+                        // تطبيق محلي فوري: الخادم لا يردّد أمر الحذف إلى نفس الجلسة التي أرسلته
                         scope.launch {
                             repository.deleteLocalMessage(message.id)
                             repository.deleteReactionsForMessage(message.id)
@@ -2173,7 +2173,7 @@ private fun ChatHubScreen(
                         selectedChatMessage = null
                     }
                 }
-                MessageActionRow(Icons.Default.Delete, "Ø­Ø°Ù Ù„Ø¯ÙŠÙ‘", "Ø§Ø­Ø°ÙÙ‡Ø§ Ù…Ù† Ù‡Ø°Ø§ Ø§Ù„Ø¬Ù‡Ø§Ø² ÙÙ‚Ø·") {
+                MessageActionRow(Icons.Default.Delete, "حذف لديّ", "احذفها من هذا الجهاز فقط") {
                     scope.launch {
                         repository.deleteLocalMessage(message.id)
                         repository.deleteReactionsForMessage(message.id)
@@ -2185,7 +2185,7 @@ private fun ChatHubScreen(
                     selectedChatMessage = null
                 }
                 if (isGroupMsg) {
-                    MessageActionRow(if (groupPinnedMessages.containsKey(message.id)) Icons.Default.Star else Icons.Default.StarBorder, if (groupPinnedMessages.containsKey(message.id)) "Ø¥Ù„ØºØ§Ø¡ Ø§Ù„ØªØ«Ø¨ÙŠØª" else "ØªØ«Ø¨ÙŠØª", "ØªØ«Ø¨ÙŠØª Ù‡Ø°Ù‡ Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ø£Ø¹Ù„Ù‰ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") {
+                    MessageActionRow(if (groupPinnedMessages.containsKey(message.id)) Icons.Default.Star else Icons.Default.StarBorder, if (groupPinnedMessages.containsKey(message.id)) "إلغاء التثبيت" else "تثبيت", "تثبيت هذه الرسالة أعلى المجموعة") {
                         if (groupPinnedMessages.containsKey(message.id)) {
                             groupPinnedMessages.remove(message.id)
                             scope.launch { pinApi.unpin(message.id) }
@@ -2196,17 +2196,17 @@ private fun ChatHubScreen(
                         selectedChatMessage = null
                     }
                 }
-                MessageActionRow(Icons.Default.NotificationsOff, "ÙƒØªÙ… Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±Ø§Øª", "ÙƒØªÙ… Ù‡Ø°Ù‡ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© 8 Ø³Ø§Ø¹Ø§Øª") {
+                MessageActionRow(Icons.Default.NotificationsOff, "كتم الإشعارات", "كتم هذه المحادثة 8 ساعات") {
                     val convId = if (isGroupMsg) message.conversationId else conversationId(account.redId, target)
                     val muted = localMessages.conversationPreference(convId).third > System.currentTimeMillis()
                     localMessages.setConversationPreference(convId, "muted_until", if (muted) 0 else System.currentTimeMillis() + 8 * 60 * 60 * 1000L)
                     selectedChatMessage = null
                 }
-                MessageActionRow(Icons.Default.Info, "Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ø±Ø³Ø§Ù„Ø©", "Ø§Ù„ØªÙØ§ØµÙŠÙ„ ÙˆØ§Ù„ÙˆÙ‚Øª ÙˆØ§Ù„Ø­Ø§Ù„Ø©") {
+                MessageActionRow(Icons.Default.Info, "معلومات الرسالة", "التفاصيل والوقت والحالة") {
                     messageInfo = message; selectedChatMessage = null
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    listOf("1Ø³Ø§Ø¹Ø©" to 3_600_000L, "ÙŠÙˆÙ…" to 86_400_000L, "Ø£Ø³Ø¨ÙˆØ¹" to 604_800_000L, "90ÙŠÙˆÙ…" to 7_776_000_000L, "Ø¥ÙŠÙ‚Ø§Ù" to 0L).forEach { (label, ms) ->
+                    listOf("1ساعة" to 3_600_000L, "يوم" to 86_400_000L, "أسبوع" to 604_800_000L, "90يوم" to 7_776_000_000L, "إيقاف" to 0L).forEach { (label, ms) ->
                         OutlinedButton({
                             val value = if (ms > 0) ms else null
                             if (isGroupMsg) {
@@ -2217,7 +2217,7 @@ private fun ChatHubScreen(
                         }, Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
                     }
                 }
-                TextButton({ selectedChatMessage = null }, Modifier.align(Alignment.CenterHorizontally)) { Text("Ø¥ØºÙ„Ø§Ù‚", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                TextButton({ selectedChatMessage = null }, Modifier.align(Alignment.CenterHorizontally)) { Text("إغلاق", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }
@@ -2232,7 +2232,7 @@ private fun ChatHubScreen(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Ø±Ø£Ø³ Ø§Ù„ØµØ¯ÙŠÙ‚
+                // رأس الصديق
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(person.displayName.take(1))
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -2241,15 +2241,15 @@ private fun ChatHubScreen(
                     }
                 }
 
-                // Ø¥Ø¹Ø§Ø¯Ø© ØªØ³Ù…ÙŠØ© Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©
-                OutlinedTextField(editingName, { editingName = it.take(50) }, Modifier.fillMaxWidth(), label = { Text("Ø§Ø³Ù… Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© (ØªØ¬Ø§ÙˆØ²)") }, singleLine = true)
+                // إعادة تسمية المحادثة
+                OutlinedTextField(editingName, { editingName = it.take(50) }, Modifier.fillMaxWidth(), label = { Text("اسم المحادثة (تجاوز)") }, singleLine = true)
                 Button({
                     localMessages.setConversationCustomName(conversationKey, editingName.trim())
                     editingName = editingName.trim()
-                }, Modifier.fillMaxWidth(), enabled = editingName.isNotBlank() && editingName != person.displayName) { Text("Ø­ÙØ¸ Ø§Ù„Ø§Ø³Ù…") }
+                }, Modifier.fillMaxWidth(), enabled = editingName.isNotBlank() && editingName != person.displayName) { Text("حفظ الاسم") }
 
-                // Ø§Ù„Ø®Ù„ÙÙŠØ© â€” Ø§Ø®ØªÙŠØ§Ø± ØªØ¯Ø±Ø¬ Ù„ÙˆÙ†ÙŠ
-                Text("Ø®Ù„ÙÙŠØ© Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©", color = YounesEmerald, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                // الخلفية â€” اختيار تدرج لوني
+                Text("خلفية المحادثة", color = YounesEmerald, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                 val wallpapers = listOf(0, 1, 2, 3, 4, 5)
                 val wpColors = listOf(
                     Color(0xFF0A1628), Color(0xFF1A3A5F), Color(0xFF004D3A), Color(0xFF3D2E00), Color(0xFF2A0A2A), Color(0xFF002F4A)
@@ -2266,27 +2266,27 @@ private fun ChatHubScreen(
                     }
                 }
 
-                // ØªØ«Ø¨ÙŠØª / Ø£Ø±Ø´ÙØ© / ÙƒØªÙ…
+                // تثبيت / أرشفة / كتم
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "pinned", if (preference.first) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.first) "Ø¥Ù„ØºØ§Ø¡ Ø§Ù„ØªØ«Ø¨ÙŠØª" else "ØªØ«Ø¨ÙŠØª", fontSize = 12.sp) }
-                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "archived", if (preference.second) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.second) "Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø£Ø±Ø´ÙØ©" else "Ø£Ø±Ø´ÙØ©", fontSize = 12.sp) }
+                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "pinned", if (preference.first) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.first) "إلغاء التثبيت" else "تثبيت", fontSize = 12.sp) }
+                    OutlinedButton({ localMessages.setConversationPreference(conversationKey, "archived", if (preference.second) 0 else 1) }, Modifier.weight(1f)) { Text(if (preference.second) "إلغاء الأرشفة" else "أرشفة", fontSize = 12.sp) }
                 }
-                OutlinedButton({ localMessages.setConversationPreference(conversationKey, "muted_until", if (preference.third > System.currentTimeMillis()) 0 else System.currentTimeMillis() + 8 * 60 * 60 * 1000L) }, Modifier.fillMaxWidth()) { Text(if (preference.third > System.currentTimeMillis()) "Ø¥Ù„ØºØ§Ø¡ Ø§Ù„ÙƒØªÙ…" else "ÙƒØªÙ… 8 Ø³Ø§Ø¹Ø§Øª") }
-                OutlinedButton({ safety.open(person.redId); selectedContact = null }, Modifier.fillMaxWidth()) { Text("Ø±Ù…Ø² Ø§Ù„Ø£Ù…Ø§Ù† ÙˆØ§Ù„ØªØ­Ù‚Ù‚") }
+                OutlinedButton({ localMessages.setConversationPreference(conversationKey, "muted_until", if (preference.third > System.currentTimeMillis()) 0 else System.currentTimeMillis() + 8 * 60 * 60 * 1000L) }, Modifier.fillMaxWidth()) { Text(if (preference.third > System.currentTimeMillis()) "إلغاء الكتم" else "كتم 8 ساعات") }
+                OutlinedButton({ safety.open(person.redId); selectedContact = null }, Modifier.fillMaxWidth()) { Text("رمز الأمان والتحقق") }
 
-                // Ø§Ù„Ø­Ø¸Ø± / ÙÙƒ Ø§Ù„Ø­Ø¸Ø±
+                // الحظر / فك الحظر
                 val isBlocked = person.redId in blockedIds
                 Button({
                     if (isBlocked) directory.unblock(person) else directory.block(person)
                     selectedContact = null
                 }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = if (isBlocked) YounesEmerald else MaterialTheme.colorScheme.error)) {
-                    Text(if (isBlocked) "ÙÙƒ Ø§Ù„Ø­Ø¸Ø±" else "Ø­Ø¸Ø± Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù…", color = if (isBlocked) Color(0xFF002118) else Color.White)
+                    Text(if (isBlocked) "فك الحظر" else "حظر المستخدم", color = if (isBlocked) Color(0xFF002118) else Color.White)
                 }
 
-                // Ø¥Ø²Ø§Ù„Ø© / Ø¨Ù„Ø§Øº
-                OutlinedButton({ directory.remove(person); selectedContact = null }, Modifier.fillMaxWidth()) { Text("Ø¥Ø²Ø§Ù„Ø© Ù…Ù† Ø§Ù„Ø£ØµØ¯Ù‚Ø§Ø¡") }
-                OutlinedTextField(reportDetails, { reportDetails = it }, Modifier.fillMaxWidth(), label = { Text("ØªÙØ§ØµÙŠÙ„ Ø¨Ù„Ø§Øº Ø§Ø®ØªÙŠØ§Ø±ÙŠ") }, maxLines = 2)
-                OutlinedButton({ directory.report(person, "SPAM", reportDetails); reportDetails = "" }, Modifier.fillMaxWidth()) { Text("Ø¥Ø¨Ù„Ø§Øº Ø¹Ù† Ø¥Ø²Ø¹Ø§Ø¬/Ø§Ø­ØªÙŠØ§Ù„") }
+                // إزالة / بلاغ
+                OutlinedButton({ directory.remove(person); selectedContact = null }, Modifier.fillMaxWidth()) { Text("إزالة من الأصدقاء") }
+                OutlinedTextField(reportDetails, { reportDetails = it }, Modifier.fillMaxWidth(), label = { Text("تفاصيل بلاغ اختياري") }, maxLines = 2)
+                OutlinedButton({ directory.report(person, "SPAM", reportDetails); reportDetails = "" }, Modifier.fillMaxWidth()) { Text("إبلاغ عن إزعاج/احتيال") }
             }
         }
     }
@@ -2306,77 +2306,77 @@ private fun ChatHubScreen(
                             Row(Modifier.fillMaxWidth().clickable(enabled = manageable) { selectedGroupMember = member }, verticalAlignment = Alignment.CenterVertically) {
                                 Avatar(member.username.take(1)); Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text("@${member.username}"); Text(member.redId, color = AqyalCyanGlow, fontSize = 10.sp) }
                                 AssistChip({}, { Text(groupRoleLabel(member.role)) }, enabled = false)
-                                if (manageable) Icon(Icons.Default.MoreVert, "Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø¹Ø¶Ùˆ", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (manageable) Icon(Icons.Default.MoreVert, "إدارة العضو", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                     if (canManage) {
-                        OutlinedButton({ groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) }, Modifier.fillMaxWidth()) { Text("ØªØºÙŠÙŠØ± ØµÙˆØ±Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") }
-                        OutlinedTextField(memberRedId, { memberRedId = YounesId.normalizeInput(it) }, Modifier.fillMaxWidth(), label = { Text("Ø¥Ø¶Ø§ÙØ© Ø¹Ø¶Ùˆ Ø¨ÙˆØ§Ø³Ø·Ø© Ù…Ø¹Ø±Ù‘Ù ÙŠÙˆÙ†Ø³") }, placeholder = { Text(YounesId.PLACEHOLDER) }, singleLine = true)
-                        Button({ groups.addMember(selectedGroup, memberRedId) { memberRedId = "" } }, Modifier.fillMaxWidth(), enabled = memberRedId.matches(RED_ID_PATTERN) && groups.state != GroupState.Saving) { Text("Ø¥Ø¶Ø§ÙØ© Ø¹Ø¶Ùˆ") }
+                        OutlinedButton({ groupAvatarPicker.launch(arrayOf("image/jpeg", "image/png", "image/webp")) }, Modifier.fillMaxWidth()) { Text("تغيير صورة المجموعة") }
+                        OutlinedTextField(memberRedId, { memberRedId = YounesId.normalizeInput(it) }, Modifier.fillMaxWidth(), label = { Text("إضافة عضو بواسطة معرّف يونس") }, placeholder = { Text(YounesId.PLACEHOLDER) }, singleLine = true)
+                        Button({ groups.addMember(selectedGroup, memberRedId) { memberRedId = "" } }, Modifier.fillMaxWidth(), enabled = memberRedId.matches(RED_ID_PATTERN) && groups.state != GroupState.Saving) { Text("إضافة عضو") }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton({ groups.createInvite(selectedGroup) }, Modifier.weight(1f)) { Text("Ø±Ø§Ø¨Ø· Ø¯Ø¹ÙˆØ©") }
-                            OutlinedButton({ groups.loadJoinRequests(selectedGroup) }, Modifier.weight(1f)) { Text("Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù…") }
+                            OutlinedButton({ groups.createInvite(selectedGroup) }, Modifier.weight(1f)) { Text("رابط دعوة") }
+                            OutlinedButton({ groups.loadJoinRequests(selectedGroup) }, Modifier.weight(1f)) { Text("طلبات الانضمام") }
                         }
                         groups.latestInvite?.let { invite ->
                             val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-                            Card { Column(Modifier.padding(10.dp)) { Text("Ø¯Ø¹ÙˆØ© ØµØ§Ù„Ø­Ø© Ø­ØªÙ‰ ${invite.expiresAt}", style = MaterialTheme.typography.bodySmall); Text(invite.token, maxLines = 1, overflow = TextOverflow.Ellipsis, color = AqyalCyanGlow); TextButton({ clipboard.setText(AnnotatedString(invite.token)) }) { Text("Ù†Ø³Ø® Ø±Ù…Ø² Ø§Ù„Ø¯Ø¹ÙˆØ©") } } }
+                            Card { Column(Modifier.padding(10.dp)) { Text("دعوة صالحة حتى ${invite.expiresAt}", style = MaterialTheme.typography.bodySmall); Text(invite.token, maxLines = 1, overflow = TextOverflow.Ellipsis, color = AqyalCyanGlow); TextButton({ clipboard.setText(AnnotatedString(invite.token)) }) { Text("نسخ رمز الدعوة") } } }
                         }
-                        groups.joinRequests.forEach { request -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("@${request.username}", Modifier.weight(1f)); TextButton({ groups.resolveJoin(selectedGroup, request, false) }) { Text("Ø±ÙØ¶") }; Button({ groups.resolveJoin(selectedGroup, request, true) }) { Text("Ù‚Ø¨ÙˆÙ„") } } }
+                        groups.joinRequests.forEach { request -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("@${request.username}", Modifier.weight(1f)); TextButton({ groups.resolveJoin(selectedGroup, request, false) }) { Text("رفض") }; Button({ groups.resolveJoin(selectedGroup, request, true) }) { Text("قبول") } } }
                     }
                 }
             },
-            confirmButton = { TextButton({ manageGroupId = null }) { Text("Ø¥ØºÙ„Ø§Ù‚") } },
+            confirmButton = { TextButton({ manageGroupId = null }) { Text("إغلاق") } },
             dismissButton = {
-                if (myRole == "OWNER") TextButton({ deleteGroupId = selectedGroup.id }) { Text("Ø­Ø°Ù Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©", color = MaterialTheme.colorScheme.error) }
-                else TextButton({ groups.leave(selectedGroup) { manageGroupId = null; groupConversationId = null } }) { Text("Ù…ØºØ§Ø¯Ø±Ø©", color = MaterialTheme.colorScheme.error) }
+                if (myRole == "OWNER") TextButton({ deleteGroupId = selectedGroup.id }) { Text("حذف المجموعة", color = MaterialTheme.colorScheme.error) }
+                else TextButton({ groups.leave(selectedGroup) { manageGroupId = null; groupConversationId = null } }) { Text("مغادرة", color = MaterialTheme.colorScheme.error) }
             }
         )
     }
     val managedMember = selectedGroupMember
     if (selectedGroup != null && managedMember != null) AlertDialog(
         onDismissRequest = { selectedGroupMember = null },
-        title = { Text("Ø¥Ø¯Ø§Ø±Ø© @${managedMember.username}") },
+        title = { Text("إدارة @${managedMember.username}") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(managedMember.redId, color = AqyalCyanGlow)
             if (selectedGroup.members.firstOrNull { it.redId == account.redId }?.role == "OWNER") {
                 OutlinedButton({ groups.updateRole(selectedGroup, managedMember, if (managedMember.role == "ADMIN") "MEMBER" else "ADMIN"); selectedGroupMember = null }, Modifier.fillMaxWidth()) {
-                    Text(if (managedMember.role == "ADMIN") "Ø¥Ø±Ø¬Ø§Ø¹Ù‡ Ø¥Ù„Ù‰ Ø¹Ø¶Ùˆ" else "ØªØ±Ù‚ÙŠØªÙ‡ Ø¥Ù„Ù‰ Ù…Ø³Ø¤ÙˆÙ„")
+                    Text(if (managedMember.role == "ADMIN") "إرجاعه إلى عضو" else "ترقيته إلى مسؤول")
                 }
-                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; manageGroupId = null } }, Modifier.fillMaxWidth()) { Text("Ù†Ù‚Ù„ Ù…Ù„ÙƒÙŠØ© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¥Ù„ÙŠÙ‡") }
+                OutlinedButton({ groups.transferOwnership(selectedGroup, managedMember) { selectedGroupMember = null; manageGroupId = null } }, Modifier.fillMaxWidth()) { Text("نقل ملكية المجموعة إليه") }
             }
-            Button({ groups.removeMember(selectedGroup, managedMember); selectedGroupMember = null }, Modifier.fillMaxWidth()) { Text("Ø¥Ø²Ø§Ù„Ø© Ù…Ù† Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") }
-            Text("ØªØºÙŠÙŠØ± Ø§Ù„Ø¹Ø¶ÙˆÙŠØ© ÙŠØ¬Ø¨ Ø£Ù† ÙŠØ¯ÙˆØ± Sender Key Ø¹Ù†Ø¯Ù…Ø§ ØªÙƒØªÙ…Ù„ Ù…Ø­Ø§Ø¯Ø«Ø© Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª Ø§Ù„Ù…Ø´ÙØ±Ø©.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Button({ groups.removeMember(selectedGroup, managedMember); selectedGroupMember = null }, Modifier.fillMaxWidth()) { Text("إزالة من المجموعة") }
+            Text("تغيير العضوية يجب أن يدور Sender Key عندما تكتمل محادثة المجموعات المشفرة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         } },
-        confirmButton = { TextButton({ selectedGroupMember = null }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+        confirmButton = { TextButton({ selectedGroupMember = null }) { Text("إغلاق") } }
     )
     groups.groups.firstOrNull { it.id == deleteGroupId }?.let { deleting ->
         AlertDialog(
             onDismissRequest = { deleteGroupId = null },
-            title = { Text("Ø­Ø°Ù ${deleting.name} Ù†Ù‡Ø§Ø¦ÙŠÙ‹Ø§ØŸ") },
-            text = { Text("Ø³ÙŠÙØ­Ø°Ù Ø³Ø¬Ù„ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© ÙˆØ¹Ø¶ÙˆÙŠØªÙ‡Ø§ Ù…Ù† Ø§Ù„Ø®Ø§Ø¯Ù…. Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹ Ø¹Ù† Ø§Ù„Ø¹Ù…Ù„ÙŠØ©.") },
-            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; manageGroupId = null; groupConversationId = null } }) { Text("Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ") } },
-            dismissButton = { TextButton({ deleteGroupId = null }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            title = { Text("حذف ${deleting.name} نهائيًا؟") },
+            text = { Text("سيُحذف سجل المجموعة وعضويتها من الخادم. لا يمكن التراجع عن العملية.") },
+            confirmButton = { Button({ groups.deleteGroup(deleting) { deleteGroupId = null; manageGroupId = null; groupConversationId = null } }) { Text("حذف نهائي") } },
+            dismissButton = { TextButton({ deleteGroupId = null }) { Text("إلغاء") } }
         )
     }
     if (showGroupPollDialog) {
         val openGroupForPoll = groups.groups.firstOrNull { it.id == groupConversationId }
         AlertDialog(
             onDismissRequest = { showGroupPollDialog = false },
-            title = { Text("Ø§Ø³ØªØ·Ù„Ø§Ø¹ ÙÙŠ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") },
+            title = { Text("استطلاع في المجموعة") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(groupPollQuestion, { groupPollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("Ø§Ù„Ø³Ø¤Ø§Ù„") }, maxLines = 3)
+                    OutlinedTextField(groupPollQuestion, { groupPollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("السؤال") }, maxLines = 3)
                     groupPollOptions.forEachIndexed { index, value ->
                         OutlinedTextField(
                             value = value,
                             onValueChange = { next -> groupPollOptions = groupPollOptions.toMutableList().also { it[index] = next.take(80) } },
-                            Modifier.fillMaxWidth(), label = { Text("Ø§Ù„Ø®ÙŠØ§Ø± ${index + 1}") }, singleLine = true
+                            Modifier.fillMaxWidth(), label = { Text("الخيار ${index + 1}") }, singleLine = true
                         )
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton({ if (groupPollOptions.size < 6) groupPollOptions = groupPollOptions + "" }, Modifier.weight(1f), enabled = groupPollOptions.size < 6) { Text("+ Ø®ÙŠØ§Ø±") }
-                        OutlinedButton({ if (groupPollOptions.size > 2) groupPollOptions = groupPollOptions.dropLast(1) }, Modifier.weight(1f), enabled = groupPollOptions.size > 2) { Text("- Ø®ÙŠØ§Ø±") }
+                        OutlinedButton({ if (groupPollOptions.size < 6) groupPollOptions = groupPollOptions + "" }, Modifier.weight(1f), enabled = groupPollOptions.size < 6) { Text("+ خيار") }
+                        OutlinedButton({ if (groupPollOptions.size > 2) groupPollOptions = groupPollOptions.dropLast(1) }, Modifier.weight(1f), enabled = groupPollOptions.size > 2) { Text("- خيار") }
                     }
                 }
             },
@@ -2396,18 +2396,18 @@ private fun ChatHubScreen(
                         groupPollQuestion = ""
                         groupPollOptions = listOf("", "")
                     }
-                ) { Text("Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹") }
+                ) { Text("إرسال الاستطلاع") }
             },
-            dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+            dismissButton = { TextButton({ showGroupPollDialog = false }) { Text("إلغاء") } }
         )
     }
     if (showDisappearingDialog) AlertDialog(
         onDismissRequest = { showDisappearingDialog = false },
-        title = { Text("Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ù…Ø¤Ù‚ØªØ©") },
+        title = { Text("الرسائل المؤقتة") },
         text = { Column {
-            Text("Ø³ØªÙØ­Ø°Ù Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ø¬Ø¯ÙŠØ¯Ø© ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ Ù…Ù† Ø§Ù„Ø·Ø±ÙÙŠÙ† Ø¨Ø¹Ø¯ Ø§Ù†Ù‚Ø¶Ø§Ø¡ Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…Ø®ØªØ§Ø±Ø©.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text("ستُحذف الرسائل الجديدة تلقائياً من الطرفين بعد انقضاء المدة المختارة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(10.dp))
-            listOf(0L to "Ø¥ÙŠÙ‚Ø§Ù", 3_600_000L to "1 Ø³Ø§Ø¹Ø©", 86_400_000L to "24 Ø³Ø§Ø¹Ø©", 604_800_000L to "7 Ø£ÙŠØ§Ù…", 7_776_000_000L to "90 ÙŠÙˆÙ…Ø§Ù‹").forEach { (ms, label) ->
+            listOf(0L to "إيقاف", 3_600_000L to "1 ساعة", 86_400_000L to "24 ساعة", 604_800_000L to "7 أيام", 7_776_000_000L to "90 يوماً").forEach { (ms, label) ->
                 Row(Modifier.fillMaxWidth().clickable {
                     disappearingDurationMs = if (ms > 0) ms else null
                     showDisappearingDialog = false
@@ -2417,15 +2417,15 @@ private fun ChatHubScreen(
                 }
             }
         } },
-        confirmButton = { TextButton({ showDisappearingDialog = false }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+        confirmButton = { TextButton({ showDisappearingDialog = false }) { Text("إغلاق") } }
     )
     if (showGroupDisappearingDialog) AlertDialog(
         onDismissRequest = { showGroupDisappearingDialog = false },
-        title = { Text("Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ù…Ø¤Ù‚ØªØ© ÙÙŠ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") },
+        title = { Text("الرسائل المؤقتة في المجموعة") },
         text = { Column {
-            Text("Ø³ØªÙØ­Ø°Ù Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ø¬Ø¯ÙŠØ¯Ø© ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ Ø¨Ø¹Ø¯ Ø§Ù†Ù‚Ø¶Ø§Ø¡ Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…Ø®ØªØ§Ø±Ø©.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text("ستُحذف الرسائل الجديدة تلقائياً بعد انقضاء المدة المختارة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(10.dp))
-            listOf(0L to "Ø¥ÙŠÙ‚Ø§Ù", 3_600_000L to "1 Ø³Ø§Ø¹Ø©", 86_400_000L to "24 Ø³Ø§Ø¹Ø©", 604_800_000L to "7 Ø£ÙŠØ§Ù…", 7_776_000_000L to "90 ÙŠÙˆÙ…Ø§Ù‹").forEach { (ms, label) ->
+            listOf(0L to "إيقاف", 3_600_000L to "1 ساعة", 86_400_000L to "24 ساعة", 604_800_000L to "7 أيام", 7_776_000_000L to "90 يوماً").forEach { (ms, label) ->
                 Row(Modifier.fillMaxWidth().clickable {
                     groupDisappearingMs = if (ms > 0) ms else null
                     showGroupDisappearingDialog = false
@@ -2435,12 +2435,12 @@ private fun ChatHubScreen(
                 }
             }
         } },
-        confirmButton = { TextButton({ showGroupDisappearingDialog = false }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+        confirmButton = { TextButton({ showGroupDisappearingDialog = false }) { Text("إغلاق") } }
     )
     if (showMediaGallery && target.isNotBlank()) {
         val convKey = conversationId(account.redId, target)
         MediaGalleryDialog(
-            title = "Ø§Ù„ÙˆØ³Ø§Ø¦Ø· Ø§Ù„Ù…Ø´ØªØ±ÙƒØ©",
+            title = "الوسائط المشتركة",
             messages = decrypted.filter { it.conversationId == convKey },
             attachments = attachments,
             onDismiss = { showMediaGallery = false }
@@ -2448,7 +2448,7 @@ private fun ChatHubScreen(
     }
     if (showGroupMediaGallery && groupConversationId != null) {
         MediaGalleryDialog(
-            title = "ÙˆØ³Ø§Ø¦Ø· Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©",
+            title = "وسائط المجموعة",
             messages = decrypted.filter { it.conversationId == groupConversationId },
             attachments = attachments,
             onDismiss = { showGroupMediaGallery = false }
@@ -2456,11 +2456,11 @@ private fun ChatHubScreen(
     }
     if (showMessageSearch) AlertDialog(
         onDismissRequest = { showMessageSearch = false; messageSearchQuery = "" },
-        title = { Text("Ø§Ù„Ø¨Ø­Ø« Ø¯Ø§Ø®Ù„ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©") },
+        title = { Text("البحث داخل المحادثة") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(messageSearchQuery, { messageSearchQuery = it }, Modifier.fillMaxWidth(), label = { Text("ÙƒÙ„Ù…Ø© Ø£Ùˆ Ø¹Ø¨Ø§Ø±Ø©") }, singleLine = true)
+            OutlinedTextField(messageSearchQuery, { messageSearchQuery = it }, Modifier.fillMaxWidth(), label = { Text("كلمة أو عبارة") }, singleLine = true)
             val currentConversation = groupConversationId ?: conversationId(account.redId, target)
-            // ðŸ” Ø§Ù„Ø¨Ø­Ø« ÙŠØ³ØªØ¹Ù„Ù… Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø­Ù„ÙŠ Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ (Room) ÙˆÙŠØ¹Ø±Ø¶ Ø§Ù„Ù†Øµ Ø§Ù„Ù…ÙÙƒÙˆÙƒ ÙÙ‚Ø·
+            // ðŸ” البحث يستعلم السجل المحلي الحقيقي (Room) ويعرض النص المفكوك فقط
             val searchResults = remember { mutableStateOf<List<com.red.sovereign.core.database.LocalHistoryEntity>>(emptyList()) }
             androidx.compose.runtime.LaunchedEffect(messageSearchQuery, currentConversation) {
                 searchResults.value = if (messageSearchQuery.length >= 2) {
@@ -2468,26 +2468,26 @@ private fun ChatHubScreen(
                 } else emptyList()
             }
             if (messageSearchQuery.length >= 2) {
-                Text("${searchResults.value.size} Ù†ØªÙŠØ¬Ø©", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-                LazyColumn(Modifier.height(260.dp)) { items(searchResults.value, key = { it.id }) { result -> Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Column(Modifier.padding(10.dp)) { Text(searchDisplayText(result), maxLines = 4); Row(verticalAlignment = Alignment.CenterVertically) { Text(if (result.outgoing) "Ø£Ù†Øª" else result.senderId.take(12), color = AqyalCyanGlow, style = MaterialTheme.typography.labelSmall); Text(" â€¢ " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(result.createdAt)), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) } } } } }
+                Text("${searchResults.value.size} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                LazyColumn(Modifier.height(260.dp)) { items(searchResults.value, key = { it.id }) { result -> Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Column(Modifier.padding(10.dp)) { Text(searchDisplayText(result), maxLines = 4); Row(verticalAlignment = Alignment.CenterVertically) { Text(if (result.outgoing) "أنت" else result.senderId.take(12), color = AqyalCyanGlow, style = MaterialTheme.typography.labelSmall); Text(" â€¢ " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(result.createdAt)), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall) } } } } }
             } else {
-                Text("Ø§ÙƒØªØ¨ ÙƒÙ„Ù…ØªÙŠÙ† Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„ Ù„Ù„Ø¨Ø­Ø« ÙÙŠ Ù‡Ø°Ù‡ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("اكتب كلمتين على الأقل للبحث في هذه المحادثة.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
         } },
-        confirmButton = { TextButton({ showMessageSearch = false; messageSearchQuery = "" }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+        confirmButton = { TextButton({ showMessageSearch = false; messageSearchQuery = "" }) { Text("إغلاق") } }
     )
     if (showDirectory) AlertDialog(
         onDismissRequest = { showDirectory = false; pendingForwardMessage = null; directory.clear() },
-        title = { Text("Ø£Ø´Ø®Ø§Øµ ÙŠÙˆÙ†Ø³") },
+        title = { Text("أشخاص يونس") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(directoryQuery, { directoryQuery = it }, Modifier.fillMaxWidth(), label = { Text("username Ø£Ùˆ Ù…Ø¹Ø±Ù‘Ù ÙŠÙˆÙ†Ø³") }, singleLine = true)
+                OutlinedTextField(directoryQuery, { directoryQuery = it }, Modifier.fillMaxWidth(), label = { Text("username أو معرّف يونس") }, singleLine = true)
                 Button({ directory.search(directoryQuery) }, Modifier.fillMaxWidth(), enabled = directoryQuery.trim().length >= 3 && directory.state != DirectoryState.Loading) {
-                    Icon(Icons.Default.Search, null); Text(" Ø¨Ø­Ø« Ø¢Ù…Ù†")
+                    Icon(Icons.Default.Search, null); Text(" بحث آمن")
                 }
-                // ðŸ“¤ Ø§Ù„ØªÙˆØ¬ÙŠÙ‡ Ø¥Ù„Ù‰ Ù…Ø¬Ù…ÙˆØ¹Ø© â€” ÙŠØ¸Ù‡Ø± ÙÙ‚Ø· Ø£Ø«Ù†Ø§Ø¡ Ø¬Ù„Ø³Ø© Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªÙˆØ¬ÙŠÙ‡
+                // ðŸ“¤ التوجيه إلى مجموعة â€” يظهر فقط أثناء جلسة إعادة التوجيه
                 if (pendingForwardMessage != null && groups.groups.isNotEmpty()) {
-                    Text("Ø§Ù„ØªÙˆØ¬ÙŠÙ‡ Ø¥Ù„Ù‰ Ù…Ø¬Ù…ÙˆØ¹Ø©:", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text("التوجيه إلى مجموعة:", color = AqyalGold, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     LazyColumn(Modifier.height(170.dp)) {
                         items(groups.groups, key = { it.id }) { group ->
                             Row(Modifier.fillMaxWidth().clickable {
@@ -2502,9 +2502,9 @@ private fun ChatHubScreen(
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(group.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("${group.members.size} Ø¹Ø¶Ùˆ", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                    Text("${group.members.size} عضو", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                                 }
-                                Text("ØªÙˆØ¬ÙŠÙ‡", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("توجيه", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -2514,7 +2514,7 @@ private fun ChatHubScreen(
                     DirectoryState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally), color = AqyalGold)
                     is DirectoryState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
                     is DirectoryState.Message -> Text(state.text, color = AqyalGold)
-                    DirectoryState.Ready -> if (directory.results.isEmpty()) Text("Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¬ Ù…Ø·Ø§Ø¨Ù‚Ø©", color = Color.Gray) else LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    DirectoryState.Ready -> if (directory.results.isEmpty()) Text("لا توجد نتائج مطابقة", color = Color.Gray) else LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         items(directory.results, key = { it.redId }) { person ->
                             Card(Modifier.fillMaxWidth()) {
                                 Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2526,59 +2526,59 @@ private fun ChatHubScreen(
                                             pendingForwardMessage = null
                                         } else target = person.redId
                                         showDirectory = false; directory.clear()
-                                    }) { Text(if (pendingForwardMessage != null) "ØªÙˆØ¬ÙŠÙ‡" else "Ù…Ø­Ø§Ø¯Ø«Ø©") }
-                                    Button({ directory.request(person) }) { Text("Ø¥Ø¶Ø§ÙØ©") }
+                                    }) { Text(if (pendingForwardMessage != null) "توجيه" else "محادثة") }
+                                    Button({ directory.request(person) }) { Text("إضافة") }
                                 }
                             }
                         }
                     }
-                    DirectoryState.Idle -> Text("Ø§Ø¨Ø­Ø« Ø¹Ù† Ø´Ø®Øµ Ø¯ÙˆÙ† Ù…Ø´Ø§Ø±ÙƒØ© Ø±Ù‚Ù… Ù‡Ø§ØªÙ Ø£Ùˆ Ø¬Ù‡Ø§Øª Ø§ØªØµØ§Ù„ Ø§Ù„Ø¬Ù‡Ø§Ø².", color = Color.Gray, fontSize = 12.sp)
+                    DirectoryState.Idle -> Text("ابحث عن شخص دون مشاركة رقم هاتف أو جهات اتصال الجهاز.", color = Color.Gray, fontSize = 12.sp)
                 }
             }
         },
-        confirmButton = { TextButton({ showDirectory = false; pendingForwardMessage = null; directory.clear() }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+        confirmButton = { TextButton({ showDirectory = false; pendingForwardMessage = null; directory.clear() }) { Text("إغلاق") } }
     )
-    if (create) AlertDialog(onDismissRequest = { create = false }, title = { Text("Ø¥Ù†Ø´Ø§Ø¡ Ù…Ø¬Ù…ÙˆØ¹Ø© Ø¬Ø¯ÙŠØ¯Ø©") },
+    if (create) AlertDialog(onDismissRequest = { create = false }, title = { Text("إنشاء مجموعة جديدة") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(80.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant).clickable { /* Future: Add Avatar upload */ }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.CameraAlt, "Ø¥Ø¶Ø§ÙØ© ØµÙˆØ±Ø©", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Default.CameraAlt, "إضافة صورة", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Ø§Ø³Ù… Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") }, singleLine = true)
-            OutlinedTextField(groupDescription, { groupDescription = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("Ø§Ù„ÙˆØµÙ â€” Ø§Ø®ØªÙŠØ§Ø±ÙŠ") }, minLines = 2, maxLines = 4)
-            Text("Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© Ù…Ø´ÙØ±Ø© Ø¨Ø´ÙƒÙ„ Ø§ÙØªØ±Ø§Ø¶ÙŠ. Ù†Ø³ØªØ®Ø¯Ù… Sender Keys ÙÙŠ Ø­Ø§Ù„Ø© ÙˆØ¬ÙˆØ¯ Ø£Ø¹Ø¶Ø§Ø¡.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("اسم المجموعة") }, singleLine = true)
+            OutlinedTextField(groupDescription, { groupDescription = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("الوصف â€” اختياري") }, minLines = 2, maxLines = 4)
+            Text("المجموعة مشفرة بشكل افتراضي. نستخدم Sender Keys في حالة وجود أعضاء.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         } },
-        confirmButton = { Button({ groups.create(name, groupDescription.trim().takeIf(String::isNotEmpty)) { create = false; name = ""; groupDescription = "" } }, enabled = name.trim().length in 2..100 && groups.state != GroupState.Saving) { Text("Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©") } },
-        dismissButton = { OutlinedButton({ create = false; name = ""; groupDescription = "" }) { Text("Ø¥Ù„ØºØ§Ø¡") } })
+        confirmButton = { Button({ groups.create(name, groupDescription.trim().takeIf(String::isNotEmpty)) { create = false; name = ""; groupDescription = "" } }, enabled = name.trim().length in 2..100 && groups.state != GroupState.Saving) { Text("إنشاء المجموعة") } },
+        dismissButton = { OutlinedButton({ create = false; name = ""; groupDescription = "" }) { Text("إلغاء") } })
     if (showJoinGroup) AlertDialog(
         onDismissRequest = { showJoinGroup = false; joinToken = "" },
-        title = { Text("Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù… Ø¥Ù„Ù‰ Ù…Ø¬Ù…ÙˆØ¹Ø©") },
-        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(joinToken, { joinToken = it.trim() }, Modifier.fillMaxWidth(), label = { Text("Ø±Ù…Ø² Ø§Ù„Ø¯Ø¹ÙˆØ©") }, singleLine = true); Text("Ù‚Ø¯ ÙŠØªØ·Ù„Ø¨ Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù… Ù…ÙˆØ§ÙÙ‚Ø© Ù…Ø§Ù„Ùƒ Ø£Ùˆ Ù…Ø³Ø¤ÙˆÙ„ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } },
-        confirmButton = { Button({ groups.joinWithToken(joinToken) { showJoinGroup = false; joinToken = "" } }, enabled = joinToken.length >= 32 && groups.state != GroupState.Saving) { Text("Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨") } },
-        dismissButton = { TextButton({ showJoinGroup = false; joinToken = "" }) { Text("Ø¥Ù„ØºØ§Ø¡") } }
+        title = { Text("الانضمام إلى مجموعة") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(joinToken, { joinToken = it.trim() }, Modifier.fillMaxWidth(), label = { Text("رمز الدعوة") }, singleLine = true); Text("قد يتطلب الانضمام موافقة مالك أو مسؤول المجموعة.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) } },
+        confirmButton = { Button({ groups.joinWithToken(joinToken) { showJoinGroup = false; joinToken = "" } }, enabled = joinToken.length >= 32 && groups.state != GroupState.Saving) { Text("إرسال الطلب") } },
+        dismissButton = { TextButton({ showJoinGroup = false; joinToken = "" }) { Text("إلغاء") } }
     )
     messageInfo?.let { info ->
         val richInfo = if (info.type == "RICH_TEXT") RichMessage.decode(info.plaintext) else null
         AlertDialog(
             onDismissRequest = { messageInfo = null },
-            title = { Text("Ù…Ø¹Ù„ÙˆÙ…Ø§Øª Ø§Ù„Ø±Ø³Ø§Ù„Ø©") },
+            title = { Text("معلومات الرسالة") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MessageInfoRow("Ø§Ù„Ù…Ø±Ø³Ù„", if (info.outgoing) "Ø£Ù†Øª" else info.senderRedId)
-                    MessageInfoRow("Ø§Ù„Ù†ÙˆØ¹", when (info.type) {
-                        "RICH_TEXT" -> "Ù†Øµ ØºÙ†ÙŠ"; "VOICE" -> "Ø±Ø³Ø§Ù„Ø© ØµÙˆØªÙŠØ©"; "STICKER" -> "Ù…Ù„ØµÙ‚"
-                        "IMAGE" -> "ØµÙˆØ±Ø©"; "VIDEO" -> "ÙÙŠØ¯ÙŠÙˆ"; "AUDIO" -> "ØµÙˆØª"; "FILE" -> "Ù…Ù„Ù"
+                    MessageInfoRow("المرسل", if (info.outgoing) "أنت" else info.senderRedId)
+                    MessageInfoRow("النوع", when (info.type) {
+                        "RICH_TEXT" -> "نص غني"; "VOICE" -> "رسالة صوتية"; "STICKER" -> "ملصق"
+                        "IMAGE" -> "صورة"; "VIDEO" -> "فيديو"; "AUDIO" -> "صوت"; "FILE" -> "ملف"
                         else -> info.type
                     })
-                    MessageInfoRow("Ø§Ù„ÙˆÙ‚Øª", java.text.DateFormat.getDateTimeInstance().format(java.util.Date(info.timestamp)))
-                    MessageInfoRow("Ø§Ù„Ø­Ø§Ù„Ø©", when (info.status) { "READ" -> "Ù…Ù‚Ø±ÙˆØ¡Ø© âœ“âœ“"; "DELIVERED" -> "ÙˆØµÙ„Øª âœ“âœ“"; else -> "Ø£ÙØ±Ø³Ù„Øª âœ“" })
-                    if (editedMessageIds.containsKey(info.id)) MessageInfoRow("ØªØ¹Ø¯ÙŠÙ„", "Ù†Ø¹Ù…")
-                    if (richInfo?.forwardOf != null) MessageInfoRow("Ø¥Ø¹Ø§Ø¯Ø© ØªÙˆØ¬ÙŠÙ‡", "Ù†Ø¹Ù…")
-                    if (richInfo?.replyTo != null) MessageInfoRow("Ø±Ø¯ Ø¹Ù„Ù‰", richInfo?.replyTo?.take(12).orEmpty())
-                    if (richInfo?.expiresAt != null) MessageInfoRow("Ø±Ø³Ø§Ù„Ø© Ù…Ø¤Ù‚ØªØ©", "Ù†Ø¹Ù…")
-                    MessageInfoRow("Ø§Ù„Ù…Ø¹Ø±Ù‘Ù", info.id.take(16))
+                    MessageInfoRow("الوقت", java.text.DateFormat.getDateTimeInstance().format(java.util.Date(info.timestamp)))
+                    MessageInfoRow("الحالة", when (info.status) { "READ" -> "مقروءة âœ“âœ“"; "DELIVERED" -> "وصلت âœ“âœ“"; else -> "أُرسلت âœ“" })
+                    if (editedMessageIds.containsKey(info.id)) MessageInfoRow("تعديل", "نعم")
+                    if (richInfo?.forwardOf != null) MessageInfoRow("إعادة توجيه", "نعم")
+                    if (richInfo?.replyTo != null) MessageInfoRow("رد على", richInfo?.replyTo?.take(12).orEmpty())
+                    if (richInfo?.expiresAt != null) MessageInfoRow("رسالة مؤقتة", "نعم")
+                    MessageInfoRow("المعرّف", info.id.take(16))
                 }
             },
-            confirmButton = { TextButton({ messageInfo = null }) { Text("Ø¥ØºÙ„Ø§Ù‚") } }
+            confirmButton = { TextButton({ messageInfo = null }) { Text("إغلاق") } }
         )
     }
 }
@@ -2630,8 +2630,8 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Ù…Ø±ÙƒØ² Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª Ø§Ù„Ø³ÙŠØ§Ø¯ÙŠ", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = CairoFamily)
-                Text("Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª Ø§Ù„ÙØ±Ø¯ÙŠØ©ØŒ Ø§Ù„Ù…Ø¤ØªÙ…Ø±Ø§ØªØŒ ÙˆØ§Ù„Ø¨Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø±", color = Color.LightGray, fontSize = 12.sp, fontFamily = TajawalFamily)
+                Text("مركز المكالمات السيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = CairoFamily)
+                Text("المكالمات الفردية، المؤتمرات، والبث المباشر", color = Color.LightGray, fontSize = 12.sp, fontFamily = TajawalFamily)
             }
             IconButton(
                 onClick = { showStatsScreen = true },
@@ -2641,41 +2641,41 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     .background(SovereignColors.SurfaceCard)
                     .border(1.dp, SovereignColors.GlassBorder, CircleShape)
             ) {
-                Icon(Icons.Filled.Poll, "Ø¥Ø­ØµØ§Ø¦ÙŠØ§Øª ÙˆØªØ­Ù„ÙŠÙ„Ø§Øª Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª", tint = SovereignColors.GoldNeon, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.Poll, "إحصائيات وتحليلات المكالمات", tint = SovereignColors.GoldNeon, modifier = Modifier.size(20.dp))
             }
         }
         Spacer(Modifier.height(12.dp))
         val callLauncher = rememberCallPermissionLauncher(
             needCamera = true,
             onGranted = { /* will be handled per action */ },
-            onDenied = { android.widget.Toast.makeText(context, "Ø§Ù„ØµÙ„Ø§Ø­ÙŠØ§Øª Ù…Ø·Ù„ÙˆØ¨Ø© Ù„Ù„Ø§ØªØµØ§Ù„", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "الصلاحيات مطلوبة للاتصال", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val privateCallLauncher = rememberCallPermissionLauncher(
             needCamera = true,
             onGranted = { showNewCallDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "Ù…Ø·Ù„ÙˆØ¨ Ø¥Ø°Ù† Ø§Ù„Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ† ÙˆØ§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ø¥Ø¬Ø±Ø§Ø¡ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø©", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا لإجراء المكالمة", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val groupCallLauncher = rememberCallPermissionLauncher(
             needCamera = true,
             onGranted = { showGroupCallPicker = true },
-            onDenied = { android.widget.Toast.makeText(context, "Ù…Ø·Ù„ÙˆØ¨ Ø¥Ø°Ù† Ø§Ù„Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ† ÙˆØ§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ø¬Ù…Ø§Ø¹ÙŠØ©", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمكالمة الجماعية", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val conferenceLauncher = rememberCallPermissionLauncher(
-            // ðŸ”§ Ø¥ØµÙ„Ø§Ø­ Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„Ø³ÙˆØ¯Ø§Ø¡: Ù…Ø¤ØªÙ…Ø± Ø§Ù„ÙÙŠØ¯ÙŠÙˆ ÙŠØ­ØªØ§Ø¬ Ø§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ â€” ÙƒØ§Ù†Øª needCamera=false ÙÙ„Ø§ ÙŠÙØ·Ù„Ø¨ Ø§Ù„Ø¥Ø°Ù†
+            // ðŸ”§ إصلاح الشاشة السوداء: مؤتمر الفيديو يحتاج الكاميرا â€” كانت needCamera=false فلا يُطلب الإذن
             needCamera = true,
             onGranted = { showJoinDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "Ù…Ø·Ù„ÙˆØ¨ Ø¥Ø°Ù† Ø§Ù„Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ† ÙˆØ§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ù„Ù…Ø¤ØªÙ…Ø±", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للمؤتمر", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val liveLauncher = rememberCallPermissionLauncher(
-            // ðŸ”§ Ø§Ù„Ø¨Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø± ÙƒÙ…Ø°ÙŠØ¹ ÙŠØ­ØªØ§Ø¬ ÙƒØ§Ù…ÙŠØ±Ø§ + Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ†
+            // ðŸ”§ البث المباشر كمذيع يحتاج كاميرا + ميكروفون
             needCamera = true,
             onGranted = { showLiveDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "Ù…Ø·Ù„ÙˆØ¨ Ø¥Ø°Ù† Ø§Ù„Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ† ÙˆØ§Ù„ÙƒØ§Ù…ÙŠØ±Ø§ Ù„Ù„Ø¨Ø«", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون والكاميرا للبث", android.widget.Toast.LENGTH_SHORT).show() }
         )
         val spaceLauncher = rememberCallPermissionLauncher(
             needCamera = false,
             onGranted = { showSpaceDialog = true },
-            onDenied = { android.widget.Toast.makeText(context, "Ù…Ø·Ù„ÙˆØ¨ Ø¥Ø°Ù† Ø§Ù„Ù…ÙŠÙƒØ±ÙˆÙÙˆÙ† Ù„Ø¯Ø®ÙˆÙ„ Ø§Ù„Ù…Ø³Ø§Ø­Ø© Ø§Ù„ØµÙˆØªÙŠØ©", android.widget.Toast.LENGTH_SHORT).show() }
+            onDenied = { android.widget.Toast.makeText(context, "مطلوب إذن الميكروفون لدخول المساحة الصوتية", android.widget.Toast.LENGTH_SHORT).show() }
         )
 
         CallsHubLaunchers(
@@ -2692,16 +2692,16 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         )
         Spacer(Modifier.height(14.dp))
 
-        // Ø´Ø±ÙŠØ· Ø§Ù„Ø¨Ø­Ø« Ø§Ù„Ù…Ø¨Ø§Ø´Ø± ÙÙŠ Ø§Ù„Ø³Ø¬Ù„
+        // شريط البحث المباشر في السجل
         OutlinedTextField(
             value = history.searchQuery,
             onValueChange = { history.searchQuery = it },
-            placeholder = { Text("Ø¨Ø­Ø« ÙÙŠ Ø³Ø¬Ù„ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª (Ø§Ø³Ù… Ø£Ùˆ Ù…Ø¹Ø±Ù Ø£Ùˆ Ø±Ù‚Ù…)...", fontSize = 12.sp, color = Color.Gray) },
+            placeholder = { Text("بحث في سجل المكالمات (اسم أو معرف أو رقم)...", fontSize = 12.sp, color = Color.Gray) },
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = SovereignColors.EmeraldNeon, modifier = Modifier.size(18.dp)) },
             trailingIcon = {
                 if (history.searchQuery.isNotEmpty()) {
                     IconButton(onClick = { history.searchQuery = "" }) {
-                        Icon(Icons.Filled.Close, "Ù…Ø³Ø­", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Close, "مسح", tint = Color.Gray, modifier = Modifier.size(16.dp))
                     }
                 }
             },
@@ -2722,16 +2722,16 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         Spacer(Modifier.height(10.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø´ÙØ±", color = Color.White.copy(0.8f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("السجل المشفر", color = Color.White.copy(0.8f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             TextButton(onClick = { showStatsScreen = true }) {
                 Icon(Icons.Filled.Poll, null, tint = SovereignColors.GoldNeon, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Ø§Ù„Ø¥Ø­ØµØ§Ø¦ÙŠØ§Øª", color = SovereignColors.GoldNeon, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                Text("الإحصائيات", color = SovereignColors.GoldNeon, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
             }
             TextButton(onClick = { showRecordings = true }) {
                 Icon(Icons.Default.FiberManualRecord, null, tint = AqyalGold, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Ø§Ù„ØªØ³Ø¬ÙŠÙ„Ø§Øª", color = AqyalGold, fontSize = 12.5.sp)
+                Text("التسجيلات", color = AqyalGold, fontSize = 12.5.sp)
             }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -2746,8 +2746,8 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         Spacer(Modifier.height(8.dp))
         when {
             history.loading -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
-            history.error != null -> EmptyState(Icons.Default.History, "ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ø³Ø¬Ù„", history.error.orEmpty())
-            visible.isEmpty() -> EmptyState(Icons.Default.History, "Ù„Ø§ ØªÙˆØ¬Ø¯ Ù…ÙƒØ§Ù„Ù…Ø§Øª ØªØ·Ø§Ø¨Ù‚ Ø§Ù„Ø¨Ø­Ø«", "Ø³ØªØ¸Ù‡Ø± Ù‡Ù†Ø§ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª Ø§Ù„Ù…ÙÙ„ØªØ±Ø© Ù…Ø¹ Ø´Ø§Ø±Ø© ØªÙˆØ¶Ø­ Ù…Ø³Ø§Ø± ÙŠÙˆÙ†Ø³ Ø£Ùˆ DINSTAR.")
+            history.error != null -> EmptyState(Icons.Default.History, "تعذر تحميل السجل", history.error.orEmpty())
+            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات تطابق البحث", "ستظهر هنا المكالمات المفلترة مع شارة توضح مسار يونس أو DINSTAR.")
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.id }) { CallHistoryRow(it) } }
         }
     }
@@ -2821,22 +2821,22 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         )
     }
 
-    // ðŸŽ™ï¸ Ø­ÙˆØ§Ø± Ø§Ù„Ù…Ø³Ø§Ø­Ø§Øª Ø§Ù„ØµÙˆØªÙŠØ© â€” ØºØ±ÙØ© ØµÙˆØªÙŠØ© Ø¬Ù…Ø§Ø¹ÙŠØ© (Ù…Ø¤ØªÙ…Ø± Ø¨Ù„Ø§ ÙÙŠØ¯ÙŠÙˆ)
+    // ðŸŽ™ï¸ حوار المساحات الصوتية â€” غرفة صوتية جماعية (مؤتمر بلا فيديو)
     if (showSpaceDialog) {
         AlertDialog(
             onDismissRequest = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false },
-            title = { Text("Ù…Ø³Ø§Ø­Ø© ØµÙˆØªÙŠØ© ÙŠÙˆÙ†Ø³") },
+            title = { Text("مساحة صوتية يونس") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Ù…Ø³Ø§Ø­Ø© ØµÙˆØªÙŠØ© Ù…Ø´ÙØ±Ø© Ø¹Ø¨Ø± Ø®Ø§Ø¯Ù… SFU â€” ØµÙˆØª ÙÙ‚Ø·ØŒ Ø¨Ù„Ø§ ÙƒØ§Ù…ÙŠØ±Ø§.\nØ§ØªØ±Ùƒ Ø§Ù„Ø­Ù‚Ù„ ÙØ§Ø±ØºÙ‹Ø§ Ù„Ø¥Ù†Ø´Ø§Ø¡ ØºØ±ÙØ© Ø¬Ø¯ÙŠØ¯Ø© Ø¨Ù…Ø¹Ø±Ù‘Ù ØªÙ„Ù‚Ø§Ø¦ÙŠ.",
+                        "مساحة صوتية مشفرة عبر خادم SFU â€” صوت فقط، بلا كاميرا.\nاترك الحقل فارغًا لإنشاء غرفة جديدة بمعرّف تلقائي.",
                         color = Color.Gray, fontSize = 14.sp
                     )
                     OutlinedTextField(
                         value = roomInput,
                         onValueChange = { roomInput = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø³Ø§Ø­Ø© (Ø§Ø®ØªÙŠØ§Ø±ÙŠ â€” Ù…Ø«Ø§Ù„: majlis-01)") },
+                        placeholder = { Text("معرف المساحة (اختياري â€” مثال: majlis-01)") },
                         singleLine = true
                     )
                     Row(
@@ -2844,7 +2844,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Checkbox(checked = isSpaceHost, onCheckedChange = { isSpaceHost = it })
-                        Text("Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù… ÙƒÙ…Ø¶ÙŠÙ (Ù…ØªØ­Ø¯Ø«)", fontSize = 14.sp)
+                        Text("الانضمام كمضيف (متحدث)", fontSize = 14.sp)
                     }
                 }
             },
@@ -2852,20 +2852,20 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Button(
                     onClick = {
                         showSpaceDialog = false
-                        // Ù…Ø¹Ø±Ù ØªÙ„Ù‚Ø§Ø¦ÙŠ ÙØ±ÙŠØ¯ Ø¥Ù† Ù„Ù… ÙŠÙØ¯Ø®Ù„ Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… ÙˆØ§Ø­Ø¯Ù‹Ø§
+                        // معرف تلقائي فريد إن لم يُدخل المستخدم واحدًا
                         val spaceId = roomInput.trim().ifBlank { "space-${ownUserId.lowercase()}-${System.currentTimeMillis() % 100000}" }
-                        // video=false â†’ Ù…Ø³Ø§Ø± ØµÙˆØªÙŠ ØµØ±Ù â€” Ù‡Ø°Ø§ Ù‡Ùˆ Ø§Ù„ÙØ±Ù‚ Ø¨ÙŠÙ† Ø§Ù„Ù…Ø³Ø§Ø­Ø© ÙˆØ§Ù„Ù…Ø¤ØªÙ…Ø± Ø§Ù„Ù…Ø±Ø¦ÙŠ
+                        // video=false â†’ مسار صوتي صرف â€” هذا هو الفرق بين المساحة والمؤتمر المرئي
                         ConferenceService.join(context, spaceId, ownUserId, false, asHost = isSpaceHost || roomInput.isBlank())
                         roomInput = ""
                         isSpaceHost = false
                     }
                 ) {
-                    Text(if (roomInput.isBlank()) "Ø¥Ù†Ø´Ø§Ø¡ Ù…Ø³Ø§Ø­Ø© Ø¬Ø¯ÙŠØ¯Ø©" else "Ø¯Ø®ÙˆÙ„ Ø§Ù„Ù…Ø³Ø§Ø­Ø©")
+                    Text(if (roomInput.isBlank()) "إنشاء مساحة جديدة" else "دخول المساحة")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSpaceDialog = false; roomInput = ""; isSpaceHost = false }) {
-                    Text("Ø¥Ù„ØºØ§Ø¡")
+                    Text("إلغاء")
                 }
             }
         )
@@ -3025,11 +3025,11 @@ private fun CallHistoryRow(call: CallHistoryItem) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isMissed = call.status == "MISSED"
     val isOutgoing = call.direction == "OUTGOING"
-    // Ø´Ø§Ø±Ø© Ø§Ù„Ø­Ø§Ù„Ø©: Ù…Ø±ÙÙˆØ¶Ø© / Ù…Ø´ØºÙˆÙ„ / ÙØ´Ù„Øª â€” Ø¨Ø¯Ù„ Ø£Ù† ØªØ¸Ù‡Ø± ÙƒÙ„Ù‡Ø§ "ÙØ§Ø¦ØªØ©"
+    // شارة الحالة: مرفوضة / مشغول / فشلت â€” بدل أن تظهر كلها "فائتة"
     val statusBadge = when (call.status) {
-        "REJECTED" -> "Ù…Ø±ÙÙˆØ¶Ø©" to Color(0xFFE53935)
-        "BUSY" -> "Ù…Ø´ØºÙˆÙ„" to Color(0xFFFF8F00)
-        "FAILED" -> "ÙØ´Ù„Øª" to Color(0xFFB0BEC5)
+        "REJECTED" -> "مرفوضة" to Color(0xFFE53935)
+        "BUSY" -> "مشغول" to Color(0xFFFF8F00)
+        "FAILED" -> "فشلت" to Color(0xFFB0BEC5)
         else -> null
     }
 
@@ -3057,7 +3057,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
     ) {
         val glyph = callTypeGlyph(call.type, call.route)
 
-        // Ø£ÙØªØ§Ø± Ø§Ù„Ù…ØªØµÙ„
+        // أفتار المتصل
         Box(
             modifier = Modifier
                 .size(50.dp)
@@ -3070,7 +3070,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
 
         Spacer(Modifier.width(14.dp))
 
-        // Ø§Ù„ØªÙØ§ØµÙŠÙ„
+        // التفاصيل
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -3099,7 +3099,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
             Spacer(Modifier.height(4.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Ø£ÙŠÙ‚ÙˆÙ†Ø© Ø§Ù„Ø³Ù‡Ù…
+                // أيقونة السهم
                 val arrowIcon = when {
                     isMissed -> Icons.AutoMirrored.Filled.CallMissed
                     isOutgoing -> Icons.AutoMirrored.Filled.CallMade
@@ -3118,7 +3118,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                         val date = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(call.startedAt.toLongOrNull() ?: System.currentTimeMillis()))
                         append(date)
                         if (durationText.isNotEmpty()) append(" â€¢ $durationText")
-                        if (call.route == "DINSTAR") append(" â€¢ Ø¹Ø¨Ø± Ø§Ù„Ù‡Ø§ØªÙ")
+                        if (call.route == "DINSTAR") append(" â€¢ عبر الهاتف")
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
@@ -3130,7 +3130,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
 
         Spacer(Modifier.width(8.dp))
 
-        // Ø²Ø± Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø³Ø±ÙŠØ¹
+        // زر الاتصال السريع
         IconButton(
             onClick = {
                 when (call.type) {
@@ -3146,7 +3146,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
         ) {
             Icon(
                 imageVector = if (call.type == "VIDEO" || call.type == "LIVE") Icons.Default.Videocam else Icons.Default.Call,
-                contentDescription = "Ø§ØªØµØ§Ù„",
+                contentDescription = "اتصال",
                 tint = YounesEmerald,
                 modifier = Modifier.size(24.dp)
             )
@@ -3157,7 +3157,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
 @Composable
 private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enabled: Boolean, onClick: () -> Unit = {}) = Column(horizontalAlignment = Alignment.CenterHorizontally) {
     FilledIconButton(onClick, Modifier.size(62.dp), enabled = enabled) { Icon(icon, title, tint = if (enabled) color else Color.Gray, modifier = Modifier.size(30.dp)) }
-    Text(title, fontSize = 11.sp); if (!enabled) Text("Ù‚ÙŠØ¯ Ø§Ù„Ø±Ø¨Ø·", color = Color.Gray, fontSize = 9.sp)
+    Text(title, fontSize = 11.sp); if (!enabled) Text("قيد الربط", color = Color.Gray, fontSize = 9.sp)
 }
 
 @Composable
@@ -3180,28 +3180,28 @@ private fun MoreScreen(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("Ù…Ø³Ø§Ø­Ø© ÙŠÙˆÙ†Ø³", style = MaterialTheme.typography.headlineMedium)
-        Text("Ø§Ù„Ù‡ÙˆÙŠØ© ÙˆØ§Ù„Ø®Ø¯Ù…Ø§Øª Ø§Ù„Ø³ÙŠØ§Ø¯ÙŠØ© ÙÙŠ Ù…ÙƒØ§Ù† ÙˆØ§Ø­Ø¯", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("مساحة يونس", style = MaterialTheme.typography.headlineMedium)
+        Text("الهوية والخدمات السيادية في مكان واحد", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Card(Modifier.fillMaxWidth().clickable { onProfile() }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(account.username.take(1))
                 Column(Modifier.padding(horizontal = 12.dp)) {
                     Text(account.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Ø§Ù„Ø¨Ø±ÙˆÙØ§ÙŠÙ„ Â· Ø§Ù„ØµÙˆØ±Ø© ÙˆØ§Ù„Ø¨Ø§ÙŠÙˆ ÙˆØ§Ù„Ù‡ÙˆÙŠØ©", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text("البروفايل Â· الصورة والبايو والهوية", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
-        MoreOption(Icons.Default.AdminPanelSettings, "Ø§Ù„Ø¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø³ÙŠØ§Ø¯ÙŠØ©", "Ù…Ø±Ø§Ù‚Ø¨Ø© Ø£Ø³Ø·ÙˆÙ„ DINSTAR ÙˆØ¹Ù…Ù„ÙŠØ§Øª ÙŠÙˆÙ†Ø³ Ù…Ø§Ø³ØªØ±", AqyalGold, click = onAdmin)
-        MoreOption(Icons.Default.SimCard, "Ø§Ù„Ù‡Ø§ØªÙ Ø§Ù„ÙŠÙ…Ù†ÙŠ", "Ø§ØªØµØ§Ù„ ØµÙˆØªÙŠ Ù…ØµØ±Ø­ Ø¹Ø¨Ø± DINSTAR ÙˆØ´Ø±Ø§Ø¦Ø­ Ø§Ù„Ø´Ø¨ÙƒØ§Øª Ø§Ù„ÙŠÙ…Ù†ÙŠØ©", AqyalGold, click = onDinstar)
-        MoreOption(Icons.Default.Security, "Ø§Ù„Ø®ØµÙˆØµÙŠØ© ÙˆØ§Ù„Ø£Ù…Ø§Ù†", "Ù…Ù† ÙŠØ±Ù‰ Ø¨ÙŠØ§Ù†Ø§ØªÙƒØŒ Ø§Ù„ØªØ´ÙÙŠØ±ØŒ ÙˆÙ‚ÙÙ„ Ø§Ù„Ø¨ØµÙ…Ø©", com.red.sovereign.ui.theme.YounesEmerald, click = onPrivacy)
-        MoreOption(Icons.Default.CloudSync, "Ø§Ù„Ù†Ø³Ø® Ø§Ù„Ø§Ø­ØªÙŠØ§Ø·ÙŠ", "ØªØ£Ù…ÙŠÙ† Ù…Ø­Ø§Ø¯Ø«Ø§ØªÙƒ ÙˆØ³Ø¬Ù„Ø§ØªÙƒ Ù…Ø­Ù„ÙŠØ§Ù‹", com.red.sovereign.ui.theme.YounesGold, click = onBackup)
-        MoreOption(Icons.Default.Devices, "Ø§Ù„Ø£Ø¬Ù‡Ø²Ø© Ø§Ù„Ù…ØªØµÙ„Ø©", "Ø¥Ø¯Ø§Ø±Ø© Ø¬Ù„Ø³Ø§Øª ÙŠÙˆÙ†Ø³ Ø¹Ù„Ù‰ ÙƒØ§ÙØ© Ø£Ø¬Ù‡Ø²ØªÙƒ", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onDevices)
-        MoreOption(Icons.Default.Settings, "Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø§Ù„Ø¹Ø§Ù…Ø©", "Ø§Ù„Ù‡ÙˆÙŠØ© ÙˆØ§Ù„Ø£Ø¬Ù‡Ø²Ø© ÙˆØ§Ù„Ø®Ø§Ø¯Ù… ÙˆØ§Ù„Ø¬Ù„Ø³Ø©", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
-        MoreOption(Icons.Default.Contacts, "Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„", "Ø§Ù„Ø£ØµØ¯Ù‚Ø§Ø¡ ÙˆØ·Ù„Ø¨Ø§Øª Ø§Ù„ØªÙˆØ§ØµÙ„ ÙˆØ§Ù„Ø­Ø¸Ø±", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
-        MoreOption(Icons.Default.Public, "Ø§Ù„Ù…Ø¬ØªÙ…Ø¹Ø§Øª ÙˆØ§Ù„Ù‚Ù†ÙˆØ§Øª", "Ù…Ø¬ØªÙ…Ø¹Ø§Øª Ø¹Ø§Ù…Ø© ÙˆÙ‚Ù†ÙˆØ§Øª â€” Ø§Ù†Ø¶Ù… ÙˆØªØ§Ø¨Ø¹ (Ø¹Ø§Ù…ØŒ Ù„ÙŠØ³ Ù…Ø´ÙØ±Ø§Ù‹)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
-        MoreOption(Icons.Default.Event, "Ø§Ù„ÙØ¹Ø§Ù„ÙŠØ§Øª", "ÙØ¹Ø§Ù„ÙŠØ§Øª Ù…Ø¬ØªÙ…Ø¹ÙŠØ© Ù…Ø¹ RSVP ÙˆØªØ³Ø¬ÙŠÙ„ Ø­Ø¶ÙˆØ±", Color(0xFFE8B84A), enabled = true, click = onEvents)
-        MoreOption(Icons.Default.Poll, "Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª", "ØªØµÙˆÙŠØª Ù…Ø¬ØªÙ…Ø¹ÙŠ Ù…Ø¹ Ù†ØªØ§Ø¦Ø¬ ÙÙˆØ±ÙŠØ© ÙˆÙ†ÙØ³ÙŽÙ… Ù…Ø¦ÙˆÙŠØ©", Color(0xFF65D7E7), enabled = true, click = onPolls)
-        MoreOption(Icons.Default.NetworkCheck, "Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª PSTN / DINSTAR", "Ø¨ÙˆØ§Ø¨Ø© DINSTARØŒ Ø­Ø§Ù„Ø© Ø§Ù„Ø´Ø±Ø§Ø¦Ø­ØŒ SMSCØŒ Ø§Ø®ØªØ¨Ø§Ø± SIP Bridge", AqyalGold, click = onPstnConfig)
+        MoreOption(Icons.Default.AdminPanelSettings, "الإدارة السيادية", "مراقبة أسطول DINSTAR وعمليات يونس ماستر", AqyalGold, click = onAdmin)
+        MoreOption(Icons.Default.SimCard, "الهاتف اليمني", "اتصال صوتي مصرح عبر DINSTAR وشرائح الشبكات اليمنية", AqyalGold, click = onDinstar)
+        MoreOption(Icons.Default.Security, "الخصوصية والأمان", "من يرى بياناتك، التشفير، وقفل البصمة", com.red.sovereign.ui.theme.YounesEmerald, click = onPrivacy)
+        MoreOption(Icons.Default.CloudSync, "النسخ الاحتياطي", "تأمين محادثاتك وسجلاتك محلياً", com.red.sovereign.ui.theme.YounesGold, click = onBackup)
+        MoreOption(Icons.Default.Devices, "الأجهزة المتصلة", "إدارة جلسات يونس على كافة أجهزتك", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onDevices)
+        MoreOption(Icons.Default.Settings, "الإعدادات العامة", "الهوية والأجهزة والخادم والجلسة", com.red.sovereign.ui.theme.YounesEmerald, click = onSettings)
+        MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
+        MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات â€” انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
+        MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
+        MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
+        MoreOption(Icons.Default.NetworkCheck, "إعدادات PSTN / DINSTAR", "بوابة DINSTAR، حالة الشرائح، SMSC، اختبار SIP Bridge", AqyalGold, click = onPstnConfig)
     }
 }
 
@@ -3224,7 +3224,7 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
     var tab by remember { mutableIntStateOf(0) }
     val smsVm: com.red.sovereign.features.sms.SmsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     var inChat by remember { mutableStateOf(false) }
-    // ðŸ“ž Ø£ÙƒØ«Ø± Ø§Ù„Ø£Ø±Ù‚Ø§Ù… Ø§Ù„ÙŠÙ…Ù†ÙŠØ© Ø§ØªØµØ§Ù„Ù‹Ø§ â€” ØªÙØ´ØªÙ‚ Ù…Ù† Ø³Ø¬Ù„ DINSTAR Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ (Ù„Ø§ Ø¨ÙŠØ§Ù†Ø§Øª ÙˆÙ‡Ù…ÙŠØ©)
+    // ðŸ“ž أكثر الأرقام اليمنية اتصالًا â€” تُشتق من سجل DINSTAR الحقيقي (لا بيانات وهمية)
     val dinstarCalls = history?.calls?.filter { it.route == "DINSTAR" }.orEmpty()
     val favorites = dinstarCalls.groupingBy { it.peerLabel.ifBlank { it.peerId } }.eachCount()
         .entries.sortedByDescending { it.value }.take(8).map { it.key }
@@ -3232,23 +3232,23 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
         Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
             Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.SimCard, null, tint = AqyalGold, modifier = Modifier.size(35.dp)); Column(Modifier.padding(start = 12.dp)) {
-                    Text("Ø§Ù„Ù‡Ø§ØªÙ Ø§Ù„ÙŠÙ…Ù†ÙŠ Ø¹Ø¨Ø± DINSTAR", fontWeight = FontWeight.Bold, color = AqyalGold)
-                    Text(if (account.pstnEnabled) "Ù…ØµØ±Ø­ Ù„Ùƒ â€” Ù…ÙƒØ§Ù„Ù…Ø§Øª ØµÙˆØªÙŠØ© ÙÙ‚Ø·" else "ØºÙŠØ± Ù…ÙØ¹Ù„ â€” ÙŠÙØ¹Ù„Ù‡ Ø§Ù„Ù…Ø³Ø¤ÙˆÙ„ Ù…Ù† Ø§Ù„Ù„ÙˆØ­Ø©", fontSize = 12.sp)
+                    Text("الهاتف اليمني عبر DINSTAR", fontWeight = FontWeight.Bold, color = AqyalGold)
+                    Text(if (account.pstnEnabled) "مصرح لك â€” مكالمات صوتية فقط" else "غير مفعل â€” يفعله المسؤول من اللوحة", fontSize = 12.sp)
                 }
             }
         }
         PrimaryTabRow(tab) {
             listOf(
-                Icons.Default.Dialpad to "Ø§Ù„Ø£Ø±Ù‚Ø§Ù…",
-                Icons.AutoMirrored.Filled.Message to "Ø§Ù„Ø±Ø³Ø§Ø¦Ù„",
-                Icons.Default.Star to "Ø§Ù„Ù…ÙØ¶Ù„Ø©",
-                Icons.Default.History to "Ø§Ù„Ø³Ø¬Ù„",
-                Icons.Default.Contacts to "Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„"
+                Icons.Default.Dialpad to "الأرقام",
+                Icons.AutoMirrored.Filled.Message to "الرسائل",
+                Icons.Default.Star to "المفضلة",
+                Icons.Default.History to "السجل",
+                Icons.Default.Contacts to "جهات الاتصال"
             ).forEachIndexed { i, item -> Tab(tab == i, { tab = i }, icon = { Icon(item.first, null) }, text = { Text(item.second, fontSize = 10.sp) }) }
         }
         when (tab) {
             0 -> DialPad(account.pstnEnabled, viewModel, prefillNumber)
-            // ðŸ“¨ Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ â€” SMS Ø§Ø­ØªØ±Ø§ÙÙŠ: Ù…Ø­Ø§Ø¯Ø«Ø§Øª + Ø¯Ø±Ø¯Ø´Ø© + Ø¥Ø±Ø³Ø§Ù„/Ø§Ø³ØªÙ‚Ø¨Ø§Ù„/ØªØ³Ù„ÙŠÙ…
+            // ðŸ“¨ الرسائل â€” SMS احترافي: محادثات + دردشة + إرسال/استقبال/تسليم
             1 -> if (inChat && smsVm.chatNumber != null) {
                 com.red.sovereign.features.sms.SmsChatScreen(smsVm, onBack = {
                     smsVm.closeChat(); inChat = false
@@ -3258,9 +3258,9 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
                     smsVm.openChat(it); inChat = true
                 })
             }
-            // â­ Ø§Ù„Ù…ÙØ¶Ù„Ø© â€” Ø£ÙƒØ«Ø± Ø§Ù„Ø£Ø±Ù‚Ø§Ù… Ø§ØªØµØ§Ù„Ù‹Ø§ Ø¹Ø¨Ø± DINSTAR Ù…Ø¹ Ø¥Ø¹Ø§Ø¯Ø© Ø§ØªØµØ§Ù„ Ø¨Ù†Ù‚Ø±Ø©
+            // â­ المفضلة â€” أكثر الأرقام اتصالًا عبر DINSTAR مع إعادة اتصال بنقرة
             2 -> if (favorites.isEmpty()) {
-                EmptyState(Icons.Default.Star, "Ù„Ø§ Ù…ÙØ¶Ù„Ø© Ø¨Ø¹Ø¯", "Ø³ØªØ¸Ù‡Ø± Ù‡Ù†Ø§ Ø£ÙƒØ«Ø± Ø§Ù„Ø£Ø±Ù‚Ø§Ù… Ø§Ù„ÙŠÙ…Ù†ÙŠØ© Ø§ØªØµØ§Ù„Ù‹Ø§ Ø¹Ø¨Ø± DINSTAR ØªÙ„Ù‚Ø§Ø¦ÙŠÙ‹Ø§")
+                EmptyState(Icons.Default.Star, "لا مفضلة بعد", "ستظهر هنا أكثر الأرقام اليمنية اتصالًا عبر DINSTAR تلقائيًا")
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(favorites.size) { i ->
@@ -3273,22 +3273,22 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
                                     Text(op.name, color = op.brandColor, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
                                 }
                                 IconButton(onClick = { if (account.pstnEnabled) { viewModel.clearPstnState(); viewModel.dialPstn(number) } }, enabled = account.pstnEnabled) {
-                                    Icon(Icons.Default.Call, "Ø§ØªØµØ§Ù„", tint = if (account.pstnEnabled) YounesEmerald else Color.Gray)
+                                    Icon(Icons.Default.Call, "اتصال", tint = if (account.pstnEnabled) YounesEmerald else Color.Gray)
                                 }
                             }
                         }
                     }
                 }
             }
-            // ðŸ—‚ï¸ Ø³Ø¬Ù„ DINSTAR Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ â€” Ù…ÙÙ„ØªØ± Ù…Ù† Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…ÙˆØ­Ø¯
+            // ðŸ—‚ï¸ سجل DINSTAR الحقيقي â€” مفلتر من السجل الموحد
             3 -> if (dinstarCalls.isEmpty()) {
-                EmptyState(Icons.Default.History, "Ù„Ø§ Ù…ÙƒØ§Ù„Ù…Ø§Øª DINSTAR Ø¨Ø¹Ø¯", "Ø³ØªØ¸Ù‡Ø± Ù‡Ù†Ø§ ÙƒÙ„ Ù…ÙƒØ§Ù„Ù…Ø§ØªÙƒ Ø§Ù„Ù‡Ø§ØªÙÙŠØ© Ø§Ù„ÙŠÙ…Ù†ÙŠØ©")
+                EmptyState(Icons.Default.History, "لا مكالمات DINSTAR بعد", "ستظهر هنا كل مكالماتك الهاتفية اليمنية")
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(dinstarCalls.size) { i -> CallHistoryRow(dinstarCalls[i]) }
                 }
             }
-            else -> EmptyState(Icons.Default.Contacts, "Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„", "Ø§Ø®ØªØ± Ø¬Ù‡Ø© Ù…Ù† ØªØ¨ÙˆÙŠØ¨ Ø¬Ù‡Ø§Øª Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ Ø«Ù… Ø§Ø·Ù„Ø¨Ù‡Ø§ Ø¹Ø¨Ø± DINSTAR")
+            else -> EmptyState(Icons.Default.Contacts, "جهات الاتصال", "اختر جهة من تبويب جهات الاتصال الرئيسي ثم اطلبها عبر DINSTAR")
         }
     }
 }
@@ -3296,9 +3296,9 @@ private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: Auth
 @Composable
 private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String = "") {
     var number by remember(prefill) { mutableStateOf(prefill) }
-    // ðŸ“ž Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ù†Ø´Ø·Ø© Ù†Ø³ØªØ¨Ø¯Ù„ Ø§Ù„Ù„ÙˆØ­Ø© Ø¨Ø´Ø§Ø´Ø© Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„ÙØ§Ø®Ø±Ø© ÙƒØ§Ù…Ù„Ø© Ø§Ù„ØªØ­ÙƒÙ…
+    // ðŸ“ž أثناء المكالمة النشطة نستبدل اللوحة بشاشة الاتصال الفاخرة كاملة التحكم
     val pstnState = viewModel.pstnState
-    // Ù…ÙƒØ§Ù„Ù…Ø© ÙˆØ§Ø±Ø¯Ø©: Ø´Ø§Ø´Ø© Ù‚Ø¨ÙˆÙ„/Ø±ÙØ¶ â€” ÙƒØ§Ù†Øª Ù…Ø¹Ø·Ù‘Ù„Ø© (Ù„Ø§ ØªÙˆØ¬Ø¯ ÙˆØ§Ø¬Ù‡Ø© ØªØ±Ø¨Ø·Ù‡Ø§)
+    // مكالمة واردة: شاشة قبول/رفض â€” كانت معطّلة (لا توجد واجهة تربطها)
     val incomingPstn = viewModel.incomingPstnCall
     if (incomingPstn != null) {
         com.red.sovereign.features.pstn.IncomingPstnCallScreen(
@@ -3322,8 +3322,8 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String 
     }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(number.ifEmpty { "Ø£Ø¯Ø®Ù„ Ø§Ù„Ø±Ù‚Ù…" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            IconButton({ if (number.isNotEmpty()) number = number.dropLast(1) }) { Icon(Icons.AutoMirrored.Filled.Backspace, "Ø­Ø°Ù") }
+            Text(number.ifEmpty { "أدخل الرقم" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            IconButton({ if (number.isNotEmpty()) number = number.dropLast(1) }) { Icon(Icons.AutoMirrored.Filled.Backspace, "حذف") }
         }
         com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
@@ -3334,22 +3334,22 @@ private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String 
         listOf(listOf("1","2","3"), listOf("4","5","6"), listOf("7","8","9"), listOf("*","0","#")).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { row.forEach { digit -> FilledIconButton({ number += digit }, Modifier.size(64.dp)) { Text(digit, fontSize = 23.sp) } } }
         }
-        Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" Ø§ØªØµØ§Ù„ ØµÙˆØªÙŠ Ø¹Ø¨Ø± DINSTAR") }
+        Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
         when (val state = viewModel.pstnState) {
             PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
             PstnState.Bridging -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("Ø¬Ø§Ø±ÙŠ ØªØ¬Ù‡ÙŠØ² Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ø¢Ù…Ù†...", color = AqyalGold, fontSize = 13.sp)
+                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري تجهيز الاتصال الآمن...", color = AqyalGold, fontSize = 13.sp)
             }
             PstnState.Registering -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("Ø¬Ø§Ø±ÙŠ Ø§Ù„ØªØ³Ø¬ÙŠÙ„ ÙÙŠ Ø¨ÙˆØ§Ø¨Ø© Ø§Ù„ØµÙˆØª...", color = AqyalGold, fontSize = 13.sp)
+                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري التسجيل في بوابة الصوت...", color = AqyalGold, fontSize = 13.sp)
             }
             PstnState.Ringing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(18.dp)); Text("Ø¬Ø§Ø±ÙŠ Ø±Ù†ÙŠÙ† Ø§Ù„Ù‡Ø§ØªÙ...", color = YounesEmerald, fontSize = 13.sp)
+                CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(18.dp)); Text("جاري رنين الهاتف...", color = YounesEmerald, fontSize = 13.sp)
             }
 is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
             PstnState.Idle -> Unit
-            is PstnState.Started -> Unit // Ø¹ÙØ§Ù„Ø¬Øª Ø£Ø¹Ù„Ø§Ù‡ Ø¨Ø´Ø§Ø´Ø© Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„ÙƒØ§Ù…Ù„Ø©
-            is PstnState.Incoming -> Unit // Ø¹ÙÙˆÙ„Ø¬Øª Ø£Ø¹Ù„Ø§Ù‡ Ø¨Ø´Ø§Ø´Ø© Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„ÙˆØ§Ø±Ø¯Ø©
+            is PstnState.Started -> Unit // عُالجت أعلاه بشاشة الاتصال الكاملة
+            is PstnState.Incoming -> Unit // عُولجت أعلاه بشاشة المكالمة الواردة
         }
     }
 }
@@ -3373,44 +3373,44 @@ private fun CreateSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Ø¥Ù†Ø´Ø§Ø¡ ÙÙŠ ÙŠÙˆÙ†Ø³", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                if (mode != "menu") TextButton({ mode = "menu" }) { Text("Ø§Ù„Ø®ÙŠØ§Ø±Ø§Øª") }
+                Text("إنشاء في يونس", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (mode != "menu") TextButton({ mode = "menu" }) { Text("الخيارات") }
             }
             when (mode) {
                 "post" -> {
-                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("Ø§ÙƒØªØ¨ Ù…Ù†Ø´ÙˆØ±Ø§Ù‹ØŒ Ø³Ù„Ø³Ù„Ø©ØŒ ÙÙƒØ±Ø© Ø·ÙˆÙŠÙ„Ø©ØŒ Ø£Ùˆ Ø¥Ø¹Ù„Ø§Ù†Ø§Ù‹ Ù…Ø­Ù„ÙŠØ§Ù‹â€¦") }, maxLines = 7)
+                    OutlinedTextField(text, { text = it.take(2000) }, Modifier.fillMaxWidth().height(150.dp), placeholder = { Text("اكتب منشوراً، سلسلة، فكرة طويلة، أو إعلاناً محلياً…") }, maxLines = 7)
                     Text("${text.length}/2000", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("Ù†Ø´Ø± Ù…Ø­Ù„ÙŠ") }
+                    Button({ if (text.isNotBlank()) onPost(text.trim()) }, Modifier.fillMaxWidth(), enabled = text.isNotBlank() && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر محلي") }
                 }
                 "poll" -> {
-                    OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("Ø³Ø¤Ø§Ù„ Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹") }, maxLines = 3)
+                    OutlinedTextField(pollQuestion, { pollQuestion = it.take(280) }, Modifier.fillMaxWidth(), label = { Text("سؤال الاستطلاع") }, maxLines = 3)
                     pollOptions.forEachIndexed { index, value ->
                         OutlinedTextField(
                             value = value,
                             onValueChange = { next -> pollOptions = pollOptions.toMutableList().also { it[index] = next.take(80) } },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Ø§Ù„Ø®ÙŠØ§Ø± ${index + 1}") },
+                            label = { Text("الخيار ${index + 1}") },
                             singleLine = true
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(1 to "Ø³Ø§Ø¹Ø©", 24 to "ÙŠÙˆÙ…", 72 to "3 Ø£ÙŠØ§Ù…", 168 to "Ø£Ø³Ø¨ÙˆØ¹").forEach { option ->
+                        listOf(1 to "ساعة", 24 to "يوم", 72 to "3 أيام", 168 to "أسبوع").forEach { option ->
                             FilterChip(selected = pollHours == option.first, onClick = { pollHours = option.first }, label = { Text(option.second) })
                         }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("Ø¥Ø¶Ø§ÙØ© Ø®ÙŠØ§Ø±") }
-                        OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("Ø­Ø°Ù Ø®ÙŠØ§Ø±") }
+                        OutlinedButton({ if (pollOptions.size < 6) pollOptions = pollOptions + "" }, Modifier.weight(1f), enabled = pollOptions.size < 6) { Text("إضافة خيار") }
+                        OutlinedButton({ if (pollOptions.size > 2) pollOptions = pollOptions.dropLast(1) }, Modifier.weight(1f), enabled = pollOptions.size > 2) { Text("حذف خيار") }
                     }
                     val validPoll = pollQuestion.isNotBlank() && pollOptions.count { it.trim().length >= 2 } >= 2
-                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("Ù†Ø´Ø± Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹") }
+                    Button({ onPoll(pollQuestion, pollOptions, pollHours) }, Modifier.fillMaxWidth(), enabled = validPoll && !publishing) { if (publishing) CircularProgressIndicator(Modifier.size(20.dp)) else Text("نشر الاستطلاع") }
                 }
                 else -> {
-                    CreateOption(Icons.Default.DynamicFeed, "Ù…Ù†Ø´ÙˆØ± Ø£Ùˆ Ø³Ù„Ø³Ù„Ø©", "Ù†Øµ Ø·ÙˆÙŠÙ„ØŒ Ø§Ù‚ØªØ¨Ø§Ø³ØŒ Ù†Ù‚Ø§Ø´ Ù…Ø­Ù„ÙŠ", true) { mode = "post" }
-                    CreateOption(Icons.Default.Forum, "Ø§Ø³ØªØ·Ù„Ø§Ø¹ ØªÙØ§Ø¹Ù„ÙŠ", "Ø³Ø¤Ø§Ù„ ÙˆØ®ÙŠØ§Ø±Ø§Øª ÙˆØªØµÙˆÙŠØª ÙØ¹Ù„ÙŠ Ø¹Ø¨Ø± Ø§Ù„Ø®Ø§Ø¯Ù…", true) { mode = "poll" }
-                    CreateOption(Icons.Default.AddCircle, "Ø­Ø§Ù„Ø© 24 Ø³Ø§Ø¹Ø©", "ØµÙˆØ±Ø© Ø£Ùˆ ÙÙŠØ¯ÙŠÙˆ ÙŠÙØ­Ø°Ù ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹", true, onStory)
-                    CreateOption(Icons.Default.LiveTv, "Ø¨Ø« Ù…Ø¨Ø§Ø´Ø±", "ÙÙŠØ¯ÙŠÙˆ Ø¹Ø¨Ø± SFU Ø§Ù„Ù…Ø­Ù„ÙŠ", true, onLive)
-                    CreateOption(Icons.Default.Explore, "Ø§Ø³ØªÙƒØ´Ø§Ù ÙŠÙˆÙ†Ø³", "Ø§ÙƒØªØ´Ù Ø§Ù„Ø¨Ø«ÙˆØ« ÙˆØ§Ù„ØºØ±Ù Ø§Ù„ØµÙˆØªÙŠØ© Ø§Ù„Ù†Ø´Ø·Ø©", true, onExplore)
+                    CreateOption(Icons.Default.DynamicFeed, "منشور أو سلسلة", "نص طويل، اقتباس، نقاش محلي", true) { mode = "post" }
+                    CreateOption(Icons.Default.Forum, "استطلاع تفاعلي", "سؤال وخيارات وتصويت فعلي عبر الخادم", true) { mode = "poll" }
+                    CreateOption(Icons.Default.AddCircle, "حالة 24 ساعة", "صورة أو فيديو يُحذف تلقائياً", true, onStory)
+                    CreateOption(Icons.Default.LiveTv, "بث مباشر", "فيديو عبر SFU المحلي", true, onLive)
+                    CreateOption(Icons.Default.Explore, "استكشاف يونس", "اكتشف البثوث والغرف الصوتية النشطة", true, onExplore)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -3422,9 +3422,9 @@ private fun CreateSheet(
 
 @Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
 /**
- * Ù…Ø®Ø²Ù† ØªØµÙˆÙŠØªØ§Øª Ø§Ø³ØªØ·Ù„Ø§Ø¹Ø§Øª Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø© (E2EE): pollId -> (Ù…ØµÙˆØª -> ÙÙ‡Ø±Ø³ Ø§Ù„Ø®ÙŠØ§Ø±).
- * ØªÙØ­Ø¯ÙŽÙ‘Ø« Ù…Ù† Ø±Ø³Ø§Ø¦Ù„ POLL_VOTE Ø§Ù„ÙˆØ§Ø±Ø¯Ø©ØŒ ÙˆØªÙÙ‚Ø±Ø£Ù‡Ø§ Ø¨Ø·Ø§Ù‚Ø§Øª Ø§Ù„Ø§Ø³ØªØ·Ù„Ø§Ø¹.
- * ØªÙØ®Ø²ÙŽÙ‘Ù† Ø§Ù„Ù‚ÙŠÙ… ÙƒØ®Ø±ÙŠØ·Ø© Ø«Ø§Ø¨ØªØ© Ø¯Ø§Ø®Ù„ Ø®Ø±ÙŠØ·Ø© Ù…Ù„Ø§Ø­Ø¸Ø© Ù„Ø¶Ù…Ø§Ù† Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªÙˆÙ„ÙŠÙ Ø¹Ù†Ø¯ Ø£ÙŠ ØµÙˆØª.
+ * مخزن تصويتات استطلاعات المجموعة (E2EE): pollId -> (مصوت -> فهرس الخيار).
+ * تُحدَّث من رسائل POLL_VOTE الواردة، وتُقرأها بطاقات الاستطلاع.
+ * تُخزَّن القيم كخريطة ثابتة داخل خريطة ملاحظة لضمان إعادة التوليف عند أي صوت.
  */
 private object PollVoteStore {
     val votersByPoll = androidx.compose.runtime.mutableStateMapOf<String, Map<String, Int>>()
@@ -3441,7 +3441,7 @@ private object PollVoteStore {
     fun myVote(pollId: String, me: String): Int? = votersByPoll[pollId]?.get(me)
 }
 
-/** Ù†Øµ Ø¨Ø­Ø«ÙŠ Ù†Ø¸ÙŠÙ Ù„Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø­Ù„ÙŠ: ÙŠØ³ØªØ¨Ø¹Ø¯ Ø¥Ø¯Ø®Ø§Ù„Ø§Øª Ø§Ù„Ù†Ø¸Ø§Ù… ÙˆÙŠÙÙƒ Ø´ÙŠÙØ±Ø© Ø£Ø³Ù…Ø§Ø¡ Ø§Ù„ÙˆØ³Ø§Ø¦Ø·. */
+/** نص بحثي نظيف للسجل المحلي: يستبعد إدخالات النظام ويفك شيفرة أسماء الوسائط. */
 private fun searchDisplayText(entity: com.red.sovereign.core.database.LocalHistoryEntity): String {
     val text = entity.encryptedPlaintext.toString(Charsets.UTF_8)
     return when {
@@ -3452,7 +3452,7 @@ private fun searchDisplayText(entity: com.red.sovereign.core.database.LocalHisto
         entity.messageType == "GROUP_MESSAGE" || entity.messageType in setOf("FILE", "IMAGE", "VIDEO", "AUDIO", "VOICE", "STICKER") ->
             runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.AttachmentManifest>(text) }.getOrNull()?.name
                 ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.VoiceManifest>(text) }.getOrNull()?.name
-                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { if (it.emoji.isNotBlank()) it.emoji else "Ù…Ù„ØµÙ‚" }
+                ?: runCatching { ATTACHMENT_JSON.decodeFromString<com.red.sovereign.media.StickerMessagePayload>(text) }.getOrNull()?.let { if (it.emoji.isNotBlank()) it.emoji else "ملصق" }
                 ?: text
         else -> text
     }
@@ -3464,7 +3464,7 @@ private fun InlinePollCard(
     myRedId: String? = null,
     onVote: ((String, Int?) -> Unit)? = null
 ) {
-    // ØªØµÙˆÙŠØªØ§Øª Ù…ØªØ²Ø§Ù…Ù†Ø© E2EE (Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø§Øª)Ø› ÙˆØ¥Ù„Ø§ ÙŠØ¹Ø±Ø¶ Ø§Ù„Ø¨Ø·Ø§Ù‚Ø© Ù…Ø­Ù„ÙŠØ§Ù‹ ÙÙ‚Ø·
+    // تصويتات متزامنة E2EE (المجموعات)؛ وإلا يعرض البطاقة محلياً فقط
     val synced = myRedId != null && onVote != null
     val votes = if (synced) PollVoteStore.counts(poll.pollId, poll.options.size) else poll.votes
     val myVote = if (synced) myRedId?.let { PollVoteStore.myVote(poll.pollId, it) } else null
@@ -3477,7 +3477,7 @@ private fun InlinePollCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Forum, null, tint = YounesEmerald, modifier = Modifier.size(18.dp))
-                Text(" Ø§Ø³ØªØ·Ù„Ø§Ø¹ Ø§Ù„Ù…Ø¬Ù…ÙˆØ¹Ø©", style = MaterialTheme.typography.labelMedium, color = YounesEmerald, fontWeight = FontWeight.Bold)
+                Text(" استطلاع المجموعة", style = MaterialTheme.typography.labelMedium, color = YounesEmerald, fontWeight = FontWeight.Bold)
             }
             Text(poll.question, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             poll.options.forEachIndexed { index, option ->
@@ -3504,8 +3504,8 @@ private fun InlinePollCard(
                 }
             }
             Text(
-                if (synced) "Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø£ØµÙˆØ§Øª: $total Â· ØµÙˆØªÙƒ: ${myVote?.let { poll.options.getOrNull(it) } ?: "Ù„Ø§ Ø´ÙŠØ¡"}"
-                else "Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø£ØµÙˆØ§Øª: $total",
+                if (synced) "إجمالي الأصوات: $total Â· صوتك: ${myVote?.let { poll.options.getOrNull(it) } ?: "لا شيء"}"
+                else "إجمالي الأصوات: $total",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -3524,34 +3524,34 @@ private fun VoiceRecordingControls(
     var dragOffsetY by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0f) }
 
     Column {
-        // âºï¸ Ø´Ø±ÙŠØ· Ø§Ù„ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¹Ù„ÙˆÙŠ
+        // âºï¸ شريط التسجيل العلوي
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(if (voiceState.paused) AqyalGold else MaterialTheme.colorScheme.error))
             Spacer(Modifier.width(6.dp))
             Text(
-                if (voiceState.paused) "Ù…ØªÙˆÙ‚Ù Ù…Ø¤Ù‚ØªÙ‹Ø§ ${formatDuration(voiceMessages.elapsedSeconds)}"
-                else "â— ØªØ³Ø¬ÙŠÙ„ ${formatDuration(voiceMessages.elapsedSeconds)}",
+                if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}"
+                else "â— تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1f)
             )
             IconButton(voiceMessages::togglePause) {
-                Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "Ø§Ø³ØªØ¦Ù†Ø§Ù" else "Ø¥ÙŠÙ‚Ø§Ù Ù…Ø¤Ù‚Øª")
+                Icon(if (voiceState.paused) Icons.Default.PlayArrow else Icons.Default.Pause, if (voiceState.paused) "استئناف" else "إيقاف مؤقت")
             }
-            TextButton(voiceMessages::cancel) { Text("Ø¥Ù„ØºØ§Ø¡") }
+            TextButton(voiceMessages::cancel) { Text("إلغاء") }
         }
         VoiceWaveform(voiceMessages.waveform, MaterialTheme.colorScheme.error, Modifier.fillMaxWidth().height(34.dp))
 
-        // ðŸŽšï¸ Ù…Ù†Ø·Ù‚Ø© Ø§Ù„Ø³Ø­Ø¨ â€” Ø¥Ø°Ø§ Ø§Ù„Ø³Ø­Ø¨ Ù„Ù„ÙŠØ³Ø§Ø±/Ø§Ù„Ø£Ø³ÙÙ„ = Ø¥Ù„ØºØ§Ø¡ ØªØ¯Ø±ÙŠØ¬ÙŠ
+        // ðŸŽšï¸ منطقة السحب â€” إذا السحب لليسار/الأسفل = إلغاء تدريجي
         if (cancelProgress > 0f) {
             Text(
-                "â†©ï¸ Ø§Ø³Ø­Ø¨ Ù„Ù…Ø¹Ø§ÙˆØ¯Ø© Ø§Ù„ØªØ³Ø¬ÙŠÙ„ â€¢ ${(cancelProgress * 100).toInt()}%",
+                "â†©ï¸ اسحب لمعاودة التسجيل â€¢ ${(cancelProgress * 100).toInt()}%",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.labelSmall
             )
         }
 
-        // ðŸ”’ Ø¥Ø°Ø§ Ù‚ÙÙÙ„ Ø§Ù„ØªØ³Ø¬ÙŠÙ„ØŒ Ø§Ø¹Ø±Ø¶ Ø£Ø²Ø±Ø§Ø± Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ ÙˆØ§Ù„Ø¥Ù„ØºØ§Ø¡
+        // ðŸ”’ إذا قُفل التسجيل، اعرض أزرار الإرسال والإلغاء
         if (isLocked) {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -3561,18 +3561,18 @@ private fun VoiceRecordingControls(
                 OutlinedButton(
                     onClick = voiceMessages::cancel,
                     modifier = Modifier.weight(1f)
-                ) { Text("Ø­Ø°Ù") }
-                // Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ ÙŠØªÙ… Ø¹Ø¨Ø± Ø²Ø± Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ ÙÙŠ Ø´Ø±ÙŠØ· Ø§Ù„ÙƒØªØ§Ø¨Ø©
+                ) { Text("حذف") }
+                // الإرسال يتم عبر زر الإرسال الرئيسي في شريط الكتابة
                 OutlinedButton(
                     onClick = { /* triggered via main send button */ },
                     modifier = Modifier.weight(1f),
                     enabled = false
-                ) { Text("ðŸ”’ Ù…ÙÙ‚ÙÙ„ â€” Ø§Ø³ØªØ®Ø¯Ù… Ø²Ø± Ø§Ù„Ø¥Ø±Ø³Ø§Ù„") }
+                ) { Text("ðŸ”’ مُقفل â€” استخدم زر الإرسال") }
             }
         } else {
-            // ðŸ”“ Ù†ØµÙŠØ­Ø© Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù…: Ø§Ø³Ø­Ø¨ Ù„Ù„Ù‚ÙÙ„ Ø£Ùˆ Ø§Ø±ÙØ¹ Ø§Ù„Ø¥ØµØ¨Ø¹ Ù„Ù„Ø¥Ø±Ø³Ø§Ù„
+            // ðŸ”“ نصيحة للمستخدم: اسحب للقفل أو ارفع الإصبع للإرسال
             Text(
-                "ðŸ’¡ Ø§Ø³Ø­Ø¨ Ù„Ù„Ø£Ø¹Ù„Ù‰ Ù„Ù„Ù‚ÙÙ„ â€¢ Ø§Ø±ÙØ¹ Ø§Ù„Ø¥ØµØ¨Ø¹ Ù„Ù„Ø¥Ø±Ø³Ø§Ù„ â€¢ Ø§Ø³Ø­Ø¨ Ù„Ù„Ø£Ø³ÙÙ„ Ù„Ù„Ø¥Ù„ØºØ§Ø¡",
+                "ðŸ’¡ اسحب للأعلى للقفل â€¢ ارفع الإصبع للإرسال â€¢ اسحب للأسفل للإلغاء",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
@@ -3594,7 +3594,7 @@ private fun VoicePreviewControls(
             Icon(Icons.Default.PlayArrow, null, tint = YounesEmerald)
             Spacer(Modifier.width(6.dp))
             Text(
-                "Ù…Ø¹Ø§ÙŠÙ†Ø© Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ø§Ù„ØµÙˆØªÙŠØ© â€¢ ${formatDuration(duration)}",
+                "معاينة الرسالة الصوتية â€¢ ${formatDuration(duration)}",
                 color = YounesEmerald,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -3611,7 +3611,7 @@ private fun VoicePreviewControls(
                 modifier = Modifier.weight(1f),
                 enabled = !isSending
             ) {
-                Icon(Icons.Default.Close, null); Text(" Ø­Ø°Ù")
+                Icon(Icons.Default.Close, null); Text(" حذف")
             }
             Button(
                 onClick = onSend,
@@ -3619,7 +3619,7 @@ private fun VoicePreviewControls(
                 enabled = !isSending && duration >= 1
             ) {
                 if (isSending) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White)
-                else { Icon(Icons.Default.Send, null); Text(" Ø¥Ø±Ø³Ø§Ù„") }
+                else { Icon(Icons.Default.Send, null); Text(" إرسال") }
             }
         }
     }
@@ -3638,7 +3638,7 @@ private fun VoiceWaveform(values: List<Int>, color: Color, modifier: Modifier = 
     }
 }
 
-/** Ø¹Ø±Ø¶ Ø±Ø³Ø§Ù„Ø© Ù…Ù„ØµÙ‚ â€” Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ÙƒØ¨ÙŠØ± ÙƒÙ…Ø¹Ø§ÙŠÙ†Ø© (Ø§Ù„ØµÙˆØ±Ø© Ø§Ù„ÙØ¹Ù„ÙŠØ© ØªÙØ­Ù…Ù‘Ù„ Ø¹Ù†Ø¯ Ø§Ù„ØªÙˆÙØ±). */
+/** عرض رسالة ملصق â€” إيموجي كبير كمعاينة (الصورة الفعلية تُحمّل عند التوفر). */
 @Composable
 private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, attachments: AttachmentViewModel) {
     val manifestJson = item.plaintext.toString(Charsets.UTF_8)
@@ -3663,7 +3663,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
         if (bitmap != null) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
                 androidx.compose.foundation.Image(
-                    bitmap, contentDescription = "ØµÙˆØ±Ø©",
+                    bitmap, contentDescription = "صورة",
                     modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                         val uri = android.net.Uri.fromFile(downloadedFile)
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
@@ -3674,13 +3674,13 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     },
                     contentScale = ContentScale.Crop
                 )
-                // Ø´Ø§Ø±Ø© Ø§Ù„Ø­Ø¬Ù… ÙˆØ§Ù„ØªØ­Ù‚Ù‚ Ø§Ù„Ù…Ø´ÙØ±
+                // شارة الحجم والتحقق المشفر
                 Surface(Modifier.padding(6.dp), shape = RoundedCornerShape(8.dp), color = Color.Black.copy(alpha = 0.6f)) {
-                    Text(" âœ“ Ù…Ø´ÙØ±Ø© â€¢ ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                    Text(" âœ“ مشفرة â€¢ ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
                 }
             }
         } else {
-            Text("ØµÙˆØ±Ø© Ù…Ø´ÙØ±Ø© (${manifest.name})", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("صورة مشفرة (${manifest.name})", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
@@ -3688,15 +3688,15 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 if (isWorking) {
                     CircularProgressIndicator(color = YounesEmerald, strokeWidth = 3.dp)
                     Spacer(Modifier.height(10.dp))
-                    Text("Ø¬Ø§Ø±Ù ÙÙƒ Ø§Ù„ØªØ´ÙÙŠØ±â€¦", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text("جارٍ فك التشفير…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 } else {
                     Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(52.dp))
                     Spacer(Modifier.height(6.dp))
                     Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
-                    Text("${formatBytes(manifest.size)} â€¢ Ù…Ø´ÙØ±Ø©", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text("${formatBytes(manifest.size)} â€¢ مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                     IconButton({ attachments.download(item.id, manifestJson) }, enabled = !isWorking) {
                         Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
-                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "ØªÙ†Ø²ÙŠÙ„", tint = Color(0xFF002118)) }
+                            Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
                         }
                     }
                 }
@@ -3750,11 +3750,11 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text("ÙÙŠØ¯ÙŠÙˆ Ù…Ø´ÙØ± Â· ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                    Text("فيديو مشفر Â· ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
                 else IconButton({ attachments.download(item.id, manifestJson) }, enabled = !isWorking) {
-                    Icon(Icons.Default.Download, "ØªÙ†Ø²ÙŠÙ„ Ø§Ù„ÙÙŠØ¯ÙŠÙˆ", tint = YounesEmerald)
+                    Icon(Icons.Default.Download, "تنزيل الفيديو", tint = YounesEmerald)
                 }
             }
         }
@@ -3784,7 +3784,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                         Icon(Icons.Default.MusicNote, null, tint = AqyalCyanGlow, modifier = Modifier.size(20.dp))
                     }
                     Text(manifest.name, Modifier.padding(start = 10.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Text("âœ“ Ù…Ø´ÙØ±Ø©", color = YounesEmerald, fontSize = 10.sp)
+                    Text("âœ“ مشفرة", color = YounesEmerald, fontSize = 10.sp)
                 }
                 VoiceNotePlayer(android.net.Uri.fromFile(downloadedFile), isOutgoing = item.outgoing, modifier = Modifier.fillMaxWidth())
             }
@@ -3797,10 +3797,10 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text("ØµÙˆØª Ù…Ø´ÙØ± Â· ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                    Text("صوت مشفر Â· ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 IconButton({ attachments.download(item.id, manifestJson) }, enabled = attachments.sendState !is AttachmentState.Working) {
-                    Icon(Icons.Default.Download, "ØªÙ†Ø²ÙŠÙ„ Ø§Ù„ØµÙˆØª")
+                    Icon(Icons.Default.Download, "تنزيل الصوت")
                 }
             }
         }
@@ -3850,15 +3850,15 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${manifest.mimeType} Â· ${formatBytes(manifest.size)}${if (downloadedFile != null) " Â· Ø¬Ø§Ù‡Ø² Ù„Ù„ÙØªØ­" else ""}", style = MaterialTheme.typography.labelSmall)
+                Text("${manifest.mimeType} Â· ${formatBytes(manifest.size)}${if (downloadedFile != null) " Â· جاهز للفتح" else ""}", style = MaterialTheme.typography.labelSmall)
             }
             if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
             else if (downloadedFile == null) {
                 IconButton({ attachments.download(item.id, manifestJson) }) {
-                    Icon(Icons.Default.Download, "ØªÙ†Ø²ÙŠÙ„ ÙˆÙÙƒ ØªØ´ÙÙŠØ± Ø§Ù„Ù…Ø±ÙÙ‚", tint = YounesEmerald)
+                    Icon(Icons.Default.Download, "تنزيل وفك تشفير المرفق", tint = YounesEmerald)
                 }
             } else {
-                Icon(Icons.Default.Check, "ØªÙ… Ø§Ù„ØªÙ†Ø²ÙŠÙ„", tint = YounesEmerald, modifier = Modifier.size(24.dp))
+                Icon(Icons.Default.Check, "تم التنزيل", tint = YounesEmerald, modifier = Modifier.size(24.dp))
             }
         }
     }
@@ -3867,7 +3867,7 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
 private fun shouldAutoDownload(context: android.content.Context, sizeBytes: Long): Boolean =
     RedQualityManager.shouldAutoDownload(context, sizeBytes)
 
-private fun groupRoleLabel(role: String) = when (role) { "OWNER" -> "Ø§Ù„Ù…Ø§Ù„Ùƒ"; "ADMIN" -> "Ù…Ø³Ø¤ÙˆÙ„"; else -> "Ø¹Ø¶Ùˆ" }
+private fun groupRoleLabel(role: String) = when (role) { "OWNER" -> "المالك"; "ADMIN" -> "مسؤول"; else -> "عضو" }
 
 private fun formatDuration(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
 
@@ -3887,8 +3887,8 @@ private fun isSameDay(a: Long, b: Long): Boolean {
 private fun dateLabel(timestamp: Long): String {
     val now = System.currentTimeMillis()
     return when {
-        isSameDay(timestamp, now) -> "Ø§Ù„ÙŠÙˆÙ…"
-        isSameDay(timestamp, now - 86400000L) -> "Ø£Ù…Ø³"
+        isSameDay(timestamp, now) -> "اليوم"
+        isSameDay(timestamp, now - 86400000L) -> "أمس"
         else -> java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(timestamp))
     }
 }
@@ -3897,15 +3897,15 @@ private fun relativeTime(timestamp: Long): String {
     val diff = System.currentTimeMillis() - timestamp
     val min = diff / 60000
     return when {
-        diff < 60000 -> "Ø§Ù„Ø¢Ù†"
-        diff < 3600000 -> "${min}Ø¯"
-        diff < 86400000 -> "${diff / 3600000}Ø³"
-        diff < 172800000 -> "Ø£Ù…Ø³"
+        diff < 60000 -> "الآن"
+        diff < 3600000 -> "${min}د"
+        diff < 86400000 -> "${diff / 3600000}س"
+        diff < 172800000 -> "أمس"
         else -> java.text.SimpleDateFormat("dd/MM", java.util.Locale.US).format(java.util.Date(timestamp))
     }
 }
 
-/** ÙˆÙ‚Øª Ø§Ù„Ø³Ø§Ø¹Ø© Ø¯Ø§Ø®Ù„ Ø§Ù„ÙÙ‚Ø§Ø¹Ø© (Ù…Ø«Ù„ ÙˆØ§ØªØ³Ø§Ø¨: 4:20 Ù… / 11:05 Øµ). */
+/** وقت الساعة داخل الفقاعة (مثل واتساب: 4:20 م / 11:05 ص). */
 private fun formatClockTime(timestamp: Long): String =
     java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(timestamp))
 @Composable
@@ -3917,27 +3917,27 @@ private fun MessageInfoRow(label: String, value: String) {
 }
 
 /**
- * Ø¹Ø±Ø¶ ØªÙØ§Ø¹Ù„Ø§Øª Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ ØªØ­Øª Ø±Ø³Ø§Ù„Ø© (chips Ù…Ø¹ Ø§Ù„Ø¹Ø¯). Ø§Ù„Ø¶ØºØ· Ø¹Ù„Ù‰ Ø¥ÙŠÙ…ÙˆØ¬ÙŠ = toggle
- * (Ø¥Ø²Ø§Ù„Ø© Ø¥Ù† ÙƒØ§Ù† ØªÙØ§Ø¹Ù„ÙƒØŒ Ù„Ø§ Ø´ÙŠØ¡ Ø¥Ù† Ù„Ù… ÙŠÙƒÙ†). E2EE: Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ù…Ø­Ù„ÙŠ ÙÙ‚Ø·.
+ * عرض تفاعلات الإيموجي تحت رسالة (chips مع العد). الضغط على إيموجي = toggle
+ * (إزالة إن كان تفاعلك، لا شيء إن لم يكن). E2EE: الإيموجي محلي فقط.
  */
-/** Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ø§Ù„Ø³Ø±ÙŠØ¹Ø© Ù„Ù„ØªÙØ§Ø¹Ù„ â€” ØªØ¸Ù‡Ø± Ø£Ø¹Ù„Ù‰ Ù‚Ø§Ø¦Ù…Ø© Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø§Ù„Ø±Ø³Ø§Ù„Ø©. */
-// Ù…ØµØ¯Ø± Ø§Ù„Ø­Ù‚ÙŠÙ‚Ø© Ø§Ù„ÙˆØ­ÙŠØ¯: core/YounesId.kt. Ø§Ù„Ù†Ù…Ø· ÙƒØ§Ù† Ù…ÙƒØ±Ù‘Ø±Ù‹Ø§ Ù‡Ù†Ø§ ÙˆÙÙŠ
-// QrScannerSheet ÙˆSafetyViewModel Ø¨ØµÙŠØ§ØºØ§Øª Ù…ØªØ¨Ø§ÙŠÙ†Ø©ØŒ ÙÙƒØ§Ù† Ù…Ø¹Ø±Ù‘Ù ÙŠÙ‚Ø¨Ù„Ù‡
-// Ø£Ø­Ø¯Ù‡Ø§ ÙˆØªØ±ÙØ¶Ù‡ Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„ØªØ§Ù„ÙŠØ©.
+/** قائمة الإيموجي السريعة للتفاعل â€” تظهر أعلى قائمة إجراءات الرسالة. */
+// مصدر الحقيقة الوحيد: core/YounesId.kt. النمط كان مكرّرًا هنا وفي
+// QrScannerSheet وSafetyViewModel بصياغات متباينة، فكان معرّف يقبله
+// أحدها وترفضه الشاشة التالية.
 private val RED_ID_PATTERN = Regex(YounesId.PATTERN)
-// Ù†Ø³Ø®Ø© Ø¨Ø¯ÙˆÙ† ^ Ùˆ $ Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…Ù‡Ø§ Ø¯Ø§Ø®Ù„ Ù†Øµ (Ù…Ø«Ù„ @12345)
+// نسخة بدون ^ و $ لاستخدامها داخل نص (مثل @12345)
 internal val RED_ID_PARTIAL = Regex(YounesId.MENTION_PATTERN)
-// Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬Ø§Øª Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©/Ø§Ù„Ù„Ø§ØªÙŠÙ†ÙŠØ©
-// Ø§Ù„Ù‡Ø§Ø´ØªØ§Ø¬ Ù„Ù€ # autocomplete
+// الهاشتاجات العربية/اللاتينية
+// الهاشتاج لـ # autocomplete
 internal val EMOJI_CATEGORIES = listOf(
-    "Ø³Ø±ÙŠØ¹Ø©" to listOf("ðŸ˜€", "ðŸ˜‚", "ðŸ˜", "ðŸ‘", "â¤ï¸", "ðŸ”¥", "ðŸ‘", "ðŸ™", "ðŸŽ‰", "ðŸ˜¢", "ðŸ˜®", "âœ…"),
-    "Ø§Ù„ÙˆØ¬ÙˆÙ‡" to listOf("ðŸ˜€", "ðŸ˜ƒ", "ðŸ˜„", "ðŸ˜", "ðŸ˜†", "ðŸ˜…", "ðŸ˜‚", "ðŸ™‚", "ðŸ™ƒ", "ðŸ˜‰", "ðŸ˜Š", "ðŸ¥°", "ðŸ˜", "ðŸ¤©", "ðŸ˜˜", "ðŸ˜‹", "ðŸ˜Ž", "ðŸ¤”", "ðŸ˜´", "ðŸ˜­", "ðŸ˜¡", "ðŸ¥³"),
-    "Ø§Ù„Ø¥Ø´Ø§Ø±Ø§Øª" to listOf("ðŸ‘", "ðŸ‘Ž", "ðŸ‘Œ", "âœŒï¸", "ðŸ¤ž", "ðŸ¤Ÿ", "ðŸ¤˜", "ðŸ‘", "ðŸ™Œ", "ðŸ«¶", "ðŸ¤", "ðŸ™", "ðŸ’ª", "ðŸ‘€", "â¤ï¸", "ðŸ’š", "ðŸ’›", "ðŸ’™"),
-    "Ø§Ù„Ø£Ø´ÙŠØ§Ø¡" to listOf("ðŸ“±", "ðŸ’»", "âŒš", "ðŸ“·", "ðŸŽ¥", "ðŸŽ™ï¸", "ðŸ”’", "ðŸ”‘", "ðŸ’¡", "ðŸ“Œ", "ðŸ“Ž", "ðŸ“", "ðŸ“„", "ðŸ“š", "ðŸŽ", "ðŸ†", "âœ…", "âš ï¸"),
-    "Ø§Ù„Ø·Ø¨ÙŠØ¹Ø©" to listOf("ðŸŒ™", "â˜€ï¸", "â­", "ðŸ”¥", "ðŸŒˆ", "ðŸŒ¹", "ðŸŒ¿", "ðŸŒ³", "ðŸŒŠ", "â›°ï¸", "ðŸª", "ðŸ¦…", "ðŸ", "ðŸ¦‹"),
-    "Ø§Ù„Ø·Ø¹Ø§Ù…" to listOf("â˜•", "ðŸµ", "ðŸ¥¤", "ðŸž", "ðŸ¥", "ðŸš", "ðŸ—", "ðŸ¥—", "ðŸŽ", "ðŸ‰", "ðŸ‡", "ðŸ¯", "ðŸŽ‚"),
-    "Ø§Ù„Ø³ÙØ±" to listOf("ðŸš—", "ðŸš•", "ðŸšŒ", "âœˆï¸", "ðŸš", "ðŸš¢", "ðŸ—ºï¸", "ðŸ ", "ðŸ¢", "ðŸ¥", "ðŸ«", "ðŸ•Œ", "â›º"),
-    "Ø§Ù„Ø±Ù…ÙˆØ²" to listOf("âœ…", "âŒ", "âš ï¸", "â—", "â“", "ðŸ’¯", "âž•", "âž–", "â™»ï¸", "ðŸ”´", "ðŸŸ¢", "ðŸŸ¡", "ðŸ”µ", "ðŸ‡¾ðŸ‡ª")
+    "سريعة" to listOf("ðŸ˜€", "ðŸ˜‚", "ðŸ˜", "ðŸ‘", "â¤ï¸", "ðŸ”¥", "ðŸ‘", "ðŸ™", "ðŸŽ‰", "ðŸ˜¢", "ðŸ˜®", "âœ…"),
+    "الوجوه" to listOf("ðŸ˜€", "ðŸ˜ƒ", "ðŸ˜„", "ðŸ˜", "ðŸ˜†", "ðŸ˜…", "ðŸ˜‚", "ðŸ™‚", "ðŸ™ƒ", "ðŸ˜‰", "ðŸ˜Š", "ðŸ¥°", "ðŸ˜", "ðŸ¤©", "ðŸ˜˜", "ðŸ˜‹", "ðŸ˜Ž", "ðŸ¤”", "ðŸ˜´", "ðŸ˜­", "ðŸ˜¡", "ðŸ¥³"),
+    "الإشارات" to listOf("ðŸ‘", "ðŸ‘Ž", "ðŸ‘Œ", "âœŒï¸", "ðŸ¤ž", "ðŸ¤Ÿ", "ðŸ¤˜", "ðŸ‘", "ðŸ™Œ", "ðŸ«¶", "ðŸ¤", "ðŸ™", "ðŸ’ª", "ðŸ‘€", "â¤ï¸", "ðŸ’š", "ðŸ’›", "ðŸ’™"),
+    "الأشياء" to listOf("ðŸ“±", "ðŸ’»", "âŒš", "ðŸ“·", "ðŸŽ¥", "ðŸŽ™ï¸", "ðŸ”’", "ðŸ”‘", "ðŸ’¡", "ðŸ“Œ", "ðŸ“Ž", "ðŸ“", "ðŸ“„", "ðŸ“š", "ðŸŽ", "ðŸ†", "âœ…", "âš ï¸"),
+    "الطبيعة" to listOf("ðŸŒ™", "â˜€ï¸", "â­", "ðŸ”¥", "ðŸŒˆ", "ðŸŒ¹", "ðŸŒ¿", "ðŸŒ³", "ðŸŒŠ", "â›°ï¸", "ðŸª", "ðŸ¦…", "ðŸ", "ðŸ¦‹"),
+    "الطعام" to listOf("â˜•", "ðŸµ", "ðŸ¥¤", "ðŸž", "ðŸ¥", "ðŸš", "ðŸ—", "ðŸ¥—", "ðŸŽ", "ðŸ‰", "ðŸ‡", "ðŸ¯", "ðŸŽ‚"),
+    "السفر" to listOf("ðŸš—", "ðŸš•", "ðŸšŒ", "âœˆï¸", "ðŸš", "ðŸš¢", "ðŸ—ºï¸", "ðŸ ", "ðŸ¢", "ðŸ¥", "ðŸ«", "ðŸ•Œ", "â›º"),
+    "الرموز" to listOf("âœ…", "âŒ", "âš ï¸", "â—", "â“", "ðŸ’¯", "âž•", "âž–", "â™»ï¸", "ðŸ”´", "ðŸŸ¢", "ðŸŸ¡", "ðŸ”µ", "ðŸ‡¾ðŸ‡ª")
 )
 private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
 

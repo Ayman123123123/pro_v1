@@ -42,6 +42,10 @@ fi
 
 printf '%s\n' '[2/8] Database/entity and Kotlin static contracts'
 check 'schema consistency' python3 scripts/check-schema-consistency.py
+# Complements the textual entity/migration diff above by making PostgreSQL itself
+# plan every hand-written JdbcTemplate statement. Skips itself when the DB
+# container is not running, so it is safe to call unconditionally.
+check 'hand-written SQL vs live schema' python3 scripts/check-sql-prepare.py
 check 'version-catalog accessors' python3 scripts/check-catalog-accessors.py
 check 'Android integrity' python3 scripts/check-android-integrity.py
 check 'Kotlin static checks' python3 scripts/check-kotlin-static.py

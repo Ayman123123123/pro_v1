@@ -424,11 +424,86 @@ object DinstarApiContract {
         const val DIR_GSM_TO_IP = "gsm->ip"
         const val DIR_CALLBACK = "callback"
 
+        /**
+         * ترجمة اتجاه الجهاز إلى مفردات العمود `dinstar_cdr.direction`.
+         *
+         * العمود مقيَّد بـ`CHECK (direction IN ('inbound','outbound'))`، والجهاز
+         * يكتب `ip->gsm` / `gsm->ip`. إدراج القيمة الخام يُسقط الصف بخرق القيد،
+         * وهو ما كان يحدث في كل دورة ابتلاع.
+         *
+         * `ip->gsm` = صادرة (من شبكتنا إلى الهاتف المحمول)، و`gsm->ip` = واردة.
+         * `callback` يبدأ بمكالمة واردة من GSM فيُعدّ واردًا.
+         */
+        fun normalizeDirection(raw: String?): String? = when (raw?.trim()?.lowercase()) {
+            DIR_IP_TO_GSM -> "outbound"
+            DIR_GSM_TO_IP, DIR_CALLBACK -> "inbound"
+            "outbound", "out" -> "outbound"
+            "inbound", "in" -> "inbound"
+            else -> null
+        }
+
+        /**
+         * استنتاج `dinstar_cdr.status` المقيَّد
+         * (`answered|no_answer|busy|failed|cancelled`).
+         *
+         * الجهاز لا يُصدر هذا الحقل: يُصدر `answer_date` (فارغ إن لم تُجَب)
+         * و`hangup` النصي. العمود `NOT NULL` بلا افتراضي، فإدراج بلا قيمة
+         * كان يخرق القيد حتى لو كانت بقية الأعمدة صحيحة.
+         *
+         * وجود زمن الإجابة هو الدليل القاطع على الإجابة؛ وما دونه يُصنَّف من
+         * سبب الإنهاء، ومجهول السبب يُعدّ `failed` لا `no_answer` حتى لا
+         * تُقرأ إخفاقات الشبكة كأنها عدم رد من المستلم.
+         */
+        fun callOutcome(answered: Boolean, hangup: String?): String {
+            if (answered) return "answered"
+            val cause = hangup?.trim()?.lowercase().orEmpty()
+            return when {
+                cause.isEmpty() -> "failed"
+                "busy" in cause -> "busy"
+                "no answer" in cause || "no_answer" in cause || "noanswer" in cause ||
+                    "timeout" in cause || "no reply" in cause -> "no_answer"
+                "cancel" in cause || "originator" in cause || "caller" in cause -> "cancelled"
+                else -> "failed"
+            }
+        }
+
         @Suppress("UNCHECKED_CAST")
         fun records(response: Map<String, Any?>): List<Map<String, Any?>> =
             (response[RES_CDR] as? List<Map<String, Any?>>)
                 ?: (response[RES_CDR_LEGACY] as? List<Map<String, Any?>>)
                 ?: emptyList()
+
+        /**
+         * جملة إدراج CDR الوحيدة — مصدر واحد للحقيقة لكل مَن يكتب في
+         * `dinstar_cdr` ([DinstarApiService] و[CdrIngestScheduler]).
+         *
+         * كانت الجملة مكرَّرة في موضعين بعمودَي `call_type` مختلفَين وبالخطأ
+         * نفسه في كلَيهما، فأيّ إصلاح في أحدهما يترك الآخر معطوبًا.
+         *
+         * **شرط `WHERE` بعد `ON CONFLICT` إلزامي لا تجميلي**: الحَكَم
+         * `uq_dinstar_cdr_natural_key` (V40) فهرس **جزئي**
+         * (`WHERE gateway_id IS NOT NULL AND port_index IS NOT NULL AND
+         * start_time IS NOT NULL`)، وPostgreSQL لا يقبل فهرسًا جزئيًا حَكَمًا
+         * للتعارض إلا إذا أعادت الجملة شرطَه حرفيًا. بدونه تفشل الجملة كلها
+         * بـ 42P10 «there is no unique or exclusion constraint matching the
+         * ON CONFLICT specification» فتسقط دورة الابتلاع بأكملها ويبقى
+         * الجدول فارغًا — وهو ما كان يحدث فعلًا.
+         *
+         * `call_type` مُستبعَد عن قصد: افتراضيّه في المخطَّط `'VOICE'`.
+         *
+         * ترتيب الوسائط: gateway_id, port_index, start_time, answer_time,
+         * duration_seconds, direction, status, caller_number, callee_number,
+         * hangup_cause, gsm_code, codec, raw_data.
+         */
+        const val INSERT_SQL: String =
+            """INSERT INTO dinstar_cdr
+                   (gateway_id, port_index, start_time, answer_time, duration_seconds,
+                    direction, status, caller_number, callee_number,
+                    hangup_cause, gsm_code, codec, raw_data)
+               VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+               ON CONFLICT (gateway_id, port_index, start_time, caller_number, callee_number)
+               WHERE gateway_id IS NOT NULL AND port_index IS NOT NULL AND start_time IS NOT NULL
+               DO NOTHING"""
     }
 
     // ═══════════════════════════════════════════════════════════

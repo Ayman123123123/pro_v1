@@ -48,6 +48,25 @@ esac
 CONFIG_DIR="${ASTERISK_CONFIG_DIR:-/etc/asterisk}"
 mkdir -p "$CONFIG_DIR"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Install the image's pristine static configs into the (volume-backed) config
+# dir on every boot. /etc/asterisk is a VOLUME declared by the upstream image,
+# so a named volume from an earlier run shadows any COPY to that path: without
+# this step the container keeps running the dialplan captured at first boot and
+# every subsequent edit to extensions.conf is silently ignored.
+# Templates live in /usr/local/share/red-asterisk (outside the volume).
+STATIC_DIR="/usr/local/share/red-asterisk"
+if [ -d "$STATIC_DIR" ]; then
+  for tpl in "$STATIC_DIR"/*.conf; do
+    [ -f "$tpl" ] || continue
+    name=$(basename "$tpl")
+    if ! cmp -s "$tpl" "$CONFIG_DIR/$name"; then
+      cp -f "$tpl" "$CONFIG_DIR/$name"
+      echo "[entrypoint] installed $name from image (volume copy was stale or missing)"
+    fi
+  done
+fi
+
 # The upstream image stores /etc/asterisk in a runtime volume. Create a local
 # development certificate only when the persistent key volume has none; never
 # overwrite a managed certificate.
@@ -55,11 +74,16 @@ KEY_DIR="$CONFIG_DIR/keys"
 if [ ! -s "$KEY_DIR/fullchain.pem" ] || [ ! -s "$KEY_DIR/privkey.pem" ]; then
   mkdir -p "$KEY_DIR"
   if command -v openssl >/dev/null 2>&1; then
-    umask 077
-    openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-      -keyout "$KEY_DIR/privkey.pem" -out "$KEY_DIR/fullchain.pem" \
-      -subj '/CN=192.168.11.20/O=RED Sovereign/CN=Asterisk PSTN Gateway' \
-      -addext 'subjectAltName=IP:192.168.11.20,IP:127.0.0.1,DNS:localhost,DNS:red.local'
+    # umask محصور في subshell: بلا الأقواس يبقى 077 نافذًا لبقية السكربت،
+    # فتُولَّد manager.conf و pjsip.conf بوضع 600 root:root ولا يقرؤهما
+    # مستخدم asterisk الذي يعمل به الخادم ⇒ صفر نظراء PJSIP و AMI مُعطَّل.
+    (
+      umask 077
+      openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+        -keyout "$KEY_DIR/privkey.pem" -out "$KEY_DIR/fullchain.pem" \
+        -subj '/CN=192.168.11.20/O=RED Sovereign/CN=Asterisk PSTN Gateway' \
+        -addext 'subjectAltName=IP:192.168.11.20,IP:127.0.0.1,DNS:localhost,DNS:red.local'
+    )
     chown asterisk:asterisk "$KEY_DIR/privkey.pem" "$KEY_DIR/fullchain.pem" 2>/dev/null || true
     echo "[entrypoint] generated development TLS certificate"
   else
@@ -566,6 +590,17 @@ fi
 # يُسقط الحاوية في حلقة إعادة تشغيل. عند غياب السر يظل مسار الوارد يعمل
 # بالافتراضي المعلن في InternalPstnController (pstn.internal-secret).
 export PSTN_INTERNAL_SECRET="${PSTN_INTERNAL_SECRET:-}"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# الخادم يعمل بمستخدم asterisk (`-U asterisk`)، و/etc/asterisk هنا volume دائم.
+# أي ملف بقي من إصدار سابق بوضع 600 root:root يبقى غير مقروء بعد إعادة البناء،
+# فتفشل res_sorcery_config في تحميل pjsip.conf (صفر نظراء ⇒ لا مكالمة تخرج)
+# ويبقى AMI معطَّلًا (Manager: No ⇒ الخادم يعيد المحاولة أبديًا: Connection refused).
+# نُصلح الملكية والوضع دائمًا قبل التشغيل — لا نعتمد على umask الصحيح فقط.
+chown asterisk:asterisk "$CONFIG_DIR"/*.conf 2>/dev/null || true
+# manager.conf و pjsip.conf تحملان أسرارًا: قراءة للمالك فقط، لا للعالم.
+chmod 0640 "$CONFIG_DIR"/*.conf 2>/dev/null || true
+echo "[entrypoint] normalized $CONFIG_DIR/*.conf to asterisk:asterisk 0640"
 
 if [ "${RED_ASTERISK_CONFIG_ONLY:-0}" = "1" ]; then
   exit 0

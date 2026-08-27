@@ -125,8 +125,11 @@ class YemeniOperatorDetectorTest {
     }
 
     @Test fun `722 يُصنَّف في كل الصيغ الدولية والمحلية`() {
+        // ترتيب وسائط JUnit 4 هو (message, expected, actual) — لا (expected, actual, message).
+        // كان الترتيب معكوسًا فصار "سبأفون" رسالةً ونصُّ الفشل قيمةً متوقعة،
+        // أي أن الاختبار كان يفشل دائمًا ولا يفحص شيئًا.
         listOf("722012919", "+967722012919", "00967722012919", "0722012919", "967722012919")
-            .forEach { assertEquals("سبأفون", YemeniOperatorDetector.getOperatorInfo(it)?.name, "فشل عند: $it") }
+            .forEach { assertEquals("فشل عند: $it", "سبأفون", YemeniOperatorDetector.getOperatorInfo(it)?.name) }
     }
 
     @Test fun `النطاق 718 سبأفون عدن القديم يطابق 71`() {

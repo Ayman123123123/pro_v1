@@ -34,7 +34,12 @@ dependencies {
 
     // Database
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.flywaydb:flyway-core")
+    // Boot 4 moved Flyway autoconfiguration out of spring-boot-autoconfigure into
+    // its own module. With flyway-core alone there is no FlywayAutoConfiguration on
+    // the classpath, so `spring.flyway.*` is read by nobody and NO migration ever
+    // runs — the schema only ever changed when someone applied SQL by hand. This
+    // starter brings spring-boot-flyway (the autoconfiguration) plus flyway-core.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 

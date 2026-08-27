@@ -84,8 +84,20 @@ object YemeniOperatorDetector {
     private val LANDLINE_COLOR = Color(0xFF607D8B)
     private val YEMEN_4G_COLOR = Color(0xFF009688)
 
-    /** أقل طول وطني يُقبل للهاتف الثابت — دونه لا يُصنَّف تخمينًا. */
-    private const val MIN_LANDLINE_LENGTH = 6
+    /**
+     * خطة الترقيم اليمنية تفصل النوعين بالطول لا بالبادئة وحدها:
+     *
+     * - المحمول: 9 خانات وطنية — `7X XXX XXXX`.
+     * - الهاتف الثابت: 7 خانات وطنية — رمز محافظة من خانة + 6.
+     *
+     * الفصل بالطول ضروري لأن المجالين يتقاسمان الخانة الأولى `7`:
+     * `7890123` هو ثابت في صعدة/عمران، بينما `789…` بطول 9 هو يمن موبايل.
+     * الاعتماد على البادئة وحدها كان يجعل كل رقم ثابت يبدأ بـ 7 يُصنَّف
+     * محمولًا، ويجعل بادئة محمول غير مخصصة (721/741/791) تتنكّر كهاتف ثابت
+     * بدل أن تُرفض — وكلاهما يوجّه المكالمة إلى مسار خاطئ.
+     */
+    private const val MOBILE_LENGTH = 9
+    private val LANDLINE_LENGTHS = 6..8
 
     /**
      * تطبيع الرقم إلى صيغته الوطنية: تُزال الرموز والمسافات، ثم البادئة
@@ -108,10 +120,10 @@ object YemeniOperatorDetector {
         val local = normalize(number)
         if (local.isEmpty()) return null
 
-        // ─── المحمول: البادئة من المصدر الموحّد، الأطول أولًا ───
-        // fromNumber يفحص ثلاثة أرقام قبل رقمين، فيلتقط 722 (سبأفون عدن 4G)
-        // قبل أن يُقرأ 72 ويسقط الرقم إلى فرع الهاتف الثابت خطأً.
-        if (local.length >= 2) {
+        // ─── المحمول: طول 9 حصرًا ───
+        // البادئة من المصدر الموحّد، الأطول أولًا: fromNumber يفحص ثلاثة أرقام
+        // قبل رقمين، فيلتقط 722 (سبأفون عدن 4G) قبل أن يُقرأ 72 ويسقط الرقم.
+        if (local.length >= MOBILE_LENGTH) {
             val operator = YemenOperator.fromNumber(local)
             if (operator != YemenOperator.UNKNOWN) {
                 return OperatorInfo(
@@ -127,10 +139,13 @@ object YemeniOperatorDetector {
             if (local.startsWith("10")) {
                 return OperatorInfo("يمن فورجي", YEMEN_4G_COLOR, "LTE", "Yemen4G", isMobile = false)
             }
+            // بادئة محمول غير مخصصة (721/723/741/791…): تُرفض صريحًا ولا
+            // تُخمَّن كهاتف ثابت — التخمين يوجّه المكالمة لبوابة خاطئة.
+            return null
         }
 
-        // ─── الهاتف الثابت: رمز محافظة من رقم واحد ───
-        if (local.length >= MIN_LANDLINE_LENGTH) {
+        // ─── الهاتف الثابت: رمز محافظة من خانة واحدة، طول 6..8 ───
+        if (local.length in LANDLINE_LENGTHS) {
             LANDLINE_AREAS[local[0]]?.let {
                 return OperatorInfo("هاتف ثابت ($it)", LANDLINE_COLOR, "PSTN", "Landline", isMobile = false)
             }

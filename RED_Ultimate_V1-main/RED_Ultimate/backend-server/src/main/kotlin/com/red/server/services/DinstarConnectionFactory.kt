@@ -27,23 +27,23 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
- * Ù…ØµÙ†Ø¹ Ø§ØªØµØ§Ù„Ø§Øª Ø¨ÙˆØ§Ø¨Ø§Øª DINSTAR.
+ * مصنع اتصالات بوابات DINSTAR.
  *
- * ÙƒØ§Ù†Øª `DinstarHardwareService` ØªØ¨Ù†ÙŠ `OkHttpClient` ÙˆØ§Ø­Ø¯Ù‹Ø§ Ù…Ø«Ø¨Ù‘ØªÙ‹Ø§ Ø¹Ù„Ù‰
- * Ø¹Ù†ÙˆØ§Ù† ÙˆØ§Ø­Ø¯ Ù…Ù† Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§ØªØŒ ÙØ§Ø³ØªØ­Ø§Ù„ Ù…Ø®Ø§Ø·Ø¨Ø© Ø¬Ù‡Ø§Ø² Ø«Ø§Ù†Ù. Ù‡Ù†Ø§ ÙŠÙÙØµÙ„ Ø¨Ù†Ø§Ø¡
- * Ø§Ù„Ø§ØªØµØ§Ù„ Ø¹Ù† Ù…Ù†Ø·Ù‚ Ø§Ù„Ø¹Ù…Ù„ Ù„ÙŠØµØ¨Ø­ Ù„ÙƒÙ„ Ø¨ÙˆØ§Ø¨Ø© ÙÙŠ Ø§Ù„Ø£Ø³Ø·ÙˆÙ„ Ø¹Ù…ÙŠÙ„Ù‡Ø§.
+ * كانت `DinstarHardwareService` تبني `OkHttpClient` واحدًا مثبّتًا على
+ * عنوان واحد من الإعدادات، فاستحال مخاطبة جهاز ثانٍ. هنا يُفصل بناء
+ * الاتصال عن منطق العمل ليصبح لكل بوابة في الأسطول عميلها.
  *
- * ## Ø§Ù„Ù…ØµØ§Ø¯Ù‚Ø©
- * ØªØ³ØªØ®Ø¯Ù… ÙˆØ§Ø¬Ù‡Ø© UC2000 Ù…ØµØ§Ø¯Ù‚Ø© **HTTP Digest** (Ø§Ù„Ø¥ØµØ¯Ø§Ø±Ø§Øª Ø§Ù„Ø£Ù‚Ø¯Ù… Basic).
- * ÙŠÙØ³Ø¬ÙŽÙ‘Ù„ Ø§Ù„Ù…ÙØµØ§Ø¯ÙÙ‚Ø§Ù† Ù…Ø¹Ù‹Ø§ ÙˆÙŠØ®ØªØ§Ø± `DispatchingAuthenticator` Ø¨ÙŠÙ†Ù‡Ù…Ø§ Ø­Ø³Ø¨
- * ØªØ±ÙˆÙŠØ³Ø© `WWW-Authenticate`. Ø§Ù„Ù†ØªØ§Ø¦Ø¬ ØªÙØ®Ø²ÙŽÙ‘Ù† Ù…Ø¤Ù‚ØªÙ‹Ø§ Ù„ØªÙØ§Ø¯ÙŠ Ø¬ÙˆÙ„Ø© ØªØ­Ø¯ÙÙ‘
- * Ø¥Ø¶Ø§ÙÙŠØ© Ù…Ø¹ ÙƒÙ„ Ø·Ù„Ø¨.
+ * ## المصادقة
+ * تستخدم واجهة UC2000 مصادقة **HTTP Digest** (الإصدارات الأقدم Basic).
+ * يُسجَّل المُصادِقان معًا ويختار `DispatchingAuthenticator` بينهما حسب
+ * ترويسة `WWW-Authenticate`. النتائج تُخزَّن مؤقتًا لتفادي جولة تحدٍّ
+ * إضافية مع كل طلب.
  *
- * ## Ø´Ù‡Ø§Ø¯Ø© TLS
- * ØªÙØµØ¯ÙØ± Ø§Ù„Ø¨ÙˆØ§Ø¨Ø© Ø´Ù‡Ø§Ø¯Ø© Ù…ÙˆÙ‚Ù‘Ø¹Ø© Ø°Ø§ØªÙŠÙ‹Ø§ Ø¨Ø§Ø³Ù… Ù„Ø§ ÙŠØ·Ø§Ø¨Ù‚ Ø¹Ù†ÙˆØ§Ù† IP. Ø§Ù„Ù‚Ø¨ÙˆÙ„
- * Ù…Ø´Ø±ÙˆØ· Ø¨Ø£Ù…Ø±ÙŠÙ†: Ø£Ù† ÙŠÙƒÙˆÙ† Ø§Ù„Ø¹Ù†ÙˆØ§Ù† Ø®Ø§ØµÙ‹Ø§ (RFC 1918)ØŒ ÙˆØ£Ù† ÙŠÙƒÙˆÙ† Ø°Ù„Ùƒ Ø¹Ù„Ù‰
- * Ø´Ø¨ÙƒØ© Ø¥Ø¯Ø§Ø±Ø© Ù…Ø¹Ø²ÙˆÙ„Ø©. Ù„Ø°Ù„Ùƒ ÙŠØ±ÙØ¶ Ø§Ù„Ù…ØµÙ†Ø¹ Ø£ÙŠ Ø¹Ù†ÙˆØ§Ù† Ø¹Ø§Ù… Ø±ÙØ¶Ù‹Ø§ ØµØ±ÙŠØ­Ù‹Ø§ Ø¨Ø¯Ù„
- * Ø£Ù† ÙŠÙØªØ­ Ø«Ù‚Ø© Ø¹Ù…ÙŠØ§Ø¡ Ø¹Ù„Ù‰ Ø§Ù„Ø¥Ù†ØªØ±Ù†Øª.
+ * ## شهادة TLS
+ * تُصدِر البوابة شهادة موقّعة ذاتيًا باسم لا يطابق عنوان IP. القبول
+ * مشروط بأمرين: أن يكون العنوان خاصًا (RFC 1918)، وأن يكون ذلك على
+ * شبكة إدارة معزولة. لذلك يرفض المصنع أي عنوان عام رفضًا صريحًا بدل
+ * أن يفتح ثقة عمياء على الإنترنت.
  */
 @Component
 class DinstarConnectionFactory(
@@ -70,7 +70,7 @@ class DinstarConnectionFactory(
     fun probeClientFor(host: String, apiPort: Int, scheme: String): DinstarClient =
         DinstarClient(host, apiPort, scheme, buildHttpClient(probe = true), mapper)
 
-    /** ÙŠÙØ³ØªØ¯Ø¹Ù‰ Ø¹Ù†Ø¯ Ø­Ø°Ù Ø¨ÙˆØ§Ø¨Ø© Ø­ØªÙ‰ Ù„Ø§ ÙŠØªØ³Ø±Ø¨ Ø¹Ù…ÙŠÙ„ Ù…Ø¹Ù„Ù‘Ù‚. */
+    /** يُستدعى عند حذف بوابة حتى لا يتسرب عميل معلّق. */
     fun evict(host: String, apiPort: Int, scheme: String) {
         clients.remove("$scheme://$host:$apiPort")
     }
@@ -90,8 +90,8 @@ class DinstarConnectionFactory(
         })
         val ssl = SSLContext.getInstance("TLS").apply { init(null, trustAll, SecureRandom()) }
 
-        // Ø§Ù„ÙØ­Øµ ÙŠØ³ØªØ®Ø¯Ù… Ù…Ù‡Ù„Ø© Ø£Ù‚ØµØ±: Ø¹Ù†ÙˆØ§Ù† Ø¨Ù„Ø§ Ø¬Ù‡Ø§Ø² ÙŠØ¬Ø¨ Ø£Ù† ÙŠØ³Ù‚Ø· Ø¨Ø³Ø±Ø¹Ø©
-        // ÙˆØ¥Ù„Ø§ Ø§Ø³ØªØºØ±Ù‚ Ù…Ø³Ø­ â€Ž/24 Ø¯Ù‚Ø§Ø¦Ù‚.
+        // الفحص يستخدم مهلة أقصر: عنوان بلا جهاز يجب أن يسقط بسرعة
+        // وإلا استغرق مسح â€Ž/24 دقائق.
         val timeout = if (probe) probeTimeout else connectTimeout
         val builder = OkHttpClient.Builder()
             .authenticator(CachingAuthenticatorDecorator(dispatching, authCache))
@@ -99,8 +99,8 @@ class DinstarConnectionFactory(
             .sslSocketFactory(ssl.socketFactory, trustAll[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
 
-        // SPKI pinning â€” Ù†ÙØ³ Ù…Ù†Ø·Ù‚ DinstarHardwareService: Ø§Ù„Ø«Ù‚Ø© Ø§Ù„Ù…Ø­Ù„ÙŠØ©
-        // Ù„Ù„Ø´Ù‡Ø§Ø¯Ø§Øª Ø§Ù„Ø°Ø§ØªÙŠØ© Ù„Ø§ ØªÙ„ØºÙŠ ØªØ­Ù‚Ù‚ OkHttp Ù…Ù† Ø§Ù„Ø¯Ø¨ÙˆØ³ Ø¨Ø¹Ø¯ Ø¨Ù†Ø§Ø¡ Ø§Ù„Ø³Ù„Ø³Ù„Ø©.
+        // SPKI pinning â€” نفس منطق DinstarHardwareService: الثقة المحلية
+        // للشهادات الذاتية لا تلغي تحقق OkHttp من الدبوس بعد بناء السلسلة.
         certPinsConfig.split(',')
             .map { it.trim() }
             .filter { it.startsWith("sha256/") }
@@ -121,9 +121,9 @@ class DinstarConnectionFactory(
     }
 
     /**
-     * Ø¹Ù…ÙŠÙ„ Ù…ÙˆØ¬Ù‘Ù‡ Ø¥Ù„Ù‰ Ø¨ÙˆØ§Ø¨Ø© ÙˆØ§Ø­Ø¯Ø©. ÙƒÙ„ Ø§Ù„Ø§Ø³ØªØ¯Ø¹Ø§Ø¡Ø§Øª Ù‡Ù†Ø§ Ù…ÙˆØ«Ù‘Ù‚Ø© ÙÙŠ
-     * Â«UC2000 HTTP APIÂ»Ø› Ø£ÙŠ Ø¹Ù…Ù„ÙŠØ© ØºÙŠØ± Ù…ÙˆØ«Ù‘Ù‚Ø© ØªÙØ±ÙØ¶ ÙÙŠ Ø§Ù„Ø·Ø¨Ù‚Ø© Ø§Ù„Ø£Ø¹Ù„Ù‰
-     * Ø¨Ø¯Ù„ Ø§Ø®ØªØ±Ø§Ø¹ Ù…Ø³Ø§Ø±.
+     * عميل موجّه إلى بوابة واحدة. كل الاستدعاءات هنا موثّقة في
+     * Â«UC2000 HTTP API»؛ أي عملية غير موثّقة تُرفض في الطبقة الأعلى
+     * بدل اختراع مسار.
      */
     class DinstarClient(
         val host: String,
@@ -142,7 +142,11 @@ class DinstarConnectionFactory(
 
         fun getJson(path: String, query: Map<String, String> = emptyMap()): Map<String, Any?> {
             val url = base.newBuilder().addPathSegments(path.removePrefix("/"))
-            query.forEach(url::addQueryParameter)
+            // القيم تُمرَّر مُرمَّزة مسبقًا: الفاصلة الخام في آخر معامل تكسر
+            // مطابقة Digest URI في هذا البرنامج الثابت (انظر [encodeQueryValue]).
+            query.forEach { (name, value) ->
+                url.addEncodedQueryParameter(name, encodeQueryValue(value))
+            }
             return execute(Request.Builder().url(url.build()).get().build())
         }
 
@@ -153,21 +157,21 @@ class DinstarConnectionFactory(
         }
 
         /**
-         * Ù‚Ø±Ø§Ø¡Ø© Ø­Ø§Ù„Ø© Ø§Ù„Ù…Ù†Ø§ÙØ°. `port` ØªÙÙ…Ø±ÙŽÙ‘Ø± ÙƒÙ‚Ø§Ø¦Ù…Ø© Ù…ÙØµÙˆÙ„Ø© Ø¨ÙÙˆØ§ØµÙ„ØŒ ÙˆØ¹Ø¯Ø¯
-         * Ø§Ù„Ù…Ù†Ø§ÙØ° ÙŠÙØ´ØªÙ‚ Ù…Ù† Ø§Ù„Ø·Ø±Ø§Ø² Ø¨Ø¯Ù„ ØªØ«Ø¨ÙŠØªÙ‡ Ø¹Ù„Ù‰ 8.
+         * قراءة حالة المنافذ. `port` تُمرَّر كقائمة مفصولة بفواصل، وعدد
+         * المنافذ يُشتق من الطراز بدل تثبيته على 8.
          */
         @Suppress("UNCHECKED_CAST")
         fun getPortInfo(portCount: Int = 8): List<Map<String, Any?>> =
             queryPorts(portCount).ports
 
         /**
-         * Ø§Ø³ØªØ¹Ù„Ø§Ù… Ø§Ù„Ù…Ù†Ø§ÙØ° Ù…Ø¹ Ø§Ù„Ø§Ø­ØªÙØ§Ø¸ Ø¨Ø§Ù„Ø±Ù‚Ù… Ø§Ù„ØªØ³Ù„Ø³Ù„ÙŠ.
+         * استعلام المنافذ مع الاحتفاظ بالرقم التسلسلي.
          *
-         * ØªÙˆØ«ÙŠÙ‚ `get_port_info` (Â§10.3) ÙŠÙ†Øµ Ø¹Ù„Ù‰ Ø£Ù† **ÙƒÙ„ Ø§Ø³ØªØ¬Ø§Ø¨Ø© ØªØ­Ù…Ù„
-         * Ø­Ù‚Ù„ `sn`** = Ø§Ù„Ø±Ù‚Ù… Ø§Ù„ØªØ³Ù„Ø³Ù„ÙŠ Ù„Ù„Ø¨ÙˆØ§Ø¨Ø©. ÙƒØ§Ù† ÙŠÙÙ‡Ù…ÙŽÙ„ ÙˆÙŠÙÙ‚Ø±Ø£ Ø§Ù„ØªØ³Ù„Ø³Ù„ÙŠ
-         * Ù…Ù† `get_status` ÙˆØ­Ø¯Ù‡ØŒ ÙˆÙ‡Ùˆ Ø£Ù…Ø± Ù„Ø§ ØªØ¯Ø¹Ù…Ù‡ Ø§Ù„Ø¥ØµØ¯Ø§Ø±Ø§Øª Ø§Ù„Ø£Ù‚Ø¯Ù… Ù…Ù†
-         * 1102 â€” ÙØªÙÙ‚Ø¯ ØªÙ„Ùƒ Ø§Ù„Ø£Ø¬Ù‡Ø²Ø© Ù‡ÙˆÙŠØªÙ‡Ø§ Ø§Ù„Ø«Ø§Ø¨ØªØ© ÙˆØªÙØ¹Ø±ÙŽÙ‘Ù Ø¨Ø¹Ù†ÙˆØ§Ù†Ù‡Ø§
-         * Ø§Ù„Ø´Ø¨ÙƒÙŠ Ø§Ù„Ø°ÙŠ ÙŠØªØ¨Ø¯Ù‘Ù„ Ù…Ø¹ DHCP.
+         * توثيق `get_port_info` (Â§10.3) ينص على أن **كل استجابة تحمل
+         * حقل `sn`** = الرقم التسلسلي للبوابة. كان يُهمَل ويُقرأ التسلسلي
+         * من `get_status` وحده، وهو أمر لا تدعمه الإصدارات الأقدم من
+         * 1102 â€” فتفقد تلك الأجهزة هويتها الثابتة وتُعرَّف بعنوانها
+         * الشبكي الذي يتبدّل مع DHCP.
          */
         fun queryPorts(portCount: Int = 8): PortQuery {
             val response = getJson(
@@ -197,7 +201,7 @@ class DinstarConnectionFactory(
             else performance + mapOf(DinstarApiContract.PortInfo.SERIAL_KEY to serial)
         }
 
-        /** Ù†ØªÙŠØ¬Ø© Ø§Ø³ØªØ¹Ù„Ø§Ù… Ø§Ù„Ù…Ù†Ø§ÙØ° Ù…Ø¹ Ù‡ÙˆÙŠØ© Ø§Ù„Ø¬Ù‡Ø§Ø² Ø§Ù„Ù…Ø±Ø§ÙÙ‚Ø©. */
+        /** نتيجة استعلام المنافذ مع هوية الجهاز المرافقة. */
         data class PortQuery(
             val ports: List<Map<String, Any?>>,
             val serialNumber: String?
@@ -221,9 +225,39 @@ class DinstarConnectionFactory(
         }
 
         companion object {
-            /** ÙˆØ§Ø¬Ù‡Ø© UC2000 ØªÙØ´ÙŠØ± Ø¥Ù„Ù‰ Ø§Ù„Ù†Ø¬Ø§Ø­ Ø¨Ù€ `error_code = 200`. */
+            /** واجهة UC2000 تُشير إلى النجاح بـ `error_code = 200`. */
             fun isSuccess(response: Map<String, Any?>): Boolean =
                 (response["error_code"] as? Number)?.toInt() == 200
+
+            /**
+                         * ترميز قيمة معامل الاستعلام قبل إرسالها.
+             *
+             * ## لماذا هذا ضروري — عطل مُثبت ميدانيًا
+             *
+             * البرنامج الثابت `04240302` (Web Server/2.1.0 + MatrixSSL) يحسب
+             * `Digest response` على URI **قبل** فكّ ترميز الاستعلام، لكنه يفشل في
+             * مطابقته حين تظهر فاصلة **خام** داخل قيمة **آخر** معامل في السلسلة.
+             * النتيجة `401 Wrong Password` رغم صحة الاعتماد تمامًا:
+             *
+             * | سلسلة الاستعلام                          | النتيجة |
+             * |------------------------------------------|---------|
+             * | `port=0&info_type=signal`                | 200     |
+             * | `port=0&info_type=signal,type`           | **401** |
+             * | `port=0&info_type=signal%2Ctype`         | 200     |
+             * | `info_type=signal,type&port=0`           | 200     |
+             * | `info_type=signal&port=0,1`              | **401** |
+             * | `info_type=signal&port=0%2C1`            | 200     |
+             *
+             * أي أن العطل ليس في كلمة المرور ولا في نوع المصادقة (Digest يعمل،
+             * Basic يُرفض بـ401 دائمًا)، بل في **الفاصلة الخام في الموضع الأخير**.
+             * ترميز الفاصلة إلى `%2C` في كل القيم يجعل كل الاستدعاءات تنجح بلا
+             * اعتماد على ترتيب المعاملات — وهو ما كان يجعل السلوك يبدو عشوائيًا.
+             *
+             * `addEncodedQueryParameter` يُستخدم مع هذه الدالة كي لا يُعيد OkHttp
+             * فكّ `%2C` إلى فاصلة خام عند البناء.
+             */
+            internal fun encodeQueryValue(value: String): String =
+                value.replace("%", "%25").replace(",", "%2C")
 
             private fun isPrivate(host: String): Boolean = runCatching {
                 val a = InetAddress.getByName(host)

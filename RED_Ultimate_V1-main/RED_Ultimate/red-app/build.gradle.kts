@@ -5,9 +5,9 @@
     alias(libs.plugins.ksp)
 }
 
-// Ø§Ù„Ù…Ù†ÙØ° Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠ ÙÙŠ Ø§Ù„Ù‚ÙŠÙ…Ø© Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠØ©: Ø¨Ø¯ÙˆÙ†Ù‡ ÙŠÙ‚ØµØ¯ OkHttp Ø§Ù„Ù…Ù†ÙØ° 80 Ø¨ÙŠÙ†Ù…Ø§ Ø§Ù„Ø®Ø§Ø¯Ù…
-// ÙŠØ³ØªÙ…Ø¹ Ø¹Ù„Ù‰ 8088 (Ø¨ÙˆØ§Ø¨Ø© Nginx) â€” ÙÙŠÙØ´Ù„ ÙƒÙ„ Ø·Ù„Ø¨ Ø¨Ù€ NETWORK_ERROR Ø¨Ù„Ø§ Ø³Ø¨Ø¨ Ø¸Ø§Ù‡Ø±.
-// Ø§Ù„Ø¨Ù†Ø§Ø¡ Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ ÙŠÙ…Ø±Ù‘Ø± -PRED_SERVER_URL=http://SERVER_IP:PORT.
+// المنفذ الإلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما الخادم
+// يستمع على 8088 (بوابة Nginx) â€” فيفشل كل طلب بـ NETWORK_ERROR بلا سبب ظاهر.
+// البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
 // Default to the host Wi-Fi interface verified for physical Android clients.
 // CI/production may override this with -PRED_SERVER_URL=https://your-domain.
 val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.11.131:8088")
@@ -53,9 +53,9 @@ android {
             isMinifyEnabled = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Ø§Ù„ØªÙˆÙ‚ÙŠØ¹ Ø§Ù„Ø±Ø³Ù…ÙŠ ÙŠÙÙ‚Ø±Ø£ Ù…Ù† Ù…ØªØºÙŠØ±Ø§Øª Ø¨ÙŠØ¦Ø©/Ø®ØµØ§Ø¦Øµ (RED_KEYSTORE_*) â€” Ù„Ø§
-            // Ù…ÙØ§ØªÙŠØ­ Ø¥Ù†ØªØ§Ø¬ Ù…Ø¶Ù…Ù†Ø© ÙÙŠ Ø§Ù„Ù…Ø³ØªÙˆØ¯Ø¹. Ø¥Ù† Ù„Ù… ØªÙØ¶Ø¨Ø· ØªÙØ³ØªØ®Ø¯Ù… Ù‡ÙˆÙŠØ© alpha
-            // Ø§Ù„Ù…Ø¤Ù‚ØªØ© (Ù…ÙØªØ§Ø­ debug Ø¹Ø§Ù…) Ø­ØªÙ‰ ÙŠÙÙƒÙ…Ù„ Ø³ÙŠØ± Ø§Ù„Ø¹Ù…Ù„ Ø§Ù„Ù…Ø­Ù„ÙŠ.
+            // التوقيع الرسمي يُقرأ من متغيرات بيئة/خصائص (RED_KEYSTORE_*) â€” لا
+            // مفاتيح إنتاج مضمنة في المستودع. إن لم تُضبط تُستخدم هوية alpha
+            // المؤقتة (مفتاح debug عام) حتى يُكمل سير العمل المحلي.
             val keystoreFile = providers.gradleProperty("RED_KEYSTORE_FILE").orElse("").get()
             if (keystoreFile.isNotBlank()) {
                 signingConfig = signingConfigs.create("redRelease") {
@@ -159,27 +159,27 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // â”€â”€â”€â”€â”€ Ø®Ø·ÙˆØ· Google (Cairo + Tajawal) â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ خطوط Google (Cairo + Tajawal) â”€â”€â”€â”€â”€
     implementation(libs.androidx.compose.ui.text.google.fonts)
 
-    // â”€â”€â”€â”€â”€ Coil â€” ØªØ­Ù…ÙŠÙ„ ÙˆØ¹Ø±Ø¶ Ø§Ù„ØµÙˆØ± ÙˆØ§Ù„ÙÙŠØ¯ÙŠÙˆ Ø¨ÙƒÙØ§Ø¡Ø© Ø¹Ø§Ù„ÙŠØ© â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Coil â€” تحميل وعرض الصور والفيديو بكفاءة عالية â”€â”€â”€â”€â”€
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
 
-    // â”€â”€â”€â”€â”€ Lottie â€” Ø£Ù†ÙŠÙ…ÙŠØ´Ù† Ø§Ø­ØªØ±Ø§ÙÙŠ (Ù…Ø¤Ø´Ø± Ø§Ù„ÙƒØªØ§Ø¨Ø©ØŒ Ø±Ø¯ÙˆØ¯ Ø§Ù„ÙØ¹Ù„) â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Lottie â€” أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) â”€â”€â”€â”€â”€
     implementation(libs.lottie.compose)
 
-    // â”€â”€â”€â”€â”€ emoji2-emojipicker â€” Ù…Ø­Ø¯Ø¯ Ø§Ù„Ø¥ÙŠÙ…ÙˆØ¬ÙŠ Ø§Ù„Ø±Ø³Ù…ÙŠ Ù…Ù† Google â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ emoji2-emojipicker â€” محدد الإيموجي الرسمي من Google â”€â”€â”€â”€â”€
     implementation(libs.androidx.emoji2.emojipicker)
 
-    // â”€â”€â”€â”€â”€ Paging 3 â€” ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø§Øª ÙˆØ§Ù„Ù…Ù†Ø´ÙˆØ±Ø§Øª Ø¨ØªÙƒØ§Ø³Ù„ â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Paging 3 â€” تحميل المحادثات والمنشورات بتكاسل â”€â”€â”€â”€â”€
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // â”€â”€â”€â”€â”€ WorkManager â€” Ù…Ø²Ø§Ù…Ù†Ø© ÙÙŠ Ø§Ù„Ø®Ù„ÙÙŠØ© â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ WorkManager â€” مزامنة في الخلفية â”€â”€â”€â”€â”€
     implementation(libs.androidx.work.runtime.ktx)
 
-    // â”€â”€â”€â”€â”€ Room â€” Ù‚Ø§Ø¹Ø¯Ø© Ø¨ÙŠØ§Ù†Ø§Øª Ù…Ø­Ù„ÙŠØ© Ø³ÙŠØ§Ø¯ÙŠØ© â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Room â€” قاعدة بيانات محلية سيادية â”€â”€â”€â”€â”€
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
     implementation(libs.androidx.room.runtime)
@@ -187,10 +187,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
-    // â”€â”€â”€â”€â”€ Accompanist â€” Ø£Ø°ÙˆÙ†Ø§Øª ÙˆØªØ³Ù‡ÙŠÙ„Ø§Øª Compose â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Accompanist â€” أذونات وتسهيلات Compose â”€â”€â”€â”€â”€
     implementation(libs.accompanist.permissions)
 
-    // â”€â”€â”€â”€â”€ Biometric â€” Ù‚ÙÙ„ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¨Ø§Ù„Ø¨ØµÙ…Ø©/Ø§Ù„ÙˆØ¬Ù‡ â”€â”€â”€â”€â”€
+    // â”€â”€â”€â”€â”€ Biometric â€” قفل التطبيق بالبصمة/الوجه â”€â”€â”€â”€â”€
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
 

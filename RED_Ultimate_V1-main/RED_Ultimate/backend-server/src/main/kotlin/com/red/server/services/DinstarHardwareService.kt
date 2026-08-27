@@ -68,6 +68,23 @@ class DinstarHardwareService(
         const val AUTO_ENCODING = "AUTO"
 
         /**
+         * أنماط «تعلّم الرقم» كما تُرقّمها صفحة `enHBPhoneNumberAdd.htm`.
+         * DINSTAR توثّق الثلاثة رسميًا في FAQ الخاص بـ UC2000.
+         */
+        enum class NumberLearningMethod(val wire: String) {
+            SMS("0"), USSD("1"), CALL("2")
+        }
+
+        /** الرمز القصير لخدمة «معرفة رقمي» في سبأفون. */
+        const val SABAFON_MMN_SHORTCODE = "333"
+
+        /** نص الطلب لخدمة «معرفة رقمي» في سبأفون. */
+        const val SABAFON_MMN_KEYWORD = "MMN"
+
+        /** رقم هاتف أو رمز قصير — يطابق `ReTestNumber` في صفحة الجهاز. */
+        private val NUMBER_OR_SHORTCODE = Regex("^\\+?[0-9*#]{2,23}$")
+
+        /**
          * اختيار الترميز من محتوى الرسالة.
          *
          * القاعدة: إن كان كل حرف موجودًا في أبجدية GSM 03.38 فالنص يُرسَل
@@ -251,28 +268,101 @@ class DinstarHardwareService(
     /** إعادة تشغيل الوحدة (المنفذ). */
     fun resetPort(port: Int): Map<String, Any> {
         requireValidPort(port)
-        // set_port_info uses GET with query parameters per the official Dinstar API documentation
-        val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" to port.toString()))
+        // set_port_info يتطلب الثلاثة معًا: port + action + param. إرساله بلا
+        // `param` كان يجعل البرنامج الثابت يرفض الطلب صامتًا.
+        val response = getJson(
+            DinstarApiContract.Path.SET_PORT_INFO,
+            mapOf(
+                "port" to port.toString(),
+                "action" to DinstarApiContract.PortAction.RESET,
+                "param" to DinstarApiContract.PortAction.RESET_PARAM
+            )
+        )
         require(apiSuccess(response)) { "تعذّرت إعادة تشغيل الوحدة: ${apiErrorMessage(response)}" }
         return mapOf("status" to "SUCCEEDED", "port" to port)
     }
 
     /**
-     * تفعيل "تعلّم الرقم" (Phone Number Learning) عبر واجهة الويب للجهاز.
-     * يستخدم نمط "Call" الموصى به لسبأفون.
+     * إنشاء قاعدة «تعلّم الرقم» (Phone Number Learning) عبر واجهة الويب.
+     *
+     * ## لماذا الويب لا الـ API
+     * لا يوجد مسار موثّق في UC2000 HTTP API لهذه الميزة؛ الطريق الوحيد هو
+     * النموذج `/goform/HBPhoneNumberRuleAdd`.
+     *
+     * ## الحقول — مقروءة من `enHBPhoneNumberAdd.htm` على الجهاز نفسه
+     * | الحقل        | المعنى                                            |
+     * |--------------|---------------------------------------------------|
+     * | `Index`      | فهرس القاعدة 0..7 (لا فهرس المنفذ)                |
+     * | `Method`     | 0=SMS، 1=USSD، 2=Call                             |
+     * | `Encoding`   | 0=UCS2، 1=GSM 7bit — لـ SMS فقط                   |
+     * | `Dest`       | رقم/رمز الوجهة — مطلوب لـ SMS وCall، مُخفى لـ USSD |
+     * | `Text`       | النص المُرسَل — مطلوب لغير Call                    |
+     * | `Src`        | رقم المُرسِل المتوقَّع للرد (فلترة)                 |
+     * | `Key`        | الكلمات المفتاحية لاستخراج الرقم من الرد          |
+     * | `IsWRSim`    | 1 = اكتب الرقم في الشريحة                          |
+     * | `RmFromLeft` | حذف خانات من اليسار                                |
+     * | `AddPrefix`  | بادئة تُضاف                                        |
+     * | `PortGroup`  | مجموعة المنافذ (0 = الافتراضية)                    |
+     *
+     * كان الاستدعاء السابق يرسل `Index/Method/IsWRSim/Ok` فقط بنمط Call،
+     * فتُنشأ قاعدة ناقصة بلا وجهة ولا كلمات مفتاحية — لا تستخرج رقمًا.
+     *
+     * ## سبأفون
+     * الطريق الموثَّق: **SMS** إلى `333` بالنص `MMN` ثم مطابقة الرد. لذلك
+     * الافتراضي هنا SMS لا Call.
+     *
+     * @param ruleIndex فهرس القاعدة (0..7) — الافتراضي مطابق للمنفذ.
+     * @return `true` إذا قبِل الجهاز النموذج (200 أو 302).
      */
-    fun triggerNumberLearning(port: Int, host: String? = null): Boolean {
+    fun triggerNumberLearning(
+        port: Int,
+        host: String? = null,
+        method: NumberLearningMethod = NumberLearningMethod.SMS,
+        destination: String = SABAFON_MMN_SHORTCODE,
+        text: String = SABAFON_MMN_KEYWORD,
+        expectedSender: String = "",
+        keywords: String = "",
+        writeToSim: Boolean = true,
+        stripFromLeft: Int = 0,
+        addPrefix: String = "",
+        portGroup: Int = 0,
+        ruleIndex: Int = port
+    ): Boolean {
         requireValidPort(port)
+        require(ruleIndex in portRange) { "فهرس القاعدة خارج المدى: $ruleIndex" }
+        // التحقق يطابق `form_check` في صفحة الجهاز: Call وحده يعفي من النص،
+        // وUSSD وحده يعفي من الوجهة.
+        if (method != NumberLearningMethod.USSD) {
+            require(destination.matches(NUMBER_OR_SHORTCODE)) { "رقم وجهة غير صالح: $destination" }
+        }
+        if (method != NumberLearningMethod.CALL) {
+            require(text.isNotBlank()) { "نص الإرسال مطلوب لنمط ${method.name}" }
+        }
+        require(stripFromLeft in 0..31) { "عدد الخانات المحذوفة يجب أن يكون 0..31" }
+
         val target = host ?: activeHost
-        log.info("Triggering Number Learning (Call Mode) for port {} on {}", port, target)
+        require(isPrivateAddress(target)) { "بوابة تعلّم الأرقام يجب أن تكون على عنوان خاص" }
+        log.info(
+            "Number Learning rule: gateway={} ruleIndex={} method={} dest={} writeToSim={}",
+            target, ruleIndex, method.name, destination.ifBlank { "-" }, writeToSim
+        )
 
         return runCatching {
             ensureWebSession(target)
             val url = "$configuredScheme://$target:$configuredPort/goform/HBPhoneNumberRuleAdd".toHttpUrl()
             val formBody = FormBody.Builder()
-                .add("Index", port.toString())
-                .add("Method", "2") // 2 = Call
-                .add("IsWRSim", "1") // Write to SIM
+                .add("Index", ruleIndex.toString())
+                .add("Method", method.wire)
+                // الترميز يُقرأ لـ SMS وحده، لكن إرساله دائمًا لا يضرّ
+                .add("Encoding", if (method == NumberLearningMethod.SMS) "1" else "0")
+                .add("Dest", if (method == NumberLearningMethod.USSD) "" else destination)
+                .add("Text", if (method == NumberLearningMethod.CALL) "" else text)
+                .add("Src", expectedSender)
+                .add("Key", keywords)
+                .add("IsWRSim", if (writeToSim) "1" else "0")
+                .add("RmFromLeft", stripFromLeft.toString())
+                .add("AddPrefix", addPrefix)
+                .add("PortGroup", portGroup.toString())
                 .add("Ok", "Save")
                 .build()
 
@@ -283,8 +373,14 @@ class DinstarHardwareService(
                 .build()
 
             client.newCall(request).execute().use { response ->
-                response.isSuccessful || response.code == 302
+                val accepted = response.isSuccessful || response.code == 302
+                if (!accepted) {
+                    log.warn("Number Learning rejected by {}: HTTP {}", target, response.code)
+                }
+                accepted
             }
+        }.onFailure {
+            log.warn("Number Learning failed on {} port {}: {}", target, port, it.message)
         }.getOrDefault(false)
     }
 
@@ -422,11 +518,43 @@ class DinstarHardwareService(
         return postJson("/api/query_sms_deliver_status", body)
     }
 
-    /** جلب SMS الواردة — GET /api/query_incoming_sms */
-    fun queryIncomingSms(): Map<String, Any?> = getJson("/api/query_incoming_sms", emptyMap())
+    /**
+     * جلب SMS الواردة — POST /api/query_incoming_sms بمؤشّر تزايدي.
+     *
+     * `incoming_sms_id` يجعل البوابة تُعيد الرسائل الأحدث من هذا المعرّف فقط
+     * بدل الصندوق كاملًا في كل دورة. الاستجابة تحمل `sms` و`read` و`unread`.
+     */
+    fun queryIncomingSms(sinceId: Long = 0, flag: String = DinstarApiContract.Sms.FLAG_UNREAD): Map<String, Any?> =
+        postJson(
+            DinstarApiContract.Path.QUERY_INCOMING_SMS,
+            mapOf(
+                DinstarApiContract.Sms.REQ_INCOMING_ID to sinceId,
+                DinstarApiContract.Sms.REQ_FLAG to flag
+            )
+        )
 
-    /** عدد SMS في الطابور — GET /api/query_sms_count */
-    fun querySmsQueueCount(): Map<String, Any?> = getJson("/api/query_sms_count", emptyMap())
+    /**
+     * عدد SMS في الطابور.
+     *
+     * البرنامج الثابت 04240302 لا يكشف `query_sms_queue` ولا الاسم القديم
+     * `query_sms_count` (كلاهما 404 مُثبت ميدانيًا). يُجرَّب الموثّق أولًا ثم
+     * البديل، ويُعاد `error_code=404` مُوصَّفًا بدل رمي استثناء يُسقِط الاستدعاء
+     * كله على أجهزة لا تدعم المسار أصلًا.
+     */
+    fun querySmsQueueCount(): Map<String, Any?> {
+        for (path in listOf(
+            DinstarApiContract.Path.QUERY_SMS_QUEUE,
+            DinstarApiContract.Path.QUERY_SMS_COUNT_LEGACY
+        )) {
+            runCatching { postJson(path, emptyMap<String, Any>()) }
+                .onSuccess { return it }
+                .onFailure { log.debug("DINSTAR {} غير مدعوم: {}", path, it.message) }
+        }
+        return mapOf(
+            "error_code" to 404,
+            "message" to "SMS queue length is not exposed by this firmware"
+        )
+    }
 
     /** إيقاف مهمة إرسال SMS — GET /api/stop_sms?task_id=N */
     fun stopSmsTask(taskId: Int): Map<String, Any?> {
@@ -581,14 +709,45 @@ class DinstarHardwareService(
         queryPortInfo(host, portRange)
 
     private fun queryPortInfo(host: String, ports: IntRange): List<Map<String, Any?>> {
-        // الاكتشاف وفحص الحالة كانا يعتمدان مسار جلسة الويب
-        // (تسجيل دخول النموذج + WebGetPortInfoAll) الذي ترفضه بعض
-        // إصدارات البرنامج الثابت — نستخدم عميل HTTP API الموثّق
-        // (Digest) نفسه الذي يعمل عبر الأسطول.
+        // المسار الأساسي: عميل HTTP API الموثّق (Digest) نفسه الذي يعمل عبر
+        // الأسطول. الفاصلة في `info_type`/`port` تُرمَّز `%2C` — بغير ذلك يردّ
+        // البرنامج الثابت 04240302 بـ401 رغم صحة الاعتماد
+        // (انظر [DinstarConnectionFactory.DinstarClient.encodeQueryValue]).
         val client = connections.clientFor(host, configuredPort, configuredScheme)
         return runCatching { client.queryPorts(ports.last + 1).ports }
             .recoverCatching { client.queryPorts(DinstarModelProfile.UC2000_VE_4G.portRange.last + 1).ports }
-            .getOrElse { throw IllegalStateException("No authenticated UC2000 get_port_info response on $host", it) }
+            // آخر ملاذ: جلسة الويب. إصدارات تُعطّل «New Version API» أو تفقد
+            // مزامنة قاعدة Digest تظل تُجيب على `WebGetPortInfoAll` بالكوكي،
+            // فالبديل يمنع ظهور بوابة حيّة على أنها ساقطة. الحقول تُطبَّع إلى
+            // أسماء get_port_info حتى يبقى [normalizePort] مصدرًا واحدًا.
+            .recoverCatching { apiFailure ->
+                log.warn("DINSTAR get_port_info failed on {} ({}) — falling back to web session", host, apiFailure.message)
+                queryPortInfoViaWebSession(host, ports)
+            }
+            .getOrElse { throw IllegalStateException("No authenticated UC2000 port response on $host", it) }
+    }
+
+    /**
+     * قراءة حالة المنافذ عبر جلسة واجهة الويب (`WebGetPortInfoAll`).
+     *
+     * تُستخدم فقط عند فشل واجهة HTTP API الموثّقة. الاستجابة مصفوفة خام
+     * (لا `{"info":[...]}`), وأسماء حقولها تختلف: `status` بدل `reg`
+     * و`call_status` بدل `callstate`، والقيم نصية. تُطبَّع هنا إلى عقد
+     * `get_port_info` كي لا يتفرّع منطق التفسير في موضعين.
+     */
+    private fun queryPortInfoViaWebSession(host: String, ports: IntRange): List<Map<String, Any?>> {
+        ensureWebSession(host)
+        val raw = getJsonArray("/WebGetPortInfoAll", host)
+        return parsePortInfoResponse(raw, ports).map { entry ->
+            entry + mapOf(
+                "port" to (entry["port"]?.toString()?.toIntOrNull() ?: return@map entry),
+                // reg/callstate هما ما يقرؤه normalizePort؛ نص الويب
+                // "Mobile Registered" مقبول في DinstarApiContract.PortInfo.
+                "reg" to (entry["reg"] ?: entry["status"]),
+                "callstate" to (entry["callstate"] ?: entry["call_status"]),
+                "signal" to (entry["signal"]?.toString()?.trim()?.toIntOrNull() ?: entry["signal"])
+            )
+        }
     }
 
     /**
@@ -820,7 +979,15 @@ class DinstarHardwareService(
 
     private fun getJson(path: String, query: Map<String, String>, host: String = activeHost): Map<String, Any?> {
         val builder = baseUrl(host).newBuilder().addPathSegments(path.removePrefix("/"))
-        query.forEach(builder::addQueryParameter)
+        // الفاصلة الخام في آخر معامل تكسر مطابقة Digest URI على البرنامج
+        // الثابت 04240302 فتردّ 401 رغم صحة الاعتماد — التفصيل والجدول في
+        // [DinstarConnectionFactory.DinstarClient.encodeQueryValue].
+        query.forEach { (name, value) ->
+            builder.addEncodedQueryParameter(
+                name,
+                DinstarConnectionFactory.DinstarClient.encodeQueryValue(value)
+            )
+        }
         return execute(Request.Builder().url(builder.build()).get().build())
     }
 

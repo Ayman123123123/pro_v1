@@ -4,11 +4,11 @@ import kotlinx.serialization.Serializable
 import org.webrtc.IceCandidate
 
 /**
- * Ø¥Ø´Ø§Ø±Ø© Ø§Ù„Ù…ÙƒØ§Ù„Ù…Ø© Ø§Ù„Ù…ÙˆØ­Ø¯Ø© â€” Ù…ØªÙˆØ§ÙÙ‚Ø© Ù…Ø¹ YounesCallService / GroupCallService / Backend.
+ * إشارة المكالمة الموحدة â€” متوافقة مع YounesCallService / GroupCallService / Backend.
  *
- * âš ï¸ Ø¹Ù‚Ø¯ Ø§Ù„Ù…ÙˆØ§Ø¶Ø¹: Ø§Ù„ÙˆØ³ÙŠØ· Ø§Ù„Ø«Ø§Ù†ÙŠ Ø§Ù„Ù…ÙˆØ¶Ø¹ÙŠ Ù‡Ùˆ Ø¯Ø§Ø¦Ù…Ø§Ù‹ targetUserId (Ù‡ÙˆÙŠØ© Ø§Ù„Ù…Ø³ØªÙ„Ù…)
- * ÙˆÙ„ÙŠØ³ callType â€” ÙŠØ­Ù…ÙŠÙ‡ CallSignalPositionalContractTest. Ø§Ù„Ø¨Ù†Ø§Ø¡ Ø§Ù„Ù…Ø³Ù…Ù‘Ù‰
- * Ù…ÙØ¶ÙŽÙ‘Ù„ Ø¯Ø§Ø¦Ù…Ø§Ù‹ØŒ Ù„ÙƒÙ† Ø£ÙŠ Ø¨Ù†Ø§Ø¡ Ù…ÙˆØ¶Ø¹ÙŠ Ù‚Ø¯ÙŠÙ… ÙŠØ³Ù„Ùƒ Ø§Ù„Ø³Ù„ÙˆÙƒ Ø§Ù„ØµØ­ÙŠØ­ Ø§Ù„Ø¢Ù†.
+ * âš ï¸ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
+ * وليس callType â€” يحميه CallSignalPositionalContractTest. البناء المسمّى
+ * مفضَّل دائماً، لكن أي بناء موضعي قديم يسلك السلوك الصحيح الآن.
  */
 @Serializable
 data class CallSignal(

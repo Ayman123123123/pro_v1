@@ -11,16 +11,16 @@ import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
 /**
- * Dinstar SMS Controller â€” Ø¥Ø±Ø³Ø§Ù„ ÙˆØ§Ø³ØªÙ‚Ø¨Ø§Ù„ SMS Ø¹Ø¨Ø± UC2000-VE-8G
+ * Dinstar SMS Controller â€” إرسال واستقبال SMS عبر UC2000-VE-8G
  * 
- * Endpoints Ø§Ù„Ù…Ø¹Ø±Ù‘ÙØ© Ø­Ø³Ø¨ ÙˆØ«Ø§Ø¦Ù‚ Dinstar Ø§Ù„Ø±Ø³Ù…ÙŠØ©:
+ * Endpoints المعرّفة حسب وثائق Dinstar الرسمية:
  * 
- * POST /api/admin/dinstar/sms/send     â†’ Ø¥Ø±Ø³Ø§Ù„ SMS (ÙØ±Ø¯ÙŠ/Ù…Ø¬Ù…Ù‘Ø¹)
- * POST /api/admin/dinstar/sms/result   â†’ Ø¬Ù„Ø¨ Ù†ØªØ§Ø¦Ø¬ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„
- * GET  /api/admin/dinstar/sms/incoming â†’ Ø¬Ù„Ø¨ SMS Ø§Ù„ÙˆØ§Ø±Ø¯Ø©
- * GET  /api/admin/dinstar/sms/queue    â†’ Ø¹Ø¯Ø¯ SMS ÙÙŠ Ø§Ù„Ø·Ø§Ø¨ÙˆØ±
- * POST /api/admin/dinstar/sms/stop     â†’ Ø¥ÙŠÙ‚Ø§Ù Ù…Ù‡Ù…Ø© Ø¥Ø±Ø³Ø§Ù„
- * POST /api/admin/dinstar/sms/deliver  â†’ Ø¬Ù„Ø¨ Ø­Ø§Ù„Ø© Ø§Ù„ØªØ³Ù„ÙŠÙ…
+ * POST /api/admin/dinstar/sms/send     â†’ إرسال SMS (فردي/مجمّع)
+ * POST /api/admin/dinstar/sms/result   â†’ جلب نتائج الإرسال
+ * GET  /api/admin/dinstar/sms/incoming â†’ جلب SMS الواردة
+ * GET  /api/admin/dinstar/sms/queue    â†’ عدد SMS في الطابور
+ * POST /api/admin/dinstar/sms/stop     â†’ إيقاف مهمة إرسال
+ * POST /api/admin/dinstar/sms/deliver  â†’ جلب حالة التسليم
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/sms")
@@ -33,15 +33,15 @@ class DinstarSmsController(
 ) {
 
     /**
-     * Ù‡Ù„ Ø§Ù„Ù…ÙØ³ØªØ¯Ø¹ÙŠ Ø£Ø¯Ù…Ù†ØŸ Ø§Ù„Ø£Ø¯Ù…Ù† ÙˆØ­Ø¯Ù‡ ÙŠØªØ­ÙƒÙ… Ø¨Ù…Ù†Ø§ÙØ°/Ø¨ÙˆØ§Ø¨Ø§Øª Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ø¨Ø­Ø±ÙŠØ©
-     * (Ø­Ù…Ù„Ø§Øª Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…). Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠÙØ­Ø¨ÙŽØ³ Ø¹Ù„Ù‰ Ø´Ø±ÙŠØ­ØªÙ‡ Ø§Ù„Ù…Ø±Ø¨ÙˆØ·Ø©
-     * 1:1 (pstn_gateway_id/pstn_port_index) â€” Ø¥ØºÙ„Ø§Ù‚ Ø«ØºØ±Ø© Ø¥Ø±Ø³Ø§Ù„ SMS Ù…Ù†
-     * Ø´Ø±ÙŠØ­Ø© ØºÙŠØ±Ù‡ Ø£Ùˆ Ø§Ø³ØªÙ‡Ø¯Ø§Ù Ø¨ÙˆØ§Ø¨Ø© Ø§Ø¹ØªØ¨Ø§Ø·ÙŠØ© Ø¹Ø¨Ø± gatewayHost.
+     * هل المُستدعي أدمن؟ الأدمن وحده يتحكم بمنافذ/بوابات الإرسال بحرية
+     * (حملات لوحة التحكم). المستخدم العادي يُحبَس على شريحته المربوطة
+     * 1:1 (pstn_gateway_id/pstn_port_index) â€” إغلاق ثغرة إرسال SMS من
+     * شريحة غيره أو استهداف بوابة اعتباطية عبر gatewayHost.
      */
     private fun isAdmin(authentication: Authentication): Boolean =
         authentication.authorities.any { it.authority == "ROLE_ADMIN" }
 
-    /** Ù†Ø·Ø§Ù‚ Ø§Ù„Ø´Ø±ÙŠØ­Ø© Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠ Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ: (gatewayHost, portIndex) */
+    /** نطاق الشريحة الإلزامي للمستخدم العادي: (gatewayHost, portIndex) */
     private fun resolveBoundScope(user: com.red.server.auth.model.UserAccount): Pair<String, Int>? {
         val gwId = user.pstnGatewayId ?: return null
         val portIdx = user.pstnPortIndex ?: return null
@@ -49,7 +49,7 @@ class DinstarSmsController(
         return host to portIdx
     }
 
-    /** ÙŠÙÙ„ØªØ± Ø±Ø³Ø§Ø¦Ù„ ÙˆØ§Ø±Ø¯Ø© Ø¹Ù„Ù‰ Ø¹Ù†ØµØ± port Ù…Ø­Ø¯Ø¯ Ù…Ø¹ Ø¯Ø¹Ù… Ø£Ø´ÙƒØ§Ù„ Ø§Ù„Ø§Ø³ØªØ¬Ø§Ø¨Ø© Ø§Ù„Ø´Ø§Ø¦Ø¹Ø© */
+    /** يفلتر رسائل واردة على عنصر port محدد مع دعم أشكال الاستجابة الشائعة */
     private fun filterMessagesForPort(raw: Map<String, Any?>, port: Int): Map<String, Any?> {
         fun match(item: Any?): Boolean {
             if (item !is Map<*, *>) return false
@@ -66,14 +66,14 @@ class DinstarSmsController(
     }
 
     /**
-     * Ø¥Ø±Ø³Ø§Ù„ SMS Ø¹Ø¨Ø± Dinstar
+     * إرسال SMS عبر Dinstar
      * 
-     * Ø§Ù„Ø¬Ø³Ù… (JSON):
+     * الجسم (JSON):
      * {
-     *   "text": "Ù…Ø­ØªÙˆÙ‰ Ø§Ù„Ø±Ø³Ø§Ù„Ø©",
+     *   "text": "محتوى الرسالة",
      *   "param": [{"number": "777123456", "user_id": 1}],
-     *   "port": [0, 1],        // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: Ù…Ù†Ø§ÙØ° Ù…Ø­Ø¯Ø¯Ø©
-     *   "encoding": "AUTO",    // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: AUTO (Ø§ÙØªØ±Ø§Ø¶ÙŠØŒ ÙŠØ´ØªÙ‚ Ù…Ù† Ø§Ù„Ù†Øµ) Ø£Ùˆ GSM7BIT Ø£Ùˆ UCS2 â€” Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ AUTO ÙŠØµÙ„Ø­ Ø±Ø³Ø§Ø¦Ù„ Ø¹Ø±Ø¨ÙŠØ© ÙƒØ§Ù†Øª ØªØµÙ„ Â«?????Â»
+     *   "port": [0, 1],        // اختياري: منافذ محددة
+     *   "encoding": "AUTO",    // اختياري: AUTO (افتراضي، يشتق من النص) أو GSM7BIT أو UCS2 â€” الافتراضي AUTO يصلح رسائل عربية كانت تصل Â«?????Â»
      *   "request_status_report": true
      * }
      */
@@ -93,9 +93,9 @@ class DinstarSmsController(
         val preparedRecipients = smsContract.prepare(params)
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
-        // Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ AUTO: ØªØ´ØªÙ‚ Ø§Ù„Ø®Ø¯Ù…Ø© Ø§Ù„ØªØ±Ù…ÙŠØ² Ù…Ù† Ø§Ù„Ù†Øµ. ØªØ«Ø¨ÙŠØª GSM7BIT Ù‡Ù†Ø§ ÙƒØ§Ù† ÙŠÙØ¨Ø·Ù„ Ø§Ù„Ø§Ø´ØªÙ‚Ø§Ù‚ ÙˆÙŠØ¬Ø¹Ù„ ÙƒÙ„ Ø±Ø³Ø§Ù„Ø© Ø¹Ø±Ø¨ÙŠØ© ØªØµÙ„ Â«?????Â».
+        // الافتراضي AUTO: تشتق الخدمة الترميز من النص. تثبيت GSM7BIT هنا كان يُبطل الاشتقاق ويجعل كل رسالة عربية تصل Â«?????Â».
         val encoding = body["encoding"]?.toString() ?: DinstarHardwareService.AUTO_ENCODING
-        // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: ØªÙˆØ¬ÙŠÙ‡ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ù„Ø¨ÙˆØ§Ø¨Ø© Ø¨Ø¹ÙŠÙ†Ù‡Ø§. Ù„Ù„Ø£Ø¯Ù…Ù† ÙÙ‚Ø· â€” Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠÙØ±Ø³Ù„ Ø­ØµØ±Ø§Ù‹ Ù…Ù† Ø´Ø±ÙŠØ­ØªÙ‡ Ø§Ù„Ù…Ø±Ø¨ÙˆØ·Ø©
+        // اختياري: توجيه الإرسال لبوابة بعينها. للأدمن فقط â€” المستخدم العادي يُرسل حصراً من شريحته المربوطة
         val requestedHost = body["gatewayHost"]?.toString()
 
         val effectivePorts: List<Int>?
@@ -131,7 +131,7 @@ class DinstarSmsController(
         )
     }
 
-    /** Ø¬Ù„Ø¨ Ù†ØªØ§Ø¦Ø¬ Ø¥Ø±Ø³Ø§Ù„ SMS */
+    /** جلب نتائج إرسال SMS */
     @PostMapping("/result")
     fun querySmsResult(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val userIds = (body["user_id"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
@@ -139,7 +139,7 @@ class DinstarSmsController(
         return hardware.querySmsResult(userIds, numbers)
     }
 
-    /** Ø¬Ù„Ø¨ Ø­Ø§Ù„Ø© ØªØ³Ù„ÙŠÙ… SMS */
+    /** جلب حالة تسليم SMS */
     @PostMapping("/deliver")
     fun querySmsDeliveryStatus(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val numbers = (body["number"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
@@ -148,7 +148,7 @@ class DinstarSmsController(
         return hardware.querySmsDeliveryStatus(numbers, timeAfter, timeBefore)
     }
 
-    /** Ø¬Ù„Ø¨ SMS Ø§Ù„ÙˆØ§Ø±Ø¯Ø© â€” Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠØ±Ù‰ Ø±Ø³Ø§Ø¦Ù„ Ø´Ø±ÙŠØ­ØªÙ‡ ÙÙ‚Ø· */
+    /** جلب SMS الواردة â€” المستخدم العادي يرى رسائل شريحته فقط */
     @GetMapping("/incoming")
     fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
@@ -164,11 +164,11 @@ class DinstarSmsController(
         return hardware.queryIncomingSms()
     }
 
-    /** Ø¹Ø¯Ø¯ SMS ÙÙŠ Ø§Ù„Ø·Ø§Ø¨ÙˆØ± */
+    /** عدد SMS في الطابور */
     @GetMapping("/queue")
     fun querySmsQueueCount(): Map<String, Any?> = hardware.querySmsQueueCount()
 
-    /** Ø¥ÙŠÙ‚Ø§Ù Ù…Ù‡Ù…Ø© Ø¥Ø±Ø³Ø§Ù„ SMS */
+    /** إيقاف مهمة إرسال SMS */
     @PostMapping("/stop")
     fun stopSmsTask(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val taskId = (body["task_id"] as? Number)?.toInt()

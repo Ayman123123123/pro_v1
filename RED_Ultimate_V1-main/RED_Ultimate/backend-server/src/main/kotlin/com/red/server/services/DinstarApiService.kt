@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 /**
@@ -113,40 +111,52 @@ class DinstarApiService(
         }
     }
 
+    /**
+     * حفظ سجل CDR واحد كما ورد من `get_cdr`.
+     *
+     * كان هذا الموضع يخطئ في طبقتين معًا:
+     *
+     * 1. **أسماء حقول الجهاز**: يقرأ `start_time`/`answer_time`/`caller_number`
+     *    /`callee_number`، والموثّق في `get_cdr` هو
+     *    `start_date`/`answer_date`/`source_number`/`destination_number`
+     *    (انظر [DinstarApiContract.Cdr.FIELDS]). فكانت كل القيم `null`.
+     *
+     * 2. **أسماء أعمدة الجدول**: يكتب `duration`/`end_time`/`sip_call_id`
+     *    /`asterisk_channel`، وجدول V15 يحمل `duration_seconds` ولا يحمل
+     *    البقية — فيفشل الإدراج كاملًا ويُبتلَع في `catch`.
+     *
+     * وزيادةً: `direction` كان يُدرَج خامًا (`ip->gsm`) فيخرق قيد CHECK،
+     * و`status` — وهو `NOT NULL` — لم يكن يُدرَج إطلاقًا.
+     */
     private fun saveCdrRecord(gatewayId: UUID, cdr: Map<String, Any?>) {
         try {
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            val startTime = (cdr["start_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
+            val start = DinstarTime.parse(cdr["start_date"]?.toString())
+            if (start == null) {
+                log.debug("CDR بلا start_date صالح — تخطّي")
+                return
             }
-            val answerTime = (cdr["answer_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
-            }
-            val endTime = (cdr["end_time"] as? String)?.let { 
-                LocalDateTime.parse(it, formatter) 
+            val answer = DinstarTime.parse(cdr["answer_date"]?.toString())
+            val hangup = cdr["hangup"]?.toString()
+            val direction = DinstarApiContract.Cdr.normalizeDirection(cdr["direction"]?.toString())
+            if (direction == null) {
+                log.debug("CDR باتجاه غير معروف {} — تخطّي", cdr["direction"])
+                return
             }
 
-            jdbc.update("""
-                INSERT INTO dinstar_cdr 
-                (gateway_id, port_index, start_time, answer_time, end_time, duration,
-                 caller_number, callee_number, direction, call_type, codec, 
-                 hangup_cause, sip_call_id, asterisk_channel, raw_data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                gatewayId,
-                cdr["port"],
-                startTime,
-                answerTime,
-                endTime,
-                cdr["duration"],
-                cdr["caller_number"],
-                cdr["callee_number"],
-                cdr["direction"],
-                cdr["call_type"] ?: "VOICE",
-                cdr["codec"],
-                cdr["hangup_cause"],
-                cdr["sip_call_id"],
-                cdr["asterisk_channel"],
+            jdbc.update(
+                DinstarApiContract.Cdr.INSERT_SQL,
+                gatewayId.toString(),
+                (cdr["port"] as? Number)?.toInt(),
+                java.sql.Timestamp.from(start),
+                answer?.let { java.sql.Timestamp.from(it) },
+                (cdr["duration"] as? Number)?.toInt() ?: 0,
+                direction,
+                DinstarApiContract.Cdr.callOutcome(answer != null, hangup),
+                cdr["source_number"]?.toString() ?: "",
+                cdr["destination_number"]?.toString() ?: "",
+                hangup,
+                (cdr["gsm_code"] as? Number)?.toInt(),
+                cdr["codec"]?.toString(),
                 objectMapper.writeValueAsString(cdr)
             )
         } catch (e: Exception) {

@@ -155,11 +155,28 @@ class DinstarSmsContract(private val jdbc: JdbcTemplate) {
         return prepared.recipients.first() to prepared.userIds.first()
     }
 
+    /**
+     * `user_id` الذي يربط طلب الإرسال بتقرير التسليم لاحقًا.
+     *
+     * كان النصّ `nextval(''dinstar_sms_user_id_seq'')` بعلامتَي اقتباس
+     * مزدوجتَين — وهذا خطأ نحوي في PostgreSQL (42601) لا اسمٌ مقتبس. تضعيف
+     * الاقتباس أسلوب SQL المُغلَّف داخل نصّ SQL آخر، لا Kotlin: النصّ هنا
+     * يُرسَل كما هو. فكانت الجملة تفشل **دائمًا** ويُبتلَع الفشل في
+     * `runCatching`، فينزل التنفيذ إلى عدّاد الذاكرة `AtomicLong(1)`.
+     *
+     * الأثر لم يكن تجميليًا: العدّاد ساكن في `companion object` ويبدأ من 1 عند
+     * كل إقلاع، فتُعاد نفس الـ`user_id` بعد كل إعادة تشغيل، وتُنسَب تقارير
+     * التسليم الواردة من الجهاز إلى رسائل أقدم تحمل الرقم نفسه. المتتالية في
+     * القاعدة موجودة أصلًا (`last_value=1`، لم تتقدّم قطّ) وهي المصدر الصحيح
+     * لأنها تصمد عبر الإقلاع وتتفرّد بين النسخ.
+     */
     private fun nextUserId(): Long =
         runCatching {
-            jdbc.queryForObject("SELECT nextval(''dinstar_sms_user_id_seq'')", Long::class.java)
-        }.getOrNull() ?: run {
-            log.warn("dinstar_sms_user_id_seq غير متاح — استخدام عدّاد ذاكرة مؤقت")
-            fallbackSequence.getAndIncrement()
-        }
+            jdbc.queryForObject("SELECT nextval('dinstar_sms_user_id_seq')", Long::class.java)
+        }.getOrElse { e ->
+            // السبب يُسجَّل: بلا رسالة الاستثناء كان الخطأ النحوي أعلاه صامتًا
+            // تمامًا، ولا شيء في السجل يُفرّق بين «متتالية مفقودة» و«جملة معطوبة».
+            log.warn("dinstar_sms_user_id_seq غير متاح ({}) — استخدام عدّاد ذاكرة مؤقت", e.message)
+            null
+        } ?: fallbackSequence.getAndIncrement()
 }

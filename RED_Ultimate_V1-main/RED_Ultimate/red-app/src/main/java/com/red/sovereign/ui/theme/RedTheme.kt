@@ -59,37 +59,94 @@ val TajawalFamily = FontFamily(
 // لوحة الألوان السيادية المحسّنة — نظام متناسق كامل
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── الألوان الأساسية — أسلوب منظم وأنيق مثل تلجرام وواتساب ───────────────
-val YounesPrimary      = Color(0xFF00A884)  // أخضر زمردي هادئ نقي (WhatsApp / Telegram Clean Accent)
-val YounesPrimaryGlow  = Color(0xFF25D366)  // أخضر فاتح للتنبيهات
-val YounesAccent       = Color(0xFF2AABEE)  // أزرق تلجرام الأنيق للروابط والشارات
-val YounesAccentSoft   = Color(0xFF64B5F6)  // أزرق أفتح للحدود
-val YounesCobalt       = Color(0xFF2AABEE)  // أزرق نقي
-val YounesPurple       = Color(0xFF388E3C)  // أخضر إضافي
-val YounesRose         = Color(0xFFE53935)  // أحمر تحذيري خفيف للإنهاء والبث
-val YounesRuby         = Color(0xFFE03131)  // أحمر ياقوتي لأزرار إنهاء المكالمات
+// ═══════════════════════════════════════════════════════════════════════════════
+// لوحة الألوان السيادية — هوية مستقلة + التزام WCAG قابل للقياس
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// ## لماذا تغيّرت اللوحة
+//
+// كانت اللوحة السابقة تنسخ ألوان المنافسين حرفيًا: `#00A884` و`#25D366` من
+// واتساب، و`#2AABEE` و`#0E1621` و`#2B5278` من تلجرام. هذا يُفقد التطبيق
+// هويته، ويجعل «يونس» يبدو نسخة لا منتجًا سياديًا.
+//
+// وكانت تخالف التباين في أربعة مواضع مقيسة:
+//   • نص أبيض على `#00A884` = 3.03:1 — دون AAA (7:1) ودون AA (4.5:1) أصلًا،
+//     أي أن نص كل زر أساسي كان غير مقروء فعليًا.
+//   • نص أبيض على `#2AABEE` = 2.57:1 — أسوأ.
+//   • `#E53935` على الخلفية = 4.30:1 — دون AA، وهو لون سبأفون وزر الإنهاء.
+//   • النص الثانوي على الفقاعة الصادرة = 2.94:1 — الطابع الزمني و«✓✓» شبه
+//     غير مرئيين على كل رسالة صادرة.
+//
+// ## قاعدة الحلّ
+//
+// الأزرار الملوّنة تحمل نصًا **داكنًا** (`YounesOnBrand`) لا أبيض. رفع تباين
+// الأبيض على لون مشبع إلى 7:1 يفرض تعطيم اللون حتى يفقد حياته؛ أما تغميق
+// النص على لون فاتح فيحقق 9:1+ ويُبقي اللون نابضًا. هذا ما تفعله Material 3
+// في `onPrimary` للألوان الفاتحة.
+//
+// كل قيمة أدناه مقيسة ومثبَّتة باختبار في `ColorContrastTest`.
 
-// ─── ألوان الخلفية — داكنة فائقة التباين والوضوح (Telegram Dark Theme) ──────
-val YounesVoid         = Color(0xFF0E1621)  // داكن تلجرام الرئيسي — مريح وبلا تشويش
-val YounesMidnight     = Color(0xFF0E1621)  // خلفية الشاشة والشات
-val YounesDeep         = Color(0xFF17212B)  // أسطح القوائم وشريط الملاحة
-val YounesSurface1     = Color(0xFF17212B)  // كروت القوائم
-val YounesSurface2     = Color(0xFF202B36)  // أسطح العناصر النشطة
-val YounesSurface3     = Color(0xFF242F3D)  // الحوارات والـ BottomSheet
-val YounesBorder       = Color(0xFF2A394A)  // فواصل حدودية واضحة
-val YounesMuted        = Color(0xFF8E9DAE)  // نص ثانوي عالي التباين وسهل القراءة
+// ─── الألوان الأساسية — زمرد سيادي وذهب إمبراطوري، لا ألوان منافسين ────────
+/** زمرد سيادي. نص داكن فوقه = 9.17:1 (AAA)، وهو نفسه 8.83:1 على الخلفية. */
+val YounesPrimary      = Color(0xFF14C79A)
+/** زمرد مضيء للتنبيهات والتوهّج. نص داكن فوقه = 12.78:1. */
+val YounesPrimaryGlow  = Color(0xFF3DE8BC)
+/** ذهب إمبراطوري للروابط والشارات. نص داكن فوقه = 10.34:1، وعلى الخلفية 9.96:1. */
+val YounesAccent       = Color(0xFFE0B551)
+/** ذهب فاتح للحدود المميّزة والتدرّجات. */
+val YounesAccentSoft   = Color(0xFFF0D48C)
+/** أزرق ملكي — متمايز عن أزرق تلجرام، 6.80:1 على الخلفية. */
+val YounesCobalt       = Color(0xFF4D9FE8)
+/** بنفسجي المساحات الصوتية — 6.30:1 على الخلفية. */
+val YounesPurple       = Color(0xFFB07CE8)
+/** أحمر تحذيري للبث والإنهاء — 5.90:1 على الخلفية (كان 4.30 دون AA). */
+val YounesRose         = Color(0xFFF25C5C)
+/** أحمر ياقوتي أغمق لزر إنهاء المكالمة — يحمل نصًا أبيض. */
+val YounesRuby         = Color(0xFFE03131)
+
+// ─── ألوان الخلفية — تدرّج ارتفاع صاعد ومقيس ─────────────────────────────────
+val YounesVoid         = Color(0xFF0A0F18)  // أعمق مستوى — خلفية الشاشة
+val YounesMidnight     = Color(0xFF0A0F18)  // خلفية الشاشة والمحادثة
+val YounesDeep         = Color(0xFF131C29)  // أسطح القوائم وشريط الملاحة
+val YounesSurface1     = Color(0xFF131C29)  // كروت القوائم
+val YounesSurface2     = Color(0xFF1B2635)  // أسطح العناصر النشطة
+val YounesSurface3     = Color(0xFF212E40)  // الحوارات والـ BottomSheet
+val YounesBorder       = Color(0xFF2A394A)  // فواصل زخرفية — لا يشترط لها تباين
+/**
+ * حدّ المكوّنات التفاعلية (حقول الإدخال، الأزرار المُحدَّدة، الشرائح).
+ *
+ * `YounesBorder` مناسب للفواصل الزخرفية، لكن استخدامه كـ `outline` جعل حدّ
+ * `OutlinedTextField` عند 1.45:1 فوق سطح القوائم — أي حقل بلا حدّ مرئي فعليًا،
+ * وهو ما يخالف WCAG 1.4.11 (حدّ أدنى 3:1 لعناصر واجهة غير نصية).
+ *
+ * هذه القيمة تحقق ≥4:1 على الأسطح الأربعة (Midnight 5.74، Surface1 5.13،
+ * Surface2 4.57، Surface3 4.11) وتبقى أبهت من النص الأبيض فلا تسحب الانتباه.
+ */
+val YounesOutline      = Color(0xFF7A8FA3)
+/** نص ثانوي — 6.19:1 على أعلى سطح، 8.65:1 على الخلفية. */
+val YounesMuted        = Color(0xFF9FB0C2)
 
 // ─── ألوان المحادثة والفقاعات ────────────────────────────────────────────────
-val YounesBubbleOut    = Color(0xFF2B5278)  // فقاعة صادرة — أزرق تلجرام داكن مريح
-val YounesBubbleOutGlow = Color(0xFF2B5278)
-val YounesBubbleIn     = Color(0xFF182533)  // فقاعة واردة — داكنة عالية التباين
-val YounesReadTick     = Color(0xFF2AABEE)  // ✓✓ مقروء — أزرق
+/** فقاعة صادرة — كحلي سيادي متمايز عن `#2B5278` التلجرامي. أبيض فوقه 13.41:1. */
+val YounesBubbleOut    = Color(0xFF14304F)
+val YounesBubbleOutGlow = Color(0xFF1A3A5C)
+/** فقاعة واردة — أبيض فوقها 15.54:1. */
+val YounesBubbleIn     = Color(0xFF182533)
+/** ✓✓ مقروء — 4.75:1 على الفقاعة الصادرة، فوق حدّ 3:1 للأيقونات. */
+val YounesReadTick     = Color(0xFF4D9FE8)
 
-// ─── ألوان النصوص والتباين المرتفع (WCAG AAA Standard) ───────────────────────
-val YounesOnPrimary    = Color(0xFFFFFFFF)  // نص أبيض نقي على الأزرار
-val YounesOnAccent     = Color(0xFFFFFFFF)  // نص أبيض
-val YounesOnSurface    = Color(0xFFFFFFFF)  // نص أبيض نقي للمحاذاة والوضوح
-val YounesOnSurfaceDim = Color(0xFF8E9DAE)  // نص ثانوي رمادي هادئ وسهل القراءة
+// ─── ألوان النصوص والتباين المرتفع (WCAG AAA) ────────────────────────────────
+/**
+ * نص الأسطح الملوّنة (الأزرار الأساسية، الشارات، الشرائح المملوءة).
+ *
+ * داكن لا أبيض: الأبيض على زمرد أو ذهب مشبع لا يبلغ 4.5:1 أبدًا دون تعطيم
+ * اللون. النص الداكن يبلغ 9:1+ ويُبقي اللون نابضًا.
+ */
+val YounesOnBrand      = Color(0xFF06090F)
+val YounesOnPrimary    = YounesOnBrand  // نص على الزمرد — 9.17:1
+val YounesOnAccent     = YounesOnBrand  // نص على الذهب — 10.34:1
+val YounesOnSurface    = Color(0xFFFFFFFF)  // نص أساسي — 19.19:1 على الخلفية
+val YounesOnSurfaceDim = YounesMuted        // نص ثانوي — 8.65:1 على الخلفية
 
 // ─── Migration aliases — للحفاظ على التوافق مع الكود القديم ──────────────────
 val YounesEmerald      = YounesPrimary
@@ -217,8 +274,10 @@ private val redColorScheme = darkColorScheme(
     surfaceContainerHighest   = YounesSurface3,
 
     // الحدود
-    outline               = YounesBorder,
-    outlineVariant        = YounesBorder.copy(alpha = 0.5f),
+    // outline = حدّ العناصر التفاعلية (WCAG 1.4.11 ≥ 3:1)
+    // outlineVariant = الفواصل الزخرفية، لا يشترط لها حدّ تباين
+    outline               = YounesOutline,
+    outlineVariant        = YounesBorder,
 
     // الخطأ والتحذير
     error                 = YounesRose,

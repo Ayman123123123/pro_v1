@@ -75,12 +75,19 @@ class ScheduledSmsDispatcher(
         }
     }
 
+    private fun markFailed(id: String, reason: String) {
+        jdbc.update(
+            "UPDATE scheduled_sms SET status = 'FAILED', error_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            reason.take(300), id
+        )
+    }
+
     private fun dispatchOne(id: String, row: Map<String, Any?>) {
         val templateId = row["templateId"] as String
         val recipientsRaw = row["recipients"] as? String ?: ""
         val recipients = recipientsRaw.split(",").map { it.trim() }.filter { it.isNotBlank() }
         if (recipients.isEmpty()) {
-            jdbc.update("UPDATE scheduled_sms SET status = 'FAILED' WHERE id = ?", id)
+            markFailed(id, "قائمة المستلمين فارغة")
             return
         }
 
@@ -91,7 +98,7 @@ class ScheduledSmsDispatcher(
         ).firstOrNull()
 
         if (template.isNullOrBlank()) {
-            jdbc.update("UPDATE scheduled_sms SET status = 'FAILED' WHERE id = ?", id)
+            markFailed(id, "القالب $templateId غير موجود أو نصه فارغ")
             return
         }
 
@@ -117,16 +124,14 @@ class ScheduledSmsDispatcher(
 
         if (accepted) {
             jdbc.update(
-                "UPDATE scheduled_sms SET status = 'SENT', sent_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE scheduled_sms SET status = 'SENT', sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 id
             )
             log.info("Scheduled SMS $id sent to {} recipients", recipients.size)
         } else {
-            jdbc.update(
-                "UPDATE scheduled_sms SET status = 'FAILED' WHERE id = ?",
-                id
-            )
-            log.warn("Scheduled SMS $id rejected: {}", com.red.server.services.DinstarApiContract.errorMessage(response))
+            val reason = com.red.server.services.DinstarApiContract.errorMessage(response)
+            markFailed(id, reason)
+            log.warn("Scheduled SMS $id rejected: {}", reason)
         }
     }
 }

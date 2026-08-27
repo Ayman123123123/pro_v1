@@ -288,7 +288,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 // المستلم بدأ يرن — أبلغ نظام التسليم والـ presenceMonitor
                 presenceMonitor.onSignalReceived(callId.orEmpty(), "RINGING", this)
                 val cur = CallRuntime.state as? CallUiState.Connecting
-                if (cur != null) CallRuntime.state = cur.copy(presenceState = CallPresenceMonitor.PresenceState.RINGING)
+                if (cur != null) CallRuntime.state = cur.withPresence(CallPresenceMonitor.PresenceState.RINGING)
             }
             "ANSWER" -> signal.payload["sdp"]?.let { engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it)) { remoteDescriptionSet = true; flushIce() } }
             "ICE" -> {
@@ -304,8 +304,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 stopRingtone()
                 if (CallRuntime.state is CallUiState.Incoming) {
                     val missedPeer = (CallRuntime.state as? CallUiState.Incoming)?.peer.orEmpty()
-                    CallRuntime.state = CallUiState.CallEnded(missedPeer, mode, 0L, callId.orEmpty())
-                    updateNotification("مكالمة فائتة من $missedPeer")
+                    // نحن المستلم ولم نرد ⇒ مكالمة فائتة، لا «لم يتم الرد».
+                    CallRuntime.state = CallUiState.NoAnswer(missedPeer, mode, outgoing = false)
+                    updateNotification("${CallRingPolicy.unansweredMessage(outgoing = false)} من $missedPeer")
                     scheduleCleanupAndReset()
                 }
             }
@@ -557,7 +558,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     override fun onPresenceState(callId: String, state: CallPresenceMonitor.PresenceState) {
         val current = CallRuntime.state as? CallUiState.Connecting ?: return
         if (current.callId != callId) return
-        CallRuntime.state = current.copy(presenceState = state)
+        CallRuntime.state = current.withPresence(state)
         val label = when (state) {
             CallPresenceMonitor.PresenceState.CONNECTING -> "جارٍ الاتصال…"
             CallPresenceMonitor.PresenceState.RINGING -> "يرن على جهاز المستلم…"
@@ -878,7 +879,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         stopRingback()
         startSpecialTone(ToneGenerator.TONE_SUP_BUSY, 2000)
         val busyPeer = target
-        CallRuntime.state = CallUiState.Busy(busyPeer)
+        CallRuntime.state = CallUiState.Busy(busyPeer, mode)
         updateNotification("الطرف الآخر مشغول")
         scheduleCleanupAndReset()
     }
@@ -889,7 +890,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         stopRingback()
         startSpecialTone(ToneGenerator.TONE_SUP_BUSY, 1500)
         val declinedPeer = target
-        CallRuntime.state = CallUiState.Declined(declinedPeer)
+        CallRuntime.state = CallUiState.Declined(declinedPeer, mode)
         updateNotification("تم رفض المكالمة")
         scheduleCleanupAndReset()
     }
@@ -899,8 +900,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         clearRingTimeout()
         stopRingback()
         val noAnswerPeer = target
-        CallRuntime.state = CallUiState.NoAnswer(noAnswerPeer)
-        updateNotification("لا يوجد رد")
+        // نحن المتصل هنا (الحالة كانت Connecting) ⇒ «لم يتم الرد» لا «مكالمة فائتة».
+        CallRuntime.state = CallUiState.NoAnswer(noAnswerPeer, mode, outgoing = true)
+        updateNotification(CallRingPolicy.unansweredMessage(outgoing = true))
         scheduleCleanupAndReset()
     }
 

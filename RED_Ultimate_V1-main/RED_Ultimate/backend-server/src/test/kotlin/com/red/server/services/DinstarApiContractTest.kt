@@ -240,4 +240,44 @@ class DinstarApiContractTest {
         // كل رسالة واردة تُختَم بزمن القراءة لا بزمن وصولها.
         assertEquals("yyyy-MM-dd HH:mm:ss", DinstarApiContract.TIME_PATTERN)
     }
+
+    // ── ترميز معاملات الاستعلام ──────────────────────────────────────
+
+    /**
+     * الفاصلة الخام في قيمة معامل تكسر مطابقة Digest URI على البرنامج
+     * الثابت 04240302 فيردّ `401 Wrong Password` رغم صحة الاعتماد.
+     *
+     * مُثبت ميدانيًا على الجهاز الحيّ:
+     * - `port=0&info_type=signal,type`   → 401
+     * - `port=0&info_type=signal%2Ctype` → 200
+     * - `info_type=signal&port=0,1`      → 401
+     * - `info_type=signal&port=0%2C1`    → 200
+     *
+     * الترميز يجب أن يكون غير قابل للانعكاس المزدوج: `%` تُرمَّز أولًا
+     * وإلا صارت `%2C` الناتجة `%252C` في تمريرة ثانية.
+     */
+    @Test
+    fun `query values encode commas so digest auth matches`() {
+        val enc = DinstarConnectionFactory.DinstarClient::encodeQueryValue
+
+        assertEquals("signal%2Ctype", enc("signal,type"))
+        assertEquals("0%2C1%2C2%2C3%2C4%2C5%2C6%2C7", enc("0,1,2,3,4,5,6,7"))
+        // قيمة بلا فاصلة تبقى كما هي — لا ترميز زائد يغيّر المعنى
+        assertEquals("signal", enc("signal"))
+        assertEquals("Unconditional", enc("Unconditional"))
+        // `%` تُرمَّز قبل الفاصلة، فلا يُعاد ترميز الناتج
+        assertEquals("100%25", enc("100%"))
+        assertEquals("a%25b%2Cc", enc("a%b,c"))
+    }
+
+    @Test
+    fun `port info requested fields contain commas that must be encoded`() {
+        // هذا هو النداء الذي كان يفشل: عشرة حقول مفصولة بفواصل.
+        val csv = DinstarApiContract.PortInfo.REQUESTED_FIELDS_CSV
+        assertTrue(csv.contains(','), "REQUESTED_FIELDS_CSV must be comma-separated")
+        assertFalse(
+            DinstarConnectionFactory.DinstarClient.encodeQueryValue(csv).contains(','),
+            "encoded info_type must not carry a raw comma"
+        )
+    }
 }

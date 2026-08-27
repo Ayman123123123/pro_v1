@@ -79,9 +79,16 @@ class FtsSearchManagerTest {
 
     @Test
     fun `تهريب الاقتباس يمنع كسر عبارة البحث`() {
-        // صيغة FTS5: الاقتباس المزدوج يُهرَّب بتكراره
-        val sanitized = """he said "hello"""".replace("\"", "\"\"")
-        assertEquals("""he said ""hello""", sanitized)
+        // صيغة FTS5: الاقتباس المزدوج يُهرَّب بتكراره.
+        //
+        // كُتب هذا الاختبار سابقًا بسلاسل خام (""") فانحرف التوقّع: القاعدة في
+        // Kotlin أن السلسلة الخامة تنتهي عند أول """ غير متبوعة بـ "، فصار
+        // المُدخل يحمل اقتباسين والمتوقَّع يحمل اثنين بدل أربعة. استُبدلت
+        // بسلاسل عادية بمهارب صريحة حتى يكون عدد الاقتباسات مقروءًا حرفيًا.
+        val raw = "he said \"hello\""          // he said "hello"
+        val sanitized = raw.replace("\"", "\"\"")
+        assertEquals("he said \"\"hello\"\"", sanitized)
+        // شرط السلامة الفعلي: عدد زوجي دائمًا، وإلا انكسر تعبير MATCH.
         assertTrue(sanitized.count { it == '"' } % 2 == 0)
     }
 }

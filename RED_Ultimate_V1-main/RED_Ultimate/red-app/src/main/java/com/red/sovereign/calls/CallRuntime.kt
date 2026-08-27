@@ -19,15 +19,28 @@ sealed interface CallUiState {
         val callId: String,
         val peer: String,
         val mode: String,
-        val presenceState: CallPresenceMonitor.PresenceState = CallPresenceMonitor.PresenceState.CONNECTING
+        val presenceState: CallPresenceMonitor.PresenceState = CallPresenceMonitor.PresenceState.CONNECTING,
+        /**
+         * نص العرض في الـ Overlay. مُشتق افتراضيًا من [presenceState]، ويمكن
+         * تجاوزه لرسالة أدق من طبقة أعلى (مثل «يرن على هاتف المستلم — 3»).
+         *
+         * لأنه معامل بانٍ لا خاصية مشتقة، فإن `copy(presenceState = …)` وحده
+         * لا يُحدّث النص. استخدم [withPresence] دائمًا لتغيير الحضور.
+         */
+        val presenceLabel: String = labelFor(presenceState)
     ) : CallUiState {
-        /** نص تفصيلي للعرض في الـ Overlay */
-        val presenceLabel: String get() = when (presenceState) {
-            CallPresenceMonitor.PresenceState.CONNECTING -> "جارٍ الاتصال…"
-            CallPresenceMonitor.PresenceState.RINGING -> "يرن على جهاز المستلم"
-            CallPresenceMonitor.PresenceState.WAKING_UP -> "جارٍ إيقاظ الجهاز…"
-            CallPresenceMonitor.PresenceState.NO_ANSWER -> "لا يوجد رد"
-            else -> "جارٍ الاتصال…"
+        /** يغيّر الحضور ويُعيد حساب النص معه — الطريق الآمن الوحيد. */
+        fun withPresence(next: CallPresenceMonitor.PresenceState): Connecting =
+            copy(presenceState = next, presenceLabel = labelFor(next))
+
+        companion object {
+            fun labelFor(presenceState: CallPresenceMonitor.PresenceState): String = when (presenceState) {
+                CallPresenceMonitor.PresenceState.CONNECTING -> "جارٍ الاتصال…"
+                CallPresenceMonitor.PresenceState.RINGING -> "يرن على جهاز المستلم"
+                CallPresenceMonitor.PresenceState.WAKING_UP -> "جارٍ إيقاظ الجهاز…"
+                CallPresenceMonitor.PresenceState.NO_ANSWER -> "لا يوجد رد"
+                else -> "جارٍ الاتصال…"
+            }
         }
     }
     data class Active(val callId: String, val peer: String, val mode: String, val startedAt: Long, val isHeld: Boolean = false) : CallUiState
@@ -35,22 +48,51 @@ sealed interface CallUiState {
     data class ActiveWithIncoming(val active: Active, val waiting: Incoming) : CallUiState
     data class Error(val message: String) : CallUiState
     // ── حالات نهائية ─────────────────────────────────────────────────────────
-    /** الطرف الآخر مشغول — تُشغَّل نغمة مشغول */
-    data class Busy(val peer: String) : CallUiState
+    /**
+     * الطرف الآخر مشغول — تُشغَّل نغمة مشغول.
+     * [mode] يسمح للشاشة النهائية بقول «مكالمة فيديو» بدل نص محايد.
+     */
+    data class Busy(val peer: String, val mode: String = DEFAULT_MODE) : CallUiState
     /** الطرف الآخر رفض المكالمة صراحةً */
-    data class Declined(val peer: String) : CallUiState
-    /** انتهت مهلة الرنين بلا رد */
-    data class NoAnswer(val peer: String) : CallUiState
+    data class Declined(val peer: String, val mode: String = DEFAULT_MODE) : CallUiState
+    /**
+     * انتهت مهلة الرنين بلا رد.
+     * [outgoing] يفصل «لم يتم الرد» (نحن المتصل) عن «مكالمة فائتة» (نحن المستلم)
+     * — نفس الحالة تقنيًا لكن رسالتها للمستخدم معاكسة تمامًا.
+     */
+    data class NoAnswer(
+        val peer: String,
+        val mode: String = DEFAULT_MODE,
+        val outgoing: Boolean = true
+    ) : CallUiState
     /** انتهت المكالمة بشكل طبيعي */
     data class CallEnded(
         val peer: String,
         val mode: String,
         val durationMs: Long,
-        val callId: String,
+        val callId: String = "",
         val canRedial: Boolean = true
     ) : CallUiState
     /** جاري إعادة الاتصال بعد انقطاع مؤقت — يحمل مدة المكالمة الأصلية لاستعادتها */
     data class Reconnecting(val callId: String, val peer: String, val mode: String, val attempt: Int = 1, val startedAt: Long = 0L) : CallUiState
+
+    companion object {
+        const val DEFAULT_MODE = "VOICE"
+
+        /** مدة عرض الحالة النهائية (منتهية/فائتة/مرفوضة) قبل إخفاء شاشة المكالمة. */
+        const val TERMINAL_DISPLAY_MS: Long = 4_000L
+
+        /**
+         * هل انتهت المكالمة نهائيًا؟
+         *
+         * [Reconnecting] ليست نهائية: المكالمة قد تعود، وإخفاء الشاشة عندها
+         * يفقد المستخدم مكالمة كانت ستستأنف. أما [Error] فنهائية.
+         */
+        fun isTerminal(state: CallUiState): Boolean = when (state) {
+            is Busy, is Declined, is NoAnswer, is CallEnded, is Error -> true
+            is Idle, is Incoming, is Connecting, is Active, is ActiveWithIncoming, is Reconnecting -> false
+        }
+    }
 }
 
 object CallRuntime {
@@ -63,8 +105,11 @@ object CallRuntime {
     var pstnNumber: String by mutableStateOf("")
     var pstnCallId: String by mutableStateOf("")
 
-    /** مدة عرض الحالة النهائية (منتهية/فائتة) قبل إخفاء شاشة المكالمة. */
-    const val TERMINAL_DISPLAY_MS: Long = 4_000L
+    /**
+     * مدة عرض الحالة النهائية (منتهية/فائتة) قبل إخفاء شاشة المكالمة.
+     * تُبقى هنا للتوافق مع نداءات قائمة؛ المصدر [CallUiState.TERMINAL_DISPLAY_MS].
+     */
+    const val TERMINAL_DISPLAY_MS: Long = CallUiState.TERMINAL_DISPLAY_MS
 
     fun setPstn(status: PstnCallStatus, number: String = pstnNumber, callId: String = pstnCallId) {
         pstnStatus = status; pstnNumber = number; pstnCallId = callId
