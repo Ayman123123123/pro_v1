@@ -1,8 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.red.server.services.DinstarFleetService
-import com.red.server.services.DinstarHardwareService
+import com.red.server.services.DinstarStatusSnapshotService
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.TaskScheduler
 import org.springframework.stereotype.Component
@@ -18,6 +17,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * 
  * يُرسل تحديثات حالة المنافذ والأحداث (SMS وارد، مكالمة جديدة، إلخ)
  * للعملاء المتصلين عبر `/ws/dinstar`.
+ *
+ * حالة المنافذ تُقرأ من [DinstarStatusSnapshotService] المشترك، لا باستعلام
+ * عتادي لكل جلسة: N مديرين متصلين كانوا ينتجون N استعلامًا لكل بوابة كل 5
+ * ثوانٍ. الآن دورة تحديث واحدة، وكل جلسة تبث آخر لقطة جاهزة.
  * 
  * الأحداث المرسلة:
  * - DINSTAR_PORT_STATUS: تحديث حالة منفذ (كل 5 ثوان)
@@ -28,8 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 @Component
 class DinstarWebSocketHandler(
-    private val hardware: DinstarHardwareService,
-    private val fleet: DinstarFleetService,
+    private val snapshots: DinstarStatusSnapshotService,
     private val mapper: ObjectMapper,
     private val taskScheduler: TaskScheduler
 ) : TextWebSocketHandler() {
@@ -177,41 +179,7 @@ class DinstarWebSocketHandler(
         }
     }
 
-    private fun buildPortStatusPayload(): Map<String, Any?> {
-        val gateways = fleet.listGateways(onlyEnabled = true)
-        val allPorts = mutableListOf<Map<String, Any?>>()
-
-        gateways.forEach { gateway ->
-            try {
-                val ports = hardware.getHardwareStatus(gateway)
-                fleet.markHealthy(gateway.id)
-                ports.forEach { port ->
-                    allPorts.add(port + mapOf(
-                        "gatewayHost" to gateway.host,
-                        "gatewayName" to gateway.name,
-                        "gatewayModel" to gateway.model
-                    ))
-                }
-            } catch (e: Exception) {
-                fleet.markFailure(gateway.id, e.message ?: "WebSocket status query failed")
-                log.warn("Failed to get status for gateway {}: {}", gateway.host, e.message)
-            }
-        }
-
-        return mapOf(
-            "type" to "DINSTAR_PORT_STATUS",
-            "timestamp" to System.currentTimeMillis(),
-            "data" to mapOf(
-                "ports" to allPorts,
-                "totalGateways" to gateways.size,
-                "totalPorts" to allPorts.size,
-                "registered" to allPorts.count { 
-                    (it["status"]?.toString() ?: "").equals("REGISTERED", ignoreCase = true) 
-                },
-                "usable" to allPorts.count { it["signalUsable"] == true }
-            )
-        )
-    }
+    private fun buildPortStatusPayload(): Map<String, Any?> = snapshots.payload()
 
     private fun broadcastEvent(eventType: String, data: Map<String, Any?>) {
         if (sessions.isEmpty()) return

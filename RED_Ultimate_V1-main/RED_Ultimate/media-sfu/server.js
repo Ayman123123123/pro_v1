@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const mediasoup = require('mediasoup');
 const { WebSocketServer } = require('ws');
+const { clientErrorPayload } = require('./protocol');
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 
@@ -236,7 +237,8 @@ function send(ws, requestId, payload) {
 }
 
 function sendError(ws, requestId, error) {
-  send(ws, requestId, { status: 'error', error: String(error.message || error) });
+  // لا تُسرَّب رسالة الخطأ الداخلية للعميل — رمز ثابت فقط عبر بروتوكول العقد.
+  send(ws, requestId, clientErrorPayload(error));
 }
 
 function requirePeer(context) {
