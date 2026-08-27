@@ -301,8 +301,16 @@ class DinstarHardwareService(
         return getJson("/api/query_ussd_reply", mapOf("port" to port.toString()))
     }
 
-    /** CDR must be POSTed with a JSON body per the official Dinstar API documentation. */
-    fun queryCdr(): Map<String, Any?> = postJson("/api/get_cdr", mapOf("port" to portRange.toList(), "maximum" to 100))
+    /**
+     * CDR must be POSTed with a JSON body per the official Dinstar API documentation.
+     * Body shape per [DinstarApiContract]: `{"port":[...], "time_after":..., "time_before":...}`.
+     * `maximum` is **not** a documented field for `/api/get_cdr` and historically caused 403
+     * on some firmware versions (see [DinstarApiContract.Cdr]).
+     */
+    fun queryCdr(): Map<String, Any?> = postJson(
+        "/api/get_cdr",
+        mapOf("port" to portRange.toList())
+    )
 
     fun updateSipSettings(newSipIp: String): Nothing = unsupported(
         "Firmware-independent SIP configuration API is not documented for UC2000-VE; configure the SIP trunk in the gateway UI and Asterisk"
@@ -448,8 +456,17 @@ class DinstarHardwareService(
         ))
     }
 
-    /** Get Device Status — POST /api/get_status */
-    fun getDeviceStatus(): Map<String, Any?> = postJson("/api/get_status", mapOf("maximum" to 10))
+    /**
+     * Get Device Status — POST /api/get_status.
+     *
+     * Body per [DinstarApiContract]: **a JSON array** of section names, e.g. `["performance"]`.
+     * The earlier `{"maximum":10}` body was not documented and yielded 403 on `get_status`
+     * (matches the diagnostic in `DINSTAR_API_DEEP_ANALYSIS.md`).
+     */
+    fun getDeviceStatus(): Map<String, Any?> = postJson(
+        "/api/get_status",
+        DinstarApiContract.Status.PERFORMANCE_BODY
+    )
 
     fun probeHumanBehaviorEndpoints(): Map<String, Any?> {
         val candidates = listOf("/api/get_number_learning","/api/get_human_behavior","/api/get_global_params","/api/get_parameters","/api/get_config","/api/get_system_info")
@@ -493,8 +510,7 @@ class DinstarHardwareService(
     ): List<Map<String, Any?>> {
         port?.let { requireGatewayPort(gateway, it) }
         val body = mutableMapOf<String, Any>(
-            "port" to (port?.let { listOf(it) } ?: (0 until gateway.portCount).toList()),
-            "maximum" to 100
+            "port" to (port?.let { listOf(it) } ?: (0 until gateway.portCount).toList())
         )
         timeAfter?.let { body["time_after"] = it }
         timeBefore?.let { body["time_before"] = it }

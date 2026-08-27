@@ -4,6 +4,7 @@ import com.red.server.auth.UserAccountResponse
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 /**
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Service
 @Service
 class NotificationService(
     private val emailProperties: EmailProperties,
+    private val dinstar: DinstarHardwareService,
+    @Value("\${red.notifications.sms.enabled:false}") private val notificationSmsEnabled: Boolean,
     @Autowired(required = false)
     @Qualifier("inAppNotificationService")
     private val inApp: com.red.server.notification.NotificationService? = null,
@@ -48,8 +51,44 @@ class NotificationService(
         emitEmail(user.username, "تنبيه أمان", buildSecurityAlertBody(user, alertType, details))
     }
 
-    fun sendSms(phoneNumber: String, message: String) {
-        logger.info("notification.sms target={} length={}", phoneNumber, message.length)
+    /**
+     * يرسل SMS تشغيليًا فقط عند تمكينه صراحةً (red.notifications.sms.enabled).
+     * الوضع الافتراضي لا يلمس البوابة حتى لا يرسل التطوير المحلي أو Docker
+     * رسائل حقيقية بالخطأ.
+     *
+     * القيمة true تعني أن DINSTAR قبل الرسالة في الطابور، لا أنها سُلّمت
+     * للشبكة؛ متابعة delivery report تبقى مسؤولية تدفق عتاد مصرح به.
+     *
+     * لا يُسجَّل الرقم كاملًا أبدًا — فقط آخر 4 خانات مُقنَّعة.
+     */
+    fun sendSms(phoneNumber: String, message: String): Boolean {
+        val number = phoneNumber.trim()
+        require(isValidSmsRecipient(number)) { "Invalid SMS recipient" }
+        require(message.isNotBlank()) { "SMS message is required" }
+        if (!notificationSmsEnabled) {
+            logger.info("notification.sms skipped=disabled targetSuffix={} length={}", maskedPhoneSuffix(number), message.length)
+            return false
+        }
+
+        return runCatching {
+            val response = dinstar.sendSms(
+                text = message,
+                params = listOf(mapOf("number" to number)),
+                // UCS2 يعمل مع العربية؛ اختيار GSM لحملات ASCII قرار منفصل.
+                encoding = "UCS2"
+            )
+            val accepted = isAcceptedGatewaySms(response)
+            logger.info(
+                "notification.sms accepted={} targetSuffix={} length={}",
+                accepted,
+                maskedPhoneSuffix(number),
+                message.length
+            )
+            accepted
+        }.getOrElse { error ->
+            logger.warn("notification.sms_failed targetSuffix={} errorType={}", maskedPhoneSuffix(number), error::class.simpleName)
+            false
+        }
     }
 
     fun sendPushNotification(deviceToken: String, title: String, body: String) {
@@ -372,6 +411,21 @@ class NotificationService(
         </body>
         </html>
     """.trimIndent()
+
+    companion object {
+        /** رقم دولي أو محلي: أرقام فقط مع + اختيارية — بلا مسافات ولا رموز ولا بريد. */
+        private val SMS_RECIPIENT = Regex("\\+?[0-9]{6,20}")
+
+        /** 200 = مقبول، 202 = مقبول في الطابور. أي رمز آخر رفض من البوابة. */
+        private val SMS_ACCEPTED_CODES = setOf(200, 202)
+
+        internal fun isValidSmsRecipient(value: String): Boolean = SMS_RECIPIENT.matches(value)
+
+        internal fun isAcceptedGatewaySms(response: Map<String, Any?>): Boolean =
+            (response["error_code"] as? Number)?.toInt() in SMS_ACCEPTED_CODES
+
+        internal fun maskedPhoneSuffix(value: String): String = "••••${value.takeLast(4)}"
+    }
 }
 
 data class EmailProperties(
