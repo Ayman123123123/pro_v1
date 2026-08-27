@@ -61,6 +61,9 @@ class CdrAnalysisController(
             val direction = rs.getString("direction") ?: ""
             val caller = rs.getString("caller_number")
             val callee = rs.getString("callee_number")
+            // getInt يُعيد 0 عند NULL بلا تمييز، وهو نفس الكذب الذي أزالته V41:
+            // «رَنَّ صفر ثانية» بدل «زمن الرنين مجهول». getObject يُبقي NULL.
+            val ring = (rs.getObject("ring_duration_seconds") as? Number)?.toInt()
             mapOf(
                 "id" to rs.getString("id"),
                 "gatewayHost" to (rs.getString("gateway_host") ?: "—"),
@@ -68,13 +71,13 @@ class CdrAnalysisController(
                 // الواجهة تتوقّع INBOUND/OUTBOUND، والعمود يحمل inbound/outbound.
                 "direction" to direction.uppercase(),
                 // الرقم المُقابل: في الصادرة المطلوب، وفي الواردة المتّصل.
-                "number" to (if (direction == "inbound") caller else callee ?: "—"),
+                "number" to ((if (direction == "inbound") caller else callee) ?: "—"),
                 "callerNumber" to caller,
                 "calleeNumber" to callee,
                 "startTime" to rs.getTimestamp("start_time")?.toInstant()?.toString(),
                 "answerTime" to rs.getTimestamp("answer_time")?.toInstant()?.toString(),
                 "duration" to rs.getInt("duration_seconds"),
-                "ringDuration" to rs.getInt("ring_duration_seconds"),
+                "ringDuration" to ring,
                 "status" to (rs.getString("status") ?: "").uppercase(),
                 "hangupCause" to rs.getString("hangup_cause"),
                 "codec" to rs.getString("codec"),

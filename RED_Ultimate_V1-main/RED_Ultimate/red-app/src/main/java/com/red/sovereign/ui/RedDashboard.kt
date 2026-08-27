@@ -502,9 +502,24 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
-                section == MainSection.CALLS -> UnifiedCallsScreen(account.redId, callHistory, onExplore = {
-                    currentScreen = SovereignScreen.EXPLORE
-                }, onPstn = { dinstarPrefill = ""; showDinstar = true })
+                section == MainSection.CALLS -> UnifiedCallsScreen(
+                    ownUserId = account.redId,
+                    history = callHistory,
+                    // بلا هذين المعاملين كان الاستدعاء يُربط بنسخة أضعف كانت في
+                    // CallsScreens.kt، فتختفي ستّ ميزات مكتوبة ومترجمة: منتقي
+                    // المكالمة الجماعية بحالة الاتصال، إنشاء المؤتمر، تسجيلات
+                    // المكالمات وإحصاءاتها، المكالمات المجدولة، بحث جهات الاتصال
+                    // داخل حوار المكالمة، وإعادة اتصال PSTN برقم مُعبَّأ.
+                    contacts = directory.contacts,
+                    onlineIds = directory.onlineIds.toSet(),
+                    // ما يراه المستلم كاسم للمضيف في دعوة المكالمة الجماعية؛
+                    // فارغًا كان يظهر بلا اسم. نفس المصدر المستخدم في ProfileScreen.
+                    myDisplayName = account.username,
+                    onExplore = { currentScreen = SovereignScreen.EXPLORE },
+                    // الرقم يعبر إلى لوحة الاتصال فتصبح إعادة الاتصال بضغطة واحدة
+                    // بدل إعادة إدخاله يدويًا.
+                    onPstn = { number -> dinstarPrefill = number.orEmpty(); showDinstar = true }
+                )
                 else -> MoreScreen(
                     account,
                     onDinstar = { showDinstar = true },
