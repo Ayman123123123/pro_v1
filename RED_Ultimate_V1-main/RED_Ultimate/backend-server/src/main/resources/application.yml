@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   mongodb:
     uri: mongodb://${MONGO_USER:red_user}:${MONGO_PASSWORD:}@db-mongo:27017/red_sovereign?authSource=admin
   data:
@@ -71,9 +73,6 @@ management:
       probes:
         enabled: true
 
-# ══════════════════════════════════════════
-# 🏛️ YOUNES Sovereign Configuration
-# ══════════════════════════════════════════
 red:
   # Enable only behind a proxy that discards client-supplied X-Forwarded-For.
   trust-x-forwarded-for: ${RED_TRUST_X_FORWARDED_FOR:false}
@@ -83,35 +82,26 @@ red:
     number-learning:
       auto-enabled: true
     heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
-    # بوابة البذرة: تُسجَّل تلقائيًا في الأسطول عند الإقلاع. (192.168.11.2 هو DINSTAR UC2000-VE الحقيقي، .1 هو الراوتر)
     ip: ${DINSTAR_IP:192.168.11.2}
     ips: ${DINSTAR_IPS:}
     port: ${DINSTAR_PORT:443}
     scheme: ${DINSTAR_SCHEME:https}
     username: ${DINSTAR_USERNAME:admin}
     password: ${DINSTAR_PASSWORD:}
-    # SPKI pins اختيارية (sha256/...) — عند تعبئتها تُتحقق هوية شهادة البوابة
-    # حتى مع trust-all المحلي: OkHttp يرفض أي سلسلة لا تطابق الدبوس.
-    # صيغة القيمة: sha256/xxx,sha256/yyy (فاصلة بين بوابات متعددة).
     cert-pins: ${DINSTAR_CERT_SHA256_PINS:}
     connect-timeout: 10s
     read-timeout: 30s
     max-retries: 3
-    # مهل بالثواني لعملاء OkHttp لكل بوابة
     connect-timeout-seconds: ${DINSTAR_CONNECT_TIMEOUT:5}
     read-timeout-seconds: ${DINSTAR_READ_TIMEOUT:10}
-    # مهلة قصيرة أثناء فحص النطاق: عنوان بلا جهاز يجب أن يسقط بسرعة
     probe-timeout-seconds: ${DINSTAR_PROBE_TIMEOUT:2}
     discovery:
-      # الفحص معطّل افتراضيًا: لا يُطلق الخادم مسحًا للشبكة بلا قرار صريح.
       enabled: ${DINSTAR_DISCOVERY_ENABLED:false}
-      # نطاقات الإدارة بصيغة CIDR ‎/24..‎/30 وعلى عناوين خاصة فقط.
       subnets: ${DINSTAR_DISCOVERY_SUBNETS:}
   security:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
   jwt:
     secret: ${JWT_SECRET:}
-    # JWT_SECRET must be set via environment variable — empty string will fail startup check in JwtService
     access-expiration-minutes: 15
     refresh-expiration-days: ${REFRESH_EXPIRATION_DAYS:30}
   identity-authority:
@@ -141,8 +131,6 @@ red:
     secret: ${TURN_SECRET:}
     public-host: ${TURN_PUBLIC_HOST:127.0.0.1}
     port: 3478
-    # Open Relay (Metered.ca) — TURN مجاني عبر الإنترنت
-    # يتجاوز CGNAT + الفيروال — 20GB مجاناً شهرياً
     openrelay:
       enabled: ${OPENRELAY_ENABLED:false}
       username: ${OPENRELAY_USERNAME:openrelayproject}
@@ -150,10 +138,6 @@ red:
   pstn:
     daily-limit-default: 100
     signal-threshold: 20
-    # سر تسجيل WebRTC في Asterisk — يُقرأ من WEBRTC_SIP_SECRET (نفس القيمة
-    # التي يولّد منها docker-entrypoint.sh auth password لنظير red-webrtc-client).
-    # ملاحظة: docker-compose يمرّر WEBRTC_SIP_SECRET لكلٍ من backend و pstn-gateway
-    # بنفس القيمة؛ أي اختلاف بينهما يجعل SIP REGISTER يفشل بـ 401/403.
     sip-secret: ${WEBRTC_SIP_SECRET:red-secret-token}
     bridge-secret-ttl-minutes: ${PSTN_BRIDGE_SECRET_TTL_MINUTES:60}
     turn-url: ${PSTN_TURN_URL:}

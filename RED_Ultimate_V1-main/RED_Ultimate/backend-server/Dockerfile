@@ -1,20 +1,20 @@
-# Offline builds: the frontend line requires Docker Hub, which is blocked here. Removed.
+﻿# Offline builds: the frontend line requires Docker Hub, which is blocked here. Removed.
 # RUNTIME_BASE override allows local runtime images when Docker Hub is unreachable:
 #   docker build --build-arg RUNTIME_BASE=red-backend:local ...
 ARG RUNTIME_BASE=eclipse-temurin:21-jre-jammy
 # Offline builds: this frontend line requires Docker Hub, which is blocked/unreachable here. Removed for local builds.
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-#  YOUNES Sovereign Backend â€” reproducible multi-stage BuildKit build
+# Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+#  YOUNES Sovereign Backend Ã¢â‚¬â€ reproducible multi-stage BuildKit build
 #  Stage 1: Gradle 8.14 + JDK 21 (non-root, persistent dependency cache)
-#  Stage 2: Eclipse Temurin JRE 21 â€” no apt/ffmpeg (Windows Docker dies
-#  for 30â€“90 minutes pulling 176 ffmpeg packages at tens of kB/s).
+#  Stage 2: Eclipse Temurin JRE 21 Ã¢â‚¬â€ no apt/ffmpeg (Windows Docker dies
+#  for 30Ã¢â‚¬â€œ90 minutes pulling 176 ffmpeg packages at tens of kB/s).
 #  Video thumbnails already fall back to a Java placeholder.
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
 
 # Offline builds: Docker Hub is blocked here, so the Gradle 9.7.0 distribution
 # is vendored locally (build-tools/gradle-9.7.0-bin.zip) and unpacked below.
 # Kotlin 2.3.21 (used by the backend) does not resolve :shared-proto variants
-# under Gradle 8.14.3 — the project targets Gradle 9.7 per the wrapper.
+# under Gradle 8.14.3 â€” the project targets Gradle 9.7 per the wrapper.
 FROM gradle:8.14.3-jdk21 AS builder
 
 USER root
@@ -30,7 +30,7 @@ ENV PATH="/opt/gradle-9.7.0/bin:${PATH}"
 
 # Copy backend-server as the Gradle root (it has its own settings.gradle.kts).
 # settings.gradle.kts resolves :shared-proto as ../shared-proto relative to the
-# settings dir — so it must land at /shared-proto (NOT /build/shared-proto).
+# settings dir â€” so it must land at /shared-proto (NOT /build/shared-proto).
 COPY --chown=gradle:gradle shared-proto/ ../shared-proto/
 COPY --chown=gradle:gradle backend-server/ .
 
@@ -66,3 +66,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=180s \
   CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+

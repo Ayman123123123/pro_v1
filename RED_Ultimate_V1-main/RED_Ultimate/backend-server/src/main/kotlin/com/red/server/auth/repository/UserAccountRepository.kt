@@ -1,4 +1,4 @@
-package com.red.server.auth.repository
+﻿package com.red.server.auth.repository
 
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
@@ -22,23 +22,24 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
     @Query("SELECT COUNT(u) FROM UserAccount u WHERE u.createdAt > :since")
     fun countCreatedAfter(@Param("since") since: Instant): Long
 
-    /** JPQL path `createdAt` maps to `created_at`; derived Sort.by(\"createdAt\") does not. */
     @Query("SELECT u FROM UserAccount u WHERE u.status = :status ORDER BY u.createdAt ASC")
     fun findAllByStatusOrderByCreatedAtAsc(@Param("status") status: AccountStatus): List<UserAccount>
 
     @Query("SELECT u FROM UserAccount u ORDER BY u.createdAt DESC")
     fun findAllByOrderByCreatedAtDesc(): List<UserAccount>
+
+    fun countByCreatedAtAfter(after: Instant): Long
+
+    fun findByPstnGatewayId(pstnGatewayId: UUID): List<UserAccount>
+    fun findByPstnNumber(pstnNumber: String): UserAccount?
+    fun findByPstnGatewayIdAndPstnPortIndex(pstnGatewayId: UUID, pstnPortIndex: Int): UserAccount?
+    fun existsByPstnGatewayIdAndPstnPortIndex(pstnGatewayId: UUID, pstnPortIndex: Int): Boolean
 }
 
-/**
- * Database-side administration search. Filtering before pageable is essential:
- * filtering a single fetched page produces empty pages and incorrect totals.
- * Predicates are assembled in [UserAccountSpecs] so unused filters never
- * become untyped SQL NULLs (the Hibernate + Postgres `lower(bytea)` crash).
- */
 fun UserAccountRepository.searchForAdmin(
     status: AccountStatus?,
     role: AccountRole?,
     search: String?,
     pageable: Pageable,
-): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search), pageable)
+    pstnEnabled: Boolean? = null,
+): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search, pstnEnabled), pageable)

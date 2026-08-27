@@ -63,6 +63,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - SPRING_DATA_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
+      - SPRING_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
+      - MONGO_USER=red_user
+      - MONGO_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - ASTERISK_AMI_HOST=pstn-gateway
@@ -74,7 +77,7 @@ services:
       - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
       - DINSTAR_PORT=${DINSTAR_PORT:-443}
       - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
@@ -203,7 +206,7 @@ services:
           cpus: '0.5'
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
       - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}

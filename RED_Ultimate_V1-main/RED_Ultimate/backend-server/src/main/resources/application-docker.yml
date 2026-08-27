@@ -1,6 +1,8 @@
 # Activated by SPRING_PROFILES_ACTIVE=docker inside Compose.
 # Hostnames here exist only on the red-net bridge.
 spring:
+  main:
+    allow-bean-definition-overriding: true
   datasource:
     url: jdbc:postgresql://db-postgres:5432/red_sovereign
   mongodb:

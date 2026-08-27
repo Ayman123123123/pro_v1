@@ -1,17 +1,16 @@
-﻿package com.red.server
+package com.red.server
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Primary
 import org.springframework.scheduling.annotation.EnableAsync
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.web.client.RestTemplate
 import org.springframework.web.socket.config.annotation.EnableWebSocket
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import org.springframework.scheduling.TaskScheduler
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import java.util.concurrent.atomic.AtomicInteger
 
 @SpringBootApplication
@@ -23,16 +22,19 @@ class RedSovereignApplication {
     fun restTemplate() = RestTemplate()
 
     @Bean
-    @Primary
-    fun objectMapper(): ObjectMapper = jacksonObjectMapper()
-
-        @Bean
     @Suppress("unused")
     fun pstnRetryScheduler(): ScheduledExecutorService {
         var threadNum = AtomicInteger(0)
         return Executors.newScheduledThreadPool(2) { r ->
             Thread(r, "pstn-retry-${threadNum.incrementAndGet()}").apply { isDaemon = true }
         }
+    }
+
+    @Bean
+    fun taskScheduler(): TaskScheduler = ThreadPoolTaskScheduler().apply {
+        poolSize = 4
+        setThreadNamePrefix("sched-")
+        initialize()
     }
 
     @Bean(name = ["adminSseScheduler"])
@@ -47,7 +49,7 @@ class RedSovereignApplication {
 }
 
 fun main(args: Array<String>) {
-    // 🛡️ Safety Guard: Force correct DB hosts if running in Docker
+    // Safety Guard: Force correct DB hosts if running in Docker
     if (java.io.File("/.dockerenv").exists()) {
         val mongoPass = System.getenv("MONGO_PASSWORD")
         if (!mongoPass.isNullOrBlank()) {

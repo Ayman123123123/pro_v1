@@ -1,4 +1,4 @@
-package com.red.server.messaging
+﻿package com.red.server.messaging
 
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -7,10 +7,10 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * 📌 تحكم تثبيت الرسائل — V26
- * POST /api/messages/pins — تثبيت
- * DELETE /api/messages/pins/{uuid} — إلغاء
- * GET /api/messages/pins?conversationId=... — قائمة المثبتة
+ * ðŸ“Œ ØªØ­ÙƒÙ… ØªØ«Ø¨ÙŠØª Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ â€” V26
+ * POST /api/messages/pins â€” ØªØ«Ø¨ÙŠØª
+ * DELETE /api/messages/pins/{uuid} â€” Ø¥Ù„ØºØ§Ø¡
+ * GET /api/messages/pins?conversationId=... â€” Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ù…Ø«Ø¨ØªØ©
  */
 @RestController
 @RequestMapping("/api/messages/pins")
@@ -55,9 +55,10 @@ class PinnedMessageController(private val pins: PinnedMessageService) {
         val actorId = UUID.fromString(auth.name)
         val list = when {
             conversationId != null -> pins.listForConversation(conversationId)
-            groupId != null -> pins.listForGroup(actorId, groupId)
+            groupId != null -> pins.listForGroup(groupId)
             else -> return ResponseEntity.badRequest().body(mapOf("error" to "MISSING_SCOPE"))
         }
         return ResponseEntity.ok(mapOf("pins" to list, "count" to list.size))
     }
 }
+

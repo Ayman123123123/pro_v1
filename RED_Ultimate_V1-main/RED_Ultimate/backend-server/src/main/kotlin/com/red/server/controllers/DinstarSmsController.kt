@@ -1,4 +1,4 @@
-package com.red.server.controllers
+﻿package com.red.server.controllers
 
 import com.red.server.audit.AuditService
 import com.red.server.auth.repository.UserAccountRepository
@@ -11,16 +11,16 @@ import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
 /**
- * Dinstar SMS Controller — إرسال واستقبال SMS عبر UC2000-VE-8G
+ * Dinstar SMS Controller â€” Ø¥Ø±Ø³Ø§Ù„ ÙˆØ§Ø³ØªÙ‚Ø¨Ø§Ù„ SMS Ø¹Ø¨Ø± UC2000-VE-8G
  * 
- * Endpoints المعرّفة حسب وثائق Dinstar الرسمية:
+ * Endpoints Ø§Ù„Ù…Ø¹Ø±Ù‘ÙØ© Ø­Ø³Ø¨ ÙˆØ«Ø§Ø¦Ù‚ Dinstar Ø§Ù„Ø±Ø³Ù…ÙŠØ©:
  * 
- * POST /api/admin/dinstar/sms/send     → إرسال SMS (فردي/مجمّع)
- * POST /api/admin/dinstar/sms/result   → جلب نتائج الإرسال
- * GET  /api/admin/dinstar/sms/incoming → جلب SMS الواردة
- * GET  /api/admin/dinstar/sms/queue    → عدد SMS في الطابور
- * POST /api/admin/dinstar/sms/stop     → إيقاف مهمة إرسال
- * POST /api/admin/dinstar/sms/deliver  → جلب حالة التسليم
+ * POST /api/admin/dinstar/sms/send     â†’ Ø¥Ø±Ø³Ø§Ù„ SMS (ÙØ±Ø¯ÙŠ/Ù…Ø¬Ù…Ù‘Ø¹)
+ * POST /api/admin/dinstar/sms/result   â†’ Ø¬Ù„Ø¨ Ù†ØªØ§Ø¦Ø¬ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„
+ * GET  /api/admin/dinstar/sms/incoming â†’ Ø¬Ù„Ø¨ SMS Ø§Ù„ÙˆØ§Ø±Ø¯Ø©
+ * GET  /api/admin/dinstar/sms/queue    â†’ Ø¹Ø¯Ø¯ SMS ÙÙŠ Ø§Ù„Ø·Ø§Ø¨ÙˆØ±
+ * POST /api/admin/dinstar/sms/stop     â†’ Ø¥ÙŠÙ‚Ø§Ù Ù…Ù‡Ù…Ø© Ø¥Ø±Ø³Ø§Ù„
+ * POST /api/admin/dinstar/sms/deliver  â†’ Ø¬Ù„Ø¨ Ø­Ø§Ù„Ø© Ø§Ù„ØªØ³Ù„ÙŠÙ…
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/sms")
@@ -28,19 +28,20 @@ class DinstarSmsController(
     private val hardware: DinstarHardwareService,
     private val audit: AuditService,
     private val users: UserAccountRepository,
-    private val fleet: DinstarFleetService
+    private val fleet: DinstarFleetService,
+    private val smsContract: DinstarSmsContract
 ) {
 
     /**
-     * هل المُستدعي أدمن؟ الأدمن وحده يتحكم بمنافذ/بوابات الإرسال بحرية
-     * (حملات لوحة التحكم). المستخدم العادي يُحبَس على شريحته المربوطة
-     * 1:1 (pstn_gateway_id/pstn_port_index) — إغلاق ثغرة إرسال SMS من
-     * شريحة غيره أو استهداف بوابة اعتباطية عبر gatewayHost.
+     * Ù‡Ù„ Ø§Ù„Ù…ÙØ³ØªØ¯Ø¹ÙŠ Ø£Ø¯Ù…Ù†ØŸ Ø§Ù„Ø£Ø¯Ù…Ù† ÙˆØ­Ø¯Ù‡ ÙŠØªØ­ÙƒÙ… Ø¨Ù…Ù†Ø§ÙØ°/Ø¨ÙˆØ§Ø¨Ø§Øª Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ø¨Ø­Ø±ÙŠØ©
+     * (Ø­Ù…Ù„Ø§Øª Ù„ÙˆØ­Ø© Ø§Ù„ØªØ­ÙƒÙ…). Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠÙØ­Ø¨ÙŽØ³ Ø¹Ù„Ù‰ Ø´Ø±ÙŠØ­ØªÙ‡ Ø§Ù„Ù…Ø±Ø¨ÙˆØ·Ø©
+     * 1:1 (pstn_gateway_id/pstn_port_index) â€” Ø¥ØºÙ„Ø§Ù‚ Ø«ØºØ±Ø© Ø¥Ø±Ø³Ø§Ù„ SMS Ù…Ù†
+     * Ø´Ø±ÙŠØ­Ø© ØºÙŠØ±Ù‡ Ø£Ùˆ Ø§Ø³ØªÙ‡Ø¯Ø§Ù Ø¨ÙˆØ§Ø¨Ø© Ø§Ø¹ØªØ¨Ø§Ø·ÙŠØ© Ø¹Ø¨Ø± gatewayHost.
      */
     private fun isAdmin(authentication: Authentication): Boolean =
         authentication.authorities.any { it.authority == "ROLE_ADMIN" }
 
-    /** نطاق الشريحة الإلزامي للمستخدم العادي: (gatewayHost, portIndex) */
+    /** Ù†Ø·Ø§Ù‚ Ø§Ù„Ø´Ø±ÙŠØ­Ø© Ø§Ù„Ø¥Ù„Ø²Ø§Ù…ÙŠ Ù„Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ: (gatewayHost, portIndex) */
     private fun resolveBoundScope(user: com.red.server.auth.model.UserAccount): Pair<String, Int>? {
         val gwId = user.pstnGatewayId ?: return null
         val portIdx = user.pstnPortIndex ?: return null
@@ -48,7 +49,7 @@ class DinstarSmsController(
         return host to portIdx
     }
 
-    /** يفلتر رسائل واردة على عنصر port محدد مع دعم أشكال الاستجابة الشائعة */
+    /** ÙŠÙÙ„ØªØ± Ø±Ø³Ø§Ø¦Ù„ ÙˆØ§Ø±Ø¯Ø© Ø¹Ù„Ù‰ Ø¹Ù†ØµØ± port Ù…Ø­Ø¯Ø¯ Ù…Ø¹ Ø¯Ø¹Ù… Ø£Ø´ÙƒØ§Ù„ Ø§Ù„Ø§Ø³ØªØ¬Ø§Ø¨Ø© Ø§Ù„Ø´Ø§Ø¦Ø¹Ø© */
     private fun filterMessagesForPort(raw: Map<String, Any?>, port: Int): Map<String, Any?> {
         fun match(item: Any?): Boolean {
             if (item !is Map<*, *>) return false
@@ -65,14 +66,14 @@ class DinstarSmsController(
     }
 
     /**
-     * إرسال SMS عبر Dinstar
+     * Ø¥Ø±Ø³Ø§Ù„ SMS Ø¹Ø¨Ø± Dinstar
      * 
-     * الجسم (JSON):
+     * Ø§Ù„Ø¬Ø³Ù… (JSON):
      * {
-     *   "text": "محتوى الرسالة",
+     *   "text": "Ù…Ø­ØªÙˆÙ‰ Ø§Ù„Ø±Ø³Ø§Ù„Ø©",
      *   "param": [{"number": "777123456", "user_id": 1}],
-     *   "port": [0, 1],        // اختياري: منافذ محددة
-     *   "encoding": "AUTO",    // اختياري: AUTO (افتراضي، يشتق من النص) أو GSM7BIT أو UCS2 — الافتراضي AUTO يصلح رسائل عربية كانت تصل «?????»
+     *   "port": [0, 1],        // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: Ù…Ù†Ø§ÙØ° Ù…Ø­Ø¯Ø¯Ø©
+     *   "encoding": "AUTO",    // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: AUTO (Ø§ÙØªØ±Ø§Ø¶ÙŠØŒ ÙŠØ´ØªÙ‚ Ù…Ù† Ø§Ù„Ù†Øµ) Ø£Ùˆ GSM7BIT Ø£Ùˆ UCS2 â€” Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ AUTO ÙŠØµÙ„Ø­ Ø±Ø³Ø§Ø¦Ù„ Ø¹Ø±Ø¨ÙŠØ© ÙƒØ§Ù†Øª ØªØµÙ„ Â«?????Â»
      *   "request_status_report": true
      * }
      */
@@ -89,12 +90,12 @@ class DinstarSmsController(
         val text = body["text"]?.toString() ?: throw IllegalArgumentException("SMS text is required")
         @Suppress("UNCHECKED_CAST")
         val params = (body["param"] as? List<Map<String, Any?>>) ?: throw IllegalArgumentException("param array is required")
-        val preparedRecipients = DinstarSmsContract.prepare(params)
+        val preparedRecipients = smsContract.prepare(params)
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
-        // الافتراضي AUTO: تشتق الخدمة الترميز من النص. تثبيت GSM7BIT هنا كان يُبطل الاشتقاق ويجعل كل رسالة عربية تصل «?????».
+        // Ø§Ù„Ø§ÙØªØ±Ø§Ø¶ÙŠ AUTO: ØªØ´ØªÙ‚ Ø§Ù„Ø®Ø¯Ù…Ø© Ø§Ù„ØªØ±Ù…ÙŠØ² Ù…Ù† Ø§Ù„Ù†Øµ. ØªØ«Ø¨ÙŠØª GSM7BIT Ù‡Ù†Ø§ ÙƒØ§Ù† ÙŠÙØ¨Ø·Ù„ Ø§Ù„Ø§Ø´ØªÙ‚Ø§Ù‚ ÙˆÙŠØ¬Ø¹Ù„ ÙƒÙ„ Ø±Ø³Ø§Ù„Ø© Ø¹Ø±Ø¨ÙŠØ© ØªØµÙ„ Â«?????Â».
         val encoding = body["encoding"]?.toString() ?: DinstarHardwareService.AUTO_ENCODING
-        // اختياري: توجيه الإرسال لبوابة بعينها. للأدمن فقط — المستخدم العادي يُرسل حصراً من شريحته المربوطة
+        // Ø§Ø®ØªÙŠØ§Ø±ÙŠ: ØªÙˆØ¬ÙŠÙ‡ Ø§Ù„Ø¥Ø±Ø³Ø§Ù„ Ù„Ø¨ÙˆØ§Ø¨Ø© Ø¨Ø¹ÙŠÙ†Ù‡Ø§. Ù„Ù„Ø£Ø¯Ù…Ù† ÙÙ‚Ø· â€” Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠÙØ±Ø³Ù„ Ø­ØµØ±Ø§Ù‹ Ù…Ù† Ø´Ø±ÙŠØ­ØªÙ‡ Ø§Ù„Ù…Ø±Ø¨ÙˆØ·Ø©
         val requestedHost = body["gatewayHost"]?.toString()
 
         val effectivePorts: List<Int>?
@@ -106,7 +107,7 @@ class DinstarSmsController(
             val scope = resolveBoundScope(user)
                 ?: return mapOf(
                     "error" to "SIM_NOT_BOUND",
-                    "message" to "No permanent SIM bound to this account — ask the administrator"
+                    "message" to "No permanent SIM bound to this account â€” ask the administrator"
                 )
             effectiveHost = scope.first
             effectivePorts = listOf(scope.second)
@@ -130,7 +131,7 @@ class DinstarSmsController(
         )
     }
 
-    /** جلب نتائج إرسال SMS */
+    /** Ø¬Ù„Ø¨ Ù†ØªØ§Ø¦Ø¬ Ø¥Ø±Ø³Ø§Ù„ SMS */
     @PostMapping("/result")
     fun querySmsResult(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val userIds = (body["user_id"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
@@ -138,7 +139,7 @@ class DinstarSmsController(
         return hardware.querySmsResult(userIds, numbers)
     }
 
-    /** جلب حالة تسليم SMS */
+    /** Ø¬Ù„Ø¨ Ø­Ø§Ù„Ø© ØªØ³Ù„ÙŠÙ… SMS */
     @PostMapping("/deliver")
     fun querySmsDeliveryStatus(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val numbers = (body["number"] as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
@@ -147,7 +148,7 @@ class DinstarSmsController(
         return hardware.querySmsDeliveryStatus(numbers, timeAfter, timeBefore)
     }
 
-    /** جلب SMS الواردة — المستخدم العادي يرى رسائل شريحته فقط */
+    /** Ø¬Ù„Ø¨ SMS Ø§Ù„ÙˆØ§Ø±Ø¯Ø© â€” Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠ ÙŠØ±Ù‰ Ø±Ø³Ø§Ø¦Ù„ Ø´Ø±ÙŠØ­ØªÙ‡ ÙÙ‚Ø· */
     @GetMapping("/incoming")
     fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
@@ -163,11 +164,11 @@ class DinstarSmsController(
         return hardware.queryIncomingSms()
     }
 
-    /** عدد SMS في الطابور */
+    /** Ø¹Ø¯Ø¯ SMS ÙÙŠ Ø§Ù„Ø·Ø§Ø¨ÙˆØ± */
     @GetMapping("/queue")
     fun querySmsQueueCount(): Map<String, Any?> = hardware.querySmsQueueCount()
 
-    /** إيقاف مهمة إرسال SMS */
+    /** Ø¥ÙŠÙ‚Ø§Ù Ù…Ù‡Ù…Ø© Ø¥Ø±Ø³Ø§Ù„ SMS */
     @PostMapping("/stop")
     fun stopSmsTask(@RequestBody body: Map<String, Any?>): Map<String, Any?> {
         val taskId = (body["task_id"] as? Number)?.toInt()
@@ -175,3 +176,4 @@ class DinstarSmsController(
         return hardware.stopSmsTask(taskId)
     }
 }
+
