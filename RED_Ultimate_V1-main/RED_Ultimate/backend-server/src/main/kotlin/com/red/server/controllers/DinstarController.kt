@@ -83,6 +83,77 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
         return hardware.setPortPower(port, on)
     }
 
+    /**
+     * إنشاء قاعدة «تعلّم رقم الشريحة» لمنفذ بعينه.
+     *
+     * كانت اللوحة تنادي هذا المسار وتتلقّى 404 (`No static resource
+     * api/admin/dinstar/ports/{port}/learning`) لأنه لم يكن معرَّفًا إطلاقًا،
+     * فكان زر «تعلّم الرقم» صامتًا بلا أي أثر على الجهاز.
+     *
+     * ## التكلفة — لهذا المسار POST صريح لا جدولة
+     * النمط `SMS` يُرسل رسالة مدفوعة (سبأفون: 10 YER لطلب `MMN` إلى `333`).
+     * لذلك لا يُستدعى إلا بطلب صريح من مسؤول، ويُسجَّل في التدقيق.
+     *
+     * الجسم كله اختياري؛ الافتراضي هو الطريق الموثَّق لسبأفون:
+     * ```json
+     * {"method":"SMS","destination":"333","text":"MMN","writeToSim":true}
+     * ```
+     */
+    @PostMapping("/ports/{port}/learning")
+    fun triggerNumberLearning(
+        @PathVariable port: Int,
+        @RequestBody(required = false) body: Map<String, Any?>?,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val actor = UUID.fromString(authentication.name)
+        val method = (body?.get("method") as? String)?.trim()?.uppercase()
+            ?.let { name ->
+                DinstarHardwareService.NumberLearningMethod.entries.firstOrNull { it.name == name }
+                    ?: return ResponseEntity.badRequest().body(
+                        mapOf(
+                            "error" to "INVALID_METHOD",
+                            "allowed" to DinstarHardwareService.NumberLearningMethod.entries.map { it.name }
+                        )
+                    )
+            }
+            ?: DinstarHardwareService.NumberLearningMethod.SMS
+
+        val accepted = try {
+            hardware.triggerNumberLearning(
+                port = port,
+                method = method,
+                destination = (body?.get("destination") as? String)?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: DinstarHardwareService.SABAFON_MMN_SHORTCODE,
+                text = (body?.get("text") as? String)
+                    ?: DinstarHardwareService.SABAFON_MMN_KEYWORD,
+                expectedSender = (body?.get("expectedSender") as? String).orEmpty(),
+                keywords = (body?.get("keywords") as? String).orEmpty(),
+                writeToSim = (body?.get("writeToSim") as? Boolean) ?: true,
+                stripFromLeft = (body?.get("stripFromLeft") as? Number)?.toInt() ?: 0,
+                addPrefix = (body?.get("addPrefix") as? String).orEmpty()
+            )
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "INVALID_REQUEST")))
+        }
+
+        val status = if (accepted) "SUCCEEDED" else "FAILED"
+        hardware.recordOperation(
+            actor, "NUMBER_LEARNING_RULE", port, status, mapOf("method" to method.name)
+        )
+        audit.record(actor, "DINSTAR_NUMBER_LEARNING", port.toString(), mapOf("method" to method.name))
+
+        return ResponseEntity.ok(
+            mapOf(
+                "port" to port,
+                "method" to method.name,
+                "accepted" to accepted,
+                // الجهاز يقبل القاعدة فورًا لكن الرقم يظهر بعد رد المشغّل
+                "note" to "القاعدة أُنشئت على البوابة؛ الرقم يظهر في get_port_info بعد رد المشغّل"
+            )
+        )
+    }
+
     /** Device status — POST /api/get_status */
     @GetMapping("/device-status")
     fun deviceStatus(): Map<String, Any?> = hardware.getDeviceStatus()

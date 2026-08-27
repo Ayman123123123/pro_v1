@@ -38,6 +38,7 @@ export function asArray<T = any>(data: unknown): T[] {
     if (Array.isArray(obj.content)) return obj.content as T[];
     if (Array.isArray(obj.notifications)) return obj.notifications as T[];
     if (Array.isArray(obj.items)) return obj.items as T[];
+    if (Array.isArray(obj.sessions)) return obj.sessions as T[];
   }
   return [];
 }

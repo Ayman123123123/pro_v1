@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, theme } from 'antd';
 import {
   DashboardOutlined,
+  GlobalOutlined,
   MobileOutlined,
   MonitorOutlined,
   SafetyOutlined,
@@ -59,6 +60,7 @@ const GroupsManagement = lazy(() => import('./pages/GroupsManagement'));
 const PostsManagement = lazy(() => import('./pages/PostsManagement'));
 const CallHistory = lazy(() => import('./pages/CallHistory'));
 const PstnManagement = lazy(() => import('./pages/PstnManagement'));
+const BrowserSettings = lazy(() => import('./pages/BrowserSettings'));
 
 const { Header, Sider, Content } = Layout;
 
@@ -90,7 +92,8 @@ type PageKey =
   | 'diagnostics'
   | 'data-overview'
   | 'groups'
-  | 'posts';
+  | 'posts'
+  | 'browser-settings';
 
 const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: string }[] = [
   // Operations — مدموجة من القديمة + الجديدة — بيانات حقيقية — كل التبويبات القديمة بالشكل الجديد
@@ -124,6 +127,7 @@ const menuItems: { key: PageKey; icon: React.JSX.Element; label: string; group: 
   { key: 'dinstar-pstn-users', icon: <TeamOutlined />, label: 'صلاحيات PSTN', group: 'sovereign' },
   { key: 'monitor', icon: <MonitorOutlined />, label: 'المراقبة الحية', group: 'sovereign' },
   { key: 'diagnostics', icon: <SettingOutlined />, label: 'التشخيص', group: 'sovereign' },
+  { key: 'browser-settings', icon: <GlobalOutlined />, label: 'إعدادات المتصفح', group: 'sovereign' },
 ];
 
 const groupLabels: Record<string, string> = {
@@ -245,6 +249,7 @@ export default function App() {
       case 'dinstar-pstn-users': return <PstnManagement />;
       case 'monitor': return <MasterOverview />;
       case 'diagnostics': return <Diagnostics />;
+      case 'browser-settings': return <BrowserSettings />;
     }
   };
 

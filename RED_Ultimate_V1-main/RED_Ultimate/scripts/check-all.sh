@@ -41,6 +41,9 @@ else
 fi
 
 printf '%s\n' '[2/8] Database/entity and Kotlin static contracts'
+# Flyway naming/duplication gate runs first and needs no DB: a duplicate version
+# aborts startup entirely, so catching it here is cheaper than a failed boot.
+check 'Flyway migration naming' bash scripts/check-flyway-migrations.sh
 check 'schema consistency' python3 scripts/check-schema-consistency.py
 # Complements the textual entity/migration diff above by making PostgreSQL itself
 # plan every hand-written JdbcTemplate statement. Skips itself when the DB

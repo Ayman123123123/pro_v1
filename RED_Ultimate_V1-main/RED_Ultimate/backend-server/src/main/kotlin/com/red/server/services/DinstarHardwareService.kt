@@ -48,6 +48,17 @@ class DinstarHardwareService(
     private val jdbc: JdbcTemplate,
     private val connections: DinstarConnectionFactory
 ) {
+    /**
+     * أنماط «تعلّم الرقم» كما تُرقّمها صفحة `enHBPhoneNumberAdd.htm` على
+     * الجهاز. DINSTAR توثّق الثلاثة رسميًا في FAQ الخاص بـ UC2000.
+     *
+     * معرَّف على مستوى الصنف لا داخل `companion object` كي يُشار إليه من
+     * المتحكّمات بـ `DinstarHardwareService.NumberLearningMethod`.
+     */
+    enum class NumberLearningMethod(val wire: String) {
+        SMS("0"), USSD("1"), CALL("2")
+    }
+
     companion object {
         private val log = LoggerFactory.getLogger(DinstarHardwareService::class.java)
         private val JSON = "application/json; charset=utf-8".toMediaType()
@@ -66,14 +77,6 @@ class DinstarHardwareService(
 
         /** اطلب اشتقاق الترميز من محتوى الرسالة بدل فرضه. */
         const val AUTO_ENCODING = "AUTO"
-
-        /**
-         * أنماط «تعلّم الرقم» كما تُرقّمها صفحة `enHBPhoneNumberAdd.htm`.
-         * DINSTAR توثّق الثلاثة رسميًا في FAQ الخاص بـ UC2000.
-         */
-        enum class NumberLearningMethod(val wire: String) {
-            SMS("0"), USSD("1"), CALL("2")
-        }
 
         /** الرمز القصير لخدمة «معرفة رقمي» في سبأفون. */
         const val SABAFON_MMN_SHORTCODE = "333"
