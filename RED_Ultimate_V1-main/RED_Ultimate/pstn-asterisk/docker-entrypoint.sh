@@ -550,7 +550,7 @@ fi
 # حقن سر الاستدعاء الداخلي كـ Asterisk global ليقرؤه dialplan في System(curl)
 # — ${VAR} داخل dialplan تُفسَّر كمتغير أستيريكس لا بيئة الحاوية.
 # الحارس يمنع تضاعف الكتلة عند إعادة تشغيل الحاوية (volume دائم).
-if [ -f "$CONFIG_DIR/extensions.conf" ] && [ -n "$PSTN_INTERNAL_SECRET" ]; then
+if [ -f "$CONFIG_DIR/extensions.conf" ] && [ -n "${PSTN_INTERNAL_SECRET:-}" ]; then
   if ! grep -q "PSTN_INTERNAL_SECRET" "$CONFIG_DIR/extensions.conf"; then
     cat >> "$CONFIG_DIR/extensions.conf" <<EOF
 
@@ -562,7 +562,10 @@ EOF
 fi
 
 # تصدير السر لسكربت الجسر الذي ينفّذه System() باسم مستخدم asterisk
-export PSTN_INTERNAL_SECRET
+# ملاحظة: `${VAR:-}` إلزامي — السكربت يعمل بـ`set -eu`، فمتغيّر غير معرَّف
+# يُسقط الحاوية في حلقة إعادة تشغيل. عند غياب السر يظل مسار الوارد يعمل
+# بالافتراضي المعلن في InternalPstnController (pstn.internal-secret).
+export PSTN_INTERNAL_SECRET="${PSTN_INTERNAL_SECRET:-}"
 
 if [ "${RED_ASTERISK_CONFIG_ONLY:-0}" = "1" ]; then
   exit 0

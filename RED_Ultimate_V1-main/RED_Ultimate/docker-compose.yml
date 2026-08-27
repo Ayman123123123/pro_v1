@@ -80,6 +80,11 @@ services:
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
       - DINSTAR_PORT=${DINSTAR_PORT:-443}
       - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
+      # نفس السر الذي يحمله dialplan في ترويسة X-Internal-Secret. الربط المرن
+      # في Spring يحوّله إلى الخاصية pstn.internal-secret التي يقرأها
+      # InternalPstnController. بدونه يتحقق الخادم من سرّه الافتراضي فتُرفض
+      # كل مكالمة واردة بـBAD_SECRET بينما البوابة ترسل السر الصحيح.
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -149,10 +154,14 @@ services:
     cap_drop: ["ALL"]
     stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      # `curl` غير موجود في node:24-bookworm-slim، فكان هذا الفحص يفشل دائماً
+      # ويُبقي الحاوية unhealthy رغم أن الخدمة تعمل وتردّ على /health. نستخدم
+      # نفس فحص Dockerfile المبني على fetch الأصلي في Node.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 20s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 3. TURN/STUN Relay ━━━━━━━━━━━━
@@ -212,6 +221,10 @@ services:
       - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
       - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
       - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
+      # سر مصادقة مسار الوارد: dialplan يستدعي /api/internal/pstn بترويسة
+      # X-Internal-Secret، ويتحقق منها InternalPstnController. اختياري لأن
+      # للمتحكم افتراضًا معلنًا، لكن تركه فارغًا يُبقي المسار على السر الافتراضي.
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"
