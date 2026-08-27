@@ -184,6 +184,9 @@ COMMENT ON TABLE disappearing_settings IS 'إعدادات الرسائل ذات�
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='red_id' AND character_maximum_length=5) THEN
+        -- تُسقط العروض المعتمِدة على red_id قبل توسيعه؛ يعيد V38 إنشاء
+        -- v_pstn_reconcile بـ CREATE OR REPLACE فلا يضيع شيء.
+        DROP VIEW IF EXISTS v_pstn_reconcile;
         ALTER TABLE users ALTER COLUMN red_id TYPE VARCHAR(32);
         -- إعادة القيد بعد التوسيع
         ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_red_id_format;
@@ -289,12 +292,12 @@ WHERE EXISTS (SELECT 1 FROM users WHERE role='ADMIN' LIMIT 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- علم ميزة: تفعيل الميزات الجديدة افتراضيًا
-INSERT INTO feature_flags(id, flag_name, description, enabled, rollout_percentage) VALUES
-    ('26000000-0000-0000-0000-000000000001', 'pinned_messages', 'تثبيت الرسائل في المحادثات', TRUE, 100),
-    ('26000000-0000-0000-0000-000000000002', 'message_edit_history', 'سجل تعديلات الرسائل', TRUE, 100),
-    ('26000000-0000-0000-0000-000000000003', 'channels', 'القنوات والبث الأحادي', TRUE, 100),
-    ('26000000-0000-0000-0000-000000000004', 'disappearing_flexible', 'اختفاء مرن بتوقيتات متعددة', TRUE, 100),
-    ('26000000-0000-0000-0000-000000000005', 'note_to_self', 'محادثة ملاحظة لنفسي', TRUE, 100)
+INSERT INTO feature_flags(id, flag_name, description, enabled, rollout_percentage, created_at, updated_at) VALUES
+    ('26000000-0000-0000-0000-000000000001', 'pinned_messages', 'تثبيت الرسائل في المحادثات', TRUE, 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('26000000-0000-0000-0000-000000000002', 'message_edit_history', 'سجل تعديلات الرسائل', TRUE, 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('26000000-0000-0000-0000-000000000003', 'channels', 'القنوات والبث الأحادي', TRUE, 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('26000000-0000-0000-0000-000000000004', 'disappearing_flexible', 'اختفاء مرن بتوقيتات متعددة', TRUE, 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('26000000-0000-0000-0000-000000000005', 'note_to_self', 'محادثة ملاحظة لنفسي', TRUE, 100, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (flag_name) DO UPDATE SET enabled=EXCLUDED.enabled, rollout_percentage=EXCLUDED.rollout_percentage, updated_at=CURRENT_TIMESTAMP;
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

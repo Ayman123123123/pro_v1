@@ -62,27 +62,36 @@ class DinstarSignalTest {
         assertEquals(100, values.last(), "‎-51 dBm هو الحد الأعلى")
     }
     @Test
-    @DisplayName("عتبة الصلاحية تستبعد ما دون -112 dBm فقط، و-100 تفصل المفضّل")
+    @DisplayName("الصلاحية تمتد إلى -112 dBm، والتفضيل يتبع عتبة \"جيد\"")
     fun usabilityThreshold() {
-        // usable = grade != UNUSABLE = dbm >= MIN_VIABLE_DBM (-112): إشارة ضعيفة
-        // تحمل SMS ولا تُستبعد. أما -100 (DEFAULT_MIN_GOOD_DBM) فتفصل GOOD/المفضّل
-        // للمكالمات، ويُعبّر عنها `preferred` لا `usable`.
+        // usable = grade != UNUSABLE = dbm >= MIN_VIABLE_DBM: الإشارة الضعيفة
+        // تحمل SMS ومكالمة طوارئ ولا تُقصى — هذا ما أعاد المنافذ الثمانية للعمل.
         assertTrue(DinstarSignal.interpret(6).usable, "‏-101 dBm ضعيفة لكنها صالحة")
-        assertFalse(DinstarSignal.interpret(6).preferred, "‏-101 dBm دون عتبة المفضّل")
-        assertTrue(DinstarSignal.interpret(7).usable, "‏-99 dBm مقبولة")
-        assertTrue(DinstarSignal.interpret(7).preferred, "‏-99 dBm فوق عتبة المفضّل")
+        assertTrue(DinstarSignal.interpret(7).usable, "‏-99 dBm صالحة")
         assertTrue(DinstarSignal.interpret(31).usable)
         assertFalse(DinstarSignal.interpret(99).usable, "‏99 = لا شبكة")
-    }
 
+        // preferred = GOOD = dbm >= minGoodDbm (‏-95 افتراضاً): -99 و-101 دونها.
+        assertFalse(DinstarSignal.interpret(6).preferred, "‏-101 dBm دون عتبة المفضّل")
+        assertFalse(DinstarSignal.interpret(7).preferred, "‏-99 dBm دون عتبة المفضّل")
+        assertTrue(DinstarSignal.interpret(12).preferred, "‏-89 dBm فوق العتبة")
+
+        // العتبة قابلة للضبط: بـ-100 يصبح -99 مفضّلاً دون تغيير الصلاحية.
+        assertTrue(DinstarSignal.interpret(7, minGoodDbm = -100).preferred)
+        assertFalse(DinstarSignal.interpret(6, minGoodDbm = -100).preferred)
+    }
     @Test
     @DisplayName("التصنيفات النصية تتبع القوة الفعلية")
     fun labelsFollowStrength()  {
-        assertEquals("EXCELLENT", DinstarSignal.interpret(31).label) // ‎-51
-        assertEquals("GOOD", DinstarSignal.interpret(20).label)      // ‎-73
-        assertEquals("FAIR", DinstarSignal.interpret(12).label)      // ‎-89
-        assertEquals("ACCEPTABLE", DinstarSignal.interpret(8).label)       // ‎-97
-        assertEquals("WEAK", DinstarSignal.interpret(2).label)   // ‎-109
+        assertEquals("EXCELLENT", DinstarSignal.interpret(31).label) // ‏-51
+        assertEquals("GOOD", DinstarSignal.interpret(20).label)      // ‏-73
+        assertEquals("FAIR", DinstarSignal.interpret(12).label)      // ‏-89
+        // FAIR يمتد إلى -95 وهو نفسه DEFAULT_MIN_GOOD_DBM، فرتبة ACCEPTABLE
+        // لا تظهر بالعتبة الافتراضية؛ تحتها مباشرة WEAK حتى -112.
+        assertEquals("WEAK", DinstarSignal.interpret(8).label)       // ‏-97
+        assertEquals("WEAK", DinstarSignal.interpret(2).label)       // ‏-109
+        // ACCEPTABLE تُستعمل عند تمرير عتبة أدنى صراحةً (مثل الطوارئ)
+        assertEquals("ACCEPTABLE", DinstarSignal.interpret(8, minGoodDbm = -100).label)
     }
 
     @Test

@@ -234,12 +234,12 @@ SELECT
     g.host as gateway_host,
     c.port_index,
     c.start_time,
-    c.duration,
+    c.duration_seconds AS duration,
     c.caller_number,
     c.callee_number,
     c.direction,
     c.call_type,
-    c.hangup_cause,
+    c.status AS hangup_cause,
     CASE 
         WHEN c.direction = 'INBOUND' THEN c.caller_number
         ELSE c.callee_number
@@ -261,7 +261,7 @@ SELECT
     COUNT(DISTINCT c.id) as total_calls,
     COUNT(DISTINCT s.id) as total_sms,
     COUNT(DISTINCT u.id) as total_ussd,
-    AVG(CASE WHEN c.duration IS NOT NULL THEN c.duration ELSE NULL END) as avg_call_duration,
+    AVG(c.duration_seconds) as avg_call_duration,
     MAX(c.start_time) as last_call_at
 FROM telecom_gateways g
 LEFT JOIN dinstar_cdr c ON c.gateway_id = g.id

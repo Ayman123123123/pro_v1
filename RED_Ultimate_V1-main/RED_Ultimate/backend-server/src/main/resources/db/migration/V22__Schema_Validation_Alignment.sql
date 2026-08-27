@@ -31,9 +31,31 @@ LIMIT 100;
 -- النوع (jsonb/inet/array تُسجَّل Types#OTHER فيرفضها) — والتطبيق لا يستخدم
 -- أي معاملات JSONB/ARRAY عليها، فالتحويل إلى TEXT شفاف تماماً.
 ALTER TABLE admin_audit_log       ALTER COLUMN metadata        TYPE TEXT USING metadata::text;
-ALTER TABLE admin_audit_log       ALTER COLUMN ip_address      TYPE TEXT USING host(ip_address);
 ALTER TABLE admin_sessions        ALTER COLUMN device_info     TYPE TEXT USING device_info::text;
-ALTER TABLE admin_sessions        ALTER COLUMN ip_address      TYPE TEXT USING host(ip_address);
+
+-- ip_address: `host()` يقبل inet فقط. على قاعدة سبق أن حُوِّل فيها العمود إلى
+-- varchar (أو أُنشئ نصيًا من الأصل) كان هذا السطر يرفع
+-- `function host(character varying) does not exist` فيُسقط الترحيل بالكامل —
+-- وهو ما جمّد السلسلة عند V22. الآن يُقرأ النوع الفعلي أولاً: التحويل يجري
+-- بـ host() على inet وحده، ويُتجاهل إن كان العمود نصيًا بالفعل.
+DO $$
+DECLARE
+    t record;
+BEGIN
+    FOR t IN
+        SELECT table_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name IN ('admin_audit_log', 'admin_sessions')
+          AND column_name = 'ip_address'
+          AND udt_name = 'inet'
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE %I ALTER COLUMN ip_address TYPE TEXT USING host(ip_address)',
+            t.table_name
+        );
+    END LOOP;
+END $$;
 ALTER TABLE feature_flags         ALTER COLUMN config          TYPE TEXT USING config::text;
 ALTER TABLE feature_flags         ALTER COLUMN target_user_ids TYPE TEXT USING target_user_ids::text;
 ALTER TABLE feature_flags         ALTER COLUMN target_groups   TYPE TEXT USING target_groups::text;

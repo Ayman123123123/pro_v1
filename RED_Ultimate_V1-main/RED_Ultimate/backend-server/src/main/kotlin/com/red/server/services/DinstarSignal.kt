@@ -16,18 +16,22 @@
  * | 100..191     | RSCP ممتد لـ TD-SCDMA (-116 .. -25 dBm) |
  * | 199          | غير معروفة (النطاق الممتد)                |
  *
- * ## العطل الثاني (يُعالَج هنا)
+ * ## الإصلاحات الحرجة المطبقة:
  *
- * الحكم الثنائي `usable = dbm >= -100` كان يُقصي المنافذ الثمانية كلها
- * على جهاز هذا النشر (قراءاتها 5..6 أي -103..-101) فلا تخرج مكالمة ولا SMS.
- * الصحيح التدريج لا الإقصاء.
+ * 1. **عطل القراءة 99**: كانت `coerceIn(0,31)` تحوّل 99 إلى 31 = 100%، فتُختار شريحة ميتة.
+ *    الآن: 99 → `Grade.UNUSABLE` مع `usable=false` و `percent=null`.
+ *
+ * 2. **العتبة الثنائية**: `usable = dbm >= -100` كان يُقصي كل المنافذ (قراءاتها 5..6 = -103..-101).
+ *    الآن: نظام **ثلاثي الدرجات** (GOOD/WEAK/UNUSABLE) مع عتبات قابلة للضبط.
+ *
+ * 3. **إشارة قابلة للاستخدام للـ Load Balancer**: `usable = grade != UNUSABLE` — لا تُستبعد المنافذ الضعيفة فوراً.
  */
 object DinstarSignal {
 
     const val UNKNOWN_BASIC = 99
     const val UNKNOWN_EXTENDED = 199
-    const val MIN_VIABLE_DBM = -112
-    const val DEFAULT_MIN_GOOD_DBM = -100
+    const val MIN_VIABLE_DBM = -112       // أدنى إشارة يمكن أن تنجز مكالمة (طوارئ)
+    const val DEFAULT_MIN_GOOD_DBM = -95  // عتبة "جيد" افتراضية (أكثر مرونة من -100)
     private const val MIN_DBM = -113
     private const val MAX_DBM = -51
 
@@ -40,8 +44,13 @@ object DinstarSignal {
         val grade: Grade,
         val label: String
     ) {
+        /** يمكن استخدامها للمكالمات/الرسائل — ليس UNUSABLE */
         val usable: Boolean get() = grade != Grade.UNUSABLE
+
+        /** مفضلة للاختيار — إشارة قوية */
         val preferred: Boolean get() = grade == Grade.GOOD
+
+        /** للتصحيح والسجلات */
         fun toMap(): Map<String, Any?> = mapOf(
             "signalRaw" to raw,
             "signalDbm" to dbm,
@@ -52,9 +61,16 @@ object DinstarSignal {
         )
     }
 
-    @Deprecated("استخدم interpret(raw, minGoodDbm)")
+    @Deprecated("استخدم interpret(raw, minGoodDbm) مع عتبة مناسبة")
     const val MIN_USABLE_DBM = DEFAULT_MIN_GOOD_DBM
 
+    /**
+     * يفسر القراءة الخام مع عتبة "جيد" قابلة للضبط.
+     *
+     * @param rawValue القيمة الخام من البوابة (Number أو String)
+     * @param minGoodDbm أقل dBm يُعتبر "جيد" (افتراضي -95).
+     *        للاستخدام في Load Balancer نمرر -95، وللطوارئ -112.
+     */
     fun interpret(rawValue: Any?, minGoodDbm: Int = DEFAULT_MIN_GOOD_DBM): Quality {
         val raw = when (rawValue) {
             is Number -> rawValue.toInt()
@@ -86,5 +102,14 @@ object DinstarSignal {
                 else -> "UNUSABLE"
             }
         )
+    }
+
+    /**
+     * تفسير مخصص لموزع الأحمال: يعيد `signalPercent` للوزن + `usable` للفلترة.
+     * يستخدم عتبة "جيد" -95 dBm للتصنيف، لكن `usable` يسمح بالضعيف (WEAK).
+     */
+    fun interpretForLoadBalancer(rawValue: Any?): Map<String, Any?> {
+        val q = interpret(rawValue, DEFAULT_MIN_GOOD_DBM)
+        return q.toMap()
     }
 }

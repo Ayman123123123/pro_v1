@@ -49,6 +49,8 @@ class DinstarEventListener(
         /** فهرس قصير العمر لتمرير callId فقط إلى endpoint تجهيز وسائط الوارد. */
         private const val INCOMING_CALL_PREFIX = "red:pstn:incoming-call:"
         private const val CHANNEL_CALLID_PREFIX = "red:pstn:channel-callid:"
+        /** منفذ GSM الفيزيائي المرتبط بالقناة (من RED_PORT_INDEX في VarSet). */
+        private const val CHANNEL_PORT_PREFIX = "red:pstn:channel-port:"
         private const val INCOMING_TTL_SECONDS = 120L
         private const val CHANNEL_TTL_HOURS = 2L
     }
@@ -112,6 +114,15 @@ class DinstarEventListener(
             // ولم تصل مراحل المكالمة الصادرة إلى التطبيق إطلاقاً.
             runCatching { progress.attachChannel(value, channel) }
             log.debug("Channel {} bound to callId {}", channel, value)
+        }
+        // C4 FIX: التقاط RED_PORT_INDEX من dialplan — هذا هو المنفذ الحقيقي
+        // وليس رقم القناة الداخلي. يُخزن لربط القناة بالمنفذ الفيزيائي.
+        if (variable == "RED_PORT_INDEX") {
+            val portIdx = value.toIntOrNull()
+            if (portIdx != null && portIdx in 0..63) {
+                redis.opsForValue().set("$CHANNEL_PORT_PREFIX$channel", portIdx.toString(), Duration.ofHours(CHANNEL_TTL_HOURS))
+                log.debug("Channel {} bound to portIndex {}", channel, portIdx)
+            }
         }
     }
 
@@ -231,9 +242,11 @@ class DinstarEventListener(
             releaseActiveReservation(callId)
         }
 
-        // المنفذ/البوابة: أولوية لتخمين القناة الصريح، وإلا ربط المكالمة المخزّن.
-        val port = extractPortIndex(channel, lineNumber)
+        // المنفذ/البوابة: أولوية للمنفذ الحقيقي الملتقط من RED_PORT_INDEX (VarSet)،
+        // ثم boundCall، ثم التخمين من اسم القناة (الأقل دقة).
+        val port = redis.opsForValue().getAndDelete("$CHANNEL_PORT_PREFIX$channel")?.toIntOrNull()
             ?: boundCall?.second?.takeIf { it in 0..63 }
+            ?: extractPortIndex(channel, lineNumber)?.takeIf { it in 0..63 }
         val gatewayHost = extractGatewayHost(channel)
         val gatewayId = gatewayHost?.let {
             runCatching {
