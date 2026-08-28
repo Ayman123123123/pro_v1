@@ -42,7 +42,10 @@ class DinstarFleetBootstrap(
         // (المحادثات، المكالمات عبر WebRTC، اللوحة) لا تعتمد على PSTN.
         runCatching { fleet.ensureSeedGateway() }
             .onSuccess { id ->
-                if (id != null) log.info("سُجّلت بوابة DINSTAR الافتراضية في الأسطول: {}", id)
+                if (id != null) {
+                    fleet.setEnabled(id, true)
+                    log.info("سُجّلت بوابة DINSTAR الافتراضية في الأسطول: {}", id)
+                }
                 else log.debug("لا حاجة لتسجيل بوابة بذرة — مسجّلة سلفًا أو العنوان غير خاص")
             }
             .onFailure { log.warn("تعذّر تسجيل بوابة DINSTAR الافتراضية: {}", it.message) }
@@ -63,7 +66,7 @@ class DinstarFleetBootstrap(
                     // "DINSTAR_IPS" كانت تكسر UPSERT سجل البوابة في كل إقلاع
                     // فيبقى last_seen قديماً والبوابة تظهر OFFLINE كاذبةً.
                     if (discovered != null) {
-                        fleet.upsertGateway(
+                        val id = fleet.upsertGateway(
                             host = ip,
                             apiPort = discovered.apiPort,
                             scheme = discovered.scheme,
@@ -75,9 +78,10 @@ class DinstarFleetBootstrap(
                             macAddress = discovered.macAddress,
                             discoveryMethod = "CONFIG_SEED"
                         )
+                        fleet.setEnabled(id, true)
                         log.info("سُجّلت بوابة DINSTAR من DINSTAR_IPS: {} ({})", ip, discovered.model)
                     } else {
-                        fleet.upsertGateway(
+                        val id = fleet.upsertGateway(
                             host = ip,
                             apiPort = 443,
                             scheme = "https",
@@ -86,6 +90,7 @@ class DinstarFleetBootstrap(
                             name = "DINSTAR @ $ip",
                             discoveryMethod = "CONFIG_SEED"
                         )
+                        fleet.setEnabled(id, true)
                         log.info("سُجّلت بوابة DINSTAR (fallback) من DINSTAR_IPS: {}", ip)
                     }
                 }.onFailure { log.warn("تعذّر تسجيل بوابة DINSTAR {}: {}", ip, it.message) }

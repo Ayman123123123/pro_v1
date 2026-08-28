@@ -691,6 +691,14 @@ class DinstarHardwareService(
         return response
     }
 
+    fun queryUssdReply(gateway: DinstarFleetService.Gateway, port: Int): Map<String, Any?> {
+        requireGatewayPort(gateway, port)
+        return clientFor(gateway).getJson(
+            DinstarApiContract.Path.QUERY_USSD_REPLY, 
+            mapOf("port" to port.toString())
+        )
+    }
+
     /** تشغيل/إيقاف منفذ في بوابة محددة — GET /api/set_port_info?action=power */
     fun setPortPower(gateway: DinstarFleetService.Gateway, port: Int, on: Boolean): Map<String, Any?> {
         requireGatewayPort(gateway, port)
@@ -1108,3 +1116,4 @@ class DinstarHardwareService(
         "factoryResetFromYounes" to false
     )
 }
+

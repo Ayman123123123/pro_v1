@@ -24,7 +24,11 @@ class PstnCallController(
     fun dial(@RequestBody request: PstnCallRequest, authentication: Authentication): ResponseEntity<Any> {
         val userId = UUID.fromString(authentication.name)
         val user = calls.getUser(userId)
-        if (!user.pstnEnabled || user.pstnDailyLimit <= 0) {
+        val isAdmin = authentication.authorities.any { it.authority == "ROLE_ADMIN" }
+        // الادمن له مسار حرّ عبر /api/admin/dinstar/calls بلا حد يومي، لكنه قد
+        // ينادي هذا المسار من لوحة DinstarControl القديمة. الحد 0 كان يُسقطه
+        // حتى بعد تفعيل pstn_enabled (حالة 85204: enabled=true و limit=0).
+        if (!isAdmin && (!user.pstnEnabled || user.pstnDailyLimit <= 0)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "PSTN_NOT_ENABLED"))
         }
         if (calls.hasActiveCall(userId)) {

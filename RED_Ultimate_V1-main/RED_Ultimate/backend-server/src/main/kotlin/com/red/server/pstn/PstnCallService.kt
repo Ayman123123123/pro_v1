@@ -30,7 +30,8 @@ class PstnCallService(
     private val loadBalancer: DinstarLoadBalancer,
     private val history: CallHistoryService,
     private val progress: PstnCallProgressTracker,
-    @Qualifier("pstnRetryScheduler") private val retryScheduler: ScheduledExecutorService
+    @Qualifier("pstnRetryScheduler") private val retryScheduler: ScheduledExecutorService,
+    private val reservations: PersistentReservationService? = null
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)
@@ -101,6 +102,9 @@ class PstnCallService(
             // منفذ هذه المكالمة فقط، لا أي منفذ اعتباطي عبر الأسطول.
             redis.opsForValue().set(activeKey(user.id), "${actionId}:${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
             redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
+            // حجز دائم — يبقى حتى بعد فقدان Redis أو إعادة تشغيل الباكند
+            try { reservations?.bindActiveCall(user.id, actionId, selection.gatewayId, selection.portIndex, number) } catch (_: Exception) {}
+            try { reservations?.tryReservePort(selection.gatewayId, selection.portIndex, user.id, actionId, Duration.ofMinutes(30), number) } catch (_: Exception) {}
             PstnCallResponse(actionId, "DIALING", number, used.toInt(), user.pstnDailyLimit, portIdx)
         }.getOrElse {
             // Release both the daily counter and the pre-dial reservation.
@@ -147,13 +151,17 @@ class PstnCallService(
      * @param callerNumber رقم الشريحة الظاهر للمستلم. `null` = رقم المنفذ المختار.
      * @param gatewayHost بوابة بعينها. `null` = يختار الموزّع من الأسطول.
      * @param portIndex منفذ بعينه. `null` = يختار الموزّع الأفضل.
+     * @param bridge `true` = مكالمة صوتية حقيقية: نظير الإداري يُطلب أولًا ثم
+     *   تُجسر ساق GSM. `false` = الوضع القديم (`Wait(1)` ثم إغلاق) وهو اختبار
+     *   إشغال للمنفذ لا مكالمة — لا مسار صوت فيه إطلاقًا.
      */
     fun dialAsAdmin(
         adminId: UUID,
         suppliedNumber: String,
         gatewayHost: String? = null,
         portIndex: Int? = null,
-        callerNumber: String? = null
+        callerNumber: String? = null,
+        bridge: Boolean = true
     ): PstnCallResponse {
         val admin = users.findById(adminId).orElseThrow { NoSuchElementException("Admin not found") }
         val number = normalizeYemeniNumber(suppliedNumber)
@@ -173,7 +181,18 @@ class PstnCallService(
             normalized
         } ?: selection.simNumber
 
-        val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, selection.portIndex, effectiveCaller)
+        // المسار المجسّر هو الافتراضي: الوضع القديم كان يطلب GSM ثم يُنفّذ
+        // Wait(1) ويُغلق، فلا يسمع الإداري شيئًا ولا يسمعه المستلم.
+        val actionId = if (bridge) {
+            pstn.dialGsmBridged(
+                phoneNumber = number,
+                pjsipEndpoint = selection.pjsipEndpoint,
+                portIndex = selection.portIndex,
+                callerSimNumber = effectiveCaller
+            )
+        } else {
+            pstn.dialGsm(number, selection.pjsipEndpoint, selection.portIndex, effectiveCaller)
+        }
         // السجل الدائم يُكتب قبل أي حدث AMI: بدونه تصل الأحداث إلى مكالمة
         // لا وجود لها في التاريخ فتُبتلَع تحذيرات "Call not found".
         history.start(admin.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
@@ -186,6 +205,8 @@ class PstnCallService(
             Duration.ofMinutes(30)
         )
         redis.opsForValue().set(callUserKey(actionId), admin.id.toString(), Duration.ofMinutes(30))
+        try { reservations?.bindActiveCall(admin.id, actionId, selection.gatewayId, selection.portIndex, number) } catch (_: Exception) {}
+        try { reservations?.tryReservePort(selection.gatewayId, selection.portIndex, admin.id, actionId, Duration.ofMinutes(30), number) } catch (_: Exception) {}
 
         log.info(
             "PSTN admin dial: admin={} number={} gateway={} port={} callerId={} callId={}",
@@ -199,22 +220,25 @@ class PstnCallService(
 
     /**
      * Check whether the user currently has an active PSTN call.
+     * يفحص Redis أولاً (أسرع)، ثم Postgres (أدق بعد فقدان الكاش).
      */
     fun hasActiveCall(userId: UUID): Boolean {
         val raw = redis.opsForValue().get(activeKey(userId))
         if (raw != null) return true
-        return loadBalancer.hasActiveCall(userId)
+        if (loadBalancer.hasActiveCall(userId)) return true
+        return try { reservations?.hasActiveCall(userId) ?: false } catch (_: Exception) { false }
     }
 
     /**
      * يعيد المنفذ النشط الحالي للمستخدم (المنفذ الذي رُبط بمكالمته الجارية).
      * @return Triple<callId, portIndex, gatewayId> أو null إذا لا توجد مكالمة نشطة.
+     * يفحص Redis، ثم LoadBalancer، ثم Postgres.
      */
     fun resolveActiveCall(userId: UUID): Triple<String, Int, UUID>? {
-        val raw = redis.opsForValue().get(activeKey(userId)) ?: return loadBalancer.resolveActiveCall(userId)?.let {
-            Triple(it.first, it.second, it.third)
-        }
-        return PstnActiveCallKeys.parse(raw)?.let { Triple(it.first, it.second, it.third) }
+        val raw = redis.opsForValue().get(activeKey(userId))
+        if (raw != null) return PstnActiveCallKeys.parse(raw)?.let { Triple(it.first, it.second, it.third) }
+        loadBalancer.resolveActiveCall(userId)?.let { return Triple(it.first, it.second, it.third) }
+        return null
     }
 
     /**
@@ -271,8 +295,13 @@ class PstnCallService(
 
     fun clearActive(userId: UUID) {
         val raw = redis.opsForValue().get(activeKey(userId))
+        val callId = raw?.split(":")?.firstOrNull()
         redis.delete(activeKey(userId))
-        raw?.split(":")?.firstOrNull()?.let { redis.delete(callUserKey(it)) }
+        callId?.let { redis.delete(callUserKey(it)) }
+        // تحرير دائم — حتى بعد فقدان Redis
+        if (callId != null) {
+            try { reservations?.unbindActiveCall(userId, callId) } catch (_: Exception) {}
+        }
     }
 
     private fun activeKey(userId: UUID) = "red:pstn:active:$userId"

@@ -99,24 +99,42 @@ class PstnBridgeController(
         // Uses the same key prefix (red:pstn:calluser:) as PstnCallService and
         // DindarEventListener so all components share the same lookup table.
         redis.opsForValue().set("red:pstn:calluser:$callId", user.id.toString(), Duration.ofMinutes(bridgeSecretTtlMinutes))
+                val effectivePort = request.port ?: user.pstnPortIndex
+        val targetGw = if (effectivePort != null) {
+            val gwId = user.pstnGatewayId
+            val host = gwId?.let { gid ->
+                runCatching { 
+                    org.springframework.web.context.support.WebApplicationContextUtils
+                        .getRequiredWebApplicationContext(org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes().let { it as org.springframework.web.context.request.ServletRequestAttributes }.request.servletContext)
+                        .getBean(org.springframework.jdbc.core.JdbcTemplate::class.java)
+                        .queryForObject("SELECT host FROM telecom_gateways WHERE id = ?", String::class.java, gid)
+                }.getOrNull()
+            }
+            if (host != null) {
+                "dinstar-gw-${host.replace('.', '-')}-port-$effectivePort"
+            } else {
+                val gwIndex = if (effectivePort >= 8) 2 else 1
+                val localPort = effectivePort % 8
+                "dinstar-gw-${gwIndex}-port-${localPort}"
+            }
+        } else null
+        
+        if (effectivePort != null) {
+            redis.opsForValue().set("red:pstn:callport:$callId", effectivePort.toString(), Duration.ofMinutes(bridgeSecretTtlMinutes))
+        }
 
-        // Build ICE servers from the existing IceServerController logic
+log.info("PSTN bridge: user={} number={} daily={}/{} callId={} gw={}",
+            user.redId, number, used, user.pstnDailyLimit, callId, targetGw)
+
+        val expiresAt = Instant.now().plusSeconds(3600).epochSecond
+
         val iceConfig = try {
             iceController.iceServers(authentication)
         } catch (e: Exception) {
             log.warn("Failed to generate ICE servers for bridge: {}", e.message)
             IceConfiguration(Instant.now().plusSeconds(3600).epochSecond, emptyList())
         }
-
-        // TURN wired from configuration (optional; null when not configured)
-        val turn = if (turnUrl.isNotBlank()) {
-            TurnCredentials(url = turnUrl, username = turnUsername, password = turnPassword)
-        } else null
-
-        log.info("PSTN bridge: user={} number={} daily={}/{} callId={}",
-            user.redId, number, used, user.pstnDailyLimit, callId)
-
-        val expiresAt = Instant.now().plusSeconds(3600).epochSecond
+        val turn = if (turnUrl.isNotBlank()) TurnCredentials(turnUrl, turnUsername, turnPassword) else null
 
         return ResponseEntity.ok(BridgeResponse(
             callId = callId,
@@ -132,6 +150,8 @@ class PstnBridgeController(
             turnServerUrl = turn?.url,
             turnUsername = turn?.username,
             turnPassword = turn?.password,
+            port = effectivePort,
+            gateway = targetGw
         ))
     }
 
@@ -162,9 +182,21 @@ class PstnBridgeController(
             log.warn("Failed to generate ICE servers for incoming bridge: {}", e.message)
             IceConfiguration(Instant.now().plusSeconds(3600).epochSecond, emptyList())
         }
-        val turn = if (turnUrl.isNotBlank()) TurnCredentials(turnUrl, turnUsername, turnPassword) else null
+val turn = if (turnUrl.isNotBlank()) TurnCredentials(turnUrl, turnUsername, turnPassword) else null
         val usedToday = redis.opsForValue().get("red:pstn:daily:${user.id}:${LocalDate.now(ZoneId.of("Asia/Aden"))}")
             ?.toIntOrNull() ?: 0
+        // Determine gateway port from incoming call metadata
+        val effectivePort = (incoming["port"] as? Int)?.takeIf { it >= 0 }
+        val gatewayHost = incoming["gatewayHost"] as? String
+        val targetGw = if (effectivePort != null) {
+            if (gatewayHost != null && gatewayHost != "unknown") {
+                "dinstar-gw-${gatewayHost.replace('.', '-')}-port-$effectivePort"
+            } else {
+                val gwIndex = if (effectivePort >= 8) 2 else 1
+                val localPort = effectivePort % 8
+                "dinstar-gw-${gwIndex}-port-${localPort}"
+            }
+        } else null
         return ResponseEntity.ok(BridgeResponse(
             callId = request.callId,
             sipServer = asteriskWssUrl,
@@ -179,6 +211,8 @@ class PstnBridgeController(
             turnServerUrl = turn?.url,
             turnUsername = turn?.username,
             turnPassword = turn?.password,
+            port = effectivePort,
+            gateway = targetGw
         ))
     }
 
@@ -224,12 +258,14 @@ class PstnBridgeController(
     }
 }
 
-data class BridgeRequest(val number: String)
+data class BridgeRequest(val number: String, val port: Int? = null)
 data class IncomingBridgeRequest(val callId: String)
 
 data class TurnCredentials(val url: String, val username: String, val password: String)
 
 data class BridgeResponse(
+    val port: Int?,
+    val gateway: String?,
     val callId: String,
     val sipServer: String,
     val sipUsername: String,
@@ -244,3 +280,7 @@ data class BridgeResponse(
     val turnUsername: String?,
     val turnPassword: String?,
 )
+
+
+
+

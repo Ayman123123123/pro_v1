@@ -33,6 +33,81 @@ class NumberLearningService(
         private val log = LoggerFactory.getLogger(NumberLearningService::class.java)
         private val rnd = SecureRandom()
         private val ZONE: ZoneId = ZoneId.of("Asia/Aden")
+
+        /**
+         * كبح أُسّي بالدقائق حسب عدد الإخفاقات اليوم على المنفذ نفسه.
+         * الفهرس = عدد الإخفاقات السابقة؛ ما بعد آخر عنصر يبقى على 240 دقيقة.
+         */
+        private val FAILURE_BACKOFF_MINUTES = listOf(5L, 15L, 30L, 60L, 120L, 240L)
+
+        /** إخفاقات متواصلة على منفذ واحد تُطفئ المحرك كليًا في اليوم نفسه. */
+        private const val DAILY_FAILURE_CIRCUIT_BREAKER = 12
+
+        /**
+         * أقصى عدد محاولات (ناجحة أو فاشلة) لكل منفذ = السقف اليومي × هذا.
+         * السقف الأصلي يحسب الناجحة وحدها، فمنفذ يفشل دائمًا كان بلا حدّ.
+         */
+        private const val MAX_ATTEMPT_MULTIPLIER = 3
+
+        /**
+         * أطول تسلسل تصاعدي/تنازلي متتالٍ يُحتمل في رقم حقيقي.
+         *
+         * أرقام الأسطول الثمانية الفعلية أطول تسلسل فيها خانتان (`…71 2 0…`)،
+         * بينما أرقام التوثيق مبنية على التسلسل نفسه: `712345678` يحمل ثمانيًا
+         * و`701234567` ثمانيًا و`777123456` ستًّا. العتبة 6 تفصل الفئتين بهامش
+         * واسع من الجانبين — لا رقم حقيقي يقترب منها، ولا رقم اصطناعي ينجو.
+         */
+        private const val MAX_CONSECUTIVE_RUN = 6
+
+        /** أقصر رقم محمول يمني قابل للاتصال (بادئة من رقمين + سبعة). */
+        private const val MIN_DIALABLE_DIGITS = 9
+
+        /**
+         * هل يبدو الرقم اصطناعيًا؟
+         *
+         * ## لماذا بنيويًا لا بقائمة
+         *
+         * قائمة حظر صريحة تُغطّي ما رأيناه فقط، وأول رقم توثيق جديد يمرّ.
+         * والأنماط النصية (`Regex`) هشّة: نمطٌ كُتب لـ`777123456` لا يمسك
+         * `712345678` رغم أن كلَيهما التسلسل نفسه بإزاحة واحدة — وهو ما حدث
+         * فعلًا وأسقط الاختبار.
+         *
+         * الفحص هنا على **بنية** الرقم: تسلسل متتالٍ طويل، أو خانة واحدة
+         * مكرّرة، أو طول أقصر من رقم محمول. هذه هي الصفات التي تجعل الرقم
+         * صالحًا للتوثيق وغير صالح للاتصال.
+         *
+         * الاتجاه الخطأ الأخطر هو رفض رقم صحيح: ذلك يُفرِّغ المجمّع ويُعطّل
+         * الميزة بلا رسالة مفهومة. لذلك العتبات واسعة والأرقام الحقيقية
+         * الثمانية مثبَّتة في [NumberLearningPlaceholderTest].
+         */
+        internal fun looksLikePlaceholder(number: String): Boolean {
+            val digits = number.filter(Char::isDigit).let { raw ->
+                // البادئة الدولية ليست جزءًا من بنية الرقم الوطني
+                when {
+                    raw.startsWith("00967") -> raw.drop(5)
+                    raw.startsWith("967") && raw.length > 9 -> raw.drop(3)
+                    else -> raw
+                }
+            }
+            if (digits.length < MIN_DIALABLE_DIGITS) return true
+            if (digits.all { it == digits[0] }) return true
+            return longestConsecutiveRun(digits) >= MAX_CONSECUTIVE_RUN
+        }
+
+        /** أطول سلسلة خانات متتالية تصاعديًا أو تنازليًا (`123` أو `987`). */
+        private fun longestConsecutiveRun(digits: String): Int {
+            if (digits.length < 2) return digits.length
+            var longest = 1
+            var ascending = 1
+            var descending = 1
+            for (i in 1 until digits.length) {
+                val delta = digits[i] - digits[i - 1]
+                ascending = if (delta == 1) ascending + 1 else 1
+                descending = if (delta == -1) descending + 1 else 1
+                longest = maxOf(longest, ascending, descending)
+            }
+            return longest
+        }
     }
 
     // â”â”â”â”â”â”â”â”â”â” Config â”â”â”â”â”â”â”â”â”â”
@@ -236,8 +311,20 @@ class NumberLearningService(
         val inWindow = if (start < end) minutesNow in start until end else minutesNow >= start || minutesNow < end
         if (!inWindow) return
 
-        val pool = jdbc.queryForList("SELECT number FROM number_learning_pool WHERE active").map { it["number"].toString() }
-        if (pool.isEmpty()) return
+        // أرقام المجمّع تُنقّى من الأنماط الاصطناعية قبل أي إنفاق: الاتصال
+        // برقم وهمي يفشل حتمًا لكنه يُحاسَب على الشبكة، والفشل بدوره كان
+        // يُشغّل إعادة المحاولة بلا كبح.
+        val pool = jdbc.queryForList("SELECT number FROM number_learning_pool WHERE active")
+            .map { it["number"].toString() }
+            .filterNot { candidate ->
+                looksLikePlaceholder(candidate).also { bad ->
+                    if (bad) log.warn("Number-learning: skipping placeholder pool entry {}", candidate)
+                }
+            }
+        if (pool.isEmpty()) {
+            log.warn("Number-learning: pool holds no dialable numbers — engine idle")
+            return
+        }
 
         val enabledPortsRaw = cfg["enabled_ports"]?.toString()?.trim().orEmpty()
         val ports: List<Int> = if (enabledPortsRaw.isBlank()) (0..15).toList()
@@ -256,6 +343,18 @@ class NumberLearningService(
                 Long::class.java, port, today
             ) ?: 0L
             if (usedToday >= cap) continue
+
+            // المحاولات الفاشلة تُنفق رصيدًا أيضًا: استثناؤها من كل حساب كان
+            // يمنح المنفذ المعطوب محاولات غير محدودة. سقفٌ منفصل أوسع يسمح
+            // بتعويض انقطاع عابر دون أن يفتح بابًا مفتوحًا.
+            val attemptsToday = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM number_learning_calls WHERE port = ? AND started_at::date = ?",
+                Long::class.java, port, today
+            ) ?: 0L
+            if (attemptsToday >= cap * MAX_ATTEMPT_MULTIPLIER) {
+                log.debug("Number-learning: port {} exhausted its attempt budget ({})", port, attemptsToday)
+                continue
+            }
 
             val eligibleAt = jdbc.queryForObject(
                 "SELECT MAX(next_eligible_at) FROM number_learning_calls WHERE port = ? AND started_at::date = ?",
@@ -294,18 +393,58 @@ class NumberLearningService(
         val correlationId = try {
             pstn.dialGsm(number, waitSeconds = duration)
         } catch (e: Exception) {
+            // ‏`next_eligible_at = NULL` كان يُبطل كل كبح على مسار الفشل:
+            // ‏`tickInternal` يقرأ `MAX(next_eligible_at)` ليقرر الأهلية، و
+            // ‏`MAX(NULL)` = `NULL` فلا انتظار؛ و`usedToday` يستثني `FAILED`
+            // فلا يُستهلك السقف اليومي. النتيجة إعادة محاولة كل 60 ثانية بلا
+            // نهاية — 1682 محاولة في ثلاثة أيام، كل واحدة تطلب الشبكة فعلًا
+            // قبل أن تفشل. الكبح الأُسّي يحوّل الفشل المتكرر إلى تباطؤ تلقائي.
+            val failuresToday = runCatching {
+                jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM number_learning_calls WHERE port = ? AND started_at::date = CURRENT_DATE AND status = 'FAILED'",
+                    Long::class.java, port
+                ) ?: 0L
+            }.getOrDefault(0L)
+            val backoffMinutes = FAILURE_BACKOFF_MINUTES.getOrElse(
+                failuresToday.toInt().coerceAtMost(FAILURE_BACKOFF_MINUTES.lastIndex)
+            ) { FAILURE_BACKOFF_MINUTES.last() }
             jdbc.update(
-                "INSERT INTO number_learning_calls(id,port,number,correlation_id,mode,status,duration_seconds,error,started_at,next_eligible_at) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,NULL)",
-                UUID.randomUUID(), port, number, null, mode, "FAILED", duration, e.message?.take(300)
+                "INSERT INTO number_learning_calls(id,port,number,correlation_id,mode,status,duration_seconds,error,started_at,next_eligible_at) VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",
+                UUID.randomUUID(), port, number, null, mode, "FAILED", duration, e.message?.take(300),
+                java.sql.Timestamp.from(Instant.now().plusSeconds(backoffMinutes * 60))
             )
-            log.warn("Learning call failed port={} number={}: {}", port, number, e.message)
+            log.warn(
+                "Learning call failed port={} number={} (failure {} today, backing off {}min): {}",
+                port, number, failuresToday + 1, backoffMinutes, e.message
+            )
+            // قاطع الدائرة: فشل متواصل يعني خللًا بنيويًا (Asterisk ساقط، أو
+            // أرقام غير صالحة) لا عقبة عابرة. الاستمرار يُنفق رصيدًا بلا أي
+            // احتمال نجاح، فيُطفأ المحرك ويُترك للمسؤول تشخيصه.
+            if (failuresToday + 1 >= DAILY_FAILURE_CIRCUIT_BREAKER) {
+                runCatching {
+                    jdbc.update("UPDATE number_learning_config SET mode = 'OFF' WHERE id = 1")
+                    log.error(
+                        "Number-learning DISABLED: port {} hit {} failures today. Fix the cause then re-enable.",
+                        port, failuresToday + 1
+                    )
+                }
+            }
             return mapOf("status" to "FAILED", "port" to port, "number" to number, "error" to e.message)
         }
         val jitterMin = if (maxIntervalMin > minIntervalMin) minIntervalMin + rnd.nextInt((maxIntervalMin - minIntervalMin + 1).toInt()).toLong() else minIntervalMin
         val nextEligible = Instant.now().plusSeconds(jitterMin * 60)
         jdbc.update(
             "INSERT INTO number_learning_calls(id,port,number,correlation_id,mode,status,duration_seconds,started_at,next_eligible_at) VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?)",
-            UUID.randomUUID(), port, number, correlationId, mode, "ORIGINATED", duration, nextEligible
+            // `Instant` خامًا يُرسله pgjdbc كنص varchar، والعمود
+            // `timestamp without time zone` لا يقبل varchar ضمنيًا (42804)،
+            // فتُترجَم إلى BadSqlGrammarException ويسقط كل إدراج ORIGINATED.
+            // مسار FAILED كان ينجح لأنه يمرّر NULL حرفيًا لا معاملًا.
+            // الأثر: المحرك يُطلق المكالمة على الشبكة (تكلفة حقيقية) ثم يفشل
+            // في تسجيلها، فيرى `tickInternal` صفر مكالمات ويعيد الإطلاق كل
+            // دقيقة بلا سقف ولا فاصل — 1440 مكالمة/يوم بدل 7.
+            // القراءة تستخدم `java.sql.Timestamp` أصلًا، فالكتابة تُطابقها.
+            UUID.randomUUID(), port, number, correlationId, mode, "ORIGINATED", duration,
+            java.sql.Timestamp.from(nextEligible)
         )
         log.info("Learning call originated: port={} number={} duration={}s corr={}", port, number, duration, correlationId)
         return mapOf("status" to "ORIGINATED", "port" to port, "number" to number, "durationSeconds" to duration, "correlationId" to correlationId, "nextEligibleAt" to nextEligible)

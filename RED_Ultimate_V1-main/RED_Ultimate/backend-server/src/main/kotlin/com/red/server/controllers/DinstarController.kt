@@ -2,6 +2,7 @@ package com.red.server.controllers
 
 import com.red.server.audit.AuditService
 import com.red.server.pstn.PstnCallService
+import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.http.HttpStatus
@@ -16,6 +17,7 @@ class DinstarController(
     private val hardware: DinstarHardwareService,
     private val audit: AuditService,
     private val calls: PstnCallService,
+    private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate
 ) {
 
@@ -41,18 +43,34 @@ class DinstarController(
         return result
     }
 
+    /**
+     * إرسال كود USSD على منفذ بعينه.
+     *
+     * `gatewayId` اختياري: بدونه يُستخدم الجهاز النشط. مع أسطول متعدد
+     * البوابات فهرس المنفذ وحده غامض — المنفذ 3 شريحة مختلفة على كل جهاز،
+     * فاستعلام الرصيد كان يذهب إلى شريحة غير المقصودة صامتًا.
+     */
     @PostMapping("/ports/{port}/ussd")
     fun sendUssd(@PathVariable port: Int, @RequestBody body: Map<String, String>, authentication: Authentication): Map<String, Any?> {
         val code = body["code"] ?: throw IllegalArgumentException("USSD code is required")
         val actor = UUID.fromString(authentication.name)
-        val result = hardware.sendUssd(port, code)
+        val gateway = body["gatewayId"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { raw ->
+                val id = runCatching { UUID.fromString(raw) }.getOrNull()
+                    ?: throw IllegalArgumentException("gatewayId is not a valid UUID")
+                fleet.findGateway(id) ?: throw NoSuchElementException("Gateway $id is not registered")
+            }
+        val result = if (gateway != null) hardware.sendUssd(gateway, port, code) else hardware.sendUssd(port, code)
         hardware.recordOperation(actor, "USSD_SENT", port, "SUCCEEDED", mapOf("codeLength" to code.length))
-        audit.record(actor, "DINSTAR_USSD_SENT", port.toString(), mapOf("codeLength" to code.length))
+        audit.record(actor, "DINSTAR_USSD_SENT", port.toString(), mapOf(
+            "codeLength" to code.length, "gateway" to (gateway?.host ?: "active")
+        ))
         // Persistent USSD log: gateway buffer is volatile, DB survives
         try {
             jdbc.update(
-                "INSERT INTO dinstar_ussd_log(port_index,ussd_code,response_text,status) VALUES (?,?,?,?)",
-                port, code, result["response_text"]?.toString(), result["status"]?.toString() ?: "SENT"
+                "INSERT INTO dinstar_ussd_log(gateway_id,port_index,ussd_code,response_text,status) VALUES (?,?,?,?,?)",
+                gateway?.id, port, code, result["response_text"]?.toString(), result["status"]?.toString() ?: "SENT"
             )
         } catch (_: Exception) {}
         return result
@@ -180,18 +198,27 @@ class DinstarController(
         val gatewayHost = body["gatewayHost"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
         val portIndex = (body["portIndex"] as? Number)?.toInt()
         val callerNumber = body["callerNumber"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        // الافتراضي مكالمة مجسّرة حقيقية. `bridge=false` يُبقي وضع الاختبار
+        // القديم (إشغال المنفذ ثانية واحدة بلا صوت) لمن يريد فحص المسار فقط.
+        val bridge = when (val raw = body["bridge"]) {
+            null -> true
+            is Boolean -> raw
+            else -> raw.toString().toBooleanStrictOrNull() ?: true
+        }
         return try {
-            val result = calls.dialAsAdmin(actor, number, gatewayHost, portIndex, callerNumber)
+            val result = calls.dialAsAdmin(actor, number, gatewayHost, portIndex, callerNumber, bridge)
             audit.record(actor, "DINSTAR_ADMIN_CALL", result.callId, mapOf(
                 "number" to number, "gatewayHost" to (gatewayHost ?: "auto"),
                 "portIndex" to (portIndex ?: -1), "callerNumber" to (callerNumber ?: "port-default"),
-                "selectedPort" to result.slot
+                "selectedPort" to result.slot, "bridge" to bridge
             ))
             hardware.recordOperation(actor, "ADMIN_CALL", result.slot, "SUCCEEDED", mapOf("callId" to result.callId))
             ResponseEntity.ok(mapOf(
                 "callId" to result.callId, "status" to result.status,
                 "number" to result.number, "port" to result.slot,
-                "route" to "Backend -> Asterisk -> PJSIP -> DINSTAR"
+                "bridged" to bridge,
+                "route" to if (bridge) "Admin WebRTC <-> Asterisk <-> PJSIP <-> DINSTAR <-> GSM"
+                           else "Backend -> Asterisk -> PJSIP -> DINSTAR (no audio path)"
             ))
         } catch (e: IllegalArgumentException) {
             ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "INVALID_REQUEST")))

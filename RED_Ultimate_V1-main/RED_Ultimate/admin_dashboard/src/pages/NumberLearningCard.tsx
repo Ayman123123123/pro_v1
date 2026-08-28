@@ -130,8 +130,8 @@ export default function NumberLearningCard() {
             <Col span={5}>
               <Form.Item label="مدة المكالمة (ث)">
                 <Space.Compact>
-                  <InputNumber min={3} max={600} value={cfg.minDurationSeconds} onChange={(v: number | null) => v && saveConfig({ minDurationSeconds: v })} />
-                  <InputNumber min={3} max={900} value={cfg.maxDurationSeconds} onChange={(v: number | null) => v && saveConfig({ maxDurationSeconds: v })} />
+                  <InputNumber min={1} max={600} value={cfg.minDurationSeconds} onChange={(v: number | null) => v && saveConfig({ minDurationSeconds: v })} />
+                  <InputNumber min={1} max={900} value={cfg.maxDurationSeconds} onChange={(v: number | null) => v && saveConfig({ maxDurationSeconds: v })} />
                 </Space.Compact>
               </Form.Item>
             </Col>

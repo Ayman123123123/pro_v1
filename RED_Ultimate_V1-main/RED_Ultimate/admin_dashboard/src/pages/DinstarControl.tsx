@@ -12,6 +12,9 @@ import {
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
 import NumberLearningCard from './NumberLearningCard';
+import SmsInbox from '../components/SmsInbox';
+import CallHistory from './CallHistory';
+import WebRtcDialer from '../components/WebRtcDialer';
 
 /**
  * صفحة بوابات DINSTAR — أسطول UC2000-VE.
@@ -112,7 +115,7 @@ export default function DinstarControl() {
   const [capabilities, setCapabilities] = useState<Record<string, unknown>>({});
   const [cdr, setCdr] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [ussdTarget, setUssdTarget] = useState<number | null>(null);
+  const [ussdTarget, setUssdTarget] = useState<{gatewayId: string, port: number} | null>(null);
   const [ussd, setUssd] = useState('');
   const [dialPort, setDialPort] = useState<number | null>(null);
   const [dialHost, setDialHost] = useState('');
@@ -121,12 +124,25 @@ export default function DinstarControl() {
   const [dialResult, setDialResult] = useState<any>(null);
   const [smsTo, setSmsTo] = useState('');
   const [smsGateway, setSmsGateway] = useState<string | undefined>(undefined);
+  /**
+   * منفذ الإرسال — أي شريحة يخرج منها SMS.
+   *
+   * الواجهة كانت ترسل `gatewayHost` وحده بلا `port`، فالجهاز يختار المنفذ
+   * الأول المتاح دائمًا. النتيجة أن كل الرسائل تخرج من شريحة واحدة: رصيدها
+   * وحدها يُستهلك، والمستلم يرى رقمًا واحدًا لا الرقم المقصود. الباكإند
+   * يقبل `port` للأدمن أصلًا (`effectivePorts = portList`) — الواجهة فقط
+   * لم تكن ترسله.
+   *
+   * `undefined` = اترك الاختيار للجهاز (السلوك القديم، صريح الآن).
+   */
+  const [smsPort, setSmsPort] = useState<number | undefined>(undefined);
   const [smsText, setSmsText] = useState('');
   const [smsSending, setSmsSending] = useState(false);
   const [smsInbox, setSmsInbox] = useState<any[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(false);
   const [routeResult, setRouteResult] = useState<any>(null);
+  const [dialerOpen, setDialerOpen] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null);
   const [form] = Form.useForm();
@@ -187,15 +203,25 @@ export default function DinstarControl() {
       },
     });
 
+    const [ussdResult, setUssdResult] = useState<any>(null);
+  const [ussdLoading, setUssdLoading] = useState(false);
+
   const sendUssd = async () => {
-    if (ussdTarget == null) return;
+    if (ussdTarget == null || !ussd) return;
+    setUssdLoading(true);
+    setUssdResult(null);
     try {
-      await json(await apiFetch(`/api/admin/dinstar/ports/${ussdTarget}/ussd`, {
-        method: 'POST', body: JSON.stringify({ code: ussd }),
+      // نقطة النهاية الحقيقية: POST على منفذ بعينه. المسار السابق
+      // (/ussd/balance?gatewayId=…) لا وجود له في DinstarController.
+      // gatewayId يُرسل لأن فهرس المنفذ وحده غامض في أسطول متعدد البوابات.
+      const res = await json(await apiFetch(`/api/admin/dinstar/ports/${ussdTarget.port}/ussd`, {
+        method: 'POST',
+        body: JSON.stringify({ code: ussd, gatewayId: ussdTarget.gatewayId }),
       }));
-      message.success('أُرسل طلب USSD');
-      setUssdTarget(null); setUssd('');
+      setUssdResult(res.response_text || res.reply || res.error || JSON.stringify(res));
+      message.success('تم جلب الرد بنجاح');
     } catch (e: any) { message.error(e.message); }
+    finally { setUssdLoading(false); }
   };
 
   const openDial = (port: number, host: string) => {
@@ -203,8 +229,10 @@ export default function DinstarControl() {
   };
 
   /**
-   * إجراء مكالمة من منفذ بعينه: Backend → Asterisk → PJSIP → DINSTAR.
-   * slotIndex يثبّت المنفذ في موزّع الأحمال (forcedPort).
+   * مكالمة إدارية حرة: أي منفذ، أي بوابة، أي رقم متصل من الأسطول.
+   * POST /api/admin/dinstar/calls — لا حد يومي، و callerNumber مقيّد
+   * بأرقام الأسطول (anti-spoofing). يبقى /api/pstn/calls للمستخدم العادي
+   * محبوسًا على شريحته 1:1.
    */
   const dialPortCall = async () => {
     if (dialPort == null) return;
@@ -215,21 +243,40 @@ export default function DinstarControl() {
     }
     setDialBusy(true);
     try {
-      const b = await json(await apiFetch('/api/pstn/calls', {
-        method: 'POST', body: JSON.stringify({ number, slotIndex: dialPort }),
+      const b = await json(await apiFetch('/api/admin/dinstar/calls', {
+        method: 'POST',
+        body: JSON.stringify({
+          number,
+          gatewayHost: dialHost || undefined,
+          portIndex: dialPort,
+          // callerNumber: اتركه فارغًا ليستخدم رقم المنفذ المختار تلقائيًا
+        }),
       }));
       setDialResult(b);
-      message.success(`تم إطلاق المكالمة على المنفذ ${(b.slot ?? dialPort) + 1} — ${b.status || 'DIALING'}`);
+      const portOut = (b.port ?? b.slot ?? dialPort) as number;
+      message.success(`تم إطلاق المكالمة على المنفذ ${portOut + 1} — ${b.status || 'DIALING'}`);
     } catch (e: any) { message.error(e.message); setDialResult(null); }
     finally { setDialBusy(false); }
   };
 
-  const loadCdr = async () => {
+  /**
+   * سجل المكالمات — من قاعدة البيانات لا من ذاكرة الجهاز.
+   *
+   * `/api/admin/dinstar/cdr` يستعلم البوابة مباشرةً: ذاكرة متطايرة تُمحى عند
+   * إعادة التشغيل، وتحمل بيانات جهاز واحد فقط، ولا تعرف المشغّل ولا التكلفة.
+   * `/cdr/analysis` يقرأ `dinstar_cdr` الدائم مضمومًا إلى لقطات المنافذ
+   * والبوابات، فيُعطي المشغّل وزمن الرنين وسبب الإنهاء والتكلفة لكل الأسطول.
+   */
+  const loadCdr = useCallback(async () => {
     try {
-      const b = await json(await apiFetch('/api/admin/dinstar/cdr'));
-      setCdr(b.cdr || b.query || []);
+      const b = await json(await apiFetch('/api/admin/dinstar/cdr/analysis?limit=200'));
+      setCdr(Array.isArray(b) ? b : (b.records || []));
     } catch (e: any) { message.error(e.message); }
-  };
+  }, []);
+
+  // السجل يُحمَّل تلقائيًا: قراءة قاعدة البيانات لا تلمس الأجهزة، فلا مبرّر
+  // لإخفاء البيانات وراء زر. الزر بقي للتحديث اليدوي الفوري.
+  usePolling(loadCdr, 30000);
 
   /**
    * أرقام الوجهة — تُفصل بفاصلة أو مسافة أو سطر جديد.
@@ -252,6 +299,32 @@ export default function DinstarControl() {
   /** أي حرف خارج ASCII يفرض unicode فينكمش المقطع من 160 إلى 70 حرفًا. */
   const smsIsUnicode = useMemo(() => /[^\x00-\x7F]/.test(smsText), [smsText]);
 
+  /**
+   * شرائح الإرسال المتاحة — مشتقّة من لقطة الأسطول الحقيقية لا من قائمة ثابتة.
+   *
+   * فهرس المنفذ مُقيَّد ببوابته: المنفذ 3 على جهاز يعني شريحة أخرى على جهاز
+   * ثانٍ. لذلك لا تُعرض الشرائح إلا بعد اختيار البوابة، وإلا أرسل المسؤول من
+   * منفذ يظنّه رقمًا معيّنًا وهو رقم آخر.
+   *
+   * غير المسجَّلة تظهر مُعطَّلة بدل حجبها: الغياب يبدو خطأً في الواجهة، أما
+   * الظهور المُعطَّل فيقول «الشريحة موجودة لكنها ساقطة على الشبكة».
+   */
+  const smsPortOptions = useMemo(() => {
+    if (!smsGateway || !fleetPorts) return [];
+    const entry = fleetPorts.gateways.find((g) => g.gateway.host === smsGateway);
+    if (!entry) return [];
+    return entry.ports.map((p) => {
+      const registered = isRegistered(p.status);
+      const op = resolveOp(p.operator);
+      return {
+        value: p.index,
+        disabled: !registered,
+        label: `SIM ${p.index + 1} — ${p.numberMasked || 'رقم غير معروف'} · ${op.ar}`
+          + (registered ? '' : ' · غير مسجّلة'),
+      };
+    });
+  }, [smsGateway, fleetPorts]);
+
   const loadInbox = useCallback(async () => {
     try {
       const b = await json(await apiFetch('/api/admin/dinstar/sms/incoming'));
@@ -267,6 +340,9 @@ export default function DinstarControl() {
         // بوابة بعينها من الأسطول؛ عند تركها فارغة يستعمل الخادم
         // البوابة النشطة. بلا هذا الخيار كان كل SMS يخرج من جهاز واحد.
         ...(smsGateway ? { gatewayHost: smsGateway } : {}),
+        // منفذ الإرسال: بدونه يختار الجهاز الأول دائمًا فتُستنزف شريحة واحدة
+        // ويظهر للمستلم رقم غير المقصود. الباكإند يقبله للأدمن.
+        ...(smsPort != null ? { port: [smsPort] } : {}),
         // الترميز يُحسم هنا لا في الجهاز: تركه للاستنتاج التلقائي كان
         // يسقط صامتًا إلى unicode ويضاعف عدد المقاطع.
         encoding: smsIsUnicode ? 'unicode' : 'gsm-7bit',
@@ -408,7 +484,7 @@ export default function DinstarControl() {
             >
               اتصال
             </Button>
-            <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget(port.index); setUssd(''); }}>
+            <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget({gatewayId: gateway.id, port: port.index}); setUssd(''); }}>
               USSD
             </Button>
             <Button size="small" danger icon={<ToolOutlined />} onClick={() => resetPort(gateway.host, port.index)}>
@@ -430,6 +506,7 @@ export default function DinstarControl() {
           </Typography.Text>
         </div>
         <Space>
+          <Button type="primary" icon={<PhoneOutlined />} onClick={() => setDialerOpen(true)}>اتصال مباشر</Button>
           <Button icon={<RadarChartOutlined />} onClick={() => { setRouteResult(null); setRouteOpen(true); }}>
             اختبار التوجيه
           </Button>
@@ -546,19 +623,83 @@ export default function DinstarControl() {
       )}
 
       <Card
-        title={<><HistoryOutlined /> سجل المكالمات من الجهاز (CDR)</>}
-        extra={<Button onClick={loadCdr}>تحميل</Button>}
+        title={<><HistoryOutlined /> سجل المكالمات ({cdr.length})</>}
+        extra={<Button icon={<ReloadOutlined />} onClick={loadCdr}>تحديث</Button>}
       >
         <Table
           size="small" dataSource={cdr}
-          rowKey={(r: any) => `${r.id || r.port}-${r.startTime || r.start_date}`}
+          rowKey={(r: any) => r.id || `${r.portIndex}-${r.startTime}`}
+          locale={{ emptyText: <Empty description="لا توجد مكالمات مسجّلة" /> }}
+          pagination={{ pageSize: 10, showSizeChanger: true, hideOnSinglePage: true }}
+          scroll={{ x: 'max-content' }}
           columns={[
-            { title: 'المنفذ', dataIndex: 'port' },
-            { title: 'الاتجاه', dataIndex: 'direction' },
-            { title: 'الرقم', render: (_, r: any) => r.callee || r.destination_number || '—' },
-            { title: 'البدء', render: (_, r: any) => r.startTime || r.start_date || '—' },
-            { title: 'المدة', dataIndex: 'duration' },
-            { title: 'الحالة', dataIndex: 'status' },
+            {
+              title: 'الشريحة', width: 110, fixed: 'left',
+              render: (_, r: any) => (
+                <Tooltip title={r.gatewayHost || '—'}>
+                  <span>SIM {(r.portIndex ?? 0) + 1}</span>
+                </Tooltip>
+              ),
+            },
+            {
+              title: 'المشغّل', dataIndex: 'operator', width: 110,
+              render: (v: string) => {
+                const op = resolveOp(v);
+                return <Tag color={op.clr}>{op.ar}</Tag>;
+              },
+            },
+            {
+              title: 'الاتجاه', dataIndex: 'direction', width: 90,
+              render: (v: string) => (
+                <Tag color={v === 'INBOUND' ? 'blue' : 'geekblue'}>
+                  {v === 'INBOUND' ? 'واردة' : 'صادرة'}
+                </Tag>
+              ),
+            },
+            { title: 'الرقم', dataIndex: 'number', width: 130 },
+            {
+              title: 'البدء', dataIndex: 'startTime', width: 160,
+              render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—'),
+            },
+            {
+              // زمن الرنين يفرّق بين «لم يُرَد» و«لم تصل الشبكة»: رنين طويل
+              // بلا رد يعني وصولًا سليمًا، ورنين صفر يعني رفضًا فوريًا.
+              title: 'الرنين', dataIndex: 'ringDuration', width: 80,
+              render: (v: number | null) => (v == null ? '—' : `${v}s`),
+            },
+            {
+              title: 'المدة', dataIndex: 'duration', width: 90,
+              render: (v: number) => {
+                if (!v) return '—';
+                const m = Math.floor(v / 60);
+                return m > 0 ? `${m}د ${v % 60}ث` : `${v}ث`;
+              },
+            },
+            {
+              title: 'الحالة', dataIndex: 'status', width: 110,
+              render: (v: string) => {
+                const map: Record<string, { ar: string; clr: string }> = {
+                  ANSWERED: { ar: 'مُجابة', clr: 'success' },
+                  NO_ANSWER: { ar: 'بلا رد', clr: 'warning' },
+                  BUSY: { ar: 'مشغول', clr: 'orange' },
+                  FAILED: { ar: 'فاشلة', clr: 'error' },
+                  CANCELLED: { ar: 'مُلغاة', clr: 'default' },
+                };
+                const hit = map[v] || { ar: v || '—', clr: 'default' };
+                return <Tag color={hit.clr}>{hit.ar}</Tag>;
+              },
+            },
+            {
+              // سبب الإنهاء هو ما يميّز خلل الشبكة عن سلوك المستلم — بدونه
+              // كل فشل يبدو واحدًا ولا يُشخَّص.
+              title: 'سبب الإنهاء', dataIndex: 'hangupCause', width: 150,
+              ellipsis: true, render: (v: string) => v || '—',
+            },
+            {
+              title: 'التكلفة', dataIndex: 'cost', width: 110, align: 'right',
+              render: (v: number) => (v ? `${v.toFixed(2)} ﷼` : '—'),
+            },
+            { title: 'الترميز', dataIndex: 'codec', width: 90, render: (v: string) => v || '—' },
           ]}
         />
       </Card>
@@ -589,7 +730,7 @@ export default function DinstarControl() {
             <Select
               style={{ width: '100%', marginBottom: 8 }}
               value={smsGateway}
-              onChange={setSmsGateway}
+              onChange={(v) => { setSmsGateway(v); setSmsPort(undefined); }}
               allowClear
               placeholder="البوابة (اتركها فارغة للبوابة النشطة)"
               options={(fleet || [])
@@ -598,6 +739,18 @@ export default function DinstarControl() {
                   value: g.host,
                   label: `${g.name} — ${g.host} (${g.model})`,
                 }))}
+            />
+            <Select
+              style={{ width: '100%', marginBottom: 8 }}
+              value={smsPort}
+              onChange={setSmsPort}
+              allowClear
+              disabled={!smsGateway}
+              placeholder={smsGateway
+                ? 'شريحة الإرسال (اتركها فارغة ليختار الجهاز)'
+                : 'اختر البوابة أولًا لعرض الشرائح'}
+              options={smsPortOptions}
+              notFoundContent="لا توجد شرائح في هذه البوابة"
             />
             <Input.TextArea
               rows={4} value={smsText} onChange={(e) => setSmsText(e.target.value)}
@@ -761,12 +914,13 @@ export default function DinstarControl() {
       </Modal>
 
       {/* ── USSD ── */}
-      <Modal open={ussdTarget != null} title={`USSD — SIM ${(ussdTarget ?? 0) + 1}`}
-        onCancel={() => setUssdTarget(null)} onOk={sendUssd}
-        okButtonProps={{ disabled: !/^[*#0-9]{2,30}$/.test(ussd) }}>
-        <Input value={ussd} onChange={(e) => setUssd(e.target.value)} placeholder="مثال *101#" />
-        <Alert style={{ marginTop: 12 }} type="warning"
-          message="قد يعرض USSD الرصيد أو معلومات حساسة؛ النتيجة لا تُسجَّل نصًا في سجل التدقيق." />
+      <Modal open={ussdTarget != null} title={`USSD — SIM ${(ussdTarget?.port ?? 0) + 1}`}
+        onCancel={() => { setUssdTarget(null); setUssdResult(null); }} onOk={sendUssd}
+        okButtonProps={{ loading: ussdLoading }} okText="إرسال" cancelText="إلغاء">
+        <Input placeholder="*163#" value={ussd} onChange={(e) => setUssd(e.target.value)} disabled={ussdLoading} />
+        {ussdResult && (
+          <Alert style={{ marginTop: 16 }} type="info" message="رد الشبكة" description={<pre style={{ whiteSpace: 'pre-wrap' }}>{ussdResult}</pre>} />
+        )}
       </Modal>
 
       {/* ── اتصال من منفذ بعينه ── */}
@@ -781,13 +935,25 @@ export default function DinstarControl() {
           onPressEnter={dialPortCall}
         />
         <Alert style={{ marginTop: 12 }} type="info"
-          message="المكالمة تخرج عبر Backend ← Asterisk ← PJSIP ← DINSTAR من هذا المنفذ حصرًا (slotIndex مثبّت في موزّع الأحمال)." />
+          message="مكالمة مجسّرة: يرنّ متصفّحك أولًا، وعند الرد تُطلب الوجهة على GSM ويُوصل الصوت في الاتجاهين."
+          description="المسار: متصفّحك ⇄ Asterisk ⇄ PJSIP ⇄ DINSTAR ⇄ شبكة GSM — من هذا المنفذ حصرًا." />
         {dialResult && (
           <Alert style={{ marginTop: 12 }} type="success" showIcon
-            message={`أُطلقت: ${dialResult.status} · المنفذ ${(dialResult.slot ?? 0) + 1} · callId ${dialResult.callId}`} />
+            message={`أُطلقت: ${dialResult.status} · المنفذ ${(dialResult.slot ?? 0) + 1} · callId ${dialResult.callId}`}
+            description={dialResult.bridged === false
+              ? 'تنبيه: أُطلقت بلا جسر صوتي — إشغال منفذ فقط.'
+              : 'ارفع السمّاعة في المتصفّح لسماع رنين الشبكة.'} />
         )}
       </Modal>
       <NumberLearningCard />
     </div>
   );
 }
+
+
+
+
+
+
+
+

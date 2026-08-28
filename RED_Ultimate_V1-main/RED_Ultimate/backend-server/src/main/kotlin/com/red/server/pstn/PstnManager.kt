@@ -1,4 +1,4 @@
-﻿package com.red.server.pstn
+package com.red.server.pstn
 
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
@@ -266,7 +266,8 @@ class PstnManager(
     @Throws(IllegalStateException::class)
     fun dialGsm(phoneNumber: String, waitSeconds: Int): String {
         val correlationId = dialGsm(phoneNumber)
-        val safeWait = waitSeconds.coerceIn(5, 300)
+        // السماح بمدة رنين قصيرة جداً (ثانية واحدة) لضمان عدم الرد وسحب الرصيد
+        val safeWait = waitSeconds.coerceIn(1, 300)
         learningExecutor.schedule({
             runCatching { hangupCall(correlationId) }
                 .onFailure { log.warn("Learning call {} auto-hangup failed: {}", correlationId, it.message) }
@@ -275,8 +276,101 @@ class PstnManager(
         return correlationId
     }
 
-    fun bindChannel(callId: String, channel: String) {
-        if (callId.isNotBlank() && channel.isNotBlank()) callChannels[callId] = channel
+    /**
+     * 📞 مكالمة إدارية مجسّرة — مسار صوت حقيقي في الاتجاهين.
+     *
+     * ## المشكلة التي يحلّها
+     *
+     * [dialGsm] يُنشئ `Local/<num>@from-red-backend` مع `Application=Wait`
+     * و`Data=1`: يطلب GSM، وحين يرد المستلم يُنفّذ `Wait(1)` ثم يُغلق. لا
+     * ساق ثانية ولا مسار صوت — "اختبار" لا مكالمة. لذلك كانت لوحة الإدارة
+     * تُبلّغ نجاحًا بينما لا أحد يسمع أحدًا.
+     *
+     * ## الترتيب الصحيح
+     *
+     * القناة الأصلية هي نظير الإداري (WebRTC)، والوجهة هي سياق
+     * `from-admin-bridge`. فحين يرفع الإداري السمّاعة يبدأ السياق بطلب
+     * الرقم على GSM ويجسر الساقين. الإداري يسمع رنين الناقل الحقيقي لأن
+     * `Dial` يمرّر 183 Session Progress مع SDP تلقائيًا — لا نغمة مُولَّدة.
+     *
+     * @param phoneNumber رقم الوجهة على شبكة GSM
+     * @param adminEndpoint نظير PJSIP للإداري (WebRTC) الذي يُطلب أولًا
+     * @param pjsipEndpoint بوابة DINSTAR — نفس عقد [dialGsm]
+     * @param portIndex فهرس المنفذ داخل البوابة، ‎-1 يعني التلقائي
+     * @param callerSimNumber رقم الشريحة الذي يظهر للمستلم الخارجي
+     * @return correlationId للربط بسجل قاعدة البيانات وأحداث AMI
+     */
+    @Throws(IllegalStateException::class)
+    fun dialGsmBridged(
+        phoneNumber: String,
+        adminEndpoint: String = "red-webrtc-client",
+        pjsipEndpoint: String = "dinstar-gateway",
+        portIndex: Int = -1,
+        callerSimNumber: String? = null
+    ): String {
+        require(phoneNumber.matches(Regex("^\\+?[0-9]{6,15}$"))) { "Invalid phone number" }
+        require(pjsipEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid PJSIP endpoint name" }
+        // نفس حارس الحقن: اسم النظير يدخل قناة AMI مباشرةً
+        require(adminEndpoint.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) { "Invalid admin endpoint name" }
+
+        val correlationId = UUID.randomUUID().toString()
+        val effectiveCallerId = callerSimNumber?.filter { it.isDigit() }
+            ?.takeIf { it.length in 6..15 } ?: "RED SOVEREIGN"
+
+        val action = OriginateAction().apply {
+            actionId = correlationId
+            // الساق الأولى: الإداري. لا Local channel هنا — نطلب النظير مباشرةً
+            // حتى يكون رفع السمّاعة هو ما يُشغّل ساق GSM، لا العكس.
+            channel = "PJSIP/$adminEndpoint"
+            // الوجهة سياق لا تطبيق: Context/Exten/Priority يُنتج مكالمة كاملة،
+            // بينما Application=Wait يُنتج قناة معلّقة تُغلق نفسها.
+            context = "from-admin-bridge"
+            exten = phoneNumber
+            priority = 1
+            callerId = effectiveCallerId
+            setVariable("RED_GW", pjsipEndpoint)
+            setVariable("RED_PORT_INDEX", portIndex.toString())
+            setVariable("RED_CALL_ID", correlationId)
+            if (callerSimNumber != null) {
+                setVariable("RED_SIM_NUMBER", callerSimNumber.filter { it.isDigit() })
+            }
+            setAsync(true)
+        }
+
+        var lastException: Exception? = null
+        repeat(maxRetries) { attempt ->
+            try {
+                val conn = ensureConnected()
+                val response = conn.sendAction(action, actionTimeoutMs)
+                check(response.response?.equals("Success", ignoreCase = true) == true) {
+                    response.message ?: "Asterisk rejected admin bridge originate"
+                }
+                log.info(
+                    "Admin bridge originate sent: admin={} dest={} gw={} port={} (callId={}, attempt={})",
+                    adminEndpoint, phoneNumber, pjsipEndpoint, portIndex, correlationId, attempt + 1
+                )
+                return correlationId
+            } catch (e: Exception) {
+                lastException = e
+                log.warn("Admin bridge originate attempt {}/{} failed: {}", attempt + 1, maxRetries, e.message)
+                connectionLock.withLock { connection = null }
+                if (attempt < maxRetries - 1) {
+                    try {
+                        Thread.sleep(1_000L * (attempt + 1))
+                    } catch (ie: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw IllegalStateException("Admin bridge interrupted during retry backoff", ie)
+                    }
+                }
+            }
+        }
+        throw IllegalStateException(
+            "Asterisk rejected admin bridge after $maxRetries attempts: ${lastException?.message}",
+            lastException
+        )
+    }
+
+    fun bindChannel(callId: String, channel: String) {        if (callId.isNotBlank() && channel.isNotBlank()) callChannels[callId] = channel
     }
 
     fun forgetChannel(callId: String) {
