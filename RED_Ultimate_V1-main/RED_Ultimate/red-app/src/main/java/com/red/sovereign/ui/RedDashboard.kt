@@ -2827,10 +2827,25 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         LiveStreamHubDialog(
             onDismiss = { showLiveDialog = false },
             onStartBroadcasting = { title, isPriv, pass ->
+                // خصوصية البث كانت تُجمع من الحوار ثم تُهمل: `isPriv` و`pass`
+                // لم يُمرَّرا إلى الخدمة إطلاقًا رغم أنها تقبلهما، فكل بث
+                // «خاص» كان يبدأ مفتوحًا للجميع بينما يظن المستخدم أنه محمي.
+                // الحوار نفسه يمنع الآن الإطلاق بلا كلمة سر عند تفعيل الخصوصية.
+                val password = if (isPriv) pass.trim().takeIf { it.isNotBlank() } else null
+                showLiveDialog = false
                 val streamId = "stream_${java.util.UUID.randomUUID().toString().take(8)}"
-                LiveStreamService.start(context, streamId, ownUserId, true, title)
+                LiveStreamService.start(
+                    context = context,
+                    streamId = streamId,
+                    userId = ownUserId,
+                    isBroadcaster = true,
+                    title = title,
+                    isPrivate = isPriv,
+                    password = password
+                )
             },
             onWatchStream = { streamId ->
+                showLiveDialog = false
                 LiveStreamService.start(context, streamId, ownUserId, false)
             }
         )

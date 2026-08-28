@@ -1,7 +1,10 @@
 package com.red.server.controllers
 
 import com.red.server.audit.AuditService
+import com.red.server.pstn.PstnCallService
 import com.red.server.services.DinstarHardwareService
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -9,7 +12,12 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/api/admin/dinstar")
-class DinstarController(private val hardware: DinstarHardwareService, private val audit: AuditService) {
+class DinstarController(
+    private val hardware: DinstarHardwareService,
+    private val audit: AuditService,
+    private val calls: PstnCallService,
+    private val jdbc: JdbcTemplate
+) {
 
     @GetMapping("/status")
     fun status() = hardware.getHardwareStatus()
@@ -40,6 +48,13 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
         val result = hardware.sendUssd(port, code)
         hardware.recordOperation(actor, "USSD_SENT", port, "SUCCEEDED", mapOf("codeLength" to code.length))
         audit.record(actor, "DINSTAR_USSD_SENT", port.toString(), mapOf("codeLength" to code.length))
+        // Persistent USSD log: gateway buffer is volatile, DB survives
+        try {
+            jdbc.update(
+                "INSERT INTO dinstar_ussd_log(port_index,ussd_code,response_text,status) VALUES (?,?,?,?)",
+                port, code, result["response_text"]?.toString(), result["status"]?.toString() ?: "SENT"
+            )
+        } catch (_: Exception) {}
         return result
     }
 
@@ -152,6 +167,38 @@ class DinstarController(private val hardware: DinstarHardwareService, private va
                 "note" to "القاعدة أُنشئت على البوابة؛ الرقم يظهر في get_port_info بعد رد المشغّل"
             )
         )
+    }
+
+    @PostMapping("/calls")
+    fun adminDial(
+        @RequestBody body: Map<String, Any?>,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val actor = java.util.UUID.fromString(authentication.name)
+        val number = body["number"]?.toString()?.trim()
+            ?: return ResponseEntity.badRequest().body(mapOf("error" to "NUMBER_REQUIRED"))
+        val gatewayHost = body["gatewayHost"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        val portIndex = (body["portIndex"] as? Number)?.toInt()
+        val callerNumber = body["callerNumber"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        return try {
+            val result = calls.dialAsAdmin(actor, number, gatewayHost, portIndex, callerNumber)
+            audit.record(actor, "DINSTAR_ADMIN_CALL", result.callId, mapOf(
+                "number" to number, "gatewayHost" to (gatewayHost ?: "auto"),
+                "portIndex" to (portIndex ?: -1), "callerNumber" to (callerNumber ?: "port-default"),
+                "selectedPort" to result.slot
+            ))
+            hardware.recordOperation(actor, "ADMIN_CALL", result.slot, "SUCCEEDED", mapOf("callId" to result.callId))
+            ResponseEntity.ok(mapOf(
+                "callId" to result.callId, "status" to result.status,
+                "number" to result.number, "port" to result.slot,
+                "route" to "Backend -> Asterisk -> PJSIP -> DINSTAR"
+            ))
+        } catch (e: IllegalArgumentException) {
+            ResponseEntity.badRequest().body(mapOf("error" to (e.message ?: "INVALID_REQUEST")))
+        } catch (e: IllegalStateException) {
+            audit.record(actor, "DINSTAR_ADMIN_CALL_FAILED", number, mapOf("reason" to (e.message ?: "UNAVAILABLE")))
+            ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(mapOf("error" to (e.message ?: "PORT_UNAVAILABLE")))
+        }
     }
 
     /** Device status — POST /api/get_status */

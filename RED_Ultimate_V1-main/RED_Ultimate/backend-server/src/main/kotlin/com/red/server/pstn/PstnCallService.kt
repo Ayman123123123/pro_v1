@@ -118,6 +118,86 @@ class PstnCallService(
     fun getUser(userId: UUID) = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
 
     /**
+     * مكالمة إدارية: أي منفذ، أي بوابة، أي رقم متصل من الأسطول.
+     *
+     * ## لماذا دالة منفصلة لا معامل في [dial]
+     *
+     * [dial] يحمل ثلاثة قيود مقصودة للمستخدم العادي: الحد اليومي، والحجز
+     * الذرّي «مكالمة واحدة لكل حساب»، والحصر على الشريحة المربوطة 1:1.
+     * تمرير علم `isAdmin` داخله يعني أن كل قيد يصير شرطيًّا، وأي إغفال
+     * لاحق يفتح ثغرة صامتة للمستخدم العادي. الفصل يجعل المسار الإداري
+     * صريحًا ويترك مسار المستخدم بلا فروع.
+     *
+     * ## ما يُتحقق منه رغم أنها إدارية
+     *
+     * **رقم المتصل يجب أن يكون رقم شريحة فعلية في الأسطول.** إظهار رقم لا
+     * تملكه البوابة انتحال هوية (CLI spoofing): المشغّل يرفضه غالبًا،
+     * وحين يمرّ يُنسَب الاتصال لمالك الرقم الحقيقي. لذلك يُطابَق مقابل
+     * `users.pstn_number` — وهو مُشتقّ من الجهاز نفسه لا من إدخال يدوي.
+     *
+     * **المنفذ المطلوب يمرّ بكل شروط الصلاحية.** `forcedPort` يحصر الترشيح
+     * ولا يلغي فحص التسجيل والإشارة والانشغال، فطلب منفذ ميت يُرجع خطأً
+     * صريحًا لا منفذًا بديلًا يظنّ المسؤول أنه اختاره.
+     *
+     * ## ما لا يُقيَّد
+     *
+     * الحد اليومي والحجز الذرّي: المسؤول قد يجري مكالمات متزامنة على منافذ
+     * مختلفة، وهذا هو الغرض. التدقيق يُسجّل كل مكالمة بدلًا من الحد.
+     *
+     * @param callerNumber رقم الشريحة الظاهر للمستلم. `null` = رقم المنفذ المختار.
+     * @param gatewayHost بوابة بعينها. `null` = يختار الموزّع من الأسطول.
+     * @param portIndex منفذ بعينه. `null` = يختار الموزّع الأفضل.
+     */
+    fun dialAsAdmin(
+        adminId: UUID,
+        suppliedNumber: String,
+        gatewayHost: String? = null,
+        portIndex: Int? = null,
+        callerNumber: String? = null
+    ): PstnCallResponse {
+        val admin = users.findById(adminId).orElseThrow { NoSuchElementException("Admin not found") }
+        val number = normalizeYemeniNumber(suppliedNumber)
+
+        val selection = loadBalancer.selectPort(number, portIndex, gatewayHost)
+            ?: throw IllegalStateException(
+                "NO_USABLE_PORT: no registered port with a usable signal matches " +
+                    "gateway=${gatewayHost ?: "any"} port=${portIndex ?: "any"}"
+            )
+
+        // رقم المتصل: إمّا رقم شريحة مُتحقَّق منه، أو رقم المنفذ المختار.
+        val effectiveCaller = callerNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { requested ->
+            val normalized = normalizeYemeniNumber(requested)
+            require(users.findByPstnNumber(normalized) != null) {
+                "CALLER_ID_NOT_IN_FLEET: $normalized is not a SIM number known to this deployment"
+            }
+            normalized
+        } ?: selection.simNumber
+
+        val actionId = pstn.dialGsm(number, selection.pjsipEndpoint, selection.portIndex, effectiveCaller)
+        // السجل الدائم يُكتب قبل أي حدث AMI: بدونه تصل الأحداث إلى مكالمة
+        // لا وجود لها في التاريخ فتُبتلَع تحذيرات "Call not found".
+        history.start(admin.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
+        progress.register(actionId, admin.redId, number)
+        // لا حجز `activeKey`: المسؤول قد يجري مكالمات متزامنة. لكن ربط
+        // callId←→المنفذ لازم كي يُحرَّر المنفذ الصحيح عند الإنهاء.
+        redis.opsForValue().set(
+            PstnActiveCallKeys.callKey(actionId),
+            PstnActiveCallKeys.format(actionId, selection.gatewayId, selection.portIndex),
+            Duration.ofMinutes(30)
+        )
+        redis.opsForValue().set(callUserKey(actionId), admin.id.toString(), Duration.ofMinutes(30))
+
+        log.info(
+            "PSTN admin dial: admin={} number={} gateway={} port={} callerId={} callId={}",
+            admin.redId, number, selection.gatewayHost, selection.portIndex,
+            effectiveCaller ?: "(default)", actionId
+        )
+        return PstnCallResponse(
+            actionId, "DIALING", number, 0, 0, selection.portIndex
+        )
+    }
+
+    /**
      * Check whether the user currently has an active PSTN call.
      */
     fun hasActiveCall(userId: UUID): Boolean {

@@ -48,7 +48,7 @@ class PstnCallServiceTest {
         whenever(redis.opsForValue()).thenReturn(values)
         whenever(values.increment(any())).thenReturn(1)
         whenever(values.setIfAbsent(any(), any(), any())).thenReturn(true)
-        whenever(loadBalancer.selectPort(any(), anyOrNull())).thenReturn(null)
+        whenever(loadBalancer.selectPort(anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(null)
 
         val service = PstnCallService(users, redis, pstn, loadBalancer, history, progress, retryScheduler)
         assertThrows(IllegalStateException::class.java) { service.dial(id, "+967771234567") }
@@ -78,7 +78,7 @@ class PstnCallServiceTest {
         assertThrows(com.red.server.auth.RateLimitExceededException::class.java) { service.dial(id, "+967771234567") }
 
         verify(values).decrement(any())
-        verify(loadBalancer, never()).selectPort(anyOrNull(), anyOrNull())
+        verify(loadBalancer, never()).selectPort(anyOrNull(), anyOrNull(), anyOrNull())
         verify(pstn, never()).dialGsm(any(), any(), any(), anyOrNull())
     }
 }

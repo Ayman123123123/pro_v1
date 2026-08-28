@@ -735,6 +735,11 @@ fun LiveStreamHubDialog(
                                         onStartBroadcasting(streamTitle.ifBlank { "بث مباشر يونس" }, isPrivate, streamPassword)
                                         onDismiss()
                                     },
+                                    // بث خاص بلا كلمة سر ليس بثًا خاصًا. المنع عند
+                                    // الزر لا بعد الإرسال: الحوار يستدعي onDismiss()
+                                    // مباشرة بعد الاستدعاء، فأي تحقق لاحق يُغلق
+                                    // الحوار ويُفقد المستخدم ما كتبه.
+                                    enabled = !isPrivate || streamPassword.isNotBlank(),
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850)),
                                     shape = RoundedCornerShape(12.dp)

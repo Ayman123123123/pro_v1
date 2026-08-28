@@ -197,12 +197,27 @@ class DinstarLoadBalancer(
      *        مع بقاء شروط الصلاحية (تسجيل/إشارة/انشغال) مطبقة — طلب منفذ
      *        ميت يُرجع null لا منفذًا بديلًا، كي لا تخرج المكالمة من شريحة
      *        غير التي اختارها المستخدم عمدًا.
+     * @param forcedGatewayHost بوابة بعينها (اختياري). مع أسطول من جهازين
+     *        فأكثر، `forcedPort` وحده غامض: المنفذ 3 موجود على كل جهاز.
+     *        تحديد البوابة يجعل الاختيار الإداري قاطعًا.
      * @return المنفذ المختار، أو `null` إذا لم يوجد أي منفذ صالح.
      *         `null` هنا مقصودة: إخبار المتصل بعدم توفر مسار أصدق من
      *         إعادة منفذ عشوائي ستفشل عليه المكالمة.
      */
-    fun selectPort(targetNumber: String? = null, forcedPort: Int? = null): PortSelection? {
-        val gateways = fleet.routableGateways()
+    fun selectPort(
+        targetNumber: String? = null,
+        forcedPort: Int? = null,
+        forcedGatewayHost: String? = null
+    ): PortSelection? {
+        val allRoutable = fleet.routableGateways()
+        // حصر البوابة يجري **قبل** الاستعلام: لا معنى لسؤال أجهزة مستبعدة.
+        val gateways = forcedGatewayHost
+            ?.let { host -> allRoutable.filter { it.host == host } }
+            ?: allRoutable
+        if (forcedGatewayHost != null && gateways.isEmpty()) {
+            log.warn("DINSTAR: requested gateway {} is not routable (disabled or offline)", forcedGatewayHost)
+            return null
+        }
         val targetOperator = targetNumber?.let { classifyNumber(it) }
         val rr = nextSlot.getAndIncrement()
 
@@ -216,9 +231,11 @@ class DinstarLoadBalancer(
         val candidates = mutableListOf<Candidate>()
 
         // لا بوابات مسجّلة: نعمل بالمسار الأحادي القديم حتى لا تنكسر
-        // عمليات النشر التي لم تُسجّل أسطولًا بعد.
+        // عمليات النشر التي لم تُسجّل أسطولًا بعد. لكن طلب بوابة بعينها
+        // لا يُلبّى بالمسار الأحادي — ذلك يكذب على المسؤول.
         val sources: List<Pair<DinstarFleetService.Gateway?, List<Map<String, Any?>>>> =
             if (gateways.isEmpty()) {
+                if (forcedGatewayHost != null) return null
                 listOf(null to (runCatching { hardware.getHardwareStatus() }.getOrElse {
                     log.warn("DINSTAR single-gateway status failed: {}", it.message); emptyList()
                 }))

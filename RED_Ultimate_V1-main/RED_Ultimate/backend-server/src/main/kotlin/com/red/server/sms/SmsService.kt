@@ -2,7 +2,10 @@ package com.red.server.sms
 
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.services.DinstarApiContract
+import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
+import com.red.server.services.DinstarSmsContract
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -24,6 +27,7 @@ class SmsService(
     private val markers: SmsReadMarkerRepository,
     private val users: UserAccountRepository,
     private val hardware: DinstarHardwareService,
+    private val fleet: DinstarFleetService,
     private val redis: StringRedisTemplate,
     @Value("\${red.dinstar.enabled:true}") private val dinstarEnabled: Boolean,
     private val jdbc: org.springframework.jdbc.core.JdbcTemplate
@@ -120,61 +124,95 @@ class SmsService(
     // ── وارد (استلام من DINSTAR → تخزين مشترك) ────────────────────────────────
 
     /**
-     * يجلب الرسائل الواردة الجديدة من بوابة DINSTAR ويخزّنها مرة واحدة.
-     * التكرار يُستنطق عبر (sender, content, created_at) لتجنّب التكرار
-     * عند المعالجة المتعددة للبوابة.
+     * يجلب الرسائل الواردة الجديدة من كل بوابة في الأسطول ويخزّنها مرة واحدة.
+     *
+     * ## ما تغيّر ولماذا
+     *
+     * **1. مؤشّر تزايدي بدل حيلة الدقيقتين.** كان التكرار يُستنطق بـ«نفس الرقم
+     * ونفس النص خلال 120 ثانية». هذا يُسقط رسالتين متطابقتين مشروعتين (رمز
+     * تحقق يُعاد إرساله)، ويُدخل مكرّرًا بعد الدقيقتين. الآن `incoming_sms_id`
+     * من الجهاز هو المفتاح، ويُمرَّر كنقطة استئناف.
+     *
+     * **2. الاستهلاك يفرض المؤشّر.** `query_incoming_sms` **يحذف** ما يقرأه
+     * (مُثبت: قراءة ثانية تُعيد `sms:[]` مع `read=8`). فسؤال الجهاز من الصفر
+     * بعد إعادة تشغيل يُعيد لا شيء ويضيع ما بين اللحظتين.
+     *
+     * **3. كل بوابة على حدة.** كان يُستعلم العنوان المضبوط وحده، فرسائل
+     * الجهاز الثاني لا تُلتقط أبدًا. ومؤشّر الوارد يُعدّ داخل كل جهاز مستقلًا،
+     * فمؤشّر عام يجعل الأبطأ يتخطّى رسائله كلما تقدّم الأسرع.
+     *
+     * **4. زمن الجهاز يُقرأ بالصيغة الصحيحة.** كان `Instant.parse` يُنادى على
+     * `yyyy-MM-dd HH:mm:ss` وهي ليست ISO-8601، فيفشل **دائمًا** ويسقط إلى
+     * `Instant.now()`: كل رسالة تُختم بزمن قراءتها لا زمن وصولها، فترتيب
+     * المحادثة مبنيّ على وقت مُلفَّق. `DinstarTime` يفكّها بمنطقة الجهاز.
      */
     @Transactional
     fun ingestIncoming(): List<SmsMessageEntity> {
         if (!dinstarEnabled) return emptyList()
-        val raw = runCatching { hardware.queryIncomingSms() }
-            .getOrElse {
-                val msg = it.message ?: "unknown"
-                val firstFailure = lastSmsReachable.put("ingest", false) != false
-                val last = lastSmsWarnAt["ingest"]
-                val quiet = last != null && Duration.between(last, Instant.now()).toMinutes() < 5
-                if (firstFailure || !quiet) {
-                    log.warn("DINSTAR query_incoming_sms failed: {} — Set DINSTAR_ENABLED=false if no hardware", msg)
-                    lastSmsWarnAt["ingest"] = Instant.now()
-                } else {
-                    log.debug("DINSTAR still unreachable (ingest): {}", msg)
-                }
-                return emptyList()
+
+        val gateways = runCatching { fleet.listGateways(onlyEnabled = true) }.getOrDefault(emptyList())
+        // لا أسطول مسجّل: المسار الأحادي القديم على العنوان المضبوط.
+        if (gateways.isEmpty()) return ingestFromGateway(null)
+        return gateways.flatMap { gw -> ingestFromGateway(gw) }
+    }
+
+    private fun ingestFromGateway(gateway: DinstarFleetService.Gateway?): List<SmsMessageEntity> {
+        val label = gateway?.host ?: "configured"
+        val since = gateway?.let { messages.maxIncomingIdForGateway(it.id) }
+            ?: messages.maxIncomingIdUnassigned()
+
+        val raw = runCatching {
+            if (gateway != null) hardware.queryIncomingSms(gateway, sinceId = since)
+            else hardware.queryIncomingSms(sinceId = since)
+        }.getOrElse {
+            val msg = it.message ?: "unknown"
+            val firstFailure = lastSmsReachable.put(label, false) != false
+            val last = lastSmsWarnAt[label]
+            val quiet = last != null && Duration.between(last, Instant.now()).toMinutes() < 5
+            if (firstFailure || !quiet) {
+                log.warn("DINSTAR query_incoming_sms failed on {}: {} — Set DINSTAR_ENABLED=false if no hardware", label, msg)
+                lastSmsWarnAt[label] = Instant.now()
+            } else {
+                log.debug("DINSTAR still unreachable (ingest {}): {}", label, msg)
             }
-        lastSmsReachable["ingest"] = true
-        lastSmsWarnAt.remove("ingest")
-        return parseIncomingResponse(raw).mapNotNull { entry ->
+            return emptyList()
+        }
+        lastSmsReachable[label] = true
+        lastSmsWarnAt.remove(label)
+
+        return DinstarSmsContract.parseIncoming(raw).mapNotNull { entry ->
             val sender = runCatching { normalizeYemeniNumber(entry.number) }
                 .getOrElse {
-                    log.warn("Ignoring incoming SMS with invalid sender from DINSTAR: {}", entry.number)
+                    log.warn("Ignoring incoming SMS with invalid sender from DINSTAR {}: {}", label, entry.number)
                     return@mapNotNull null
                 }
-            val text = entry.text
-            if (text.isBlank()) return@mapNotNull null
+            if (entry.text.isBlank()) return@mapNotNull null
 
-            // dedup خلال آخر 2 دقيقة
-            val cutoff = Instant.now().minusSeconds(120)
-            val dup = messages.findByOwnerIdIsNullAndNumberOrderByCreatedAtAsc(sender).lastOrNull()
-            if (dup != null && dup.createdAt.isAfter(cutoff) && dup.content == text) return@mapNotNull null
-
-            // الربط الدائم 1:1 — حدد مالك الشريحة عبر المنفذ
-            val ownerId = entry.port?.let { pIdx ->
-                // ابحث عن حساب يملك هذا المنفذ (على أي بوابة — مؤقت أحادي)
-                users.findAllByStatusOrderByCreatedAtAsc(com.red.server.auth.model.AccountStatus.APPROVED)
-                    .firstOrNull { it.pstnPortIndex == pIdx && it.pstnEnabled }?.id
+            // المفتاح الطبيعي من الجهاز. غيابه (إصدار قديم) يُبقي فحص التكرار
+            // النصي القديم كملاذ أخير بدل إسقاط الرسالة.
+            val incomingId = entry.incomingSmsId
+            if (incomingId != null) {
+                if (messages.existsByGatewayIdAndIncomingSmsId(gateway?.id, incomingId)) return@mapNotNull null
+            } else {
+                val cutoff = Instant.now().minusSeconds(120)
+                val dup = messages.findByOwnerIdIsNullAndNumberOrderByCreatedAtAsc(sender).lastOrNull()
+                if (dup != null && dup.createdAt.isAfter(cutoff) && dup.content == entry.text) return@mapNotNull null
             }
 
             val msg = SmsMessageEntity(
-                ownerId = ownerId,
+                ownerId = resolveIncomingOwner(gateway, entry.port),
                 number = sender,
-                content = text,
+                content = entry.text,
                 direction = SmsDirection.IN,
                 status = SmsStatus.RECEIVED,
                 port = entry.port,
-                createdAt = entry.time,
-                readAt = null
+                gatewayId = gateway?.id,
+                // زمن الجهاز لا زمن القراءة؛ null يعني أن الجهاز لم يُصدر وقتًا.
+                createdAt = entry.time ?: Instant.now(),
+                readAt = null,
+                incomingSmsId = incomingId,
+                senderImsi = entry.imsi
             )
-            // قد تأتي مرات متعددة من منافذ مختلفة — INSERT ... ON CONFLICT لتجنب الأخطاء
             try {
                 messages.save(msg)
                 msg
@@ -184,86 +222,92 @@ class SmsService(
         }
     }
 
+    /**
+     * مالك الرسالة الواردة عبر الربط الدائم 1:1.
+     *
+     * كانت المطابقة بفهرس المنفذ وحده «على أي بوابة» — ومع جهازين يصير
+     * المنفذ 3 على `.2` والمنفذ 3 على `.3` شيئًا واحدًا، فتُنسَب رسالة
+     * مستخدم إلى آخر. الترتيب الآن: (بوابة، منفذ) أولًا، ثم المنفذ وحده
+     * كسقوط للنشر الأحادي القديم.
+     */
+    private fun resolveIncomingOwner(gateway: DinstarFleetService.Gateway?, port: Int?): UUID? {
+        if (port == null) return null
+        if (gateway != null) {
+            users.findByPstnGatewayIdAndPstnPortIndex(gateway.id, port)?.let { return it.id }
+            // بوابة معروفة بلا مالك مربوط: لا نُسقط إلى مطابقة المنفذ وحده،
+            // فذلك هو بالضبط الخلط الذي نتجنّبه.
+            return null
+        }
+        return users.findAllByStatusOrderByCreatedAtAsc(com.red.server.auth.model.AccountStatus.APPROVED)
+            .firstOrNull { it.pstnPortIndex == port && it.pstnEnabled }?.id
+    }
+
     /** نتيجة استجابة DINSTAR: يدعم الصيغ {"messages":[...]} و{"sms":[...]} و{"result":[...]} */
     private data class IncomingEntry(val port: Int?, val number: String, val text: String, val time: Instant)
-
-    @Suppress("UNCHECKED_CAST")
-    private fun parseIncomingResponse(raw: Map<String, Any?>): List<IncomingEntry> {
-        val error = (raw["error_code"] as? Number)?.toInt() ?: 0
-        if (error !in setOf(200, 202, 0)) {
-            log.warn("DINSTAR incoming SMS returned error_code=$error")
-        }
-        val list = listOf("messages", "sms", "result", "data").firstNotNullOfOrNull { key ->
-            (raw[key] as? List<*>)?.takeIf { it.isNotEmpty() }
-        } ?: raw["sms"] as? List<*> ?: emptyList<List<*>>()
-
-        return list.mapNotNull { item ->
-            val m = item as? Map<*, *> ?: return@mapNotNull null
-            val rawNumber = m["number"] ?: m["sender"] ?: m["from"] ?: return@mapNotNull null
-            val rawText = m["text"] ?: m["content"] ?: m["msg"] ?: return@mapNotNull null
-            val number = rawNumber.toString().trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val text = rawText.toString().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val port = (m["port"] as? Number)?.toInt()
-            val time = runCatching { Instant.parse((m["time"] ?: m["datetime"] ?: m["timestamp"]).toString()) }
-                .getOrNull() ?: Instant.now()
-            IncomingEntry(port, number, text, time)
-        }
-    }
 
     // ── حالة التسليم ──────────────────────────────────────────────────────────
 
     /**
-     * يجرّب ترقيم تسليم الرسائل المرسلة خلال آخر 6 ساعات ويُحدّث الحالة.
-     * يُعيد الرسائل التي غيّرت حالتها (SENT → DELIVERED | FAILED).
+     * يُطابق تقارير التسليم بمعرّف المرجع ويُحدّث الحالة.
+     *
+     * ## ما تغيّر ولماذا
+     *
+     * **1. المطابقة بـ`ref_id` لا بالرقم.** كان التقرير يُنسَب لأي رسالة تحمل
+     * الرقم نفسه، فرسالتان متتاليتان إلى الرقم ذاته تتبادلان تقريريهما —
+     * والثانية تُعلَّم `DELIVERED` بتقرير الأولى قبل أن تصل. `ref_id` هو
+     * المعرّف الذي تُصدره الشبكة لكل إرسال، وهو المفتاح الصحيح الوحيد
+     * (3GPP TS 23.040 §9.2.3.15).
+     *
+     * **2. `status_code` الرقمي لا `status` النصي.** الحقل النصي الذي كان
+     * يُقرأ **غير موجود** في ردّ `query_sms_deliver_status`؛ الموثّق
+     * `status_code` عددي بمدياته: 0 وصلت، 1..31 جارية، 32..63 فشل مؤقت،
+     * 64..255 فشل دائم. فكانت كل رسالة تبقى `SENT` إلى الأبد: لم تنتقل رسالة
+     * واحدة إلى `DELIVERED` قطّ.
+     *
+     * **3. الفشل المؤقت يُميَّز عن الدائم.** المؤقت يستحق إعادة محاولة، والدائم
+     * لا. جمعهما في `FAILED` كان يُسقط ما يمكن إنقاذه.
      */
     @Transactional
     fun pollDelivery(): List<SmsMessageEntity> {
         val since = Instant.now().minusSeconds(6 * 3600)
-        val pending = messages.findByStatusAndCreatedAtAfter(SmsStatus.SENT, since)
+        // فقط ما يملك ref_id: بدونه لا مطابقة ممكنة، والرقم وحده يُنتج نسبةً خاطئة.
+        val pending = messages.findByStatusAndDinstarRefIdIsNotNullAndCreatedAtAfter(SmsStatus.SENT, since)
         if (pending.isEmpty()) return emptyList()
 
         val numbers = pending.mapNotNull { it.number }.distinct()
         if (numbers.isEmpty()) return emptyList()
 
         val raw = runCatching { hardware.querySmsDeliveryStatus(numbers) }.getOrNull() ?: return emptyList()
-        val statuses = parseDeliveryStatus(raw)
-        val changed = mutableListOf<SmsMessageEntity>()
+        val reports = DinstarSmsContract.parseDeliveryReports(raw).associateBy { it.refId }
+        if (reports.isEmpty()) return emptyList()
 
+        val changed = mutableListOf<SmsMessageEntity>()
         pending.forEach { msg ->
-            val newStatus = statuses[msg.number] ?: return@forEach
-            if (newStatus != SmsStatus.DELIVERED && newStatus != SmsStatus.FAILED) return@forEach
-            if (msg.status == newStatus) return@forEach
+            val report = msg.dinstarRefId?.let { reports[it] } ?: return@forEach
+            val newStatus = when (report.outcome) {
+                DinstarApiContract.DeliveryOutcome.DELIVERED -> SmsStatus.DELIVERED
+                DinstarApiContract.DeliveryOutcome.PERMANENT_FAILURE -> SmsStatus.FAILED
+                // المؤقت والجاري يبقيان SENT كي تُعاد المحاولة في الدورة التالية.
+                else -> return@forEach
+            }
+            // الرمز الخام يُحفظ دائمًا — يُبقي التشخيص ممكنًا لو تغيّر تصنيفنا.
+            msg.deliveryStatusCode = report.statusCode
+            msg.lastPolledAt = Instant.now()
+            if (msg.status == newStatus) {
+                messages.save(msg)
+                return@forEach
+            }
             msg.status = newStatus
-            if (newStatus == SmsStatus.DELIVERED) msg.deliveredAt = Instant.now()
-            if (newStatus == SmsStatus.FAILED) msg.errorText = msg.errorText?.ifEmpty { "DELIVERY_FAILED" } ?: "DELIVERY_FAILED"
+            when (newStatus) {
+                SmsStatus.DELIVERED -> msg.deliveredAt = report.time ?: Instant.now()
+                SmsStatus.FAILED -> msg.errorText =
+                    "DELIVERY_FAILED(code=${report.statusCode ?: "?"})"
+                else -> Unit
+            }
             messages.save(msg)
             changed.add(msg)
         }
         return changed
-    }
-
-    /** يدعم صيغ DINSTAR: {"sms":[{"number":...,"status":"Delivered"}]} و{"result":[...]} */
-    @Suppress("UNCHECKED_CAST")
-    private fun parseDeliveryStatus(raw: Map<String, Any?>): Map<String, SmsStatus> {
-        if ((raw["error_code"] as? Number)?.toInt() !in setOf(200, 202, 0)) {
-            log.debug("DINSTAR deliver status error: ${raw["error_code"]}")
-        }
-        val list = listOf("sms", "messages", "result", "data").firstNotNullOfOrNull { key ->
-            (raw[key] as? List<*>)?.takeIf { it.isNotEmpty() }
-        } ?: return emptyMap()
-
-        val out = LinkedHashMap<String, SmsStatus>()
-        list.forEach { item ->
-            val m = item as? Map<*, *> ?: return@forEach
-            val number = normalizeYemeniNumber((m["number"] ?: "").toString())
-            val status = (m["status"] ?: m["deliver_status"] ?: "").toString().trim()
-            out[number] = when (status.lowercase()) {
-                "delivered", "ok", "success", "sent" -> SmsStatus.DELIVERED
-                "failed", "error", "none", "undelivered" -> SmsStatus.FAILED
-                else -> SmsStatus.SENT
-            }
-        }
-        return out
     }
 
     // ── محادثات وقراءة ───────────────────────────────────────────────────────

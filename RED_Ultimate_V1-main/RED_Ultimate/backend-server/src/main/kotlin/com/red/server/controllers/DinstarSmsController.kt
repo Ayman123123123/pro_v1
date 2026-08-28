@@ -5,6 +5,12 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.services.DinstarFleetService
 import com.red.server.services.DinstarHardwareService
 import com.red.server.services.DinstarSmsContract
+import com.red.server.sms.SmsDirection
+import com.red.server.sms.SmsMessageEntity
+import com.red.server.sms.SmsMessageRepository
+import com.red.server.sms.SmsStatus
+import org.springframework.jdbc.core.JdbcTemplate
+import java.time.Instant
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -29,7 +35,9 @@ class DinstarSmsController(
     private val audit: AuditService,
     private val users: UserAccountRepository,
     private val fleet: DinstarFleetService,
-    private val smsContract: DinstarSmsContract
+    private val smsContract: DinstarSmsContract,
+    private val smsMessages: SmsMessageRepository,
+    private val jdbc: JdbcTemplate
 ) {
 
     /**
@@ -84,7 +92,7 @@ class DinstarSmsController(
     ): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
         val user = users.findById(actor).orElseThrow { NoSuchElementException("User not found") }
-        if (!user.pstnEnabled) {
+        if (!isAdmin(authentication) && !user.pstnEnabled) {
             return mapOf("error" to "SMS_NOT_ENABLED", "message" to "SMS is not enabled for your account")
         }
         val text = body["text"]?.toString() ?: throw IllegalArgumentException("SMS text is required")
@@ -121,10 +129,37 @@ class DinstarSmsController(
         ))
 
         val gatewayResponse = hardware.sendSms(text, preparedRecipients.recipients, effectivePorts, encoding, effectiveHost)
+        val accepted = DinstarSmsContract.isAccepted(gatewayResponse)
         val taskId = (gatewayResponse["task_id"] as? Number)?.toInt()
         val queueCount = (gatewayResponse["sms_in_queue"] as? Number)?.toInt()
+        // Persist every recipient: sms_messages (user-facing history) + dinstar_sms_log (device audit)
+        val gwId = effectiveHost?.let { runCatching { fleet.findGatewayByHost(it)?.id }.getOrNull() }
+        val now = Instant.now()
+        val smsStatus = if (accepted) SmsStatus.SENT else SmsStatus.FAILED
+        val errCode = (gatewayResponse["error_code"] as? Number)?.toInt()
+        val errMsg = if (!accepted) gatewayResponse["error_code"]?.toString()?.take(200) else null
+        preparedRecipients.recipients.forEachIndexed { idx, rec ->
+            val num = rec["number"]?.toString() ?: return@forEachIndexed
+            val uid = preparedRecipients.userIds.getOrNull(idx)
+            try {
+                smsMessages.save(SmsMessageEntity(
+                    ownerId = actor, number = num, content = text,
+                    direction = SmsDirection.OUT, status = smsStatus,
+                    port = effectivePorts?.firstOrNull(), gatewayId = gwId,
+                    smsParts = 1, createdAt = now, sentAt = if (accepted) now else null,
+                    errorText = errMsg, dinstarUserId = uid, dinstarTaskId = taskId?.toLong()
+                ))
+            } catch (_: Exception) {}
+            try {
+                jdbc.update(
+                    "INSERT INTO dinstar_sms_log(gateway_id,port_index,message_type,phone_number,message_text,encoding,status,task_id,error_code,error_message) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    gwId, effectivePorts?.firstOrNull(), "OUT", num, text.take(500),
+                    encoding, if (accepted) "SENT" else "FAILED", taskId?.toString(), errCode, errMsg
+                )
+            } catch (_: Exception) {}
+        }
         return mapOf(
-            "status" to if (DinstarSmsContract.isAccepted(gatewayResponse)) "ACCEPTED" else "FAILED",
+            "status" to if (accepted) "ACCEPTED" else "FAILED",
             "taskId" to taskId,
             "queueCount" to queueCount,
             "userIds" to preparedRecipients.userIds
@@ -153,7 +188,7 @@ class DinstarSmsController(
     fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)
         val user = users.findById(actor).orElseThrow { NoSuchElementException("User not found") }
-        if (!user.pstnEnabled) {
+        if (!isAdmin(authentication) && !user.pstnEnabled) {
             return mapOf("error" to "SMS_NOT_ENABLED", "messages" to emptyList<Any>())
         }
         if (!isAdmin(authentication)) {

@@ -527,15 +527,41 @@ class DinstarHardwareService(
      *
      * `incoming_sms_id` يجعل البوابة تُعيد الرسائل الأحدث من هذا المعرّف فقط
      * بدل الصندوق كاملًا في كل دورة. الاستجابة تحمل `sms` و`read` و`unread`.
+     *
+     * `flag=all` هو الافتراضي عن قصد: `unread` يعتمد على علامة القراءة داخل
+     * الجهاز، وهي تُقلَب بمجرد أن يفتح أحدهم صفحة الوارد في واجهة الويب —
+     * فتصير الرسالة «مقروءة» ولا تظهر لنا أبدًا. المؤشّر التزايدي يكفي وحده
+     * لمنع التكرار، فلا حاجة لإسناد المنع إلى حالة قابلة للتغيير من الخارج.
      */
-    fun queryIncomingSms(sinceId: Long = 0, flag: String = DinstarApiContract.Sms.FLAG_UNREAD): Map<String, Any?> =
+    fun queryIncomingSms(
+        sinceId: Long = 0,
+        flag: String = DinstarApiContract.Sms.FLAG_ALL
+    ): Map<String, Any?> =
         postJson(
             DinstarApiContract.Path.QUERY_INCOMING_SMS,
-            mapOf(
-                DinstarApiContract.Sms.REQ_INCOMING_ID to sinceId,
-                DinstarApiContract.Sms.REQ_FLAG to flag
-            )
+            incomingSmsBody(sinceId, flag)
         )
+
+    /**
+     * جلب SMS الواردة من بوابة بعينها.
+     *
+     * النسخة بلا وسيط تخاطب العنوان المضبوط وحده، فكان وارد الجهاز الثاني
+     * لا يُلتقط إطلاقًا مهما بلغ عدد الأجهزة المسجّلة.
+     */
+    fun queryIncomingSms(
+        gateway: DinstarFleetService.Gateway,
+        sinceId: Long = 0,
+        flag: String = DinstarApiContract.Sms.FLAG_ALL
+    ): Map<String, Any?> =
+        clientFor(gateway).postJson(
+            DinstarApiContract.Path.QUERY_INCOMING_SMS,
+            incomingSmsBody(sinceId, flag)
+        )
+
+    private fun incomingSmsBody(sinceId: Long, flag: String): Map<String, Any> = mapOf(
+        DinstarApiContract.Sms.REQ_INCOMING_ID to sinceId,
+        DinstarApiContract.Sms.REQ_FLAG to flag
+    )
 
     /**
      * عدد SMS في الطابور.

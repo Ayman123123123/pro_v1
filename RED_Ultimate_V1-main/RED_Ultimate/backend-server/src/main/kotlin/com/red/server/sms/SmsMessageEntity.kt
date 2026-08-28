@@ -73,7 +73,53 @@ class SmsMessageEntity(
     var deliveredAt: Instant? = null,
 
     @Column(name = "read_at")
-    var readAt: Instant? = null
+    var readAt: Instant? = null,
+
+    // ── ربط تقارير الشبكة (هجرة V39) ──────────────────────────────────────
+    //
+    // الأعمدة العشرة التالية أضافتها V39 «Sms Delivery Correlation» في القاعدة،
+    // لكن الكيان لم يُحدَّث فبقيت **فارغة أبديًا**: JPA لا يكتب عمودًا لا يعرفه.
+    // النتيجة أن كل ما بُنيت من أجله الهجرة كان معطوبًا صامتًا:
+    //
+    //  * `incomingSmsId` هو مؤشّر الوارد. بدونه لا سبيل لمعرفة أين توقّفت
+    //    القراءة، فكان الالتقاط يعتمد حيلة «نفس النص خلال دقيقتين» — تُسقِط
+    //    رسالتين متطابقتين مشروعتين، وتُدخل مكرّرًا بعد الدقيقتين. والأخطر أن
+    //    `query_incoming_sms` **يستهلك** الوارد عند القراءة، فالمفقود يُفقد نهائيًا.
+    //  * `dinstarRefId` هو المفتاح الوحيد الذي تُطابَق به تقارير التسليم
+    //    (3GPP TS 23.040). بدونه كانت المطابقة بالرقم وحده، فتقرير رسالة
+    //    يُنسَب لأخرى إلى الرقم نفسه.
+    //  * `deliveryStatusCode` الرمز الرقمي الخام — يُبقي التشخيص ممكنًا حين
+    //    يتغيّر تصنيفنا للحالة.
+    @Column(name = "dinstar_user_id")
+    var dinstarUserId: Long? = null,
+
+    @Column(name = "dinstar_ref_id")
+    var dinstarRefId: Long? = null,
+
+    @Column(name = "dinstar_task_id")
+    var dinstarTaskId: Long? = null,
+
+    @Column(name = "incoming_sms_id")
+    var incomingSmsId: Long? = null,
+
+    @Column(name = "encoding", length = 12)
+    var encoding: String? = null,
+
+    @Column(name = "delivery_status_code")
+    var deliveryStatusCode: Int? = null,
+
+    @Column(name = "parts_confirmed")
+    var partsConfirmed: Int? = null,
+
+    /** IMSI الشريحة التي حملت الرسالة — يُثبّت المنفذ حتى لو أُعيد ترتيبه. */
+    @Column(name = "sender_imsi", length = 32)
+    var senderImsi: String? = null,
+
+    @Column(name = "last_polled_at")
+    var lastPolledAt: Instant? = null,
+
+    @Column(name = "retry_count", nullable = false)
+    var retryCount: Int = 0
 )
 
 /** مفتاح مركّب لعلامة القراءة: (مستخدم، رقم). */

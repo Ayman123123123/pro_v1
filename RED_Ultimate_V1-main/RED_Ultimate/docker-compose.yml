@@ -78,6 +78,9 @@ services:
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
+      # الأسطول كما يقرؤه `DinstarFleetService`. بدونه يبقى الخادم على بوابة
+      # البذرة وحدها، فيصبح الجهاز الثاني مسجَّلًا في القاعدة وغير مُستعلَم.
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
       - DINSTAR_PORT=${DINSTAR_PORT:-443}
       - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
       # نفس السر الذي يحمله dialplan في ترويسة X-Internal-Secret. الربط المرن
@@ -216,6 +219,13 @@ services:
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
+      # قائمة الأسطول الكاملة. `docker-entrypoint.sh` يولّد من كل عنوان فيها
+      # نظيرًا للبوابة + نظيرًا لكل منفذ GSM على مقبسه (5060+index)، ولا يقرأ
+      # `DINSTAR_IP` المفرد إطلاقًا. تركه غير مُمرَّر كان يُسقط كل بوابة عدا
+      # الافتراضية داخل الحاوية: الخادم يختار منفذًا على البوابة الثانية ثم
+      # ينادي `PJSIP/<num>@dinstar-gw-192-168-11-3-port-N` وهو نظير غير موجود،
+      # فتفشل المكالمة بلا أي أثر يشير إلى السبب.
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
       - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
