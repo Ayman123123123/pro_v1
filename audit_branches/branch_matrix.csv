@@ -1,0 +1,31 @@
+branch,last_commit_date,author,subject,commits,ahead_of_main,behind_main,files_in_branch,identical_to_main,pct_identical,only_in_branch,only_in_main,modified,modified_old_version_in_main_history,modified_unique_content,added_files_whose_content_is_in_main_history,added_files_unique_content,pairs_ws_only,pairs_crlf_diff,pairs_bom_diff,pairs_final_newline_diff
+arena/019fe8fa-pro-v1,2026-08-10,Ayman,Merge origin/arena/019fe99e-pro-v1 with local fixes,196,117,371,31096,10067,88.86,20603,836,426,416,10,20603,0,23,80,21,13
+arena/019fe9e3-pro-v1,2026-08-11,Ayman123123123,"Merged PR #24: Hardened NGINX, SSL self-healing, and operational tools integrated",258,179,371,10869,10169,89.76,265,725,435,405,30,260,5,23,85,24,15
+arena/019ff019-pro-v1,2026-08-11,Ayman123123123,docs(schema): update master-schema.sql to match V23 database capabilities and performance ,221,142,371,10802,10115,89.28,260,787,427,423,4,258,2,23,81,21,12
+arena/019ff06b-pro-v1,2026-08-11,arena-ai-coding-agent[bot],دمج PR #17: توافق DINSTAR متعدد البوابات، ومعرّف يونس، وإصلاحات أمنية,233,154,371,10823,10147,89.57,258,764,418,418,0,258,0,23,85,23,13
+arena/019ff085-pro-v1,2026-08-11,Arena Agent,ci: إعادة build-red.yml لإصدار main (bot بلا صلاحية workflows),248,169,371,10843,10165,89.73,260,746,418,418,0,260,0,23,85,23,13
+arena/019ff0c7-pro-v1,2026-08-11,Ayman123123123,feat(remote-wipe+ws-hardening): بروتوكول RemoteWipe/RemoteWipeAck + تحصين RedMasterHandler,234,155,371,10823,10147,89.57,258,764,418,418,0,258,0,23,85,23,13
+arena/019ff146-pro-v1,2026-08-11,Ayman123123123,"fix(android): wire backup/update navigation, add full-screen call intent, clean notificati",240,161,371,10862,10178,89.84,259,726,425,425,0,259,0,23,86,24,13
+arena/019ff178-pro-v1,2026-08-11,Ayman123123123,feat(platform): activate app features and restore complete quality gates,239,160,371,10873,10202,90.05,259,715,412,412,0,259,0,23,86,24,14
+arena/019ff1f9-pro-v1,2026-08-11,Ayman123123123,"docs: final comprehensive fix report for APK build complexity (env, deps, composable, svg,",245,166,371,10878,10208,90.11,259,710,411,411,0,259,0,23,86,24,14
+arena/019ff215-pro-v1,2026-08-11,Ayman123123123,merge: resolve main integration conflicts,252,173,371,10896,10231,90.31,259,692,406,406,0,259,0,23,86,24,14
+arena/019ff237-pro-v1,2026-08-11,Ayman123123123,fix(audit): deep comprehensive audit — fix 4 critical defects (Elements import + 3x !!) + ,244,165,371,10885,10214,90.16,262,706,409,406,3,262,0,23,86,24,14
+arena/019ff422-pro-v1,2026-08-12,Ayman123123123,fix(platform): align Kotlin tests and close call/typing admin gaps,256,177,371,10909,10258,90.55,262,682,389,389,0,262,0,27,86,24,14
+arena/019ff82d-pro-v1,2026-08-13,Ayman123123123,Merge main into the YOUNES calling branch.,272,193,371,10957,10342,91.29,263,635,352,352,0,263,0,27,88,26,12
+arena/019ff859-pro-v1,2026-08-13,Ayman123123123,Make server health checks tolerant of transient network blips,248,169,371,10912,10259,90.56,263,680,390,390,0,263,0,27,86,24,14
+arena/019ff8b4-pro-v1,2026-08-13,Ayman123123123,صحة الإدارة والتحليلات وعدم الخروج عند 500,276,197,371,10957,10346,91.32,263,635,348,348,0,263,0,27,88,26,12
+arena/019ff8c7-pro-v1,2026-08-13,Ayman123123123,Clean leftover merge markers and document Material3 theme pin,287,208,371,10965,10357,91.42,264,628,344,344,0,264,0,27,88,26,11
+arena/019ff8f2-pro-v1,2026-08-13,Ayman123123123,docs: إضافة التقرير التقني الشامل,300,221,371,10995,10374,91.57,271,605,350,350,0,271,0,27,88,26,11
+arena/019ffce9-pro-v1,2026-08-13,Ayman123123123,إصلاح INVALID_REQUEST والتسجيل + تطوير المحادثات والمجموعات والمكالمات وPSTN,290,211,371,10998,10377,91.6,271,602,350,350,0,271,0,27,88,26,11
+arena/019ffd78-pro-v1,2026-08-14,Ayman123123123,"Show group senders by name, search the open group, and save decrypted media if allowed.",298,219,371,11013,10393,91.74,271,587,349,349,0,271,0,27,88,26,11
+arena/019ffe92-pro-v1,2026-08-14,Ayman123123123,fix(backend): unique Flyway versions — two files shared V25 and two shared V26,307,228,371,11012,10393,91.74,271,588,348,335,13,270,1,27,88,26,11
+arena/019ffece-pro-v1,2026-08-14,Ayman123123123,Stabilize sovereign runtime and secure realtime features,300,221,371,11014,10388,91.69,270,585,356,314,42,269,1,27,89,26,11
+arena/019fffd5-pro-v1,2026-08-14,Ayman123123123,Fix backend startup errors: duplicate Flyway versions and duplicate Spring beans,300,221,371,11011,10395,91.76,266,584,350,350,0,266,0,27,88,26,11
+arena/01a0064f-pro-v1,2026-08-15,Ayman123123123,"merge(platform): bring PR #39 stabilization — websocket auth, SFU tickets, DINSTAR admin-g",303,224,371,11016,10389,91.7,269,582,358,312,46,268,1,27,89,26,11
+arena/01a00f9e-pro-v1,2026-08-19,Ayman123123123,إصلاح ثلاثة أعطال يكشفها check-all.sh وفاحصَين لا يمكن إرضاؤهما,402,323,371,10924,10635,93.87,3,408,286,286,0,3,0,26,93,25,12
+chore/platform-rebuild-baseline,2026-08-20,Ayman123123123,test(platform): record local verification checkpoint,402,323,371,11041,10412,91.91,292,580,337,285,52,267,25,27,88,26,11
+feat/admin-social-management,2026-08-19,Ayman123123123,feat(dashboard): دوال API لإدارة المجموعات والمنشورات + إصلاحات SmsTemplates,323,244,371,11014,10404,91.84,266,581,344,344,0,266,0,27,88,26,11
+feat/red-engineering-roadmap-20260820,2026-08-20,Manus AI,docs: add comprehensive RED engineering roadmap,404,325,371,10925,10635,93.87,4,408,286,286,0,3,1,26,93,25,12
+feature/uc2000-ve-sms-browser-audit,2026-08-19,Ayman123123123,docs: record successful SIP and SMS readiness checks,333,254,371,11020,10401,91.81,271,580,348,340,8,266,5,27,88,26,11
+fix/restore-websocket-registrations,2026-08-17,Ayman123123123,fix(calls): route multi-device ring cancellation to the actor's devices,303,224,371,11011,10395,91.76,266,584,350,350,0,266,0,27,88,26,11
+revert-37-arena/019ffd78-pro-v1,2026-08-14,Ayman123123123,"Revert ""Activate Younes chats, groups, composer, and Home — local-first E2EE""",300,221,371,10998,10377,91.6,271,602,350,350,0,271,0,27,88,26,11
