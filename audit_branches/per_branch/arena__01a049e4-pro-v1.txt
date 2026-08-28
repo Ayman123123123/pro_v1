@@ -1,0 +1,78 @@
+# فرع: arena/01a049e4-pro-v1   مقابل  main
+# القسم 1: name-status   (A=موجود فقط في الفرع | D=موجود فقط في main (غائب عن الفرع) | M=معدّل | R=منقول/مُعاد تسميته)
+A	audit_branches/branch_matrix.csv
+A	audit_branches/char_level_differences.csv
+A	audit_branches/line_level_unique_diffs.patch
+A	audit_branches/main_only_files.csv
+A	audit_branches/orphan_line_diffs.csv
+A	audit_branches/per_branch/arena__019fe8fa-pro-v1.txt
+A	audit_branches/per_branch/arena__019fe9e3-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff019-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff06b-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff085-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff0c7-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff146-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff178-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff1f9-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff215-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff237-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff422-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff82d-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff859-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff8b4-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff8c7-pro-v1.txt
+A	audit_branches/per_branch/arena__019ff8f2-pro-v1.txt
+A	audit_branches/per_branch/arena__019ffce9-pro-v1.txt
+A	audit_branches/per_branch/arena__019ffd78-pro-v1.txt
+A	audit_branches/per_branch/arena__019ffe92-pro-v1.txt
+A	audit_branches/per_branch/arena__019ffece-pro-v1.txt
+A	audit_branches/per_branch/arena__019fffd5-pro-v1.txt
+A	audit_branches/per_branch/arena__01a0064f-pro-v1.txt
+A	audit_branches/per_branch/arena__01a00f9e-pro-v1.txt
+A	audit_branches/per_branch/chore__platform-rebuild-baseline.txt
+A	audit_branches/per_branch/feat__admin-social-management.txt
+A	audit_branches/per_branch/feat__red-engineering-roadmap-20260820.txt
+A	audit_branches/per_branch/feature__uc2000-ve-sms-browser-audit.txt
+A	audit_branches/per_branch/fix__restore-websocket-registrations.txt
+A	audit_branches/per_branch/revert-37-arena__019ffd78-pro-v1.txt
+A	audit_branches/unique_files_only_in_branches.csv
+A	تقرير_مطابقة_كل_الفروع_مع_main_2026-08-28.md
+
+# القسم 2: numstat   (أسطر مضافة \t أسطر محذوفة \t المسار)
+31	0	audit_branches/branch_matrix.csv
+3775	0	audit_branches/char_level_differences.csv
+85086	0	audit_branches/line_level_unique_diffs.patch
+841	0	audit_branches/main_only_files.csv
+209	0	audit_branches/orphan_line_diffs.csv
+21833	0	audit_branches/per_branch/arena__019fe8fa-pro-v1.txt
+1382	0	audit_branches/per_branch/arena__019fe9e3-pro-v1.txt
+1433	0	audit_branches/per_branch/arena__019ff019-pro-v1.txt
+1399	0	audit_branches/per_branch/arena__019ff06b-pro-v1.txt
+1381	0	audit_branches/per_branch/arena__019ff085-pro-v1.txt
+1399	0	audit_branches/per_branch/arena__019ff0c7-pro-v1.txt
+1368	0	audit_branches/per_branch/arena__019ff146-pro-v1.txt
+1342	0	audit_branches/per_branch/arena__019ff178-pro-v1.txt
+1336	0	audit_branches/per_branch/arena__019ff1f9-pro-v1.txt
+1313	0	audit_branches/per_branch/arena__019ff215-pro-v1.txt
+1330	0	audit_branches/per_branch/arena__019ff237-pro-v1.txt
+1286	0	audit_branches/per_branch/arena__019ff422-pro-v1.txt
+1204	0	audit_branches/per_branch/arena__019ff82d-pro-v1.txt
+1285	0	audit_branches/per_branch/arena__019ff859-pro-v1.txt
+1200	0	audit_branches/per_branch/arena__019ff8b4-pro-v1.txt
+1189	0	audit_branches/per_branch/arena__019ff8c7-pro-v1.txt
+1176	0	audit_branches/per_branch/arena__019ff8f2-pro-v1.txt
+1173	0	audit_branches/per_branch/arena__019ffce9-pro-v1.txt
+1157	0	audit_branches/per_branch/arena__019ffd78-pro-v1.txt
+1156	0	audit_branches/per_branch/arena__019ffe92-pro-v1.txt
+1160	0	audit_branches/per_branch/arena__019ffece-pro-v1.txt
+1153	0	audit_branches/per_branch/arena__019fffd5-pro-v1.txt
+1159	0	audit_branches/per_branch/arena__01a0064f-pro-v1.txt
+698	0	audit_branches/per_branch/arena__01a00f9e-pro-v1.txt
+1162	0	audit_branches/per_branch/chore__platform-rebuild-baseline.txt
+1144	0	audit_branches/per_branch/feat__admin-social-management.txt
+699	0	audit_branches/per_branch/feat__red-engineering-roadmap-20260820.txt
+1152	0	audit_branches/per_branch/feature__uc2000-ve-sms-browser-audit.txt
+1153	0	audit_branches/per_branch/fix__restore-websocket-registrations.txt
+1173	0	audit_branches/per_branch/revert-37-arena__019ffd78-pro-v1.txt
+42	0	audit_branches/unique_files_only_in_branches.csv
+388	0	تقرير_مطابقة_كل_الفروع_مع_main_2026-08-28.md
