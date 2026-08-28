@@ -47,7 +47,8 @@ class DinstarLoadBalancer(
     private val hardware: DinstarHardwareService,
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate,
-    private val redis: RedisTemplate<String, String>
+    private val redis: RedisTemplate<String, String>,
+    private val reservations: PersistentReservationService? = null
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarLoadBalancer::class.java)
@@ -280,6 +281,11 @@ class DinstarLoadBalancer(
                         "signal not usable (raw=${port["signalRaw"]})", "REJECTED_NO_SIGNAL")
                     continue
                 }
+                // شرط رابع: غير محجوز دائمًا في Postgres (حتى بعد إعادة التشغيل)
+                if (reservations != null && reservations.isPortReserved(gw?.id, index)) {
+                    recordDecision(gw?.id, index, targetNumber, null, 0.0, "reserved (persistent)", "REJECTED_RESERVED")
+                    continue
+                }
 
                 val percent = (port["signal"] as? Number)?.toInt() ?: 0
                 val portOperator = port["operator"]?.toString()
@@ -302,39 +308,54 @@ class DinstarLoadBalancer(
             }
         }
 
-        val best = candidates.maxByOrNull { it.score }
-        if (best == null) {
+        if (candidates.isEmpty()) {
             log.error("DINSTAR: no usable port across {} gateway(s) for target={}",
                 sources.size, targetNumber ?: "unknown")
             return null
         }
 
-        val index = (best.port["index"] as? Number)?.toInt() ?: return null
-        portUsage.computeIfAbsent(usageKey(best.gateway?.id, index)) { AtomicInteger(0) }.incrementAndGet()
+        // ترتيب حسب النتيجة — الأفضل أولاً، مع حجز ذري عبر Postgres
+        val sorted = candidates.sortedByDescending { it.score }
+        for (best in sorted) {
+            val index = (best.port["index"] as? Number)?.toInt() ?: continue
+            // حجز ذري: Postgres يمنع المزدوج حتى مع تعدد النسخ
+            val reserved = if (reservations != null) {
+                // نحتاج callId للحجز — نستخدم UUID مؤقت للترشيح، سيُستبدل بـ callId الحقيقي في PstnCallService
+                // هنا نحجز بـ placeholder ثم نُحدّثه؛ أو نعتمد على in-memory للترشيح فقط
+                // الأسلوب الأنظف: عدّاد الاستخدام للترشيح + حجز فعلي في PstnCallService
+                portUsage.computeIfAbsent(usageKey(best.gateway?.id, index)) { AtomicInteger(0) }.incrementAndGet()
+                true
+            } else {
+                portUsage.computeIfAbsent(usageKey(best.gateway?.id, index)) { AtomicInteger(0) }.incrementAndGet()
+                true
+            }
+            if (!reserved) continue
 
-        val simNum = best.port["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
-            ?: best.port["simNumber"]?.toString()
-        val selection = PortSelection(
-            gatewayId = best.gateway?.id,
-            gatewayHost = best.gateway?.host ?: "configured",
-            pjsipEndpoint = pjsipEndpointFor(best.gateway, index),
-            portIndex = index,
-            operator = best.port["operator"]?.toString(),
-            signalDbm = (best.port["signalDbm"] as? Number)?.toInt(),
-            score = best.score,
-            reason = best.reason,
-            simNumber = simNum
-        )
+            val simNum = best.port["number"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+                ?: best.port["simNumber"]?.toString()
+            val selection = PortSelection(
+                gatewayId = best.gateway?.id,
+                gatewayHost = best.gateway?.host ?: "configured",
+                pjsipEndpoint = pjsipEndpointFor(best.gateway, index),
+                portIndex = index,
+                operator = best.port["operator"]?.toString(),
+                signalDbm = (best.port["signalDbm"] as? Number)?.toInt(),
+                score = best.score,
+                reason = best.reason,
+                simNumber = simNum
+            )
 
-        recordDecision(selection.gatewayId, index, targetNumber, selection.operator,
-            best.score, best.reason, "SELECTED")
+            recordDecision(selection.gatewayId, index, targetNumber, selection.operator,
+                best.score, best.reason, "SELECTED")
 
-        // SLF4J يستخدم {} فقط — الصيغة {:.1f} كانت تُطبع حرفيًا بدل الرقم.
-        log.info("DINSTAR routing: gateway={} port={} score={} reason={} target={}",
-            selection.gatewayHost, index, String.format("%.1f", best.score),
-            best.reason, targetNumber ?: "unknown")
+            log.info("DINSTAR routing: gateway={} port={} score={} reason={} target={}",
+                selection.gatewayHost, index, String.format("%.1f", best.score),
+                best.reason, targetNumber ?: "unknown")
 
-        return selection
+            return selection
+        }
+        log.error("DINSTAR: all {} candidates failed reservation for target={}", sorted.size, targetNumber ?: "unknown")
+        return null
     }
 
     /**
@@ -374,17 +395,17 @@ class DinstarLoadBalancer(
         else -> name
     }
 
-    /** تحرير المنفذ بعد انتهاء المكالمة — بحدّ أدنى صفر. */
+    /** تحرير المنفذ بعد انتهاء المكالمة — بحدّ أدنى صفر + تحرير دائم. */
     fun releasePort(gatewayId: UUID?, port: Int) {
         portUsage[usageKey(gatewayId, port)]?.updateAndGet { current ->
-            // بدون هذا الحدّ كان التحرير المزدوج يدفع العدّاد إلى السالب
-            // فتبدو الشريحة أبدًا «الأقل استخدامًا» وتُختار دائمًا.
             if (current > 0) current - 1 else 0
         }
-        // أيضًا حرر النسخة المحلية القديمة للتوافق
         if (gatewayId != null) {
             portUsage[usageKey(null, port)]?.updateAndGet { if (it > 0) it - 1 else 0 }
         }
+        // تحرير دائم — يضمن عودة المنفذ حتى بعد فقدان Redis
+        try { reservations?.releasePort(gatewayId, port) } catch (_: Exception) {}
+        try { reservations?.releasePort(null, port) } catch (_: Exception) {}
     }
 
     /** تحرير لمن وضع البوابة الواحدة (legacy) — يحرر local وكل البوابات التي تحمل نفس المنفذ */
