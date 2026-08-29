@@ -72,16 +72,16 @@ type ProbeResult = {
   confidence: number; signals: string[]; adoptable?: boolean; message?: string;
 };
 
-/** مشغلو اليمن: 71 سبأفون · 73 يو · 77/78 يمن موبايل · 70 واي */
+/** مشغلو اليمن — ألوان رسمية راقية بلا أخضر ساطع */
 const YEMEN_OP: Record<string, { ar: string; clr: string }> = {
-  Sabafon: { ar: 'سبأفون', clr: '#E53935' },
-  MTN: { ar: 'يو', clr: '#FFB300' },
-  YOU: { ar: 'يو', clr: '#FFB300' },
-  YemenMobile: { ar: 'يمن موبايل', clr: '#43A047' },
-  'Yemen Mobile': { ar: 'يمن موبايل', clr: '#43A047' },
-  YTelecom: { ar: 'واي', clr: '#1E88E5' },
-  'Y Telecom': { ar: 'واي', clr: '#1E88E5' },
-  HiTel: { ar: 'واي', clr: '#1E88E5' },
+  Sabafon: { ar: 'سبأفون', clr: '#B91C1C' },      // أحمر عقيق
+  MTN: { ar: 'يو', clr: '#B78A2E' },              // ذهبي مطفي
+  YOU: { ar: 'يو', clr: '#B78A2E' },
+  YemenMobile: { ar: 'يمن موبايل', clr: '#1E3A8A' }, // كحلي ملكي
+  'Yemen Mobile': { ar: 'يمن موبايل', clr: '#1E3A8A' },
+  YTelecom: { ar: 'واي', clr: '#6B21A8' },       // بنفسجي ملكي
+  'Y Telecom': { ar: 'واي', clr: '#6B21A8' },
+  HiTel: { ar: 'واي', clr: '#6B21A8' },
 };
 const resolveOp = (o?: string) => {
   if (!o || o === 'UNKNOWN') return { ar: 'غير معروف', clr: '#757575' };
@@ -90,15 +90,15 @@ const resolveOp = (o?: string) => {
   return hit ? YEMEN_OP[hit] : { ar: o, clr: '#757575' };
 };
 
-/** ألوان تصنيف الإشارة — مشتقة من dBm لا من نسبة ملفّقة. */
+/** ألوان تصنيف الإشارة — لوحة رسمية راقية بلا أخضر (ذهبي/كحلي/أزرق ملكي) */
 const SIGNAL_LABEL: Record<string, { ar: string; clr: string }> = {
-  EXCELLENT: { ar: 'ممتازة', clr: '#00C896' },
-  GOOD: { ar: 'جيدة', clr: '#52C41A' },
-  FAIR: { ar: 'مقبولة', clr: '#E8B84A' },
-  WEAK: { ar: 'ضعيفة', clr: '#FA8C16' },
-  UNUSABLE: { ar: 'غير كافية', clr: '#F5222D' },
-  NO_SIGNAL: { ar: 'لا يوجد قياس', clr: '#8C8C8C' },
-  OUT_OF_RANGE: { ar: 'قراءة شاذة', clr: '#8C8C8C' },
+  EXCELLENT: { ar: 'ممتازة', clr: '#B78A2E' }, // ذهبي مطفي — فاخر
+  GOOD: { ar: 'جيدة', clr: '#1976D2' },       // أزرق ملكي
+  FAIR: { ar: 'مقبولة', clr: '#8A6D3B' },     // برونزي
+  WEAK: { ar: 'ضعيفة', clr: '#C0842B' },     // عنبري
+  UNUSABLE: { ar: 'غير كافية', clr: '#B91C1C' }, // أحمر عميق
+  NO_SIGNAL: { ar: 'لا يوجد قياس', clr: '#6B7D8F' },
+  OUT_OF_RANGE: { ar: 'قراءة شاذة', clr: '#6B7D8F' },
 };
 
 const HEALTH: Record<string, { ar: string; badge: 'success' | 'warning' | 'error' | 'default' }> = {
@@ -435,62 +435,94 @@ export default function DinstarControl() {
   const renderPort = (gateway: Gateway, port: Port) => {
     const label = SIGNAL_LABEL[port.signalLabel || 'NO_SIGNAL'] || SIGNAL_LABEL.NO_SIGNAL;
     const measured = port.signalDbm != null;
+    const op = resolveOp(port.operator);
+    const registered = isRegistered(port.status);
+    const ready = registered && !!port.signalUsable;
+    // لون الحدود حسب الجاهزية — رسمي راقٍ بلا أخضر
+    const borderColor = ready ? 'rgba(183,138,46,0.35)' : registered ? 'rgba(25,118,210,0.25)' : 'rgba(185,28,28,0.25)';
+    const statusTag = ready ? { clr: '#B78A2E', txt: 'جاهز' } : registered ? { clr: '#1976D2', txt: 'مسجّل بلا إشارة' } : { clr: '#B91C1C', txt: 'غير مسجّل' };
     return (
-      <Col xs={24} sm={12} lg={6} key={`${gateway.id}-${port.index}`}>
+      <Col xs={24} sm={12} lg={6} xl={6} key={`${gateway.id}-${port.index}`}>
         <Card
           size="small"
-          title={`SIM ${port.index + 1}`}
-          extra={
-            <Tag color={isRegistered(port.status) ? (port.signalUsable ? 'green' : 'orange') : 'red'}>
-              {isRegistered(port.status) ? (port.signalUsable ? 'جاهز' : 'مسجّل بلا إشارة') : 'غير مسجّل'}
-            </Tag>
+          hoverable
+          style={{ borderColor, borderWidth: 1.5, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}
+          styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 12 } }}
+          title={
+            <Space size={6}>
+              <span style={{ fontWeight: 800, letterSpacing: 0.3 }}>SIM {port.index + 1}</span>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>@ {gateway.host}</Typography.Text>
+            </Space>
           }
+          extra={<Tag color={statusTag.clr} style={{ color: '#fff', border: 'none', fontWeight: 600 }}>{statusTag.txt}</Tag>}
         >
-          <div style={{ textAlign: 'center' }}>
-            <SignalFilled style={{ fontSize: 30, color: label.clr }} />
-            {measured ? (
-              <>
-                <Progress percent={port.signal ?? 0} strokeColor={label.clr} size="small" />
-                <Typography.Text strong style={{ color: label.clr }}>
-                  {port.signalDbm} dBm · {label.ar}
-                </Typography.Text>
-              </>
-            ) : (
-              // الفرق الجوهري: لا نرسم شريطًا بنسبة ملفّقة حين لا يوجد قياس.
-              <Tooltip title={`القراءة الخام ${port.signalRaw ?? '—'} تعني في 3GPP TS 27.007 «غير قابلة للكشف»`}>
-                <div style={{ padding: '6px 0' }}>
-                  <Tag color="default">لا يوجد قياس إشارة</Tag>
-                </div>
-              </Tooltip>
-            )}
-            <Space wrap style={{ marginTop: 6 }}>
-              <Tag>{port.radioType || 'UNKNOWN'}</Tag>
-              <Tag color="blue">{port.callState || 'UNKNOWN'}</Tag>
-              <Tag>{port.gprs || 'UNKNOWN'}</Tag>
+          {/* ── الشريحة والمشغل ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Tag color={op.clr} style={{ color: '#fff', border: 'none', fontWeight: 600, fontSize: 12 }}>{op.ar}</Tag>
+            <Space size={4}>
+              <Tag style={{ fontSize: 11 }}>{port.radioType || '—'}</Tag>
+              <Tag color={port.callState === 'Idle' ? 'default' : 'processing'} style={{ fontSize: 11 }}>{port.callState || '—'}</Tag>
             </Space>
           </div>
-          <Descriptions column={1} size="small" style={{ marginTop: 8 }}>
-            <Descriptions.Item label="المشغل">
-              <Tag color={resolveOp(port.operator).clr}>{resolveOp(port.operator).ar}</Tag>
+
+          {/* ── الإشارة — عرض أنيق ── */}
+          <div style={{ textAlign: 'center', padding: '8px 0 6px', background: 'var(--yns-surface-light, #F0F2F5)', borderRadius: 10, marginBottom: 8 }}>
+            <SignalFilled style={{ fontSize: 28, color: label.clr }} />
+            {measured ? (
+              <div style={{ padding: '4px 10px 0' }}>
+                <Progress percent={Math.max(0, Math.min(100, port.signal ?? 0))} strokeColor={label.clr} size="small" showInfo={false} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                  <Typography.Text strong style={{ color: label.clr, fontSize: 12 }}>{port.signalDbm} dBm</Typography.Text>
+                  <Tag color={label.clr} style={{ color: '#fff', border: 'none', fontSize: 11 }}>{label.ar}</Tag>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>خام {port.signalRaw ?? '—'}</Typography.Text>
+                </div>
+              </div>
+            ) : (
+              <Tooltip title={`القراءة الخام ${port.signalRaw ?? '—'} تعني في 3GPP TS 27.007 «غير قابلة للكشف»`}>
+                <div style={{ padding: 6 }}><Tag color="default">لا يوجد قياس إشارة</Tag></div>
+              </Tooltip>
+            )}
+          </div>
+
+          {/* ── كل المعلومات — شبكة 2×4 حديثة ── */}
+          <Descriptions column={1} size="small" bordered={false} style={{ flex: 1 }}>
+            <Descriptions.Item label={<span style={{ fontSize: 11, color: 'var(--yns-text-muted)' }}>الرقم</span>}>
+              <span style={{ fontWeight: 600, fontSize: 12 }}>{port.numberMasked || 'غير معروف'}</span>
             </Descriptions.Item>
-            <Descriptions.Item label="الرقم">{port.numberMasked || 'غير معروف'}</Descriptions.Item>
-            <Descriptions.Item label="IMSI">{port.imsiMasked || '—'}</Descriptions.Item>
+            <Descriptions.Item label={<span style={{ fontSize: 11 }}>IMSI</span>}>
+              <Typography.Text copyable={!!port.imsiMasked} style={{ fontSize: 11 }}>{port.imsiMasked || '—'}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={<span style={{ fontSize: 11 }}>ICCID</span>}>
+              <Typography.Text copyable={!!port.iccidMasked} style={{ fontSize: 11 }}>{port.iccidMasked || '—'}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={<span style={{ fontSize: 11 }}>الشبكة</span>}>
+              <Space size={4} wrap>
+                <Tag style={{ fontSize: 11 }}>{port.gprs || '—'}</Tag>
+                <Tag color={ready ? '#B78A2E' : undefined} style={ready ? { color: '#fff', border: 'none' } : {}}>{ready ? 'قابل للمكالمات' : 'غير جاهز'}</Tag>
+              </Space>
+            </Descriptions.Item>
           </Descriptions>
-          <Space style={{ marginTop: 6 }}>
+
+          {/* ── الأزرار — ترتيب عصري متساوٍ ── */}
+          <Space.Compact block style={{ marginTop: 10 }}>
             <Button
-              type="primary" size="small" icon={<PhoneOutlined />}
-              disabled={!isRegistered(port.status) || !port.signalUsable}
+              type="primary" size="small" icon={<PhoneOutlined />} block
+              disabled={!ready}
               onClick={() => openDial(port.index, gateway.host)}
+              style={{ fontWeight: 600 }}
             >
               اتصال
             </Button>
             <Button size="small" icon={<ApiOutlined />} onClick={() => { setUssdTarget({gatewayId: gateway.id, port: port.index}); setUssd(''); }}>
               USSD
             </Button>
-            <Button size="small" danger icon={<ToolOutlined />} onClick={() => resetPort(gateway.host, port.index)}>
-              إعادة تشغيل
+            <Button size="small" icon={<ToolOutlined />} onClick={() => resetPort(gateway.host, port.index)}>
+              تهيئة
             </Button>
-          </Space>
+          </Space.Compact>
+          <Typography.Text type="secondary" style={{ fontSize: 10, textAlign: 'center', marginTop: 4, display: 'block' }}>
+            {gateway.model} · منفذ {port.index} · {port.signalLabel || '—'}
+          </Typography.Text>
         </Card>
       </Col>
     );
@@ -517,14 +549,14 @@ export default function DinstarControl() {
 
       {totals && (
         <Row gutter={[12, 12]} style={{ margin: '14px 0' }}>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="البوابات" value={totals.gateways} suffix={`/ ${fleet.length}`} /></Card></Col>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="متصلة" value={totals.online} valueStyle={{ color: '#00C896' }} /></Card></Col>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="شرائح مسجّلة" value={totals.registered} suffix={`/ ${totals.ports}`} /></Card></Col>
+          <Col xs={12} md={6}><Card size="small" styles={{ body: { padding: 12 } }}><Statistic title="البوابات" value={totals.gateways} suffix={`/ ${fleet.length}`} valueStyle={{ color: '#0F1B2D', fontWeight: 800 }} /></Card></Col>
+          <Col xs={12} md={6}><Card size="small" styles={{ body: { padding: 12 } }}><Statistic title="متصلة" value={totals.online} valueStyle={{ color: '#B78A2E', fontWeight: 700 }} /></Card></Col>
+          <Col xs={12} md={6}><Card size="small" styles={{ body: { padding: 12 } }}><Statistic title="شرائح مسجّلة" value={totals.registered} suffix={`/ ${totals.ports}`} valueStyle={{ color: '#1976D2', fontWeight: 600 }} /></Card></Col>
           <Col xs={12} md={6}>
-            <Card size="small">
+            <Card size="small" styles={{ body: { padding: 12 } }}>
               <Tooltip title="الشريحة المسجّلة قد تكون بلا إشارة قابلة للقياس؛ الجاهزة فقط تصلح لحمل مكالمة.">
                 <Statistic title="جاهزة للمكالمات" value={totals.usable} suffix={`/ ${totals.registered}`}
-                  valueStyle={{ color: totals.usable < totals.registered ? '#E8B84A' : '#00C896' }} />
+                  valueStyle={{ color: totals.usable < totals.registered ? '#C0842B' : '#B78A2E', fontWeight: 700 }} />
               </Tooltip>
             </Card>
           </Col>

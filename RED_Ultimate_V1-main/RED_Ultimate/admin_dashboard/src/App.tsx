@@ -305,9 +305,9 @@ export default function App() {
       theme={{
         algorithm: resolvedTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          colorPrimary: resolvedTheme === 'dark' ? '#00C896' : '#007A5E',
+          colorPrimary: resolvedTheme === 'dark' ? '#B78A2E' : '#9A7524',
           colorInfo: resolvedTheme === 'dark' ? '#4FC3F7' : '#1976D2',
-          colorWarning: '#E0A83C',
+          colorWarning: '#C0842B',
           colorBgBase: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA',
           borderRadius: 14,
           fontFamily: "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif",
