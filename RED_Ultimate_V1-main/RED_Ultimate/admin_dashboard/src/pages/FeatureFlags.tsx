@@ -97,7 +97,7 @@ export default function FeatureFlags() {
       title: 'الوصف',
       dataIndex: 'description',
       key: 'description',
-      render: (d: string) => d ? <Text ellipsis={{ tooltip: d }} style={{ maxWidth: 200 }}>{d}</Text> : '—',
+      render: (d: string) => d ? <Tooltip title={d}><Typography.Text>{d}</Typography.Text></Tooltip> : '—',
     },
     {
       title: 'الحالة',

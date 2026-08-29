@@ -615,7 +615,7 @@ a:hover {
   cursor: pointer;
   transition: all var(--transition-fast);
   text-decoration: none;
-  white-space:nowrap;
+  white-space: normal;
 }
 
 .btn:disabled {
@@ -1083,9 +1083,8 @@ a:hover {
 .metric-message {
   font-size: 0.8125rem;
   color: var(--yns-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .metric-bars {
@@ -1229,9 +1228,8 @@ a:hover {
   font-size: 0.875rem;
   color: var(--yns-text);
   margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .activity-text strong {
@@ -1578,7 +1576,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   line-height: 1.25;
-  white-space: nowrap;
+  white-space: normal;
   transition: opacity var(--transition-fast);
 }
 

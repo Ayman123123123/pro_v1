@@ -280,7 +280,6 @@ export default function SmsTemplates() {
     {
       title: 'النص',
       dataIndex: 'text',
-      ellipsis: true,
       render: (v: string) => (
         <Tooltip title={v}>
           <Typography.Text>{v}</Typography.Text>

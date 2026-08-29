@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Table, Tag, Space, Button, Modal, Form, Input, message, Card,
-  Select, Statistic, Row, Col, Typography, Empty, Timeline, Badge, Alert
+  Select, Statistic, Row, Col, Typography, Empty, Timeline, Badge, Alert, Tooltip
 } from 'antd';
 import {
   AlertOutlined, CheckOutlined, CloseOutlined, ReloadOutlined,
@@ -187,9 +187,7 @@ export default function Reports() {
       render: (_reason: string, r: any) => {
         const reason = r.reason || r.description;
         return (
-          <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: reason }}>
-            {reason || '—'}
-          </Text>
+          <Tooltip title={reason || ''}><Typography.Text style={{ fontSize: 12 }}>{reason || '—'}</Typography.Text></Tooltip>
         );
       },
     },

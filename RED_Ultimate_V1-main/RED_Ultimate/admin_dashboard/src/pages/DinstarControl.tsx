@@ -724,8 +724,8 @@ export default function DinstarControl() {
             {
               // سبب الإنهاء هو ما يميّز خلل الشبكة عن سلوك المستلم — بدونه
               // كل فشل يبدو واحدًا ولا يُشخَّص.
-              title: 'سبب الإنهاء', dataIndex: 'hangupCause', width: 150,
-              ellipsis: true, render: (v: string) => v || '—',
+              title: 'سبب الإنهاء', dataIndex: 'hangupCause', width: 200,
+              render: (v: string) => v || '—',
             },
             {
               title: 'التكلفة', dataIndex: 'cost', width: 110, align: 'right',
@@ -817,7 +817,7 @@ export default function DinstarControl() {
               columns={[
                 { title: 'المنفذ', dataIndex: 'port', width: 70, render: (v: number) => `SIM ${v + 1}` },
                 { title: 'المرسل', dataIndex: 'number', width: 140 },
-                { title: 'النص', dataIndex: 'text', ellipsis: true },
+                { title: 'النص', dataIndex: 'text' },
                 {
                   title: 'الوقت', dataIndex: 'timestamp', width: 150,
                   render: (v: string) => (v ? new Date(v).toLocaleString('ar') : '—'),

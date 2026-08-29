@@ -522,7 +522,7 @@ export default function App() {
                     }}>
                       {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
                     </Avatar>
-                    <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {adminUser.username}
                     </span>
                     <DownOutlined style={{ fontSize: 10, opacity: 0.6 }} />

@@ -170,12 +170,12 @@ export default function AuditLog() {
         return <Tag color={SEVERITY_COLORS[s] ?? 'default'} icon={icon}>{s ?? 'INFO'}</Tag>;
       },
     },
-    {
-      title: 'التفاصيل',
+{
+      title: 'الوصف',
       dataIndex: 'description',
       key: 'description',
       render: (d: string) => d ? (
-        <Text style={{ fontSize: 12 }} ellipsis={{ tooltip: d }}>{d}</Text>
+        <Tooltip title={d}><Typography.Text style={{ fontSize: 12 }}>{d}</Typography.Text></Tooltip>
       ) : '—',
     },
     {
