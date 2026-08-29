@@ -88,12 +88,33 @@ class MainActivity : FragmentActivity() {
         // or the Android recent-apps thumbnail.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         SettingsRuntime.initialize(application)
+        // ─── مزامنة ثيم Liquid Glass 2026 مع الإعدادات المحفوظة ──────────────
+        runCatching {
+            val s = SettingsRuntime.current
+            com.red.sovereign.ui.theme.AppThemeState.currentPreset = runCatching { com.red.sovereign.ui.theme.AppThemePreset.valueOf(s.themePreset) }.getOrElse { com.red.sovereign.ui.theme.AppThemePreset.SOVEREIGN }
+            com.red.sovereign.ui.theme.AppThemeState.themeMode = runCatching { com.red.sovereign.ui.theme.AppThemeMode.valueOf(s.themeMode) }.getOrElse { com.red.sovereign.ui.theme.AppThemeMode.SYSTEM }
+            com.red.sovereign.ui.theme.AppThemeState.highContrast = s.highContrast
+            com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled = s.liquidGlassEnabled
+            com.red.sovereign.ui.theme.AppThemeState.reduceMotion = s.reduceMotion
+            com.red.sovereign.ui.theme.AppThemeState.fontScale = s.fontScale
+            com.red.sovereign.ui.theme.AppThemeState.customPrimary = if (s.customPrimary != 0) androidx.compose.ui.graphics.Color(s.customPrimary) else null
+        }
         enableEdgeToEdge()
         setContent {
             val preferences = SettingsRuntime.current
+            // مزامنة حية كل Recomposition
+            androidx.compose.runtime.LaunchedEffect(preferences) {
+                com.red.sovereign.ui.theme.AppThemeState.highContrast = preferences.highContrast
+                com.red.sovereign.ui.theme.AppThemeState.reduceMotion = preferences.reduceMotion
+                com.red.sovereign.ui.theme.AppThemeState.fontScale = preferences.fontScale
+                com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled = preferences.liquidGlassEnabled
+                runCatching { com.red.sovereign.ui.theme.AppThemeState.currentPreset = com.red.sovereign.ui.theme.AppThemePreset.valueOf(preferences.themePreset) }
+                runCatching { com.red.sovereign.ui.theme.AppThemeState.themeMode = com.red.sovereign.ui.theme.AppThemeMode.valueOf(preferences.themeMode) }
+                if (preferences.customPrimary != 0) com.red.sovereign.ui.theme.AppThemeState.customPrimary = androidx.compose.ui.graphics.Color(preferences.customPrimary)
+            }
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, preferences.fontScale)) {
-                YounesTheme(highContrast = preferences.highContrast) {
+                YounesTheme {
                     SovereignBackground {
                         val state = authViewModel.state
                         LaunchedEffect(state) {

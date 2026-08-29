@@ -5,8 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1810805e-9b6b-456f-8c66-e30d804a0c21" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/messaging/MessageService.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/messaging/MessageService.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/shared-proto/src/main/proto/red_protocol.proto" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/shared-proto/src/main/proto/red_protocol.proto" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/controllers/AdminController.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/controllers/AdminController.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/CallRuntime.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/CallRuntime.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/GroupCallService.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/GroupCallService.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/YounesCallService.kt" beforeDir="false" afterPath="$PROJECT_DIR$/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/calls/YounesCallService.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/_red_ultimate_verify/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/_red_ultimate_verify/.gitignore" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -53,7 +56,7 @@
     "SHELLCHECK.PATH": "C:\\Users\\hpc01\\AppData\\Roaming\\Google\\AndroidStudio2026.1.3\\plugins\\Shell Script\\shellcheck.exe",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
-    "git-widget-placeholder": "integration/unify-2026-08-25",
+    "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "C:/Users/hpc01/Pictures/pro_new",

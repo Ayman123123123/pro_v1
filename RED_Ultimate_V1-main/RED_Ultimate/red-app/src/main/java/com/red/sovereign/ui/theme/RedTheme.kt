@@ -6,10 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -17,43 +21,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.R
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Google Fonts Provider — Cairo (العناوين) + Tajawal (نصوص المحادثات)
+// الخط الموحّد — IBM Plex Sans Arabic ثنائي النص (SIL OFL 1.1)
+// مضمّن في الحزمة لا مجلوب من الشبكة: 4 أوزان محلية في res/font
+// plex_arabic.xml (400/500/600/700). ينهي ارتداد Google Play Services
+// ويوحّد هوية التطبيق مع admin_dashboard (IBM Plex) ويضمن ثبات مقاسات
+// الأسطر حتى على شبكات اليمن الضعيفة.
 // ═══════════════════════════════════════════════════════════════════════════════
-private val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs
+val PlexArabicFamily = FontFamily(
+    Font(R.font.plex_arabic_regular, FontWeight.Normal),
+    Font(R.font.plex_arabic_regular, FontWeight.Light),
+    Font(R.font.plex_arabic_medium, FontWeight.Medium),
+    Font(R.font.plex_arabic_semibold, FontWeight.SemiBold),
+    Font(R.font.plex_arabic_bold, FontWeight.Bold),
+    Font(R.font.plex_arabic_bold, FontWeight.ExtraBold),
+    Font(R.font.plex_arabic_bold, FontWeight.Black),
 )
 
-private val CairoFont   = GoogleFont("Cairo")
-private val TajawalFont = GoogleFont("Tajawal")
-
-val CairoFamily = FontFamily(
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Light),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.SemiBold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Bold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.ExtraBold),
-    Font(googleFont = CairoFont, fontProvider = provider, weight = FontWeight.Black),
-)
-
-val TajawalFamily = FontFamily(
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Light),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Normal),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Medium),
-    Font(googleFont = TajawalFont, fontProvider = provider, weight = FontWeight.Bold),
-)
+// أسماء مستعارة للتوافق مع 15 موضعًا يستعمل Cairo/Tajawal مباشرة
+// الآن كلاهما يشير لنفس العائلة الموحدة — لا تناقض بصري بعد اليوم
+val CairoFamily: FontFamily = PlexArabicFamily
+val TajawalFamily: FontFamily = PlexArabicFamily
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // لوحة الألوان السيادية المحسّنة — نظام متناسق كامل
@@ -204,25 +201,28 @@ val GradientNavBar      = Brush.verticalGradient(
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// نظام الطباعة — Cairo للعناوين، Tajawal للمحادثات
+// نظام الطباعة — عائلة واحدة ثنائية النص (Plex Arabic)
+// Material 3 Type Scale كامل — 15 نمطًا تغطي كل الاستعمالات
 // ═══════════════════════════════════════════════════════════════════════════════
 private val redTypography = Typography(
-    // Cairo للعناوين الكبيرة والشاشات
-    displaySmall  = TextStyle(fontFamily = CairoFamily, fontSize = 36.sp, lineHeight = 46.sp, fontWeight = FontWeight.Black),
-    headlineLarge = TextStyle(fontFamily = CairoFamily, fontSize = 30.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold),
-    headlineMedium= TextStyle(fontFamily = CairoFamily, fontSize = 25.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
-    headlineSmall = TextStyle(fontFamily = CairoFamily, fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
-    titleLarge    = TextStyle(fontFamily = CairoFamily, fontSize = 21.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
-    titleMedium   = TextStyle(fontFamily = CairoFamily, fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall    = TextStyle(fontFamily = CairoFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-    // Tajawal لنصوص المحادثات والوصف
-    bodyLarge     = TextStyle(fontFamily = TajawalFamily, fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal),
-    bodyMedium    = TextStyle(fontFamily = TajawalFamily, fontSize = 15.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal),
-    bodySmall     = TextStyle(fontFamily = TajawalFamily, fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
-    // Cairo للتسميات
-    labelLarge    = TextStyle(fontFamily = CairoFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
-    labelMedium   = TextStyle(fontFamily = CairoFamily, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
-    labelSmall    = TextStyle(fontFamily = CairoFamily, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    // عناوين كبيرة
+    displayLarge  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 57.sp, lineHeight = 64.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.25).sp),
+    displayMedium = TextStyle(fontFamily = PlexArabicFamily, fontSize = 45.sp, lineHeight = 52.sp, fontWeight = FontWeight.ExtraBold),
+    displaySmall  = TextStyle(fontFamily = PlexArabicFamily, fontSize = 36.sp, lineHeight = 46.sp, fontWeight = FontWeight.Black),
+    headlineLarge = TextStyle(fontFamily = PlexArabicFamily, fontSize = 30.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold),
+    headlineMedium= TextStyle(fontFamily = PlexArabicFamily, fontSize = 25.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontFamily = PlexArabicFamily, fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
+    titleLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 21.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
+    titleMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+    // نصوص المحادثات والوصف
+    bodyLarge     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 17.sp, lineHeight = 27.sp, fontWeight = FontWeight.Normal),
+    bodyMedium    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 15.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal),
+    bodySmall     = TextStyle(fontFamily = PlexArabicFamily, fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
+    // تسميات وشارات
+    labelLarge    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium   = TextStyle(fontFamily = PlexArabicFamily, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
+    labelSmall    = TextStyle(fontFamily = PlexArabicFamily, fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
 )
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -299,16 +299,48 @@ private val redHighContrastColorScheme = redColorScheme.copy(
     outline           = YounesPrimaryGlow,
 )
 
-enum class AppThemePreset(val label: String, val description: String) {
-    SOVEREIGN("يونس السيادي", "أسود ملكي مع أخضر زمردي ولمسات ذهبية"),
-    TELEGRAM_DARK("تلجرام الكحلي", "أزرق تلجرام الأنيق مع كحلي داكن"),
-    WHATSAPP_DARK("واتساب الزمردي", "أخضر واتساب الكلاسيكي المريح للعين"),
-    OLED_BLACK("أوليد فائق السواد", "سواد تام 100% لتوفير الطاقة وأقصى تباين")
-}
+// ─── Light schemes — نفس الهوية، خلفية فاتحة #F7F8FA (لؤلؤي) ────────────────
+private val redLightColorScheme = lightColorScheme(
+    primary               = Color(0xFF0A7A5E),
+    onPrimary             = Color.White,
+    primaryContainer      = Color(0xFFA8F0D8),
+    onPrimaryContainer    = Color(0xFF002117),
+    secondary             = Color(0xFF2E7DA8),
+    onSecondary           = Color.White,
+    secondaryContainer    = Color(0xFFBFE6F7),
+    onSecondaryContainer  = Color(0xFF001F2A),
+    tertiary              = Color(0xFF8A6A0A),
+    onTertiary            = Color.White,
+    tertiaryContainer     = Color(0xFFFFE08B),
+    onTertiaryContainer   = Color(0xFF221B00),
+    background            = Color(0xFFF7F8FA),
+    onBackground          = Color(0xFF0F1B2D),
+    surface               = Color(0xFFFFFFFF),
+    onSurface             = Color(0xFF0F1B2D),
+    surfaceVariant        = Color(0xFFE6E8EB),
+    onSurfaceVariant      = Color(0xFF5A6B7D),
+    surfaceTint           = Color(0xFF0A7A5E),
+    surfaceContainer          = Color(0xFFF0F2F5),
+    surfaceContainerLow       = Color(0xFFF7F8FA),
+    surfaceContainerHigh      = Color(0xFFE6E8EB),
+    surfaceContainerHighest   = Color(0xFFDDE1E6),
+    outline               = Color(0xFF7A8FA3),
+    outlineVariant        = Color(0xFFD0D7DE),
+    error                 = Color(0xFFD32F2F),
+    onError               = Color.White,
+    errorContainer        = Color(0xFFFFDAD6),
+    onErrorContainer      = Color(0xFF410002),
+    inversePrimary        = YounesPrimary,
+    inverseSurface        = Color(0xFF0A0F18),
+    inverseOnSurface      = Color(0xFFF7F8FA),
+    scrim                 = Color(0x66000000),
+)
 
-object AppThemeState {
-    var currentPreset by androidx.compose.runtime.mutableStateOf(AppThemePreset.WHATSAPP_DARK)
-}
+private val redHighContrastLight = redLightColorScheme.copy(
+    onBackground = Color(0xFF0A0F18),
+    onSurface = Color(0xFF0A0F18),
+    outline = Color(0xFF0A7A5E),
+)
 
 val telegramColorScheme = redColorScheme.copy(
     primary = Color(0xFF2AABEE),
@@ -319,6 +351,15 @@ val telegramColorScheme = redColorScheme.copy(
     surface = Color(0xFF17212B),
     surfaceVariant = Color(0xFF232E3C),
     outline = Color(0xFF2B5278)
+)
+val telegramLightColorScheme = redLightColorScheme.copy(
+    primary = Color(0xFF0A7DBF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFBFE6F7),
+    secondary = Color(0xFF2AABEE),
+    background = Color(0xFFF7F8FA),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFE6E8EB),
 )
 
 val whatsAppColorScheme = redColorScheme.copy(
@@ -331,6 +372,14 @@ val whatsAppColorScheme = redColorScheme.copy(
     surfaceVariant = Color(0xFF202C33),
     outline = Color(0xFF2A3942)
 )
+val whatsAppLightColorScheme = redLightColorScheme.copy(
+    primary = Color(0xFF008069),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFA8F0D8),
+    secondary = Color(0xFF25D366),
+    background = Color(0xFFF7F8FA),
+    surface = Color(0xFFFFFFFF),
+)
 
 val oledColorScheme = redColorScheme.copy(
     primary = Color(0xFF00E676),
@@ -342,46 +391,150 @@ val oledColorScheme = redColorScheme.copy(
     surfaceVariant = Color(0xFF161616),
     outline = Color(0xFF262626)
 )
+val oledLightColorScheme = redLightColorScheme // الأوليد الفاتح = الفاتح العادي
+
+// ─── أوضاع المظهر ───────────────────────────────────────────────────────────
+enum class AppThemeMode(val label: String) {
+    LIGHT("فاتح"),
+    DARK("ليلي"),
+    SYSTEM("حسب النظام")
+}
+
+enum class AppThemePreset(val label: String, val description: String) {
+    SOVEREIGN("يونس السيادي", "أسود ملكي مع أخضر زمردي ولمسات ذهبية — الهوية الأصلية"),
+    TELEGRAM_DARK("تلجرام الكحلي", "أزرق تلجرام الأنيق مع كحلي داكن"),
+    WHATSAPP_DARK("واتساب الزمردي", "أخضر واتساب الكلاسيكي المريح للعين"),
+    OLED_BLACK("أوليد فائق السواد", "سواد تام 100% لتوفير الطاقة وأقصى تباين"),
+    DYNAMIC("ديناميكي", "ألوان مستخرجة من خلفية الهاتف — Material You (أندرويد 12+)"),
+    CUSTOM("مخصص", "اختر لونك بنفسك مع حارس تباين ذكي")
+}
+
+object AppThemeState {
+    var currentPreset by androidx.compose.runtime.mutableStateOf(AppThemePreset.SOVEREIGN)
+    var themeMode by androidx.compose.runtime.mutableStateOf(AppThemeMode.SYSTEM)
+    var highContrast by androidx.compose.runtime.mutableStateOf(false)
+    var liquidGlassEnabled by androidx.compose.runtime.mutableStateOf(true)
+    var reduceMotion by androidx.compose.runtime.mutableStateOf(false)
+    var fontScale by androidx.compose.runtime.mutableStateOf(1.0f)
+    var customPrimary by androidx.compose.runtime.mutableStateOf<Color?>(null)
+    // 6 ألوان مقترحة للمخصص تضمن ≥4.5:1
+    val customPresets = listOf(
+        YounesPrimary to "زمرد يونس",
+        YounesAccent to "ذهب إمبراطوري",
+        YounesCobalt to "أزرق ملكي",
+        Color(0xFFE53935) to "أحمر حي",
+        Color(0xFF8E24AA) to "بنفسجي ملكي",
+        Color(0xFF00ACC1) to "تركواز"
+    )
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ثيم يونس الرئيسي
+// ثيم يونس الرئيسي — يدعم فاتح/ليلي/نظام + ديناميكي + مخصص + Liquid Glass
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun YounesTheme(
     preset: AppThemePreset = AppThemeState.currentPreset,
-    highContrast: Boolean = false,
+    mode: AppThemeMode = AppThemeState.themeMode,
+    highContrast: Boolean = AppThemeState.highContrast,
+    liquidGlass: Boolean = AppThemeState.liquidGlassEnabled,
     content: @Composable () -> Unit
 ) {
-    val baseScheme = when (preset) {
-        AppThemePreset.SOVEREIGN -> redColorScheme
-        AppThemePreset.TELEGRAM_DARK -> telegramColorScheme
-        AppThemePreset.WHATSAPP_DARK -> whatsAppColorScheme
-        AppThemePreset.OLED_BLACK -> oledColorScheme
+    val context = LocalContext.current
+    val systemIsDark = isSystemInDarkTheme()
+    val isDark = when (mode) {
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+        AppThemeMode.SYSTEM -> systemIsDark
     }
-    val finalScheme = if (highContrast) baseScheme.copy(
-        onBackground = Color.White,
-        onSurface = Color.White,
-        outline = baseScheme.primary
-    ) else baseScheme
+
+    // ─── اختيار اللوحة الأساسية ──────────────────────────────────────────
+    val baseScheme = when (preset) {
+        AppThemePreset.SOVEREIGN -> if (isDark) redColorScheme else redLightColorScheme
+        AppThemePreset.TELEGRAM_DARK -> if (isDark) telegramColorScheme else telegramLightColorScheme
+        AppThemePreset.WHATSAPP_DARK -> if (isDark) whatsAppColorScheme else whatsAppLightColorScheme
+        AppThemePreset.OLED_BLACK -> if (isDark) oledColorScheme else oledLightColorScheme
+        AppThemePreset.DYNAMIC -> {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            } else {
+                if (isDark) redColorScheme else redLightColorScheme
+            }
+        }
+        AppThemePreset.CUSTOM -> {
+            val custom = AppThemeState.customPrimary
+            if (custom != null) {
+                val base = if (isDark) redColorScheme else redLightColorScheme
+                base.copy(primary = custom, primaryContainer = custom.copy(alpha = 0.18f))
+            } else {
+                if (isDark) redColorScheme else redLightColorScheme
+            }
+        }
+    }
+
+    val finalScheme = if (highContrast) {
+        if (isDark) baseScheme.copy(
+            onBackground = Color.White,
+            onSurface = Color.White,
+            onSurfaceVariant = Color(0xFFDCEEF6),
+            outline = baseScheme.primary
+        ) else baseScheme.copy(
+            onBackground = Color(0xFF0A0F18),
+            onSurface = Color(0xFF0A0F18),
+            outline = baseScheme.primary
+        )
+    } else baseScheme
+
+    // ─── مقياس الخط الديناميكي ───────────────────────────────────────────
+    val scaledTypography = rememberScaledTypography(AppThemeState.fontScale)
 
     MaterialTheme(
         colorScheme = finalScheme,
-        typography = redTypography,
+        typography = scaledTypography,
         shapes = redShapes,
         content = content
     )
 }
 
+@Composable
+private fun rememberScaledTypography(scale: Float): Typography {
+    if (scale == 1f) return redTypography
+    fun TextStyle.scaled() = copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
+    return Typography(
+        displayLarge = redTypography.displayLarge.scaled(),
+        displayMedium = redTypography.displayMedium.scaled(),
+        displaySmall = redTypography.displaySmall.scaled(),
+        headlineLarge = redTypography.headlineLarge.scaled(),
+        headlineMedium = redTypography.headlineMedium.scaled(),
+        headlineSmall = redTypography.headlineSmall.scaled(),
+        titleLarge = redTypography.titleLarge.scaled(),
+        titleMedium = redTypography.titleMedium.scaled(),
+        titleSmall = redTypography.titleSmall.scaled(),
+        bodyLarge = redTypography.bodyLarge.scaled(),
+        bodyMedium = redTypography.bodyMedium.scaled(),
+        bodySmall = redTypography.bodySmall.scaled(),
+        labelLarge = redTypography.labelLarge.scaled(),
+        labelMedium = redTypography.labelMedium.scaled(),
+        labelSmall = redTypography.labelSmall.scaled(),
+    )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// خلفية الشاشة الرئيسية — تدرج داكن عميق
+// خلفية الشاشة الرئيسية — تدرج Liquid Glass (2026)
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun SovereignBackground(content: @Composable () -> Unit) {
+    val isDark = when (AppThemeState.themeMode) {
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+        AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     val bgBrush = when (AppThemeState.currentPreset) {
-        AppThemePreset.OLED_BLACK    -> Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF0A0A0A)))
-        AppThemePreset.WHATSAPP_DARK -> Brush.verticalGradient(listOf(Color(0xFF0B141A), Color(0xFF111B21), Color(0xFF0B141A)))
-        AppThemePreset.TELEGRAM_DARK -> Brush.verticalGradient(listOf(Color(0xFF0E1621), Color(0xFF17212B), Color(0xFF0E1621)))
-        AppThemePreset.SOVEREIGN     -> GradientBackground
+        AppThemePreset.OLED_BLACK    -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF0A0A0A))) else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFE6E8EB)))
+        AppThemePreset.WHATSAPP_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0B141A), Color(0xFF111B21), Color(0xFF0B141A))) else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
+        AppThemePreset.TELEGRAM_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0E1621), Color(0xFF17212B), Color(0xFF0E1621))) else Brush.verticalGradient(listOf(Color(0xFFF0F2F5), Color(0xFFFFFFFF)))
+        AppThemePreset.DYNAMIC       -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
+        AppThemePreset.CUSTOM        -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
+        AppThemePreset.SOVEREIGN     -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFEAF0F2)))
     }
     Box(
         Modifier

@@ -1,7 +1,9 @@
 package com.red.sovereign.features.profile
 
 import android.content.Context
+import android.net.Uri
 import android.system.Os
+import androidx.core.content.FileProvider
 import java.io.File
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -11,7 +13,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.MasterKey
+import com.red.sovereign.auth.AuthorizedApiClient
+import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.core.database.RedDatabase
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 /**
  * 🔒 مدير النسخ الاحتياطي السيادي الحقيقي
@@ -192,6 +202,61 @@ class BackupManager(private val context: Context) {
             checksum = prefs.getString("last_backup_checksum", "") ?: sha256(file),
             createdAt = prefs.getLong("last_backup_time", file.lastModified())
         )
+    }
+
+    /**
+     * تصدير نسخة إلى خارج التطبيق عبر FileProvider — للنسخ إلى Drive أو مشاركة
+     * يعيد Uri صالح للمشاركة عبر Intent.
+     */
+    fun getShareUri(file: File): Uri {
+        return FileProvider.getUriForFile(context, "com.red.sovereign.fileprovider", file)
+    }
+
+    /**
+     * رفع سحابي اختياري — يرفع الملف المشفر إلى خادم MinIO عبر backend
+     * المسار: POST ${ServerEndpoint}/api/sovereign/backup/upload
+     * يتطلب Bearer صالح. يعيد رابط التحميل أو معرف النسخة.
+     * إن لم يكن الخادم يدعم المسار، يعيد failure مع رسالة واضحة.
+     */
+    suspend fun uploadToCloud(file: File, onProgress: ((Long, Long) -> Unit)? = null): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            if (!file.exists()) return@withContext Result.failure(IllegalStateException("Backup file not found"))
+            val token = TokenStore(context).accessToken ?: return@withContext Result.failure(IllegalStateException("غير مصادق — سجل الدخول أولاً"))
+            val base = ServerEndpoint.url().trimEnd('/')
+            val url = "$base/api/sovereign/backup/upload"
+            val client = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).writeTimeout(60, TimeUnit.SECONDS).build()
+            val mediaType = "application/octet-stream".toMediaType()
+            val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+                .addFormDataPart("file", file.name, okhttp3.RequestBody.create(mediaType, file))
+                .addFormDataPart("checksum", sha256(file))
+                .addFormDataPart("createdAt", file.lastModified().toString())
+                .build()
+            val req = Request.Builder().url(url).header("Authorization", "Bearer $token").post(body).build()
+            val resp = client.newCall(req).execute()
+            val respBody = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                return@withContext Result.failure(IllegalStateException("رفع سحابي فشل HTTP ${resp.code}: ${respBody.take(200)} — تأكد أن الخادم يدعم /api/sovereign/backup/upload"))
+            }
+            // نتوقع JSON { url, id } — نعيد النص كما هو للعرض
+            Result.success(respBody.ifBlank { "تم الرفع بنجاح (${file.name})" })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * استيراد من Uri خارجي (SAF) — ينسخ الملف إلى backupsDir ثم يمكن استعادته
+     */
+    suspend fun importFromUri(uri: Uri): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            val input = context.contentResolver.openInputStream(uri) ?: return@withContext Result.failure(IllegalStateException("تعذر فتح الملف"))
+            val outName = "red_backup_import_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.enc"
+            val outFile = File(backupsDir, outName)
+            input.use { ins -> outFile.outputStream().use { outs -> ins.copyTo(outs) } }
+            Result.success(outFile)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     private fun sha256(file: File): String {

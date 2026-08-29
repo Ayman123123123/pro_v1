@@ -129,10 +129,52 @@ class RedConnectionService : Service() {
             pendingGroupPayloadSends.add(PendingGroupPayloadSend(encodedGroup, type, payload))
             if (connected) drainGroupPayloadSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_TYPING) {
-            val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
+            val target = intent.getStringExtra(EXTRA_TARGET) // قد يكون null للمجموعات
             val isTyping = intent.getBooleanExtra(EXTRA_IS_TYPING, false)
-            if (connected) socket.typing(conversation, target, isTyping)
+            if (connected) {
+                if (conversation.length > 32) {
+                    // مجموعة: بث جماعي
+                    socket.typingGroup(conversation, isTyping)
+                } else {
+                    if (target.isNullOrBlank()) return START_STICKY
+                    socket.typing(conversation, target, isTyping)
+                }
+            }
+        } else if (intent?.action == ACTION_DELETE) {
+            val messageId = intent.getStringExtra(EXTRA_MESSAGE_ID) ?: return START_STICKY
+            val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
+            val forEveryone = intent.getBooleanExtra(EXTRA_FOR_EVERYONE, false)
+            scope.launch {
+                try { repository.deleteReactionsForMessage(messageId) } catch (_: Exception) {}
+                try { repository.deleteLocalMessage(messageId) } catch (_: Exception) {}
+                try { repository.deleteMessage(messageId) } catch (_: Exception) {}
+            }
+            if (forEveryone) {
+                // إرسال أمر حذف للجميع عبر الخادم — يبث للطرفين
+                if (connected) {
+                    socket.deleteMessage(messageId, conversation, true)
+                } else {
+                    socket.connect()
+                    // محاولة ثانية بعد 800ms
+                    scheduler.schedule({
+                        runCatching { socket.deleteMessage(messageId, conversation, true) }
+                    }, 800, TimeUnit.MILLISECONDS)
+                }
+                // أيضاً عبر RichMessage DELETE كاحتياط للمجموعات (SenderKey)
+                // نحدد الطرف الآخر من conversationId (للمحادثة الفردية)
+                scope.launch {
+                    val myId = tokenStore.redId ?: return@launch
+                    // حاول استنتاج target من conversationId أو من السجل قبل الحذف
+                    // للتبسيط: إن كانت محادثة فردية (<=32) نرسل Rich DELETE أيضاً
+                    if (conversation.length <= 32) {
+                        val peerId = conversation // في المحادثات الفردية conversationId = hash أو peerId — fallback
+                        val richDelete = com.red.sovereign.core.RichMessage(action = "DELETE", deleteOf = messageId)
+                        val payload = com.red.sovereign.core.RichMessage.encode(richDelete)
+                        // لا نعرف peerId بدقة هنا فلا نرسل rich إضافي — يكفي DeleteRED للفردي
+                    }
+                }
+            }
         } else if (intent?.action == ACTION_QUICK_REPLY) {
             val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
@@ -639,6 +681,34 @@ class RedConnectionService : Service() {
             Intent(context, RedConnectionService::class.java).setAction(ACTION_MARK_READ)
                 .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_SEQUENCE, sequence)
         )
+
+        /** إرسال مؤشر كتابة — فردي (target مطلوب) أو جماعي (target فارغ). */
+        fun sendTyping(context: Context, conversationId: String, targetRedId: String?, isTyping: Boolean) =
+            context.startForegroundService(
+                Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_TYPING)
+                    .putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_IS_TYPING, isTyping)
+            )
+
+        /** اختصار للمجموعات */
+        fun sendGroupTyping(context: Context, groupId: String, isTyping: Boolean) = sendTyping(context, groupId, null, isTyping)
+
+        const val ACTION_DELETE = "com.red.sovereign.DELETE_MESSAGE"
+        const val EXTRA_FOR_EVERYONE = "forEveryone"
+
+        /** حذف للجميع — يُرسل DeleteRED عبر الخادم ليصل للطرفين */
+        fun deleteForEveryone(context: Context, messageId: String, conversationId: String) =
+            context.startForegroundService(
+                Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
+                    .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, true)
+            )
+
+        /** حذف لدي فقط — محلي */
+        fun deleteForMe(context: Context, messageId: String, conversationId: String) =
+            context.startForegroundService(
+                Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
+                    .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, false)
+            )
+
         fun stop(context: Context) = context.stopService(Intent(context, RedConnectionService::class.java))
     }
 }

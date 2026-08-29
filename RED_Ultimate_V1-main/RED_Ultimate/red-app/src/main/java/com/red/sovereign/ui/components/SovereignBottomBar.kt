@@ -39,8 +39,8 @@ import com.red.sovereign.ui.MainSection
 import com.red.sovereign.ui.theme.SovereignColors
 
 /**
- * شريط التنقّل السفلي السيادي — سطح أكريليكي عائم بحواف متدرّجة،
- * يُبرز القسم النشط بتوهّج زمردي وتكبير خفيف.
+ * شريط التنقّل السفلي — Liquid Glass عائم 2026 (تليجرام/واتساب)
+ * شفاف + blur (alpha) + حد متدرّج + ظل عميق. يحترم reduceMotion.
  */
 @Composable
 fun SovereignBottomBar(
@@ -48,6 +48,8 @@ fun SovereignBottomBar(
     onSectionSelected: (MainSection) -> Unit
 ) {
     val dimens = rememberAdaptiveDimens()
+    val liquidGlass = com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
 
     Box(
         modifier = Modifier
@@ -65,7 +67,7 @@ fun SovereignBottomBar(
                 .clip(RoundedCornerShape(36.dp))
                 .border(
                     width = 1.2.dp,
-                    brush = Brush.horizontalGradient(
+                    brush = if (liquidGlass) com.red.sovereign.ui.theme.SovereignGradients.liquidGlassBorder else Brush.horizontalGradient(
                         listOf(
                             SovereignColors.GlassBorder.copy(alpha = 0.5f),
                             SovereignColors.Emerald.copy(alpha = 0.35f),
@@ -74,9 +76,9 @@ fun SovereignBottomBar(
                     ),
                     shape = RoundedCornerShape(36.dp)
                 ),
-            color = SovereignColors.ObsidianDeep.copy(alpha = 0.94f),
-            tonalElevation = 10.dp,
-            shadowElevation = 16.dp
+            color = if (liquidGlass) SovereignColors.GlassBgLiquid else SovereignColors.ObsidianDeep.copy(alpha = 0.94f),
+            tonalElevation = if (liquidGlass) 12.dp else 10.dp,
+            shadowElevation = if (liquidGlass) 20.dp else 16.dp
         ) {
             Row(
                 modifier = Modifier
@@ -94,13 +96,13 @@ fun SovereignBottomBar(
                         } else {
                             Color(0xFF94A3B8)
                         },
-                        animationSpec = spring(stiffness = Spring.StiffnessLow),
+                        animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium) else spring(stiffness = Spring.StiffnessLow),
                         label = "BottomBarColor"
                     )
 
                     val itemScale by animateFloatAsState(
                         targetValue = if (isSelected) 1.12f else 1.0f,
-                        animationSpec = spring(
+                        animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium) else spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         ),

@@ -80,13 +80,29 @@ class RedWebSocketClient(
         return socket?.send(envelope.toByteArray().toByteString()) == true
     }
 
-    fun typing(conversationId: String, targetRedId: String, active: Boolean) {
+    fun typing(conversationId: String, targetRedId: String?, active: Boolean) {
         val sender = requireNotNull(tokens.redId)
-        val envelope = RedProtos.RedRED.newBuilder().setTyping(
-            RedProtos.TypingRED.newBuilder().setConversationId(conversationId).setUserId(sender)
-                .setTargetUserId(targetRedId).setIsTyping(active)
-        ).build()
+        val builder = RedProtos.TypingRED.newBuilder().setConversationId(conversationId).setUserId(sender)
+            .setIsTyping(active)
+        // للمجموعات (conversationId > 32) target قد يكون فارغاً — البث للكل. للفرد مطلوب.
+        if (!targetRedId.isNullOrBlank() && targetRedId != sender) {
+            builder.setTargetUserId(targetRedId)
+        } else if (conversationId.length <= 32) {
+            // محادثة فردية بدون target تعني خطأ — نتجاهل
+            if (active && targetRedId.isNullOrBlank()) return
+        }
+        val envelope = RedProtos.RedRED.newBuilder().setTyping(builder.build()).build()
         socket?.send(envelope.toByteArray().toByteString())
+    }
+
+    /** اختصار للمجموعات — يبث لكل الأعضاء دون target */
+    fun typingGroup(conversationId: String, active: Boolean) = typing(conversationId, null, active)
+
+    fun deleteMessage(messageId: String, conversationId: String, forEveryone: Boolean = true): Boolean {
+        val envelope = RedProtos.RedRED.newBuilder().setDelete(
+            RedProtos.DeleteRED.newBuilder().setMessageId(messageId).setConversationId(conversationId).setForEveryone(forEveryone)
+        ).build()
+        return socket?.send(envelope.toByteArray().toByteString()) == true
     }
 
     fun disconnect() { socket?.close(1000, "client logout"); socket = null }

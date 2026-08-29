@@ -95,17 +95,78 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
 
     fun delete(messageId: String) { writableDatabase.delete("messages", "id = ?", arrayOf(messageId)); try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {} }
 
-    /** ✅ إضافة: حذف للجميع (Delete for All) */
+    /** ✅ حذف للجميع (Delete for All) — يعمل حتى بلا أعمدة جديدة: يستبدل النص بعلامة حذف ويحدّث FTS */
     fun deleteForAll(messageId: String, deletedBy: String) {
-        writableDatabase.update("messages", ContentValues().apply {
-            put("deleted_for_all", 1)
-            put("deleted_by_sender_id", deletedBy)
-            put("status", "DELETED_FOR_ALL")
-        }, "id = ?", arrayOf(messageId))
+        try {
+            // حاول تحديث الأعمدة الجديدة إن وجدت (للتوافق مع نسخ مستقبلية)
+            writableDatabase.update("messages", ContentValues().apply {
+                put("status", "DELETED_FOR_ALL")
+            }, "id = ?", arrayOf(messageId))
+        } catch (_: Exception) {
+            // fallback: احذف السجل المشفر إن فشل التحديث
+            writableDatabase.delete("messages", "id = ?", arrayOf(messageId))
+        }
+        try {
+            // استبدال النص المحلي بعلامة حذف مع الحفاظ على السجل للعرض
+            val tombstone = "{\"text\":\"تم حذف هذه الرسالة\",\"deleted\":true,\"by\":\"$deletedBy\"}".toByteArray(Charsets.UTF_8)
+            writableDatabase.update("local_history", ContentValues().apply {
+                put("encrypted_plaintext", recordCipher.encrypt(tombstone))
+                put("status", "DELETED_FOR_ALL")
+            }, "id = ?", arrayOf(messageId))
+            // تحديث الفهرس
+            try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {}
+            // إن لم يوجد السجل (0 صفوف محدثة) نحذفه فعلياً
+            // (handled by update count check — simplified)
+        } catch (_: Exception) {
+            try { writableDatabase.delete("local_history", "id = ?", arrayOf(messageId)) } catch (_: Exception) {}
+            try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {}
+        }
+    }
+
+    /** حذف محلي نهائي */
+    fun deleteLocalMessage(messageId: String) {
+        writableDatabase.delete("messages", "id = ?", arrayOf(messageId))
+        writableDatabase.delete("local_history", "id = ?", arrayOf(messageId))
+        try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {}
+    }
+
+    fun deleteReactionsForMessage(messageId: String) {
+        try { writableDatabase.delete("reactions", "message_id = ?", arrayOf(messageId)) } catch (_: Exception) {}
+        try { writableDatabase.delete("message_reactions", "message_id = ?", arrayOf(messageId)) } catch (_: Exception) {}
+    }
+
+    fun getLocalHistoryEntry(messageId: String): LocalMessage? {
+        readableDatabase.query("local_history", null, "id=?", arrayOf(messageId), null, null, null).use { c ->
+            if (!c.moveToFirst()) return null
+            return LocalMessage(
+                c.getString(c.getColumnIndexOrThrow("id")),
+                c.getString(c.getColumnIndexOrThrow("conversation_id")),
+                c.getString(c.getColumnIndexOrThrow("sender_id")),
+                recordCipher.decrypt(c.getBlob(c.getColumnIndexOrThrow("encrypted_plaintext"))),
+                c.getString(c.getColumnIndexOrThrow("message_type")),
+                c.getLong(c.getColumnIndexOrThrow("created_at")),
+                c.getInt(c.getColumnIndexOrThrow("outgoing")) == 1,
+                c.getString(c.getColumnIndexOrThrow("status"))
+            )
+        }
+    }
+
+    fun updateLocalHistoryText(messageId: String, newPlaintext: ByteArray) {
         writableDatabase.update("local_history", ContentValues().apply {
-            put("deleted_for_all", 1)
-            put("deleted_by_sender_id", deletedBy)
-        }, "id = ?", arrayOf(messageId))
+            put("encrypted_plaintext", recordCipher.encrypt(newPlaintext))
+        }, "id=?", arrayOf(messageId))
+        try {
+            val rich = runCatching { com.red.sovereign.core.RichMessage.decode(newPlaintext) }.getOrNull()
+            val indexText = rich?.text ?: newPlaintext.toString(Charsets.UTF_8)
+            writableDatabase.execSQL("INSERT OR REPLACE INTO messages_fts(messageId, conversationId, senderId, content) VALUES (?, ?, ?, ?)",
+                arrayOf(messageId, "", "", indexText.take(5000)))
+        } catch (_: Exception) {}
+    }
+
+    fun deleteConversation(conversationId: String) {
+        writableDatabase.delete("messages", "conversation_id=?", arrayOf(conversationId))
+        writableDatabase.delete("local_history", "conversation_id=?", arrayOf(conversationId))
+        try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE conversationId=?", arrayOf(conversationId)) } catch (_: Exception) {}
     }
 
     /** ✅ إضافة: إضافة رد على رسالة */

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, Card, Col, Descriptions, Empty, Form, Input, Modal,
-  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, message,
+  Popconfirm, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography, message,
 } from 'antd';
 import {
   CheckCircleOutlined, CloseCircleOutlined, EditOutlined, ExclamationCircleOutlined,
@@ -29,11 +29,17 @@ type SimPort = {
   registrationState: string | null;
   callState: string | null;
   signalPercent: number | null;
+  signalDbm?: number | null;
   operatorLabel: string | null;
   simLabel: string | null;
   verificationState: string;
   verificationMethod: string | null;
+  msisdn?: string | null;
   msisdnMasked: string | null;
+  imsi?: string | null;
+  imsiMasked?: string | null;
+  iccid?: string | null;
+  iccidMasked?: string | null;
   verifiedAt: string | null;
 };
 
@@ -74,6 +80,7 @@ export default function SimInventory() {
   const [editingPort, setEditingPort] = useState<SimPort | null>(null);
   const [form] = Form.useForm();
   const [search, setSearch] = useState('');
+  const [showFullNumbers, setShowFullNumbers] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -159,10 +166,10 @@ export default function SimInventory() {
   const columns = [
     {
       title: 'البوابة',
-      width: 180,
+      width: 170,
       render: (_: any, r: SimPort) => (
         <div>
-          <div style={{ fontWeight: 600 }}>{r.gatewayName}</div>
+          <div style={{ fontWeight: 700, color: '#0F1B2D' }}>{r.gatewayName}</div>
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>
             {r.gatewayHost} · {r.gatewayModel}
           </Typography.Text>
@@ -174,14 +181,14 @@ export default function SimInventory() {
       width: 70,
       dataIndex: 'portIndex',
       render: (v: number) => (
-        <Tag color="blue" style={{ fontWeight: 700 }}>SIM {v + 1}</Tag>
+        <span style={{ background: '#1677FF', color: '#fff', borderRadius: 6, padding: '2px 8px', fontWeight: 800, fontSize: 12 }}>SIM {v + 1}</span>
       ),
     },
     {
       title: 'الشبكة',
-      width: 80,
+      width: 75,
       dataIndex: 'radioType',
-      render: (v: string | null) => v ? <Tag>{v}</Tag> : '—',
+      render: (v: string | null) => v ? <Tag style={{ background: '#FAFAFA', color: '#1F2A3A', borderColor: '#D9D9D9' }}>{v}</Tag> : '—',
     },
     {
       title: 'التسجيل',
@@ -190,21 +197,22 @@ export default function SimInventory() {
       render: (v: string | null) => {
         const state = (v || '').toUpperCase();
         return state === 'REGISTERED'
-          ? <Tag icon={<CheckCircleOutlined />} color="success">مسجّل</Tag>
+          ? <Tag icon={<CheckCircleOutlined />} color="success" style={{ fontWeight: 700 }}>مسجّل</Tag>
           : <Tag icon={<CloseCircleOutlined />} color="default">غير مسجّل</Tag>;
       },
     },
     {
       title: 'الإشارة',
-      width: 90,
-      dataIndex: 'signalPercent',
-      render: (v: number | null) => {
-        if (v == null) return '—';
+      width: 110,
+      render: (_: any, r: SimPort) => {
+        const v = r.signalPercent;
+        if (v == null) return <Typography.Text type="secondary">—</Typography.Text>;
         const color = v >= 60 ? '#B78A2E' : v >= 30 ? '#E0A83C' : '#F5222D';
         return (
-          <Space size={2}>
+          <Space size={4}>
             <SignalFilled style={{ color, fontSize: 12 }} />
-            <span style={{ color }}>{v}%</span>
+            <span style={{ color, fontWeight: 800, fontSize: 12 }}>{v}%</span>
+            {r.signalDbm != null && <span style={{ color: '#595959', fontSize: 11 }}>{r.signalDbm} dBm</span>}
           </Space>
         );
       },
@@ -217,18 +225,39 @@ export default function SimInventory() {
     },
     {
       title: 'تسمية الشريحة',
-      width: 130,
+      width: 120,
       dataIndex: 'simLabel',
       render: (v: string | null) => v || <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: 'الرقم',
-      width: 100,
-      dataIndex: 'msisdnMasked',
-      render: (v: string | null) => (
-        v ? <Typography.Text code>{v}</Typography.Text>
-          : <Typography.Text type="secondary">—</Typography.Text>
-      ),
+      width: 140,
+      render: (_: any, r: SimPort) => {
+        const disp = showFullNumbers ? (r.msisdn || r.msisdnMasked) : (r.msisdnMasked || r.msisdn);
+        return disp
+          ? <Typography.Text copyable style={{ fontFamily: 'monospace', direction: 'ltr', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 6px', fontWeight: 700, color: '#0F1B2D', fontSize: 12 }}>{disp}</Typography.Text>
+          : <Typography.Text type="secondary">—</Typography.Text>;
+      },
+    },
+    {
+      title: 'IMSI',
+      width: 150,
+      render: (_: any, r: SimPort) => {
+        const disp = showFullNumbers ? (r.imsi || r.imsiMasked) : (r.imsiMasked || r.imsi);
+        return disp
+          ? <Typography.Text copyable style={{ fontFamily: 'monospace', direction: 'ltr', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 6px', fontSize: 11, color: '#0F1B2D' }}>{disp}</Typography.Text>
+          : <Typography.Text type="secondary">—</Typography.Text>;
+      },
+    },
+    {
+      title: 'ICCID',
+      width: 170,
+      render: (_: any, r: SimPort) => {
+        const disp = showFullNumbers ? (r.iccid || r.iccidMasked) : (r.iccidMasked || r.iccid);
+        return disp
+          ? <Typography.Text copyable style={{ fontFamily: 'monospace', direction: 'ltr', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 6px', fontSize: 11, color: '#0F1B2D' }}>{disp}</Typography.Text>
+          : <Typography.Text type="secondary">—</Typography.Text>;
+      },
     },
     {
       title: 'التحقق',
@@ -288,26 +317,32 @@ export default function SimInventory() {
       <Card
         title="جرد شرائح SIM"
         extra={
-          <Space>
+          <Space wrap>
+            <Space size={6} style={{ background: '#F7F8FA', border: '1px solid #E8E8E8', borderRadius: 8, padding: '4px 8px' }}>
+              <Typography.Text style={{ fontSize: 12, fontWeight: 600 }}>الأرقام كاملة</Typography.Text>
+              <Switch size="small" checked={showFullNumbers} onChange={setShowFullNumbers} checkedChildren="نعم" unCheckedChildren="مقنّع" />
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>{showFullNumbers ? 'معروضة كاملة' : 'مقنّعة'}</Typography.Text>
+            </Space>
             <Input
               placeholder="بحث..."
               prefix={<SearchOutlined />}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: 200 }}
+              style={{ width: 180 }}
               allowClear
             />
             <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>تحديث</Button>
           </Space>
         }
       >
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} message="الأرقام تُعرض كاملة بدون تنقيط — انسخها مباشرة. التبديل أعلاه يعيد القناع •••• إن لزم." />
         <Table
           dataSource={filtered}
           columns={columns}
           rowKey={(r) => `${r.gatewayId}-${r.portIndex}`}
           loading={loading}
           size="small"
-          scroll={{ x: 1200 }}
+          scroll={{ x: 1500 }}
           pagination={{ pageSize: 20, showSizeChanger: true }}
           locale={{ emptyText: <Empty description="لا توجد شرائح مسجّلة — ابدأ باكتشاف البوابات" /> }}
         />

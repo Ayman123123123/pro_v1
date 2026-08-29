@@ -58,6 +58,10 @@ private object Keys {
     const val AUTO_ARCHIVE_MUTED = "auto_archive_muted"
     const val GROUP_NOTIFICATIONS = "group_notifications"
     const val LOCK_TIMEOUT_SECONDS = "lock_timeout_seconds"
+    const val THEME_PRESET = "theme_preset"
+    const val THEME_MODE = "theme_mode"
+    const val LIQUID_GLASS = "liquid_glass"
+    const val CUSTOM_PRIMARY = "custom_primary"
 }
 
 /**
@@ -102,7 +106,11 @@ internal fun SharedPreferences.readSettings(): YounesSettings {
         saveMediaToGallery = getBoolean(Keys.SAVE_MEDIA_GALLERY, defaults.saveMediaToGallery),
         autoArchiveMuted = getBoolean(Keys.AUTO_ARCHIVE_MUTED, defaults.autoArchiveMuted),
         groupNotifications = getBoolean(Keys.GROUP_NOTIFICATIONS, defaults.groupNotifications),
-        lockTimeoutSeconds = getInt(Keys.LOCK_TIMEOUT_SECONDS, defaults.lockTimeoutSeconds)
+        lockTimeoutSeconds = getInt(Keys.LOCK_TIMEOUT_SECONDS, defaults.lockTimeoutSeconds),
+        themePreset = getString(Keys.THEME_PRESET, defaults.themePreset) ?: defaults.themePreset,
+        themeMode = getString(Keys.THEME_MODE, defaults.themeMode) ?: defaults.themeMode,
+        liquidGlassEnabled = getBoolean(Keys.LIQUID_GLASS, defaults.liquidGlassEnabled),
+        customPrimary = getInt(Keys.CUSTOM_PRIMARY, defaults.customPrimary)
     )
 }
 
@@ -136,6 +144,10 @@ internal fun SharedPreferences.writeSettings(value: YounesSettings) {
         .putBoolean(Keys.AUTO_ARCHIVE_MUTED, value.autoArchiveMuted)
         .putBoolean(Keys.GROUP_NOTIFICATIONS, value.groupNotifications)
         .putInt(Keys.LOCK_TIMEOUT_SECONDS, value.lockTimeoutSeconds)
+        .putString(Keys.THEME_PRESET, value.themePreset)
+        .putString(Keys.THEME_MODE, value.themeMode)
+        .putBoolean(Keys.LIQUID_GLASS, value.liquidGlassEnabled)
+        .putInt(Keys.CUSTOM_PRIMARY, value.customPrimary)
         .apply()
 }
 
@@ -171,6 +183,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setAutoArchiveMuted(value: Boolean) = update(state.copy(autoArchiveMuted = value))
     fun setGroupNotifications(value: Boolean) = update(state.copy(groupNotifications = value))
     fun setLockTimeoutSeconds(value: Int) = update(state.copy(lockTimeoutSeconds = value.coerceIn(5, 300)))
+    fun setThemePreset(value: String) = update(state.copy(themePreset = value))
+    fun setThemeMode(value: String) = update(state.copy(themeMode = value))
+    fun setLiquidGlass(value: Boolean) = update(state.copy(liquidGlassEnabled = value))
+    fun setCustomPrimary(value: Int) = update(state.copy(customPrimary = value))
 
     private fun sanitizeVisibility(value: String) = value.takeIf { it in VISIBILITY }.orEmpty().ifBlank { "CONTACTS" }
 
@@ -218,7 +234,11 @@ data class YounesSettings(
     val saveMediaToGallery: Boolean = false,
     val autoArchiveMuted: Boolean = false,
     val groupNotifications: Boolean = true,
-    val lockTimeoutSeconds: Int = 15
+    val lockTimeoutSeconds: Int = 15,
+    val themePreset: String = "SOVEREIGN",
+    val themeMode: String = "SYSTEM",
+    val liquidGlassEnabled: Boolean = true,
+    val customPrimary: Int = 0
 ) {
     val notificationEnabled: Boolean get() = messageNotifications
 }

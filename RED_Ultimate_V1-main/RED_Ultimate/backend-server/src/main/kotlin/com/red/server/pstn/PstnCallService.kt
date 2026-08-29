@@ -31,7 +31,7 @@ class PstnCallService(
     private val history: CallHistoryService,
     private val progress: PstnCallProgressTracker,
     @Qualifier("pstnRetryScheduler") private val retryScheduler: ScheduledExecutorService,
-    private val reservations: PersistentReservationService? = null
+    private val reservations: PersistentReservationService
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(PstnCallService::class.java)

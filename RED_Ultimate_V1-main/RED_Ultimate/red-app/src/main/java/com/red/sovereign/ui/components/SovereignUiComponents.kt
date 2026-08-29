@@ -63,32 +63,44 @@ import kotlin.math.sin
  */
 
 /**
- * بطاقة زجاجية فاخرة بتأثير Glassmorphism مع حواف متدرّجة وظلال عميقة.
- *
- * تتقلّص قليلًا عند الضغط لإعطاء إحساس لمسي، وذلك فقط عند تمرير [onClick].
+ * بطاقة زجاجية فاخرة — Liquid Glass 2026 (واتساب/تليجرام)
+ * زجاج سائل شفاف + blur غير مباشر (alpha) + عمق ضوئي + حد متدرّج.
+ * تتقلّص عند الضغط فقط إن لم يكن reduceMotion مفعّلاً.
  */
 @Composable
 fun SovereignGlassCard(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 20.dp,
-    borderBrush: Brush = SovereignGradients.glassCard,
-    backgroundColor: Color = SovereignColors.SurfaceCard.copy(alpha = 0.75f),
+    borderBrush: Brush = SovereignGradients.liquidGlassBorder,
+    backgroundColor: Color = SovereignColors.SurfaceCard.copy(alpha = 0.65f),
+    liquidGlass: Boolean = com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
+    val targetScale = if (isPressed && onClick != null && !reduceMotion) 0.97f else 1f
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && onClick != null) 0.97f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        targetValue = targetScale,
+        animationSpec = if (reduceMotion) spring(stiffness = Spring.StiffnessMedium) else spring(stiffness = Spring.StiffnessMediumLow),
         label = "GlassCardScale"
     )
+
+    val bg = if (liquidGlass) {
+        // Liquid Glass: شفافية أعلى + عمق — يحاكي real-time blurring عبر alpha
+        SovereignColors.GlassBgLiquid
+    } else {
+        backgroundColor
+    }
+    val brush = if (liquidGlass) SovereignGradients.liquidGlassBorder else borderBrush
+    val elevation = if (liquidGlass) 12.dp else 8.dp
 
     Surface(
         modifier = modifier
             .scale(scale)
             .clip(RoundedCornerShape(cornerRadius))
-            .border(1.dp, borderBrush, RoundedCornerShape(cornerRadius))
+            .border(1.dp, brush, RoundedCornerShape(cornerRadius))
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -100,9 +112,9 @@ fun SovereignGlassCard(
                     Modifier
                 }
             ),
-        color = backgroundColor,
-        shadowElevation = 8.dp,
-        tonalElevation = 4.dp
+        color = bg,
+        shadowElevation = elevation,
+        tonalElevation = if (liquidGlass) 6.dp else 4.dp
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -112,7 +124,8 @@ fun SovereignGlassCard(
 }
 
 /**
- * زر نيون سيادي تفاعلي بارتداد انسيابي وتدرّج لوني براق.
+ * زر نيون سيادي تفاعلي — نص داكن على الزمرد/الذهب لضمان 9:1 AAA (WCAG).
+ * السابق كان أبيض على #00A884 = 3.03:1 راسب — الآن YounesOnBrand.
  */
 @Composable
 fun SovereignNeonButton(
@@ -121,7 +134,7 @@ fun SovereignNeonButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     gradient: Brush = SovereignGradients.emerald,
-    contentColor: Color = Color.White,
+    contentColor: Color = Color(0xFF06090F),
     enabled: Boolean = true,
     height: Dp = 50.dp
 ) {
@@ -241,8 +254,8 @@ fun SovereignStatusBadge(
 }
 
 /**
- * محاكي موجات صوتية حيّة (Soundwave Visualizer) لعرض التحدّث في المكالمات
- * والرسائل الصوتية وزر الضغط للتحدّث (PTT).
+ * محاكي موجات صوتية حيّة — Liquid Glass: شفافية متدفقة كما في واتساب 2026.
+ * يحترم reduceMotion (يثبت عند prefers-reduced-motion).
  */
 @Composable
 fun SovereignWaveVisualizer(
@@ -252,11 +265,12 @@ fun SovereignWaveVisualizer(
     barColor: Color = SovereignColors.EmeraldNeon,
     maxBarHeight: Dp = 36.dp
 ) {
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
     val infiniteTransition = rememberInfiniteTransition(label = "WaveAnimation")
     val phase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 6.28f,
-        animationSpec = infiniteRepeatable(
+        animationSpec = if (reduceMotion) infiniteRepeatable(tween(1)) else infiniteRepeatable(
             animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),

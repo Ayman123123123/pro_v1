@@ -3,19 +3,24 @@ package com.red.server.websocket
 import com.google.protobuf.ByteString
 // MessageDocument lives top-level in database/SovereignMongoDocuments.kt
 import com.red.server.database.MessageDocument
+import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.database.RedisManager
 import com.red.server.messaging.DeleteService
 import com.red.server.messaging.MessageService
 import com.red.server.services.AdminUserIntelligenceService
 import com.red.server.services.NotificationService
+import com.red.server.social.UserStatusService
 import com.red.sovereign.proto.RedProtos
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.BinaryMessage
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.WebSocketSession
 import org.springframework.web.socket.handler.BinaryWebSocketHandler
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import com.red.server.auth.RedIdGenerator
@@ -28,7 +33,10 @@ class RedMasterHandler(
     private val redis: StringRedisTemplate,
     private val userIntelligence: AdminUserIntelligenceService,
     private val accessGuard: ApprovedDeviceSessionGuard,
-    private val notifications: NotificationService
+    private val notifications: NotificationService,
+    private val users: UserAccountRepository,
+    private val jdbc: JdbcTemplate,
+    private val presencePrivacy: UserStatusService
 ) : BinaryWebSocketHandler() {
     private val log = LoggerFactory.getLogger(RedMasterHandler::class.java)
     private val sessions = ConcurrentHashMap<String, ConcurrentHashMap<String, WebSocketSession>>()
@@ -49,6 +57,8 @@ class RedMasterHandler(
             session.close(CloseStatus.POLICY_VIOLATION)
             return
         }
+        // تحديث حضور لحظي عند كل إطار — يبقي red:presence:index حياً ويحدّث last_seen
+        touchPresence(session)
         // Never let a malformed frame crash the handler thread — close the socket as BAD_DATA.
         val envelope = runCatching { RedProtos.RedRED.parseFrom(frame.payload) }.getOrElse {
             session.close(CloseStatus.BAD_DATA)
@@ -56,6 +66,17 @@ class RedMasterHandler(
         }
         // 🛡️ أي فشل في معالجة المغلف (تحقق/عضوية/تسلسل) لا يقتل المقبس — نسجّل ونكمل.
         handleEnvelopeSafely(session, envelope)
+    }
+
+    /** تحديث حضور فوري و last_seen — يُستدعى عند كل إطار للحفاظ على نافذة 5د حية */
+    private fun touchPresence(session: WebSocketSession) {
+        val redId = session.attributes["userId"] as? String ?: return
+        val now = System.currentTimeMillis().toDouble()
+        runCatching { redis.opsForZSet().add("red:presence:index", redId, now) }
+        // تحديث last_seen في DB بشكل خفيف (لا ننتظر النتيجة)
+        runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
+        // أيضاً تحديث حالة ONLINE في UserStatusService للوحة والخصوصية
+        runCatching { redis.opsForSet().add("users:online", redId) }
     }
 
     /** معالجة مغلف واحد بعزل الأخطاء — مرونة بمستوى واتساب: رسالة مرفوضة
@@ -102,6 +123,32 @@ class RedMasterHandler(
     private fun receiveAck(session: WebSocketSession, incoming: RedProtos.MessageAck) {
         val recipient = userId(session)
         val deviceId = session.attributes["protocolDeviceId"] as? Int ?: error("Protocol device is missing")
+        // احترام خصوصية إيصالات القراءة — إن كان المرسل الأصلي حظر READ، نمنع التحديث
+        if (incoming.status == "READ") {
+            val storedOpt = runCatching { messages.findMessage(incoming.messageId) }.getOrNull()
+            if (storedOpt != null) {
+                val senderRedId = storedOpt.senderId
+                val privacy = runCatching { presencePrivacy.getPrivacySettings(senderRedId) }.getOrNull()
+                if (privacy != null && privacy.readReceipts == "NOBODY") {
+                    // المرسل لا يريد إيصالات قراءة — نتجاهل READ ونعتبره DELIVERED فقط
+                    val delivered = messages.acknowledge(recipient, deviceId, incoming.messageId, "DELIVERED")
+                    val ackDelivered = ack(delivered, delivered.status)
+                    sendToUser(delivered.senderId, ackDelivered)
+                    sendToUser(delivered.receiverId, ackDelivered, exceptSessionId = session.id)
+                    return
+                }
+                if (privacy != null && privacy.readReceipts == "CONTACTS") {
+                    val senderIsContact = runCatching { messages.isContact(senderRedId, recipient) }.getOrDefault(false)
+                    if (!senderIsContact && senderRedId != recipient) {
+                        val delivered = messages.acknowledge(recipient, deviceId, incoming.messageId, "DELIVERED")
+                        val ackDelivered = ack(delivered, delivered.status)
+                        sendToUser(delivered.senderId, ackDelivered)
+                        sendToUser(delivered.receiverId, ackDelivered, exceptSessionId = session.id)
+                        return
+                    }
+                }
+            }
+        }
         val stored = messages.acknowledge(recipient, deviceId, incoming.messageId, incoming.status)
         val ack = ack(stored, stored.status)
         sendToUser(stored.senderId, ack)
@@ -111,6 +158,9 @@ class RedMasterHandler(
     private fun receiveTyping(session: WebSocketSession, typing: RedProtos.TypingRED) {
         val sender = userId(session)
         require(typing.userId == sender) { "userId does not match authenticated RED ID" }
+        // احترام خصوصية typing — إن عطّل المرسل مؤشرات الكتابة لا تُبث (اختياري مستقبلاً)
+        // حالياً نحترم فقط عدم الإزعاج للمحظورين عبر requireDirectAllowed
+        // حفظ مؤقت + بث فوري + تنظيف تلقائي TTL 5s عبر RedisManager
         redisManager.setTyping(sender, typing.conversationId)
         // 📝 مؤشر الكتابة الجماعي: conversationId = معرف مجموعة (UUID > 32) — يُبث لكل الأعضاء
         if (typing.conversationId.length > 32) {
@@ -119,10 +169,14 @@ class RedMasterHandler(
             messages.groupMemberRedIds(typing.conversationId)
                 .filter { it != sender }
                 .forEach { sendToUser(it, envelope) }
+            // أيضاً نشر عبر قناة red:typing الجماعية للتكامل مع الخدمات الأخرى
+            runCatching { redis.convertAndSend("red:typing", "${typing.conversationId}:$sender:${typing.isTyping}") }
         } else {
             require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
             messages.requireDirectAllowed(sender, typing.targetUserId)
+            // فحص خصوصية target إن كان حظر typing (مستقبلاً)
             sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
+            runCatching { redis.convertAndSend("red:typing", "${typing.conversationId}:$sender:${typing.isTyping}") }
         }
     }
 
@@ -144,16 +198,45 @@ class RedMasterHandler(
         sessions.computeIfAbsent(redId) { ConcurrentHashMap() }[session.id] = session
         val protocolDeviceId = session.attributes["protocolDeviceId"] as? Int
             ?: throw IllegalStateException("Messaging requires an approved protocol device")
-        redis.opsForZSet().add("red:presence:index", redId, System.currentTimeMillis().toDouble())
+        val now = System.currentTimeMillis().toDouble()
+        redis.opsForZSet().add("red:presence:index", redId, now)
+        redis.opsForSet().add("users:online", redId)
+        // تحديث last_seen فوري في قاعدة البيانات
+        runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
+        runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ? AND last_seen IS NULL", Instant.now(), Instant.now(), redId) }
         messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
+        log.debug("Presence ONLINE for {} (sessions={})", redId, sessions[redId]?.size)
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
         frameLimiter.remove(session.id)
         val redId = session.attributes["userId"] as? String ?: return
-        sessions[redId]?.let { userSessions ->
+        val removed = sessions[redId]?.let { userSessions ->
             userSessions.remove(session.id)
-            if (userSessions.isEmpty()) sessions.remove(redId, userSessions)
+            if (userSessions.isEmpty()) {
+                sessions.remove(redId, userSessions)
+                true
+            } else false
+        } ?: false
+        // إن لم يعد له أي جلسة حية — اعتبره offline فعلياً وحذّث last_seen
+        if (removed || sessions[redId].isNullOrEmpty()) {
+            runCatching { redis.opsForZSet().remove("red:presence:index", redId) }
+            runCatching { redis.opsForSet().remove("users:online", redId) }
+            runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
+            log.debug("Presence OFFLINE for {}", redId)
+        }
+    }
+
+    /** تنظيف دوري للـ ZSet — يزيل الإدخالات التي تجاوزت نافذة 5 دقائق (حتى بلا فتح الدشبورد) */
+    @Scheduled(fixedRate = 60_000)
+    fun cleanupStalePresence() {
+        val cutoff = (System.currentTimeMillis() - 5 * 60_000L).toDouble()
+        runCatching { redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff) }
+        // مزامنة users:online مع ZSet الحية
+        runCatching {
+            val live = redis.opsForZSet().range("red:presence:index", 0, -1) ?: emptySet()
+            val online = redis.opsForSet().members("users:online") ?: emptySet()
+            (online - live).forEach { redis.opsForSet().remove("users:online", it) }
         }
     }
 

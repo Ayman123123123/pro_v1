@@ -150,6 +150,28 @@ class MessageService(
         MessageDocument::class.java
     )
 
+    fun findMessage(messageId: String): MessageDocument? = mongo.findOne(
+        Query(Criteria.where("uuid").`is`(messageId)),
+        MessageDocument::class.java
+    )
+
+    fun isContact(redIdA: String, redIdB: String): Boolean {
+        if (redIdA == redIdB) return true
+        val a = users.findByRedId(redIdA.uppercase()) ?: return false
+        val b = users.findByRedId(redIdB.uppercase()) ?: return false
+        val cnt = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?",
+            Int::class.java, a.id, b.id
+        ) ?: 0
+        if (cnt > 0) return true
+        // تحقق ثنائي الاتجاه
+        val cnt2 = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?",
+            Int::class.java, b.id, a.id
+        ) ?: 0
+        return cnt2 > 0
+    }
+
     /** Same block policy as messages — used by typing indicators and other pairwise signals. */
     fun requireDirectAllowed(senderRedId: String, receiverRedId: String) =
         enforceNotBlocked(senderRedId, receiverRedId)

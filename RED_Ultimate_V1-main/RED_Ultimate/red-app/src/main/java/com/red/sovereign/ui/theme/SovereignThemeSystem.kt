@@ -82,10 +82,17 @@ object SovereignColors {
     /** علامة المساحات على الأسطح الداكنة — 4.11:1 على SurfaceNavy. */
     val SpaceAccent = Color(0xFFBA68C8)
 
-    // ── طبقات الزجاج الضبابي (Glassmorphism) ────────────────────────────────
+    // ── طبقات الزجاج الضبابي — Liquid Glass 2026 (شفافية + blur + عمق ضوئي) ─────
+    // مصدر التصميم: واتساب/تليجرام 2026 — real-time blurring + frosted panels
     val GlassBg = Color(0x1F1E293B)
+    val GlassBgLiquid = Color(0x99151F32) // 60% شفاف للـ Liquid Glass
     val GlassBorder = Color(0x3394A3B8)
+    val GlassBorderLiquid = Color(0x4D94A3B8) // 30% للزجاج السائل
     val GlassHighlight = Color(0x22FFFFFF)
+    val GlassShadow = Color(0x40000000)
+    // ألوان الزجاج الفاتح
+    val GlassBgLight = Color(0xB3FFFFFF) // 70% أبيض شفاف
+    val GlassBorderLight = Color(0x330F1B2D)
 }
 
 object SovereignGradients {
@@ -118,6 +125,27 @@ object SovereignGradients {
         listOf(
             Color(0x2E1E293B),
             Color(0x140F172A)
+        )
+    )
+
+    // ─── Liquid Glass 2026 — تدرجات زجاجية سائلة شفافة (واتساب/تليجرام) ─────
+    val liquidGlassCard = Brush.linearGradient(
+        listOf(
+            Color(0x99151F32), // 60% Body
+            Color(0x801A263D)  // 50% depth
+        )
+    )
+    val liquidGlassLight = Brush.linearGradient(
+        listOf(
+            Color(0xB3FFFFFF),
+            Color(0x80F0F2F5)
+        )
+    )
+    val liquidGlassBorder = Brush.linearGradient(
+        listOf(
+            Color(0x4D94A3B8),
+            Color(0x3314C79A),
+            Color(0x4D94A3B8)
         )
     )
 

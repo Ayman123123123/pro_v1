@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Info
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -230,15 +232,120 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { LockedSetting("مفاتيح الهوية", "تبقى داخل Android Keystore ولا يمكن تصديرها") }
 }
 
-@Composable private fun AppearanceSettings(vm: SettingsViewModel) = SettingsList {
-    item {
-        Text("حجم الخط · ${(vm.state.fontScale * 100).toInt()}%", fontWeight = FontWeight.SemiBold)
-        Slider(value = vm.state.fontScale, onValueChange = vm::setFontScale, valueRange = .85f..1.30f, steps = 8)
+@Composable private fun AppearanceSettings(vm: SettingsViewModel) {
+    // مزامنة AppThemeState مع SettingsViewModel
+    val s = vm.state
+    androidx.compose.runtime.LaunchedEffect(s.themePreset, s.themeMode, s.liquidGlassEnabled, s.customPrimary, s.highContrast, s.reduceMotion, s.fontScale) {
+        runCatching { com.red.sovereign.ui.theme.AppThemeState.currentPreset = com.red.sovereign.ui.theme.AppThemePreset.valueOf(s.themePreset) }
+        runCatching { com.red.sovereign.ui.theme.AppThemeState.themeMode = com.red.sovereign.ui.theme.AppThemeMode.valueOf(s.themeMode) }
+        com.red.sovereign.ui.theme.AppThemeState.highContrast = s.highContrast
+        com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled = s.liquidGlassEnabled
+        com.red.sovereign.ui.theme.AppThemeState.reduceMotion = s.reduceMotion
+        com.red.sovereign.ui.theme.AppThemeState.fontScale = s.fontScale
+        com.red.sovereign.ui.theme.AppThemeState.customPrimary = if (s.customPrimary != 0) Color(s.customPrimary) else null
     }
-    item { ToggleSetting("تباين مرتفع", "حدود ونصوص أوضح", vm.state.highContrast, vm::setHighContrast) }
-    item { ToggleSetting("واجهة مدمجة", "مسافات أقل للقوائم الطويلة", vm.state.compactMode, vm::setCompactMode) }
-    item { ToggleSetting("تقليل الحركة", "إيقاف الخلفيات المتحركة والمؤثرات المستمرة", vm.state.reduceMotion, vm::setReduceMotion) }
-    item { LockedSetting("RTL والعربية", "مفعلة تلقائيًا حسب لغة النظام") }
+    SettingsList {
+        item {
+            Text("حجم الخط · ${(vm.state.fontScale * 100).toInt()}%", fontWeight = FontWeight.SemiBold)
+            Slider(value = vm.state.fontScale, onValueChange = vm::setFontScale, valueRange = .85f..1.30f, steps = 8)
+        }
+        item { ToggleSetting("تباين مرتفع", "حدود ونصوص أوضح — AAA 7:1", vm.state.highContrast, vm::setHighContrast) }
+        item { ToggleSetting("واجهة مدمجة", "مسافات أقل للقوائم الطويلة", vm.state.compactMode, vm::setCompactMode) }
+        item { ToggleSetting("تقليل الحركة", "يحترم prefers-reduced-motion — يثبت Liquid Glass", vm.state.reduceMotion, vm::setReduceMotion) }
+        item { ToggleSetting("Liquid Glass 2026", "زجاج سائل شفاف كتليجرام/واتساب — يحتاج إعادة تشغيل بصرية", vm.state.liquidGlassEnabled, vm::setLiquidGlass) }
+        item {
+            Text("نمط الإضاءة", fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                listOf("SYSTEM" to "تلقائي", "DARK" to "ليلي", "LIGHT" to "فاتح").forEach { (id, label) ->
+                    val sel = vm.state.themeMode == id
+                    AssistChip(
+                        onClick = { vm.setThemeMode(id) },
+                        label = { Text(label, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) },
+                        leadingIcon = { if (sel) Text("●") },
+                        colors = if (sel) AssistChipDefaults.assistChipColors(containerColor = YounesEmerald, labelColor = Color(0xFF06090F)) else AssistChipDefaults.assistChipColors()
+                    )
+                }
+            }
+        }
+        item {
+            Text("الثيم — Liquid Glass", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("6 خيارات: سيادي/تلجرام/واتساب/أوليد/ديناميكي (Material You)/مخصص", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            val themes = listOf(
+                "SOVEREIGN" to Triple("سيادي", Color(0xFF14C79A), Color(0xFF0A0F18)),
+                "TELEGRAM_DARK" to Triple("تلجرام", Color(0xFF2AABEE), Color(0xFF0E1621)),
+                "WHATSAPP_DARK" to Triple("واتساب", Color(0xFF00A884), Color(0xFF0B141A)),
+                "OLED_BLACK" to Triple("أوليد", Color(0xFF00E676), Color(0xFF000000)),
+                "DYNAMIC" to Triple("ديناميكي", Color(0xFF4FC3F7), Color(0xFF1A263D)),
+                "CUSTOM" to Triple("مخصص", if (vm.state.customPrimary != 0) Color(vm.state.customPrimary) else Color(0xFFE0B551), Color(0xFF131C29))
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    themes.take(3).forEach { (id, info) ->
+                        val (label, accent, bg) = info
+                        val sel = vm.state.themePreset == id
+                        Card(
+                            Modifier.weight(1f).clickable { vm.setThemePreset(id) },
+                            colors = CardDefaults.cardColors(containerColor = bg),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(28.dp).clip(CircleShape).background(accent), contentAlignment = Alignment.Center) {
+                                    if (sel) Icon(Icons.Default.Check, null, tint = Color(0xFF06090F), modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    themes.drop(3).forEach { (id, info) ->
+                        val (label, accent, bg) = info
+                        val sel = vm.state.themePreset == id
+                        Card(
+                            Modifier.weight(1f).clickable { vm.setThemePreset(id) },
+                            colors = CardDefaults.cardColors(containerColor = bg),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(28.dp).clip(CircleShape).background(accent), contentAlignment = Alignment.Center) {
+                                    if (sel) Icon(Icons.Default.Check, null, tint = Color(0xFF06090F), modifier = Modifier.size(16.dp))
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+            if (vm.state.themePreset == "CUSTOM") {
+                Spacer(Modifier.height(10.dp))
+                Text("لون مخصص — اختر واحداً يضمن ≥4.5:1:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    listOf(
+                        Color(0xFF14C79A) to "زمرد",
+                        Color(0xFFE0B551) to "ذهب",
+                        Color(0xFF4D9FE8) to "أزرق",
+                        Color(0xFFE53935) to "أحمر",
+                        Color(0xFF8E24AA) to "بنفسجي",
+                        Color(0xFF00ACC1) to "تركواز"
+                    ).forEach { (c, _) ->
+                        val sel = vm.state.customPrimary == c.value.toInt()
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).background(c)
+                                .clickable { vm.setCustomPrimary(c.value.toInt()) }
+                                .then(if (sel) Modifier.background(Color.White.copy(alpha = 0.0f)) else Modifier),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (sel) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+        item { LockedSetting("RTL والعربية", "مفعلة تلقائيًا حسب لغة النظام — Plex Arabic ثنائي النص") }
+    }
 }
 
 @Composable private fun ChatSettings(vm: SettingsViewModel) = SettingsList {

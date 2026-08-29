@@ -3,14 +3,20 @@ package com.red.server.controllers
 import com.red.server.audit.AuditService
 import com.red.server.auth.ApprovalActionRequest
 import com.red.server.auth.RedApprovalService
+import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.UserDeviceRepository
 import com.red.server.auth.toResponse
 import com.red.server.services.CoreService
+import com.red.server.services.DinstarFleetService
 import com.red.server.services.RedSecurityService
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Pageable
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -21,6 +27,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/admin")
 class AdminController(
+    private val fleet: DinstarFleetService,
     private val approvalService: RedApprovalService,
     private val coreService: CoreService,
     private val securityService: RedSecurityService,

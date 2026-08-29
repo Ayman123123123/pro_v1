@@ -1,6 +1,9 @@
 package com.red.sovereign.features.profile
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +32,7 @@ fun BackupScreen(onBack: () -> Unit = {}) {
 
     var isExporting by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     var lastBackup by remember { mutableStateOf(backupManager.getLastBackupInfo()) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -37,6 +41,23 @@ fun BackupScreen(onBack: () -> Unit = {}) {
     fun refresh() {
         lastBackup = backupManager.getLastBackupInfo()
         backups = backupManager.listBackups()
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        isImporting = true
+        resultMessage = null
+        errorMessage = null
+        scope.launch {
+            val res = backupManager.importFromUri(uri)
+            withContext(Dispatchers.Main) {
+                isImporting = false
+                res.onSuccess { file ->
+                    refresh()
+                    resultMessage = "تم استيراد الملف: ${file.name} — يمكنك الآن الاستعادة"
+                }.onFailure { e -> errorMessage = "فشل الاستيراد: ${e.message}" }
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -133,6 +154,61 @@ fun BackupScreen(onBack: () -> Unit = {}) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(if (isImporting) "جاري الاستعادة..." else "استعادة البيانات السيادية")
         }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // تصدير خارجي + رفع سحابي
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    val latest = backupManager.getLastBackupInfo() ?: backupManager.listBackups().firstOrNull()
+                    if (latest == null) { errorMessage = "لا توجد نسخة للتصدير"; return@OutlinedButton }
+                    try {
+                        val file = java.io.File(latest.absolutePath)
+                        val uri = backupManager.getShareUri(file)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/octet-stream"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "تصدير نسخة مشفرة").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (e: Exception) { errorMessage = "فشل التصدير: ${e.message}" }
+                },
+                modifier = Modifier.weight(1f)
+            ) { Text("تصدير/مشاركة", fontSize = 12.sp) }
+
+            Button(
+                onClick = {
+                    val latest = backupManager.getLastBackupInfo() ?: backupManager.listBackups().firstOrNull()
+                    if (latest == null) { errorMessage = "لا توجد نسخة للرفع"; return@Button }
+                    isUploading = true
+                    resultMessage = null
+                    errorMessage = null
+                    scope.launch {
+                        val file = java.io.File(latest.absolutePath)
+                        val res = backupManager.uploadToCloud(file)
+                        withContext(Dispatchers.Main) {
+                            isUploading = false
+                            res.onSuccess { msg -> resultMessage = "☁️ $msg" }.onFailure { e -> errorMessage = "فشل الرفع: ${e.message}" }
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                enabled = !isUploading
+            ) {
+                if (isUploading) CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                else Text("رفع سحابي", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = { importLauncher.launch("*/*") },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("استيراد من ملف خارجي") }
+
+        Text("الرفع السحابي يرسل الملف المشفر فقط إلى MinIO عبر الخادم — المفتاح يبقى في جهازك.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 6.dp))
 
         resultMessage?.let { msg ->
             Spacer(modifier = Modifier.height(16.dp))

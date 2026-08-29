@@ -229,15 +229,21 @@ const dinstarSlots = (gatewayIndex = 0) =>
     const registered = index !== 5;
     const rawByPort = [22, 19, 25, 5, 17, null, 28, 99];
     const raw = registered ? rawByPort[index] : null;
+    const fullNumber = registered ? `+96777${String(100000 + index * 11111).padStart(6,'0')}${index}`.slice(0,13) : null;
+    const fullImsi = registered ? `4210${String(index).repeat(2)}${String(1000000 + index*123456).padStart(7,'0')}${index}1` .slice(0,15) : null;
+    const fullIccid = registered ? `89967${String(100000000 + index*11111111).padStart(9,'0')}000${index}1234` .slice(0,19) : null;
     return {
       index, port: index, radioType: gatewayIndex === 1 ? 'LTE' : 'GSM',
       status: registered ? 'REGISTERED' : 'UNREGISTERED',
       callState: index === 2 ? 'ACTIVE' : index === 6 ? 'DIALING' : 'IDLE',
       ...interpretSignal(raw),
       gprs: registered ? 'ATTACHED' : 'DETACHED',
-      numberMasked: registered ? `+9677${index}****${index}${index}` : null,
-      imsiMasked: registered ? `4210${index}******${index}` : null,
-      iccidMasked: registered ? `8996701******${index}` : null,
+      number: fullNumber,
+      imsi: fullImsi,
+      iccid: fullIccid,
+      numberMasked: registered ? `••••${fullNumber.slice(-4)}` : null,
+      imsiMasked: registered ? `••••${fullImsi.slice(-4)}` : null,
+      iccidMasked: registered ? `••••${fullIccid.slice(-4)}` : null,
       operator: registered ? OPERATORS[index] : 'UNKNOWN',
     };
   });
@@ -1254,11 +1260,17 @@ on('GET', '/api/admin/dinstar/sim-inventory', () => {
         registrationState: port.status || 'UNREGISTERED',
         callState: port.callState || 'IDLE',
         signalPercent: port.signal ?? null,
+        signalDbm: port.signalDbm ?? null,
         operatorLabel: null,
         simLabel: null,
         verificationState: 'UNKNOWN',
         verificationMethod: null,
-        msisdnMasked: null,
+        msisdn: port.number || null,
+        msisdnMasked: port.numberMasked || null,
+        imsi: port.imsi || null,
+        imsiMasked: port.imsiMasked || null,
+        iccid: port.iccid || null,
+        iccidMasked: port.iccidMasked || null,
         verifiedAt: null,
       });
     }

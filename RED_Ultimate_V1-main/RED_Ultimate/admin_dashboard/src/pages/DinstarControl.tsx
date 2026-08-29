@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert, Badge, Button, Card, Col, Descriptions, Divider, Empty, Form, Input,
-  InputNumber, Modal, Progress, Row, Select, Space, Statistic, Table, Tag,
+  InputNumber, Modal, Progress, Row, Select, Space, Statistic, Switch, Table, Tag,
   Tooltip, Typography, message,
 } from 'antd';
 import {
@@ -27,7 +27,8 @@ type Port = {
   index: number; radioType?: string; status?: string; callState?: string;
   signal?: number | null; signalRaw?: number | null; signalDbm?: number | null;
   signalUsable?: boolean; signalLabel?: string; gprs?: string;
-  numberMasked?: string; imsiMasked?: string; iccidMasked?: string; operator?: string;
+  number?: string | null; numberMasked?: string; imsi?: string | null; imsiMasked?: string; iccid?: string | null; iccidMasked?: string; operator?: string;
+  boundRedId?: string; boundUsername?: string;
 };
 type Gateway = {
   id: string; name: string; model: string; host: string; scheme: string; apiPort: number;
@@ -145,6 +146,8 @@ export default function DinstarControl() {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeResult, setProbeResult] = useState<ProbeResult | null>(null);
+  // عرض الأرقام كاملة افتراضيًا حسب طلب الإدارة — لا تنقيط
+  const [showFullNumbers, setShowFullNumbers] = useState(true);
   const [form] = Form.useForm();
   const [routeForm] = Form.useForm();
 
@@ -316,14 +319,15 @@ export default function DinstarControl() {
     return entry.ports.map((p) => {
       const registered = isRegistered(p.status);
       const op = resolveOp(p.operator);
+      const dispNum = showFullNumbers ? (p.number || p.numberMasked) : (p.numberMasked || p.number);
       return {
         value: p.index,
         disabled: !registered,
-        label: `SIM ${p.index + 1} — ${p.numberMasked || 'رقم غير معروف'} · ${op.ar}`
+        label: `SIM ${p.index + 1} — ${dispNum || 'رقم غير معروف'} · ${op.ar}`
           + (registered ? '' : ' · غير مسجّلة'),
       };
     });
-  }, [smsGateway, fleetPorts]);
+  }, [smsGateway, fleetPorts, showFullNumbers]);
 
   const loadInbox = useCallback(async () => {
     try {
@@ -441,64 +445,68 @@ export default function DinstarControl() {
     // لون الحدود حسب الجاهزية — رسمي راقٍ بلا أخضر
     const borderColor = ready ? 'rgba(183,138,46,0.35)' : registered ? 'rgba(25,118,210,0.25)' : 'rgba(185,28,28,0.25)';
     const statusTag = ready ? { clr: '#B78A2E', txt: 'جاهز' } : registered ? { clr: '#1976D2', txt: 'مسجّل بلا إشارة' } : { clr: '#B91C1C', txt: 'غير مسجّل' };
+    // اختيار القيمة المعروضة: رقم كامل عند التفعيل، وإلا المُقنّع
+    const displayNumber = showFullNumbers ? (port.number || port.numberMasked) : (port.numberMasked || port.number);
+    const displayImsi = showFullNumbers ? (port.imsi || port.imsiMasked) : (port.imsiMasked || port.imsi);
+    const displayIccid = showFullNumbers ? (port.iccid || port.iccidMasked) : (port.iccidMasked || port.iccid);
     return (
       <Col xs={24} sm={12} lg={6} xl={6} key={`${gateway.id}-${port.index}`}>
         <Card
           size="small"
           hoverable
-          style={{ borderColor, borderWidth: 1.5, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 12 } }}
+          style={{ borderColor, borderWidth: 1.5, overflow: 'hidden', height: '100%', display: 'flex', flexDirection: 'column', background: '#fff' }}
+          styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 12, background: '#fff' } }}
           title={
             <Space size={6}>
-              <span style={{ fontWeight: 800, letterSpacing: 0.3 }}>SIM {port.index + 1}</span>
+              <span style={{ fontWeight: 800, letterSpacing: 0.3, color: '#0F1B2D' }}>SIM {port.index + 1}</span>
               <Typography.Text type="secondary" style={{ fontSize: 11 }}>@ {gateway.host}</Typography.Text>
             </Space>
           }
-          extra={<Tag color={statusTag.clr} style={{ color: '#fff', border: 'none', fontWeight: 600 }}>{statusTag.txt}</Tag>}
+          extra={<Tag style={{ backgroundColor: statusTag.clr, color: '#fff', borderColor: statusTag.clr, fontWeight: 700, fontSize: 11 }}>{statusTag.txt}</Tag>}
         >
           {/* ── الشريحة والمشغل ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Tag color={op.clr} style={{ color: '#fff', border: 'none', fontWeight: 600, fontSize: 12 }}>{op.ar}</Tag>
+            <span style={{ backgroundColor: op.clr, color: '#fff', borderRadius: 6, padding: '2px 10px', fontWeight: 700, fontSize: 12, lineHeight: '20px', display: 'inline-block' }}>{op.ar}</span>
             <Space size={4}>
-              <Tag style={{ fontSize: 11 }}>{port.radioType || '—'}</Tag>
+              <Tag style={{ fontSize: 11, color: '#1F2A3A', borderColor: '#D9D9D9', background: '#FAFAFA' }}>{port.radioType || '—'}</Tag>
               <Tag color={port.callState === 'Idle' ? 'default' : 'processing'} style={{ fontSize: 11 }}>{port.callState || '—'}</Tag>
             </Space>
           </div>
 
-          {/* ── الإشارة — عرض أنيق ── */}
-          <div style={{ textAlign: 'center', padding: '8px 0 6px', background: 'var(--yns-surface-light, #F0F2F5)', borderRadius: 10, marginBottom: 8 }}>
+          {/* ── الإشارة — عرض أنيق بتباين عالٍ ── */}
+          <div style={{ textAlign: 'center', padding: '10px 8px 8px', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 10, marginBottom: 10 }}>
             <SignalFilled style={{ fontSize: 28, color: label.clr }} />
             {measured ? (
-              <div style={{ padding: '4px 10px 0' }}>
-                <Progress percent={Math.max(0, Math.min(100, port.signal ?? 0))} strokeColor={label.clr} size="small" showInfo={false} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
-                  <Typography.Text strong style={{ color: label.clr, fontSize: 12 }}>{port.signalDbm} dBm</Typography.Text>
-                  <Tag color={label.clr} style={{ color: '#fff', border: 'none', fontSize: 11 }}>{label.ar}</Tag>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>خام {port.signalRaw ?? '—'}</Typography.Text>
+              <div style={{ padding: '6px 6px 0' }}>
+                <Progress percent={Math.max(0, Math.min(100, port.signal ?? 0))} strokeColor={label.clr} trailColor="#E8EAEE" size="small" showInfo={false} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 6 }}>
+                  <span style={{ color: label.clr, fontWeight: 800, fontSize: 12, background: '#fff', border: `1px solid ${label.clr}`, borderRadius: 6, padding: '1px 6px' }}>{port.signalDbm} dBm</span>
+                  <span style={{ backgroundColor: label.clr, color: '#fff', borderRadius: 6, padding: '2px 8px', fontWeight: 700, fontSize: 11, lineHeight: '18px' }}>{label.ar}</span>
+                  <span style={{ fontSize: 11, color: '#595959', background: '#fff', border: '1px solid #E8E8E8', borderRadius: 6, padding: '1px 6px' }}>خام {port.signalRaw ?? '—'}</span>
                 </div>
               </div>
             ) : (
               <Tooltip title={`القراءة الخام ${port.signalRaw ?? '—'} تعني في 3GPP TS 27.007 «غير قابلة للكشف»`}>
-                <div style={{ padding: 6 }}><Tag color="default">لا يوجد قياس إشارة</Tag></div>
+                <div style={{ padding: 8 }}><Tag style={{ background: '#FFF2E8', color: '#8C4A00', borderColor: '#FFD591' }}>لا يوجد قياس إشارة</Tag></div>
               </Tooltip>
             )}
           </div>
 
-          {/* ── كل المعلومات — شبكة 2×4 حديثة ── */}
-          <Descriptions column={1} size="small" bordered={false} style={{ flex: 1 }}>
-            <Descriptions.Item label={<span style={{ fontSize: 11, color: 'var(--yns-text-muted)' }}>الرقم</span>}>
-              <span style={{ fontWeight: 600, fontSize: 12 }}>{port.numberMasked || 'غير معروف'}</span>
+          {/* ── كل المعلومات — أرقام كاملة بخط واضح وتباين عالٍ ── */}
+          <Descriptions column={1} size="small" bordered={false} style={{ flex: 1 }} labelStyle={{ width: 52 }} contentStyle={{ textAlign: 'left' }}>
+            <Descriptions.Item label={<span style={{ fontSize: 11, color: '#595959', fontWeight: 600 }}>الرقم</span>}>
+              <span style={{ fontWeight: 800, fontSize: 13, color: '#0F1B2D', fontFamily: 'monospace', direction: 'ltr', display: 'inline-block', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 8px', letterSpacing: 0.5 }}>{displayNumber || 'غير معروف'}</span>
             </Descriptions.Item>
-            <Descriptions.Item label={<span style={{ fontSize: 11 }}>IMSI</span>}>
-              <Typography.Text copyable={!!port.imsiMasked} style={{ fontSize: 11 }}>{port.imsiMasked || '—'}</Typography.Text>
+            <Descriptions.Item label={<span style={{ fontSize: 11, color: '#595959', fontWeight: 600 }}>IMSI</span>}>
+              <Typography.Text copyable={!!displayImsi} style={{ fontSize: 12, color: '#0F1B2D', fontFamily: 'monospace', direction: 'ltr', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 6px' }}>{displayImsi || '—'}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label={<span style={{ fontSize: 11 }}>ICCID</span>}>
-              <Typography.Text copyable={!!port.iccidMasked} style={{ fontSize: 11 }}>{port.iccidMasked || '—'}</Typography.Text>
+            <Descriptions.Item label={<span style={{ fontSize: 11, color: '#595959', fontWeight: 600 }}>ICCID</span>}>
+              <Typography.Text copyable={!!displayIccid} style={{ fontSize: 12, color: '#0F1B2D', fontFamily: 'monospace', direction: 'ltr', background: '#F7F8FA', border: '1px solid #EEF0F3', borderRadius: 6, padding: '2px 6px' }}>{displayIccid || '—'}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label={<span style={{ fontSize: 11 }}>الشبكة</span>}>
-              <Space size={4} wrap>
-                <Tag style={{ fontSize: 11 }}>{port.gprs || '—'}</Tag>
-                <Tag color={ready ? '#B78A2E' : undefined} style={ready ? { color: '#fff', border: 'none' } : {}}>{ready ? 'قابل للمكالمات' : 'غير جاهز'}</Tag>
+            <Descriptions.Item label={<span style={{ fontSize: 11, color: '#595959', fontWeight: 600 }}>الشبكة</span>}>
+              <Space size={6} wrap>
+                <span style={{ fontSize: 11, color: '#1F2A3A', background: '#FAFAFA', border: '1px solid #D9D9D9', borderRadius: 6, padding: '2px 8px' }}>{port.gprs || '—'}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', backgroundColor: ready ? '#B78A2E' : '#8C8C8C', borderRadius: 6, padding: '2px 8px', display: 'inline-block' }}>{ready ? 'قابل للمكالمات' : 'غير جاهز'}</span>
               </Space>
             </Descriptions.Item>
           </Descriptions>
@@ -537,7 +545,14 @@ export default function DinstarControl() {
             UC2000-VE — جسر يونس الصوتي إلى شبكات GSM/LTE. التحكم الموثق فقط.
           </Typography.Text>
         </div>
-        <Space>
+        <Space wrap>
+          <Space size={6} style={{ background: '#F7F8FA', border: '1px solid #E8E8E8', borderRadius: 8, padding: '4px 8px' }}>
+            <Typography.Text style={{ fontSize: 12, fontWeight: 600 }}>الأرقام كاملة</Typography.Text>
+            <Switch size="small" checked={showFullNumbers} onChange={setShowFullNumbers} checkedChildren="نعم" unCheckedChildren="مقنّع" />
+            <Tooltip title={showFullNumbers ? 'تُعرض الأرقام كاملة بدون تنقيط' : 'تُعرض الأرقام مقنّعة ••••'}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>{showFullNumbers ? 'معروضة كاملة' : 'مقنّعة'}</Typography.Text>
+            </Tooltip>
+          </Space>
           <Button type="primary" icon={<PhoneOutlined />} onClick={() => setDialerOpen(true)}>اتصال مباشر</Button>
           <Button icon={<RadarChartOutlined />} onClick={() => { setRouteResult(null); setRouteOpen(true); }}>
             اختبار التوجيه

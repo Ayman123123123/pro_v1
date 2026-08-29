@@ -57,37 +57,70 @@ class ContactService(
         requesterId
     )
 
-    /** Presence is limited to established contacts and stale websocket entries are offline. */
+    /** Presence is limited to established contacts and respects online_status privacy. */
     fun presence(ownerId: UUID, requestedIds: List<String>): Map<String, Boolean> {
         require(requestedIds.size <= 100) { "At most 100 contact IDs may be checked at once" }
         val requested = requestedIds.map { it.uppercase() }.toSet()
         if (requested.isEmpty()) return emptyMap()
+        val requesterRedId = users.findById(ownerId).orElse(null)?.redId ?: return emptyMap()
         val allowed = contacts(ownerId).asSequence().map(PublicRedProfile::redId).filter(requested::contains).toList()
         val cutoff = (System.currentTimeMillis() - PRESENCE_WINDOW_MS).toDouble()
         return allowed.associateWith { redId ->
-            (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
+            val isOnlineRaw = (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
+            if (!isOnlineRaw) return@associateWith false
+            val privacy = runCatching { presence.getPrivacySettings(redId) }.getOrNull()
+            when (privacy?.onlineStatus ?: "EVERYONE") {
+                "NOBODY" -> redId == requesterRedId
+                "CONTACTS", "CONTACTS_EXCEPT", "ONLY_SHARE_WITH" -> redId == requesterRedId || areContacts(redId, requesterRedId)
+                else -> true
+            }
         }
     }
 
     /**
      * Presence مفصّل: يعود بـ { redId -> {online, lastSeen} }.
-     * lastSeen يُؤخذ من UserAccount.last_seen (يُحدّث عند تسجيل الدخول والنشاط).
-     * يُستخدم لعرض "آخر ظهور" في الواجهة — مع احترام إخفاء آخر ظهور (لا يُكشف إن اختفى).
+     * يحترم إعدادات الخصوصية (user_privacy_settings.last_seen / online_status) —
+     * NOBODY / CONTACTS تُخفى إن لم يكن الطالب مخوّلاً.
      */
     fun presenceDetailed(ownerId: UUID, requestedIds: List<String>): Map<String, PresenceInfo> {
         require(requestedIds.size <= 100) { "At most 100 contact IDs may be checked at once" }
         val requested = requestedIds.map { it.uppercase() }.toSet()
         if (requested.isEmpty()) return emptyMap()
+        val requesterRedId = users.findById(ownerId).orElse(null)?.redId ?: return emptyMap()
         val allowed = contacts(ownerId).asSequence().map(PublicRedProfile::redId).filter(requested::contains).toList()
         val cutoff = (System.currentTimeMillis() - PRESENCE_WINDOW_MS).toDouble()
-        // جلب lastSeen من قاعدة البيانات لكل جهة الاتصال المسموح بها
-        val lastSeenMap = allowed.associateWith { redId ->
-            users.findByRedId(redId)?.lastSeen
-        }
+        val lastSeenMap = allowed.associateWith { redId -> users.findByRedId(redId)?.lastSeen }
         return allowed.associateWith { redId ->
-            val online = (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
-            PresenceInfo(online, if (online) System.currentTimeMillis() else lastSeenMap[redId]?.toEpochMilli())
+            val isOnlineRaw = (redis.opsForZSet().score("red:presence:index", redId) ?: Double.NEGATIVE_INFINITY) >= cutoff
+            // احترام خصوصية online_status و last_seen للهدف
+            val privacy = runCatching { presence.getPrivacySettings(redId) }.getOrNull()
+            val canSeeOnline = when (privacy?.onlineStatus ?: "EVERYONE") {
+                "NOBODY" -> redId == requesterRedId
+                "CONTACTS" -> redId == requesterRedId || areContacts(redId, requesterRedId)
+                "CONTACTS_EXCEPT", "ONLY_SHARE_WITH" -> redId == requesterRedId || areContacts(redId, requesterRedId) // مبسّط
+                else -> true
+            }
+            val canSeeLastSeen = when (privacy?.lastSeen ?: "EVERYONE") {
+                "NOBODY" -> redId == requesterRedId
+                "CONTACTS" -> redId == requesterRedId || areContacts(redId, requesterRedId)
+                "CONTACTS_EXCEPT", "ONLY_SHARE_WITH" -> redId == requesterRedId || areContacts(redId, requesterRedId)
+                else -> true
+            }
+            val online = isOnlineRaw && canSeeOnline
+            val lastSeenEpoch = if (!canSeeLastSeen) null else if (online) System.currentTimeMillis() else lastSeenMap[redId]?.toEpochMilli()
+            // إن كان مخفياً تماماً و offline، نعيد null لآخر ظهور
+            PresenceInfo(online, lastSeenEpoch)
         }
+    }
+
+    private fun areContacts(aRedId: String, bRedId: String): Boolean {
+        if (aRedId == bRedId) return true
+        val a = users.findByRedId(aRedId.uppercase()) ?: return false
+        val b = users.findByRedId(bRedId.uppercase()) ?: return false
+        val cnt = jdbc.queryForObject("SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?", Int::class.java, a.id, b.id) ?: 0
+        if (cnt > 0) return true
+        val cnt2 = jdbc.queryForObject("SELECT COUNT(*) FROM red_contacts WHERE owner_id=? AND contact_id=?", Int::class.java, b.id, a.id) ?: 0
+        return cnt2 > 0
     }
 
     @Transactional

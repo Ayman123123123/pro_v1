@@ -48,7 +48,7 @@ class DinstarLoadBalancer(
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate,
     private val redis: RedisTemplate<String, String>,
-    private val reservations: PersistentReservationService? = null
+    private val reservations: PersistentReservationService
 ) {
     companion object {
         private val log = LoggerFactory.getLogger(DinstarLoadBalancer::class.java)

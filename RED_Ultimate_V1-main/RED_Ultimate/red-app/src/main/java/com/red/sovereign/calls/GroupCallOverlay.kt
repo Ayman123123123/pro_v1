@@ -35,7 +35,9 @@ import kotlinx.coroutines.delay
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
+import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.ui.theme.YounesPrimary
 
 /**
  * 👥 مكالمات المجموعات — واتساب النقي
@@ -72,7 +74,11 @@ fun GroupCallOverlay() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF0B1220), Color(0xFF02070E))))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF0A0F18), Color(0xFF131C29), Color(0xFF0A0F18))
+                    )
+                )
         ) {
             when (state) {
                 is GroupCallUiState.IncomingGroup -> WhatsAppIncomingPanel(state)
@@ -96,9 +102,10 @@ private fun MinimizedGroupCallBar(state: GroupCallUiState.Active) {
     ) {
         Surface(
             shape = RoundedCornerShape(16.dp),
-            color = Color(0xFF0F172A).copy(alpha = 0.96f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, YounesEmerald.copy(0.5f)),
-            shadowElevation = 8.dp,
+            color = SovereignColors.GlassBgLiquid,
+            border = androidx.compose.foundation.BorderStroke(1.dp, YounesPrimary.copy(0.35f)),
+            shadowElevation = 16.dp,
+            tonalElevation = 8.dp,
             modifier = Modifier.width(180.dp).clickable { GroupCallRuntime.isMinimized = false }
         ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -214,6 +221,8 @@ private fun WhatsAppActivePanel(state: GroupCallUiState.Active) {
 private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
     val groupName = GroupCallRuntime.activeGroupName.ifBlank { "مجموعة يونس" }
     val joinedCount = state.members.count { it.status == GroupCallMemberStatus.JOINED } + 1
+    // Liquid Glass: مؤشر جودة حي — يقرأ lastStats مباشرة بلا Flow
+    val quality = CallQualityManager.lastStats
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -229,6 +238,16 @@ private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
                         color = Color.White.copy(0.7f), fontSize = 12.sp
                     )
                     WhatsAppElapsedTimer(state.startedAt)
+                    // جودة الشبكة Liquid Glass
+                    Surface(color = when (quality.quality) {
+                        NetworkQuality.EXCELLENT -> Color(0xFF14C79A)
+                        NetworkQuality.GOOD -> Color(0xFF4D9FE8)
+                        NetworkQuality.FAIR -> Color(0xFFE0B551)
+                        NetworkQuality.POOR -> Color(0xFFF25C5C)
+                        else -> Color(0xFF9FB0C2)
+                    }.copy(alpha = 0.18f), shape = RoundedCornerShape(8.dp)) {
+                        Text(" ${quality.bitrateKbps}kbps ", color = Color.White, fontSize = 9.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                    }
                 }
             }
         }
@@ -461,8 +480,8 @@ private fun WhatsAppControlIsland(
 
         // الجزيرة الرئيسية — pill عائم ضبابي
         Box(
-            Modifier.clip(RoundedCornerShape(32.dp)).background(Color(0xFF1A2332).copy(alpha = 0.92f))
-                .border(1.dp, Color.White.copy(0.08f), RoundedCornerShape(32.dp))
+            Modifier.clip(RoundedCornerShape(32.dp)).background(SovereignColors.GlassBgLiquid)
+                .border(1.dp, Color.White.copy(0.10f), RoundedCornerShape(32.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             Row(
