@@ -59,6 +59,7 @@ class WebRtcSipClient(
     private var localSdp: String? = null
     private var remoteSdp: String? = null
     private var inviteTarget: String? = null
+    private var inviteHeaders: Map<String, String> = emptyMap()
     private var pendingNonce: String? = null
     private var pendingRealm: String? = null
     /** تحدّي RFC 3261 الحالي — عند توفره تُبنى الترويسة بـ qop=auth (يتطلبه Asterisk). */
@@ -171,7 +172,7 @@ class WebRtcSipClient(
         ws = client.newWebSocket(request, listener)
     }
 
-    fun invite(targetNumber: String) {
+    fun invite(targetNumber: String, customHeaders: Map<String, String> = emptyMap()) {
         // Generate SDP offer via PeerConnection
         val constraints = org.webrtc.MediaConstraints().apply {
             mandatory.add(org.webrtc.MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -182,7 +183,7 @@ class WebRtcSipClient(
                 localSdp = sdp.description
                 peerConnection.setLocalDescription(object : org.webrtc.SdpObserver {
                     override fun onSetSuccess() {
-                        sendInvite(targetNumber)
+                        sendInvite(targetNumber, customHeaders)
                     }
                     override fun onCreateSuccess(sdp: SessionDescription?) = Unit
                     override fun onSetFailure(error: String) {
@@ -322,7 +323,7 @@ class WebRtcSipClient(
         ws?.send(msg)
     }
 
-    private fun sendInvite(targetNumber: String) {
+    private fun sendInvite(targetNumber: String, customHeaders: Map<String, String>) {
         inviteTarget = targetNumber
         branch = generateBranch()
         cseq++
@@ -711,3 +712,4 @@ class WebRtcSipClient(
         return bytes.joinToString("") { "%02x".format(it) }
     }
 }
+

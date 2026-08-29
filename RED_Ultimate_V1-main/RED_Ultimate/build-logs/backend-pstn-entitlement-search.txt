@@ -1,0 +1,30 @@
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:108:val pstnEnabled: Boolean,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:116:val pstnEnabled: Boolean,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:125:val pstnEnabled: Boolean,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:139:@RequestParam(required = false) pstnEnabled: Boolean?
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:157:pstnEnabled = user.pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:164:pstnEnabled?.let { item.pstnEnabled == it } ?: true
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:188:pstnEnabled = user.pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:209:user.pstnEnabled = request.pstnEnabled
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:220:pstnEnabled = user.pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:235:user.pstnEnabled = !user.pstnEnabled
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\api\admin\RedMasterController.kt:245:pstnEnabled = user.pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\AuthController.kt:169:@GetMapping("/me")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\AuthDtos.kt:85:val pstnEnabled: Boolean,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\AuthDtos.kt:130:pstnEnabled = pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\PstnAuthorizationController.kt:22:user.pstnEnabled = request.enabled
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\PstnAuthorizationController.kt:27:mapOf("redId" to user.redId, "enabled" to user.pstnEnabled, "dailyLimit" to user.pstnDailyLimit))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\model\UserAccount.kt:56:@Column(name = "pstn_enabled", nullable = false)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\model\UserAccount.kt:57:var pstnEnabled: Boolean = false,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\auth\repository\UserAccountRepository.kt:22:fun findAllByPstnEnabledTrueAndStatus(status: AccountStatus): List<UserAccount>
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\config\SecurityConfig.kt:114:// SMS send/incoming accessible to any authenticated user (server checks pstnEnabled)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\controllers\DinstarSmsController.kt:51:if (!user.pstnEnabled) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\controllers\DinstarSmsController.kt:103:if (!user.pstnEnabled) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\DinstarEventListener.kt:221:.filter { it.pstnEnabled }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnBridgeController.kt:69:if (!user.pstnEnabled || user.pstnDailyLimit <= 0) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnBridgeController.kt:151:if (user.status != AccountStatus.APPROVED || !user.pstnEnabled) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnCallController.kt:29:if (!user.pstnEnabled || user.pstnDailyLimit <= 0) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnCallService.kt:46:require(user.pstnEnabled && user.pstnDailyLimit > 0) { "PSTN access is not enabled for this account" }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnCallService.kt:130:"pstnEnabled" to user.pstnEnabled,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\pstn\PstnCallService.kt:185:if (!user.pstnEnabled || user.status != AccountStatus.APPROVED) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\backend-server\src\main\kotlin\com\red\server\sms\SmsService.kt:66:require(user.pstnEnabled && user.pstnDailyLimit > 0) { "SMS is not enabled for your account" }

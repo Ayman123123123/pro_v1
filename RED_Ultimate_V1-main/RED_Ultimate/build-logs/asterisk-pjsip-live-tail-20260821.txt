@@ -1,0 +1,1800 @@
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_19#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja6a211bf-1bf5-4dd9-b8a4-9cd64a7a21c9
+From: <sip:1000000@172.22.0.7>;tag=3d98ed47-8fa6-4a0b-89bd-c689e8f1ac3d
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 3a1ce08f-a451-46e0-b797-8b00dc87f736
+CSeq: 43689 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPja6a211bf-1bf5-4dd9-b8a4-9cd64a7a21c9;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=3d98ed47-8fa6-4a0b-89bd-c689e8f1ac3d
+To: <sip:192.168.11.2>;tag=f4b343b44da994a7aedbc1bd2791a852
+Call-ID: 3a1ce08f-a451-46e0-b797-8b00dc87f736
+CSeq: 43689 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Challenge
+actionid: 2112484962_15#
+authtype: MD5
+
+<--- Examining AMI action: -->
+action: Login
+actionid: 2112484962_16#
+key: 973e7ee69d1a85c407dd96d3ab86b18a
+authtype: MD5
+username: red_admin
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 935
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:34:51.415+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/52074
+UsingPassword: 0
+SessionTV: 2026-08-21T08:34:51.415+0000
+
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 935
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:34:51.415+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/52074
+UsingPassword: 0
+SessionTV: 2026-08-21T08:34:51.415+0000
+
+
+<--- Examining AMI action: -->
+action: CoreSettings
+actionid: 2112484962_17#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjc88b0a23-c8f0-4902-8e78-4ebb60f9d43d
+From: <sip:1000000@172.22.0.7>;tag=07e0c65b-f4be-4bae-a81c-915f8fc2e84e
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 9d9f82c3-ff3d-4d53-b9d8-885784c75f59
+CSeq: 43504 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjc88b0a23-c8f0-4902-8e78-4ebb60f9d43d;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=07e0c65b-f4be-4bae-a81c-915f8fc2e84e
+To: <sip:192.168.11.2>;tag=2554a855cbdeabae69e1566250a4dcc8
+Call-ID: 9d9f82c3-ff3d-4d53-b9d8-885784c75f59
+CSeq: 43504 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj9ffb4ff2-b0e7-412f-9654-ef9719121c20
+From: <sip:1@172.22.0.7>;tag=5be21b6c-de7a-4197-9b2a-8cacd83db3f7
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: de6e1d3f-97fa-433c-853f-63ab7b0508c3
+CSeq: 44841 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj9ffb4ff2-b0e7-412f-9654-ef9719121c20;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=5be21b6c-de7a-4197-9b2a-8cacd83db3f7
+To: <sip:1@192.168.11.2>;tag=ccfa2e99965c8dd6f0c4c95f15a1365f
+Call-ID: de6e1d3f-97fa-433c-853f-63ab7b0508c3
+CSeq: 44841 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj33d69a04-57d2-4f20-bc59-2cfd4f70fc4b
+From: <sip:2@172.22.0.7>;tag=874080bb-a34d-451a-969f-bca30bce62d2
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: e011d392-a882-41ed-8ae4-b575a998789d
+CSeq: 49346 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj876461d1-d362-487b-8cd9-04600e8e9b55
+From: <sip:3@172.22.0.7>;tag=d734bfe9-d93a-48c9-ac91-1943d8fc8e2d
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: 09196c55-60ac-42f8-bcf4-f732a1b1dbd8
+CSeq: 26642 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjd5f59386-d341-4fa8-bfde-6b31cf9b9f63
+From: <sip:4@172.22.0.7>;tag=c41fed88-6a37-45b3-af24-60dcbe841777
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: bf840e92-ed85-4c0d-bf94-518d1da3d179
+CSeq: 43768 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj8403d3eb-95c6-4586-8070-4927ec2f8954
+From: <sip:5@172.22.0.7>;tag=980159ce-9582-46dd-8224-cea84413195c
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: 4163eac4-a069-42c6-9ee1-aa6de9971952
+CSeq: 12251 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjc45e5cb7-572c-44a4-9d5f-18485c1310cf
+From: <sip:6@172.22.0.7>;tag=4cc116c4-faf4-4b39-ac67-924444d14d5c
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 3bedbe76-3d3d-4faa-bd60-ff2b28e690ff
+CSeq: 51162 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj89334652-afb5-451c-a881-389139556544
+From: <sip:7@172.22.0.7>;tag=2598fbaf-dd16-42a5-a98c-fa8806585669
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: 8bdd2ff9-7011-46dc-be05-3b1cff796897
+CSeq: 15196 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj33d69a04-57d2-4f20-bc59-2cfd4f70fc4b;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=874080bb-a34d-451a-969f-bca30bce62d2
+To: <sip:2@192.168.11.2>;tag=a76968bd42e57c69ac6ebf5b9a0eb2a5
+Call-ID: e011d392-a882-41ed-8ae4-b575a998789d
+CSeq: 49346 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPj876461d1-d362-487b-8cd9-04600e8e9b55;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=d734bfe9-d93a-48c9-ac91-1943d8fc8e2d
+To: <sip:3@192.168.11.2>;tag=44cadb9a9291c5419d6283d9baf53680
+Call-ID: 09196c55-60ac-42f8-bcf4-f732a1b1dbd8
+CSeq: 26642 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPj89334652-afb5-451c-a881-389139556544;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=2598fbaf-dd16-42a5-a98c-fa8806585669
+To: <sip:7@192.168.11.2>;tag=cf90df92cb5a8ca74c6c25d55a8dddd8
+Call-ID: 8bdd2ff9-7011-46dc-be05-3b1cff796897
+CSeq: 15196 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPjc45e5cb7-572c-44a4-9d5f-18485c1310cf;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=4cc116c4-faf4-4b39-ac67-924444d14d5c
+To: <sip:6@192.168.11.2>;tag=d05060e92e999a6887b42ed730ee1755
+Call-ID: 3bedbe76-3d3d-4faa-bd60-ff2b28e690ff
+CSeq: 51162 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPj8403d3eb-95c6-4586-8070-4927ec2f8954;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=980159ce-9582-46dd-8224-cea84413195c
+To: <sip:5@192.168.11.2>;tag=13458caff9ca18ec2b30909f0249e961
+Call-ID: 4163eac4-a069-42c6-9ee1-aa6de9971952
+CSeq: 12251 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPjd5f59386-d341-4fa8-bfde-6b31cf9b9f63;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=c41fed88-6a37-45b3-af24-60dcbe841777
+To: <sip:4@192.168.11.2>;tag=bcfab9ec1f6b9e21eb15197a81dd94a2
+Call-ID: bf840e92-ed85-4c0d-bf94-518d1da3d179
+CSeq: 43768 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj8fa219dd-8fb4-4c44-8e96-4248ecc802b9
+From: <sip:0@172.22.0.7>;tag=710b905e-aa5f-4a47-a7ad-148bd45f7c94
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: 3b1a0140-6094-4844-ac1d-9781147f7c21
+CSeq: 13369 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPj8fa219dd-8fb4-4c44-8e96-4248ecc802b9;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=710b905e-aa5f-4a47-a7ad-148bd45f7c94
+To: <sip:0@192.168.11.2>;tag=615bc8bd6181f7901b5a8b51878b37c8
+Call-ID: 3b1a0140-6094-4844-ac1d-9781147f7c21
+CSeq: 13369 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_20#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja9b52016-4365-41f3-b191-151ca03feac1
+From: <sip:1000000@172.22.0.7>;tag=735d419e-c477-4ed3-a6a3-5d19f0eecc87
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 6da424f3-c047-4ac8-9a69-26290b20d4b3
+CSeq: 27730 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPja9b52016-4365-41f3-b191-151ca03feac1;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=735d419e-c477-4ed3-a6a3-5d19f0eecc87
+To: <sip:192.168.11.2>;tag=ce70f40161eec0ea1dcf7eac22960820
+Call-ID: 6da424f3-c047-4ac8-9a69-26290b20d4b3
+CSeq: 27730 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (410 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj5bb9a296-037c-4489-b17f-a83bdd60fb8e
+From: <sip:1000000@172.22.0.7>;tag=0d19e97b-dfcd-49cc-acfc-585d36c686d5
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: a9109761-4677-49b8-8a98-8136719ad30d
+CSeq: 6535 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (501 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj5bb9a296-037c-4489-b17f-a83bdd60fb8e;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=0d19e97b-dfcd-49cc-acfc-585d36c686d5
+To: <sip:192.168.11.2>;tag=9d68071f82f0ea7eeceaf88c47d397f6
+Call-ID: a9109761-4677-49b8-8a98-8136719ad30d
+CSeq: 6535 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj513fd970-09e4-4549-b62b-772db0e24685
+From: <sip:1@172.22.0.7>;tag=b710fe62-ec8e-4833-a22c-f97dc2183869
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: 11f548b5-3a10-4f20-ac38-7a13fdd3f9f6
+CSeq: 24709 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj513fd970-09e4-4549-b62b-772db0e24685;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=b710fe62-ec8e-4833-a22c-f97dc2183869
+To: <sip:1@192.168.11.2>;tag=528df27bca877a8e997e5c8fc49af293
+Call-ID: 11f548b5-3a10-4f20-ac38-7a13fdd3f9f6
+CSeq: 24709 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj6f723e1b-ee5d-4db1-a877-d141fbc473e0
+From: <sip:2@172.22.0.7>;tag=abaed238-e014-4fc3-8669-1e27cb621501
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: 972688c9-75e9-4b3e-b9f1-81bba2de89eb
+CSeq: 56947 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj391c9597-de99-4fac-9ada-f4f9aa4c4880
+From: <sip:3@172.22.0.7>;tag=d5526867-6892-4d12-9905-de5edb98081a
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: eb99c1c3-9ed8-4f5e-9d97-5800c3f04b44
+CSeq: 31905 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj2553b2ab-2367-4a14-842c-f90f95c1eeec
+From: <sip:4@172.22.0.7>;tag=2f64bbfb-fca3-4777-8cc1-f3d0f4be2978
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: ca53d870-1886-4a57-9a91-7945a83b5393
+CSeq: 19115 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj323a8b39-635b-4016-8e67-428dc3e25674
+From: <sip:5@172.22.0.7>;tag=dbad0e97-c5d3-41c9-ad03-3156aba23ed9
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: 8df3e734-782d-4c98-970e-9935a958c3bb
+CSeq: 26419 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (414 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj1ef4d70b-6b3b-4e44-a82e-67f2cff5a096
+From: <sip:6@172.22.0.7>;tag=8c87a619-f613-49dd-b0db-06f1289923e5
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 591299bb-0548-4243-86e4-bac1cd534419
+CSeq: 73 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjfc2e41aa-6203-4071-acd9-03d5cf6ee853
+From: <sip:7@172.22.0.7>;tag=38403154-5f61-4157-8967-55c4fba1bab5
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: bd6d757f-5c82-41a9-b1c1-49e9a76a2529
+CSeq: 3550 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj6f723e1b-ee5d-4db1-a877-d141fbc473e0;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=abaed238-e014-4fc3-8669-1e27cb621501
+To: <sip:2@192.168.11.2>;tag=bc1916ed5d09947f245453bc1dfe0e79
+Call-ID: 972688c9-75e9-4b3e-b9f1-81bba2de89eb
+CSeq: 56947 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPj391c9597-de99-4fac-9ada-f4f9aa4c4880;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=d5526867-6892-4d12-9905-de5edb98081a
+To: <sip:3@192.168.11.2>;tag=3427f61bbfbaea448e963e9eda1e6e9f
+Call-ID: eb99c1c3-9ed8-4f5e-9d97-5800c3f04b44
+CSeq: 31905 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPj2553b2ab-2367-4a14-842c-f90f95c1eeec;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=2f64bbfb-fca3-4777-8cc1-f3d0f4be2978
+To: <sip:4@192.168.11.2>;tag=ca1f295fa75c5766d5be299a99f3aafc
+Call-ID: ca53d870-1886-4a57-9a91-7945a83b5393
+CSeq: 19115 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPj323a8b39-635b-4016-8e67-428dc3e25674;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=dbad0e97-c5d3-41c9-ad03-3156aba23ed9
+To: <sip:5@192.168.11.2>;tag=cae250226e874c7caf5308178884dd66
+Call-ID: 8df3e734-782d-4c98-970e-9935a958c3bb
+CSeq: 26419 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (497 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPj1ef4d70b-6b3b-4e44-a82e-67f2cff5a096;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=8c87a619-f613-49dd-b0db-06f1289923e5
+To: <sip:6@192.168.11.2>;tag=ee301d183db531090b6ab2bdd8800682
+Call-ID: 591299bb-0548-4243-86e4-bac1cd534419
+CSeq: 73 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPjfc2e41aa-6203-4071-acd9-03d5cf6ee853;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=38403154-5f61-4157-8967-55c4fba1bab5
+To: <sip:7@192.168.11.2>;tag=0378c441e265695a1ee11be81a74b232
+Call-ID: bd6d757f-5c82-41a9-b1c1-49e9a76a2529
+CSeq: 3550 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjb20d68e8-6b21-4ceb-a220-8a28d3605324
+From: <sip:0@172.22.0.7>;tag=dc3d834b-bef5-4d58-9d6f-5ff306518e82
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: 1baea4be-5ebe-4e5b-9cac-2d8c60ea0c6a
+CSeq: 16033 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPjb20d68e8-6b21-4ceb-a220-8a28d3605324;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=dc3d834b-bef5-4d58-9d6f-5ff306518e82
+To: <sip:0@192.168.11.2>;tag=127ed7065879894102c4d9f6f6fad81d
+Call-ID: 1baea4be-5ebe-4e5b-9cac-2d8c60ea0c6a
+CSeq: 16033 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_21#
+
+<--- Examining AMI action: -->
+action: Challenge
+actionid: 2112484962_18#
+authtype: MD5
+
+<--- Examining AMI action: -->
+action: Login
+actionid: 2112484962_19#
+key: 2c6875ca5cd7b3e14d772b60a980fd3a
+authtype: MD5
+username: red_admin
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 936
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:35:36.512+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/42602
+UsingPassword: 0
+SessionTV: 2026-08-21T08:35:36.512+0000
+
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 936
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:35:36.512+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/42602
+UsingPassword: 0
+SessionTV: 2026-08-21T08:35:36.512+0000
+
+
+<--- Examining AMI action: -->
+action: CoreSettings
+actionid: 2112484962_20#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj9b302117-fc0d-498b-8d28-386652d8225e
+From: <sip:1000000@172.22.0.7>;tag=43c81a44-2941-46f1-910b-bd45fab8c843
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 3866557e-7925-4104-9d71-4a4b18529ed6
+CSeq: 29441 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj9b302117-fc0d-498b-8d28-386652d8225e;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=43c81a44-2941-46f1-910b-bd45fab8c843
+To: <sip:192.168.11.2>;tag=b52da02d88e92b2e43ece1ec480008c7
+Call-ID: 3866557e-7925-4104-9d71-4a4b18529ed6
+CSeq: 29441 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjaa6ce9b3-c427-4cac-92d4-6d8c5ce7de79
+From: <sip:1000000@172.22.0.7>;tag=b8a967dc-85c1-4cd2-9495-60a6110b5347
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: ef415aed-d4c3-4b55-93d2-1064c4f273c7
+CSeq: 56120 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjaa6ce9b3-c427-4cac-92d4-6d8c5ce7de79;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=b8a967dc-85c1-4cd2-9495-60a6110b5347
+To: <sip:192.168.11.2>;tag=bc90f44a9d814b6346ed1fac75913db2
+Call-ID: ef415aed-d4c3-4b55-93d2-1064c4f273c7
+CSeq: 56120 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj466900bc-cdf2-4f0b-a334-2bfb2ec9458d
+From: <sip:1@172.22.0.7>;tag=7285129b-85d8-4da3-bbac-2723a0ab4164
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: 6bb29473-7853-49f1-9db4-5aeb4d6f8d18
+CSeq: 48745 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj466900bc-cdf2-4f0b-a334-2bfb2ec9458d;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=7285129b-85d8-4da3-bbac-2723a0ab4164
+To: <sip:1@192.168.11.2>;tag=bf57e05ab65a750777b538ce3a51df5f
+Call-ID: 6bb29473-7853-49f1-9db4-5aeb4d6f8d18
+CSeq: 48745 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjbe2d4327-881d-4fcf-913b-cf827c743edd
+From: <sip:2@172.22.0.7>;tag=56be9d7f-86d8-4211-bd49-9bfc44743c50
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: 0bfc1514-2ecb-4a70-9bf1-3a0d04817812
+CSeq: 8142 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj09344ca5-5417-43cc-9c2f-3d906a0e30fc
+From: <sip:3@172.22.0.7>;tag=f1d19a79-d774-4a70-ba9d-354890323010
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: 22cda740-9294-4c11-a50c-3cad899a56f3
+CSeq: 30368 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj5f7a9a9b-14b6-4f1f-946c-c58d0a09c1d7
+From: <sip:4@172.22.0.7>;tag=1e89915c-1cba-4e16-9e4e-f5292e239335
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: 57e8c363-3727-4220-94ee-80f0807b5058
+CSeq: 38270 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj51c756a0-e1cd-4fcf-b79f-fc563ac3f163
+From: <sip:5@172.22.0.7>;tag=2011511c-c63c-49ac-aa5d-398259ccdaa1
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: af7bcd5d-1546-469a-b7a8-8f0c47de3212
+CSeq: 27132 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj8e9b4a22-3694-4f4b-afad-022716718e68
+From: <sip:6@172.22.0.7>;tag=90a1665d-aa6a-483b-9485-66c8890c0827
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 1fb515bf-2abb-483a-a012-7eae1619df1c
+CSeq: 42230 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj7430c040-bb80-4981-9b6b-b1d583dbc816
+From: <sip:7@172.22.0.7>;tag=85f11c90-8be9-4ed1-89af-fe4ac6be8e19
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: 853f2bad-4656-4f3c-a2cc-b962292e018e
+CSeq: 30540 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjbe2d4327-881d-4fcf-913b-cf827c743edd;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=56be9d7f-86d8-4211-bd49-9bfc44743c50
+To: <sip:2@192.168.11.2>;tag=3c021e3cc562078983b87fc8d5677323
+Call-ID: 0bfc1514-2ecb-4a70-9bf1-3a0d04817812
+CSeq: 8142 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPj09344ca5-5417-43cc-9c2f-3d906a0e30fc;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=f1d19a79-d774-4a70-ba9d-354890323010
+To: <sip:3@192.168.11.2>;tag=fed22e3b910ef1864b23ad14903280b2
+Call-ID: 22cda740-9294-4c11-a50c-3cad899a56f3
+CSeq: 30368 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPj5f7a9a9b-14b6-4f1f-946c-c58d0a09c1d7;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=1e89915c-1cba-4e16-9e4e-f5292e239335
+To: <sip:4@192.168.11.2>;tag=ec0ca3d60b82bfd803969a18d3fa15b5
+Call-ID: 57e8c363-3727-4220-94ee-80f0807b5058
+CSeq: 38270 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPj51c756a0-e1cd-4fcf-b79f-fc563ac3f163;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=2011511c-c63c-49ac-aa5d-398259ccdaa1
+To: <sip:5@192.168.11.2>;tag=c4236b28b370588da9806a88d2886219
+Call-ID: af7bcd5d-1546-469a-b7a8-8f0c47de3212
+CSeq: 27132 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPj8e9b4a22-3694-4f4b-afad-022716718e68;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=90a1665d-aa6a-483b-9485-66c8890c0827
+To: <sip:6@192.168.11.2>;tag=5c30fbcdeb1bed408ae6cf88e9f27249
+Call-ID: 1fb515bf-2abb-483a-a012-7eae1619df1c
+CSeq: 42230 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPj7430c040-bb80-4981-9b6b-b1d583dbc816;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=85f11c90-8be9-4ed1-89af-fe4ac6be8e19
+To: <sip:7@192.168.11.2>;tag=5c1b28370a517f686bf64ac76f25120b
+Call-ID: 853f2bad-4656-4f3c-a2cc-b962292e018e
+CSeq: 30540 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj07f58688-db91-4e54-bf9d-5aed3ac79793
+From: <sip:0@172.22.0.7>;tag=00c320ec-cd60-4ace-a32a-dfe28a451d0b
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: e1c112f9-7d71-4504-b9e9-c161bb545cd2
+CSeq: 61557 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPj07f58688-db91-4e54-bf9d-5aed3ac79793;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=00c320ec-cd60-4ace-a32a-dfe28a451d0b
+To: <sip:0@192.168.11.2>;tag=376326db75191b17a8a43d8c00feba85
+Call-ID: e1c112f9-7d71-4504-b9e9-c161bb545cd2
+CSeq: 61557 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_22#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj176729eb-3ba3-4f86-9d54-4dc7f16673b2
+From: <sip:1000000@172.22.0.7>;tag=9f3d1d9f-8731-41a3-a6ba-b706d3a4a759
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: b5701b12-f430-453d-b729-b5dc013ae9cf
+CSeq: 23128 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj176729eb-3ba3-4f86-9d54-4dc7f16673b2;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=9f3d1d9f-8731-41a3-a6ba-b706d3a4a759
+To: <sip:192.168.11.2>;tag=d5a6d580e2bdcf315c18190808853a8f
+Call-ID: b5701b12-f430-453d-b729-b5dc013ae9cf
+CSeq: 23128 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Challenge
+actionid: 2112484962_21#
+authtype: MD5
+
+<--- Examining AMI action: -->
+action: Login
+actionid: 2112484962_22#
+key: 3ed22423ccb35cedad8625c145904bd8
+authtype: MD5
+username: red_admin
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 937
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:36:21.612+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/46330
+UsingPassword: 0
+SessionTV: 2026-08-21T08:36:21.612+0000
+
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 937
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:36:21.612+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/46330
+UsingPassword: 0
+SessionTV: 2026-08-21T08:36:21.612+0000
+
+
+<--- Examining AMI action: -->
+action: CoreSettings
+actionid: 2112484962_23#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj042920c6-f0f0-4416-9127-780d22e7717d
+From: <sip:1000000@172.22.0.7>;tag=9204a37f-68d4-4dfb-8ae0-38d170555c25
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: d22b4367-08e2-4a47-b825-43eba4650f9e
+CSeq: 59515 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj042920c6-f0f0-4416-9127-780d22e7717d;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=9204a37f-68d4-4dfb-8ae0-38d170555c25
+To: <sip:192.168.11.2>;tag=eb26ca3fd40bfe8a6e2a70bed4a70961
+Call-ID: d22b4367-08e2-4a47-b825-43eba4650f9e
+CSeq: 59515 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj67411bcc-d1db-412c-bd6f-722975d92ce0
+From: <sip:1@172.22.0.7>;tag=043fd2bc-6906-490a-a642-e533d101b499
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: 0766c1ea-fb86-4c62-a81b-920ab4c3cb69
+CSeq: 27882 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj67411bcc-d1db-412c-bd6f-722975d92ce0;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=043fd2bc-6906-490a-a642-e533d101b499
+To: <sip:1@192.168.11.2>;tag=50f5d6e0935dcbec26e85c3413734cdf
+Call-ID: 0766c1ea-fb86-4c62-a81b-920ab4c3cb69
+CSeq: 27882 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj3f671ee5-cc28-4589-8144-46dac9cdd957
+From: <sip:2@172.22.0.7>;tag=b25e06b9-91c1-4f9a-b0f3-c56a38ea9512
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: 846d714f-32de-4484-aa0a-8ef867cf527e
+CSeq: 2575 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjda8fc13d-ca6d-4fa0-9c3c-0f77779bae51
+From: <sip:3@172.22.0.7>;tag=9a73d704-6e2b-4e8f-ad1a-07f72cf7a224
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: 627dec6e-e286-4b76-b4bb-5d3a13cba0d9
+CSeq: 24891 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjf4efd552-7a85-4c60-b269-b3566e13d044
+From: <sip:4@172.22.0.7>;tag=c7730072-4379-45a0-9cb6-8b85a336c95e
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: 9a2a06d4-2788-4dcb-8f08-2ff93a841ef0
+CSeq: 19821 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj0ad623e5-b7b6-40bb-a889-e86c1a51dfb5
+From: <sip:5@172.22.0.7>;tag=d9326f18-91b9-42f6-b6d2-4c78c4de77f9
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: 51674a6f-fb5e-4316-afd8-4251a811ef21
+CSeq: 64755 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj0056b682-935b-4983-b160-973dc438bcae
+From: <sip:6@172.22.0.7>;tag=a69464b7-ccdc-468d-bfeb-c5f12ff16877
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 95596820-7733-4c14-82d1-f3a49d5b477c
+CSeq: 38764 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja038acc2-62ad-42ba-8b74-0fd081addef3
+From: <sip:7@172.22.0.7>;tag=d37cd111-ba9f-4838-b3d8-18016e75ab17
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: a99fc220-6edc-46bf-ba3d-39f4170860ec
+CSeq: 42885 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj3f671ee5-cc28-4589-8144-46dac9cdd957;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=b25e06b9-91c1-4f9a-b0f3-c56a38ea9512
+To: <sip:2@192.168.11.2>;tag=4869cfdf7ef6068adecdee02fe3e8799
+Call-ID: 846d714f-32de-4484-aa0a-8ef867cf527e
+CSeq: 2575 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPjda8fc13d-ca6d-4fa0-9c3c-0f77779bae51;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=9a73d704-6e2b-4e8f-ad1a-07f72cf7a224
+To: <sip:3@192.168.11.2>;tag=9552842afca3dd43d6b32954e06932ad
+Call-ID: 627dec6e-e286-4b76-b4bb-5d3a13cba0d9
+CSeq: 24891 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPjf4efd552-7a85-4c60-b269-b3566e13d044;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=c7730072-4379-45a0-9cb6-8b85a336c95e
+To: <sip:4@192.168.11.2>;tag=2e9dd5746060803c5b6ddb03054791be
+Call-ID: 9a2a06d4-2788-4dcb-8f08-2ff93a841ef0
+CSeq: 19821 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPj0ad623e5-b7b6-40bb-a889-e86c1a51dfb5;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=d9326f18-91b9-42f6-b6d2-4c78c4de77f9
+To: <sip:5@192.168.11.2>;tag=802213a2d692a0436d525e5b614f55cc
+Call-ID: 51674a6f-fb5e-4316-afd8-4251a811ef21
+CSeq: 64755 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPj0056b682-935b-4983-b160-973dc438bcae;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=a69464b7-ccdc-468d-bfeb-c5f12ff16877
+To: <sip:6@192.168.11.2>;tag=9eb3636c4cf9c584d42587c64541a872
+Call-ID: 95596820-7733-4c14-82d1-f3a49d5b477c
+CSeq: 38764 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPja038acc2-62ad-42ba-8b74-0fd081addef3;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=d37cd111-ba9f-4838-b3d8-18016e75ab17
+To: <sip:7@192.168.11.2>;tag=b41f9961dcc4436fc4979a8acfd676af
+Call-ID: a99fc220-6edc-46bf-ba3d-39f4170860ec
+CSeq: 42885 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPje864f757-90b4-4cef-9445-4a2d7db1fb72
+From: <sip:0@172.22.0.7>;tag=0ed73eec-7bbf-43ba-bb18-8ef5f5efd0b0
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: 25ef3ae9-8273-469b-85c5-853642f76307
+CSeq: 10236 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPje864f757-90b4-4cef-9445-4a2d7db1fb72;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=0ed73eec-7bbf-43ba-bb18-8ef5f5efd0b0
+To: <sip:0@192.168.11.2>;tag=ed8f0f1b479e0cc053bbc2cfabb9da5b
+Call-ID: 25ef3ae9-8273-469b-85c5-853642f76307
+CSeq: 10236 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_23#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja9f77222-5be3-4843-8d8d-ef068d77d965
+From: <sip:1000000@172.22.0.7>;tag=f46debec-db99-496b-a2a0-a0e5d9cd5d2f
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 019f1b7c-2216-486c-9067-191e9edc1cc3
+CSeq: 53642 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPja9f77222-5be3-4843-8d8d-ef068d77d965;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=f46debec-db99-496b-a2a0-a0e5d9cd5d2f
+To: <sip:192.168.11.2>;tag=e9c78da530671053fd2656d02a447132
+Call-ID: 019f1b7c-2216-486c-9067-191e9edc1cc3
+CSeq: 53642 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjc5b2165d-f9e7-498a-919a-755cbf35b77a
+From: <sip:1000000@172.22.0.7>;tag=6662e66c-96e9-4018-903b-1ca05325d841
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: a2f8d5e8-3108-44fa-bb72-4a14bd023c4d
+CSeq: 57844 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjc5b2165d-f9e7-498a-919a-755cbf35b77a;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=6662e66c-96e9-4018-903b-1ca05325d841
+To: <sip:192.168.11.2>;tag=3ce8cabf702ca95436bd9e4e2936c0a2
+Call-ID: a2f8d5e8-3108-44fa-bb72-4a14bd023c4d
+CSeq: 57844 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj53574a64-34b9-4858-ab24-9890cdd66891
+From: <sip:1@172.22.0.7>;tag=e70fc666-5bc7-46ea-8d45-2c2b53f51d0d
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: 0be5b145-cc1c-4cb8-a783-b73a24f0e1a5
+CSeq: 24673 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj53574a64-34b9-4858-ab24-9890cdd66891;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=e70fc666-5bc7-46ea-8d45-2c2b53f51d0d
+To: <sip:1@192.168.11.2>;tag=4c81352e90c1f5aa7809dea7ad25ac7d
+Call-ID: 0be5b145-cc1c-4cb8-a783-b73a24f0e1a5
+CSeq: 24673 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj8acac03c-784d-41c6-89ab-ac4033ea1042
+From: <sip:2@172.22.0.7>;tag=775a4dd3-7887-451e-a204-e27a662cb60d
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: 7b91538f-befb-498f-9901-b81c54dd25e8
+CSeq: 36028 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj44a2fd0c-8447-466e-97ed-214ed6b19734
+From: <sip:3@172.22.0.7>;tag=c4791c9d-b240-4c28-a929-e58957cca737
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: 0680e55e-7257-498b-be0f-5274461b3cc9
+CSeq: 51381 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj830c73ff-54c9-41e1-84bd-fe82040d3495
+From: <sip:4@172.22.0.7>;tag=27a3c783-452d-4891-bf83-6c36210b6816
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: 9615ae54-5802-4f6c-ba2e-f1ae81a9e798
+CSeq: 29282 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj219ea525-02b5-4333-8d37-7e1c1ca54e68
+From: <sip:5@172.22.0.7>;tag=6f671750-7363-4e60-9c41-dc4fe2d006a0
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: e5a02f38-29f0-4ca6-a86e-38c7935c14ff
+CSeq: 8330 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjd1f88c0c-f3b2-4869-a189-0e274c381cbe
+From: <sip:6@172.22.0.7>;tag=d92f1c14-2257-403a-9f9c-a6ec1d166a8d
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 14110e30-4655-4ecd-9749-9aa2f71b0fac
+CSeq: 16830 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj34f168f9-25ee-45bd-a800-4ce88b4356cb
+From: <sip:7@172.22.0.7>;tag=1f9cdbf8-2d0a-4ac2-b929-c60684177a68
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: ed69ae37-a015-4713-a4ce-493a4f79c395
+CSeq: 38182 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPj8acac03c-784d-41c6-89ab-ac4033ea1042;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=775a4dd3-7887-451e-a204-e27a662cb60d
+To: <sip:2@192.168.11.2>;tag=1983b7aee38dcd6ec79c08253dabcc26
+Call-ID: 7b91538f-befb-498f-9901-b81c54dd25e8
+CSeq: 36028 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPj44a2fd0c-8447-466e-97ed-214ed6b19734;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=c4791c9d-b240-4c28-a929-e58957cca737
+To: <sip:3@192.168.11.2>;tag=a2c0dc1ebd753e28df5fe2e6bb5393f6
+Call-ID: 0680e55e-7257-498b-be0f-5274461b3cc9
+CSeq: 51381 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPj830c73ff-54c9-41e1-84bd-fe82040d3495;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=27a3c783-452d-4891-bf83-6c36210b6816
+To: <sip:4@192.168.11.2>;tag=cfb3c5b0ee159dca0f3e2007467ac7db
+Call-ID: 9615ae54-5802-4f6c-ba2e-f1ae81a9e798
+CSeq: 29282 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPj219ea525-02b5-4333-8d37-7e1c1ca54e68;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=6f671750-7363-4e60-9c41-dc4fe2d006a0
+To: <sip:5@192.168.11.2>;tag=5db5b25afd33a12880d67eba5039de62
+Call-ID: e5a02f38-29f0-4ca6-a86e-38c7935c14ff
+CSeq: 8330 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPjd1f88c0c-f3b2-4869-a189-0e274c381cbe;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=d92f1c14-2257-403a-9f9c-a6ec1d166a8d
+To: <sip:6@192.168.11.2>;tag=2bc25e8e49bea6b76af27bf76aee4630
+Call-ID: 14110e30-4655-4ecd-9749-9aa2f71b0fac
+CSeq: 16830 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPj34f168f9-25ee-45bd-a800-4ce88b4356cb;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=1f9cdbf8-2d0a-4ac2-b929-c60684177a68
+To: <sip:7@192.168.11.2>;tag=324275f8b85f66a7b45b6fd4e092d8de
+Call-ID: ed69ae37-a015-4713-a4ce-493a4f79c395
+CSeq: 38182 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj9ddc2a1f-289a-43f4-9b59-83778272f76e
+From: <sip:0@172.22.0.7>;tag=e1ed9ee6-9a91-4c68-9e12-1d8f4d1b836d
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: d50f108c-7207-4b7a-86f9-567fb6ae4ced
+CSeq: 11465 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPj9ddc2a1f-289a-43f4-9b59-83778272f76e;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=e1ed9ee6-9a91-4c68-9e12-1d8f4d1b836d
+To: <sip:0@192.168.11.2>;tag=ec943535d964ac76cb28f71fe86452cc
+Call-ID: d50f108c-7207-4b7a-86f9-567fb6ae4ced
+CSeq: 11465 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Examining AMI action: -->
+action: Challenge
+actionid: 2112484962_24#
+authtype: MD5
+
+<--- Examining AMI action: -->
+action: Login
+actionid: 2112484962_25#
+key: bf485f535e92f029319306e23426fb39
+authtype: MD5
+username: red_admin
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 938
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:37:06.711+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/40666
+UsingPassword: 0
+SessionTV: 2026-08-21T08:37:06.711+0000
+
+
+<-- Examining AMI event (1310502545): -->
+Event: SuccessfulAuth
+Privilege: security,all
+SequenceNumber: 938
+File: manager.c
+Line: 593
+Func: manager_default_msg_cb
+EventTV: 2026-08-21T08:37:06.711+0000
+Severity: Informational
+Service: AMI
+EventVersion: 1
+AccountID: red_admin
+SessionID: 0x713044000920
+LocalAddress: IPV4/TCP/0.0.0.0/5038
+RemoteAddress: IPV4/TCP/172.22.0.6/40666
+UsingPassword: 0
+SessionTV: 2026-08-21T08:37:06.711+0000
+
+
+<--- Examining AMI action: -->
+action: CoreSettings
+actionid: 2112484962_26#
+
+<--- Examining AMI action: -->
+action: Ping
+actionid: 1408064535_24#
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja9a2e2a6-bfc4-4184-b903-7f734011add0
+From: <sip:1000000@172.22.0.7>;tag=2d4eda0d-b5de-4b5e-ae3a-08133a978708
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: 1bf8bc51-913e-4ded-a854-69b0ef3581af
+CSeq: 54865 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPja9a2e2a6-bfc4-4184-b903-7f734011add0;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=2d4eda0d-b5de-4b5e-ae3a-08133a978708
+To: <sip:192.168.11.2>;tag=e1e99da99db7b9e888b0313ed42ad333
+Call-ID: 1bf8bc51-913e-4ded-a854-69b0ef3581af
+CSeq: 54865 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (411 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjda093dfd-2642-4852-91d7-ed0f632fe744
+From: <sip:1000000@172.22.0.7>;tag=65063985-07bc-46e7-911d-eac5fcd3a5ac
+To: <sip:192.168.11.2>
+Contact: <sip:1000000@172.22.0.7:5060>
+Call-ID: e1e70e5a-20af-4619-bda1-c490d7c77c87
+CSeq: 57595 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (502 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjda093dfd-2642-4852-91d7-ed0f632fe744;received=192.168.11.105
+From: <sip:1000000@172.22.0.7>;tag=65063985-07bc-46e7-911d-eac5fcd3a5ac
+To: <sip:192.168.11.2>;tag=826277db0a34ca68ccd7a6db4e1ff8b1
+Call-ID: e1e70e5a-20af-4619-bda1-c490d7c77c87
+CSeq: 57595 OPTIONS
+Contact: <sip:192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5061 --->
+OPTIONS sip:1@192.168.11.2:5061;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj41f87286-2733-45ab-946b-af6322c815f7
+From: <sip:1@172.22.0.7>;tag=0f3e87c8-a5c0-48bf-b08e-e5c625ef458c
+To: <sip:1@192.168.11.2>
+Contact: <sip:1@172.22.0.7:5060>
+Call-ID: 0e116bba-d732-4007-b768-e9ce02d88181
+CSeq: 22519 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5061 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61439;branch=z9hG4bKPj41f87286-2733-45ab-946b-af6322c815f7;received=192.168.11.105
+From: <sip:1@172.22.0.7>;tag=0f3e87c8-a5c0-48bf-b08e-e5c625ef458c
+To: <sip:1@192.168.11.2>;tag=4098e8ac03fc9f0ebe33ea205a6cfd75
+Call-ID: 0e116bba-d732-4007-b768-e9ce02d88181
+CSeq: 22519 OPTIONS
+Contact: <sip:1@192.168.11.2:5061;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:2@192.168.11.2:5062;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjf1f7b0e5-1b05-446e-8f01-4f02f0264ca6
+From: <sip:2@172.22.0.7>;tag=53d96c89-39e7-49f4-9b81-6ad0635c9b2d
+To: <sip:2@192.168.11.2>
+Contact: <sip:2@172.22.0.7:5060>
+Call-ID: e628760e-72b3-4363-9782-18515a5e9b0b
+CSeq: 12758 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5063 --->
+OPTIONS sip:3@192.168.11.2:5063;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPj6b514485-a2ef-4d8d-ab22-cfe4a2356e20
+From: <sip:3@172.22.0.7>;tag=9dcda6e0-7e39-4486-b687-e07f01e800ef
+To: <sip:3@192.168.11.2>
+Contact: <sip:3@172.22.0.7:5060>
+Call-ID: fda46c21-920e-41a7-b393-dd9e10cdc8ec
+CSeq: 8936 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (416 bytes) to UDP:192.168.11.2:5064 --->
+OPTIONS sip:4@192.168.11.2:5064;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjf73a9c67-a1d7-4b52-8d64-6f89be6a33d9
+From: <sip:4@172.22.0.7>;tag=4c8c8f28-459e-4515-a394-af229d7e0b93
+To: <sip:4@192.168.11.2>
+Contact: <sip:4@172.22.0.7:5060>
+Call-ID: deec2013-3250-4eb4-9c4f-9fd2fca1a089
+CSeq: 4812 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5065 --->
+OPTIONS sip:5@192.168.11.2:5065;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjaa4f2c78-61f2-46a0-a6a8-db2040ad536d
+From: <sip:5@172.22.0.7>;tag=4c9dc0fd-525f-45fb-8318-6a83ff6df934
+To: <sip:5@192.168.11.2>
+Contact: <sip:5@172.22.0.7:5060>
+Call-ID: 30821981-2769-4624-966c-ccfc9b9c0837
+CSeq: 44199 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5066 --->
+OPTIONS sip:6@192.168.11.2:5066;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjbeb00dc5-e7a8-4409-804c-ae4927c84e22
+From: <sip:6@172.22.0.7>;tag=553a6d47-1f92-400f-9633-fdb81ae2ab42
+To: <sip:6@192.168.11.2>
+Contact: <sip:6@172.22.0.7:5060>
+Call-ID: 23acac8a-373b-4a20-a663-b88778fff726
+CSeq: 37325 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5067 --->
+OPTIONS sip:7@192.168.11.2:5067;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPja098d449-7b60-4957-b88a-194d8b3ba14e
+From: <sip:7@172.22.0.7>;tag=6fc2e0c6-a42f-4c8c-8349-d62d098b8e12
+To: <sip:7@192.168.11.2>
+Contact: <sip:7@172.22.0.7:5060>
+Call-ID: 86f18e74-f9d8-40b0-83c5-51f62a7cab54
+CSeq: 63876 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5062 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61257;branch=z9hG4bKPjf1f7b0e5-1b05-446e-8f01-4f02f0264ca6;received=192.168.11.105
+From: <sip:2@172.22.0.7>;tag=53d96c89-39e7-49f4-9b81-6ad0635c9b2d
+To: <sip:2@192.168.11.2>;tag=afd6e0f8666f9b0a704f4c48b085f428
+Call-ID: e628760e-72b3-4363-9782-18515a5e9b0b
+CSeq: 12758 OPTIONS
+Contact: <sip:2@192.168.11.2:5062;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5063 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61440;branch=z9hG4bKPj6b514485-a2ef-4d8d-ab22-cfe4a2356e20;received=192.168.11.105
+From: <sip:3@172.22.0.7>;tag=9dcda6e0-7e39-4486-b687-e07f01e800ef
+To: <sip:3@192.168.11.2>;tag=1fc1b1de93d0810f598e6f84b6fc7085
+Call-ID: fda46c21-920e-41a7-b393-dd9e10cdc8ec
+CSeq: 8936 OPTIONS
+Contact: <sip:3@192.168.11.2:5063;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (499 bytes) from UDP:192.168.11.2:5064 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61441;branch=z9hG4bKPjf73a9c67-a1d7-4b52-8d64-6f89be6a33d9;received=192.168.11.105
+From: <sip:4@172.22.0.7>;tag=4c8c8f28-459e-4515-a394-af229d7e0b93
+To: <sip:4@192.168.11.2>;tag=72cff49d5d54d4392f5e448f03e7b2a2
+Call-ID: deec2013-3250-4eb4-9c4f-9fd2fca1a089
+CSeq: 4812 OPTIONS
+Contact: <sip:4@192.168.11.2:5064;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5065 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61442;branch=z9hG4bKPjaa4f2c78-61f2-46a0-a6a8-db2040ad536d;received=192.168.11.105
+From: <sip:5@172.22.0.7>;tag=4c9dc0fd-525f-45fb-8318-6a83ff6df934
+To: <sip:5@192.168.11.2>;tag=ea63591ad2b0e4b9b107a7c336d64f72
+Call-ID: 30821981-2769-4624-966c-ccfc9b9c0837
+CSeq: 44199 OPTIONS
+Contact: <sip:5@192.168.11.2:5065;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5066 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61443;branch=z9hG4bKPjbeb00dc5-e7a8-4409-804c-ae4927c84e22;received=192.168.11.105
+From: <sip:6@172.22.0.7>;tag=553a6d47-1f92-400f-9633-fdb81ae2ab42
+To: <sip:6@192.168.11.2>;tag=55f61fe401c34d79750b5eda816127d8
+Call-ID: 23acac8a-373b-4a20-a663-b88778fff726
+CSeq: 37325 OPTIONS
+Contact: <sip:6@192.168.11.2:5066;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Received SIP response (500 bytes) from UDP:192.168.11.2:5067 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61444;branch=z9hG4bKPja098d449-7b60-4957-b88a-194d8b3ba14e;received=192.168.11.105
+From: <sip:7@172.22.0.7>;tag=6fc2e0c6-a42f-4c8c-8349-d62d098b8e12
+To: <sip:7@192.168.11.2>;tag=59cd7db5390d3ec2b8b45e0307483253
+Call-ID: 86f18e74-f9d8-40b0-83c5-51f62a7cab54
+CSeq: 63876 OPTIONS
+Contact: <sip:7@192.168.11.2:5067;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+
+<--- Transmitting SIP request (412 bytes) to UDP:192.168.11.2:5060 --->
+OPTIONS sip:0@192.168.11.2;transport=UDP SIP/2.0
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport;branch=z9hG4bKPjde3cc62c-9c5c-4403-8de3-7762a67fcf8c
+From: <sip:0@172.22.0.7>;tag=d93b6dcc-d8dd-482e-a504-3a07150ce1a2
+To: <sip:0@192.168.11.2>
+Contact: <sip:0@172.22.0.7:5060>
+Call-ID: 2cc46adf-e406-47b5-bfa1-204c512fee86
+CSeq: 10683 OPTIONS
+Max-Forwards: 70
+User-Agent: Asterisk PBX 22.10.1
+Content-Length:  0
+
+
+<--- Received SIP response (495 bytes) from UDP:192.168.11.2:5060 --->
+SIP/2.0 200 OK
+Via: SIP/2.0/UDP 172.22.0.7:5060;rport=61438;branch=z9hG4bKPjde3cc62c-9c5c-4403-8de3-7762a67fcf8c;received=192.168.11.105
+From: <sip:0@172.22.0.7>;tag=d93b6dcc-d8dd-482e-a504-3a07150ce1a2
+To: <sip:0@192.168.11.2>;tag=390c34997e7a2c90c82addab909a684a
+Call-ID: 2cc46adf-e406-47b5-bfa1-204c512fee86
+CSeq: 10683 OPTIONS
+Contact: <sip:0@192.168.11.2;transport=UDP>
+Supported: replaces
+Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE, NOTIFY, REFER
+Content-Length: 0
+
+

@@ -1,0 +1,78 @@
+=== time 2026-08-21T06:10:36.6206575+03:00 ===
+=== Windows TCP 5062 ===
+
+ComputerName            : 192.168.11.2
+RemoteAddress           : 192.168.11.2
+RemotePort              : 5062
+NameResolutionResults   : 192.168.11.2
+MatchingIPsecRules      : 
+NetworkIsolationContext : Internet
+IsAdmin                 : False
+InterfaceAlias          : kk
+SourceAddress           : 192.168.11.105
+NetRoute (NextHop)      : 0.0.0.0
+PingSucceeded           : True
+PingReplyDetails (RTT)  : 1 ms
+TcpTestSucceeded        : False
+
+
+=== Windows TCP 443 ===
+
+ComputerName            : 192.168.11.2
+RemoteAddress           : 192.168.11.2
+RemotePort              : 443
+NameResolutionResults   : 192.168.11.2
+MatchingIPsecRules      : 
+NetworkIsolationContext : Internet
+IsAdmin                 : False
+InterfaceAlias          : kk
+SourceAddress           : 192.168.11.105
+NetRoute (NextHop)      : 0.0.0.0
+TcpTestSucceeded        : True
+
+
+=== Container route ===
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+0.0.0.0         192.168.65.1    0.0.0.0         UG    0      0        0 eth0
+127.0.0.0       0.0.0.0         255.0.0.0       U     0      0        0 lo
+172.17.0.0      0.0.0.0         255.255.0.0     U     0      0        0 docker0
+172.18.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-b26615a7be70
+172.19.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-0840e5507b5f
+172.20.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-41379e77de22
+172.21.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-d5966bebd4a8
+172.22.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-b06a8c5ac053
+172.23.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-a5ebdde2ec49
+172.24.0.0      0.0.0.0         255.255.0.0     U     0      0        0 br-3106baad842e
+192.168.65.0    0.0.0.0         255.255.255.0   U     0      0        0 eth0
+192.168.65.1    0.0.0.0         255.255.255.255 UH    0      0        0 eth0
+192.168.65.7    0.0.0.0         255.255.255.255 UH    0      0        0 services1
+=== Container TCP 5062 ===
+=== AOR ===
+
+      Aor:  <Aor..............................................>  <MaxContact>
+    Contact:  <Aor/ContactUri............................> <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+      Aor:  dinstar-gateway                                      0
+    Contact:  dinstar-gateway/sip:192.168.11.2:5062        ee98bdc39c Unavail        -nan
+
+
+ ParameterName        : ParameterValue
+ ============================================
+ authenticate_qualify : false
+ contact              : sip:192.168.11.2:5062
+ default_expiration   : 3600
+ mailboxes            : 
+ max_contacts         : 0
+ maximum_expiration   : 7200
+ minimum_expiration   : 60
+ outbound_proxy       : 
+ qualify_2xx_only     : false
+ qualify_frequency    : 30
+ qualify_timeout      : 3.000000
+ remove_existing      : false
+ remove_unavailable   : false
+ support_path         : false
+ voicemail_extension  : 
+

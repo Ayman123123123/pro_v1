@@ -129,6 +129,7 @@ var fleetStatus by remember { mutableStateOf<DinstarFleetStatus?>(null) }
     var testBridgeResult by remember { mutableStateOf<String?>(null) }
     var showBridgeTest by remember { mutableStateOf(false) }
     var bridgeTestNumber by remember { mutableStateOf("") }
+    var bridgeTestPort by remember { mutableStateOf("") }
     
     val dialogState = remember { DialogState(null, null) }
     
@@ -242,8 +243,8 @@ var fleetStatus by remember { mutableStateOf<DinstarFleetStatus?>(null) }
             return
         }
         testBridgeResult = "جاري الاختبار..."
-        val response = api.request("POST", "/api/pstn/bridge", 
-            json.encodeToString(mapOf("number" to bridgeTestNumber)))
+val response = api.request("POST", "/api/pstn/bridge", 
+            json.encodeToString(buildMap<String, Any> { put("number", bridgeTestNumber); bridgeTestPort.toIntOrNull()?.let { put("port", it) } }))
         when (response) {
             is ApiResult.Success -> {
                 testBridgeResult = "نجح: ${response.value.substring(0, min(200, response.value.length))}"
@@ -317,10 +318,18 @@ var fleetStatus by remember { mutableStateOf<DinstarFleetStatus?>(null) }
                             androidx.compose.material3.TextField(
                                 value = bridgeTestNumber,
                                 onValueChange = { bridgeTestNumber = it },
-                                label = { Text("Test Number (Yemeni format)") },
-                                modifier = Modifier.weight(1f).padding(end = 12.dp),
+                                label = { Text("Number") },
+                                modifier = Modifier.weight(1f).padding(end = 8.dp),
                                 singleLine = true,
-                                placeholder = { Text("e.g., 777123456") }
+                                placeholder = { Text("777123456") }
+                            )
+                            androidx.compose.material3.TextField(
+                                value = bridgeTestPort,
+                                onValueChange = { bridgeTestPort = it },
+                                label = { Text("Port") },
+                                modifier = Modifier.weight(0.4f).padding(end = 12.dp),
+                                singleLine = true,
+                                placeholder = { Text("0-15") }
                             )
                             Button(onClick = { scope.launch { testBridge() } }, colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) {
                                 Icon(Icons.Filled.Dialpad, contentDescription = null, modifier = Modifier.size(18.dp))

@@ -315,7 +315,9 @@ class PstnWebRtcManager(private val context: Context) {
         sipClient = WebRtcSipClient(context, pc, object : WebRtcSipClient.Events {
             override fun onRegistered() {
                 state = PstnCallState.INVITING
-                sipClient?.invite(bridge.targetNumber)
+                val headers = mutableMapOf("X-Red-Call-Id" to bridge.callId)
+                  bridge.gateway?.let { headers["X-Red-Gw"] = it }
+                  sipClient?.invite(bridge.targetNumber, headers)
                 // Start local ringback from INVITE until 180/200
                 startOutboundRingback()
             }
@@ -817,3 +819,6 @@ class PstnWebRtcManager(private val context: Context) {
         fun controls(context: Context): PstnWebRtcManager? = activeUi ?: incomingInstance.takeIf { it != null }
     }
 }
+
+
+

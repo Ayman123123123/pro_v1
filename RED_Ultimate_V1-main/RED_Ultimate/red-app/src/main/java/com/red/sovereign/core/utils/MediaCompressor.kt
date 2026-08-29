@@ -12,6 +12,7 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.effect.Presentation
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
+import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import com.red.sovereign.media.VoiceQuality
 import kotlinx.coroutines.CompletableDeferred
@@ -117,10 +118,10 @@ object MediaCompressor {
         val result = CompletableDeferred<java.io.File>()
         val transformer = Transformer.Builder(context)
             .addListener(object : Transformer.Listener {
-                override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult) {
+                override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: ExportResult) {
                     result.complete(java.io.File(outputPath))
                 }
-                override fun onError(composition: androidx.media3.transformer.Composition, exportResult: androidx.media3.transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                override fun onError(composition: androidx.media3.transformer.Composition, exportResult: ExportResult, exportException: androidx.media3.transformer.ExportException) {
                     result.completeExceptionally(exportException)
                 }
             })
@@ -156,6 +157,15 @@ object MediaCompressor {
             .build()
 
         transformer.start(mediaItem, outputPath)
+    }
+
+    /**
+     * Creates a default Transformer.Listener that does nothing.
+     * Useful when caller doesn't need callbacks.
+     */
+    fun defaultTransformerListener(): Transformer.Listener = object : Transformer.Listener {
+        override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: ExportResult) {}
+        override fun onError(composition: androidx.media3.transformer.Composition, exportResult: ExportResult, exportException: androidx.media3.transformer.ExportException) {}
     }
 
     private fun Bitmap.rotated(degrees: Float): Bitmap {

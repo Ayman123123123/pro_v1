@@ -17,13 +17,15 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         CallLogEntity::class,
         StoryEntity::class,
         DraftEntity::class,
-        MessageReactionEntity::class
+        MessageReactionEntity::class,
+        OutboxMessageEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
     abstract fun redDao(): RedDao
+    abstract fun outboxDao(): OutboxDao
 
     companion object {
         @Volatile
@@ -55,7 +57,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -130,7 +132,7 @@ abstract class RedDatabase : RoomDatabase() {
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -175,5 +177,29 @@ private val INDEX_MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 
 private val MESSAGES_INDEX_MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
     override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_messages_conversationId_createdAt` ON `messages` (`conversationId`, `createdAt`)")
+    }
+}
+
+/** صندوق الصادر المتين — يضمن عدم فقدان أي رسالة بعد قتل العملية */
+private val OUTBOX_MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `outbox_messages` (
+                `id` TEXT NOT NULL,
+                `conversationId` TEXT NOT NULL,
+                `payload` BLOB NOT NULL,
+                `type` TEXT NOT NULL,
+                `status` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `retryCount` INTEGER NOT NULL,
+                `nextAttemptAt` INTEGER NOT NULL,
+                `idempotencyKey` TEXT NOT NULL,
+                `lastError` TEXT,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_messages_status_nextAttemptAt` ON `outbox_messages` (`status`, `nextAttemptAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_messages_conversationId` ON `outbox_messages` (`conversationId`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_messages_idempotencyKey` ON `outbox_messages` (`idempotencyKey`)")
     }
 }

@@ -5,10 +5,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @Serializable data class PstnCallRequest(val number: String, val slotIndex: Int? = null)
-@Serializable data class PstnCallResponse(val callId: String, val status: String, val number: String, val usedToday: Int, val dailyLimit: Int, val slot: Int = -1)
+@Serializable data class PstnCallResponse(val port: Int?,
+    val gateway: String?,
+    val callId: String, val status: String, val number: String, val usedToday: Int, val dailyLimit: Int, val slot: Int = -1)
 
 @Serializable
 data class BridgeResponse(
+    val port: Int?,
+    val gateway: String?,
     val callId: String,
     val sipServer: String,
     val sipUsername: String,
@@ -76,8 +80,9 @@ class PstnApi(private val tokens: TokenStore) {
         }
     }
 
-    suspend fun bridge(number: String): ApiResult<BridgeResponse> {
-        return when (val result = client.request("POST", "/api/pstn/bridge", json.encodeToString(mapOf("number" to number)))) {
+    suspend fun bridge(number: String, port: Int? = null): ApiResult<BridgeResponse> {
+        val payload = buildMap<String, Any> { put("number", number); if (port != null) put("port", port) }
+        return when (val result = client.request("POST", "/api/pstn/bridge", json.encodeToString(payload))) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<BridgeResponse>(result.value)) }
                 .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
             is ApiResult.Error -> result
@@ -119,3 +124,7 @@ class PstnApi(private val tokens: TokenStore) {
         }
     }
 }
+
+
+
+

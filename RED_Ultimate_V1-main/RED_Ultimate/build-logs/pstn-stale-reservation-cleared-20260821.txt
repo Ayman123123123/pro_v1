@@ -1,0 +1,1 @@
+2026-08-21T07:19:13.5690534+03:00 key=red:pstn:active:4729d5f7-464a-43b2-b505-05ce0ec189f5 value=5bea50dd-088d-4162-83d0-f1af5ea818e3:local:0 reason=No active Asterisk channel; stale bridge reservation

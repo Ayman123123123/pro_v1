@@ -1,0 +1,12 @@
+FILE=DinstarEventListener.kt LINE=40 TEXT=private const val INCOMING_CALL_PREFIX = "red:pstn:incoming-call:"
+FILE=DinstarEventListener.kt LINE=172 TEXT=data["callId"]?.toString()?.let { redis.delete("$INCOMING_CALL_PREFIX$it") }
+FILE=DinstarEventListener.kt LINE=232 TEXT=redis.opsForValue().set("$INCOMING_CALL_PREFIX${incomingDoc.id}", incomingJson, Duration.ofSeconds(INCOMING_TTL_SECONDS))
+FILE=PstnActiveCallKeys.kt LINE=20 TEXT=const val CALL_PREFIX = "red:pstn:call:"
+FILE=PstnActiveCallKeys.kt LINE=29 TEXT=fun callKey(callId: String): String = "$CALL_PREFIX$callId"
+FILE=PstnBridgeController.kt LINE=103 TEXT=// Uses the same key prefix (red:pstn:calluser:) as PstnCallService and
+FILE=PstnBridgeController.kt LINE=105 TEXT=redis.opsForValue().set("red:pstn:calluser:$callId", user.id.toString(), Duration.ofMinutes(bridgeSecretTtlMinutes))
+FILE=PstnBridgeController.kt LINE=203 TEXT=redis.delete("red:pstn:calluser:$callId")
+FILE=PstnCallService.kt LINE=83 TEXT=redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
+FILE=PstnCallService.kt LINE=144 TEXT=raw?.split(":")?.firstOrNull()?.let { redis.delete(callUserKey(it)) }
+FILE=PstnCallService.kt LINE=148 TEXT=private fun callUserKey(callId: String) = "red:pstn:calluser:$callId"
+FILE=PstnCallService.kt LINE=155 TEXT=redis.opsForValue().get(callUserKey(callId))?.let { runCatching { UUID.fromString(it.trim()) }.getOrNull() }

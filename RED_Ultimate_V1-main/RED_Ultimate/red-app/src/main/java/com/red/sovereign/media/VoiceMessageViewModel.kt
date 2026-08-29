@@ -443,16 +443,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             when (val uploaded = media.uploadEncrypted(encrypted, "voice-note")) {
                 is ApiResult.Error -> uploaded
                 is ApiResult.Success -> {
-                    // منح الوصول لكل مستلم (فرد أو أعضاء المجموعة) â€” فشل عضو لا يمنع الإرسال
-                                                            val grantResults = coroutineScope {
+                    // منح الوصول لكل مستلم (فرد أو أعضاء المجموعة) — فشل عضو لا يمنع الإرسال
+                    val grantResults = coroutineScope {
                         targetRedIds.filter { it.isNotBlank() }.map { grantee ->
-                            async {
-                                media.grant(uploaded.value.objectKey, grantee)
-                            }
+                            async { media.grant(uploaded.value.objectKey, grantee) }
                         }.awaitAll()
                     }
                     val anyGranted = grantResults.any { it is ApiResult.Success }
-                    
+
                     if (!anyGranted) {
                         media.delete(uploaded.value.url)
                         return ApiResult.Error(null, "VOICE_GRANT_FAILED")

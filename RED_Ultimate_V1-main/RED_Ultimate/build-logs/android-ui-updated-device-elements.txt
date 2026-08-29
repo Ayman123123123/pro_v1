@@ -1,0 +1,18 @@
+text= | desc=مكالمة صوتية للمجموعة | clickable= | enabled= | bounds=
+text= | desc=مكالمة فيديو للمجموعة | clickable= | enabled= | bounds=
+text=g | desc= | clickable= | enabled= | bounds=
+text=gg | desc= | clickable= | enabled= | bounds=
+text=مجموعة مشفرة | desc= | clickable= | enabled= | bounds=
+text= 1 أعضاء • تشفير Sender Keys | desc= | clickable= | enabled= | bounds=
+text= خاصة | desc= | clickable= | enabled= | bounds=
+text=الأعضاء | desc= | clickable= | enabled= | bounds=
+text=الإعدادات | desc= | clickable= | enabled= | bounds=
+text=أدوات الإدارة | desc= | clickable= | enabled= | bounds=
+text= دعوة | desc= | clickable= | enabled= | bounds=
+text= معرف | desc= | clickable= | enabled= | bounds=
+text= الطلبات (0) | desc= | clickable= | enabled= | bounds=
+text= إضافة أعضاء من أصدقائك | desc= | clickable= | enabled= | bounds=
+text=f | desc= | clickable= | enabled= | bounds=
+text=ffd (أنت) | desc= | clickable= | enabled= | bounds=
+text=34919 | desc= | clickable= | enabled= | bounds=
+text= المالك السيادي | desc= | clickable= | enabled= | bounds=

@@ -76,6 +76,10 @@ class YounesApplication : Application() {
         createNotificationChannels()
         // تنظيف دوري للقصص المنتهية — بدونه تتراكم صفوفها في القاعدة بلا حد
         com.red.sovereign.core.workers.StoryCleanupWorker.enqueue(this)
+        // صندوق الصادر المتين — يعيد الرسائل بعد قتل العملية أو انقطاع الشبكة
+        // حتى لو لم يُستدعَ schedule() يدويًا (مثلاً بعد reboot)، فالمجدولة الدورية كل 15 دقيقة
+        // تضمن عدم بقاء أي رسالة PENDING إلى الأبد
+        try { com.red.sovereign.core.outbox.OutboxRetryWorker.schedulePeriodic(this) } catch (_: Exception) {}
     }
 
     private fun createNotificationChannels() {

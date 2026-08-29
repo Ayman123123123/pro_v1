@@ -1,0 +1,52 @@
+=== 2026-08-21T06:42:58.7866873+03:00 ===
+=== digest ===
+HTTP/1.1 401 Unauthorized
+Server: Web Server/2.1.0 MatrixSSL/4.3.0-OPEN
+Date: Mon Aug 25 06:06:01 2025
+WWW-Authenticate: Digest realm="Web Server", domain="",qop="auth", nonce="75e25d70cf5c9ef96b1b85be50703941", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"
+<redacted>
+Pragma: no-cache
+Cache-Control: no-cache
+Content-Type: text/html
+
+HTTP/1.1 401 Unauthorized
+Server: Web Server/2.1.0 MatrixSSL/4.3.0-OPEN
+Date: Mon Aug 25 06:06:01 2025
+WWW-Authenticate: Digest realm="Web Server", domain="",qop="auth", nonce="f0dc70a32de6af88cad4043756487b3a", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"
+<redacted>
+Pragma: no-cache
+Cache-Control: no-cache
+Content-Type: text/html
+
+HTTP_STATUS=401
+=== basic ===
+HTTP/1.1 401 Unauthorized
+Server: Web Server/2.1.0 MatrixSSL/4.3.0-OPEN
+Date: Mon Aug 25 06:06:01 2025
+WWW-Authenticate: Digest realm="Web Server", domain="",qop="auth", nonce="75e25d70cf5c9ef96b1b85be50703941", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"
+<redacted>
+Pragma: no-cache
+Cache-Control: no-cache
+Content-Type: text/html
+
+HTTP_STATUS=401
+=== anyauth ===
+HTTP/1.1 401 Unauthorized
+Server: Web Server/2.1.0 MatrixSSL/4.3.0-OPEN
+Date: Mon Aug 25 06:06:01 2025
+WWW-Authenticate: Digest realm="Web Server", domain="",qop="auth", nonce="75e25d70cf5c9ef96b1b85be50703941", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"
+<redacted>
+Pragma: no-cache
+Cache-Control: no-cache
+Content-Type: text/html
+
+HTTP/1.1 401 Unauthorized
+Server: Web Server/2.1.0 MatrixSSL/4.3.0-OPEN
+Date: Mon Aug 25 06:06:01 2025
+WWW-Authenticate: Digest realm="Web Server", domain="",qop="auth", nonce="f0dc70a32de6af88cad4043756487b3a", opaque="5ccc069c403ebaf9f0171e9517f40e41",algorithm="MD5", stale="FALSE"
+<redacted>
+Pragma: no-cache
+Cache-Control: no-cache
+Content-Type: text/html
+
+HTTP_STATUS=401

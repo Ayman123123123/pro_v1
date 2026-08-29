@@ -1,0 +1,455 @@
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:31:import com.red.sovereign.calls.PstnIncomingCallCoordinator
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:45:private val pstnIncomingCoordinator: PstnIncomingCallCoordinator by viewModels()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:111:// أحداث PSTN مستقلة عن شاشة SMS ولوحة DINSTAR وتبقى للمستخدم المصادق عليه فقط.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:112:pstnIncomingCoordinator.start()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:124:// تحديث صلاحيات PSTN عند استئناف التطبيق
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:128:authViewModel.refreshPstnEntitlement()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\MainActivity.kt:135:pstnIncomingCoordinator.stop()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthModels.kt:45:val pstnEnabled: Boolean = false,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthModels.kt:46:val pstnDailyLimit: Int = 0,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:27:private val pstn = PstnApi(tokens)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:33:var pstnState: PstnState by mutableStateOf(PstnState.Idle)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:117:/** WebRTC-PSTN bridge: connect to Asterisk via WSS, dial through DINSTAR GSM */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:118:private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:119:var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:121:fun dialPstn(number: String) = viewModelScope.launch {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:122:refreshPstnEntitlement()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:123:pstnState = PstnState.Bridging
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:124:val mgr = com.red.sovereign.calls.PstnWebRtcManager(getApplication())
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:125:pstnWebRtc = mgr
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:126:mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:127:override fun onConnected() { pstnState = PstnState.Registering }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:128:override fun onRinging() { pstnState = PstnState.Ringing }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:130:pstnState = PstnState.Started(mgr.currentCallId ?: "", usedToday, dailyLimit)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:133:pstnState = PstnState.Idle
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:134:pstnWebRtc?.release()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:135:pstnWebRtc = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:138:incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:139:pstnState = PstnState.Incoming(fromNumber)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:142:pstnState = PstnState.Error(localize(message))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:147:fun acceptIncomingPstnCall() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:148:val incoming = incomingPstnCall ?: return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:149:pstnWebRtc?.answerIncoming(incoming.sdp)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:150:incomingPstnCall = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:153:fun rejectIncomingPstnCall() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:154:pstnWebRtc?.rejectIncoming()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:155:pstnWebRtc?.release()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:156:pstnWebRtc = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:157:incomingPstnCall = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:158:pstnState = PstnState.Idle
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:161:fun hangupPstn() = viewModelScope.launch {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:162:pstnWebRtc?.hangup()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:163:pstnWebRtc?.release()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:164:pstnWebRtc = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:165:pstnState = PstnState.Idle
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:168:/** كتم/إلغاء كتم الميكروفون في مكالمة PSTN النشطة. */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:169:fun togglePstnMute(mute: Boolean) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:170:pstnWebRtc?.isMuted = mute
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:173:/** تبديل مكبر الصوت في مكالمة PSTN النشطة. */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:174:fun togglePstnSpeaker(speakerOn: Boolean) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:175:pstnWebRtc?.isSpeaker = speakerOn
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:178:fun clearPstnState() { pstnState = PstnState.Idle }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:182:val result = pstn.sendSms(recipient, text)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:190:val result = pstn.getInbox()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:243:state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:280:state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:293:/** يجلب حالة PSTN من الخادم (/api/auth/me) ويحدث الحالة المحلية.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:295:fun refreshPstnEntitlement() = viewModelScope.launch {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:299:tokens.store.put("pstn_enabled", user.pstnEnabled.toString())
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:302:is AuthState.Authenticated -> current.copy(pstnEnabled = user.pstnEnabled)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:362:value.contains("PSTN_NOT_ENABLED", ignoreCase = true) ->
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:363:"ميزة الهاتف اليمني (PSTN) غير مفعلة لحسابك. تواصل مع الإدارة لتفعيل الخدمة."
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:366:value.contains("ALREADY_IN_PSTN_CALL", ignoreCase = true) ->
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:374:value.contains("NO_ACTIVE_PSTN_CALL", ignoreCase = true) ->
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:397:data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean, val isAdmin: Boolean = false) : AuthState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:410:sealed interface PstnState {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:411:data object Idle : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:412:data object Dialing : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:413:data object Bridging : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:414:data object Registering : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:415:data object Ringing : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:416:data class Incoming(val fromNumber: String) : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:423:) : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:424:data class Error(val message: String) : PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\AuthViewModel.kt:427:data class IncomingPstnCall(val sdp: String, val fromNumber: String)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:7:@Serializable data class PstnCallRequest(val number: String, val slotIndex: Int? = null)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:8:@Serializable data class PstnCallResponse(val callId: String, val status: String, val number: String, val usedToday: Int, val dailyLimit: Int, val slot: Int = -1)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:54:class PstnApi(private val tokens: TokenStore) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:59:* بدء مكالمة PSTN.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:63:suspend fun dial(number: String, slotIndex: Int? = null): ApiResult<PstnCallResponse> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:64:return when (val result = client.request("POST", "/api/pstn/calls", json.encodeToString(PstnCallRequest(number, slotIndex)))) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:65:is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<PstnCallResponse>(result.value)) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:72:return when (val result = client.request("POST", "/api/pstn/calls/$callId/hangup", "{\"port\":$port}")) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:79:return when (val result = client.request("POST", "/api/pstn/bridge/$callId/hangup", "")) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:86:return when (val result = client.request("POST", "/api/pstn/bridge", json.encodeToString(mapOf("number" to number)))) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\PstnApi.kt:98:return when (val result = client.request("POST", "/api/pstn/incoming-bridge", json.encodeToString(IncomingBridgeRequest(callId)))) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\TokenStore.kt:14:val pstnEnabled get() = store.get("pstn_enabled") == "true"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\auth\TokenStore.kt:25:store.put("pstn_enabled", response.user.pstnEnabled.toString())
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallHistoryViewModel.kt:79:CallFilterType.DINSTAR -> item.route.equals("DINSTAR", ignoreCase = true) || item.route.equals("PSTN", ignoreCase = true)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallHistoryViewModel.kt:141:val dinstar = calls.count { it.route.equals("DINSTAR", ignoreCase = true) || it.route.equals("PSTN", ignoreCase = true) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:61:import com.red.sovereign.calls.Material3ExpressivePstnCallScreen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:62:import com.red.sovereign.calls.Material3ExpressiveIncomingPstnCallScreen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:67:* لا لوحة DTMF (تلك للهواتف PSTN).
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:104:val isPstnCall = mode == "PSTN" || mode == "DINSTAR" || callId.startsWith("pstn-") || callId.startsWith("dinstar-")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:262:// PSTN/DINSTAR calls use Material 3 Expressive screens
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:263:is CallUiState.Incoming -> if (isPstnCall) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:264:Material3ExpressiveIncomingPstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:279:is CallUiState.Connecting -> if (isPstnCall) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:280:Material3ExpressivePstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:281:status = PstnCallStatus.BRIDGING,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:300:is CallUiState.CallEnded -> if (isPstnCall) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:301:Material3ExpressivePstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:302:status = PstnCallStatus.ENDED,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:312:is CallUiState.Reconnecting -> if (isPstnCall) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:313:Material3ExpressivePstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:314:status = PstnCallStatus.BRIDGING,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallOverlay.kt:374:showKeypad = isPstnCall,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:79:/** مراحل اتصال PSTN المعروضة للمستخدم في شاشة المكالمة */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:90:* Material 3 Expressive PSTN Call Screen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:94:fun Material3ExpressivePstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:95:status: PstnCallStatus,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:121:PstnCallStatus.REGISTERING -> ConnectionStage.REGISTERING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:122:PstnCallStatus.BRIDGING -> ConnectionStage.BRIDGING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:123:PstnCallStatus.INVITING -> ConnectionStage.INVITING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:124:PstnCallStatus.RINGING -> ConnectionStage.RINGING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:125:PstnCallStatus.ACTIVE -> ConnectionStage.CONNECTED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:142:PstnCallStatus.ACTIVE -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:145:PstnCallStatus.IDLE, PstnCallStatus.ENDED -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:154:if (status == PstnCallStatus.ACTIVE && callStartTime > 0) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:163:if (status == PstnCallStatus.IDLE) onBack()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:230:if (status == PstnCallStatus.ACTIVE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:244:if (status == PstnCallStatus.ACTIVE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:256:if (status != PstnCallStatus.IDLE && status != PstnCallStatus.ENDED) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:399:text = "Daily PSTN Limit",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:432:status: PstnCallStatus,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:470:enabled = status == PstnCallStatus.ACTIVE,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:479:enabled = status == PstnCallStatus.ACTIVE,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:488:enabled = status == PstnCallStatus.ACTIVE,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:497:enabled = status == PstnCallStatus.ACTIVE,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallScreen.kt:524:enabled = status == PstnCallStatus.ACTIVE,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallSystemSurfacePolicy.kt:6:* الداخلية في ذلك السطح. تظل مكالمات PSTN/DINSTAR منفصلة في مسارها الخاص.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallSystemSurfacePolicy.kt:10:mode.equals("PSTN", ignoreCase = true) || mode.equals("DINSTAR", ignoreCase = true)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallType.kt:32:PSTN_GSM("مكالمة هاتفية GSM", "phone", 1, Architecture.PSTN_LEGACY, false, false, true, false, false),
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallType.kt:33:PSTN_WEBRTC("مكالمة هاتفية WebRTC", "phone", 1, Architecture.PSTN_WEBRTC_SIP, true, false, true, false, false);
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallType.kt:45:PSTN_LEGACY("PSTN Legacy", "AMI → Asterisk → DINSTAR", "هاتف GSM"),
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallType.kt:46:PSTN_WEBRTC_SIP("PSTN WebRTC-SIP", "WebRTC-SIP → Asterisk WSS → DINSTAR", "هاتف WebRTC")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\CallType.kt:57:fun pstnTypes() = entries.filter { it.name.startsWith("PSTN") }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:34:onPstnCall: (String) -> Unit,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:36:pstnEnabled: Boolean,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:60:fun handlePstnCall() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:66:if (!pstnEnabled) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:67:errorMessage = "PSTN plan required"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:79:onPstnCall(formatted)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:109:onClick = { if (pstnEnabled) handlePstnCall() },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:110:containerColor = if (pstnEnabled) MaterialTheme.colorScheme.tertiary
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:112:contentColor = if (pstnEnabled) MaterialTheme.colorScheme.onTertiary
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:115:Icon(Icons.Filled.Phone, contentDescription = "PSTN call")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:198:// PSTN daily-limit text
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:200:text = if (pstnEnabled) "Used: $usedToday / $dailyLimit"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:201:else "PSTN plan required",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:203:color = if (pstnEnabled) MaterialTheme.colorScheme.onSurface
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\DialPadScreen.kt:215:color = if (pstnEnabled) MaterialTheme.colorScheme.onSurface
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:55:import com.red.sovereign.features.sms.PstnEventSocket
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:116:CALL_TYPE_PSTN -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:118:viewModel.peer = intent?.getStringExtra(EXTRA_PSTN_CALLER).orEmpty()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:121:viewModel.pstnPort = intent?.getIntExtra(EXTRA_PSTN_PORT, -1) ?: -1
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:122:viewModel.pstnChannel = intent?.getStringExtra(EXTRA_PSTN_CHANNEL).orEmpty()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:123:viewModel.preparePstnControl()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:150:const val CALL_TYPE_PSTN = "pstn"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:155:const val EXTRA_PSTN_CALLER = "pstn_caller"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:156:const val EXTRA_PSTN_PORT = "pstn_port"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:157:const val EXTRA_PSTN_CHANNEL = "pstn_channel"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:159:fun launchPstn(context: Context, callId: String, callerNumber: String, port: Int, channel: String) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:163:putExtra(EXTRA_CALL_TYPE, CALL_TYPE_PSTN)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:165:putExtra(EXTRA_PSTN_CALLER, callerNumber)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:166:putExtra(EXTRA_PSTN_PORT, port)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:167:putExtra(EXTRA_PSTN_CHANNEL, channel)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:238:var pstnPort = -1
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:239:var pstnChannel = ""
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:241:private val pstnSocket = PstnEventSocket(TokenStore(application))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:242:private var pstnMedia: PstnWebRtcManager? = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:243:private var pstnAcceptPending = false
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:244:private var pstnAcceptSent = false
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:245:var pstnMediaReady by mutableStateOf(false)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:247:var pstnMediaError by mutableStateOf<String?>(null)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:251:* يفتح تحكم PSTN ويسجل SIP/WebRTC للمستخدم قبل إرسال القبول إلى Asterisk.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:255:fun preparePstnControl() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:256:if (pstnChannel.isBlank() || callId.isBlank()) return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:257:pstnSocket.connect()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:258:if (pstnMedia != null) return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:259:val media = PstnWebRtcManager(getApplication())
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:260:pstnMedia = media
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:262:media.prepareIncoming(callId, object : PstnWebRtcManager.Events {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:264:pstnMediaReady = true
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:265:if (pstnAcceptPending) sendPstnAccept()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:270:if (pstnAcceptPending) media.answerIncoming(sdp)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:273:pstnMediaReady = false
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:276:pstnMediaError = message
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:277:pstnMediaReady = false
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:283:private fun sendPstnAccept() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:284:if (pstnAcceptSent || pstnChannel.isBlank()) return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:285:pstnAcceptSent = true
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:286:pstnSocket.send("PSTN_ACCEPT", mapOf("channel" to pstnChannel))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:304:IncomingCallActivity.CALL_TYPE_PSTN -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:305:pstnAcceptPending = true
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:306:if (pstnMediaReady) sendPstnAccept()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:322:IncomingCallActivity.CALL_TYPE_PSTN -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:323:if (pstnChannel.isNotBlank()) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:324:pstnSocket.send("PSTN_REJECT", mapOf("channel" to pstnChannel))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:326:pstnMedia?.rejectIncoming()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:327:pstnMedia?.release()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:328:pstnMedia = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:329:pstnMediaReady = false
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:336:pstnMedia?.release()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:337:pstnMedia = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:338:pstnSocket.disconnect()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:365:IncomingCallActivity.CALL_TYPE_PSTN -> "مكالمة هاتف واردة"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:442:// PSTN يبقى في foreground إلى أن يكتمل تسجيل SIP ثم يصل INVITE الصوتي.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingCallActivity.kt:443:if (viewModel.callType != IncomingCallActivity.CALL_TYPE_PSTN) onFinish()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingPstnCallScreen.kt:68:* Material 3 Expressive Incoming PSTN Call Screen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingPstnCallScreen.kt:72:fun Material3ExpressiveIncomingPstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\IncomingPstnCallScreen.kt:173:text = "Incoming PSTN Call",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:14:* يستقبل أحداث PSTN النظامية (مكالمة واردة على خط الهاتف).
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:16:* 1. تذكير المستخدم بوجود خط PSTN إذا كان في مكالمة RED نشطة
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:17:* 2. الهدوء التلقائي للـ ringer عند ورود PSTN
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:26:showPstnReminderNotification(context, incomingNumber)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:32:// User picked up PSTN — pause any media, but don't auto-end RED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:38:// PSTN ended — resume RED ringer/UI if a RED call is incoming
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:44:private fun showPstnReminderNotification(context: Context, number: String?) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:48:if (manager.getNotificationChannel(PSTN_CHANNEL) == null) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:50:PSTN_CHANNEL,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:51:"مكالمة PSTN واردة",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:67:val notification = NotificationCompat.Builder(context, PSTN_CHANNEL)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:70:.setContentText("PSTN: $displayNumber — رُد من تطبيق الهاتف")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:78:manager.notify(PSTN_NOTIFICATION_ID, notification)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:79:android.util.Log.i("PhoneStateReceiver", "PSTN notification shown for: $displayNumber")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:91:private const val PSTN_CHANNEL = "red_pstn_reminder"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PhoneStateReceiver.kt:92:private const val PSTN_NOTIFICATION_ID = 8001
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:17:* Foreground Service that keeps the Android process alive during a PSTN call.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:20:* during an active PSTN call (WebRTC audio bridge to DINSTAR GSM).
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:22:class PstnCallForegroundService : Service() {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:25:private const val CHANNEL_ID = "red_pstn_call"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:27:private const val ACTION_START = "com.red.sovereign.pstn.START"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:28:private const val ACTION_STOP = "com.red.sovereign.pstn.STOP"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:31:val intent = Intent(context, PstnCallForegroundService::class.java).apply {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:40:context.stopService(Intent(context, PstnCallForegroundService::class.java))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:58:val label = if (isIncoming) "Incoming PSTN" else "Outgoing PSTN"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:85:wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "red:pstn-call")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallForegroundService.kt:99:NotificationChannel(CHANNEL_ID, "PSTN Calls", NotificationManager.IMPORTANCE_LOW)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:49:enum class PstnCallStatus {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:76:private fun statusLabel(status: PstnCallStatus): String = when (status) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:77:PstnCallStatus.IDLE -> ""
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:78:PstnCallStatus.REGISTERING -> "Registering..."
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:79:PstnCallStatus.BRIDGING -> "Connecting..."
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:80:PstnCallStatus.INVITING -> "Calling..."
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:81:PstnCallStatus.RINGING -> "Ringing..."
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:82:PstnCallStatus.ACTIVE -> "Connected"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:83:PstnCallStatus.ENDED -> "Call Ended"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:84:PstnCallStatus.ERROR -> "Connection Error"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:87:private fun statusColor(status: PstnCallStatus): Color = when (status) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:88:PstnCallStatus.ACTIVE -> Color(0xFF4CAF50)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:89:PstnCallStatus.RINGING -> Color(0xFFFFC107)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:90:PstnCallStatus.ERROR -> Color(0xFFF44336)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:91:PstnCallStatus.ENDED -> Color(0xFF9E9E9E)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:106:fun PstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:107:status: PstnCallStatus,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:121:PstnCallStatus.ACTIVE -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:126:PstnCallStatus.IDLE, PstnCallStatus.ENDED -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:135:if (status == PstnCallStatus.ACTIVE && callStartTime > 0) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:144:if (status == PstnCallStatus.IDLE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:173:if (status == PstnCallStatus.BRIDGING || status == PstnCallStatus.INVITING || status == PstnCallStatus.REGISTERING) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:196:if (status == PstnCallStatus.ACTIVE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:206:if (status == PstnCallStatus.ERROR) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:223:if (status == PstnCallStatus.ACTIVE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:265:if (status != PstnCallStatus.IDLE && status != PstnCallStatus.ENDED) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:275:enabled = status == PstnCallStatus.ACTIVE
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:285:enabled = status == PstnCallStatus.ACTIVE
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:295:enabled = status != PstnCallStatus.ENDED,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:349:private fun PstnCallStatus.emoji(): String = when (this) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:350:PstnCallStatus.RINGING -> "\u23F3"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:351:PstnCallStatus.ACTIVE -> "\u260E"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:352:PstnCallStatus.ERROR -> "\u26A0"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:353:PstnCallStatus.ENDED -> "\u2716"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:354:PstnCallStatus.IDLE -> ""
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:355:PstnCallStatus.BRIDGING -> "\u25CB"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:356:PstnCallStatus.INVITING -> "\u25CB"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnCallScreen.kt:357:PstnCallStatus.REGISTERING -> "\u25CB"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:8:import com.red.sovereign.features.sms.PstnEventSocket
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:9:import com.red.sovereign.features.sms.PstnWsEnvelope
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:13:* مستهلك دائم لأحداث PSTN الخاصة بالمستخدم المسجّل.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:16:* بعد المصادقة ويحوّل حدث PSTN_INCOMING إلى شاشة المكالمة الواردة. يبقى
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:17:* WebSocket نفسه مصدر الإشارة فقط، أما الصوت فيُدار في مسار PSTN/WebRTC.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:19:class PstnIncomingCallCoordinator(application: Application) : AndroidViewModel(application) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:20:private val socket = PstnEventSocket(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:42:private fun onEvent(event: PstnWsEnvelope) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:43:if (event.type != "PSTN_INCOMING") return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:49:Log.w(TAG, "Ignoring incomplete PSTN incoming event callId=$callId")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:57:IncomingCallActivity.launchPstn(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnIncomingCallCoordinator.kt:73:const val TAG = "PstnIncomingCoordinator"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:7:import com.red.sovereign.auth.PstnApi
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:29:* Manages a WebRTC PeerConnection to Asterisk for PSTN calling via WSS.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:32:* 1. POST /api/pstn/bridge → get SIP credentials + WSS URL + ICE servers
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:41:class PstnWebRtcManager(private val context: Context) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:64:var state: PstnCallState = PstnCallState.IDLE; private set
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:99:* Initiate a PSTN call via WebRTC bridge.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:103:suspend fun call(number: String, events: Events): PstnCallState =
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:108:* لا ينشئ INVITE ولا يستهلك رصيداً؛ ينتظر redirect بعد PSTN_ACCEPT.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:110:suspend fun prepareIncoming(callId: String, events: Events): PstnCallState =
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:113:private suspend fun startBridge(number: String, incomingCallId: String?, events: Events): PstnCallState = withContext(Dispatchers.IO) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:114:if (state != PstnCallState.IDLE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:118:state = PstnCallState.BRIDGING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:121:// Keep process alive during PSTN call
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:123:PstnCallForegroundService.start(context, label, incomingCallId != null)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:125:val api = PstnApi(TokenStore(context))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:131:state = PstnCallState.ERROR
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:137:// Use the callId from the bridge response so the backend (PstnBridgeController)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:164:state = PstnCallState.ERROR
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:178:val audioTrack = factory!!.createAudioTrack("pstn-audio", audioSource).apply { setEnabled(true) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:179:pc.addTrack(audioTrack, listOf("pstn-stream"))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:182:state = PstnCallState.REGISTERING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:187:state = PstnCallState.INVITING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:190:state = PstnCallState.REGISTERING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:195:state = PstnCallState.RINGING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:199:state = PstnCallState.ACTIVE
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:205:state = PstnCallState.INVITING
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:215:this@PstnWebRtcManager.lastLocalSdp = answerSdp.description
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:240:state = PstnCallState.ENDED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:245:state = PstnCallState.ERROR
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:294:if (state == PstnCallState.IDLE || state == PstnCallState.ENDED) return
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:297:state = PstnCallState.ENDED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:303:val api = PstnApi(TokenStore(context))
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:312:* Accept an incoming PSTN call. The answer SDP was prepared when the
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:317:if (state == PstnCallState.INVITING) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:325:state = PstnCallState.ACTIVE
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:336:* Reject an incoming PSTN call: 486 Busy Here + full cleanup.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:339:if (state == PstnCallState.INVITING) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:342:state = PstnCallState.ENDED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:366:state = PstnCallState.IDLE
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:367:PstnCallForegroundService.stop(context)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:374:if (this@PstnWebRtcManager.state == PstnCallState.ACTIVE) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:375:this@PstnWebRtcManager.state = PstnCallState.ENDED
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\PstnWebRtcManager.kt:397:enum class PstnCallState {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\WebRtcSipClient.kt:29:* This is a purpose-built client for the RED Sovereign PSTN bridge.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\WebRtcSipClient.kt:31:* for outbound PSTN calls via Asterisk.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\WebRtcSipClient.kt:398:// Incoming INVITE → incoming PSTN call via WebRTC
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YemeniOperatorDetector.kt:45:clean.startsWith("1") -> OperatorInfo("هاتف ثابت (صنعاء)", Color(0xFF607D8B), "PSTN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YemeniOperatorDetector.kt:46:clean.startsWith("2") -> OperatorInfo("هاتف ثابت (عدن)", Color(0xFF455A64), "PSTN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YemeniOperatorDetector.kt:47:clean.startsWith("3") -> OperatorInfo("هاتف ثابت (الحديدة)", Color(0xFF455A64), "PSTN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YemeniOperatorDetector.kt:48:clean.startsWith("4") -> OperatorInfo("هاتف ثابت (تعز)", Color(0xFF455A64), "PSTN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YemeniOperatorDetector.kt:49:clean.startsWith("5") -> OperatorInfo("هاتف ثابت (إب)", Color(0xFF455A64), "PSTN")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YounesCallService.kt:201:// PSTN interop: silence/hold/resume RED call from PhoneStateReceiver
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YounesCallService.kt:205:// أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء PSTN
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YounesCallService.kt:1434:// PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\calls\YounesCallService.kt:1456:// PSTN interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\core\PstnSignalBus.kt:8:object PstnSignalBus {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\core\RedSystemLinker.kt:22:"PSTN_GSM" -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\core\database\RedDao.kt:158:// SMS Messages — تخزين محلي لرسائل PSTN
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\core\database\RedDatabase.kt:183:/** جداول SMS المحلية: sms_messages + sms_conversations لتخزين رسائل PSTN محلياً */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\calls\SovereignCallSystem.kt:44:PSTN_DINSTAR("خطي يمني", Icons.Rounded.SimCard, SovereignColors.DinstarGold, "عبر بوابة DINSTAR")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\dinstar\DinstarAdminScreen.kt:73:"مراقبة وتحكم في أسطول الـ GSM وPSTN",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\dinstar\DinstarViewModel.kt:138:is DinstarWsEvent.PstnIncoming -> handlePstnIncoming(event)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\dinstar\DinstarViewModel.kt:145:private fun handlePstnIncoming(event: DinstarWsEvent.PstnIncoming) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\dinstar\DinstarViewModel.kt:146:IncomingCallActivity.launchPstn(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\dinstar\DinstarWebSocketBridge.kt:99:data class PstnIncoming(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\DialPadScreen.kt:1:package com.red.sovereign.features.pstn
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\DialPadScreen.kt:46:* - مكالمة PSTN/GSM عبر DINSTAR (ذهبي / برتقالي)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\DialPadScreen.kt:55:onNavigateToPstnCall: (String) -> Unit,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\DialPadScreen.kt:201:// PSTN/GSM call — Gold / DINSTAR
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\DialPadScreen.kt:204:onClick = { if (number.isNotEmpty()) onNavigateToPstnCall(number) },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\IncomingPstnCallScreen.kt:1:package com.red.sovereign.features.pstn
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\IncomingPstnCallScreen.kt:28:fun IncomingPstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:1:package com.red.sovereign.features.pstn
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:30:import com.red.sovereign.auth.PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:34:* 🇾🇪 DINSTAR GSM & Yemeni PSTN Calling Screen — Ultimate Luxury Experience
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:37:fun PstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:39:state: PstnState,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:54:val startedState = state as? PstnState.Started
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:57:val isRinging = state is PstnState.Ringing || (startedState?.ringing == true)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:58:val isBridging = state is PstnState.Bridging || state is PstnState.Registering
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:141:state is PstnState.Error -> "خطأ: ${(state as PstnState.Error).message}"
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:146:state is PstnState.Error -> SovereignColors.RubyNeon
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:189:onClick = { isMuted = !isMuted; viewModel?.togglePstnMute(isMuted) ?: onMuteToggle(isMuted) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\pstn\PstnCallScreen.kt:206:onClick = { isSpeaker = !isSpeaker; viewModel?.togglePstnSpeaker(isSpeaker) ?: onSpeakerToggle(isSpeaker) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventEnvelopeCodec.kt:12:internal object PstnEventEnvelopeCodec {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventEnvelopeCodec.kt:15:fun decode(text: String): PstnWsEnvelope {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventEnvelopeCodec.kt:17:?: error("PSTN event is not a JSON object")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventEnvelopeCodec.kt:25:return json.decodeFromJsonElement<PstnWsEnvelope>(normalized)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:20:* عميل WebSocket لأحداث PSTN/SMS الحية عبر `/ws/pstn`.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:25:* - PSTN_CALL_EVENT {callId, event, number, cause, port, redId}
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:26:* - PSTN_INCOMING {number, caller, port, callId}
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:32:class PstnEventSocket(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:34:private val onEnvelope: (PstnWsEnvelope) -> Unit = {},
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:51:val request = Request.Builder().url(wsBase.trimEnd('/') + "/ws/pstn")
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:68:runCatching { PstnEventEnvelopeCodec.decode(text) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:70:.onFailure { Log.w("PstnEventSocket", "Ignoring malformed PSTN event", it) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:86:* Send a PSTN control message to the backend.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\PstnEventSocket.kt:105:.onFailure { Log.e("PstnEventSocket", "Failed to send $type", it) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\SmsModels.kt:43:/** حدث WebSocket /ws/pstn — توجيهه لكل نوع. */
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\SmsModels.kt:45:data class PstnWsEnvelope(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\SmsViewModel.kt:26:* والبحث، مع تحديث فوري عبر WebSocket /ws/pstn وتحديث دوري كل 30 ثانية.
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\SmsViewModel.kt:54:private val socket = PstnEventSocket(tokens, onEnvelope = ::handleEvent, onState = { connected = it })
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\features\sms\SmsViewModel.kt:187:private fun handleEvent(e: PstnWsEnvelope) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:121:onPstnConfigClick: (() -> Unit)? = null
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:181:// PSTN / DINSTAR
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:183:title = "PSTN / DINSTAR",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:188:title = "PSTN Configuration",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:192:// Navigate to PSTN Config Screen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\DeviceSettingsScreen.kt:194:onPstnConfigClick?.invoke()
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:88:import com.red.sovereign.auth.PstnApi
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:110:fun PstnConfigScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:118:val pstnApi = remember { PstnApi(tokenStore) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:197:val response = pstnApi.sendSms(number, text)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:245:val response = api.request("POST", "/api/pstn/bridge",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:264:title = { Text("PSTN / DINSTAR Configuration") },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:313:PstnSectionItem(title = "SIP Bridge Test", icon = Icons.Filled.CloudQueue, color = AqyalGold)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\PstnConfigScreen.kt:584:fun PstnSectionItem(title: String, icon: ImageVector, color: Color) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:112:SettingsPage.DEVICES -> DevicesSettings(deviceSettings, onPstnConfig = {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:113:// Navigate to PSTN Config Screen - this would need a proper navigation implementation
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:186:item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Filled.LocalPhone) }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:304:@Composable private fun DevicesSettings(vm: DeviceSettingsViewModel, onPstnConfig: (() -> Unit)? = null) = SettingsList {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:322:title = "PSTN / DINSTAR Configuration",
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\settings\SettingsScreen.kt:325:onClick = { onPstnConfig?.invoke() }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\CallsHubActions.kt:49:onPstn: () -> Unit,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\CallsHubActions.kt:127:onClick = onPstn
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:179:import com.red.sovereign.auth.PstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:233:import com.red.sovereign.settings.PstnConfigScreen
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:286:private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN, PSTN_CONFIG }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:399:SovereignScreen.PSTN_CONFIG -> {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:401:PstnConfigScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, tokenStore = TokenStore(context), snackbarHostState = remember { SnackbarHostState() })
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:449:}, onPstn = { num -> dinstarPrefill = num ?: ""; showDinstar = true })
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:463:onPstnConfig = { currentScreen = SovereignScreen.PSTN_CONFIG }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:2555:private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit, onPstn: (String?) -> Unit = {}) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:2651:onPstn = { showDinstarDialog = true },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:2843:com.red.sovereign.features.pstn.DialPadScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:2849:onNavigateToPstnCall = { targetNum ->
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:2851:onPstn(targetNum)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3141:onPstnConfig: () -> Unit = {}
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3168:MoreOption(Icons.Default.NetworkCheck, "إعدادات PSTN / DINSTAR", "بوابة DINSTAR، حالة الشرائح، SMSC، اختبار SIP Bridge", AqyalGold, click = onPstnConfig)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3200:Text(if (account.pstnEnabled) "مصرح لك — مكالمات صوتية فقط" else "غير مفعل — يفعله المسؤول من اللوحة", fontSize = 12.sp)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3214:0 -> DialPad(account.pstnEnabled, viewModel, prefillNumber)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3239:IconButton(onClick = { if (account.pstnEnabled) { viewModel.clearPstnState(); viewModel.dialPstn(number) } }, enabled = account.pstnEnabled) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3240:Icon(Icons.Default.Call, "اتصال", tint = if (account.pstnEnabled) YounesEmerald else Color.Gray)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3264:val pstnState = viewModel.pstnState
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3266:val incomingPstn = viewModel.incomingPstnCall
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3267:if (incomingPstn != null) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3268:com.red.sovereign.features.pstn.IncomingPstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3269:number = incomingPstn.fromNumber,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3270:onAccept = { viewModel.acceptIncomingPstnCall() },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3271:onDecline = { viewModel.rejectIncomingPstnCall() }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3275:val isInPstnCall = pstnState is PstnState.Started || pstnState is PstnState.Bridging || pstnState is PstnState.Registering || pstnState is PstnState.Ringing || pstnState is PstnState.Dialing
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3276:if (isInPstnCall) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3277:com.red.sovereign.features.pstn.PstnCallScreen(
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3279:state = viewModel.pstnState,
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3280:onHangup = { viewModel.hangupPstn() },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3281:onMuteToggle = { viewModel.togglePstnMute(it) },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3282:onSpeakerToggle = { viewModel.togglePstnSpeaker(it) },
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3301:Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3302:when (val state = viewModel.pstnState) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3303:PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3304:PstnState.Bridging -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3307:PstnState.Registering -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3310:PstnState.Ringing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3313:is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3314:PstnState.Idle -> Unit
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3315:is PstnState.Started -> Unit // عُالجت أعلاه بشاشة الاتصال الكاملة
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3316:is PstnState.Incoming -> Unit // عُولجت أعلاه بشاشة المكالمة الواردة

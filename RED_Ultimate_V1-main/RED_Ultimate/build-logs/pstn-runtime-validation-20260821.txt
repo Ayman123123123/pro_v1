@@ -1,0 +1,36 @@
+=== time 2026-08-21T06:26:15.4608044+03:00 ===
+=== container health ===
+/red-db-sql running=true restarts=0 health=healthy
+/red-backend running=true restarts=0 health=healthy
+/red-pstn-gateway running=true restarts=0 health=healthy
+=== backend health endpoint ===
+{"brand":"YOUNES","displayName":"┘è┘ê┘å╪│","status":"DEGRADED","version":"1.0.0-YOUNES","timestamp":"2026-08-21T03:26:16.730485800Z","responseTimeMs":804,"services":{"postgresql":{"status":"UP","error":null},"mongodb":{"status":"UP","error":null},"redis":{"status":"DOWN","error":"REDIS_UNAVAILABLE"},"minio":{"status":"UP","error":null}}}
+=== backend AMI listener ===
+2026-08-21 03:24:47.790 [main] INFO  com.red.server.pstn.PstnManager - Registered DinstarEventListener on AMI connection
+2026-08-21 03:24:47.791 [main] INFO  com.red.server.pstn.PstnManager - AMI connection established to red_admin@pstn-gateway
+2026-08-21 03:25:28.300 [main] INFO  com.red.server.pstn.PstnManager - Registered DinstarEventListener on AMI connection
+2026-08-21 03:25:28.300 [main] INFO  com.red.server.pstn.PstnManager - AMI connection established to red_admin@pstn-gateway
+=== dialplan UserEvent ===
+                    3. UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:s,Context:from-dinstar) [extensions.conf:63]
+                    4. UserEvent(DinstarIncomingCall,CallerIDNum:${CALLERID(num)},Channel:${CHANNEL(name)},Exten:${EXTEN},Context:from-dinstar) [extensions.conf:53]
+=== SIP contacts ===
+
+  Contact:  <Aor/ContactUri..............................> <Hash....> <Status> <RTT(ms)..>
+==========================================================================================
+
+  Contact:  0/sip:0@192.168.11.2;transport=UDP             ed379b278f Avail         7.213
+  Contact:  1/sip:1@192.168.11.2:5061;transport=UDP        2166cc3d7a Avail        58.928
+  Contact:  2/sip:2@192.168.11.2:5062;transport=UDP        8d562e09a0 Avail        58.399
+  Contact:  3/sip:3@192.168.11.2:5063;transport=UDP        50a4cd4e5f Avail        59.391
+  Contact:  4/sip:4@192.168.11.2:5064;transport=UDP        cfae5f8478 Avail        59.164
+  Contact:  5/sip:5@192.168.11.2:5065;transport=UDP        9ab984e32f Avail        58.484
+  Contact:  6/sip:6@192.168.11.2:5066;transport=UDP        2ec7173307 Avail        58.388
+  Contact:  7/sip:7@192.168.11.2:5067;transport=UDP        2642cf77b1 Avail        58.950
+  Contact:  dinstar-gateway/sip:192.168.11.2:5062          ee98bdc39c Avail         5.822
+  Contact:  dinstar-gw-192-168-11-2/sip:192.168.11.2:5062  ee98bdc39c Avail         6.620
+
+Objects found: 10
+
+=== WebRTC endpoint ===
+      Contact:  <Aor/ContactUri..........................> <Hash....> <Status> <RTT(ms)..>
+ Endpoint:  red-webrtc-client                                    Unavailable   0 of inf

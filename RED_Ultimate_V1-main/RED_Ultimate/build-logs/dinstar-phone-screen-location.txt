@@ -1,0 +1,2 @@
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:443:showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory, prefillNumber = dinstarPrefill)
+C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate\red-app\src\main\java\com\red\sovereign\ui\RedDashboard.kt:3187:private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null, prefillNumber: String = "") {

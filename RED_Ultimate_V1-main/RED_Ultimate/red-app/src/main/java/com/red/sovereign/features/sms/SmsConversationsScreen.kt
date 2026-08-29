@@ -39,44 +39,84 @@ import java.util.Locale
 fun SmsConversationsScreen(vm: SmsViewModel, onOpenChat: (String) -> Unit) {
     LaunchedEffect(Unit) { vm.start() }
 
-    Column(Modifier.fillMaxSize()) {
-        // Header
-        Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(34.dp))
-                Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                    Text("الرسائل النصية", fontWeight = FontWeight.Bold, color = AqyalGold)
-                    Text(if (vm.connected) "متصل — تحديث فوري" else "غير متصل — التحديث الدوري", fontSize = 12.sp,
-                        color = if (vm.connected) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant)
+    var showNewChatDialog by remember { mutableStateOf(false) }
+    var newChatNumber by remember { mutableStateOf("") }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            // Header
+            Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(34.dp))
+                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                        Text("الرسائل النصية", fontWeight = FontWeight.Bold, color = AqyalGold)
+                        Text(if (vm.connected) "متصل — تحديث فوري" else "غير متصل — التحديث الدوري", fontSize = 12.sp,
+                            color = if (vm.connected) YounesEmerald else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { vm.refresh() }) { Icon(Icons.Default.Refresh, "تحديث", tint = AqyalGold) }
                 }
-                IconButton(onClick = { vm.refresh() }) { Icon(Icons.Default.Refresh, "تحديث", tint = AqyalGold) }
+            }
+
+            // Search
+            OutlinedTextField(
+                value = vm.searchQuery,
+                onValueChange = vm::onSearchChange,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                placeholder = { Text("ابحث في المحادثات…") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            // Content
+            if (vm.loading && vm.conversations.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
+            } else if (vm.filteredConversations.isEmpty()) {
+                EmptyState("لا توجد محادثات", "ابدأ بإرسال رسالة لأي رقم يمني")
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(vm.filteredConversations, key = { it.number }) { conv ->
+                        ConversationRow(conv) { onOpenChat(conv.number) }
+                    }
+                }
             }
         }
 
-        // Search
-        OutlinedTextField(
-            value = vm.searchQuery,
-            onValueChange = vm::onSearchChange,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-            placeholder = { Text("ابحث في المحادثات…") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            singleLine = true,
-            shape = RoundedCornerShape(14.dp)
+        FloatingActionButton(
+            onClick = { showNewChatDialog = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            containerColor = AqyalGold
+        ) {
+            Icon(androidx.compose.material.icons.Icons.Default.Add, contentDescription = "New Chat", tint = Color.White)
+        }
+    }
+
+    if (showNewChatDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewChatDialog = false },
+            title = { Text("محادثة جديدة") },
+            text = {
+                OutlinedTextField(
+                    value = newChatNumber,
+                    onValueChange = { newChatNumber = it },
+                    label = { Text("رقم الهاتف") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (newChatNumber.isNotBlank()) {
+                        onOpenChat(newChatNumber)
+                        showNewChatDialog = false
+                        newChatNumber = ""
+                    }
+                }) { Text("مراسلة") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewChatDialog = false }) { Text("إلغاء") }
+            }
         )
-
-        // Content
-        if (vm.loading && vm.conversations.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
-        } else if (vm.filteredConversations.isEmpty()) {
-            EmptyState("لا توجد محادثات", "ابدأ بإرسال رسالة لأي رقم يمني")
-        } else {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(vm.filteredConversations, key = { it.number }) { conv ->
-                    ConversationRow(conv) { onOpenChat(conv.number) }
-                }
-            }
-        }
     }
 }
 

@@ -1,0 +1,37 @@
+red-pstn-gateway|red-pstn-gateway:local|Up 3 minutes (healthy)|red-sovereign_red-net
+objective_spence|0bee159678c2|Exited (1) 8 hours ago|bridge
+red-proxy|nginx:1.28.0-alpine|Up About an hour (unhealthy)|red-sovereign_red-net
+red-db-sql|postgres:16.9-bookworm|Exited (255) About an hour ago|
+red-db-nosql|mongo:8.0.13-noble|Up About an hour (healthy)|red-sovereign_red-net
+red-cache|redis:7.4.5-bookworm|Exited (255) About an hour ago|
+red-backend|red-backend:local|Up 19 seconds (health: starting)|red-sovereign_red-net
+red-identity-init|alpine:3.21|Exited (0) 22 hours ago|none
+red-media-sfu|red-media-sfu:local|Up About an hour (healthy)|red-sovereign_red-net
+red-turn|coturn/coturn:4.6.2-r10|Up About an hour (healthy)|red-sovereign_red-net
+red-certs-init|red-tls-init:local|Exited (0) 22 hours ago|red-sovereign_default
+red-storage|minio/minio:RELEASE.2025-04-22T22-12-26Z|Up About an hour (healthy)|red-sovereign_red-net
+red-admin-ui|red-admin-ui:local|Up About an hour (healthy)|red-sovereign_red-net
+meridian-backend-1|meridian-backend|Exited (137) 27 hours ago|meridian_default
+great_ardinghelli|595cac01bff1|Exited (2) 22 hours ago|bridge
+kind-cloud-provider|docker/desktop-cloud-provider-kind:v0.6.0|Up About an hour|kind
+kind-registry-mirror|docker/desktop-containerd-registry-mirror:v0.0.4|Up About an hour (healthy)|kind
+desktop-worker2|kindest/node:v1.36.1|Up About an hour|kind
+desktop-worker3|kindest/node:v1.36.1|Up About an hour|kind
+desktop-control-plane|kindest/node:v1.36.1|Up About an hour|kind
+desktop-worker|kindest/node:v1.36.1|Up About an hour|kind
+kind_meitner|mongo:8|Exited (0) 10 days ago|bridge
+bold_burnell|node:26-slim|Exited (0) 10 days ago|bridge
+nifty_sutherland|nginx:alpine|Exited (0) 10 days ago|bridge
+optimistic_kalam|redis:7.4-alpine|Exited (0) 10 days ago|bridge
+exciting_archimedes|alpine/openssl:latest|Exited (0) 10 days ago|bridge
+signal-server-younes-server-1|signal-server-younes-server|Exited (143) 2 weeks ago|signal-server_default
+signal-server-minio-1|minio/minio|Exited (0) 2 weeks ago|signal-server_default
+signal-server-redis-1|bitnamilegacy/redis-cluster:7.4.3|Exited (0) 2 weeks ago|signal-server_default
+signal-server-fdb-1|foundationdb/foundationdb:7.3.33|Exited (143) 2 weeks ago|signal-server_default
+nova_postgres|postgres:15|Up About an hour (healthy)|nova-connect-backend_default
+nova_redis|redis:7|Up About an hour (healthy)|nova-connect-backend_default
+dingchat-backend-1|dingchat-backend|Up About an hour|dingchat_dingchat-net
+dingchat-redis-1|redis:7|Up About an hour (healthy)|dingchat_dingchat-net
+dingchat-postgres-1|postgres:15|Up About an hour (healthy)|dingchat_dingchat-net
+dingchat-tunnel-1|cloudflare/cloudflared:latest|Up About an hour|dingchat_dingchat-net
+dingchat-minio-1|minio/minio|Exited (0) 2 weeks ago|dingchat_dingchat-net

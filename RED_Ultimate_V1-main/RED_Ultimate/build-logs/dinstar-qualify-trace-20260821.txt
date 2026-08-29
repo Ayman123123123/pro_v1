@@ -1,0 +1,75 @@
+=== trace started 2026-08-21T06:11:25.0924594+03:00 ===
+PJSIP Logging enabled
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+<--- Transmitting SIP request (417 bytes) to UDP:192.168.11.2:5062 --->
+OPTIONS sip:192.168.11.2:5062 SIP/2.0
+To: <sip:192.168.11.2>
+PJSIP Logging disabled

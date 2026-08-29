@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -16,6 +17,7 @@ import android.hardware.SensorManager
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaRecorder
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.media.ToneGenerator
@@ -23,8 +25,18 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
+import android.util.Range
+import android.util.Size
+import android.app.PictureInPictureParams
+import android.view.WindowManager
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.AudioFormat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
@@ -692,14 +704,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             CallRuntime.isRecording = false
             recording?.let { rec ->
                 updateNotification("مكالمة يونس نشطة • تم حفظ التسجيل محلياً. جارٍ الرفع السحابي...")
-                
+
                 try {
                     val file = java.io.File(rec.filePath)
                     if (file.exists()) {
                         val tokens = com.red.sovereign.auth.TokenStore(this@YounesCallService)
                         val client = com.red.sovereign.auth.AuthorizedApiClient(tokens)
                         val mediaApi = com.red.sovereign.media.MediaApi(this@YounesCallService, client)
-                        
+
                         val res = mediaApi.uploadEncrypted(file, "record_${rec.callId}")
                         if (res is com.red.sovereign.auth.ApiResult.Success) {
                             android.util.Log.d("CallRecording", "Uploaded Encrypted Backup: ${res.value.objectKey}")
@@ -1181,7 +1193,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
-        
+
         private fun safeStartService(context: Context, intent: Intent) {
             try {
                 ContextCompat.startForegroundService(context, intent)
@@ -1189,7 +1201,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 try { context.startService(intent) } catch (ex: Exception) { /* ignored */ }
             }
         }
-        
+
         fun listen(context: Context) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
         fun start(context: Context, target: String, video: Boolean) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
