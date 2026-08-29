@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, ConfigProvider, Layout, Menu, Segmented, Space, Spin, Tooltip, theme } from 'antd';
+import { Avatar, Badge, Button, ConfigProvider, Dropdown, Layout, Menu, Segmented, Space, Spin, Tag, Tooltip, Typography, theme } from 'antd';
 import {
   DashboardOutlined,
   GlobalOutlined,
@@ -28,6 +28,8 @@ import {
   BulbOutlined,
   MoonOutlined,
   LaptopOutlined,
+  DownOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -393,14 +395,99 @@ export default function App() {
                 </Badge>
               )}
               {adminUser?.username && (
-                <span className="yns-user-chip">
-                  <span className="yns-user-avatar">
-                    {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0)}
+                <Dropdown
+                  trigger={['click']}
+                  placement="bottomLeft"
+                  dropdownRender={() => (
+                    <div style={{
+                      width: 280,
+                      background: resolvedTheme === 'dark' ? '#141C24' : '#fff',
+                      border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      boxShadow: resolvedTheme === 'dark' ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 40px rgba(15,27,45,0.15)',
+                    }}>
+                      {/* رأس المستخدم — تدرج ذهبي/كحلي فاخر */}
+                      <div style={{
+                        padding: '18px 16px 14px',
+                        background: 'linear-gradient(135deg, #0F1B2D 0%, #1E2936 50%, #2C3A4A 100%)',
+                        color: '#fff',
+                        position: 'relative',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          position: 'absolute', top: -20, left: -20, width: 80, height: 80,
+                          background: 'radial-gradient(circle, rgba(183,138,46,0.25) 0%, transparent 70%)',
+                          borderRadius: '50%',
+                        }} />
+                        <Space size={12} align="start">
+                          <Avatar size={48} style={{
+                            background: 'linear-gradient(135deg, #B78A2E 0%, #D4B16A 100%)',
+                            color: '#0A0F14', fontWeight: 800, fontSize: 20, flexShrink: 0,
+                            border: '2px solid rgba(255,255,255,0.2)',
+                          }}>
+                            {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
+                          </Avatar>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, fontSize: 14, lineHeight: 1.2, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {adminUser.displayName || adminUser.username}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                              <Tag color="gold" style={{ margin: 0, fontSize: 10, lineHeight: '16px', border: 'none', color: '#0A0F14', fontWeight: 700 }}>
+                                {(adminUser as any).role || 'ADMIN'}
+                              </Tag>
+                              <span style={{ fontFamily: 'monospace', fontSize: 11 }}>#{ (adminUser as any).redId || '—'}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4, wordBreak: 'break-all' }}>
+                              @{adminUser.username}
+                            </div>
+                          </div>
+                        </Space>
+                      </div>
+                      {/* إحصائيات سريعة */}
+                      <div style={{
+                        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+                        padding: 12, background: resolvedTheme === 'dark' ? 'rgba(255,255,255,0.03)' : '#F7F8FA',
+                        borderBottom: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`,
+                      }}>
+                        <div style={{ textAlign: 'center', padding: '8px 4px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 10, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}` }}>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: '#B78A2E' }}>{pendingCount}</div>
+                          <div style={{ fontSize: 10, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D' }}>موافقات معلقة</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '8px 4px', background: resolvedTheme === 'dark' ? '#1E2936' : '#fff', borderRadius: 10, border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}` }}>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: apiUp ? '#B78A2E' : '#B91C1C' }}>{apiUp ? 'متصل' : 'غير متصل'}</div>
+                          <div style={{ fontSize: 10, color: resolvedTheme === 'dark' ? '#9AAEBB' : '#5A6B7D' }}>حالة الخادم</div>
+                        </div>
+                      </div>
+                      {/* إجراءات */}
+                      <div style={{ padding: 8 }}>
+                        <Button type="text" block icon={<UserOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 36 }}
+                          onClick={() => setCurrentPage('users')}>
+                          إدارة المستخدمين
+                        </Button>
+                        <Button type="text" block icon={<SettingOutlined />} style={{ textAlign: 'right', justifyContent: 'flex-start', height: 36 }}
+                          onClick={() => setCurrentPage('browser-settings')}>
+                          إعدادات المتصفح
+                        </Button>
+                        <div style={{ height: 1, background: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB', margin: '6px 0' }} />
+                        <Button danger block icon={<LogoutOutlined />} onClick={logout} style={{ height: 36, fontWeight: 600 }}>
+                          تسجيل الخروج
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                >
+                  <span className="yns-user-chip" style={{ cursor: 'pointer', userSelect: 'none' }}>
+                    <span className="yns-user-avatar">
+                      {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
+                    </span>
+                    <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {adminUser.username}
+                    </span>
+                    <DownOutlined style={{ fontSize: 10, opacity: 0.6 }} />
                   </span>
-                  {adminUser.username}
-                </span>
+                </Dropdown>
               )}
-              <Button danger icon={<LogoutOutlined />} onClick={logout}>تسجيل الخروج</Button>
             </Space>
           </Header>
           <Content className="yns-content">
