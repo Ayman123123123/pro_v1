@@ -106,7 +106,11 @@ fun SmartServerSettingsScreen(
                         }
                         is ApiResult.Error -> {
                             status = ServerStatus.ERROR
-                            Toast.makeText(context, "فشل التحقق: ${result.message}", Toast.LENGTH_LONG).show()
+                            val message = when (result.message) {
+                                "WIFI_NOT_CONNECTED" -> "لا يوجد اتصال WiFi — الاكتشاف يعمل فقط على الشبكة المحلية. تواصل مع شبكة WiFi ثم جرب مجدداً."
+                                else -> "فشل التحقق: ${result.message}"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -154,7 +158,11 @@ fun SmartServerSettingsScreen(
                         }
                         is ApiResult.Error -> {
                             status = ServerStatus.ERROR
-                            Toast.makeText(context, "لم يتم العثور على خادم: ${result.message}", Toast.LENGTH_LONG).show()
+                            val message = when (result.message) {
+                                "WIFI_NOT_CONNECTED" -> "لا يوجد اتصال WiFi — الاكتشاف يعمل فقط على الشبكة المحلية. تواصل مع شبكة WiFi ثم جرب مجدداً."
+                                else -> "لم يتم العثور على خادم: ${result.message}"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                         }
                     }
                 }
@@ -533,6 +541,7 @@ fun AdvancedOptions(
     currentUrl: String,
     onResetToDefault: () -> Unit
 ) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             Modifier.fillMaxWidth(),
@@ -554,6 +563,15 @@ fun AdvancedOptions(
             QuickAction(Icons.Default.PhoneAndroid, "محاكي", "10.0.2.2") { }
             QuickAction(Icons.Default.Computer, "Localhost", "127.0.0.1") { }
             QuickAction(Icons.Default.ContentCopy, "نسخ الحالي", "") { }
+            QuickAction(Icons.Default.Usb, "adb reverse", "adb reverse tcp:8088 tcp:8088") {
+                try {
+                    val process = Runtime.getRuntime().exec("adb reverse tcp:8088 tcp:8088")
+                    process.waitFor()
+                    Toast.makeText(context, "adb reverse tcp:8088 tcp:8088 تم", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "فشل adb reverse: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 }

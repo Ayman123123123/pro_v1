@@ -1,6 +1,8 @@
 ﻿package com.red.sovereign.core
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import com.red.sovereign.BuildConfig
@@ -51,6 +53,11 @@ class LocalServerDiscovery(private val context: Context) {
     }
 
     suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
+        // تحقق من WiFi أولاً
+        if (!isWifiConnected()) {
+            return@withContext ApiResult.Error(null, "WIFI_NOT_CONNECTED")
+        }
+        
         val known = knownBases()
         // كان الشرط يمرر FAST_BUDGET_MS في الحالتين â€” اكتشاف سريع ثم شامل لاحقاً.
         firstVerified(known, FAST_BUDGET_MS)?.let { found ->
@@ -230,6 +237,15 @@ nsdManager.stopServiceDiscovery(listener)
         const val THOROUGH_BUDGET_MS = 3_200L
         const val MDNS_BUDGET_MS = 1_200L
         const val MAX_PARALLEL = 16
+    }
+
+    /** يتحقق من اتصال WiFi قبل البدء في المسح */
+    private fun isWifiConnected(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
     /** يتحقق من إدخال المستخدم (host | host:port | رابط كامل) ويعيد الرابط الموثوق. */
     fun verifyUserInput(input: String): ApiResult<String> {
