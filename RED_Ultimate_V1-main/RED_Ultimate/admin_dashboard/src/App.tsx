@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Avatar, Badge, Button, ConfigProvider, Dropdown, Layout, Menu, Segmented, Space, Spin, Tag, Tooltip, Typography, theme } from 'antd';
+import { Avatar, Badge, Button, ConfigProvider, Divider, Dropdown, Layout, Menu, Segmented, Space, Spin, Tag, Tooltip, theme } from 'antd';
 import {
   DashboardOutlined,
   GlobalOutlined,
@@ -371,29 +371,59 @@ export default function App() {
                 {menuItems.find(m => m.key === currentPage)?.label || 'يونس'}
               </span>
             </div>
-            <Space size={12}>
-              {/* تبديل فاتح/ليلي/نظام — ألوان رسمية راقية */}
-              <Tooltip title="المظهر">
-                <Segmented
-                  size="small"
-                  value={themeMode}
-                  onChange={(v) => setThemeMode(v as ThemeMode)}
-                  options={[
-                    { value: 'light', icon: <BulbOutlined />, label: 'فاتح' },
-                    { value: 'dark', icon: <MoonOutlined />, label: 'ليلي' },
-                    { value: 'system', icon: <LaptopOutlined />, label: 'نظام' },
-                  ]}
-                />
-              </Tooltip>
-              <span className={apiUp ? 'yns-status up' : 'yns-status down'}>
+            <Space size={8} align="center" style={{ flexWrap: 'nowrap' }}>
+              {/* مجموعة التحكم — ترويسة مرتبة بأزرار حبوب فاخرة */}
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: 3, borderRadius: 9999,
+                background: resolvedTheme === 'dark' ? '#1E2936' : '#F0F2F5',
+                border: `1px solid ${resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB'}`,
+              }}>
+                <Tooltip title="فاتح">
+                  <Button
+                    size="small" shape="circle"
+                    type={themeMode === 'light' ? 'primary' : 'text'}
+                    icon={<BulbOutlined />}
+                    onClick={() => setThemeMode('light')}
+                    style={themeMode === 'light' ? { background: '#B78A2E', borderColor: '#B78A2E', color: '#fff' } : {}}
+                  />
+                </Tooltip>
+                <Tooltip title="ليلي">
+                  <Button
+                    size="small" shape="circle"
+                    type={themeMode === 'dark' ? 'primary' : 'text'}
+                    icon={<MoonOutlined />}
+                    onClick={() => setThemeMode('dark')}
+                    style={themeMode === 'dark' ? { background: '#0F1B2D', borderColor: '#0F1B2D', color: '#D4B16A' } : {}}
+                  />
+                </Tooltip>
+                <Tooltip title="تابع للنظام">
+                  <Button
+                    size="small" shape="circle"
+                    type={themeMode === 'system' ? 'primary' : 'text'}
+                    icon={<LaptopOutlined />}
+                    onClick={() => setThemeMode('system')}
+                    style={themeMode === 'system' ? { background: '#B78A2E', borderColor: '#B78A2E', color: '#fff' } : {}}
+                  />
+                </Tooltip>
+              </div>
+
+              <Divider type="vertical" style={{ height: 24, margin: '0 4px', borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
+
+              <span className={apiUp ? 'yns-status up' : 'yns-status down'} style={{ height: 28, borderRadius: 9999, padding: '0 10px', fontSize: 12 }}>
                 <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
-                {apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}
+                {apiUp ? 'متصل' : 'غير متصل'}
               </span>
+
               {pendingCount > 0 && (
-                <Badge count={pendingCount} color="#E0A83C">
-                  <Button size="small" onClick={() => setCurrentPage('approvals')}>موافقات</Button>
+                <Badge count={pendingCount} color="#B78A2E" size="small" style={{ fontWeight: 700 }}>
+                  <Button size="small" shape="round" onClick={() => setCurrentPage('approvals')} style={{ fontWeight: 600, borderColor: '#B78A2E', color: '#B78A2E' }}>
+                    موافقات
+                  </Button>
                 </Badge>
               )}
+
+              <Divider type="vertical" style={{ height: 24, margin: '0 4px', borderColor: resolvedTheme === 'dark' ? '#2C3A4A' : '#E6E8EB' }} />
               {adminUser?.username && (
                 <Dropdown
                   trigger={['click']}
@@ -477,15 +507,26 @@ export default function App() {
                     </div>
                   )}
                 >
-                  <span className="yns-user-chip" style={{ cursor: 'pointer', userSelect: 'none' }}>
-                    <span className="yns-user-avatar">
+                  <Button
+                    shape="round"
+                    style={{
+                      height: 34, padding: '0 10px 0 6px', gap: 8,
+                      background: resolvedTheme === 'dark' ? '#141C24' : '#fff',
+                      borderColor: '#B78A2E', color: resolvedTheme === 'dark' ? '#F1F5F9' : '#0F1B2D',
+                      fontWeight: 600, display: 'inline-flex', alignItems: 'center',
+                    }}
+                  >
+                    <Avatar size={24} style={{
+                      background: 'linear-gradient(135deg, #B78A2E 0%, #D4B16A 100%)',
+                      color: '#0A0F14', fontWeight: 800, fontSize: 12, flexShrink: 0,
+                    }}>
                       {(adminUser.displayName || adminUser.username || '؟').trim().charAt(0).toUpperCase()}
-                    </span>
-                    <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    </Avatar>
+                    <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {adminUser.username}
                     </span>
                     <DownOutlined style={{ fontSize: 10, opacity: 0.6 }} />
-                  </span>
+                  </Button>
                 </Dropdown>
               )}
             </Space>
