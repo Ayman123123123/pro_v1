@@ -549,6 +549,11 @@ class DinstarEventListener(
     }
 
     private fun extractPortIndex(channel: String, lineNumber: String?): Int? {
+        // أولوية قصوى: النمط الصريح الذي تبنيه docker-entrypoint.sh ودليل DINSTAR
+        // `dinstar-gw-{ip}-port-{n}` — هو المصدر الوحيد الموثوق للمنفذ الحقيقي.
+        Regex("""-port-(\d{1,2})\b""").find(channel)?.groupValues?.get(1)?.toIntOrNull()?.let {
+            if (it in 0..31) return it
+        }
         val fromChannel = Regex("""[-_:](\d{1,3})(?:@|$)""")
             .findAll(channel).lastOrNull()?.groupValues?.get(1)?.toIntOrNull()
         if (fromChannel != null && fromChannel in 0..63) return fromChannel

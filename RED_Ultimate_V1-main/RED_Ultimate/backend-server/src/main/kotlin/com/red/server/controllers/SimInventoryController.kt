@@ -12,10 +12,14 @@ import java.util.UUID
 
 /**
  * وحدة التحكم في جرد شرائح SIM — إدارة تسميات الشرائح وحالة التحقق.
- * 
- *Endpoints:
- * GET  /api/admin/dinstar/sim-inventory                    — قائمة كل الشرائح
- * PUT  /api/admin/dinstar/sim-inventory/{gatewayId}/{port} — تحديث بيانات شريحة
+ *
+ * @deprecated المسار الموحد هو `/api/admin/dinstar/inventory` (GatewaySimInventoryController).
+ *   هذا المتحكم باقٍ كاسم مستعار للتوافق مع إصدارات لوحة التحكم القديمة وسيُحذف في الإصدار القادم.
+ *   كل طلب هنا يُسجل تحذيراً ويُعيد `Deprecation: true` + `Sunset` ليُسهل تتبع الاستخدام.
+ *
+ * Endpoints (مستعارة):
+ * GET  /api/admin/dinstar/sim-inventory                    — قائمة كل الشرائح (مستعار)
+ * PUT  /api/admin/dinstar/sim-inventory/{gatewayId}/{port} — تحديث بيانات شريحة (مستعار)
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/sim-inventory")
@@ -23,9 +27,13 @@ class SimInventoryController(
     private val inventory: GatewaySimInventoryService,
     private val audit: AuditService
 ) {
+    companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger(SimInventoryController::class.java)
+    }
 
     @GetMapping
     fun list(): ResponseEntity<List<Map<String, Any?>>> {
+        log.warn("DEPRECATED inventory path used: GET /api/admin/dinstar/sim-inventory — use /api/admin/dinstar/inventory")
         val ports = inventory.list().map { p ->
             mapOf(
                 "gatewayId" to p.gatewayId,
@@ -45,7 +53,11 @@ class SimInventoryController(
                 "verifiedAt" to p.verifiedAt?.toString()
             )
         }
-        return ResponseEntity.ok(ports)
+        return ResponseEntity.ok()
+            .header("Deprecation", "true")
+            .header("Sunset", "Sat, 31 Jan 2027 00:00:00 GMT")
+            .header("Link", "</api/admin/dinstar/inventory>; rel=\"successor-version\"")
+            .body(ports)
     }
 
     @PutMapping("/{gatewayId}/{portIndex}")
@@ -74,21 +86,28 @@ class SimInventoryController(
             lastFourDigits = lastFourDigits
         )
 
+        log.warn("DEPRECATED inventory path used: PUT /api/admin/dinstar/sim-inventory/{}/{} — use /api/admin/dinstar/inventory/{}/ports/{}",
+            gatewayId, portIndex, gatewayId, portIndex)
         val result = inventory.update(gatewayId, portIndex, update, actorId)
-        
+
         audit.record(actorId, "DINSTAR_SIM_INVENTORY_UPDATE", "$gatewayId/$portIndex", mapOf(
             "operatorLabel" to operatorLabel,
             "simLabel" to simLabel,
-            "verificationState" to verificationState.name
+            "verificationState" to verificationState.name,
+            "deprecatedPath" to true
         ))
 
-        return ResponseEntity.ok(mapOf(
-            "success" to true,
-            "gatewayId" to result.gatewayId,
-            "portIndex" to result.portIndex,
-            "operatorLabel" to result.operatorLabel,
-            "simLabel" to result.simLabel,
-            "verificationState" to result.verificationState.name
-        ))
+        return ResponseEntity.ok()
+            .header("Deprecation", "true")
+            .header("Sunset", "Sat, 31 Jan 2027 00:00:00 GMT")
+            .header("Link", "</api/admin/dinstar/inventory>; rel=\"successor-version\"")
+            .body(mapOf(
+                "success" to true,
+                "gatewayId" to result.gatewayId,
+                "portIndex" to result.portIndex,
+                "operatorLabel" to result.operatorLabel,
+                "simLabel" to result.simLabel,
+                "verificationState" to result.verificationState.name
+            ))
     }
 }
