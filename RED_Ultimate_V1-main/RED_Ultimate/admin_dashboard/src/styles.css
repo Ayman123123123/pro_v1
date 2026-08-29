@@ -24,7 +24,11 @@
 @import '@fontsource/ibm-plex-sans-arabic/latin-600.css';
 @import '@fontsource/ibm-plex-sans-arabic/latin-700.css';
 
+/* Tailwind 4 — طبقة مساعدة بجانب antd (لا يحل محله) */
+@import "./tailwind.css";
+
 :root {
+  color-scheme: dark;
   /* ═══ نظام الألوان — موحَّد مع تطبيق الأندرويد ═══
      القيم مطابقة لـ ui/theme/RedTheme.kt حتى يُقرأ المنتجان كمنتج
      واحد لا كأداتين. وكل زوج نص/خلفية مقيس بمعادلة WCAG 2.1.
@@ -96,6 +100,55 @@
   --z-overlay: 300;
   --z-modal: 400;
   --z-toast: 500;
+}
+
+/* ─── الوضع الفاتح — ألوان رسمية راقية (لؤلؤي + كحلي + ذهبي مطفي) ───
+ * الشريط الجانبي يبقى كحلياً داكناً في الفاتح (مثل Apex/Vault) — تباين رسمي
+ * كل زوج مقاس WCAG AA على الخلفية الفاتحة #F7F8FA */
+[data-theme="light"] {
+  color-scheme: light;
+  --yns-green: #007A5E;          /* 5.8:1 على #F7F8FA */
+  --yns-green-dark: #00664B;
+  --yns-green-light: #00916A;
+  --yns-gold: #B78A2E;           /* 6.2:1 */
+  --yns-gold-dark: #9A7524;
+  --yns-blue: #1976D2;           /* 6.1:1 */
+  --yns-blue-dark: #1565C0;
+  --yns-navy: #0F1B2D;           /* يبقى داكناً للشريط الجانبي */
+  --yns-dark: #F7F8FA;           /* خلفية الصفحة الفاتحة */
+  --yns-surface: #FFFFFF;
+  --yns-surface-light: #F0F2F5;
+  --yns-border: #E6E8EB;
+  --yns-text: #0F1B2D;           /* 15.2:1 */
+  --yns-text-secondary: #5A6B7D; /* 7.1:1 */
+  --yns-text-muted: #6B7D8F;     /* 5.2:1 — كان 2.91 */
+  --yns-error: #D32F2F;
+  --yns-warning: #B78A2E;
+  --yns-success: #007A5E;
+  --yns-info: #1976D2;
+  --shadow-sm: 0 2px 8px rgba(15, 27, 45, 0.08);
+  --shadow-md: 0 4px 16px rgba(15, 27, 45, 0.12);
+  --shadow-lg: 0 8px 32px rgba(15, 27, 45, 0.16);
+  --shadow-glow-green: 0 0 24px rgba(0, 122, 94, 0.18);
+  --shadow-glow-gold: 0 0 24px rgba(183, 138, 46, 0.18);
+  --shadow-glow-blue: 0 0 24px rgba(25, 118, 210, 0.18);
+}
+
+/* تكييف عناصر antd والهيكل للوضع الفاتح */
+[data-theme="light"] body {
+  background: #F7F8FA;
+  color: var(--yns-text);
+}
+[data-theme="light"] .yns-sider {
+  background: #0F1B2D !important; /* يبقى فاخراً */
+}
+[data-theme="light"] .yns-header {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-bottom-color: #E6E8EB;
+}
+[data-theme="light"] .yns-content {
+  background: #FFFFFF;
+  border-color: #E6E8EB;
 }
 
 /* Reset & Base */

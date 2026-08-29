@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // Hot-reload talks to the real Compose stack on 8088. Vite itself stays on
 // 5173 so it never steals Nginx's port or the old Node mock on 8080.
@@ -14,7 +15,7 @@ const proxy = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     chunkSizeWarningLimit: 1500,
     rollupOptions: {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Button, ConfigProvider, Layout, Menu, Space, Spin, theme } from 'antd';
+import { Badge, Button, ConfigProvider, Layout, Menu, Segmented, Space, Spin, Tooltip, theme } from 'antd';
 import {
   DashboardOutlined,
   GlobalOutlined,
@@ -25,6 +25,9 @@ import {
   CloudServerOutlined,
   DatabaseOutlined,
   LogoutOutlined,
+  BulbOutlined,
+  MoonOutlined,
+  LaptopOutlined,
 } from '@ant-design/icons';
 import { adminLogin, adminLogout, authStore, apiFetch, getPendingApprovals, probeBackend } from './api';
 import Login from './pages/Login';
@@ -140,16 +143,45 @@ const groupLabels: Record<string, string> = {
  * Real administrative shell. Authentication is delegated to /api/auth/login via adminLogin(),
  * and every feature page remains reachable after the TypeScript UI migration.
  */
+type ThemeMode = 'light' | 'dark' | 'system';
+function getInitialTheme(): ThemeMode {
+  const saved = localStorage.getItem('yns-theme') as ThemeMode | null;
+  if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  return 'dark';
+}
+function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
+  if (mode !== 'system') return mode;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export default function App() {
   const [authenticated, setAuthenticated] = useState(() => authStore.isAuthenticated());
   const [currentPage, setCurrentPage] = useState<PageKey>('dashboard');
   const [loginLoading, setLoginLoading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [apiUp, setApiUp] = useState(true);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getInitialTheme());
+  const resolvedTheme = themeMode === 'system' ? resolveTheme('system') : themeMode;
   const adminUser = authStore.user();
   // عداد فشل متتالٍ لفحص صحة الخادم: لا نقلب «متصل» إلى «غير متصل» من طلة
   // عابرة واحدة — فوسيط المعاينة أو انقطاع شبكة مؤقت قد يفشل دورة واحدة فقط.
   const healthFailsRef = useRef(0);
+
+  // تطبيق الثيم على <html data-theme> + persist
+  useEffect(() => {
+    const t = resolveTheme(themeMode);
+    document.documentElement.dataset.theme = t;
+    localStorage.setItem('yns-theme', themeMode);
+  }, [themeMode]);
+
+  // تتبع تفضيل النظام عند وضع "system"
+  useEffect(() => {
+    if (themeMode !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => { document.documentElement.dataset.theme = mq.matches ? 'dark' : 'light'; };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [themeMode]);
 
   useEffect(() => {
     const onExpired = () => setAuthenticated(false);
@@ -271,12 +303,12 @@ export default function App() {
     <ConfigProvider
       direction="rtl"
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: resolvedTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
-          colorPrimary: '#00C896',
-          colorInfo: '#4FC3F7',
+          colorPrimary: resolvedTheme === 'dark' ? '#00C896' : '#007A5E',
+          colorInfo: resolvedTheme === 'dark' ? '#4FC3F7' : '#1976D2',
           colorWarning: '#E0A83C',
-          colorBgBase: '#06110D',
+          colorBgBase: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA',
           borderRadius: 14,
           fontFamily: "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif",
         },
@@ -294,13 +326,13 @@ export default function App() {
           },
           Layout: {
             siderBg: '#0A1014',
-            headerBg: 'rgba(8, 21, 37, 0.85)',
+            headerBg: resolvedTheme === 'dark' ? 'rgba(8, 21, 37, 0.85)' : 'rgba(255,255,255,0.85)',
             headerHeight: 64,
           },
         },
       }}
     >
-      <Layout style={{ minHeight: '100vh', background: '#06110D' }}>
+      <Layout style={{ minHeight: '100vh', background: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA' }}>
         <Sider theme="dark" collapsible width={248} className="yns-sider">
           <div className="yns-brand">
             <span className="admin-brand-icon admin-brand-icon--image">
@@ -336,6 +368,19 @@ export default function App() {
               </span>
             </div>
             <Space size={12}>
+              {/* تبديل فاتح/ليلي/نظام — ألوان رسمية راقية */}
+              <Tooltip title="المظهر">
+                <Segmented
+                  size="small"
+                  value={themeMode}
+                  onChange={(v) => setThemeMode(v as ThemeMode)}
+                  options={[
+                    { value: 'light', icon: <BulbOutlined />, label: 'فاتح' },
+                    { value: 'dark', icon: <MoonOutlined />, label: 'ليلي' },
+                    { value: 'system', icon: <LaptopOutlined />, label: 'نظام' },
+                  ]}
+                />
+              </Tooltip>
               <span className={apiUp ? 'yns-status up' : 'yns-status down'}>
                 <span className={apiUp ? 'yns-dot up' : 'yns-dot down'} />
                 {apiUp ? 'الخادم متصل' : 'الخادم غير متصل'}

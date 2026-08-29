@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* ربط متغيرات YOUNES بـ Tailwind — استعمل bg-younes-green إلخ في أي مكان مخصص */
+@theme {
+  --color-younes-green: var(--yns-green);
+  --color-younes-gold: var(--yns-gold);
+  --color-younes-blue: var(--yns-blue);
+  --color-younes-navy: var(--yns-navy);
+  --color-younes-dark: var(--yns-dark);
+  --color-younes-surface: var(--yns-surface);
+}
