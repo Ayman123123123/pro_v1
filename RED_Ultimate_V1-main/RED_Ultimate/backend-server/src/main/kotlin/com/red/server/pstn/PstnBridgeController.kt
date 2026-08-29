@@ -7,7 +7,9 @@ import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
 import com.red.server.calls.IceServerController
 import com.red.server.calls.IceConfiguration
+import com.red.server.services.DinstarFleetService
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.jdbc.core.JdbcTemplate
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.data.redis.core.StringRedisTemplate
@@ -29,6 +31,8 @@ class PstnBridgeController(
     private val iceController: IceServerController,
     private val history: CallHistoryService,
     private val objectMapper: ObjectMapper,
+    private val fleet: DinstarFleetService,
+    private val jdbc: JdbcTemplate,
     @Value("\${red.pstn.sip-secret:red-secret-token}") private val sipSecret: String,
     @Value("\${ASTERISK_WSS_URL:wss://localhost:8089/ws}") private val asteriskWssUrl: String,
     @Value("\${red.pstn.bridge-secret-ttl-minutes:60}") private val bridgeSecretTtlMinutes: Long,
@@ -80,48 +84,57 @@ class PstnBridgeController(
             )
         }
 
+        // ── الربط 1:1 صارم في التطبيق — كل الناس سواسية ──
+        // الإدمن الحر موجود فقط في لوحة الإدمن (POST /api/admin/dinstar/calls → dialAsAdmin).
+        // هنا أي `port` يرسله التطبيق يُتجاهل عمداً، وإلا كسر مستخدم شريحة غيره
+        // واستهلك رصيدها وظهر رقمه بدل رقم صاحب الشريحة.
+        if (request.port != null) {
+            log.warn("PSTN bridge: port override ignored for app user={} requested={} bound={}",
+                user.redId, request.port, user.pstnPortIndex)
+        }
+        val effectivePort = user.pstnPortIndex
+        if (effectivePort == null) {
+            redis.opsForValue().decrement(key)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                mapOf("error" to "PSTN_SIM_NOT_BOUND", "message" to "No SIM bound to this account — ask the administrator")
+            )
+        }
+        // نحسب targetGw الآن قبل حجز المكالمة — إذا فشل الحل لا نترك حجزاً وهمياً
+        val gwId = user.pstnGatewayId
+        val host = gwId?.let { gid ->
+            runCatching { fleet.findGateway(gid)?.host
+                ?: jdbc.queryForObject("SELECT host FROM telecom_gateways WHERE id = ?", String::class.java, gid) }
+                .getOrNull()
+        }
+        val targetGw = if (host != null) {
+            "dinstar-gw-${host.replace('.', '-')}-port-$effectivePort"
+        } else {
+            // تخمين من فهرس المنفذ فقط عند فقدان السجل — لا نعتمد عليه للفوترة
+            val gwIndex = if (effectivePort >= 8) 2 else 1
+            val localPort = effectivePort % 8
+            "dinstar-gw-${gwIndex}-port-${localPort}"
+        }
+
         // Atomic single-active-call reservation: SETNX wins exactly once
+        // نستخدم الهوية الحقيقية (callId:gatewayId:port) بدل (callId:null:0) السابق
+        // الذي كان يجعل كل تحرير يحرر المنفذ 0 ويترك المنفذ الحقيقي عالقاً 30 دقيقة.
         val callId = UUID.randomUUID().toString()
         val activeKey = PstnActiveCallKeys.activeKey(userId)
         val reserved = redis.opsForValue().setIfAbsent(
-            activeKey, PstnActiveCallKeys.format(callId, null, 0), Duration.ofMinutes(bridgeSecretTtlMinutes)
+            activeKey, PstnActiveCallKeys.format(callId, gwId, effectivePort), Duration.ofMinutes(bridgeSecretTtlMinutes)
         )
         if (reserved != true) {
             redis.opsForValue().decrement(key)
             return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf("error" to "ALREADY_IN_PSTN_CALL"))
         }
 
-        // Record the call in history so DindarEventListener and admin dashboards can track it.
-        // The callId returned here becomes the correlationId used in Redis and CallHistoryDocument.
+        // Record the call in history so DinstarEventListener and admin dashboards can track it.
         runCatching { history.start(user.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, callId) }
             .onFailure { log.warn("PSTN bridge: failed to record call in history: {}", it.message) }
-        // Store reverse mapping callId → userId for admin lookup.
-        // Uses the same key prefix (red:pstn:calluser:) as PstnCallService and
-        // DindarEventListener so all components share the same lookup table.
         redis.opsForValue().set("red:pstn:calluser:$callId", user.id.toString(), Duration.ofMinutes(bridgeSecretTtlMinutes))
-                val effectivePort = request.port ?: user.pstnPortIndex
-        val targetGw = if (effectivePort != null) {
-            val gwId = user.pstnGatewayId
-            val host = gwId?.let { gid ->
-                runCatching { 
-                    org.springframework.web.context.support.WebApplicationContextUtils
-                        .getRequiredWebApplicationContext(org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes().let { it as org.springframework.web.context.request.ServletRequestAttributes }.request.servletContext)
-                        .getBean(org.springframework.jdbc.core.JdbcTemplate::class.java)
-                        .queryForObject("SELECT host FROM telecom_gateways WHERE id = ?", String::class.java, gid)
-                }.getOrNull()
-            }
-            if (host != null) {
-                "dinstar-gw-${host.replace('.', '-')}-port-$effectivePort"
-            } else {
-                val gwIndex = if (effectivePort >= 8) 2 else 1
-                val localPort = effectivePort % 8
-                "dinstar-gw-${gwIndex}-port-${localPort}"
-            }
-        } else null
-        
-        if (effectivePort != null) {
-            redis.opsForValue().set("red:pstn:callport:$callId", effectivePort.toString(), Duration.ofMinutes(bridgeSecretTtlMinutes))
-        }
+        // callport يُخزن بالشكل gatewayId:port ليتطابق مع PstnActiveCallKeys
+        redis.opsForValue().set("red:pstn:callport:$callId",
+            "${gwId ?: "unknown"}:$effectivePort", Duration.ofMinutes(bridgeSecretTtlMinutes))
 
 log.info("PSTN bridge: user={} number={} daily={}/{} callId={} gw={}",
             user.redId, number, used, user.pstnDailyLimit, callId, targetGw)

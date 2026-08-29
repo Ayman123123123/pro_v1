@@ -101,21 +101,20 @@ class PstnApi(private val tokens: TokenStore) {
         }
     }
 
-    // 📨 SMS Methods
+    // 📨 SMS — المسار الدائم الموحد /api/sms (سابقاً كان يضرب /api/admin/dinstar/sms مباشرةً
+    // على الجهاز بلا حفظ في sms_messages، فتضيع الرسالة عند إعادة تشغيل البوابة).
+    // الآن يمر عبر SmsService الدائم 1:1 — كل مستخدم يرسل حتماً من شريحته المربوطة.
     suspend fun sendSms(recipient: String, text: String, encoding: String = "unicode"): ApiResult<SmsSendResponse> {
-        val currentUserId = tokens.redId ?: ""
-        val request = SmsSendRequest(
-            text = text,
-            encoding = encoding,
-            param = listOf(SmsParam(number = recipient, user_id = currentUserId))
-        )
-        return when (val result = client.request("POST", "/api/admin/dinstar/sms/send", json.encodeToString(request))) {
+        // نوحد على /api/sms/send الدائم — port=null يعني "شريحتي المربوطة"
+        val payload = mapOf("number" to recipient, "text" to text)
+        return when (val result = client.request("POST", "/api/sms/send", json.encodeToString(payload))) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsSendResponse>(result.value)) }
                 .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
             is ApiResult.Error -> result
         }
     }
 
+    @Deprecated("استخدم SmsApi.conversations() — هذا المسار يقرأ صندوق الجهاز المتطاير بلا حفظ")
     suspend fun getInbox(): ApiResult<List<SmsIncomingMessage>> {
         return when (val result = client.request("GET", "/api/admin/dinstar/sms/incoming", "")) {
             is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsIncomingResponse>(result.value).messages) }

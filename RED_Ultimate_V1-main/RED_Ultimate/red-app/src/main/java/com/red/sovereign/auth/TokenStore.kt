@@ -12,6 +12,10 @@ class TokenStore(val context: Context) {
     val redId get() = store.get("red_id")
     val username get() = store.get("username")
     val pstnEnabled get() = store.get("pstn_enabled") == "true"
+    /** رقم الشريحة المربوطة 1:1 — كامل غير مقنع، يراه صاحبه فقط في جهازه. */
+    val pstnNumber get() = store.get("pstn_number")
+    val pstnPortIndex get() = store.get("pstn_port_index")?.toIntOrNull()
+    val pstnGatewayId get() = store.get("pstn_gateway_id")
     /** دور الحساب — "ADMIN" أو "USER". يُستخدم لإظهار/إخفاء أدوات الإدارة في التطبيق. */
     val role get() = store.get("role") ?: "USER"
     val isAdmin get() = role == "ADMIN"
@@ -34,9 +38,14 @@ class TokenStore(val context: Context) {
         response.deviceId?.let(::rememberDevice)
         store.put("red_id", response.user.redId); store.put("username", response.user.username)
         store.put("pstn_enabled", response.user.pstnEnabled.toString())
-        store.put("role", response.user.role)
+        store.put("pstn_number", response.user.pstnNumber ?: "")
+        store.put("pstn_port_index", response.user.pstnPortIndex?.toString() ?: "")
+        store.put("pstn_gateway_id", response.user.pstnGatewayId?.toString() ?: "")
+        store.put("role", response.user.role.toString())
         clearPendingLogin()
     }
     fun updateTokens(response: RefreshResponse) { store.put("access", response.accessToken); store.put("refresh", response.refreshToken) }
-    fun clearSession() = store.remove("access", "refresh", "red_id", "username", "role", "pstn_enabled", "pending_username", "pending_password")
+    fun clearSession() = store.remove("access", "refresh", "red_id", "username", "role",
+        "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id",
+        "pending_username", "pending_password")
 }
