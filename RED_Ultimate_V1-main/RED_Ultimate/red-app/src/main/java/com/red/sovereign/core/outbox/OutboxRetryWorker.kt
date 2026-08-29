@@ -191,8 +191,9 @@ class OutboxRetryWorker(
             
             applicationContext.startForegroundService(intent)
             
-            // تحديث الحالة إلى SENT فور إضافة للطابور في الخدمة
-            dao.updateStatus(msg.id, OutboxMessageEntity.STATUS_SENT)
+            // ملاحظة: يتم إرسال الطلب للخدمة، والحالة تُحدَّث فعلياً من الخدمة نفسها
+            // عبر callback عندما يتم الإرسال بنجاح. هنا نعيد المحاولة فقط إذا فشل الإرسال.
+            // لا نُحدِّث إلى SENT هنا لتجنب إعلان الإرسال قبل التأكيد الفعلي.
             true
         } catch (e: Exception) {
             Log.w(TAG, "Send failed for ${msg.id}", e)

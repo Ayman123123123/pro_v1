@@ -18,7 +18,14 @@ data class MessageEntity(
     val sequence: Long,
     val status: String,
     val createdAt: Long,
-    val outgoing: Boolean
+    val outgoing: Boolean,
+    // ✅ إضافة دعم الرد على الرسائل
+    val replyToMessageId: String? = null,
+    val replyToMessageText: String? = null,
+    val replyToSenderId: String? = null,
+    // ✅ إضافة دعم الحذف للجميع
+    val deletedForAll: Boolean = false,
+    val deletedBySenderId: String? = null
 )
 
 @Entity(
@@ -36,7 +43,12 @@ data class LocalHistoryEntity(
     val messageType: String,
     val createdAt: Long,
     val outgoing: Boolean,
-    val status: String = "SENT"
+    val status: String = "SENT",
+    val replyToMessageId: String? = null,
+    val replyToMessageText: String? = null,
+    val replyToSenderId: String? = null,
+    val deletedForAll: Boolean = false,
+    val deletedBySenderId: String? = null
 )
 
 @Entity(

@@ -156,9 +156,8 @@ fun SmsConversationsScreen(vm: SmsViewModel, onOpenChat: (String) -> Unit) {
                     if (err != null) { newChatError = err; return@TextButton }
                     // normalized الآن 9 خانات يمنية صافية
                     onOpenChat(normalized)
-                        showNewChatDialog = false
-                        newChatNumber = ""
-                    }
+                    showNewChatDialog = false
+                    newChatNumber = ""
                 }) { Text("مراسلة") }
             },
             dismissButton = {

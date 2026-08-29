@@ -838,7 +838,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 android.util.Log.w("YounesCallService", "AudioFocus lost: $focusChange")
             }
         }.build()
-        val focusResult = audio.requestAudioFocus(audioFocus!!)
+        val focusRequest = audioFocus ?: run {
+            android.util.Log.e("YounesCallService", "AudioFocus request is null — audio may be muted")
+            return
+        }
+        val focusResult = audio.requestAudioFocus(focusRequest)
         if (focusResult != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             android.util.Log.w("YounesCallService", "AudioFocus not granted: $focusResult — audio may be muted")
         }

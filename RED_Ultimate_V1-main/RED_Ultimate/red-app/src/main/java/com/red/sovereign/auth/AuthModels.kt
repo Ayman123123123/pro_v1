@@ -45,6 +45,9 @@ data class UserResponse(
     val rejectionReason: String? = null,
     val pstnEnabled: Boolean = false,
     val pstnDailyLimit: Int = 0,
+    val pstnNumber: String? = null,
+    val pstnPortIndex: Int? = null,
+    val pstnGatewayId: String? = null,
     val devices: List<DeviceResponse> = emptyList()
 )
 

@@ -133,6 +133,14 @@ class RedConnectionService : Service() {
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
             val isTyping = intent.getBooleanExtra(EXTRA_IS_TYPING, false)
             if (connected) socket.typing(conversation, target, isTyping)
+        } else if (intent?.action == ACTION_QUICK_REPLY) {
+            val target = intent.getStringExtra(EXTRA_TARGET) ?: return START_STICKY
+            val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
+            val text = intent.getStringExtra(EXTRA_QUICK_REPLY_TEXT) ?: return START_STICKY
+            if (text.isNotBlank()) {
+                pendingSends.add(PendingSend(target, conversation, "TEXT", text.toByteArray(Charsets.UTF_8)))
+                if (connected) drainSends() else socket.connect()
+            }
         } else socket.connect()
         return START_STICKY
     }
@@ -403,7 +411,7 @@ class RedConnectionService : Service() {
                             }
                             if (SettingsRuntime.current.messageNotifications) {
                                 currentConversationId = message.conversationId
-                                notifyEncryptedMessage(message.senderId, preview, message.type)
+                                notifyEncryptedMessage(message.senderId, preview, message.type, message.id, message.sequenceNumber)
                             }
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }
@@ -471,7 +479,7 @@ class RedConnectionService : Service() {
         }.getOrNull()
     }
 
-    /** إشعار رسالة (فردية أو مجموعة) — يدعم التجميع والمعاينة المحسّنة. */
+    /** إشعار رسالة (فردية أو مجموعة) — يدعم التجميع والمعاينة المحسّنة والرد السريع. */
     private fun notifyEncryptedMessage(sender: String, plaintext: String?, messageType: String = "TEXT") {
         val manager = getSystemService(NotificationManager::class.java)
         val convoId = currentConversationId ?: sender
@@ -484,6 +492,24 @@ class RedConnectionService : Service() {
             .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setAutoCancel(true)
             .setContentIntent(openAppIntent(sender, convoId))
+
+        // ✅ إضافة زر الرد السريع (Quick Reply)
+        val replyIntent = Intent(this, RedConnectionService::class.java).apply {
+            action = ACTION_QUICK_REPLY
+            putExtra(EXTRA_TARGET, sender)
+            putExtra(EXTRA_CONVERSATION, convoId)
+        }
+        val replyPendingIntent = PendingIntent.getService(
+            this, convoId.hashCode(), replyIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+        val remoteInput = androidx.core.app.RemoteInput.Builder(EXTRA_QUICK_REPLY_TEXT)
+            .setLabel("اكتب رداً...")
+            .build()
+        val replyAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send, "رد سريع", replyPendingIntent
+        ).addRemoteInput(remoteInput).build()
+        builder.addAction(replyAction)
 
         if (isGroup) {
             // تجميع إشعارات المجموعة في إشعار واحد قابل للتوسيع
@@ -548,11 +574,13 @@ class RedConnectionService : Service() {
         private const val ACTION_SEND_GROUP_TEXT = "com.red.sovereign.SEND_GROUP_TEXT"
         private const val ACTION_SEND_GROUP_PAYLOAD = "com.red.sovereign.SEND_GROUP_PAYLOAD"
         const val ACTION_SEND_TYPING = "com.red.sovereign.SEND_TYPING"
+        const val ACTION_QUICK_REPLY = "com.red.sovereign.QUICK_REPLY"
         const val EXTRA_MESSAGE_ID = "msgId"
         const val EXTRA_TARGET = "target"
         const val EXTRA_CONVERSATION = "conversation"
         const val EXTRA_SEQUENCE = "sequence"
         const val EXTRA_IS_TYPING = "isTyping"
+        const val EXTRA_QUICK_REPLY_TEXT = "quickReplyText"
         private const val EXTRA_PAYLOAD = "payload"
         private const val EXTRA_TYPE = "type"
         private const val EXTRA_GROUP = "group"

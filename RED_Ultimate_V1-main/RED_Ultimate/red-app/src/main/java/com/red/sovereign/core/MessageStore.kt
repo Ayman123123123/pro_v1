@@ -95,6 +95,33 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context, "red_messages.d
 
     fun delete(messageId: String) { writableDatabase.delete("messages", "id = ?", arrayOf(messageId)); try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId)) } catch (_: Exception) {} }
 
+    /** ✅ إضافة: حذف للجميع (Delete for All) */
+    fun deleteForAll(messageId: String, deletedBy: String) {
+        writableDatabase.update("messages", ContentValues().apply {
+            put("deleted_for_all", 1)
+            put("deleted_by_sender_id", deletedBy)
+            put("status", "DELETED_FOR_ALL")
+        }, "id = ?", arrayOf(messageId))
+        writableDatabase.update("local_history", ContentValues().apply {
+            put("deleted_for_all", 1)
+            put("deleted_by_sender_id", deletedBy)
+        }, "id = ?", arrayOf(messageId))
+    }
+
+    /** ✅ إضافة: إضافة رد على رسالة */
+    fun saveReply(messageId: String, replyToId: String, replyToText: String?, replyToSender: String?) {
+        writableDatabase.update("messages", ContentValues().apply {
+            put("reply_to_message_id", replyToId)
+            put("reply_to_message_text", replyToText)
+            put("reply_to_sender_id", replyToSender)
+        }, "id = ?", arrayOf(messageId))
+        writableDatabase.update("local_history", ContentValues().apply {
+            put("reply_to_message_id", replyToId)
+            put("reply_to_message_text", replyToText)
+            put("reply_to_sender_id", replyToSender)
+        }, "id = ?", arrayOf(messageId))
+    }
+
     fun messages(conversationId: String, limit: Int = 100): List<StoredMessage> {
         val result = mutableListOf<StoredMessage>()
         readableDatabase.query("messages", null, "conversation_id = ?", arrayOf(conversationId), null, null,
