@@ -19,7 +19,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; icon: string }
   INFO: { label: 'معلومة', color: 'blue', icon: 'ℹ️' },
   WARNING: { label: 'تحذير', color: 'orange', icon: '⚠️' },
   MAINTENANCE: { label: 'صيانة', color: 'purple', icon: '🔧' },
-  FEATURE: { label: 'ميزة جديدة', color: 'green', icon: '✨' },
+  FEATURE: { label: 'ميزة جديدة', color: 'gold', icon: '✨' },
   PROMO: { label: 'عرض ترويجي', color: 'gold', icon: '🎁' },
 };
 
@@ -162,7 +162,7 @@ export default function Announcements() {
       dataIndex: 'isPublished',
       key: 'isPublished',
       render: (published: boolean) => published ? (
-        <Tag color="green" icon={<CheckCircleOutlined />}>منشور</Tag>
+        <Tag color="gold" icon={<CheckCircleOutlined />}>منشور</Tag>
       ) : (
         <Tag color="default" icon={<ClockCircleOutlined />}>مسودة</Tag>
       ),

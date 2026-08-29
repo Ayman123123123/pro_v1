@@ -105,7 +105,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
           </div>
 
           <Space wrap style={{ marginTop: 30 }}>
-            <Tag color="green" style={{ borderRadius: 20, padding: '3px 11px' }}>LOCAL MODE</Tag>
+            <Tag color="gold" style={{ borderRadius: 20, padding: '3px 11px' }}>LOCAL MODE</Tag>
             <Tag color="cyan" style={{ borderRadius: 20, padding: '3px 11px' }}>RTL MODERN</Tag>
             <Tag color="gold" style={{ borderRadius: 20, padding: '3px 11px' }}>NO LEGACY PANELS</Tag>
             <Tag color="blue" style={{ borderRadius: 20, padding: '3px 11px' }}>v1.0.0-YOUNES</Tag>

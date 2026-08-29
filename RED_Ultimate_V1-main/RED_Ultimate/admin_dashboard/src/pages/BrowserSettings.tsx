@@ -68,7 +68,7 @@ export default function BrowserSettings() {
   useEffect(() => { void refresh(); }, [refresh]);
 
   const healthTag = health.state === 'READY'
-    ? <Tag color="green">جاهز {health.status || ''}</Tag>
+    ? <Tag color="gold">جاهز {health.status || ''}</Tag>
     : <Tag color={health.state === 'DOWN' ? 'red' : 'gold'}>{health.hint}</Tag>;
 
   return (

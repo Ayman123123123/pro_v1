@@ -36,12 +36,12 @@ export default function MediaTab() {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Card
         title="WebRTC / mediasoup SFU"
-        extra={<Tag color={online ? 'green' : 'red'}>{online ? 'ONLINE' : 'UNAVAILABLE'}</Tag>}
+        extra={<Tag color={online ? 'gold' : 'red'}>{online ? 'ONLINE' : 'UNAVAILABLE'}</Tag>}
       >
         <Statistic title="مكالمات نشطة الآن" value={calls.length} prefix={<VideoCameraOutlined />} />
         {sfu && (
           <Space wrap style={{ marginTop: 8 }}>
-            <Tag color={sfu.status === 'UP' ? 'green' : 'orange'}>SFU {sfu.status || 'UNKNOWN'}</Tag>
+            <Tag color={sfu.status === 'UP' ? 'gold' : 'orange'}>SFU {sfu.status || 'UNKNOWN'}</Tag>
             {sfu.workers != null && <Tag>عمال {sfu.workers}</Tag>}
             {sfu.rooms != null && <Tag>غرف {sfu.rooms}</Tag>}
             {sfu.peers != null && <Tag>أقران {sfu.peers}</Tag>}

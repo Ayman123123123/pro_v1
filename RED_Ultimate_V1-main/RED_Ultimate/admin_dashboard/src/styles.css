@@ -43,11 +43,11 @@
   --yns-gold-dark: #C08F2E;
   --yns-blue: #4FC3F7;           /* المعلومات — 9.55:1 */
   --yns-blue-dark: #3BA8D9;
-  --yns-navy: #0A1014;           /* الخلفية */
-  --yns-dark: #06110D;           /* نص الأزرار الملوّنة — 7.09:1 */
-  --yns-surface: #121A20;
-  --yns-surface-light: #1A242C;
-  --yns-border: #2C3D47;
+  --yns-navy: #0A1014;           /* الخلفية — كحلي داكن محايد */
+  --yns-dark: #0A0F14;           /* نص الأزرار الملوّنة — محايد بلا أخضر */
+  --yns-surface: #141C24;        /* سطح بطاقات — رمادي مزرق محايد */
+  --yns-surface-light: #1E2936;  /* سطح فاتح — محايد */
+  --yns-border: #2C3A4A;         /* حدود — محايدة */
   --yns-text: #F2F6F8;           /* 17.60:1 على الخلفية */
   --yns-text-secondary: #9AAEBB; /* 8.34:1 */
   --yns-text-muted: #7C90A0;     /* كان 5A6A8A بـ2.91:1 على السطح */

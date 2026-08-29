@@ -103,7 +103,7 @@ export default function Dashboard() {
   };
 
   const userChart: ChartOption = {
-    title: { text: 'المستخدمون النشطون', textStyle: { color: '#D4B16A' } },
+    title: { text: 'المستخدمون النشطون', textStyle: { color: '#B78A2E' } },
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
@@ -114,8 +114,8 @@ export default function Dashboard() {
         type: 'line',
         data: rows.map(a => a.totalUsers),
         smooth: true,
-        itemStyle: { color: '#D4B16A' },
-        areaStyle: { color: 'rgba(0,230,160,0.2)' },
+        itemStyle: { color: '#B78A2E' },
+        areaStyle: { color: 'rgba(183,138,46,0.18)' },
       },
       {
         name: 'جدد',
@@ -150,7 +150,7 @@ export default function Dashboard() {
         </Title>
         <Text type="secondary">
           <ClockCircleOutlined /> آخر تحديث: {new Date().toLocaleString('ar-EG')}
-          {realtime && <Tag color="green" style={{ marginRight: 12 }}>مباشر</Tag>}
+          {realtime && <Tag color="gold" style={{ marginRight: 12 }}>مباشر</Tag>}
         </Text>
       </div>
 
@@ -276,7 +276,7 @@ export default function Dashboard() {
           <Row gutter={[16, 16]}>
             {healthRows.map((h, idx) => {
               const status = h.status as string;
-              const color = status === 'HEALTHY' ? 'green' : status === 'DEGRADED' ? 'orange' : 'red';
+              const color = status === 'HEALTHY' ? 'gold' : status === 'DEGRADED' ? 'orange' : 'red';
               const icon = status === 'HEALTHY' ? <CheckCircleOutlined /> :
                            status === 'DEGRADED' ? <WarningOutlined /> : <AlertOutlined />;
               return (

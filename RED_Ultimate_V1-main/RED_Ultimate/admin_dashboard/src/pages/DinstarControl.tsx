@@ -711,7 +711,7 @@ export default function DinstarControl() {
               title: 'الحالة', dataIndex: 'status', width: 110,
               render: (v: string) => {
                 const map: Record<string, { ar: string; clr: string }> = {
-                  ANSWERED: { ar: 'مُجابة', clr: 'success' },
+                  ANSWERED: { ar: 'مُجابة', clr: 'gold' },
                   NO_ANSWER: { ar: 'بلا رد', clr: 'warning' },
                   BUSY: { ar: 'مشغول', clr: 'orange' },
                   FAILED: { ar: 'فاشلة', clr: 'error' },
@@ -922,7 +922,7 @@ export default function DinstarControl() {
               <Descriptions.Item label="شريحة المنفذ">{routeResult.selected.operator}</Descriptions.Item>
               <Descriptions.Item label="الإشارة">{routeResult.selected.signalDbm} dBm</Descriptions.Item>
               <Descriptions.Item label="داخل الشبكة">
-                {routeResult.selected.onNet ? <Tag color="green">نعم — تكلفة أقل</Tag> : <Tag>لا</Tag>}
+                {routeResult.selected.onNet ? <Tag color="gold">نعم — تكلفة أقل</Tag> : <Tag>لا</Tag>}
               </Descriptions.Item>
             </Descriptions>
             {routeResult.rejected?.length > 0 && (

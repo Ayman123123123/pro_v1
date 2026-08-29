@@ -14,7 +14,7 @@ const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
 
 const ACTION_LABELS: Record<string, { label: string; color: string; category: string }> = {
-  USER_APPROVED: { label: 'موافقة على مستخدم', color: 'green', category: 'USER' },
+  USER_APPROVED: { label: 'موافقة على مستخدم', color: 'gold', category: 'USER' },
   USER_BANNED: { label: 'حظر مستخدم', color: 'red', category: 'USER' },
   USER_REJECTED: { label: 'رفض مستخدم', color: 'orange', category: 'USER' },
   USER_UNBANNED: { label: 'رفع حظر', color: 'blue', category: 'USER' },
@@ -25,13 +25,13 @@ const ACTION_LABELS: Record<string, { label: string; color: string; category: st
   MEDIA_DELETED: { label: 'حذف وسائط', color: 'red', category: 'MEDIA' },
   GROUP_DELETED: { label: 'حذف مجموعة', color: 'red', category: 'CONTENT' },
   CONFIG_CHANGED: { label: 'تغيير إعدادات', color: 'orange', category: 'SYSTEM' },
-  REPORT_RESOLVED: { label: 'حل بلاغ', color: 'green', category: 'CONTENT' },
+  REPORT_RESOLVED: { label: 'حل بلاغ', color: 'gold', category: 'CONTENT' },
   REPORT_DISMISSED: { label: 'رفض بلاغ', color: 'default', category: 'CONTENT' },
   SESSION_TERMINATED: { label: 'إنهاء جلسة', color: 'orange', category: 'SECURITY' },
   SESSIONS_CLEANED: { label: 'تنظيف الجلسات', color: 'default', category: 'SECURITY' },
   FEATURE_FLAG_UPDATED: { label: 'تحديث علم ميزة', color: 'purple', category: 'SYSTEM' },
   ANNOUNCEMENT_CREATED: { label: 'إنشاء إعلان', color: 'blue', category: 'SYSTEM' },
-  ANNOUNCEMENT_PUBLISHED: { label: 'نشر إعلان', color: 'green', category: 'SYSTEM' },
+  ANNOUNCEMENT_PUBLISHED: { label: 'نشر إعلان', color: 'gold', category: 'SYSTEM' },
   ANNOUNCEMENT_DELETED: { label: 'حذف إعلان', color: 'red', category: 'SYSTEM' },
   BACKUP_STARTED: { label: 'بدء نسخة احتياطية', color: 'blue', category: 'SYSTEM' },
   BACKUP_RESTORED: { label: 'استعادة نسخة', color: 'red', category: 'SYSTEM' },

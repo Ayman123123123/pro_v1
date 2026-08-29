@@ -32,7 +32,7 @@ const MessagingTab: React.FC = () => {
                 <Col span={6}>
                     <Card>
                         <Statistic title="معدل التوصيل" value={messageStats?.delivery_rate_percent ?? '—'} suffix="%"
-                            prefix={<SendOutlined />} valueStyle={{ color: '#52c41a' }} />
+                            prefix={<SendOutlined />} valueStyle={{ color: '#B78A2E' }} />
                     </Card>
                 </Col>
                 <Col span={6}>
@@ -54,7 +54,7 @@ const MessagingTab: React.FC = () => {
                 <Descriptions column={{ xs: 1, sm: 2, lg: 4 }} bordered size="small">
                     <Descriptions.Item label="مرسلة"><Tag color="blue">{messageStats?.messages_24h ?? '—'}</Tag></Descriptions.Item>
                     <Descriptions.Item label="تم توصيلها"><Tag color="cyan">{messageStats?.delivered_messages_24h ?? '—'}</Tag></Descriptions.Item>
-                    <Descriptions.Item label="تمت قراءتها"><Tag color="green">{messageStats?.read_messages_24h ?? '—'}</Tag></Descriptions.Item>
+                    <Descriptions.Item label="تمت قراءتها"><Tag color="gold">{messageStats?.read_messages_24h ?? '—'}</Tag></Descriptions.Item>
                     <Descriptions.Item label="معلّقة"><Tag color="orange">{messageStats?.pending_messages_24h ?? '—'}</Tag></Descriptions.Item>
                 </Descriptions>
                 <Alert style={{ marginTop: 16 }} type="info" showIcon message="تُعرض بيانات تشغيلية مجمّعة فقط؛ لا تعرض اللوحة محتوى الرسائل أو هوية المرسل أو معرّف المحادثة." />

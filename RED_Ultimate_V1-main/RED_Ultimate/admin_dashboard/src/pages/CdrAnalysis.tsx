@@ -288,7 +288,7 @@ export default function CdrAnalysis() {
       dataIndex: 'direction',
       width: 80,
       render: (v: string) => (
-        <Tag color={v === 'INBOUND' ? 'green' : 'blue'}>
+        <Tag color={v === 'INBOUND' ? 'gold' : 'blue'}>
           {DIRECTION_LABELS[v] || v}
         </Tag>
       ),

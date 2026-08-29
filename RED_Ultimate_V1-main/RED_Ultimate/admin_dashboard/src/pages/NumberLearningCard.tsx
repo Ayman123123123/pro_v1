@@ -228,7 +228,7 @@ export default function NumberLearningCard() {
                    { title: 'الرقم', dataIndex: 'number' },
                    { title: 'الاتجاه', dataIndex: 'direction', render: (v: string) => <Tag>{v || 'OUTBOUND'}</Tag> },
                    { title: 'المدة', dataIndex: 'duration_seconds', render: (v: number | null) => v == null ? '—' : `${v}s` },
-                   { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={v === 'FAILED' ? 'red' : v === 'ORIGINATED' ? 'blue' : 'green'}>{v}</Tag> },
+                   { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={v === 'FAILED' ? 'red' : v === 'ORIGINATED' ? 'blue' : 'gold'}>{v}</Tag> },
                  ]} />
 
           {probe && (

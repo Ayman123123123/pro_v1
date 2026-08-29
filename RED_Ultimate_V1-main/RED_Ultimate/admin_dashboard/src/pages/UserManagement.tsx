@@ -20,7 +20,7 @@ import {
 const { Title, Text, Paragraph } = Typography;
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: 'gold', APPROVED: 'green', REJECTED: 'red', SUSPENDED: 'orange', BANNED: 'red',
+  PENDING: 'gold', APPROVED: 'gold', REJECTED: 'red', SUSPENDED: 'orange', BANNED: 'red',
 };
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'في الانتظار', APPROVED: 'مقبول', REJECTED: 'مرفوض', SUSPENDED: 'موقوف', BANNED: 'محظور',

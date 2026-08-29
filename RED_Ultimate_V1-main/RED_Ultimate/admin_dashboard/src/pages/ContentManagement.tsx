@@ -29,7 +29,7 @@ const POLL_TYPE_LABELS: Record<string, { label: string; color: string }> = {
 
 const POLL_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: 'مسودة', color: 'default' },
-  ACTIVE: { label: 'نشطة', color: 'green' },
+  ACTIVE: { label: 'نشطة', color: 'gold' },
   CLOSED: { label: 'مغلقة', color: 'orange' },
   ARCHIVED: { label: 'مؤرشفة', color: 'default' },
 };
@@ -46,7 +46,7 @@ const EVENT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
 const EVENT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: 'مسودة', color: 'default' },
   SCHEDULED: { label: 'مجدول', color: 'blue' },
-  LIVE: { label: 'مباشر', color: 'green' },
+  LIVE: { label: 'مباشر', color: 'gold' },
   ENDED: { label: 'منتهي', color: 'default' },
   CANCELLED: { label: 'ملغي', color: 'red' },
 };
@@ -782,7 +782,7 @@ function StickersTab() {
       title: 'السعر',
       key: 'price',
       render: (r: StickerPack) => r.isFree ? (
-        <Tag color="green">مجاني</Tag>
+        <Tag color="gold">مجاني</Tag>
       ) : (
         <Text strong>{(r.priceCents / 100).toFixed(2)} {r.currency}</Text>
       ),
@@ -801,7 +801,7 @@ function StickersTab() {
       title: 'الحالة',
       dataIndex: 'isPublished',
       key: 'isPublished',
-      render: (p: boolean) => p ? <Tag color="green">منشور</Tag> : <Tag>مسودة</Tag>,
+      render: (p: boolean) => p ? <Tag color="gold">منشور</Tag> : <Tag>مسودة</Tag>,
     },
     {
       title: 'إجراءات',

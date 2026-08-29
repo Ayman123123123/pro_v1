@@ -23,7 +23,7 @@ type Slot = {
 };
 
 const SIGNAL_COLOR: Record<string, string> = {
-  EXCELLENT: 'green', GOOD: 'cyan', FAIR: 'gold', WEAK: 'orange', UNUSABLE: 'red', NO_SIGNAL: 'default',
+  EXCELLENT: 'gold', GOOD: 'cyan', FAIR: 'gold', WEAK: 'orange', UNUSABLE: 'red', NO_SIGNAL: 'default',
 };
 
 /** UC2000 يعيد REGISTER_OK أحيانًا — كل صور التسجيل سواء. */
@@ -91,7 +91,7 @@ export default function MasterOverview() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic title="المستخدمون المعتمدون" value={stats.active_users || 0} prefix={<ThunderboltFilled />} />
-            <Tag color="green">LIVE</Tag>
+            <Tag color="gold">LIVE</Tag>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -104,13 +104,13 @@ export default function MasterOverview() {
           <Card>
             <Statistic title="متوسط إشارة DINSTAR" value={signal} suffix="%" prefix={<ApiOutlined />} />
             <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#B78A2E' : '#E8B84A'} />
-            <Tag color={slots.length ? 'green' : 'red'}>{usable} جاهزة / {registered} مسجّلة</Tag>
+            <Tag color={slots.length ? 'gold' : 'red'}>{usable} جاهزة / {registered} مسجّلة</Tag>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic title="قاعدة البيانات" value={stats.db_health || health?.status || 'UNKNOWN'} prefix={<DatabaseFilled />} />
-            <Tag color={(stats.db_health || health?.status) === 'UP' ? 'green' : 'red'}>REAL CHECK</Tag>
+            <Tag color={(stats.db_health || health?.status) === 'UP' ? 'gold' : 'red'}>REAL CHECK</Tag>
           </Card>
         </Col>
       </Row>
@@ -142,7 +142,7 @@ export default function MasterOverview() {
           locale={{ emptyText: 'لا توجد قراءات منافذ' }}
           columns={[
             { title: 'SIM', dataIndex: 'index', render: (v: number) => `SIM ${(v ?? 0) + 1}` },
-            { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={isRegistered(v) ? 'green' : 'red'}>{v || '—'}</Tag> },
+            { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={isRegistered(v) ? 'gold' : 'red'}>{v || '—'}</Tag> },
             { title: 'الإشارة', dataIndex: 'signalLabel', render: (v: string, r: Slot) => <Tag color={SIGNAL_COLOR[v] || 'default'}>{v || '—'}{r.signal != null ? ` · ${r.signal}%` : ''}</Tag> },
             { title: 'المشغل', dataIndex: 'operator', render: (v?: string) => v || '—' },
             { title: 'المكالمة', dataIndex: 'callState', render: (v?: string) => v || '—' },
@@ -171,7 +171,7 @@ export default function MasterOverview() {
         <Card title="صحة الخدمات">
           <Space wrap>
             {services.map(([name, svc]) => (
-              <Tag key={name} color={svc?.status === 'UP' ? 'green' : svc?.status === 'DEGRADED' ? 'orange' : 'red'}>
+              <Tag key={name} color={svc?.status === 'UP' ? 'gold' : svc?.status === 'DEGRADED' ? 'orange' : 'red'}>
                 {name}: {svc?.status || 'UNKNOWN'}
               </Tag>
             ))}

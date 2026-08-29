@@ -16,7 +16,7 @@ const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 const TYPE_LABELS: Record<string, { label: string; color: string; icon: string }> = {
-  FULL: { label: 'كامل', color: 'green', icon: '🌐' },
+  FULL: { label: 'كامل', color: 'gold', icon: '🌐' },
   INCREMENTAL: { label: 'تدريجي', color: 'blue', icon: '📈' },
   CONFIG_ONLY: { label: 'إعدادات فقط', color: 'purple', icon: '⚙️' },
   USER_DATA: { label: 'بيانات المستخدمين', color: 'cyan', icon: '👥' },
@@ -25,7 +25,7 @@ const TYPE_LABELS: Record<string, { label: string; color: string; icon: string }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   IN_PROGRESS: { label: 'قيد التنفيذ', color: 'blue' },
-  COMPLETED: { label: 'مكتمل', color: 'green' },
+  COMPLETED: { label: 'مكتمل', color: 'gold' },
   FAILED: { label: 'فشل', color: 'red' },
   VERIFIED: { label: 'متحقق', color: 'purple' },
 };

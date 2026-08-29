@@ -147,7 +147,7 @@ type ThemeMode = 'light' | 'dark' | 'system';
 function getInitialTheme(): ThemeMode {
   const saved = localStorage.getItem('yns-theme') as ThemeMode | null;
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
-  return 'dark';
+  return 'light';
 }
 function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode !== 'system') return mode;
@@ -306,9 +306,11 @@ export default function App() {
         algorithm: resolvedTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
           colorPrimary: resolvedTheme === 'dark' ? '#B78A2E' : '#9A7524',
+          colorSuccess: '#B78A2E',
           colorInfo: resolvedTheme === 'dark' ? '#4FC3F7' : '#1976D2',
           colorWarning: '#C0842B',
-          colorBgBase: resolvedTheme === 'dark' ? '#06110D' : '#F7F8FA',
+          colorError: '#B91C1C',
+          colorBgBase: resolvedTheme === 'dark' ? '#0A0F14' : '#F7F8FA',
           borderRadius: 14,
           fontFamily: "'IBM Plex Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif",
         },

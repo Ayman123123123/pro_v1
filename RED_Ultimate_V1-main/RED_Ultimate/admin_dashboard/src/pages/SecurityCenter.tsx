@@ -70,10 +70,10 @@ export default function SecurityCenter() {
             children: (
               <Space direction="vertical" size="middle" style={{width:'100%'}}>
                 <Row gutter={[16,16]}>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="تنبيهات أمنية آخر 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:(operational?.moderation?.securityAlerts24h ?? 0) > 0 ? '#ff4d4f' : '#52c41a'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="تنبيهات أمنية آخر 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:(operational?.moderation?.securityAlerts24h ?? 0) > 0 ? '#ff4d4f' : '#B78A2E'}} /></Card></Col>
                   <Col xs={24} md={12} xl={6}><Card><Statistic title="الأجهزة الملغاة" value={operational?.devices?.revoked ?? 0} prefix={<LockOutlined />} valueStyle={{color:'#ff4d4f'}} /></Card></Col>
                   <Col xs={24} md={12} xl={6}><Card><Statistic title="جلسات التجديد النشطة" value={operational?.devices?.activeRefreshSessions ?? 0} prefix={<SafetyOutlined />} valueStyle={{color:'#1890ff'}} /></Card></Col>
-                  <Col xs={24} md={12} xl={6}><Card><Statistic title="بلاغات قيد المعالجة" value={operational?.moderation?.openReports ?? 0} prefix={<ExclamationCircleOutlined />} valueStyle={{color:(operational?.moderation?.openReports ?? 0) > 0 ? '#faad14' : '#52c41a'}} /></Card></Col>
+                  <Col xs={24} md={12} xl={6}><Card><Statistic title="بلاغات قيد المعالجة" value={operational?.moderation?.openReports ?? 0} prefix={<ExclamationCircleOutlined />} valueStyle={{color:(operational?.moderation?.openReports ?? 0) > 0 ? '#faad14' : '#B78A2E'}} /></Card></Col>
                 </Row>
                 <Row gutter={[16,16]}>
                   <Col span={12}>
@@ -116,7 +116,7 @@ export default function SecurityCenter() {
                 <Table rowKey="id" dataSource={pstnUsers} pagination={{pageSize:10}} scroll={{x:900}} columns={[
                   {title:'معرّف يونس', dataIndex:'redId', render:(v:string)=><Typography.Text copyable>{v}</Typography.Text>},
                   {title:'المستخدم', render:(_:any,u:any)=><><b>@{u.username}</b><br/><small>{u.displayName}</small></>},
-                  {title:'الحالة', dataIndex:'status', render:(v:string)=><Tag color={v==='APPROVED'?'green':'orange'}>{v}</Tag>},
+                  {title:'الحالة', dataIndex:'status', render:(v:string)=><Tag color={v==='APPROVED'?'gold':'orange'}>{v}</Tag>},
                   {title:'الحد اليومي', render:(_:any,u:any)=><InputNumber min={1} max={1000} value={limits[u.id]||10} onChange={v=>setLimits({...limits,[u.id]:v||10})} disabled={u.status!=='APPROVED'} />},
                   {title:'PSTN', render:(_:any,u:any)=><Space><Switch checked={u.pstnEnabled} disabled={u.status!=='APPROVED'} onChange={v=>updatePstn(u,v)} /><span>{u.pstnEnabled?`${u.pstnDailyLimit}/يوم`:'معطل'}</span></Space>},
                 ]} />

@@ -32,7 +32,7 @@ const CATEGORY_LABELS: Record<string, { label: string; color: string; icon: stri
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'gold',
   REVIEWING: 'blue',
-  RESOLVED: 'green',
+  RESOLVED: 'gold',
   DISMISSED: 'default',
 };
 
@@ -237,7 +237,7 @@ export default function Reports() {
             </>
           )}
           {r.status === 'RESOLVED' && r.resolution && (
-            <Tag color="green">{RESOLUTION_LABELS[r.resolution] ?? r.resolution}</Tag>
+            <Tag color="gold">{RESOLUTION_LABELS[r.resolution] ?? r.resolution}</Tag>
           )}
         </Space>
       ),

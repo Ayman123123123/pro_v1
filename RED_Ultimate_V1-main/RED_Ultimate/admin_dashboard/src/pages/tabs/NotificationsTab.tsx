@@ -4,10 +4,10 @@ import { BellOutlined, CheckOutlined } from '@ant-design/icons';
 import { getNotifications, getUnreadCount, markAllNotificationsRead, markNotificationRead } from '../../api';
 
 const typeColors: Record<string, string> = {
-  NEW_MESSAGE: 'blue', GROUP_MESSAGE: 'green', MENTION: 'cyan',
+  NEW_MESSAGE: 'blue', GROUP_MESSAGE: 'gold', MENTION: 'cyan',
   INCOMING_CALL: 'blue', MISSED_CALL: 'red', PSTN_CALL: 'gold',
   STORY_VIEW: 'cyan', STORY_REPLY: 'blue',
-  GROUP_INVITE: 'green', GROUP_UPDATE: 'default', ROLE_CHANGE: 'orange',
+  GROUP_INVITE: 'gold', GROUP_UPDATE: 'default', ROLE_CHANGE: 'orange',
   LIVE_STARTED: 'red', SPACE_STARTED: 'purple',
   SECURITY_ALERT: 'red', DEVICE_NEW: 'orange', UPDATE_AVAILABLE: 'cyan',
   DINSTAR_STATUS: 'gold', DINSTAR_ALERT: 'red',

@@ -41,7 +41,7 @@ type Page = {
 };
 
 const STATUS_BADGE: Record<string, { color: string; ar: string }> = {
-  APPROVED: { color: 'green', ar: 'معتمد' },
+  APPROVED: { color: 'gold', ar: 'معتمد' },
   PENDING: { color: 'gold', ar: 'قيد المراجعة' },
   REJECTED: { color: 'red', ar: 'مرفوض' },
   SUSPENDED: { color: 'orange', ar: 'معلق' },
@@ -192,7 +192,7 @@ export default function PstnManagement() {
       render: (_: any, u: PstnUser) => {
         if (!u.pstnEnabled) return <Tag>—</Tag>;
         const ratio = u.pstnDailyLimit > 0 ? u.usedToday / u.pstnDailyLimit : 0;
-        const color = ratio >= 1 ? 'red' : ratio >= 0.8 ? 'orange' : 'green';
+        const color = ratio >= 1 ? 'red' : ratio >= 0.8 ? 'orange' : 'gold';
         return <Tag color={color}>{u.usedToday} / {u.pstnDailyLimit > 0 ? u.pstnDailyLimit : '∞'}</Tag>;
       },
     },

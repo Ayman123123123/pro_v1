@@ -16,7 +16,7 @@ import {
 const { Title, Text, Paragraph } = Typography;
 
 const VISIBILITY_LABELS: Record<string, { label: string; color: string }> = {
-  PUBLIC: { label: 'عام', color: 'green' },
+  PUBLIC: { label: 'عام', color: 'gold' },
   LOCAL_YEMEN: { label: 'محلي (اليمن)', color: 'orange' },
 };
 
@@ -122,7 +122,7 @@ export default function PostsManagement() {
     {
       title: 'الحالة', key: 'status', width: 90,
       render: (_: unknown, p: AdminPost) =>
-        p.deleted ? <Tag color="red">محذوف</Tag> : <Tag color="green">منشور</Tag>,
+        p.deleted ? <Tag color="red">محذوف</Tag> : <Tag color="gold">منشور</Tag>,
     },
     {
       title: 'نُشر', dataIndex: 'createdAt', key: 'createdAt', width: 120,

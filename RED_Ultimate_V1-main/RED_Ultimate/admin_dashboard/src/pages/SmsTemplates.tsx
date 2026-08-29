@@ -54,7 +54,7 @@ const ENCODING_LABELS: Record<string, string> = {
 
 const CATEGORY_COLORS: Record<string, string> = {
   'verification': 'blue',
-  'notification': 'green',
+  'notification': 'gold',
   'marketing': 'orange',
   'support': 'purple',
   'custom': 'default',

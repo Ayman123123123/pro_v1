@@ -21,7 +21,7 @@ type HistoryRow = {
 const STATUS_COLOR: Record<string, string> = {
   RINGING: 'gold',
   ACTIVE: 'cyan',
-  ENDED: 'green',
+  ENDED: 'gold',
   MISSED: 'red',
   REJECTED: 'orange',
   BUSY: 'volcano',
@@ -103,7 +103,7 @@ export default function CallHistory() {
       title: 'المسار',
       dataIndex: 'call_route',
       render: (v: string) => (
-        <Tag color={v === 'DINSTAR' ? 'orange' : 'green'}>{v === 'DINSTAR' ? 'DINSTAR' : 'RED'}</Tag>
+        <Tag color={v === 'DINSTAR' ? 'orange' : 'gold'}>{v === 'DINSTAR' ? 'DINSTAR' : 'RED'}</Tag>
       ),
     },
     {

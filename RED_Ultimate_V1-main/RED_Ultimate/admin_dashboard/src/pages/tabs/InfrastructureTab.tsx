@@ -52,7 +52,7 @@ export default function InfrastructureTab() {
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Card
         title="البنية المحلية"
-        extra={<Tag color={health?.ok ? 'green' : 'red'}>{health?.ok ? (health.body.status || 'HEALTHY') : 'CHECKING / DOWN'}</Tag>}
+        extra={<Tag color={health?.ok ? 'gold' : 'red'}>{health?.ok ? (health.body.status || 'HEALTHY') : 'CHECKING / DOWN'}</Tag>}
       >
         {error && <Alert type="warning" showIcon message={error} style={{ marginBottom: 12 }} />}
         <Descriptions bordered column={1} size="small">
@@ -75,7 +75,7 @@ export default function InfrastructureTab() {
         {services.length > 0 && (
           <Space wrap style={{ marginTop: 12 }}>
             {services.map(([name, svc]) => (
-              <Tag key={name} color={svc?.status === 'UP' ? 'green' : svc?.status === 'DEGRADED' ? 'orange' : 'red'}>
+              <Tag key={name} color={svc?.status === 'UP' ? 'gold' : svc?.status === 'DEGRADED' ? 'orange' : 'red'}>
                 {name}: {svc?.status || 'UNKNOWN'}{svc?.bucket ? ` (${svc.bucket})` : ''}
               </Tag>
             ))}

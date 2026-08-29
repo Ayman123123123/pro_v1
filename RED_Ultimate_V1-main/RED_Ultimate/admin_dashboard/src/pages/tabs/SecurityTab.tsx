@@ -72,7 +72,7 @@ const SecurityTab: React.FC = () => {
         <Col xs={24} sm={12} md={6}>
           <Card>
             <Statistic title="تنبيهات 24 ساعة" value={operational?.moderation?.securityAlerts24h ?? 0}
-              prefix={<SafetyOutlined />} valueStyle={{ color: '#52c41a' }} />
+              prefix={<SafetyOutlined />} valueStyle={{ color: '#B78A2E' }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={6}>

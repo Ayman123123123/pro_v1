@@ -37,7 +37,7 @@ const LogStreamerTab: React.FC = () => {
         if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, [logs]);
 
-    const color = status === 'ONLINE' ? 'green' : status === 'CONNECTING' ? 'gold' : 'red';
+    const color = status === 'ONLINE' ? 'gold' : status === 'CONNECTING' ? 'gold' : 'red';
     return (
         <Card title="سجل أحداث يونس المباشر" extra={<Tag color={color}>{status}</Tag>} style={{ background: '#030712', border: '1px solid #17344A' }}>
             {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 12 }} />}
