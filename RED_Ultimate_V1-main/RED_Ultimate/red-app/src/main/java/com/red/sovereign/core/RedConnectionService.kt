@@ -411,7 +411,7 @@ class RedConnectionService : Service() {
                             }
                             if (SettingsRuntime.current.messageNotifications) {
                                 currentConversationId = message.conversationId
-                                notifyEncryptedMessage(message.senderId, preview, message.type, message.id, message.sequenceNumber)
+                                notifyEncryptedMessage(message.senderId, preview, message.type)
                             }
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }

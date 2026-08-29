@@ -33,3 +33,26 @@ minio-data/
 postgres-data/
 mongo-data/
 local-artifacts/
+
+# Local diagnostics / dumps — large, never push (53MB tgz, 6k-line logs)
+.artifacts/
+.claude/
+_audit_temp/
+backups/
+call-debug-*/
+call-debug-latest/
+build-logs/
+docs/diagnostics/
+github-current.tgz
+missing_*.txt
+*.tgz
+*_current.log
+*_current.png
+opencode.json
+webrtc-*.txt
+route-*.txt
+ice-*.txt
+private-chat-*.txt
+call-*.txt
+contact-*.txt
+chat-*.txt

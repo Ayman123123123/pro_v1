@@ -50,11 +50,45 @@ audit_preservation_*/
 
 # سجلات تشخيص محلية مؤرّخة (مخرجات فحص، ليست كوداً)
 ASTERISK_*.txt
+**/ASTERISK_*.txt
 DINSTAR_*.txt
+**/DINSTAR_*.txt
 DINSTAR_*.html
+**/DINSTAR_*.html
 DINSTAR_*.json
+**/DINSTAR_*.json
 AUTH_*.txt
+**/AUTH_*.txt
 RED_BACKEND_*.txt
+**/RED_BACKEND_*.txt
+RED_APP_*.txt
+**/RED_APP_*.txt
+RED_*.txt
+**/RED_*.txt
+CHANGELOG-*.md
+**/CHANGELOG-*.md
+TABITOKEN_*.md
+**/TABITOKEN_*.md
+UC2000-*.md
+**/UC2000-*.md
+MERGE_*.md
+**/MERGE_*.md
+RECOVERY_*.md
+**/RECOVERY_*.md
+FULL_LITERAL_*.md
+**/FULL_LITERAL_*.md
+UNIFIED_*.md
+**/UNIFIED_*.md
+COMPREHENSIVE_*.md
+**/COMPREHENSIVE_*.md
+PSTN_*.txt
+**/PSTN_*.txt
+RECOVERY_MAP*.txt
+**/RECOVERY_MAP*.txt
+RED_ANDROID*.md
+**/RED_ANDROID*.md
+RED_LAST*.txt
+**/RED_LAST*.txt
 
 # External agent scratch/plans
 .kilo/
@@ -89,3 +123,39 @@ build_errors*.txt
 logcat.txt
 recovered.txt
 test_results.txt
+
+# ─────────────────────────────────────────────────────────────
+# مجلدات تشخيص/نسخ محلية ضخمة — لا تُرفع (كانت تُضخم كل commit إلى 70k سطر)
+# ─────────────────────────────────────────────────────────────
+.artifacts/
+.claude/
+_audit_temp/
+RED_Ultimate_V1-main/.artifacts/
+RED_Ultimate_V1-main/.claude/
+RED_Ultimate_V1-main/_audit_temp/
+**/backups/
+**/call-debug-*/
+**/call-debug-latest/
+**/build-logs/
+**/docs/diagnostics/
+github-current.tgz
+**/github-current.tgz
+missing_*.txt
+**/missing_*.txt
+*.tgz
+*_current.log
+*_current.png
+opencode.json
+**/opencode.json
+webrtc-*.txt
+route-*.txt
+ice-*.txt
+private-chat-*.txt
+call-*.txt
+**/call-*.txt
+contact-*.txt
+chat-*.txt
+.idea/
+**/.idea/
+*.log
+!backend-server/src/main/resources/db/migration/*.sql
