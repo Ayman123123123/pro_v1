@@ -247,7 +247,7 @@ export default function Reports() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
+        <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
           <AlertOutlined /> مراقبة المحتوى
         </Title>
         <Text type="secondary">مراجعة البلاغات واتخاذ الإجراءات المناسبة</Text>
@@ -271,7 +271,7 @@ export default function Reports() {
               title="تم حلها"
               value={stats.resolved}
               prefix={<CheckOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>

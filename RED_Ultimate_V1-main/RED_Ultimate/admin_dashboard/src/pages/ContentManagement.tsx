@@ -63,7 +63,7 @@ export default function ContentManagement() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
+        <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
           <BarChartOutlined /> إدارة المحتوى
         </Title>
         <Text type="secondary">استطلاعات، أحداث، هاشتاجات، وملصقات</Text>
@@ -258,7 +258,7 @@ function PollsTab() {
               title="نشطة"
               value={polls.filter(p => p.status === 'ACTIVE').length}
               prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>
@@ -504,7 +504,7 @@ function EventsTab() {
         </Col>
         <Col xs={24} sm={6}>
           <Card>
-            <Statistic title="مباشر" value={events.filter(e => e.status === 'LIVE').length} prefix={<FireOutlined />} valueStyle={{ color: '#00C896' }} />
+            <Statistic title="مباشر" value={events.filter(e => e.status === 'LIVE').length} prefix={<FireOutlined />} valueStyle={{ color: '#B78A2E' }} />
           </Card>
         </Col>
         <Col xs={24} sm={6}>
@@ -834,7 +834,7 @@ function StickersTab() {
         </Col>
         <Col xs={24} sm={8}>
           <Card>
-            <Statistic title="منشورة" value={packs.filter(p => p.isPublished).length} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#00C896' }} />
+            <Statistic title="منشورة" value={packs.filter(p => p.isPublished).length} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#B78A2E' }} />
           </Card>
         </Col>
       </Row>

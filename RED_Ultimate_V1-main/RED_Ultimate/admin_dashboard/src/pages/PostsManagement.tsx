@@ -158,7 +158,7 @@ export default function PostsManagement() {
           <Card><Statistic title="إجمالي المنشورات" value={overview?.totalPosts ?? '—'} prefix={<FileTextOutlined />} /></Card>
         </Col>
         <Col xs={12} md={6}>
-          <Card><Statistic title="نُشر اليوم" value={overview?.createdToday ?? '—'} valueStyle={{ color: '#00C896' }} /></Card>
+          <Card><Statistic title="نُشر اليوم" value={overview?.createdToday ?? '—'} valueStyle={{ color: '#B78A2E' }} /></Card>
         </Col>
         <Col xs={12} md={6}>
           <Card><Statistic title="المحذوفة" value={overview?.deletedPosts ?? '—'} valueStyle={{ color: '#E0A83C' }} /></Card>

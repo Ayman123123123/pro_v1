@@ -36,9 +36,9 @@
      عيبان أُصلحا هنا (مقيسان لا مسألتَي ذوق):
        --yns-text-muted على السطح كان 2.91:1 — راسب دون AA
        النص الأبيض على الأخضر كان 2.16:1 — راسب، فصار نصًّا داكنًا */
-  --yns-green: #00B37E;          /* الأساسي — 7.06:1 على الخلفية */
-  --yns-green-dark: #00916A;
-  --yns-green-light: #14D89B;
+  --yns-green: #B78A2E;          /* الأساسي — 7.06:1 على الخلفية */
+  --yns-green-dark: #9A7524;
+  --yns-green-light: #D4B16A;
   --yns-gold: #E0A83C;           /* التمييز — 8.97:1 */
   --yns-gold-dark: #C08F2E;
   --yns-blue: #4FC3F7;           /* المعلومات — 9.55:1 */
@@ -53,7 +53,7 @@
   --yns-text-muted: #7C90A0;     /* كان 5A6A8A بـ2.91:1 على السطح */
   --yns-error: #FF5A5F;          /* 6.27:1 */
   --yns-warning: #E0A83C;
-  --yns-success: #00B37E;
+  --yns-success: #B78A2E;
   --yns-info: #4FC3F7;
 
   /* Typography */
@@ -84,7 +84,7 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-  --shadow-glow-green: 0 0 30px rgba(0, 179, 126, 0.3);
+  --shadow-glow-green: 0 0 30px rgba(183,138,46,0.3);
   --shadow-glow-gold: 0 0 30px rgba(224, 168, 60, 0.3);
   --shadow-glow-blue: 0 0 30px rgba(79, 195, 247, 0.3);
 
@@ -109,7 +109,7 @@
   color-scheme: light;
   --yns-green: #007A5E;          /* 5.8:1 على #F7F8FA */
   --yns-green-dark: #00664B;
-  --yns-green-light: #00916A;
+  --yns-green-light: #9A7524;
   --yns-gold: #B78A2E;           /* 6.2:1 */
   --yns-gold-dark: #9A7524;
   --yns-blue: #1976D2;           /* 6.1:1 */
@@ -343,9 +343,9 @@ a:hover {
 }
 
 .nav-item.active {
-  background: linear-gradient(135deg, rgba(0, 179, 126, 0.15) 0%, rgba(79, 195, 247, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(183,138,46,0.15) 0%, rgba(79, 195, 247, 0.1) 100%);
   color: var(--yns-green);
-  border: 1px solid rgba(0, 179, 126, 0.3);
+  border: 1px solid rgba(183,138,46,0.3);
 }
 
 .nav-item.active::before {
@@ -461,7 +461,7 @@ a:hover {
 }
 
 .admin-card:hover {
-  border-color: rgba(0, 179, 126, 0.3);
+  border-color: rgba(183,138,46,0.3);
   box-shadow: var(--shadow-md);
 }
 
@@ -514,7 +514,7 @@ a:hover {
 }
 
 .stat-card:hover {
-  border-color: rgba(0, 179, 126, 0.3);
+  border-color: rgba(183,138,46,0.3);
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
@@ -561,7 +561,7 @@ a:hover {
 }
 
 .stat-card-change.positive {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -581,7 +581,7 @@ a:hover {
 }
 
 .stat-card-icon.green {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -709,7 +709,7 @@ a:hover {
 .form-input:focus, .form-select:focus, .form-textarea:focus {
   outline: none;
   border-color: var(--yns-green);
-  box-shadow: 0 0 0 3px rgba(0, 179, 126, 0.15);
+  box-shadow: 0 0 0 3px rgba(183,138,46,0.15);
 }
 
 .form-input::placeholder, .form-textarea::placeholder {
@@ -799,7 +799,7 @@ a:hover {
 }
 
 .table-status.approved, .table-status.active, .table-status.online {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-success);
 }
 
@@ -825,7 +825,7 @@ a:hover {
   color: var(--yns-text-secondary);
 }
 
-.badge.green { background: rgba(0, 179, 126, 0.15); color: var(--yns-green); }
+.badge.green { background: rgba(183,138,46,0.15); color: var(--yns-green); }
 .badge.gold { background: rgba(224, 168, 60, 0.15); color: var(--yns-gold); }
 .badge.blue { background: rgba(79, 195, 247, 0.15); color: var(--yns-blue); }
 .badge.error { background: rgba(255, 90, 95, 0.15); color: var(--yns-error); }
@@ -883,8 +883,8 @@ a:hover {
 }
 
 .alert-success {
-  background: rgba(0, 179, 126, 0.1);
-  border: 1px solid rgba(0, 179, 126, 0.3);
+  background: rgba(183,138,46,0.1);
+  border: 1px solid rgba(183,138,46,0.3);
   color: var(--yns-green);
 }
 
@@ -1025,7 +1025,7 @@ a:hover {
 }
 
 .status-badge.online {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -1196,7 +1196,7 @@ a:hover {
 }
 
 .activity-icon.user {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -1257,7 +1257,7 @@ a:hover {
 }
 
 .activity-status.approved, .activity-status.active {
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -1296,7 +1296,7 @@ a:hover {
 
 .quick-action-btn:hover {
   border-color: var(--yns-green);
-  background: rgba(0, 179, 126, 0.08);
+  background: rgba(183,138,46,0.08);
   transform: translateY(-2px);
 }
 
@@ -1307,7 +1307,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: rgba(0, 179, 126, 0.15);
+  background: rgba(183,138,46,0.15);
   color: var(--yns-green);
 }
 
@@ -1341,8 +1341,8 @@ a:hover {
   align-items: center;
   margin-bottom: var(--sp-6);
   padding: var(--sp-5) var(--sp-6);
-  background: linear-gradient(135deg, rgba(0, 179, 126, 0.1) 0%, rgba(79, 195, 247, 0.05) 100%);
-  border: 1px solid rgba(0, 179, 126, 0.2);
+  background: linear-gradient(135deg, rgba(183,138,46,0.1) 0%, rgba(79, 195, 247, 0.05) 100%);
+  border: 1px solid rgba(183,138,46,0.2);
   border-radius: var(--radius-lg);
 }
 
@@ -1365,10 +1365,10 @@ a:hover {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   color: var(--yns-green);
-  background: rgba(0, 179, 126, 0.1);
+  background: rgba(183,138,46,0.1);
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  border: 1px solid rgba(0, 179, 126, 0.2);
+  border: 1px solid rgba(183,138,46,0.2);
 }
 
 .welcome-actions {
@@ -1639,7 +1639,7 @@ a:hover {
 
 .yns-dot.up {
   background: var(--yns-success);
-  box-shadow: 0 0 8px rgba(0, 179, 126, 0.8);
+  box-shadow: 0 0 8px rgba(183,138,46,0.8);
   animation: yns-pulse 2s ease-in-out infinite;
 }
 
@@ -1703,8 +1703,8 @@ a:hover {
 
 .yns-status.up {
   color: var(--yns-success);
-  background: rgba(0, 179, 126, 0.1);
-  border-color: rgba(0, 179, 126, 0.35);
+  background: rgba(183,138,46,0.1);
+  border-color: rgba(183,138,46,0.35);
 }
 
 .yns-status.down {

@@ -339,7 +339,7 @@ export default function UserManagement() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={6}><Card><Statistic title="إجمالي" value={stats.total} prefix={<UserOutlined />} valueStyle={{ color: '#1890ff' }} /></Card></Col>
         <Col xs={24} sm={6}><Card><Statistic title="في الانتظار" value={stats.pending} prefix={<UserAddOutlined />} valueStyle={{ color: '#E8B84A' }} /></Card></Col>
-        <Col xs={24} sm={6}><Card><Statistic title="مقبول" value={stats.approved} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#00C896' }} /></Card></Col>
+        <Col xs={24} sm={6}><Card><Statistic title="مقبول" value={stats.approved} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#B78A2E' }} /></Card></Col>
         <Col xs={24} sm={6}><Card><Statistic title="محظور" value={stats.banned} prefix={<StopOutlined />} valueStyle={{ color: '#FF6B6B' }} /></Card></Col>
       </Row>
 

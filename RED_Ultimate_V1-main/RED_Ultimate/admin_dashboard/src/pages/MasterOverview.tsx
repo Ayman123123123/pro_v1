@@ -103,7 +103,7 @@ export default function MasterOverview() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic title="متوسط إشارة DINSTAR" value={signal} suffix="%" prefix={<ApiOutlined />} />
-            <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#00C896' : '#E8B84A'} />
+            <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#B78A2E' : '#E8B84A'} />
             <Tag color={slots.length ? 'green' : 'red'}>{usable} جاهزة / {registered} مسجّلة</Tag>
           </Card>
         </Col>

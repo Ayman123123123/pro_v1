@@ -250,7 +250,7 @@ export default function AuditLog() {
               title="مسؤولون نشطون"
               value={stats.uniqueAdmins}
               prefix={<UserOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>

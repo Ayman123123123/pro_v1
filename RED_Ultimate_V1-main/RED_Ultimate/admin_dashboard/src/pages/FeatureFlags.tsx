@@ -124,7 +124,7 @@ export default function FeatureFlags() {
           }}>
             <div style={{
               height: '100%', width: `${pct ?? 0}%`,
-              background: pct === 100 ? '#00C896' : pct > 0 ? '#4FC3F7' : '#666',
+              background: pct === 100 ? '#B78A2E' : pct > 0 ? '#4FC3F7' : '#666',
               transition: 'width 0.3s'
             }} />
           </div>
@@ -171,7 +171,7 @@ export default function FeatureFlags() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
+        <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
           <ExperimentOutlined /> أعلام الميزات
         </Title>
         <Text type="secondary">إدارة تفعيل الميزات بشكل تدريجي (Feature Flags)</Text>
@@ -202,7 +202,7 @@ export default function FeatureFlags() {
               title="مفعل"
               value={stats.enabled}
               prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>

@@ -93,7 +93,7 @@ export default function NotificationsTab() {
         <Space>
           <BellOutlined style={{ color: '#00E6A0' }} />
           <Typography.Text strong>صندوق الإشعارات</Typography.Text>
-          {unreadCount > 0 && <Badge count={unreadCount} color="#00C896" />}
+          {unreadCount > 0 && <Badge count={unreadCount} color="#B78A2E" />}
         </Space>
         {unreadCount > 0 && (
           <Button size="small" icon={<CheckOutlined />} onClick={handleMarkAllRead}>

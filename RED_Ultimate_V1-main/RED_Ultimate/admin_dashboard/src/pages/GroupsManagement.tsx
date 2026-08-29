@@ -145,7 +145,7 @@ export default function GroupsManagement() {
           <Card><Statistic title="متوسط الأعضاء" value={overview ? overview.avgMembersPerGroup.toFixed(1) : '—'} /></Card>
         </Col>
         <Col xs={12} md={6}>
-          <Card><Statistic title="أُنشئت اليوم" value={overview?.createdToday ?? '—'} valueStyle={{ color: '#00C896' }} /></Card>
+          <Card><Statistic title="أُنشئت اليوم" value={overview?.createdToday ?? '—'} valueStyle={{ color: '#B78A2E' }} /></Card>
         </Col>
       </Row>
 

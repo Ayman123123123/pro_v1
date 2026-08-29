@@ -200,7 +200,7 @@ export default function SimInventory() {
       dataIndex: 'signalPercent',
       render: (v: number | null) => {
         if (v == null) return '—';
-        const color = v >= 60 ? '#00C896' : v >= 30 ? '#E0A83C' : '#F5222D';
+        const color = v >= 60 ? '#B78A2E' : v >= 30 ? '#E0A83C' : '#F5222D';
         return (
           <Space size={2}>
             <SignalFilled style={{ color, fontSize: 12 }} />
@@ -260,13 +260,13 @@ export default function SimInventory() {
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#00C896' }}>{stats.total}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#B78A2E' }}>{stats.total}</div>
             <Typography.Text type="secondary">إجمالي المنافذ</Typography.Text>
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: '#52C41A' }}>{stats.verified}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: '#1976D2' }}>{stats.verified}</div>
             <Typography.Text type="secondary">محقّقة</Typography.Text>
           </Card>
         </Col>

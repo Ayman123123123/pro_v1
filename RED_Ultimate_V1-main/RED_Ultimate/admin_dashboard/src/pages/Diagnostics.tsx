@@ -131,7 +131,7 @@ export default function Diagnostics() {
         type="primary"
         onClick={() => void runTests()}
         loading={loading}
-        style={{ marginBottom: 20, background: '#00C896', borderColor: '#00C896' }}
+        style={{ marginBottom: 20, background: '#B78A2E', borderColor: '#B78A2E' }}
       >
         {loading ? 'جارٍ الفحص…' : 'بدء الفحص الحي الشامل'}
       </Button>

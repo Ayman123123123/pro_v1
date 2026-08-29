@@ -71,7 +71,7 @@ export default function DataOverview() {
   const downSources = Object.entries(data?.dataSources || {}).filter(([, s]) => !s.available);
 
   return <div>
-    <Typography.Title level={2} style={{ color: '#14D89B', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
+    <Typography.Title level={2} style={{ color: '#D4B16A', marginTop: 0 }}><DatabaseOutlined /> جرد بيانات المنصة</Typography.Title>
     <Typography.Paragraph type="secondary">
       عرض تشغيلي شامل للبيانات المتاحة للإدارة. الأرقام مجمعة فقط ولا تعرض نصوص الرسائل المشفرة أو الأسرار أو مفاتيح الهوية.
     </Typography.Paragraph>

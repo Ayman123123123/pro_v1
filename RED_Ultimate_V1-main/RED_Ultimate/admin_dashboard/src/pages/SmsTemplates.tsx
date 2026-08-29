@@ -325,7 +325,7 @@ export default function SmsTemplates() {
       title: 'الاستخدام',
       dataIndex: 'usageCount',
       width: 80,
-      render: (v: number) => <Badge count={v} style={{ backgroundColor: '#00C896' }} />,
+      render: (v: number) => <Badge count={v} style={{ backgroundColor: '#B78A2E' }} />,
     },
     {
       title: 'إجراءات',
@@ -392,7 +392,7 @@ export default function SmsTemplates() {
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
-            <Statistic title="إجمالي القوالب" value={stats.total} valueStyle={{ color: '#00C896' }} />
+            <Statistic title="إجمالي القوالب" value={stats.total} valueStyle={{ color: '#B78A2E' }} />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6}>
@@ -407,7 +407,7 @@ export default function SmsTemplates() {
         </Col>
         <Col xs={12} sm={8} md={6}>
           <Card size="small">
-            <Statistic title="مُرسَلة" value={stats.delivered} valueStyle={{ color: '#52C41A' }} />
+            <Statistic title="مُرسَلة" value={stats.delivered} valueStyle={{ color: '#1976D2' }} />
           </Card>
         </Col>
       </Row>

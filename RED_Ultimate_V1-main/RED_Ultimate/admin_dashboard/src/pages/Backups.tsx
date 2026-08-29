@@ -235,7 +235,7 @@ export default function Backups() {
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <div>
-        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
+        <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
           <DatabaseOutlined /> النسخ الاحتياطية — موحدة
         </Title>
         <Text type="secondary">سجل النسخ السابقة ودليل النسخ والاستعادة التشغيلي المشفر</Text>
@@ -269,7 +269,7 @@ export default function Backups() {
               title="مكتمل"
               value={stats.completed}
               prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>
@@ -400,7 +400,7 @@ export default function Backups() {
                     <Text code copyable style={{ display: 'block', whiteSpace: 'pre-wrap', background: '#0a0a0a', padding: 12, borderRadius: 8 }}>{item.cmd}</Text>
                   </Card>
                 ))}
-                <Card title="◆ قائمة التحقق قبل الإنتاج" extra={<SafetyOutlined style={{ color: '#00C896' }} />}>
+                <Card title="◆ قائمة التحقق قبل الإنتاج" extra={<SafetyOutlined style={{ color: '#B78A2E' }} />}>
                   <Text>• هل جربت الاستعادة على جهاز آخر؟ • هل تحققت من تسجيل دخول + فك تشفير رسالة + عرض صورة؟ • هل المفاتيح في خزنة offline؟</Text>
                 </Card>
                 <Alert type="info" showIcon message="تذكير" description="لا ترفع .env أو secrets/ أو *.pem أو dump إلى Git — هي في .gitignore لسبب." />

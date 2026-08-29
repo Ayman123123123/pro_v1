@@ -233,7 +233,7 @@ export default function CdrAnalysis() {
           type: 'bar',
           stack: 'calls',
           data: daily.map((d) => d.succeeded),
-          itemStyle: { color: '#52C41A' },
+          itemStyle: { color: '#1976D2' },
         },
         {
           name: 'غير مُجابة',
@@ -277,7 +277,7 @@ export default function CdrAnalysis() {
       series: [{
         type: 'bar',
         data: gatewayDist.map((d) => d.count),
-        itemStyle: { color: '#00C896', borderRadius: [6, 6, 0, 0] },
+        itemStyle: { color: '#B78A2E', borderRadius: [6, 6, 0, 0] },
       }],
     };
   }, [echartsMod, gatewayDist]);
@@ -366,7 +366,7 @@ export default function CdrAnalysis() {
               title="إجمالي المكالمات"
               value={stats.total}
               prefix={<PhoneOutlined />}
-              valueStyle={{ color: '#00C896' }}
+              valueStyle={{ color: '#B78A2E' }}
             />
           </Card>
         </Col>
@@ -375,7 +375,7 @@ export default function CdrAnalysis() {
             <Statistic
               title="مُجابة"
               value={stats.succeeded}
-              valueStyle={{ color: '#52C41A' }}
+              valueStyle={{ color: '#1976D2' }}
               suffix={`/ ${stats.answerRate}%`}
             />
           </Card>

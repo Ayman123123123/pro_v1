@@ -103,7 +103,7 @@ export default function Dashboard() {
   };
 
   const userChart: ChartOption = {
-    title: { text: 'المستخدمون النشطون', textStyle: { color: '#14D89B' } },
+    title: { text: 'المستخدمون النشطون', textStyle: { color: '#D4B16A' } },
     tooltip: { trigger: 'axis' },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
@@ -114,7 +114,7 @@ export default function Dashboard() {
         type: 'line',
         data: rows.map(a => a.totalUsers),
         smooth: true,
-        itemStyle: { color: '#14D89B' },
+        itemStyle: { color: '#D4B16A' },
         areaStyle: { color: 'rgba(0,230,160,0.2)' },
       },
       {
@@ -128,14 +128,14 @@ export default function Dashboard() {
   };
 
   const messageChart: ChartOption = {
-    title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#14D89B' } },
+    title: { text: 'الرسائل والمكالمات (آخر 7 أيام)', textStyle: { color: '#D4B16A' } },
     tooltip: { trigger: 'axis' },
     legend: { data: ['رسائل', 'مكالمات', 'رسائل صوتية'], textStyle: { color: '#fff' } },
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: rows.map(a => (a.statDate || '').slice(5)) },
     yAxis: { type: 'value' },
     series: [
-      { name: 'رسائل', type: 'bar', data: rows.map(a => a.messagesSent), itemStyle: { color: '#14D89B' } },
+      { name: 'رسائل', type: 'bar', data: rows.map(a => a.messagesSent), itemStyle: { color: '#D4B16A' } },
       { name: 'مكالمات', type: 'bar', data: rows.map(a => a.callsTotal), itemStyle: { color: '#E0A83C' } },
       { name: 'رسائل صوتية', type: 'line', data: rows.map(a => a.voiceMessages), smooth: true, itemStyle: { color: '#4FC3F7' } },
     ],
@@ -145,7 +145,7 @@ export default function Dashboard() {
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       {/* Header */}
       <div>
-        <Title level={2} style={{ color: '#14D89B', margin: 0 }}>
+        <Title level={2} style={{ color: '#D4B16A', margin: 0 }}>
           <ThunderboltOutlined /> لوحة الإدارة السيادية
         </Title>
         <Text type="secondary">
@@ -197,8 +197,8 @@ export default function Dashboard() {
               <Statistic
                 title="إجمالي المستخدمين"
                 value={summary.analytics.totalUsers ?? 0}
-                prefix={<TeamOutlined style={{ color: '#14D89B' }} />}
-                valueStyle={{ color: '#14D89B' }}
+                prefix={<TeamOutlined style={{ color: '#D4B16A' }} />}
+                valueStyle={{ color: '#D4B16A' }}
               />
               <Text type="secondary">+{summary.analytics.newUsers24h ?? 0} آخر 24 ساعة</Text>
             </Card>

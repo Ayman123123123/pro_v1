@@ -7,7 +7,7 @@ import LogStreamerTab from './tabs/LogStreamerTab';
 export default function SystemLogs() {
   return (
     <div>
-      <Typography.Title level={2} style={{color:'#14D89B', margin:0}}><FileSearchOutlined /> سجل النظام المباشر — موحد</Typography.Title>
+      <Typography.Title level={2} style={{color:'#D4B16A', margin:0}}><FileSearchOutlined /> سجل النظام المباشر — موحد</Typography.Title>
       <Typography.Text type="secondary">بث حي عبر WebSocket /ws/admin/logs — مدموج من LogStreamerTab القديمة — بيانات حقيقية</Typography.Text>
       <Alert type="warning" showIcon style={{margin:'16px 0'}} message="السجل لا يعرض محتوى الرسائل المشفرة أو كلمات المرور — فقط routing metadata وأحداث النظام" />
       <Card style={{marginTop:16}}>
