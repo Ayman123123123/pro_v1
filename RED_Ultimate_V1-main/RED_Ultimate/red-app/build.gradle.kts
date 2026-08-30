@@ -11,6 +11,12 @@
 // Default to the host Wi-Fi interface verified for physical Android clients.
 // CI/production may override this with -PRED_SERVER_URL=https://your-domain.
 val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.11.131:8088")
+// Comma-separated candidate server URLs tried first during LAN auto-discovery.
+// local-first-run.* builds this from BOTH the Wi-Fi (client) and Ethernet (Dinstar
+// NIC) addresses so a device on either interface connects without scanning.
+// Falls back to the single RED_SERVER_URL when not provided.
+val redServerCandidates = providers.gradleProperty("RED_SERVER_CANDIDATES")
+    .orElse(redServerUrl)
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
@@ -26,6 +32,8 @@ android {
         versionCode = 1
         versionName = "1.0.0-alpha01"
         buildConfigField("String", "RED_SERVER_URL", "\"${redServerUrl.get()}\"")
+        val escapedCandidates = redServerCandidates.get().replace("\\", "\\\\").replace("\"", "\\\"")
+        buildConfigField("String", "RED_SERVER_CANDIDATES", "\"$escapedCandidates\"")
         val escapedPins = redTlsPins.get().replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "RED_TLS_PINS", "\"$escapedPins\"")
         ndk { abiFilters += redTargetAbi.get() }

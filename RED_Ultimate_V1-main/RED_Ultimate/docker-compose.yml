@@ -228,9 +228,12 @@ services:
       - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
-      - EXTERNAL_MEDIA_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - EXTERNAL_SIGNALING_ADDRESS=${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}
-      - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}
+      # Dinstar-facing external addresses: advertise the Ethernet NIC IP (192.168.11.x)
+      # so the UC2000 can route SIP/RTP back to this host. Falls back to the client
+      # Wi-Fi IP when no Dinstar NIC is present (single-interface dev boxes).
+      - EXTERNAL_MEDIA_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
+      - EXTERNAL_SIGNALING_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
+      - ASTERISK_EXTERNAL_IP=${PSTN_EXTERNAL_IP:-${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}}
       # سر مصادقة مسار الوارد: dialplan يستدعي /api/internal/pstn بترويسة
       # X-Internal-Secret، ويتحقق منها InternalPstnController. اختياري لأن
       # للمتحكم افتراضًا معلنًا، لكن تركه فارغًا يُبقي المسار على السر الافتراضي.

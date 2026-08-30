@@ -239,7 +239,7 @@ fun SmartServerSettingsScreen(
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        label = { Text("مثال: 192.168.1.100 أو myserver.local") },
+                        label = { Text("مثال: 192.168.1.100 أو myserver.local") }, // ALLOW-IP: example hint text
                         placeholder = { Text("IP أو اسم المضيف") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
@@ -268,8 +268,8 @@ fun SmartServerSettingsScreen(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    HelperChip(Icons.Default.Info, "IP فقط: 192.168.1.100")
-                    HelperChip(Icons.Default.Info, "مع بورت: 192.168.1.100:8088")
+                    HelperChip(Icons.Default.Info, "IP فقط: 192.168.1.100") // ALLOW-IP: example hint text
+                    HelperChip(Icons.Default.Info, "مع بورت: 192.168.1.100:8088") // ALLOW-IP: example hint text
                     HelperChip(Icons.Default.Info, "اسم مضيف: myserver.local")
                 }
 

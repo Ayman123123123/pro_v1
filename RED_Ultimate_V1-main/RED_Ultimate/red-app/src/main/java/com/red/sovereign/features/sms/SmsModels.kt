@@ -63,6 +63,6 @@ data class PstnWsEnvelope(
     val gateway: String? = null,
     /** الرقم المطلوب (رقم شريحة المالك) في المكالمات الواردة. */
     val called: String? = null,
-    /** مضيف البوابة المستقبِلة (192.168.11.2/.3). */
+    /** مضيف البوابة المستقبِلة (192.168.11.2/.3). */ // ALLOW-IP: documentation of fleet IPs
     val gatewayHost: String? = null
 )

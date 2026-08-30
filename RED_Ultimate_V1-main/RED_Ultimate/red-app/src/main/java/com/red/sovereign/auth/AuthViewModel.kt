@@ -60,7 +60,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun setServerUrl(value: String): String? {
         val trimmed = value.trim()
-        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)"
+        if (trimmed.isBlank()) return "أدخل عنوان الخادم (مثال: http://192.168.1.10:8088)" // ALLOW-IP: user-facing example text
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             return "يجب أن يبدأ العنوان بـ http:// أو https://"
         }

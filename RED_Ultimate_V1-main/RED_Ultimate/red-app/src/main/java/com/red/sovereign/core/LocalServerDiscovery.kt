@@ -126,13 +126,20 @@ class LocalServerDiscovery(private val context: Context) {
     private fun knownBases(): LinkedHashSet<String> {
         val bases = linkedSetOf<String>()
         val preferred = preferredPort()
-        val seeds = listOf(
-            ServerEndpoint.url(),
-            BuildConfig.RED_SERVER_URL,
+        // المرشّحات المدمجة في البناء (واي فاي + إيثرنت + loopback) تغطي كلا الواجهتين
+        // فوراً دون مسح — يضبطها local-first-run.* من عناوين الجهاز الفعلية.
+        val candidates = BuildConfig.RED_SERVER_CANDIDATES
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        val seeds = buildList {
+            add(ServerEndpoint.url())
+            addAll(candidates)
             // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) â€” عنوان تطوير قياسي وليس IP LAN حقيقي.
-            "http://10.0.2.2:8088",
-        )
+            add("http://10.0.2.2:8088")
+        }
         seeds.forEach { seed ->
+            if (seed.isBlank()) return@forEach
             val host = YounesServerSignature.hostOf(seed) ?: return@forEach
             YounesServerSignature.ports(YounesServerSignature.portOf(seed, preferred)).forEach { port ->
                 bases += YounesServerSignature.baseUrl(host, port)
@@ -155,12 +162,11 @@ class LocalServerDiscovery(private val context: Context) {
                 val bytes = address.address.map { it.toInt() and 0xff }
                 val prefix = "${bytes[0]}.${bytes[1]}.${bytes[2]}"
                 val self = bytes[3]
-                val octets = linkedSetOf(1, 2, 50, 100, 101, 254, self)
-                lastOctet?.let(octets::add)
-                for (delta in -3..3) {
-                    val value = self + delta
-                    if (value in 1..254) octets += value
-                }
+                // مسح الـ /24 كاملاً (يضمن إيجاد الخادم عند أي أوكتيه، مثل .244)،
+                // مع تقديم الأوكتيهات الشائعة للخوادم أولاً لتقليل زمن الإيجاد.
+                val octets = linkedSetOf<Int>()
+                listOf(self, 1, 2, 50, 100, 101, 128, 200, 244, 254).forEach { if (it in 1..254) octets += it }
+                for (n in 1..254) octets += n
                 octets.forEach { last ->
                     ports.forEach { port -> bases += YounesServerSignature.baseUrl("$prefix.$last", port) }
                 }
@@ -234,7 +240,7 @@ nsdManager.stopServiceDiscovery(listener)
         const val WRITE_MS = 400L
         const val CALL_MS = 800L
         const val FAST_BUDGET_MS = 1_800L
-        const val THOROUGH_BUDGET_MS = 3_200L
+        const val THOROUGH_BUDGET_MS = 6_000L
         const val MDNS_BUDGET_MS = 1_200L
         const val MAX_PARALLEL = 16
     }

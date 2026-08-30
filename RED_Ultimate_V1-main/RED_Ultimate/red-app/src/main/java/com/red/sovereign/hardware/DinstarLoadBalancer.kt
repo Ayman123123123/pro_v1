@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.util.Log
+import com.red.sovereign.core.ServerEndpoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,20 +18,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * DinstarLoadBalancer - Handles DINSTAR device port selection and load balancing.
+ * DinstarLoadBalancer - Resolves the DINSTAR gateway reachable from this device.
  *
- * The DINSTAR gateway typically exposes several services on different ports:
- * - Port 5060: SIP signaling
- * - Port 8080: HTTP API
- * - Port 8088: HTTPS API (proxy through Nginx)
- * - Port 5090: RTP media
- * - Port 5061: TLS/SIP
- *
- * This class:
- * 1. Discovers available DINSTAR devices on the local network
- * 2. Tests port connectivity
- * 3. Selects the best port based on latency and availability
- * 4. Provides load balancing across multiple DINSTAR instances
+ * The gateway is always reached through the active RED backend (ServerEndpoint),
+ * which owns the Asterisk/DINSTAR trunk and fleet config. This class therefore
+ * resolves the gateway host from the backend endpoint rather than scanning fake
+ * LAN addresses, and layers a lightweight HTTP health check + HTTPS failover on
+ * top of it. Port semantics (as seen by the app's monitoring path):
+ *  - 8080 HTTP API (primary)
+ *  - 8088 HTTPS API (failover)
  */
 class DinstarLoadBalancer(private val context: Context) {
 
@@ -38,11 +34,8 @@ class DinstarLoadBalancer(private val context: Context) {
 
     companion object {
         private const val TAG = "DinstarLoadBalancer"
-        private const val SIP_PORT = 5060
         private const val HTTP_PORT = 8080
         private const val HTTPS_PORT = 8088
-        private const val RTP_PORT_BASE = 5000
-        private const val TLS_SIP_PORT = 5061
         private const val CONNECTIVITY_TIMEOUT_MS = 3000L
         private const val MAX_PORT_ATTEMPTS = 10
         private const val HEALTH_CHECK_PATH = "/health"
@@ -62,44 +55,43 @@ class DinstarLoadBalancer(private val context: Context) {
     )
 
     /**
-     * Discover DINSTAR devices on the local network and select the best one.
-     * Returns the selected host and port.
+     * Resolve the DINSTAR gateway host and select the best port.
+     *
+     * The gateway is always reached through the active RED backend, which owns the
+     * Asterisk/DINSTAR trunk and fleet. We therefore resolve the host from
+     * [ServerEndpoint] (the configured server URL) instead of scanning fake LAN
+     * addresses, while still recording the active transport (Wi-Fi vs cellular)
+     * for diagnostics and any transport-specific tuning.
      */
     suspend fun discoverAndSelect(): Pair<String, Int> {
-        // Get local network info
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val activeNetwork = cm.activeNetwork
-        
-        return when (activeNetwork) {
-            is Network -> {
-                val capabilities = cm.getNetworkCapabilities(activeNetwork)
-                val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-                val isCellular = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val capabilities = activeNetwork?.let { cm.getNetworkCapabilities(it) }
+        val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val isCellular = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
 
-                if (isWifi) {
-                    // On WiFi, scan for DINSTAR devices
-                    val wifiHosts = scanWifiNetwork()
-                    if (wifiHosts.isNotEmpty()) {
-                        // Select best host based on latency
-                        val bestHost = wifiHosts.minByOrNull { testPort(it, HTTP_PORT).responseTimeMs } ?: wifiHosts.first()
-                        selectPort(bestHost, HTTP_PORT)
-                    } else {
-                        selectPort("192.168.1.1", HTTP_PORT) // Default DINSTAR IP
-                    }
-                } else {
-                    // On cellular, use cached or default
-                    selectPort("10.0.0.1", HTTP_PORT)
-                }
-            }
-            else -> selectPort("192.168.1.1", HTTP_PORT) // Fallback
+        val backendHost = ServerEndpoint.host().takeIf { it.isNotBlank() }
+        if (backendHost == null) {
+            Log.w(TAG, "No configured server endpoint — using loopback fallback")
+            return selectPort("127.0.0.1", HTTP_PORT)
         }
+
+        // Wi-Fi clients may reach the gateway on the LAN directly; cellular clients
+        // use the same backend host (a public domain or tunnel). The host is the
+        // authoritative fleet address either way.
+        val candidates = scanWifiNetwork()
+        val host = if (candidates.isNotEmpty()) candidates.first() else backendHost
+        Log.d(TAG, "discoverAndSelect transport=wifi:$isWifi cellular:$isCellular host=$host")
+        return selectPort(host, HTTP_PORT)
     }
 
+    /**
+     * Build the candidate gateway host list. The only authoritative source is the
+     * active backend endpoint (which manages the DINSTAR fleet); no LAN guessing.
+     */
     private fun scanWifiNetwork(): List<String> {
-        // Scan local network for DINSTAR devices
-        // This is a simplified scan - in production would use mDNS/DNS-SD
-        val candidates = mutableListOf("192.168.1.1", "192.168.1.2", "192.168.1.100")
-        return candidates
+        val host = ServerEndpoint.host().takeIf { it.isNotBlank() } ?: return emptyList()
+        return listOf(host)
     }
 
     /**
@@ -199,7 +191,9 @@ class DinstarLoadBalancer(private val context: Context) {
      * Get the currently selected DINSTAR host and port.
      */
     fun getSelectedAddress(): String {
-        return if (selectedHost != null && selectedPort > 0) "$selectedHost:$selectedPort" else "192.168.1.1:8088"
+        if (selectedHost != null && selectedPort > 0) return "$selectedHost:$selectedPort"
+        val host = ServerEndpoint.host().takeIf { it.isNotBlank() } ?: "127.0.0.1"
+        return "$host:$HTTPS_PORT"
     }
 
     /**

@@ -1,5 +1,6 @@
 param(
-    [Parameter(Mandatory = $true)][string]$ServerIp,
+    [string]$ServerIp,
+    [string]$DinstarNicIp,
     [ValidateRange(1024, 65535)][int]$HttpPort = 8088,
     [switch]$BuildAndroid
 )
@@ -7,6 +8,24 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $RepoRoot = Split-Path -Parent $Root
 $EnvFile = Join-Path $Root ".env"
+$DetectScript = Join-Path $PSScriptRoot "detect-lan-ips.ps1"
+
+# Dual-interface auto-detection: Wi-Fi IP for clients, Ethernet 192.168.11.x for Dinstar.
+$Detected = $null
+if (Test-Path $DetectScript) {
+    $Detected = & $DetectScript -Json | ConvertFrom-Json
+}
+if (-not $ServerIp -and $Detected -and $Detected.clientLanIp) {
+    $ServerIp = $Detected.clientLanIp
+    Write-Host "Auto-detected client LAN IP (Wi-Fi): $ServerIp" -ForegroundColor Cyan
+}
+if (-not $DinstarNicIp -and $Detected -and $Detected.dinstarNicIp) {
+    $DinstarNicIp = $Detected.dinstarNicIp
+    Write-Host "Auto-detected Dinstar NIC IP (Ethernet): $DinstarNicIp" -ForegroundColor Cyan
+}
+if (-not $ServerIp) {
+    $ServerIp = Read-Host "Enter the server's client-facing LAN IPv4 (Wi-Fi) for Nginx/TURN/SFU"
+}
 
 if ($ServerIp -notmatch '^([0-9]{1,3}\.){3}[0-9]{1,3}$') { throw "ServerIp must be a local IPv4 address" }
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker Desktop is required" }
@@ -75,7 +94,8 @@ if (-not (Test-Path $EnvFile)) {
         "replace_with_at_least_32_random_characters" = (New-Hex 48)
         "replace_with_at_least_14_random_characters" = (New-Hex 20)
         "replace_with_the_gateway_password" = (New-Hex 24)
-        "192.168.1.50" = $ServerIp
+        "192.168.0.244" = $ServerIp
+        "192.168.11.20" = $(if ($DinstarNicIp) { $DinstarNicIp } else { "192.168.11.20" })
     }
     foreach ($entry in $replacements.GetEnumerator()) { $text = $text.Replace($entry.Key, $entry.Value) }
     [IO.File]::WriteAllText($EnvFile, $text, [Text.UTF8Encoding]::new($false))
@@ -87,6 +107,10 @@ if (-not (Test-Path $EnvFile)) {
 # Port 80 is commonly reserved by HTTP.sys/IIS on Windows. Keep the internal Nginx port at 80,
 # but expose a configurable unprivileged host port and ensure browser CORS includes that origin.
 $envText = Get-Content $EnvFile -Raw
+# Re-map any legacy client IP placeholders (192.168.1.50 / 192.168.0.244) and the
+# Dinstar NIC placeholder to the freshly detected dual-interface addresses.
+$envText = $envText.Replace('192.168.1.50', $ServerIp).Replace('192.168.0.244', $ServerIp)
+if ($DinstarNicIp) { $envText = $envText.Replace('192.168.11.20', $DinstarNicIp) }
 if ($envText -match '(?m)^RED_HTTP_PORT=.*$') {
     $envText = [regex]::Replace($envText, '(?m)^RED_HTTP_PORT=.*$', "RED_HTTP_PORT=$HttpPort")
 } else {
@@ -172,6 +196,23 @@ try {
     Wait-ContainerReady "red-pstn-gateway"
 } finally { Pop-Location }
 
+# إعلان mDNS اختياري (best-effort) على واجهة العميل كي تكتشف الهواتف السيرفر
+# تلقائياً عبر MDNS. يعمل على المضيف لا داخل حاوية (Docker Desktop على Windows
+# لا يمرّر multicast mDNS). لا يفشل التشغيل إن تعذّر.
+$mdnsPy = Join-Path $PSScriptRoot "advertise-mdns.py"
+$pyExe = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pyExe) { $pyExe = Get-Command python3 -ErrorAction SilentlyContinue }
+if (Test-Path $mdnsPy -and $pyExe) {
+    try {
+        Start-Process -FilePath $pyExe.Source -ArgumentList @($mdnsPy, "--host", $ServerIp, "--port", "$HttpPort") -WindowStyle Hidden -ErrorAction Stop
+        Write-Host "mDNS advertisement started (best-effort) for http://${ServerIp}:$HttpPort" -ForegroundColor Cyan
+    } catch {
+        Write-Host "mDNS advertisement skipped: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "mDNS advertisement skipped (python or advertise-mdns.py not found) - embedded candidates + LAN sweep still apply." -ForegroundColor Yellow
+}
+
 if ($BuildAndroid) {
     Push-Location $RepoRoot
     try {
@@ -181,7 +222,13 @@ if ($BuildAndroid) {
         New-Item -ItemType Directory -Force $Artifacts | Out-Null
         $tlsPinsMatch = [regex]::Match((Get-Content $EnvFile -Raw), '(?m)^RED_TLS_PINS=(.*)$')
         $tlsPins = if ($tlsPinsMatch.Success) { $tlsPinsMatch.Groups[1].Value.Trim() } else { '' }
-        & docker build --file Dockerfile --target android-artifact --build-arg "RED_SERVER_URL=http://${ServerIp}:$HttpPort" --build-arg "RED_TLS_PINS=$tlsPins" --output "type=local,dest=$Artifacts" .
+        # مرشّحات لاكتشاف تلقائي على كلا الواجهتين: واي فاي (العميل) + إيثرنت (NIC الخاص
+        # بـ Dinstar) + loopback. يضمن اتصال الجهاز فوراً دون مسح شبكة.
+        $candidates = @("http://${ServerIp}:$HttpPort")
+        if ($DinstarNicIp) { $candidates += "http://${DinstarNicIp}:$HttpPort" }
+        $candidates += "http://127.0.0.1:$HttpPort"
+        $candidateArg = $candidates -join ','
+        & docker build --file Dockerfile --target android-artifact --build-arg "RED_SERVER_URL=http://${ServerIp}:$HttpPort" --build-arg "RED_TLS_PINS=$tlsPins" --build-arg "RED_SERVER_CANDIDATES=$candidateArg" --output "type=local,dest=$Artifacts" .
         if ($LASTEXITCODE -ne 0) { throw "Verified Android artifact build failed" }
         if (-not (Test-Path (Join-Path $Artifacts "red-app-debug.apk"))) { throw "Android build finished without an APK" }
         Write-Host "Verified APK saved under local-artifacts/red-app-debug.apk."

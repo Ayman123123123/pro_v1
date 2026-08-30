@@ -12,15 +12,18 @@ services:
   backend:
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.2}"
     environment:
       - DINSTAR_ENABLED=${DINSTAR_ENABLED:-true}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
 
   pstn-gateway:
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "dinstar.lan:${DINSTAR_IP:-192.168.11.1}"
+      - "dinstar.lan:${DINSTAR_IP:-192.168.11.2}"
     environment:
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.1}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
+      - PSTN_EXTERNAL_IP=${PSTN_EXTERNAL_IP:-${DINSTAR_NIC_IP:-}}
       - ASTERISK_LOCAL_NET=192.168.11.0/24,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12

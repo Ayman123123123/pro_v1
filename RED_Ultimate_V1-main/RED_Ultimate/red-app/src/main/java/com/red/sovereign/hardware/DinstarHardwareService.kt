@@ -2,6 +2,7 @@ package com.red.sovereign.hardware
 
 import android.content.Context
 import android.util.Log
+import com.red.sovereign.core.ServerEndpoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -22,19 +23,19 @@ import java.security.cert.X509Certificate
  * the Asterisk/DINSTAR connection. The Android app communicates with
  * the backend REST API; the backend handles SIP/PJSIP signaling.
  *
- * Fallback: direct HTTP health check against DINSTAR gateway on LAN
- * for status monitoring only (calls always go through backend).
+ * The gateway host defaults to the active backend server (set via
+ * ServerEndpoint) and is overridden at runtime when fleet config arrives
+ * from the backend. No private IP is hard-coded here.
  */
 class DinstarHardwareService(private val context: Context) {
 
     companion object {
         private const val TAG = "DinstarHW"
-        private const val DINSTAR_DEFAULT_HOST = "192.168.137.100"
         private const val HTTP_PORT = 8080
         private const val HEALTH_CHECK_TIMEOUT_MS = 3000L
     }
 
-    private var dinstarHost: String = DINSTAR_DEFAULT_HOST
+    private var dinstarHost: String = ServerEndpoint.host()
     private var httpPort: Int = HTTP_PORT
     private var isAvailable = false
     private var lastHealthCheck: Long = 0
