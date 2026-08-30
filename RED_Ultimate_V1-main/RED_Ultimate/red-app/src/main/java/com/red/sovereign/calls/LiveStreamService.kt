@@ -522,18 +522,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     }
 
     private fun showIncomingLiveStreamNotification(streamId: String, userId: String, broadcasterName: String) {
-        val watchIntent = Intent(this, LiveStreamService::class.java).apply {
-            action = ACTION_START
-            putExtra(EXTRA_STREAM_ID, streamId)
-            putExtra(EXTRA_USER_ID, userId)
-            putExtra(EXTRA_BROADCASTER, false)
-        }
-        val watchPending = PendingIntent.getService(this, 1, watchIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val dismissIntent = Intent(this, LiveStreamService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val dismissPending = PendingIntent.getService(this, 2, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val watchPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_LIVE_WATCH, CallNotificationActionReceiver.CALL_TYPE_LIVESTREAM, 7404, callId = streamId, myUserId = userId, hostId = "", isVideo = true)
+        val dismissPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_LIVE_STOP, CallNotificationActionReceiver.CALL_TYPE_LIVESTREAM, 7404, callId = streamId, myUserId = userId, hostId = "", isVideo = true)
 
         val mainIntent = PendingIntent.getActivity(
             this, 0,
@@ -560,8 +550,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             .setColor(0xFFE53935.toInt())
             .setOngoing(false)
             .setAutoCancel(true)
-            .addAction(0, "مشاهدة", watchPending)
-            .addAction(0, "تجاهل", dismissPending)
+            .addAction(0, "مشاهدة", watchPi)
+            .addAction(0, "تجاهل", dismissPi)
             .build()
 
         ServiceCompat.startForeground(this, 7403, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -581,7 +571,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             .setColor(if (isBroadcaster) 0xFFE53935.toInt() else 0xFF00C98C.toInt())
             .setOngoing(true)
             .setSilent(true)
-            .addAction(0, "إيقاف", PendingIntent.getService(this, 1, Intent(this, LiveStreamService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE))
+            .addAction(0, "إيقاف", CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_LIVE_STOP, CallNotificationActionReceiver.CALL_TYPE_LIVESTREAM, 7403, callId = streamId, myUserId = userId, hostId = "", isVideo = isBroadcaster))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         if (isBroadcaster) {
@@ -701,6 +691,16 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
         fun action(context: Context, act: String) {
             ContextCompat.startForegroundService(context, Intent(context, LiveStreamService::class.java).setAction(act))
+        }
+        fun watch(context: Context, streamId: String, userId: String, password: String? = null) {
+            val intent = Intent(context, LiveStreamService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_STREAM_ID, streamId)
+                putExtra(EXTRA_USER_ID, userId)
+                putExtra(EXTRA_BROADCASTER, false)
+                if (!password.isNullOrBlank()) putExtra(EXTRA_PASSWORD, password)
+            }
+            ContextCompat.startForegroundService(context, intent)
         }
     }
 }

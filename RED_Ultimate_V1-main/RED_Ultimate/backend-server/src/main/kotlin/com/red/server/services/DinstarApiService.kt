@@ -155,9 +155,10 @@ class DinstarApiService(
                 DinstarApiContract.Cdr.callOutcome(answer != null, hangup),
                 cdr["source_number"]?.toString() ?: "",
                 cdr["destination_number"]?.toString() ?: "",
-                hangup,
+                cdr["reason"]?.toString(),
                 (cdr["gsm_code"] as? Number)?.toInt(),
                 cdr["codec"]?.toString(),
+                DinstarApiContract.Cdr.endTime(start, answer, DinstarApiContract.Cdr.ringSeconds(start, answer), (cdr["duration"] as? Number)?.toInt() ?: 0),
                 objectMapper.writeValueAsString(cdr)
             )
         } catch (e: Exception) {

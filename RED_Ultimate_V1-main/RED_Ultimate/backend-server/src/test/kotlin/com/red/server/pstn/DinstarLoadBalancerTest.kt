@@ -25,7 +25,13 @@ class DinstarLoadBalancerTest {
     private val jdbc = mock<JdbcTemplate>()
     private val redis = mock<RedisTemplate<String, String>>()
 
-    private fun createLoadBalancer() = DinstarLoadBalancer(hardware, fleet, jdbc, redis)
+    /**
+     * الحجز الدائم مزدوج: هذه الاختبارات تقيس اختيار المنفذ (الترتيب،
+     * الإشارة، الاستبعاد) لا استمرار الحجز عبر إعادة التشغيل.
+     */
+    private val reservations = mock<PersistentReservationService>()
+
+    private fun createLoadBalancer() = DinstarLoadBalancer(hardware, fleet, jdbc, redis, reservations)
 
     private fun makeGateway(
         id: UUID = UUID.randomUUID(),

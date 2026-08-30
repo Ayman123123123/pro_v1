@@ -160,6 +160,18 @@ EOF
 # DinstarLoadBalancer → RED_GW variable in Dial(PJSIP/${EXTEN}@${GW}).
 # No hardcoding — adding a 3rd gateway requires only ENV change + restart.
 # ═══════════════════════════════════════════════════════════════════════════
+# CLIP — هوية المتصل الحقيقية لكل شريحة.
+# كان `from_user=1000000` مثبتًا في كل نقاط النهاية، فيمحو dialplan الـ
+# `CALLERID(num)=${RED_SIM_NUMBER}` ويُظهر `1000000` دائمًا حتى مع
+# توجيه `-port-N` الصحيح. الآن مشروط: إن ضُبط `DINSTAR_FROM_USER`
+# (مثلاً `967712068639`) يُستخدم كـ From ثابت للشبكات التي تطلبه،
+# وإلا يُحذف السطر فيمرّر From الحقيقي لكل شريحة.
+if [ -n "${DINSTAR_FROM_USER:-}" ]; then
+  FROM_USER_LINE="from_user=${DINSTAR_FROM_USER}"
+else
+  FROM_USER_LINE=";from_user unset — dialplan CALLERID(num) passes through for per-SIM CLIP"
+fi
+
 # بوابة لكل عنوان في القائمة.
 #
 # ⚠️ الاسم يُشتق من العنوان لا من ترتيبه في القائمة.

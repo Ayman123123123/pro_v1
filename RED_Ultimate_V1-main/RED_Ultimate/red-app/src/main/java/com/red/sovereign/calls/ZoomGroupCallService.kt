@@ -72,6 +72,11 @@ object ZoomRuntime {
     var isLocked by mutableStateOf(false)
     var isWaitingRoomEnabled by mutableStateOf(false)
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
+    /** مرجع الإشارة النشطة — يُحدَّث من ZoomGroupCallService عند onCreate ويُفرَّغ عند stop.
+     *  يتيح للـ Compose (مثل BreakoutRoomsSheet) إرسال إشارات دون الاحتفاظ بـ service instance. */
+    @Volatile var activeSignaling: CallSignalingClient? = null
+    /** علم فتح/إغلاق BreakoutRoomsSheet — مشترك بين ZoomActivePanel و ZoomParticipantsSheet. */
+    var showBreakoutSheet: Boolean by mutableStateOf(false)
     var meetingTitle: String by mutableStateOf("")
     var meetingId: String by mutableStateOf("")
     var activePoll: ZoomPoll? by mutableStateOf(null)
@@ -113,6 +118,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             NotificationChannel("red_calls", getString(com.red.sovereign.R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH)
         )
         signaling = CallSignalingClient(this, TokenStore(this), this)
+        ZoomRuntime.activeSignaling = signaling
     }
 
     private fun prepareAudio(isVideo: Boolean) {
@@ -420,9 +426,9 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 val hostName = signal.payload["hostName"]?.toString() ?: ""
                 val title = signal.payload["title"]?.toString() ?: "اجتماع Zoom"
                 val otherIds = signal.payload["inviteeIds"]?.toString()?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                
+
                 if (mId.isBlank()) return
-                
+
                 scope.launch(Dispatchers.Main.immediate) {
                     // تحديث الحالة إلى مكالمة واردة
                     ZoomRuntime.state = ZoomUiState.Incoming(mId, hostId, hostName, isVideo, otherIds, title)
@@ -462,14 +468,50 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             "ZOOM_BREAKOUT_CREATE" -> {
                 val roomsRaw = signal.payload["rooms"].orEmpty()
                 if (roomsRaw.isNotBlank()) {
-                    val rooms = roomsRaw.split(";").mapIndexed{ idx, entry ->
-                        val parts = entry.split(":", limit=2)
+                    val rooms = roomsRaw.split(";").mapIndexed { idx, entry ->
+                        val parts = entry.split(":", limit = 2)
                         val name = parts.getOrNull(0) ?: "غرفة ${idx+1}"
-                        val ids = parts.getOrNull(1)?.split(",")?.filter{it.isNotBlank()} ?: emptyList()
-                        ZoomBreakoutRoom(id="br_${meetingId}_$idx", name=name, participantIds=ids)
+                        val ids = parts.getOrNull(1)?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                        ZoomBreakoutRoom(id = "br_${meetingId}_$idx", name = name, participantIds = ids)
                     }
                     ZoomRuntime.breakoutRooms = rooms
                 }
+            }
+            "ZOOM_BREAKOUT_ASSIGN" -> {
+                val roomId = signal.payload["roomId"]?.toString().orEmpty()
+                val userId = signal.payload["userId"]?.toString().orEmpty()
+                if (roomId.isNotBlank() && userId.isNotBlank()) {
+                    ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.map { room ->
+                        if (room.id == roomId) room.copy(participantIds = room.participantIds + userId) else room
+                    }
+                }
+            }
+            "ZOOM_BREAKOUT_MOVE" -> {
+                val roomId = signal.payload["roomId"]?.toString().orEmpty()
+                val userId = signal.payload["userId"]?.toString().orEmpty()
+                if (roomId.isNotBlank() && userId.isNotBlank()) {
+                    ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.map { room ->
+                        if (room.id == roomId) room.copy(participantIds = room.participantIds + userId) else room
+                    }
+                }
+            }
+            "ZOOM_BREAKOUT_DELETE" -> {
+                val roomId = signal.payload["roomId"]?.toString().orEmpty()
+                if (roomId.isNotBlank()) {
+                    ZoomRuntime.breakoutRooms = ZoomRuntime.breakoutRooms.filter { it.id != roomId }
+                }
+            }
+            "ZOOM_BREAKOUT_CLOSE_ALL" -> {
+                ZoomRuntime.breakoutRooms = emptyList()
+            }
+            "ZOOM_BREAKOUT_BROADCAST" -> {
+                val text = signal.payload["text"]?.toString()?.orEmpty()
+            }
+            "ZOOM_BREAKOUT_TIMER_START" -> {
+                // Timer start logic handled locally
+            }
+            "ZOOM_BREAKOUT_TIMER_STOP" -> {
+                // Timer stop logic handled locally
             }
             "OFFER" -> signal.payload["sdp"]?.let{ sdp-> val from=signal.sourceUserId.orEmpty(); if(from.isNotBlank()) mesh?.handleOffer(from, sdp) else engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)){ engine?.answer() } }
             "ANSWER" -> signal.payload["sdp"]?.let{ sdp-> val from=signal.sourceUserId.orEmpty(); if(from.isNotBlank()) mesh?.handleAnswer(from, sdp) else engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
@@ -555,7 +597,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
     private fun finishStop(){
         if(cleanedUp) return
         cleanedUp=true; ringTimeout?.cancel(); incomingTimeout?.cancel(); stopRingback(); stopRingtone(); releaseAudio()
-        engine?.release(); engine=null; mesh?.release(); mesh=null; sfu?.release(); sfu=null; signaling.close()
+        engine?.release(); engine=null; mesh?.release(); mesh=null; sfu?.release(); sfu=null; signaling.close(); ZoomRuntime.activeSignaling=null
         ZoomRuntime.state=ZoomUiState.Ended; ZoomRuntime.localVideo=null; ZoomRuntime.remoteVideos=emptyMap(); ZoomRuntime.eglContext=null
         ZoomRuntime.isMuted=false; ZoomRuntime.isHost=false; ZoomRuntime.isVideoEnabled=false; ZoomRuntime.isScreenSharing=false; ZoomRuntime.isRecording=false; ZoomRuntime.isMinimized=false; ZoomRuntime.isHandRaised=false; ZoomRuntime.networkStats=NetworkStats()
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
@@ -563,18 +605,19 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
     private fun promoteToForeground(){
         val label=if(isVideo) "اجتماع Zoom فيديو" else "اجتماع Zoom صوتي"
         val intent=PendingIntent.getActivity(this,0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val endIntent=PendingIntent.getService(this,10, Intent(this, ZoomGroupCallService::class.java).setAction(ACTION_END_ZOOM), PendingIntent.FLAG_IMMUTABLE)
-        val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText("اجتماع Zoom جاري...").setContentIntent(intent).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setSilent(true).addAction(0,"إنهاء",endIntent).build()
+        val endPi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9200, callId = meetingId, myUserId = myUserId, hostId = hostId, isVideo = isVideo)
+        val mutePi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9200, callId = meetingId, myUserId = myUserId, hostId = hostId, isVideo = isVideo)
+        val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText("اجتماع Zoom جاري...").setContentIntent(intent).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setSilent(true).addAction(0,"كتم",mutePi).addAction(0,"إنهاء",endPi).build()
         var type=ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE; if(isVideo) type=type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         ServiceCompat.startForeground(this, 9200, notif, type)
     }
     private fun showIncomingZoomNotification(mId: String, hostName: String, otherCount: Int, video: Boolean, title: String){
         val label=if(video) "اجتماع Zoom فيديو" else "اجتماع Zoom صوتي"
         val body=if(otherCount>0) "من $hostName ومعه $otherCount آخرون · $title" else "من $hostName · $title"
-        val acceptIntent=PendingIntent.getService(this,30, Intent(this, ZoomGroupCallService::class.java).setAction(ACTION_ACCEPT_ZOOM).putExtra(EXTRA_MEETING_ID,mId).putExtra(EXTRA_MY_USER_ID,myUserId).putExtra(EXTRA_HOST_ID,hostId).putExtra(EXTRA_IS_VIDEO,video), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val declineIntent=PendingIntent.getService(this,31, Intent(this, ZoomGroupCallService::class.java).setAction(ACTION_DECLINE_ZOOM).putExtra(EXTRA_MEETING_ID,mId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val acceptPi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_ACCEPT, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9201, callId = mId, myUserId = myUserId, hostId = hostId, isVideo = video)
+        val declinePi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_DECLINE, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9201, callId = mId, myUserId = myUserId, hostId = hostId, isVideo = video)
         val fullScreenIntent=PendingIntent.getActivity(this,32, Intent(this, MainActivity::class.java).apply{ addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP); putExtra("zoom_meeting_id",mId)}, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText(body).setFullScreenIntent(fullScreenIntent,true).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setAutoCancel(false).addAction(0,"رفض",declineIntent).addAction(0,"قبول",acceptIntent).build()
+        val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText(body).setFullScreenIntent(fullScreenIntent,true).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setAutoCancel(false).addAction(NotificationCompat.Action.Builder(0,"رفض",declinePi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MUTE).build()).addAction(NotificationCompat.Action.Builder(0,"قبول",acceptPi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build()).build()
         ServiceCompat.startForeground(this, 9201, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
     override fun onDestroy(){ finishStop(); scope.cancel(); super.onDestroy() }

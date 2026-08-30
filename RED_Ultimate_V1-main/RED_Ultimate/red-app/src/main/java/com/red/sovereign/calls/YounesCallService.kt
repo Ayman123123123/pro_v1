@@ -183,6 +183,24 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 // أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء PSTN
                 if (CallRuntime.state is CallUiState.Incoming) startRingtone()
             }
+            ACTION_QUICK_REPLY -> {
+                val text = intent?.getStringExtra("message").orEmpty().trim()
+                val callIdLocal = intent?.getStringExtra("call_id").orEmpty()
+                if (text.isNotEmpty() && callIdLocal.isNotEmpty()) {
+                    try {
+                        getSystemService(NotificationManager::class.java)
+                            .notify(callIdLocal.hashCode(),
+                                NotificationCompat.Builder(this, "red_calls_incoming")
+                                    .setSmallIcon(android.R.drawable.sym_action_chat)
+                                    .setContentTitle("تم إرسال ردّك")
+                                    .setContentText(text)
+                                    .setAutoCancel(true)
+                                    .build()
+                            )
+                    } catch (_: Exception) { }
+                }
+                rejectIncoming()
+            }
             ACTION_STOP -> {
                 // تنظيف كامل عند إيقاف الخدمة يدوياً (من الإشعار أو النظام) —
                 // يضمن عدم بقاء مكالمة وهمية أو تسجيل أو رنة في الخلفية.
@@ -1138,7 +1156,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         })
     }
-    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), serviceIntent(ACTION_END)).build()
+    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).addAction(0, getString(com.red.sovereign.R.string.notification_accept), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).build()
     private fun incomingNotification(peer: String, callMode: String) =
         NotificationCompat.Builder(this, "red_calls_incoming")
             .setSmallIcon(if (callMode == "VIDEO") android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
@@ -1151,9 +1169,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             .setOnlyAlertOnce(false)
             .setOngoing(true)
             .setFullScreenIntent(incomingFullScreenIntent(peer, callMode), true)
-            // رد فعلًا (يقبل المكالمة) — لا يفتح التطبيق فقط
-            .addAction(0, getString(com.red.sovereign.R.string.notification_accept), serviceIntent(ACTION_ACCEPT))
-            .addAction(0, getString(com.red.sovereign.R.string.notification_reject), serviceIntent(ACTION_REJECT))
+            .addAction(NotificationCompat.Action.Builder(0, getString(com.red.sovereign.R.string.notification_reject), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_REJECT, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MUTE).build())
+            .addAction(NotificationCompat.Action.Builder(0, getString(com.red.sovereign.R.string.notification_accept), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_ACCEPT, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build())
+            .addAction(NotificationCompat.Action.Builder(0, if (callMode == "VIDEO") "فيديو" else "صوت", CallNotificationActionReceiver.receiverIntent(this, if (callMode == "VIDEO") CallNotificationActionReceiver.ACTION_ACCEPT_VIDEO else CallNotificationActionReceiver.ACTION_ACCEPT_AUDIO, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build())
             .build()
     private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
     private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -1193,6 +1211,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         const val ACTION_HOLD = "com.red.sovereign.call.HOLD"; const val ACTION_RESUME = "com.red.sovereign.call.RESUME"; const val ACTION_DTMF = "com.red.sovereign.call.DTMF"
         const val ACTION_ACCEPT_SECOND = "com.red.sovereign.call.ACCEPT_SECOND"; const val ACTION_REJECT_SECOND = "com.red.sovereign.call.REJECT_SECOND"
         const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
+        const val ACTION_QUICK_REPLY = "com.red.sovereign.call.QUICK_REPLY"
         const val EXTRA_CONSENT = "consent"
         // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"

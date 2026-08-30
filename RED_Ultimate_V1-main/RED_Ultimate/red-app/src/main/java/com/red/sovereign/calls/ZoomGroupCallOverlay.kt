@@ -126,6 +126,64 @@ private fun ZoomActivePanel(state: ZoomUiState.Active){
     if(showRecordConsent){
         AlertDialog(onDismissRequest={showRecordConsent=false}, title={Text("تسجيل اجتماع Zoom", fontWeight=FontWeight.Bold)}, text={Text("سيُسجَّل الصوت بتشفير AES-GCM.")}, confirmButton={TextButton({showRecordConsent=false; ZoomGroupCallService.action(context, "START_RECORDING")}){Text("موافق", color=ZoomBlue)}}, dismissButton={TextButton({showRecordConsent=false}){Text("إلغاء")}})
     }
+
+    if(ZoomRuntime.showBreakoutSheet){
+        BreakoutRoomsSheet(
+            meetingId = state.meetingId,
+            isHost = ZoomRuntime.isHost,
+            onDismiss = { ZoomRuntime.showBreakoutSheet = false },
+            onCreateRooms = { count, autoAssign ->
+                ZoomGroupCallService.createBreakout(context, count)
+            },
+            onAssignMember = { roomId, userId ->
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = "ZOOM_BREAKOUT_ASSIGN",
+                    groupCallId = state.meetingId,
+                    payload = mapOf("roomId" to roomId, "userId" to userId)
+                ))
+            },
+            onMoveMember = { roomId, userId ->
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = "ZOOM_BREAKOUT_MOVE",
+                    groupCallId = state.meetingId,
+                    payload = mapOf("roomId" to roomId, "userId" to userId)
+                ))
+            },
+            onDeleteRoom = { roomId ->
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = "ZOOM_BREAKOUT_DELETE",
+                    groupCallId = state.meetingId,
+                    payload = mapOf("roomId" to roomId)
+                ))
+            },
+            onBroadcastMessage = { message ->
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = "ZOOM_BREAKOUT_BROADCAST",
+                    groupCallId = state.meetingId,
+                    payload = mapOf("text" to message)
+                ))
+            },
+            onCloseAllRooms = {
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = "ZOOM_BREAKOUT_CLOSE_ALL",
+                    groupCallId = state.meetingId
+                ))
+            },
+            onTimerAction = { roomId, start ->
+                ZoomRuntime.activeSignaling?.send(CallSignal(
+                    callId = state.meetingId,
+                    type = if (start) "ZOOM_BREAKOUT_TIMER_START" else "ZOOM_BREAKOUT_TIMER_STOP",
+                    groupCallId = state.meetingId,
+                    payload = mapOf("roomId" to roomId)
+                ))
+            }
+        )
+    }
 }
 
 @Composable
@@ -360,7 +418,7 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
                             ZoomSheetBtn(if(ZoomRuntime.isLocked) "إلغاء القفل" else "قفل", if(ZoomRuntime.isLocked) Color(0xFFE53935) else ZoomBlue, Modifier.weight(1f)){ ZoomGroupCallService.toggleLock(context) }
                             ZoomSheetBtn(if(ZoomRuntime.isWaitingRoomEnabled) "إيقاف الانتظار" else "قاعة انتظار", ZoomBlue, Modifier.weight(1f)){ ZoomGroupCallService.toggleWaitingRoom(context) }
                             ZoomSheetBtn("استطلاع", ZoomBlue, Modifier.weight(1f)){ showPollCreate=true }
-                            ZoomSheetBtn("غرف", ZoomBlue, Modifier.weight(1f)){ ZoomGroupCallService.createBreakout(context, 3) }
+                            ZoomSheetBtn("غرف", ZoomBlue, Modifier.weight(1f)){ ZoomRuntime.showBreakoutSheet = true }
                         }
                     }
                     // استطلاع نشط

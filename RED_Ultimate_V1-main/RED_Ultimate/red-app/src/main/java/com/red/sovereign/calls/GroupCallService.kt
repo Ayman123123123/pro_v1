@@ -827,8 +827,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     private fun promoteToForeground() {
         val label = if (isVideo) "مكالمة فيديو جماعية" else "مكالمة صوتية جماعية"
         val intent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val endIntent = PendingIntent.getService(this, 10,
-            Intent(this, GroupCallService::class.java).setAction(ACTION_END_GROUP_CALL), PendingIntent.FLAG_IMMUTABLE)
+        val endPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_GROUP, NOTIF_ID_ACTIVE, callId = groupCallId, myUserId = myUserId, hostId = this.hostId, isVideo = isVideo)
+        val mutePi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_GROUP, NOTIF_ID_ACTIVE, callId = groupCallId, myUserId = myUserId, hostId = this.hostId, isVideo = isVideo)
         val notif = NotificationCompat.Builder(this, "red_calls")
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle(label)
@@ -838,7 +838,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setColor(0xFF00C98C.toInt())
             .setOngoing(true).setSilent(true)
-            .addAction(0, "إنهاء", endIntent)
+            .addAction(0, "كتم", mutePi)
+            .addAction(0, "إنهاء", endPi)
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         if (isVideo) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
@@ -848,14 +849,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     private fun showIncomingGroupCallNotification(gId: String, hostName: String, otherCount: Int, video: Boolean) {
         val label = if (video) "مكالمة فيديو جماعية" else "مكالمة صوتية جماعية"
         val body = if (otherCount > 0) "من $hostName ومعه $otherCount آخرون" else "من $hostName"
-        val acceptIntent = PendingIntent.getService(this, 20,
-            Intent(this, GroupCallService::class.java).setAction(ACTION_ACCEPT_GROUP_CALL)
-                .putExtra(EXTRA_GROUP_CALL_ID, gId).putExtra(EXTRA_IS_VIDEO, video),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val declineIntent = PendingIntent.getService(this, 21,
-            Intent(this, GroupCallService::class.java).setAction(ACTION_DECLINE_GROUP_CALL)
-                .putExtra(EXTRA_GROUP_CALL_ID, gId),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val acceptPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_ACCEPT, CallNotificationActionReceiver.CALL_TYPE_GROUP, NOTIF_ID_INCOMING, callId = gId, myUserId = myUserId, hostId = this.hostId, isVideo = video)
+        val declinePi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_DECLINE, CallNotificationActionReceiver.CALL_TYPE_GROUP, NOTIF_ID_INCOMING, callId = gId, myUserId = myUserId, hostId = this.hostId, isVideo = video)
         val fullScreenIntent = PendingIntent.getActivity(
             this, 22,
             Intent(this, IncomingCallActivity::class.java).apply {
@@ -877,8 +872,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setColor(0xFF00C98C.toInt())
             .setOngoing(true).setAutoCancel(false)
-            .addAction(0, "رفض", declineIntent)
-            .addAction(0, "قبول", acceptIntent)
+            .addAction(NotificationCompat.Action.Builder(0, "رفض", declinePi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MUTE).build())
+            .addAction(NotificationCompat.Action.Builder(0, "قبول", acceptPi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build())
             .build()
         ServiceCompat.startForeground(this, NOTIF_ID_INCOMING, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }

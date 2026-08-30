@@ -33,11 +33,12 @@ class DinstarEventListener(
     private val users: UserAccountRepository,
     @Lazy private val pstnEvents: PstnEventWebSocketHandler,
     private val notifications: NotificationService,
-    @Lazy private val pstnManager: PstnManager,
+    @Lazy private val pstnManager: EnhancedPstnManager,
     private val objectMapper: ObjectMapper,
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate,
     private val progress: PstnCallProgressTracker,
+    private val timeline: CallTimelineService,
     @Lazy private val eventBridge: com.red.server.websocket.DinstarEventBridge
 ) : ManagerEventListener {
     companion object {
@@ -181,12 +182,31 @@ class DinstarEventListener(
      */
     private fun emitCallProgress(callId: String, stage: PstnCallProgressTracker.Stage, extra: Map<String, Any?>) {
         val updated = runCatching { progress.advanceByCallId(callId, stage) }.getOrNull() ?: return
+
+        // الخطّ المُخزَّن يُكتب من الانتقال الفعلي نفسه، لا من نداء عميل:
+        // `advanceByCallId` أعاد قيمة ⇒ هذا انتقال حقيقي لم يُسجَّل قبلًا
+        // (يُرجع null على التكرار والتراجع). كان `pstn_call_timeline` جدولًا
+        // بلا كاتب: تُنشئه V44 ويقرأه المتحكّم، ولا شيء يملؤه من الأحداث.
+        runCatching {
+            timeline.endStage(callId, CallTimelineService.fromProgress(previousStage(stage)))
+            timeline.recordStage(callId, CallTimelineService.fromProgress(stage), extra)
+        }.onFailure { log.debug("Timeline write failed for {} at {}: {}", callId, stage, it.message) }
+
         val accountId = resolveAccountIdForRedId(updated.redId) ?: return
         val data = LinkedHashMap<String, Any?>(extra)
         data["number"] = updated.number
         runCatching { pstnEvents.pushPstnCallEvent(accountId, callId, stage.name, data) }
             .onFailure { log.debug("Failed to push PSTN progress {} for {}: {}", stage, callId, it.message) }
     }
+
+    /**
+     * المرحلة السابقة في التتابع — تُغلق زمنيًّا عند بدء التالية.
+     *
+     * بلا هذا يبقى `ended_at` فارغًا في كل مرحلة، فلا يُعرف كم مكثت المكالمة
+     * في «يرنّ» قبل الإجابة — وهو أوّل ما يُسأل عنه عند تشخيص التأخير.
+     */
+    private fun previousStage(stage: PstnCallProgressTracker.Stage): PstnCallProgressTracker.Stage =
+        PstnCallProgressTracker.Stage.entries.getOrElse(stage.ordinal - 1) { stage }
 
     /** يحوّل redId المسجَّل في المتتبِّع إلى معرِّف الحساب (UUID) المطلوب لبثّ WS. */
     private fun resolveAccountIdForRedId(redId: String): String? =

@@ -4,6 +4,10 @@ server:
 spring:
   main:
     allow-bean-definition-overriding: true
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
   mongodb:
     uri: mongodb://${MONGO_USER:red_user}:${MONGO_PASSWORD:}@db-mongo:27017/red_sovereign?authSource=admin
   data:

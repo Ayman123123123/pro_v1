@@ -56,6 +56,13 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             ACTION_HOLD_ACTIVE -> YounesCallService.holdActiveCall(context)
             ACTION_RESUME_RINGER -> YounesCallService.resumeRinger(context)
             ACTION_QUICK_REPLY -> handleQuickReply(context, intent, callType, callId)
+            ACTION_LIVE_STOP -> LiveStreamService.stop(context)
+            ACTION_LIVE_WATCH -> if (callId.isNotEmpty() && myUserId.isNotEmpty()) LiveStreamService.watch(context, callId, myUserId, null)
+            ACTION_CONFERENCE_LEAVE -> ConferenceService.leave(context)
+            ACTION_CONFERENCE_ACCEPT_PENDING -> {
+                val room = callId
+                if (room.isNotEmpty() && myUserId.isNotEmpty()) ConferenceService.action(context, "com.red.sovereign.conference.APPROVE_JOIN")
+            }
         }
     }
 
@@ -67,7 +74,7 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             CALL_TYPE_ZOOM -> if (callId.isNotEmpty() && myUserId.isNotEmpty()) {
                 ZoomGroupCallService.accept(context, callId, myUserId, isVideo, hostId)
             }
-            CALL_TYPE_CONFERENCE -> ConferenceService.accept(context, callId)
+            CALL_TYPE_CONFERENCE -> ConferenceService.accept(context, callId, myUserId)
             else -> YounesCallService.accept(context, cameraOn = isVideo, micOn = true)
         }
     }
@@ -121,6 +128,10 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_HOLD_ACTIVE = "com.red.sovereign.callnotif.HOLD_ACTIVE"
         const val ACTION_RESUME_RINGER = "com.red.sovereign.callnotif.RESUME_RINGER"
         const val ACTION_QUICK_REPLY = "com.red.sovereign.callnotif.QUICK_REPLY"
+        const val ACTION_LIVE_STOP = "com.red.sovereign.callnotif.LIVE_STOP"
+        const val ACTION_LIVE_WATCH = "com.red.sovereign.callnotif.LIVE_WATCH"
+        const val ACTION_CONFERENCE_LEAVE = "com.red.sovereign.callnotif.CONF_LEAVE"
+        const val ACTION_CONFERENCE_ACCEPT_PENDING = "com.red.sovereign.callnotif.CONF_ACCEPT_PENDING"
 
         const val KEY_QUICK_REPLY = "key_quick_reply"
 
@@ -212,7 +223,7 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             acceptLabel: String
         ): NotificationCompat.Action {
             val replyPi = quickReplyPendingIntent(context, callType, notifId, callId, myUserId, hostId, isVideo)
-            val replyInput = quickReplyRemoteInput(context.getString(R.string.call_quick_reply_hint))
+            val replyInput = quickReplyRemoteInput(context.getString(R.string.notification_accept))
             return NotificationCompat.Action.Builder(
                 android.R.drawable.sym_action_chat,
                 acceptLabel,

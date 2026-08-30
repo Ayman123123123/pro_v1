@@ -117,7 +117,7 @@ class DinstarCdrMappingTest {
         val values = Regex("""VALUES\s*\(([^)]*)\)""", RegexOption.IGNORE_CASE)
             .find(sql)!!.groupValues[1]
 
-        assertEquals(14, columns.size, "أعمدة الإدراج: $columns")
+        assertEquals(15, columns.size, "أعمدة الإدراج: $columns")
         assertEquals(
             columns.size, values.count { it == '?' },
             "عدد ? ($values) لا يطابق عدد الأعمدة (${columns.size})"
@@ -147,13 +147,30 @@ class DinstarCdrMappingTest {
     }
 
     @Test
-    @DisplayName("ring_duration_seconds مُدرَج فعلًا في الجملة")
-    fun ringColumnIsInserted() {
-        // العمود كان يُترك لافتراضي المخطَّط (0) في كل صفٍّ مع أن طرفَي الطرح
-        // موجودان، فيُقرأ كأن كل مكالمة أُجيبت لحظيًا.
-        assertTrue(
-            "ring_duration_seconds" in DinstarApiContract.Cdr.INSERT_SQL,
-            "زمن الرنين محسوب لكنه غير مُدرَج: ${DinstarApiContract.Cdr.INSERT_SQL}"
+    @DisplayName("end_time يُحسَب: مُجابة = answer + duration، غير مُجابة = start + ring + duration")
+    fun endTimeDerivation() {
+        val start = java.time.Instant.parse("2026-08-27T14:55:08Z")
+        val answer = start.plusSeconds(3)
+        val ringSec = 3
+        val dur = 120
+
+        assertAll(
+            // مُجابة: answer + duration
+            { assertEquals(answer.plusSeconds(120), DinstarApiContract.Cdr.endTime(start, answer, ringSec, dur)) },
+            // غير مُجابة: start + ring + duration
+            { assertEquals(start.plusSeconds(3 + 120), DinstarApiContract.Cdr.endTime(start, null, ringSec, dur)) },
+            // بلا start: null
+            { assertNull(DinstarApiContract.Cdr.endTime(null, answer, ringSec, dur)) },
+            // بلا start ولا answer: null
+            { assertNull(DinstarApiContract.Cdr.endTime(null, null, ringSec, dur)) },
         )
+    }
+
+    @Test
+    @DisplayName("end_time و hangup_cause (reason) مُدرَجان في الجملة")
+    fun endTimeAndReasonColumnInserted() {
+        val sql = DinstarApiContract.Cdr.INSERT_SQL
+        assertTrue("end_time" in sql, "end_time مفقود: $sql")
+        assertTrue("hangup_cause" in sql, "hangup_cause مفقود: $sql")
     }
 }

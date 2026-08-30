@@ -160,6 +160,24 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 }
             }
             ACTION_LEAVE -> leave()
+            ACTION_ACCEPT_INVITE -> {
+                roomId = intent.getStringExtra(EXTRA_ROOM_ID).orEmpty()
+                val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, true)
+                if (roomId.isNotBlank()) {
+                    stopRingtone()
+                    startedAsHost = false
+                    ConferenceRuntime.isVideoEnabled = hasVideo
+                    ConferenceRuntime.isSpeaker = hasVideo
+                    ConferenceRuntime.selfRole = if (hasVideo) "SPEAKER" else "LISTENER"
+                    ConferenceRuntime.isMuted = !hasVideo
+                    ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
+                    promote()
+                    scope.launch {
+                        registerRoom(!hasVideo, emptyList(), false)
+                        signaling.connect(roomId)
+                    }
+                }
+            }
             ACTION_TOGGLE_MIC -> {
                 if (!ConferenceRuntime.isSpeaker) return START_STICKY
                 ConferenceRuntime.isMuted = !ConferenceRuntime.isMuted
@@ -671,19 +689,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
 
         startRingtone()
 
-        val acceptIntent = Intent(this, ConferenceService::class.java).apply {
-            action = ACTION_JOIN
-            putExtra(EXTRA_ROOM_ID, roomId)
-            putExtra(EXTRA_USER_ID, userId)
-            putExtra(EXTRA_VIDEO, isVideo)
-            putExtra(EXTRA_HOST, false)
-        }
-        val acceptPending = PendingIntent.getService(this, 1, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-
-        val rejectIntent = Intent(this, ConferenceService::class.java).apply {
-            action = ACTION_LEAVE
-        }
-        val rejectPending = PendingIntent.getService(this, 2, rejectIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val acceptPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_ACCEPT, CallNotificationActionReceiver.CALL_TYPE_CONFERENCE, 7402, callId = roomId, myUserId = userId, hostId = "", isVideo = isVideo)
+        val rejectPi = CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_DECLINE, CallNotificationActionReceiver.CALL_TYPE_CONFERENCE, 7402, callId = roomId, myUserId = userId, hostId = "", isVideo = isVideo)
 
         val fullScreen = PendingIntent.getActivity(
             this, 7402,
@@ -710,8 +717,8 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setColor(0xFF00C98C.toInt())
             .setOngoing(true)
-            .addAction(0, "انضمام", acceptPending)
-            .addAction(0, "رفض", rejectPending)
+            .addAction(NotificationCompat.Action.Builder(0, "رفض", rejectPi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MUTE).build())
+            .addAction(NotificationCompat.Action.Builder(0, "انضمام", acceptPi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build())
             .build()
 
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -733,7 +740,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             .setColor(0xFF00C98C.toInt())
             .setOngoing(true)
             .setSilent(true)
-            .addAction(0, "مغادرة", PendingIntent.getService(this, 1, Intent(this, ConferenceService::class.java).setAction(ACTION_LEAVE), PendingIntent.FLAG_IMMUTABLE))
+            .addAction(0, "مغادرة", CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_CONFERENCE_LEAVE, CallNotificationActionReceiver.CALL_TYPE_CONFERENCE, 7402, callId = roomId, myUserId = userId, hostId = "", isVideo = isVideo))
             .build()
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         if (isVideo) {
@@ -752,6 +759,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        const val ACTION_ACCEPT_INVITE = "com.red.sovereign.conference.ACCEPT_INVITE"
         const val ACTION_INVITE = "com.red.sovereign.conference.INVITE"
         const val ACTION_JOIN = "com.red.sovereign.conference.JOIN"
         const val ACTION_LEAVE = "com.red.sovereign.conference.LEAVE"
@@ -858,6 +866,15 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
         fun leave(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, ConferenceService::class.java).setAction(ACTION_LEAVE))
+        }
+        fun accept(context: Context, roomId: String, myUserId: String = "") {
+            val intent = Intent(context, ConferenceService::class.java).apply {
+                action = ACTION_ACCEPT_INVITE
+                putExtra(EXTRA_ROOM_ID, roomId)
+                putExtra(EXTRA_VIDEO, true)
+                if (myUserId.isNotEmpty()) putExtra(EXTRA_USER_ID, myUserId)
+            }
+            ContextCompat.startForegroundService(context, intent)
         }
         fun action(context: Context, act: String, consent: Boolean = false) {
             val intent = Intent(context, ConferenceService::class.java).setAction(act)

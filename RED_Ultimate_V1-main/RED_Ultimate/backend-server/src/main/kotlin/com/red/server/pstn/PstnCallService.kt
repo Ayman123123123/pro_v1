@@ -1,5 +1,6 @@
 package com.red.server.pstn
 
+import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.calls.CallHistoryService
@@ -26,7 +27,7 @@ data class PstnRetryEvent(val callId: String, val userId: UUID, val redId: Strin
 class PstnCallService(
     private val users: UserAccountRepository,
     private val redis: StringRedisTemplate,
-    private val pstn: PstnManager,
+    private val pstn: EnhancedPstnManager,  // ✅ تم التحديث لاستخدام Enhanced
     private val loadBalancer: DinstarLoadBalancer,
     private val history: CallHistoryService,
     private val progress: PstnCallProgressTracker,
@@ -117,43 +118,8 @@ class PstnCallService(
     }
 
     /**
-     * Fetch a user account by ID — used by the controller for pre-checks.
-     */
-    fun getUser(userId: UUID) = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
-
-    /**
-     * مكالمة إدارية: أي منفذ، أي بوابة، أي رقم متصل من الأسطول.
-     *
-     * ## لماذا دالة منفصلة لا معامل في [dial]
-     *
-     * [dial] يحمل ثلاثة قيود مقصودة للمستخدم العادي: الحد اليومي، والحجز
-     * الذرّي «مكالمة واحدة لكل حساب»، والحصر على الشريحة المربوطة 1:1.
-     * تمرير علم `isAdmin` داخله يعني أن كل قيد يصير شرطيًّا، وأي إغفال
-     * لاحق يفتح ثغرة صامتة للمستخدم العادي. الفصل يجعل المسار الإداري
-     * صريحًا ويترك مسار المستخدم بلا فروع.
-     *
-     * ## ما يُتحقق منه رغم أنها إدارية
-     *
-     * **رقم المتصل يجب أن يكون رقم شريحة فعلية في الأسطول.** إظهار رقم لا
-     * تملكه البوابة انتحال هوية (CLI spoofing): المشغّل يرفضه غالبًا،
-     * وحين يمرّ يُنسَب الاتصال لمالك الرقم الحقيقي. لذلك يُطابَق مقابل
-     * `users.pstn_number` — وهو مُشتقّ من الجهاز نفسه لا من إدخال يدوي.
-     *
-     * **المنفذ المطلوب يمرّ بكل شروط الصلاحية.** `forcedPort` يحصر الترشيح
-     * ولا يلغي فحص التسجيل والإشارة والانشغال، فطلب منفذ ميت يُرجع خطأً
-     * صريحًا لا منفذًا بديلًا يظنّ المسؤول أنه اختاره.
-     *
-     * ## ما لا يُقيَّد
-     *
-     * الحد اليومي والحجز الذرّي: المسؤول قد يجري مكالمات متزامنة على منافذ
-     * مختلفة، وهذا هو الغرض. التدقيق يُسجّل كل مكالمة بدلًا من الحد.
-     *
-     * @param callerNumber رقم الشريحة الظاهر للمستلم. `null` = رقم المنفذ المختار.
-     * @param gatewayHost بوابة بعينها. `null` = يختار الموزّع من الأسطول.
-     * @param portIndex منفذ بعينه. `null` = يختار الموزّع الأفضل.
-     * @param bridge `true` = مكالمة صوتية حقيقية: نظير الإداري يُطلب أولًا ثم
-     *   تُجسر ساق GSM. `false` = الوضع القديم (`Wait(1)` ثم إغلاق) وهو اختبار
-     *   إشغال للمنفذ لا مكالمة — لا مسار صوت فيه إطلاقًا.
+     * مكالمة إدارية مجسّرة (Bridged) — للإدمنين فقط.
+     * يتجاوز حد اليوم الواحد والربط 1:1، ويتيح اختيار أي بوابة/منفذ/رقم مُتصل.
      */
     fun dialAsAdmin(
         adminId: UUID,
@@ -164,63 +130,53 @@ class PstnCallService(
         bridge: Boolean = true
     ): PstnCallResponse {
         val admin = users.findById(adminId).orElseThrow { NoSuchElementException("Admin not found") }
+        require(admin.role == AccountRole.ADMIN) { "Only admins can use dialAsAdmin" }
+
         val number = normalizeYemeniNumber(suppliedNumber)
 
+        // اختيار البوابة والمنفذ
         val selection = loadBalancer.selectPort(number, portIndex, gatewayHost)
-            ?: throw IllegalStateException(
-                "NO_USABLE_PORT: no registered port with a usable signal matches " +
-                    "gateway=${gatewayHost ?: "any"} port=${portIndex ?: "any"}"
-            )
+            ?: throw IllegalStateException("NO_USABLE_PORT: no registered port with a usable signal matches gateway=${gatewayHost ?: "any"} port=${portIndex?.toString() ?: "any"}")
 
-        // رقم المتصل: إمّا رقم شريحة مُتحقَّق منه، أو رقم المنفذ المختار.
-        val effectiveCaller = callerNumber?.trim()?.takeIf { it.isNotEmpty() }?.let { requested ->
-            val normalized = normalizeYemeniNumber(requested)
-            require(users.findByPstnNumber(normalized) != null) {
-                "CALLER_ID_NOT_IN_FLEET: $normalized is not a SIM number known to this deployment"
-            }
-            normalized
-        } ?: selection.simNumber
+        // رقم المتصل: إما الرقم المحدد، أو رقم الشريحة المختارة، أو رقم الشريحة من البوابة
+        val effectiveCaller = callerNumber?.takeIf { it.isNotBlank() }?.let { normalizeYemeniNumber(it) }
+            ?: selection.simNumber
 
-        // المسار المجسّر هو الافتراضي: الوضع القديم كان يطلب GSM ثم يُنفّذ
-        // Wait(1) ويُغلق، فلا يسمع الإداري شيئًا ولا يسمعه المستلم.
         val actionId = if (bridge) {
+            // جسر حقيقي: يرنّ WebRTC أولاً ثم يُجسر إلى GSM
             pstn.dialGsmBridged(
                 phoneNumber = number,
+                adminEndpoint = "red-webrtc-client",
                 pjsipEndpoint = selection.pjsipEndpoint,
                 portIndex = selection.portIndex,
                 callerSimNumber = effectiveCaller
             )
         } else {
+            // وضع الاختبار: يطلب GSM ثم ينهي فوراً (Wait 1)
             pstn.dialGsm(number, selection.pjsipEndpoint, selection.portIndex, effectiveCaller)
         }
-        // السجل الدائم يُكتب قبل أي حدث AMI: بدونه تصل الأحداث إلى مكالمة
-        // لا وجود لها في التاريخ فتُبتلَع تحذيرات "Call not found".
+
         history.start(admin.redId, number, number, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
         progress.register(actionId, admin.redId, number)
-        // لا حجز `activeKey`: المسؤول قد يجري مكالمات متزامنة. لكن ربط
-        // callId←→المنفذ لازم كي يُحرَّر المنفذ الصحيح عند الإنهاء.
-        redis.opsForValue().set(
-            PstnActiveCallKeys.callKey(actionId),
-            PstnActiveCallKeys.format(actionId, selection.gatewayId, selection.portIndex),
-            Duration.ofMinutes(30)
-        )
-        redis.opsForValue().set(callUserKey(actionId), admin.id.toString(), Duration.ofMinutes(30))
-        try { reservations?.bindActiveCall(admin.id, actionId, selection.gatewayId, selection.portIndex, number) } catch (_: Exception) {}
-        try { reservations?.tryReservePort(selection.gatewayId, selection.portIndex, admin.id, actionId, Duration.ofMinutes(30), number) } catch (_: Exception) {}
 
-        log.info(
-            "PSTN admin dial: admin={} number={} gateway={} port={} callerId={} callId={}",
-            admin.redId, number, selection.gatewayHost, selection.portIndex,
-            effectiveCaller ?: "(default)", actionId
-        )
-        return PstnCallResponse(
-            actionId, "DIALING", number, 0, 0, selection.portIndex
-        )
+        val selectionGatewayId = selection.gatewayId
+        val selectionPortIndex = selection.portIndex
+        redis.opsForValue().set(activeKey(admin.id), "${actionId}:${selectionGatewayId}:${selectionPortIndex}", Duration.ofMinutes(30))
+        redis.opsForValue().set(callUserKey(actionId), admin.id.toString(), Duration.ofMinutes(30))
+        try { reservations?.bindActiveCall(admin.id, actionId, selectionGatewayId, selectionPortIndex, number) } catch (_: Exception) {}
+        try { reservations?.tryReservePort(selectionGatewayId, selectionPortIndex, admin.id, actionId, Duration.ofMinutes(30), number) } catch (_: Exception) {}
+
+        return PstnCallResponse(actionId, "DIALING", number, 0, admin.pstnDailyLimit, selectionPortIndex)
     }
 
     /**
+     * Fetch a user account by ID — used by the controller for pre-checks.
+     */
+    fun getUser(userId: UUID) = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
+
+    /**
      * Check whether the user currently has an active PSTN call.
-     * يفحص Redis أولاً (أسرع)، ثم Postgres (أدق بعد فقدان الكاش).
+     * يفحص Redis أولااً (أسرع)، ثم Postgres (أدق بعد فقدان الكاش).
      */
     fun hasActiveCall(userId: UUID): Boolean {
         val raw = redis.opsForValue().get(activeKey(userId))
@@ -232,7 +188,6 @@ class PstnCallService(
     /**
      * يعيد المنفذ النشط الحالي للمستخدم (المنفذ الذي رُبط بمكالمته الجارية).
      * @return Triple<callId, portIndex, gatewayId> أو null إذا لا توجد مكالمة نشطة.
-     * يفحص Redis، ثم LoadBalancer، ثم Postgres.
      */
     fun resolveActiveCall(userId: UUID): Triple<String, Int, UUID>? {
         val raw = redis.opsForValue().get(activeKey(userId))
@@ -258,24 +213,21 @@ class PstnCallService(
             "callId" to (active?.first ?: ""),
             "port" to (active?.second ?: -1),
             "gatewayId" to (active?.third?.toString() ?: ""),
-            "route" to "Asterisk→PJSIP→DINSTAR"
+            "route" to "Asterisk→PJSIP→DINSTAR",
+            "managerHealth" to pstn.getMetrics()
         )
     }
 
     /**
      * إنهاء مكالمة PSTN بأمان — اتحاد نسختَي origin والمحلي:
-     * 1) التحقق من الملكية عبر سِجل Redis (callUserKey): لا يُحرِّر
-     *    مستخدمٌ منفذَ مكالمة غيره (تحصين origin، لكن مدعوم بالـRedis
-     *    القابل للتوزيع بدل خريطة داخلية تُفقد عند إعادة التشغيل).
-     * 2) تحرير المنفذ في الموزّع إن كانت المكالمة الجارية هي نفسها.
-     * 3) إسقاط ساق GSM عبر AMI — hangupCall (قدرة محليّة فريدة غابت عن origin).
-     * 4) إنهاء قيد المتتبِّع progress.finishByCallId (ميزة تتبّع origin).
-     * 5) تنظيف حالة Redis كي لا يبقى المستخدم محجوبًا حتى انتهاء المهلة.
+     * 1) التحقق من الملكية عبر سِجل Redis (callUserKey)
+     * 2) تحرير المنفذ في الموزّع
+     * 3) إسقاط ساق GSM عبر AMI
+     * 4) إنهاء قيد المتتبِّع
+     * 5) تنظيف حالة Redis
      */
     fun hangup(userId: UUID, callId: String): PstnHangupResponse {
         val user = users.findById(userId).orElseThrow { NoSuchElementException("User not found") }
-        // سجل الملكية مصدر الصلاحية؛ callId غير معروف يُعامل كإنهاء متسامح
-        // (مثل origin: الإنهاء المتكرر/المتأخر لا يفشل، لكن ملكية طرف آخر تُرفض).
         val owner = findUserByCallId(callId)
         require(owner == null || owner == userId) { "Only the call initiator can release this PSTN route" }
         history.end(callId, user.redId)
@@ -285,8 +237,6 @@ class PstnCallService(
         if (ownsThisCall) {
             loadBalancer.releasePort(active!!.third, active.second)
         }
-        // الإنهاء اليدوي قد يسبق حدث Hangup من AMI أو يحلّ محلّه؛ نُسقط
-        // ساق GSM بأمان (لا يفشل الطلب إن كانت القناة انتهت أصلًا).
         runCatching { pstn.hangupCall(callId) }
         progress.finishByCallId(callId)
         clearActive(userId)
@@ -298,7 +248,6 @@ class PstnCallService(
         val callId = raw?.split(":")?.firstOrNull()
         redis.delete(activeKey(userId))
         callId?.let { redis.delete(callUserKey(it)) }
-        // تحرير دائم — حتى بعد فقدان Redis
         if (callId != null) {
             try { reservations?.unbindActiveCall(userId, callId) } catch (_: Exception) {}
         }
@@ -307,21 +256,11 @@ class PstnCallService(
     private fun activeKey(userId: UUID) = "red:pstn:active:$userId"
     private fun callUserKey(callId: String) = "red:pstn:calluser:$callId"
 
-    /**
-     * Resolves which user owns a given callId (set at dial time).
-     * Returns null if the call is unknown or already expired.
-     */
     fun findUserByCallId(callId: String): UUID? =
         redis.opsForValue().get(callUserKey(callId))?.let { runCatching { UUID.fromString(it.trim()) }.getOrNull() }
 
     private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
 
-    /**
-     * Consumes PstnRetryEvent published by DindarEventListener when a PSTN
-     * call fails while still ringing (e.g. no signal on the selected port).
-     * Delegates to the @Async handleRetry which schedules reconnection
-     * with exponential backoff.
-     */
     @EventListener
     @Async
     fun onPstnRetryEvent(event: PstnRetryEvent) {
@@ -329,10 +268,6 @@ class PstnCallService(
         handleRetry(event)
     }
 
-    /**
-     * Retry scheduling for a failed PSTN call — fires asynchronously
-     * with exponential backoff, then cleans up Redis state on exhaustion.
-     */
     fun handleRetry(event: PstnRetryEvent) {
         val attempt = retryAttempts.computeIfAbsent(event.callId) { AtomicInteger(0) }.incrementAndGet()
         val backoffMs = listOf(1_000L, 2_000L, 5_000L, 10_000L).getOrElse(attempt - 1) { 10_000L }
@@ -345,9 +280,6 @@ class PstnCallService(
                         log.warn("Retry: user {} no longer eligible", event.userId)
                         return@schedule
                     }
-                    // الربط الدائم 1:1 يفرض نفسه على إعادة المحاولة أيضاً —
-                    // المكالمة المعادة يجب أن تخرج من شريحة المستخدم نفسها
-                    // (نفس CLIP) وإلا انتهك عقد الشريحة الشخصية.
                     val selection = if (user.pstnGatewayId != null && user.pstnPortIndex != null) {
                         loadBalancer.selectPermanentPort(user.pstnGatewayId!!, user.pstnPortIndex!!, event.phoneNumber)
                     } else {
@@ -368,7 +300,6 @@ class PstnCallService(
                     history.start(user.redId, event.phoneNumber, event.phoneNumber, CallType.AUDIO_1V1, CallRoute.DINSTAR, actionId)
                     redis.opsForValue().set(activeKey(user.id), "${actionId}:${selection.gatewayId}:${selection.portIndex}", Duration.ofMinutes(30))
                     redis.opsForValue().set(callUserKey(actionId), user.id.toString(), Duration.ofMinutes(30))
-
                     log.info("PSTN retry succeeded for user {} call {}", event.userId, event.callId)
                     retryAttempts.remove(event.callId)
                 } catch (e: Exception) {
@@ -386,11 +317,6 @@ class PstnCallService(
         )
     }
 
-    /**
-     * Normalize and validate Yemeni phone numbers.
-     * Supports: +967XXXXXXXXX, 967XXXXXXXXX, 0XXXXXXXXX, XXXXXXXXX
-     * Output: local format without leading 0 (e.g., 777123456)
-     */
     private fun normalizeYemeniNumber(value: String): String {
         val compact = value.filter { it.isDigit() || it == '+' }
         val local = when {
@@ -401,17 +327,8 @@ class PstnCallService(
             else -> compact
         }
         require(local.matches(Regex("^[0-9]{6,12}$"))) { "Only valid Yemeni numbers are allowed" }
-
-        // التصنيف يفوَّض إلى DinstarLoadBalancer — المصدر الوحيد لخريطة
-        // بادئات المشغّلين، وهو ما يختار المنفذ فعليًا بعد قليل. جدول
-        // محلي ثانٍ كان يفتح باب التفرّع: النسخة السابقة هنا أغفلت 78
-        // و70 تمامًا فكانت ترفض أرقام يمن موبايل الجديدة وواي.
         val operator = DinstarLoadBalancer.classifyNumber(local)
         require(operator != null && operator.isMobile) { "Unrecognized Yemeni mobile prefix" }
-
-        // الشرط السابق كان `... || local.length >= 9`، وكل محمول يمني
-        // تسعة أرقام — فكان الطرف الثاني يُصدّق أي رقم ويُبطل التحقق
-        // من البادئة كليًا.
         require(local.length == MOBILE_NSN_LENGTH) {
             "Yemeni mobile numbers are $MOBILE_NSN_LENGTH digits"
         }

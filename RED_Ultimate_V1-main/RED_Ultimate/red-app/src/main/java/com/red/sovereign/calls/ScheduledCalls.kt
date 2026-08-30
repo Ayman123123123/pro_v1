@@ -83,14 +83,7 @@ class ScheduledCallReceiver : BroadcastReceiver() {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel("red_scheduled", "مكالمات مجدولة", NotificationManager.IMPORTANCE_HIGH))
 
-        val joinIntent = Intent(context, ConferenceService::class.java).apply {
-            action = ConferenceService.ACTION_JOIN
-            putExtra(ConferenceService.EXTRA_ROOM_ID, call.roomId)
-            putExtra(ConferenceService.EXTRA_USER_ID, TokenStore(context).redId.orEmpty())
-            putExtra(ConferenceService.EXTRA_VIDEO, call.video)
-            putExtra(ConferenceService.EXTRA_HOST, true)
-        }
-        val joinPending = PendingIntent.getService(context, id.hashCode(), joinIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val joinPi = CallNotificationActionReceiver.receiverIntent(context, CallNotificationActionReceiver.ACTION_CONFERENCE_ACCEPT_PENDING, CallNotificationActionReceiver.CALL_TYPE_CONFERENCE, id.hashCode(), callId = call.roomId, myUserId = TokenStore(context).redId.orEmpty(), hostId = "", isVideo = call.video)
         val openPending = PendingIntent.getActivity(context, id.hashCode(), Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val notif = NotificationCompat.Builder(context, "red_scheduled")
@@ -100,7 +93,7 @@ class ScheduledCallReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(openPending)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .addAction(0, "انضمام الآن", joinPending)
+            .addAction(0, "انضمام الآن", joinPi)
             .build()
         runCatching { manager?.notify(id.hashCode(), notif) }
     }

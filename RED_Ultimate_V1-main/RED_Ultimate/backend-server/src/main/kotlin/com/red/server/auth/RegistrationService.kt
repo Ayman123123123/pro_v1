@@ -109,25 +109,56 @@ class RegistrationService(
 
     private fun resolveApprovedDevice(user: UserAccount, deviceId: java.util.UUID?): UserDevice? {
         if (user.role == AccountRole.ADMIN && deviceId == null) return null
-        requireNotNull(deviceId) { "deviceId is required" }
-        val device = devices.findByIdAndUserId(deviceId, user.id)
+        // كان `deviceId` مطلوبًا دومًا لغير الأدمن، ففشل تسجيل الدخول من هاتف
+        // جديد (حيث `tokens.deviceId` لا يزال null) بـ400 رغم صحة كلمة المرور.
+        // التطبيق لا يولّد معرّفًا جديدًا قبل تسجيل الدخول، والخادم كان يرمي
+        // `deviceId is required` بدل إنشاء جهاز جديد. الآن يُنشأ جهاز جديد
+        // تلقائيًا عند الحاجة — سلوك مطابق للـself-heal الموجود للحالة التي
+        // فقدت فيها الأجهزة جميعها.
+        var resolvedDeviceId = deviceId ?: java.util.UUID.randomUUID()
+        val device = devices.findByIdAndUserId(resolvedDeviceId, user.id)
         if (device == null) {
             val owned = devices.findAllByUserIdOrderByCreatedAtAsc(user.id)
             if (owned.isEmpty()) {
+                val fingerprint = java.util.UUID.randomUUID().toString().replace("-", "").take(64)
                 val saved = devices.save(
                     com.red.server.auth.model.UserDevice(
-                        id = deviceId,
+                        id = resolvedDeviceId,
                         user = user,
                         status = com.red.server.auth.model.DeviceStatus.APPROVED,
                         deviceName = "Restored device",
+                        identityFingerprint = fingerprint,
+                        protocolDeviceId = 1,
+                        registrationId = 1,
                     )
                 )
                 org.slf4j.LoggerFactory.getLogger(javaClass).warn(
-                    "Self-heal: re-registered lost device {} for user {}", deviceId, user.redId
+                    "Self-heal: re-registered lost device {} for user {}", resolvedDeviceId, user.redId
                 )
                 return saved
             }
-            throw InvalidCredentialsException()
+            // جهاز غير معروف لكن المستخدم يملك أجهزة أخرى: تسجيل دخول من هاتف
+            // جديد. كان يُرمى `InvalidCredentialsException` فيُقرأ كـ401 رغم صحة
+            // كلمة المرور. الآن يُسجَّل الجهاز الجديد تلقائيًا — كلمة المرور
+            // هي الحاجز الأمني، ومعرف الجهاز ليس سرًا.
+            val nextProtocolId = owned.maxByOrNull { it.protocolDeviceId }?.protocolDeviceId?.plus(1) ?: 1
+            val nextRegistrationId = owned.maxByOrNull { it.registrationId }?.registrationId?.plus(1) ?: 1
+            val fingerprint = java.util.UUID.randomUUID().toString().replace("-", "").take(64)
+            val saved = devices.save(
+                com.red.server.auth.model.UserDevice(
+                    id = resolvedDeviceId,
+                    user = user,
+                    status = com.red.server.auth.model.DeviceStatus.APPROVED,
+                    deviceName = "New device on login",
+                    identityFingerprint = fingerprint,
+                    protocolDeviceId = owned.maxByOrNull { it.protocolDeviceId }?.protocolDeviceId?.plus(1) ?: 1,
+                    registrationId = owned.maxByOrNull { it.registrationId }?.registrationId?.plus(1) ?: 1,
+                )
+            )
+            org.slf4j.LoggerFactory.getLogger(javaClass).warn(
+                "Registered new device {} for user {} (previously {} device(s))", resolvedDeviceId, user.redId, owned.size
+            )
+            return saved
         }
         require(device.status == DeviceStatus.APPROVED) { "Device is not approved" }
         return device

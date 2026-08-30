@@ -495,22 +495,24 @@ object DinstarApiContract {
          * لحظيًا. غير المُجابة تبقى `NULL`: لا زمن إجابة ولا زمن إنهاء يُصدره
          * الجهاز، والصفر فيها كذبٌ لا نقصُ بيان.
          *
-         * `end_time` مُستبعَد: حسابه يفترض أن `duration` زمن تحدُّثٍ لا زمن
-         * مكالمةٍ كاملة، وهو ما لا يُثبته الرد (كل السجلات المُلتقطة مُجابة،
-         * فلا عيّنة تُفرِّق). عمودٌ فارغ أصدق من عمودٍ مبنيٍّ على ظنّ.
+         * `end_time` يُحسَب هنا: للمكالمات المُجابة `answer_time + duration_seconds`،
+         * ولغير المُجابة `start_time + COALESCE(ring_duration_seconds, 0) + duration_seconds`.
+         *
+         * `hangup_cause` يخزن حقل `reason` من الجهاز (`NORMAL HANG UP`، `NO ANSWER`، إلخ)
+         * لا حقل `hangup` (`calling`/`called` الذي يدل على الطرف المنهي فقط).
          *
          * `call_type` مُستبعَد عن قصد: افتراضيّه في المخطَّط `'VOICE'`.
          *
          * ترتيب الوسائط: gateway_id, port_index, start_time, answer_time,
          * duration_seconds, ring_duration_seconds, direction, status,
-         * caller_number, callee_number, hangup_cause, gsm_code, codec, raw_data.
+         * caller_number, callee_number, hangup_cause, gsm_code, codec, end_time, raw_data.
          */
         const val INSERT_SQL: String =
             """INSERT INTO dinstar_cdr
                    (gateway_id, port_index, start_time, answer_time, duration_seconds,
                     ring_duration_seconds, direction, status, caller_number, callee_number,
-                    hangup_cause, gsm_code, codec, raw_data)
-               VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+                    hangup_cause, gsm_code, codec, end_time, raw_data)
+               VALUES (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
                ON CONFLICT (gateway_id, port_index, start_time, caller_number, callee_number)
                WHERE gateway_id IS NOT NULL AND port_index IS NOT NULL AND start_time IS NOT NULL
                DO NOTHING"""
@@ -526,6 +528,21 @@ object DinstarApiContract {
             if (start == null || answer == null) return null
             val gap = java.time.Duration.between(start, answer).seconds
             return if (gap < 0) null else gap.toInt()
+        }
+
+        /**
+         * زمن نهاية المكالمة.
+         *
+         * - مُجابة: `answer_time + duration_seconds`
+         * - غير مُجابة: `start_time + ring_seconds + duration_seconds`
+         *   (حيث `ring_seconds` هو زمن الرنين، و`duration_seconds` صفر للغير مُجابة).
+         */
+        fun endTime(start: java.time.Instant?, answer: java.time.Instant?, ringSec: Int?, durSec: Int): java.time.Instant? {
+            if (start == null) return null
+            val ring = ringSec ?: 0
+            val dur = maxOf(durSec, 0)
+            return if (answer != null) answer.plusSeconds(dur.toLong())
+            else start.plusSeconds((ring + dur).toLong())
         }
     }
 

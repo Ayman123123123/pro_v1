@@ -1,49 +1,75 @@
 package com.red.sovereign.calls
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesPrimary
-
-/**
- * 🚪 واجهة غرف الانقسام (Breakout Rooms) — نمط Zoom/Teams
- * كاملة: إنشاء، تعيين، نقل، حذف، توقيت، بث رسالة
- */
 
 @Composable
 fun BreakoutRoomsSheet(
     meetingId: String,
     isHost: Boolean,
     onDismiss: () -> Unit,
-    onCreateRooms: (Int, Boolean) -> Unit,  // count, autoAssign
-    onAssignMember: (String, String) -> Unit, // roomId, userId
-    onMoveMember: (String, String) -> Unit, // roomId, userId
+    onCreateRooms: (Int, Boolean) -> Unit,
+    onAssignMember: (String, String) -> Unit,
+    onMoveMember: (String, String) -> Unit,
     onDeleteRoom: (String) -> Unit,
     onBroadcastMessage: (String) -> Unit,
     onCloseAllRooms: () -> Unit,
-    onTimerAction: (String, Boolean) -> Unit, // roomId, start/stop
+    onTimerAction: (String, Boolean) -> Unit,
 ) {
-    val context = LocalContext.current
     val rooms = ZoomRuntime.breakoutRooms
     val state = ZoomRuntime.state
     val joinedMembers = when (state) {
@@ -66,7 +92,6 @@ fun BreakoutRoomsSheet(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ── Header ──────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -77,7 +102,7 @@ fun BreakoutRoomsSheet(
                 if (isHost && rooms.isNotEmpty()) {
                     Button(
                         onClick = { onCloseAllRooms() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935).copy(0.2f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935).copy(alpha = 0.2f)),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -89,7 +114,7 @@ fun BreakoutRoomsSheet(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color.White.copy(0.1f))
+                        .background(Color.White.copy(alpha = 0.1f))
                         .clickable { onDismiss() }
                         .padding(8.dp)
                 ) {
@@ -98,32 +123,29 @@ fun BreakoutRoomsSheet(
             }
         }
 
-        // ── Status Bar ──────────────────────────────────────────────────────
         if (rooms.isEmpty()) {
-            // Empty state
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 40.dp)
-                    .background(Color.White.copy(0.04f), RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
                     .clickable { if (isHost) showCreateDialog = true },
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Icon(Icons.Default.GroupAdd, null, tint = YounesPrimary, modifier = Modifier.size(48.dp))
                     Text(
-                        isHost ? "أنشئ غرف انقسام لتقسيم المشاركين" : "لا توجد غرف انقسام نشطة",
-                        color = if (isHost) YounesPrimary else Color.White.copy(0.5f),
+                        if (isHost) "أنشئ غرف انقسام لتقسيم المشاركين" else "لا توجد غرف انقسام نشطة",
+                        color = if (isHost) YounesPrimary else Color.White.copy(alpha = 0.5f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
                     if (isHost) {
-                        Text("اضغط لإنشاء الغرف", color = Color.White.copy(0.4f), fontSize = 11.sp)
+                        Text("اضغط لإنشاء الغرف", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
                     }
                 }
             }
         } else {
-            // Rooms list
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(rooms, key = { it.id }) { room ->
                     BreakoutRoomCard(
@@ -143,10 +165,8 @@ fun BreakoutRoomsSheet(
             }
         }
 
-        // ── Host Actions ────────────────────────────────────────────────────
         if (isHost) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Broadcast message
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -155,16 +175,17 @@ fun BreakoutRoomsSheet(
                     OutlinedTextField(
                         value = broadcastMessage,
                         onValueChange = { broadcastMessage = it },
-                        placeholder = { Text("رسالة بث لجميع الغرف…", color = Color.White.copy(0.4f)) },
+                        placeholder = { Text("رسالة بث لجميع الغرف…", color = Color.White.copy(alpha = 0.4f)) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color.White.copy(0.1f),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
                             focusedBorderColor = YounesPrimary,
                             focusedLabelColor = YounesPrimary,
                             unfocusedTextColor = Color.White,
                             focusedTextColor = Color.White,
-                            placeholderTextColor = Color.White.copy(0.4f)
+                            unfocusedPlaceholderColor = Color.White.copy(alpha = 0.4f),
+                            focusedPlaceholderColor = Color.White.copy(alpha = 0.4f)
                         )
                     )
                     Button(
@@ -182,7 +203,6 @@ fun BreakoutRoomsSheet(
                     }
                 }
 
-                // Create rooms button
                 if (rooms.isEmpty() || rooms.size < 10) {
                     Button(
                         onClick = { showCreateDialog = true },
@@ -213,72 +233,57 @@ fun BreakoutRoomsSheet(
         }
     }
 
-    // ── Create Rooms Dialog ─────────────────────────────────────────────────
-    if (showCreateDialog) {
-        AnimatedContent(
-            targetState = showCreateDialog,
-            transitionSpec = {
-                slideInVertically(initialOffsetY = { it * 100 }, animationSpec = tween(200)) +
-                    fadeIn(animationSpec = tween(200)) with
-                slideOutVertically(targetOffsetY = { it * 100 }, animationSpec = tween(150)) +
-                    fadeOut(animationSpec = tween(150))
-            }
-        ) { target ->
-            if (target) {
-                AlertDialog(
-                    onDismissRequest = { showCreateDialog = false },
-                    title = { Text("إنشاء غرف الانقسام", fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("عدد الغرف:", color = Color.White, fontSize = 14.sp)
-                                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
-                                    IconButton(onClick = { roomCount = (roomCount - 1).coerceAtLeast(2) }) {
-                                        Icon(Icons.Default.Remove, null, tint = YounesPrimary)
-                                    }
-                                    Text("$roomCount", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp))
-                                    IconButton(onClick = { roomCount = (roomCount + 1).coerceAtMost(50) }) {
-                                        Icon(Icons.Default.Add, null, tint = YounesPrimary)
-                                    }
-                                }
+    AnimatedVisibility(visible = showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("إنشاء غرف الانقسام", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("عدد الغرف:", color = Color.White, fontSize = 14.sp)
+                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                            IconButton(onClick = { roomCount = (roomCount - 1).coerceAtLeast(2) }) {
+                                Icon(Icons.Default.Remove, null, tint = YounesPrimary)
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("تعيين تلقائي للمشاركين", color = Color.White, fontSize = 13.sp)
-                                Switch(
-                                    checked = autoAssign,
-                                    onCheckedChange = { autoAssign = it },
-                                    colors = SwitchDefaults.colors(checkedThumbColor = YounesPrimary, checkedTrackColor = YounesPrimary.copy(0.5f))
-                                )
+                            Text("$roomCount", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp))
+                            IconButton(onClick = { roomCount = (roomCount + 1).coerceAtMost(50) }) {
+                                Icon(Icons.Default.Add, null, tint = YounesPrimary)
                             }
-                            Text(
-                                autoAssign
-                                    ? "سيتم توزيع المشاركين بالتساوي على الغرف"
-                                    : "ستبقى الغرف فارغة — أضف المشاركين يدوياً",
-                                color = Color.White.copy(0.5f),
-                                fontSize = 11.sp
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            onCreateRooms(roomCount, autoAssign)
-                            showCreateDialog = false
-                        }) {
-                            Text("إنشاء", color = YounesPrimary, fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showCreateDialog = false }) {
-                            Text("إلغاء", color = Color.White.copy(0.7f))
                         }
                     }
-                )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("تعيين تلقائي للمشاركين", color = Color.White, fontSize = 13.sp)
+                        Switch(
+                            checked = autoAssign,
+                            onCheckedChange = { autoAssign = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = YounesPrimary, checkedTrackColor = YounesPrimary.copy(alpha = 0.5f))
+                        )
+                    }
+                    Text(
+                        if (autoAssign) "سيتم توزيع المشاركين بالتساوي على الغرف" else "ستبقى الغرف فارغة — أضف المشاركين يدوياً",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onCreateRooms(roomCount, autoAssign)
+                    showCreateDialog = false
+                }) {
+                    Text("إنشاء", color = YounesPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) {
+                    Text("إلغاء", color = Color.White.copy(alpha = 0.7f))
+                }
             }
-        }
+        )
     }
 }
 
@@ -301,18 +306,15 @@ private fun BreakoutRoomCard(
     val isTimerSelected = selectedRoomForTimer == room.id
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isTimerSelected) YounesPrimary.copy(0.1f) else Color(0xFF1A2332)
+            containerColor = if (isTimerSelected) YounesPrimary.copy(alpha = 0.1f) else Color(0xFF1A2332)
         ),
         shape = RoundedCornerShape(14.dp),
-        border = if (isTimerSelected) BorderStroke(1.5.dp, YounesPrimary) else BorderStroke(1.dp, Color.White.copy(0.08f)),
+        border = if (isTimerSelected) BorderStroke(1.5.dp, YounesPrimary) else BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Room header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -337,21 +339,19 @@ private fun BreakoutRoomCard(
                         Text(room.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text(
                             "${assignedMembers.size} / ${room.participantIds.size + unassignedMembers.size} مشارك",
-                            color = Color.White.copy(0.6f),
+                            color = Color.White.copy(alpha = 0.6f),
                             fontSize = 11.sp
                         )
                     }
                 }
 
-                // Room actions
                 if (isHost) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Timer
                         if (!isTimerSelected) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.White.copy(0.08f))
+                                    .background(Color.White.copy(alpha = 0.08f))
                                     .clickable { onSelectTimer(room.id) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
@@ -361,20 +361,19 @@ private fun BreakoutRoomCard(
                                 }
                             }
                         } else {
-                            // Timer controls
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White.copy(0.08f))
+                                        .background(Color.White.copy(alpha = 0.08f))
                                         .padding(horizontal = 6.dp, vertical = 6.dp)
                                 ) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = { timerMinutes = (timerMinutes - 1).coerceAtLeast(1) }) {
+                                        IconButton(onClick = { onTimerMinutesChange((timerMinutes - 1).coerceAtLeast(1)) }) {
                                             Icon(Icons.Default.Remove, null, tint = YounesPrimary, modifier = Modifier.size(14.dp))
                                         }
                                         Text("$timerMinutes د", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(40.dp).padding(horizontal = 8.dp))
-                                        IconButton(onClick = { timerMinutes = (timerMinutes + 1).coerceAtMost(120) }) {
+                                        IconButton(onClick = { onTimerMinutesChange((timerMinutes + 1).coerceAtMost(120)) }) {
                                             Icon(Icons.Default.Add, null, tint = YounesPrimary, modifier = Modifier.size(14.dp))
                                         }
                                     }
@@ -394,7 +393,7 @@ private fun BreakoutRoomCard(
                                         onTimerAction(room.id, false)
                                         onSelectTimer(null)
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935).copy(0.2f)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935).copy(alpha = 0.2f)),
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text("إلغاء", color = Color(0xFFE53935), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
@@ -402,11 +401,10 @@ private fun BreakoutRoomCard(
                             }
                         }
 
-                        // Delete room
                         Box(
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .background(Color(0xFFE53935).copy(0.15f))
+                                .background(Color(0xFFE53935).copy(alpha = 0.15f))
                                 .clickable { onDeleteRoom(room.id) }
                                 .padding(8.dp)
                         ) {
@@ -416,26 +414,23 @@ private fun BreakoutRoomCard(
                 }
             }
 
-            // Assigned members
             if (assignedMembers.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     assignedMembers.forEach { member ->
                         BreakoutMemberRow(
                             member = member,
                             isAssigned = true,
-                            roomId = room.id,
                             isHost = isHost,
                             onMove = { onMoveMember(room.id, member.userId) },
-                            onRemove = { onMoveMember("", member.userId) } // Move to unassigned
+                            onRemove = { onMoveMember("", member.userId) }
                         )
                     }
                 }
             }
 
-            // Unassigned members (only show if host and room has capacity or for drag-drop target)
             if (isHost && unassignedMembers.isNotEmpty()) {
                 Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("غير معينين — اسحب لتعيين", color = Color.White.copy(0.4f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                    Text("غير معينين — اضغط + لتعيين", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Medium)
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
@@ -444,7 +439,6 @@ private fun BreakoutRoomCard(
                             BreakoutMemberRow(
                                 member = member,
                                 isAssigned = false,
-                                roomId = room.id,
                                 isHost = isHost,
                                 onMove = { onAssignMember(room.id, member.userId) },
                                 onRemove = {}
@@ -461,7 +455,6 @@ private fun BreakoutRoomCard(
 private fun BreakoutMemberRow(
     member: ZoomMember,
     isAssigned: Boolean,
-    roomId: String,
     isHost: Boolean,
     onMove: () -> Unit,
     onRemove: () -> Unit
@@ -469,14 +462,14 @@ private fun BreakoutMemberRow(
     val statusColor = when (member.status) {
         ZoomMemberStatus.JOINED -> if (member.isMuted) Color(0xFFFFC107) else Color(0xFF00C98C)
         ZoomMemberStatus.RINGING -> Color(0xFF4D9FE8)
-        else -> Color.White.copy(0.4f)
+        else -> Color.White.copy(alpha = 0.4f)
     }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isAssigned) Color.White.copy(0.05f) else Color.White.copy(0.03f))
+            .background(if (isAssigned) Color.White.copy(alpha = 0.05f) else Color.White.copy(alpha = 0.03f))
             .padding(10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -508,7 +501,7 @@ private fun BreakoutMemberRow(
                             ZoomMemberStatus.NO_ANSWER -> "لم يرد"
                             else -> member.status.name
                         },
-                        color = Color.White.copy(0.5f),
+                        color = Color.White.copy(alpha = 0.5f),
                         fontSize = 10.sp
                     )
                     if (member.hasVideo) Icon(Icons.Default.Videocam, null, tint = YounesPrimary, modifier = Modifier.size(12.dp))
@@ -520,7 +513,7 @@ private fun BreakoutMemberRow(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (isAssigned) {
                     IconButton(onClick = onRemove) {
-                        Icon(Icons.Default.RemoveCircleOutline, null, tint = Color.White.copy(0.5f), modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.RemoveCircleOutline, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
                     }
                 }
                 IconButton(onClick = onMove) {

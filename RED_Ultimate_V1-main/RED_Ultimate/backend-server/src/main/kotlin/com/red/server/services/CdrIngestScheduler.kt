@@ -81,12 +81,13 @@ class CdrIngestScheduler(
                     log.debug("CDR: اتجاه غير معروف {} — تخطّي السجل", cdr["direction"])
                     continue
                 }
-            val status = DinstarApiContract.Cdr.callOutcome(answer != null, hangup)
+val status = DinstarApiContract.Cdr.callOutcome(answer != null, hangup)
+            val reason = cdr["reason"]?.toString()
             val rawJson = mapper.writeValueAsString(cdr)
 
             // التكرار يمنعه القيد الفريد uq_dinstar_cdr_natural_key (V40) لا
             // فحصٌ مسبق: الفحص ثم الإدراج يفتح نافذة سباق بين دورتين.
-            // الجملة مشتركة في DinstarApiContract.Cdr.INSERT_SQL — انظر شرحها
+            // الجملة المشتركة في DinstarApiContract.Cdr.INSERT_SQL — انظر شرحها
             // هناك لسبب وجوب شرط WHERE بعد ON CONFLICT.
             val rows = jdbc.update(
                 DinstarApiContract.Cdr.INSERT_SQL,
@@ -94,7 +95,9 @@ class CdrIngestScheduler(
                 answer?.let { java.sql.Timestamp.from(it) },
                 duration, DinstarApiContract.Cdr.ringSeconds(start, answer),
                 direction, status, src, dst,
-                hangup, gsmCode, codec, rawJson
+                reason, gsmCode, codec,
+                DinstarApiContract.Cdr.endTime(start, answer, DinstarApiContract.Cdr.ringSeconds(start, answer), duration),
+                rawJson
             )
             if (rows > 0) inserted++
         }
