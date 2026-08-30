@@ -228,6 +228,10 @@ services:
       - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
       - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
       - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      # هوية المتصل الافتراضية للجذع — اتركه فارغاً ليمرّر كل شريحة رقمها الحقيقي
+      # (`CALLERID(num)=RED_SIM_NUMBER` من الـdialplan). عيّنه فقط إن طلبت
+      # الشبكة From ثابتاً (مثلاً E.164 موحّد).
+      - DINSTAR_FROM_USER=${DINSTAR_FROM_USER:-}
       # Dinstar-facing external addresses: advertise the Ethernet NIC IP (192.168.11.x)
       # so the UC2000 can route SIP/RTP back to this host. Falls back to the client
       # Wi-Fi IP when no Dinstar NIC is present (single-interface dev boxes).

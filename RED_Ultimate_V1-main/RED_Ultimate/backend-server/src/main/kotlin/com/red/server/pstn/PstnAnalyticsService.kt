@@ -164,4 +164,29 @@ class PstnAnalyticsService(
             "successRate" to successRate
         )
     }
+
+    fun daily(days: Int): List<Map<String, Any?>> {
+        val safeDays = days.coerceIn(1, 365)
+        return jdbc.query(
+            """SELECT date_trunc('day', start_time)::date  AS call_day,
+                      COUNT(*)                                        AS calls,
+                      COUNT(*) FILTER (WHERE status = 'answered')     AS answered,
+                      COALESCE(SUM(duration_seconds), 0)              AS seconds
+               FROM dinstar_cdr
+               WHERE start_time >= CURRENT_DATE - make_interval(days => ?)
+               GROUP BY 1
+               ORDER BY 1""",
+            arrayOf<Any>(safeDays)
+        ) { rs, _ ->
+            val calls = rs.getLong("calls")
+            val answered = rs.getLong("answered")
+            mapOf(
+                "date" to rs.getDate("call_day")?.toString(),
+                "calls" to calls,
+                "succeeded" to answered,
+                "failed" to (calls - answered),
+                "duration" to rs.getLong("seconds")
+            )
+        }
+    }
 }

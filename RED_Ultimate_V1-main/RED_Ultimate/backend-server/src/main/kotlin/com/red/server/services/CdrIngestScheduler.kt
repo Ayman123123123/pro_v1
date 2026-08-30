@@ -51,11 +51,15 @@ class CdrIngestScheduler(
     }
 
     private fun ingestFrom(gateway: DinstarFleetService.Gateway) {
-        // نافذة آخر 24 ساعة — كافية لالتقاط ما فات دون تكرار كل السجل.
-        val since = Instant.now().minusSeconds(24 * 3600)
-        val timeAfter = DinstarTime.format(since)
+        // الجهاز قد تكون ساعته منحرفة سنة كاملة عن الخادم (ثبت حياً:
+        // الجهاز يعيد `2025-08-26` بينما الخادم `2026-08-29`). نافذة 24
+        // ساعة بوقت الخادم كانت تُقصي كل سجلات الجهاز فبقي `dinstar_cdr`
+        // قديماً عند 2026-08-27 رغم وجود مكالمات اليوم في الجهاز.
+        // الحل: اسحب كل المخزون المؤقت واترك التكرار للقيد الفريد
+        // `uq_dinstar_cdr_natural_key` (V40) — لا تكلفة إضافية تذكر
+        // لأن المخزون محدود ببضع مئات والـ ON CONFLICT يتجاهل المكرر.
 
-        val records = hardware.getCdrRecords(gateway, timeAfter = timeAfter)
+        val records = hardware.getCdrRecords(gateway)
         if (records.isEmpty()) {
             log.debug("CDR ingest: no records from {}", gateway.host)
             return

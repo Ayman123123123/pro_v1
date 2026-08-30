@@ -212,7 +212,7 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
-from_user=1000000
+${FROM_USER_LINE}
 aors=${gw_name}
 transport=transport-udp
 
@@ -245,7 +245,7 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
-from_user=1000000
+${FROM_USER_LINE}
 aors=${port_endpoint}
 transport=transport-udp
 EOF
@@ -270,7 +270,7 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
-from_user=1000000
+${FROM_USER_LINE}
 aors=${first_gw_name}
 transport=transport-udp
 ;disable_nat_qualify=yes
@@ -291,7 +291,7 @@ direct_media=no
 rtp_symmetric=yes
 force_rport=yes
 rewrite_contact=yes
-from_user=1000000
+${FROM_USER_LINE}
 aors=${first_port_endpoint}
 transport=transport-udp
 EOF

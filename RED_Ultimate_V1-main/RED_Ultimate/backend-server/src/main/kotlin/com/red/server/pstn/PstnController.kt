@@ -108,6 +108,12 @@ class PstnController(
     fun getGatewayStats(): ResponseEntity<List<Map<String, Any?>>> =
         ResponseEntity.ok(analyticsService.getGatewayStats())
 
+    @GetMapping("/analytics/daily")
+    fun daily(
+        @RequestParam(defaultValue = "30") days: Int,
+    ): ResponseEntity<List<Map<String, Any?>>> =
+        ResponseEntity.ok(analyticsService.daily(days.coerceIn(1, MAX_ANALYTICS_DAYS)))
+
     // ── الخط الزمني ────────────────────────────────────────────────────────
 
     /**
