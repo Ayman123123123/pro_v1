@@ -33,13 +33,26 @@ class PstnBridgeController(
     private val objectMapper: ObjectMapper,
     private val fleet: DinstarFleetService,
     private val jdbc: JdbcTemplate,
-    @Value("\${red.pstn.sip-secret:red-secret-token}") private val sipSecret: String,
+    @Value("\${red.pstn.sip-secret:}") private val sipSecret: String,
     @Value("\${ASTERISK_WSS_URL:wss://localhost:8089/ws}") private val asteriskWssUrl: String,
     @Value("\${red.pstn.bridge-secret-ttl-minutes:60}") private val bridgeSecretTtlMinutes: Long,
     @Value("\${red.pstn.turn-url:}") private val turnUrl: String,
     @Value("\${red.pstn.turn-username:}") private val turnUsername: String,
     @Value("\${red.pstn.turn-password:}") private val turnPassword: String,
 ) {
+    /**
+     * Fail-fast على الإقلاع: بلا سرّ طويل لا يُشغَّل الخادم إطلاقًا.
+     * أي قيمة افتراضية = بطاقة رسوم مفتوحة: أي عميل يعرفها يسجّل على PBX ويتصل عبر شرائح SIM.
+     * الحدّ 32 موافق لنمط RED_ADMIN_PASSWORD في [com.red.server.auth.AdminBootstrap].
+     */
+    @PostConstruct
+    internal fun validateSipSecret() {
+        require(sipSecret.length >= 32) {
+            "WEBRTC_SIP_SECRET must be set to >= 32 random characters (openssl rand -hex 32). " +
+                "A default or short secret allows any client to register and place billed calls."
+        }
+    }
+
     companion object {
         private val log = LoggerFactory.getLogger(PstnBridgeController::class.java)
         /** مفوَّضة إلى YemenNumberPlan — كانت النسخة المحلية تفتقد واي 700-709. */

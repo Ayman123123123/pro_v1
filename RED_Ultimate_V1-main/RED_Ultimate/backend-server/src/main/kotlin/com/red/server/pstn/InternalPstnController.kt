@@ -31,7 +31,8 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/internal/pstn")
 class InternalPstnController(
     private val listener: DinstarEventListener,
-    @Value("\${pstn.internal-secret:red-internal-pstn-secret}") private val internalSecret: String,
+    // لا قيمة افتراضية: سرّ معلن في المستودع = أي مضيف على الشبكة يحقن أحداث CDR/مكالمات فائتة.
+    @Value("\${pstn.internal-secret:}") private val internalSecret: String,
     @Value("\${pstn.internal-allowed-ips:}") private val allowedIps: String
 ) {
     companion object {

@@ -64,7 +64,7 @@ dependencies {
 
     // OkHttp for Dinstar API
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.github.rburgst:okhttp-digest:3.1.1")  // HTTP Digest auth (Dinstar New API â‰¥1102)
+    implementation("io.github.rburgst:okhttp-digest:3.1.1")  // HTTP Digest auth (Dinstar New API ≥1102)
 
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")

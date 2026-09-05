@@ -387,9 +387,17 @@ EOF
 # ═══════════════════════════════════════════════════════════════════════════
 # WebRTC Client — تسجيل ديناميكي للتطبيق
 # ═══════════════════════════════════════════════════════════════════════════
-# كل مستخدم يحصل على حساب SIP فريد当他 يتصل بـ Asterisk عبر WSS.
+# كل مستخدم يحصل على حساب SIP فريد عندما يتصل بـ Asterisk عبر WSS.
 # الباسورد يُولَّد من الـ JWT token عبر Backend.
-WEBRTC_SECRET="${WEBRTC_SIP_SECRET:-red-secret-token}"
+if [ -z "${WEBRTC_SIP_SECRET:-}" ]; then
+  echo "FATAL: WEBRTC_SIP_SECRET is required (>= 32 chars, openssl rand -hex 32). refusing to start with a default SIP password." >&2
+  exit 1
+fi
+if [ "${#WEBRTC_SIP_SECRET}" -lt 32 ]; then
+  echo "FATAL: WEBRTC_SIP_SECRET is too short (${#WEBRTC_SIP_SECRET} chars, minimum 32)." >&2
+  exit 1
+fi
+WEBRTC_SECRET="${WEBRTC_SIP_SECRET}"
 cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
 [red-webrtc-client]

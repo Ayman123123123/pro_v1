@@ -6,7 +6,7 @@
 }
 
 // المنفذ الإلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما الخادم
-// يستمع على 8088 (بوابة Nginx) â€” فيفشل كل طلب بـ NETWORK_ERROR بلا سبب ظاهر.
+// يستمع على 8088 (بوابة Nginx) — فيفشل كل طلب بـ NETWORK_ERROR بلا سبب ظاهر.
 // البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
 // Default to the host Wi-Fi interface verified for physical Android clients.
 // CI/production may override this with -PRED_SERVER_URL=https://your-domain.
@@ -61,7 +61,7 @@ android {
             isMinifyEnabled = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // التوقيع الرسمي يُقرأ من متغيرات بيئة/خصائص (RED_KEYSTORE_*) â€” لا
+            // التوقيع الرسمي يُقرأ من متغيرات بيئة/خصائص (RED_KEYSTORE_*) — لا
             // مفاتيح إنتاج مضمنة في المستودع. إن لم تُضبط تُستخدم هوية alpha
             // المؤقتة (مفتاح debug عام) حتى يُكمل سير العمل المحلي.
             val keystoreFile = providers.gradleProperty("RED_KEYSTORE_FILE").orElse("").get()
@@ -74,6 +74,12 @@ android {
                     storeType = "PKCS12"
                 }
             } else {
+                // كان الرجوع إلى redLocalDebug يوقّع نسخ الإصدار بمفتاح debug عام في المستودع،
+                // فتضيع خاصية التوقيع الثابت التي تعتمد عليها تحديثات التطبيق.
+                if (providers.gradleProperty("RED_ALLOW_DEBUG_RELEASE").orElse("").get().isBlank()) {
+                    error("RED_KEYSTORE_FILE is required for release signing (set RED_KEYSTORE_PASSWORD, "
+                        + "RED_KEY_ALIAS and RED_KEY_PASSWORD too). Pass -PRED_ALLOW_DEBUG_RELEASE=true only for local experiments.")
+                }
                 signingConfig = signingConfigs.getByName("redLocalDebug")
             }
         }
@@ -167,27 +173,27 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // â”€â”€â”€â”€â”€ خطوط Google (Cairo + Tajawal) â”€â”€â”€â”€â”€
+    // ───── خطوط Google (Cairo + Tajawal) ─────
     implementation(libs.androidx.compose.ui.text.google.fonts)
 
-    // â”€â”€â”€â”€â”€ Coil â€” تحميل وعرض الصور والفيديو بكفاءة عالية â”€â”€â”€â”€â”€
+    // ───── Coil — تحميل وعرض الصور والفيديو بكفاءة عالية ─────
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
 
-    // â”€â”€â”€â”€â”€ Lottie â€” أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) â”€â”€â”€â”€â”€
+    // ───── Lottie — أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) ─────
     implementation(libs.lottie.compose)
 
-    // â”€â”€â”€â”€â”€ emoji2-emojipicker â€” محدد الإيموجي الرسمي من Google â”€â”€â”€â”€â”€
+    // ───── emoji2-emojipicker — محدد الإيموجي الرسمي من Google ─────
     implementation(libs.androidx.emoji2.emojipicker)
 
-    // â”€â”€â”€â”€â”€ Paging 3 â€” تحميل المحادثات والمنشورات بتكاسل â”€â”€â”€â”€â”€
+    // ───── Paging 3 — تحميل المحادثات والمنشورات بتكاسل ─────
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // â”€â”€â”€â”€â”€ WorkManager â€” مزامنة في الخلفية â”€â”€â”€â”€â”€
+    // ───── WorkManager — مزامنة في الخلفية ─────
     implementation(libs.androidx.work.runtime.ktx)
 
-    // â”€â”€â”€â”€â”€ Room â€” قاعدة بيانات محلية سيادية â”€â”€â”€â”€â”€
+    // ───── Room — قاعدة بيانات محلية سيادية ─────
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
     implementation(libs.androidx.room.runtime)
@@ -195,10 +201,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
-    // â”€â”€â”€â”€â”€ Accompanist â€” أذونات وتسهيلات Compose â”€â”€â”€â”€â”€
+    // ───── Accompanist — أذونات وتسهيلات Compose ─────
     implementation(libs.accompanist.permissions)
 
-    // â”€â”€â”€â”€â”€ Biometric â€” قفل التطبيق بالبصمة/الوجه â”€â”€â”€â”€â”€
+    // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
 

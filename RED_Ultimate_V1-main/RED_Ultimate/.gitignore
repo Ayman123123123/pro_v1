@@ -14,3 +14,8 @@ backups/
 *.tar.gz.gpg.sha256
 # Vendored Gradle distribution for offline Docker builds (150 MB)
 build-tools/
+
+# جلسات والتقاطات تشخيصية — فيها رموز جلسة، لا تُلتزَم
+*cookie.txt
+logcat.txt
+*.hprof
