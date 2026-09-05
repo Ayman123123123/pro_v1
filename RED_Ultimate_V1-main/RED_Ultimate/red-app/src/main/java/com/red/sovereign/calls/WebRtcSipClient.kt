@@ -203,12 +203,12 @@ class WebRtcSipClient(
     fun addIceCandidate(candidate: IceCandidate) {
         // Send ICE candidate via SIP INFO or re-INVITE
         val iceMsg = buildIceMessage(candidate)
-        ws?.send(iceMsg)
+        sendOrReport(iceMsg, "INFO-ICE")
     }
 
     fun bye() {
         val msg = buildBye()
-        ws?.send(msg)
+        sendOrReport(msg, "BYE")
         events.onBye("LOCAL_HANGUP")
     }
 
@@ -269,7 +269,7 @@ class WebRtcSipClient(
             append("\r\n")
             append(localSdp)
         }
-        val sent = ws?.send(msg) ?: false
+        val sent = sendOrReport(msg, "200-OK+SDP")
         // Update internal callId to match dialog so BYE uses correct ID
         runCatching {
             val extracted = callIdHeader.substringAfter(":", "").trim()
@@ -277,6 +277,33 @@ class WebRtcSipClient(
         }
         lastIncomingSdp = localSdp
         return sent
+    }
+
+
+    /**
+     * كل إرسال يمرّ من هنا.
+     *
+     * قبل هذا التوحيد كانت `ws?.send(msg)` تُستدعى قيمتُها مُهمَلة في ثمانية
+     * مواضع. `WebSocket.send()` تُرجع `false` عند إغلاق المقبس أو امتلاء
+     * الطابور (سقف OkHttp 16MB)، وتُرجع `null` عبر `?.` إذا لم تُفتح المقبس
+     * أصلًا — أي أن `REGISTER` لم يغادر الجهاز قطّ، ولا `onFailure` تُستدعى،
+     * ولا شيء يصل الواجهة. هذا حرفيًا عرَض «SIP_SEND_FAILED / رسالة فارغة».
+     * الآن: لا إرسال بصمت — إمّا نجاح أو `onError` باسم المعاملة وحالتها.
+     */
+    private fun sendOrReport(payload: String, label: String): Boolean {
+        val socket = ws
+        if (socket == null) {
+            events.onError("SIP_SEND_FAILED: $label — المقبس غير مفتوح (sipServer=${if (sipServer.isEmpty()) "<unset>" else sipServer}, disposed=$disposed)")
+            android.util.Log.e("SipClient", "send($label) refused: no open WebSocket")
+            return false
+        }
+        return if (socket.send(payload)) {
+            true
+        } else {
+            events.onError("SIP_SEND_FAILED: $label — رفض OkHttp الإرسال (المقبس أُغلق أو طابوره ممتلئ)")
+            android.util.Log.e("SipClient", "send($label) returned false (closed/queue overflow)")
+            false
+        }
     }
 
     // ─── SIP Message Building ─────────────────────────────────────────
@@ -320,7 +347,7 @@ class WebRtcSipClient(
             append("Content-Length: 0\r\n")
             append("\r\n")
         }
-        ws?.send(msg)
+        sendOrReport(msg, "REGISTER")
     }
 
     private fun sendInvite(targetNumber: String, customHeaders: Map<String, String>) {
@@ -347,7 +374,7 @@ class WebRtcSipClient(
             append("\r\n")
             append(sdp)
         }
-        ws?.send(msg)
+        sendOrReport(msg, "INVITE")
     }
 
     /** إعادة إرسال INVITE مع Authorization بعد تحدّي 401 — بدون هذا يموت الاتصال. */
@@ -376,7 +403,7 @@ class WebRtcSipClient(
             append("\r\n")
             append(sdp)
         }
-        ws?.send(msg)
+        sendOrReport(msg, "INVITE+auth")
     }
 
     private fun buildBye(): String {
@@ -574,7 +601,7 @@ class WebRtcSipClient(
             append("Content-Length: 0\r\n")
             append("\r\n")
         }
-        ws?.send(msg)
+        sendOrReport(msg, "REGISTER+auth")
     }
 
     internal fun sendAck() {
@@ -595,7 +622,7 @@ class WebRtcSipClient(
             append("Content-Length: 0\r\n")
             append("\r\n")
         }
-        ws?.send(msg)
+        sendOrReport(msg, "ACK")
     }
 
     /**
@@ -635,7 +662,7 @@ class WebRtcSipClient(
             append("Content-Length: 0\r\n")
             append("\r\n")
         }
-        ws?.send(msg)
+        sendOrReport(msg, "response")
     }
 
     // ─── SIP Parsing Utilities ──────────────────────────────────────────
@@ -692,7 +719,19 @@ class WebRtcSipClient(
             // خوارزمية غير مدعومة → صفّر التحدي واستخدم المسار القديم بدل الفشل الصامت.
             authChallenge = null
         }
-        return computeDigestAuth(method, uri, pendingRealm ?: "", username, password, pendingNonce ?: "")
+        // تحذير: لا يجوز إلصاق تجاوب MD5 مجرّدًا. المسار القديم كان ينتج
+        // `Authorization: 6f1a…` فيردّ الطرف بـ 400 Bad Request — وكان ذلك يبدو
+        // «تسجيلًا صامتًا يفشل». نبني ترويسة Digest كاملة ولو من الحقول الخام.
+        val response = computeDigestAuth(method, uri, pendingRealm ?: "", username, password, pendingNonce ?: "")
+        val fields = buildList {
+            add("username=\"$username\"")
+            if ((pendingRealm ?: "").isNotBlank()) add("realm=\"${pendingRealm}\"")
+            add("nonce=\"${pendingNonce.orEmpty()}\"")
+            add("uri=\"$uri\"")
+            add("response=\"$response\"")
+            add("algorithm=MD5")
+        }
+        return "Digest ${fields.joinToString(", ")}"
     }
 
     /**

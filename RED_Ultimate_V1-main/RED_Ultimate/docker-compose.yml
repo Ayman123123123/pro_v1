@@ -74,6 +74,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      # سرّ تسجيل SIP لمسار WebRTC↔PSTN. بلا قيمة افتراضية في الكود: الصمت هنا = بطاقة
+      # رسوم مفتوحة على شرائح SIM. التوليد: openssl rand -hex 32
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:?WEBRTC_SIP_SECRET is required (>= 32 chars)}
       - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
       - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
       - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
@@ -87,7 +90,7 @@ services:
       # في Spring يحوّله إلى الخاصية pstn.internal-secret التي يقرأها
       # InternalPstnController. بدونه يتحقق الخادم من سرّه الافتراضي فتُرفض
       # كل مكالمة واردة بـBAD_SECRET بينما البوابة ترسل السر الصحيح.
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:?PSTN_INTERNAL_SECRET is required}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -218,6 +221,8 @@ services:
           cpus: '0.5'
     environment:
       - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
+      # يقرأه docker-entrypoint.sh ويكتبه في pjsip.conf؛ entrypoint يفشل إن لم يُضبط.
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:?WEBRTC_SIP_SECRET is required (>= 32 chars)}
       - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
       # قائمة الأسطول الكاملة. `docker-entrypoint.sh` يولّد من كل عنوان فيها
       # نظيرًا للبوابة + نظيرًا لكل منفذ GSM على مقبسه (5060+index)، ولا يقرأ
@@ -241,7 +246,7 @@ services:
       # سر مصادقة مسار الوارد: dialplan يستدعي /api/internal/pstn بترويسة
       # X-Internal-Secret، ويتحقق منها InternalPstnController. اختياري لأن
       # للمتحكم افتراضًا معلنًا، لكن تركه فارغًا يُبقي المسار على السر الافتراضي.
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:?PSTN_INTERNAL_SECRET is required}
     ports:
       - "5060:5060/udp"
       - "10000-10100:10000-10100/udp"

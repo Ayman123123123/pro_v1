@@ -4,10 +4,10 @@ import kotlinx.serialization.Serializable
 import org.webrtc.IceCandidate
 
 /**
- * إشارة المكالمة الموحدة â€” متوافقة مع YounesCallService / GroupCallService / Backend.
+ * إشارة المكالمة الموحدة — متوافقة مع YounesCallService / GroupCallService / Backend.
  *
- * âš ï¸ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
- * وليس callType â€” يحميه CallSignalPositionalContractTest. البناء المسمّى
+ * ⚠️ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
+ * وليس callType — يحميه CallSignalPositionalContractTest. البناء المسمّى
  * مفضَّل دائماً، لكن أي بناء موضعي قديم يسلك السلوك الصحيح الآن.
  */
 @Serializable

@@ -150,7 +150,9 @@ red:
   pstn:
     daily-limit-default: 100
     signal-threshold: 20
-    sip-secret: ${WEBRTC_SIP_SECRET:red-secret-token}
+    # Fail-closed: بدون متغيّر بيئة لا يوجد سرّ على الإطلاق (انظر PstnBridgeController.validateSipSecret).
+    # أي قيمة افتراضية هنا = بطاقة رسوم مشتركة قابلة للاستغلال من أي تطبيق.
+    sip-secret: ${WEBRTC_SIP_SECRET:}
     bridge-secret-ttl-minutes: ${PSTN_BRIDGE_SECRET_TTL_MINUTES:60}
     turn-url: ${PSTN_TURN_URL:}
     turn-username: ${PSTN_TURN_USERNAME:}

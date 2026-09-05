@@ -17,16 +17,16 @@ import org.springframework.web.bind.annotation.*
 import java.util.UUID
 
 /**
- * Dinstar SMS Controller â€” إرسال واستقبال SMS عبر UC2000-VE-8G
+ * Dinstar SMS Controller — إرسال واستقبال SMS عبر UC2000-VE-8G
  * 
  * Endpoints المعرّفة حسب وثائق Dinstar الرسمية:
  * 
- * POST /api/admin/dinstar/sms/send     â†’ إرسال SMS (فردي/مجمّع)
- * POST /api/admin/dinstar/sms/result   â†’ جلب نتائج الإرسال
- * GET  /api/admin/dinstar/sms/incoming â†’ جلب SMS الواردة
- * GET  /api/admin/dinstar/sms/queue    â†’ عدد SMS في الطابور
- * POST /api/admin/dinstar/sms/stop     â†’ إيقاف مهمة إرسال
- * POST /api/admin/dinstar/sms/deliver  â†’ جلب حالة التسليم
+ * POST /api/admin/dinstar/sms/send     → إرسال SMS (فردي/مجمّع)
+ * POST /api/admin/dinstar/sms/result   → جلب نتائج الإرسال
+ * GET  /api/admin/dinstar/sms/incoming → جلب SMS الواردة
+ * GET  /api/admin/dinstar/sms/queue    → عدد SMS في الطابور
+ * POST /api/admin/dinstar/sms/stop     → إيقاف مهمة إرسال
+ * POST /api/admin/dinstar/sms/deliver  → جلب حالة التسليم
  */
 @RestController
 @RequestMapping("/api/admin/dinstar/sms")
@@ -43,7 +43,7 @@ class DinstarSmsController(
     /**
      * هل المُستدعي أدمن؟ الأدمن وحده يتحكم بمنافذ/بوابات الإرسال بحرية
      * (حملات لوحة التحكم). المستخدم العادي يُحبَس على شريحته المربوطة
-     * 1:1 (pstn_gateway_id/pstn_port_index) â€” إغلاق ثغرة إرسال SMS من
+     * 1:1 (pstn_gateway_id/pstn_port_index) — إغلاق ثغرة إرسال SMS من
      * شريحة غيره أو استهداف بوابة اعتباطية عبر gatewayHost.
      */
     private fun isAdmin(authentication: Authentication): Boolean =
@@ -81,7 +81,7 @@ class DinstarSmsController(
      *   "text": "محتوى الرسالة",
      *   "param": [{"number": "777123456", "user_id": 1}],
      *   "port": [0, 1],        // اختياري: منافذ محددة
-     *   "encoding": "AUTO",    // اختياري: AUTO (افتراضي، يشتق من النص) أو GSM7BIT أو UCS2 â€” الافتراضي AUTO يصلح رسائل عربية كانت تصل Â«?????Â»
+     *   "encoding": "AUTO",    // اختياري: AUTO (افتراضي، يشتق من النص) أو GSM7BIT أو UCS2 — الافتراضي AUTO يصلح رسائل عربية كانت تصل «?????»
      *   "request_status_report": true
      * }
      */
@@ -101,9 +101,9 @@ class DinstarSmsController(
         val preparedRecipients = smsContract.prepare(params)
         
         val portList = (body["port"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }
-        // الافتراضي AUTO: تشتق الخدمة الترميز من النص. تثبيت GSM7BIT هنا كان يُبطل الاشتقاق ويجعل كل رسالة عربية تصل Â«?????Â».
+        // الافتراضي AUTO: تشتق الخدمة الترميز من النص. تثبيت GSM7BIT هنا كان يُبطل الاشتقاق ويجعل كل رسالة عربية تصل «?????».
         val encoding = body["encoding"]?.toString() ?: DinstarHardwareService.AUTO_ENCODING
-        // اختياري: توجيه الإرسال لبوابة بعينها. للأدمن فقط â€” المستخدم العادي يُرسل حصراً من شريحته المربوطة
+        // اختياري: توجيه الإرسال لبوابة بعينها. للأدمن فقط — المستخدم العادي يُرسل حصراً من شريحته المربوطة
         val requestedHost = body["gatewayHost"]?.toString()
 
         val effectivePorts: List<Int>?
@@ -115,7 +115,7 @@ class DinstarSmsController(
             val scope = resolveBoundScope(user)
                 ?: return mapOf(
                     "error" to "SIM_NOT_BOUND",
-                    "message" to "No permanent SIM bound to this account â€” ask the administrator"
+                    "message" to "No permanent SIM bound to this account — ask the administrator"
                 )
             effectiveHost = scope.first
             effectivePorts = listOf(scope.second)
@@ -183,7 +183,7 @@ class DinstarSmsController(
         return hardware.querySmsDeliveryStatus(numbers, timeAfter, timeBefore)
     }
 
-    /** جلب SMS الواردة â€” المستخدم العادي يرى رسائل شريحته فقط */
+    /** جلب SMS الواردة — المستخدم العادي يرى رسائل شريحته فقط */
     @GetMapping("/incoming")
     fun queryIncomingSms(authentication: Authentication): Map<String, Any?> {
         val actor = UUID.fromString(authentication.name)

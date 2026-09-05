@@ -26,7 +26,7 @@ services:
       - EXTERNAL_SIGNALING_ADDRESS=${TURN_PUBLIC_HOST:-}
       - ASTERISK_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - ASTERISK_WSS_PORT=8089
-      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-secret-token}
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:?WEBRTC_SIP_SECRET is required (>= 32 chars)}
     ports:
       - "5060:5060/udp"
       - "8089:8089/tcp"

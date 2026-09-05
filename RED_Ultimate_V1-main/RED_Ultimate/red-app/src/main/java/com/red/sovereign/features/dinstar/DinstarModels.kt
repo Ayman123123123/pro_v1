@@ -5,8 +5,8 @@ import androidx.compose.ui.graphics.Color
 //
 // نماذج بوابة Dinstar UC2000-VE.
 //
-// âš ï¸ حالة الاستعمال (تحقّق 2026-08-19): المستعمَل حيًّا من هذا الملف هو
-// [YemenOperator] وحده â€” يعتمد عليه `calls/YemeniOperatorDetector.kt`
+// ⚠️ حالة الاستعمال (تحقّق 2026-08-19): المستعمَل حيًّا من هذا الملف هو
+// [YemenOperator] وحده — يعتمد عليه `calls/YemeniOperatorDetector.kt`
 // و`ui/components/SovereignUiComponents.kt` في 19 موضعًا.
 //
 // أما بقيّة النماذج ([DinstarPort]، [DinstarGatewayStatus]،
@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 // مكانها لوحة الإدارة لا جهاز المستخدم.
 //
 // أُبقيت هذه النماذج لأنها تصف عقد API البوابة الفعلي كما وثّقته
-// Â«Dinstar GSM Gateway HTTP API»، فهي مرجع صحيح لأي وصلٍ قادم ولا
+// «Dinstar GSM Gateway HTTP API»، فهي مرجع صحيح لأي وصلٍ قادم ولا
 // تُدخل سلوكًا في التطبيق ما دامت غير مستدعاة.
 //
 
@@ -38,7 +38,7 @@ data class DinstarPort(
     val signalDbm: Int? = null,
     /** القراءة الخام من `AT+CSQ`. القيمة 99 تعني «غير قابلة للكشف». */
     val signalRaw: Int? = null,
-    /** هل الإشارة كافية لحمل مكالمة (â€Žâ‰¥ -100 dBm)؟ */
+    /** هل الإشارة كافية لحمل مكالمة (‎≥ -100 dBm)؟ */
     val signalUsable: Boolean = false,
     val gprsState: String = "DETACH",
     val operatorName: String = "غير معروف",
@@ -57,7 +57,7 @@ data class DinstarPort(
     val isAvailable: Boolean
         get() = registrationState == "REGISTERED" && callState == "IDLE" && signalUsable
 
-    /** مسجّلة على الشبكة لكن بلا إشارة صالحة â€” حالة تستحق التنبيه. */
+    /** مسجّلة على الشبكة لكن بلا إشارة صالحة — حالة تستحق التنبيه. */
     val isRegisteredButUnusable: Boolean
         get() = registrationState == "REGISTERED" && !signalUsable
 
@@ -72,16 +72,16 @@ data class DinstarPort(
             else -> "جاهز"
         }
 
-    /** نص القوة للعرض â€” لا يختلق رقمًا حين لا يوجد قياس. */
+    /** نص القوة للعرض — لا يختلق رقمًا حين لا يوجد قياس. */
     val signalLabelAr: String
-        get() = signalDbm?.let { "$it dBm" } ?: "â€”"
+        get() = signalDbm?.let { "$it dBm" } ?: "—"
 }
 
 /**
  * مشغلو الهاتف المحمول في اليمن.
  *
  * **تصحيح البادئات:** كانت الخريطة السابقة تنسب `77x` إلى سبأفون
- * و`73x` إلى يمن موبايل و`71x` إلى MTN â€” وكلها معكوسة. البادئة الصحيحة
+ * و`73x` إلى يمن موبايل و`71x` إلى MTN — وكلها معكوسة. البادئة الصحيحة
  * تُحدَّد بأول رقمين بعد `+967` حسب خطة الترقيم اليمنية:
  *
  * | البادئة | المشغل |
@@ -104,7 +104,7 @@ enum class YemenOperator(
 ) {
     /**
      * `71` النطاق الأصلي (صنعاء وعموم البلاد، ومنه `718` عدن القديم).
-     * `722` نطاق عدن للجيل الرابع (VoLTE) â€” أُطلق مستقلًّا لا امتدادًا
+     * `722` نطاق عدن للجيل الرابع (VoLTE) — أُطلق مستقلًّا لا امتدادًا
      * لـ`71`، فيجب ذكره صراحةً وإلا قُرئ `72` وسقط في «غير معروف».
      */
     SABAFON("سبأفون", "Sabafon", setOf("71", "722"), Color(0xFFF25C5C)),
@@ -114,8 +114,8 @@ enum class YemenOperator(
     /**
      * ليس مشغّلًا بل غياب تعرُّف، فلونه محايد لا هوية تجارية له.
      * `9AAEBB` هو لون النص الثانوي في لوحة التطبيق (`RedTheme.kt`):
-     * الرمادي السابق `757575` كان يبلغ 4.15:1 على الخلفية â€” دون حدّ
-     * AA â€” بينما هذا يبلغ 8.34:1. وألوان المشغّلين الأربعة أعلاه
+     * الرمادي السابق `757575` كان يبلغ 4.15:1 على الخلفية — دون حدّ
+     * AA — بينما هذا يبلغ 8.34:1. وألوان المشغّلين الأربعة أعلاه
      * ألوان علامات تجارية فتبقى كما هي، وكلها تتجاوز 4.5:1.
      */
     UNKNOWN("غير معروف", "Unknown", setOf(), Color(0xFF9FB0C2));
@@ -144,7 +144,7 @@ enum class YemenOperator(
             if (name.isNullOrBlank()) return UNKNOWN
             return when {
                 name.contains("Sabafon", ignoreCase = true) || name.contains("سبأفون") -> SABAFON
-                // MTN اليمن صارت YOU في 2021 â€” الاسمان لمشغل واحد
+                // MTN اليمن صارت YOU في 2021 — الاسمان لمشغل واحد
                 name.contains("YOU", ignoreCase = true) || name.contains("MTN", ignoreCase = true) ||
                     name.contains("Yemeni Omani", ignoreCase = true) || name.contains("يو") -> YOU
                 name.contains("Yemen", ignoreCase = true) && name.contains("Mobile", ignoreCase = true) -> YEMEN_MOBILE
@@ -159,7 +159,7 @@ enum class YemenOperator(
 }
 
 data class DinstarGatewayStatus(
-    /** معرّف البوابة في سجل الأسطول â€” لازم للتمييز بين عدة أجهزة. */
+    /** معرّف البوابة في سجل الأسطول — لازم للتمييز بين عدة أجهزة. */
     val gatewayId: String? = null,
     val name: String = "",
     val isOnline: Boolean = false,
@@ -174,7 +174,7 @@ data class DinstarGatewayStatus(
     val activeCallCount: Int get() = ports.count { it.callState == "ACTIVE" }
     val availableCount: Int get() = ports.count { it.isAvailable }
 
-    /** مسجّلة لكن بلا إشارة صالحة â€” الفجوة التي كانت مخفية خلف نسبة 100%. */
+    /** مسجّلة لكن بلا إشارة صالحة — الفجوة التي كانت مخفية خلف نسبة 100%. */
     val registeredButUnusableCount: Int get() = ports.count { it.isRegisteredButUnusable }
 
     /**
@@ -190,14 +190,14 @@ data class DinstarGatewayStatus(
     /**
      * أفضل منفذ للمكالمة. الترتيب بالـ dBm لا بالنسبة، و`isAvailable`
      * يضمن استبعاد ما لا يحمل مكالمة. القرار النهائي للتوجيه يتخذه
-     * الخادم â€” هذا للعرض والتشخيص فقط.
+     * الخادم — هذا للعرض والتشخيص فقط.
      */
     val bestPortForCall: DinstarPort? get() =
         ports.filter { it.isAvailable }.maxByOrNull { it.signalDbm ?: Int.MIN_VALUE }
 }
 
 /**
- * حالة الأسطول كاملًا â€” عدة بوابات معًا.
+ * حالة الأسطول كاملًا — عدة بوابات معًا.
  *
  * النموذج السابق كان يفترض بوابة واحدة (`DinstarGatewayStatus` مفردة)،
  * فلم يكن ممكنًا عرض جهازين أو معرفة أيّهما حمل المكالمة.
@@ -213,7 +213,7 @@ data class DinstarFleetStatus(
     val usablePorts: Int get() = gateways.sumOf { it.availableCount }
     val activeCalls: Int get() = gateways.sumOf { it.activeCallCount }
 
-    /** Â«14 مسجّلة، منها 10 جاهزة» â€” الفرق الذي يحتاجه المسؤول. */
+    /** «14 مسجّلة، منها 10 جاهزة» — الفرق الذي يحتاجه المسؤول. */
     val summaryAr: String
         get() = "$registeredPorts شريحة مسجّلة، منها $usablePorts جاهزة"
 }
@@ -244,7 +244,7 @@ data class DinstarStatistics(
 /**
  * رسالة SMS واردة على إحدى شرائح البوابة.
  *
- * `port` هو فهرس المنفذ الذي استقبلها â€” يُعرَّف بـ -1 حين لا ترسله
+ * `port` هو فهرس المنفذ الذي استقبلها — يُعرَّف بـ -1 حين لا ترسله
  * البوابة، فلا يُخلط بالمنفذ 0 الحقيقي.
  */
 data class DinstarIncomingSms(
@@ -255,7 +255,7 @@ data class DinstarIncomingSms(
 )
 
 /**
- * قياسات عتاد البوابة نفسها â€” لا حالة المنافذ.
+ * قياسات عتاد البوابة نفسها — لا حالة المنافذ.
  *
  * مصدرها `/api/get_status` على الجهاز، يمرّرها الخادم عبر
  * `/api/admin/dinstar/device-status` ويحفظها في `dinstar_device_status`.
@@ -264,7 +264,7 @@ data class DinstarIncomingSms(
  * (`"45%"`, `"128MB"`, `"47C"`) وتتفاوت بين الإصدارات، فتحويلها إلى أرقام
  * هنا يفقد الوحدة ويكسر عند صيغة غير متوقَّعة. العرض يبقى كما أرسله الجهاز.
  *
- * استُعيد هذا النموذج في 2026-08-19: كانت السلسلة مقطوعة عند التطبيق â€”
+ * استُعيد هذا النموذج في 2026-08-19: كانت السلسلة مقطوعة عند التطبيق —
  * الجهاز يُنتج القياسات والخادم يخزّنها ولا شيء يستهلكها.
  */
 data class DinstarDeviceStatus(
@@ -275,11 +275,11 @@ data class DinstarDeviceStatus(
     val flashTotal: String? = null,
     val flashUsed: String? = null,
     val flashFree: String? = null,
-    /** حرارة اللوحة â€” المؤشر الأبكر على اختناق حراري يسبق سقوط المنافذ. */
+    /** حرارة اللوحة — المؤشر الأبكر على اختناق حراري يسبق سقوط المنافذ. */
     val temperature: String? = null,
     val uptime: String? = null
 ) {
-    /** true حين لم تصل أي قيمة â€” للتمييز بين "لم يُستعلم بعد" و"جهاز صامت". */
+    /** true حين لم تصل أي قيمة — للتمييز بين "لم يُستعلم بعد" و"جهاز صامت". */
     val isEmpty: Boolean
         get() = listOf(
             cpuUsed, memoryTotal, memoryUsed, memoryFree,

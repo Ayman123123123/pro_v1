@@ -1,0 +1,31 @@
+# نهايات الأسطر: السكربتات والملفات النصية الحساسة تصل Linux بـ LF (وإلا كسر bash/nginx).
+* text=auto
+
+*.sh          text eol=lf
+Dockerfile*   text eol=lf
+*.conf        text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.sql         text eol=lf
+*.kt          text eol=lf
+*.kts         text eol=lf
+*.ts          text eol=lf
+*.tsx         text eol=lf
+
+# بايتات لا يجوز لمسها
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.p12 binary
+*.jks binary
+*.keystore binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.db binary
+*.pack binary

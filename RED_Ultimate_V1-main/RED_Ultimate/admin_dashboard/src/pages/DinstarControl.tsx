@@ -14,7 +14,6 @@ import { usePolling } from '../hooks/usePolling';
 import NumberLearningCard from './NumberLearningCard';
 import SmsInbox from '../components/SmsInbox';
 import CallHistory from './CallHistory';
-import WebRtcDialer from '../components/WebRtcDialer';
 
 /**
  * صفحة بوابات DINSTAR — أسطول UC2000-VE.
