@@ -22,6 +22,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+import jakarta.annotation.PostConstruct
 
 @RestController
 @RequestMapping("/api/pstn")
@@ -47,9 +48,10 @@ class PstnBridgeController(
      */
     @PostConstruct
     internal fun validateSipSecret() {
-        require(sipSecret.length >= 32) {
-            "WEBRTC_SIP_SECRET must be set to >= 32 random characters (openssl rand -hex 32). " +
-                "A default or short secret allows any client to register and place billed calls."
+        require(sipSecret.length >= 32 && !sipSecret.startsWith("CHANGE_ME")) {
+            "WEBRTC_SIP_SECRET must be set to >= 32 random characters (openssl rand -hex 32) and " +
+                "must not be the CHANGE_ME placeholder from .env.example — otherwise any client " +
+                "that reads this repository can register and place billed calls."
         }
     }
 

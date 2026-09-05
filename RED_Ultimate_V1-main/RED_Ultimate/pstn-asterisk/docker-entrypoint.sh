@@ -397,6 +397,11 @@ if [ "${#WEBRTC_SIP_SECRET}" -lt 32 ]; then
   echo "FATAL: WEBRTC_SIP_SECRET is too short (${#WEBRTC_SIP_SECRET} chars, minimum 32)." >&2
   exit 1
 fi
+case "$WEBRTC_SIP_SECRET" in
+  CHANGE_ME*)
+    echo "FATAL: WEBRTC_SIP_SECRET is still the CHANGE_ME placeholder from .env.example; generate one with: openssl rand -hex 32" >&2
+    exit 1 ;;
+esac
 WEBRTC_SECRET="${WEBRTC_SIP_SECRET}"
 cat >> "$CONFIG_DIR/pjsip.conf" <<EOF
 
