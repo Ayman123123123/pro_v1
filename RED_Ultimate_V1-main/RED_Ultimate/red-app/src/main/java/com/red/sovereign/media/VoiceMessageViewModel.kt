@@ -38,7 +38,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * ðŸŽ™ï¸ YOUNES Sovereign Voice Message ViewModel â€” يدعم:
+ * 🎙️ YOUNES Sovereign Voice Message ViewModel — يدعم:
  *
  *  **التسجيل:**
  *  - MediaRecorder + AAC + 96kbps + 44.1kHz + M4A
@@ -219,7 +219,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ”’ تفعيل القفل â€” يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
+     * 🔒 تفعيل القفل — يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
      */
     fun lockRecording() {
         if (state is VoiceMessageState.Recording) {
@@ -230,7 +230,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ“¤ تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
+     * 📤 تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
      * إذا وصلت إلى CANCEL_THRESHOLD، يتم حذف التسجيل تلقائياً
      */
     fun updateCancelProgress(progress: Float) {
@@ -242,7 +242,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ“¤ إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
+     * 📤 إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
      * يحفظ الـ target و conversationId للإرسال اللاحق
      */
     fun stopAndPreview(targetRedId: String? = null, conversationId: String? = null) {
@@ -366,7 +366,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ—‘ï¸ حذف الـ preview والعودة إلى Idle
+     * 🗑️ حذف الـ preview والعودة إلى Idle
      */
     fun discardPreview() {
         previewPath?.let { File(it).delete() }
@@ -404,7 +404,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸŽšï¸ Trim silence from start and end of waveform
+     * 🎚️ Trim silence from start and end of waveform
      * Removes low-amplitude samples from the edges
      */
     private fun trimSilence(samples: List<Int>): List<Int> {
@@ -512,7 +512,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
 }
 
 /**
- * ðŸŽšï¸ Voice Quality Modes
+ * 🎚️ Voice Quality Modes
  * - STANDARD: 96kbps / 44.1kHz (افتراضي، توازن بين الحجم والجودة)
  * - HIGH: 128kbps / 44.1kHz (جودة عالية)
  * - ULTRA: 192kbps / 48kHz (جودة استوديو)

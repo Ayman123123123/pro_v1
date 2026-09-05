@@ -11,7 +11,7 @@ import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.settings.SettingsRuntime
 
 /**
- * يونس Application â€” نقطة الدخول القانونية للتطبيق
+ * يونس Application — نقطة الدخول القانونية للتطبيق
  * تهيئ كل الأنظمة قبل أول Activity
  */
 class YounesApplication : Application() {
@@ -72,7 +72,7 @@ class YounesApplication : Application() {
                 workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork2)
             }
         } catch (_: Exception) {}
-        // قنوات الإشعارات â€” مطلوبة لـ RedConnectionService و YounesCallService
+        // قنوات الإشعارات — مطلوبة لـ RedConnectionService و YounesCallService
         createNotificationChannels()
         // تنظيف دوري للقصص المنتهية — بدونه تتراكم صفوفها في القاعدة بلا حد
         com.red.sovereign.core.workers.StoryCleanupWorker.enqueue(this)
@@ -92,7 +92,7 @@ class YounesApplication : Application() {
             NotificationChannel("red_calls", getString(R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH).apply {
                 description = getString(R.string.channel_calls_desc)
             },
-            // قناة المكالمات الواردة â€” أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
+            // قناة المكالمات الواردة — أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
             NotificationChannel("red_calls_incoming", getString(R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
                 description = getString(R.string.channel_calls_incoming_desc)
                 enableVibration(true)

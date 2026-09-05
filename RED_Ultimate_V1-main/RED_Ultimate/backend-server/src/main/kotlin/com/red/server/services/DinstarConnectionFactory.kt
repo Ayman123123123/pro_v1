@@ -91,7 +91,7 @@ class DinstarConnectionFactory(
         val ssl = SSLContext.getInstance("TLS").apply { init(null, trustAll, SecureRandom()) }
 
         // الفحص يستخدم مهلة أقصر: عنوان بلا جهاز يجب أن يسقط بسرعة
-        // وإلا استغرق مسح â€Ž/24 دقائق.
+        // وإلا استغرق مسح ‎/24 دقائق.
         val timeout = if (probe) probeTimeout else connectTimeout
         val builder = OkHttpClient.Builder()
             .authenticator(CachingAuthenticatorDecorator(dispatching, authCache))
@@ -99,7 +99,7 @@ class DinstarConnectionFactory(
             .sslSocketFactory(ssl.socketFactory, trustAll[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true }
 
-        // SPKI pinning â€” نفس منطق DinstarHardwareService: الثقة المحلية
+        // SPKI pinning — نفس منطق DinstarHardwareService: الثقة المحلية
         // للشهادات الذاتية لا تلغي تحقق OkHttp من الدبوس بعد بناء السلسلة.
         certPinsConfig.split(',')
             .map { it.trim() }
@@ -122,7 +122,7 @@ class DinstarConnectionFactory(
 
     /**
      * عميل موجّه إلى بوابة واحدة. كل الاستدعاءات هنا موثّقة في
-     * Â«UC2000 HTTP API»؛ أي عملية غير موثّقة تُرفض في الطبقة الأعلى
+     * «UC2000 HTTP API»؛ أي عملية غير موثّقة تُرفض في الطبقة الأعلى
      * بدل اختراع مسار.
      */
     class DinstarClient(
@@ -167,10 +167,10 @@ class DinstarConnectionFactory(
         /**
          * استعلام المنافذ مع الاحتفاظ بالرقم التسلسلي.
          *
-         * توثيق `get_port_info` (Â§10.3) ينص على أن **كل استجابة تحمل
+         * توثيق `get_port_info` (§10.3) ينص على أن **كل استجابة تحمل
          * حقل `sn`** = الرقم التسلسلي للبوابة. كان يُهمَل ويُقرأ التسلسلي
          * من `get_status` وحده، وهو أمر لا تدعمه الإصدارات الأقدم من
-         * 1102 â€” فتفقد تلك الأجهزة هويتها الثابتة وتُعرَّف بعنوانها
+         * 1102 — فتفقد تلك الأجهزة هويتها الثابتة وتُعرَّف بعنوانها
          * الشبكي الذي يتبدّل مع DHCP.
          */
         fun queryPorts(portCount: Int = 8): PortQuery {
@@ -212,7 +212,7 @@ class DinstarConnectionFactory(
             return http.newCall(withAccept).execute().use { response ->
                 if (!response.isSuccessful) {
                     val challenge = response.challenges().joinToString(", ") { "${it.scheme} realm=${it.realm}" }
-                    log.warn("DINSTAR HTTP {} on {}{} â€” challenge: {}",
+                    log.warn("DINSTAR HTTP {} on {}{} — challenge: {}",
                         response.code, endpointLabel, request.url.encodedPath, challenge)
                     throw IllegalStateException(
                         "DINSTAR HTTP ${response.code} on ${request.url.encodedPath} ($endpointLabel)"

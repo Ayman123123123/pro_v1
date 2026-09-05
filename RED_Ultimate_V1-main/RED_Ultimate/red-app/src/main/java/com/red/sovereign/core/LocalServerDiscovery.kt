@@ -45,7 +45,7 @@ class LocalServerDiscovery(private val context: Context) {
         .followSslRedirects(false)
         .build()
 
-    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً â€” يعيد العنوان المقبول أو null. */
+    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً — يعيد العنوان المقبول أو null. */
     suspend fun verifyExplicit(base: String): String? = withContext(Dispatchers.IO) {
         val normalized = base.trim().ifBlank { return@withContext null }
         val withScheme = if (normalized.contains("://")) normalized else "http://$normalized"
@@ -59,7 +59,7 @@ class LocalServerDiscovery(private val context: Context) {
         }
         
         val known = knownBases()
-        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين â€” اكتشاف سريع ثم شامل لاحقاً.
+        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين — اكتشاف سريع ثم شامل لاحقاً.
         firstVerified(known, FAST_BUDGET_MS)?.let { found ->
             ServerEndpoint.update(context, found)
             return@withContext ApiResult.Success(200, found)
@@ -135,7 +135,7 @@ class LocalServerDiscovery(private val context: Context) {
         val seeds = buildList {
             add(ServerEndpoint.url())
             addAll(candidates)
-            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) â€” عنوان تطوير قياسي وليس IP LAN حقيقي.
+            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) — عنوان تطوير قياسي وليس IP LAN حقيقي.
             add("http://10.0.2.2:8088")
         }
         seeds.forEach { seed ->
@@ -173,7 +173,7 @@ class LocalServerDiscovery(private val context: Context) {
             }
         }
 
-        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف â€” مفيد عند وجود توجيه بين الشبكتين.
+        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف — مفيد عند وجود توجيه بين الشبكتين.
         val knownHost = YounesServerSignature.hostOf(BuildConfig.RED_SERVER_URL)
         if (knownHost != null && knownHost != lastKnown) {
             val parts = knownHost.split('.').map { it.toIntOrNull() }

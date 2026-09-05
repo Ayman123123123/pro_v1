@@ -98,7 +98,7 @@ data class NetworkStats(
 }
 
 /**
- * WebRtcEngine â€” المحرك الأساسي للمكالمات.
+ * WebRtcEngine — المحرك الأساسي للمكالمات.
  * يتضمن:
  * - Audio constraints كاملة (AEC, NS, AGC, HighPass, Stereo, TypingNoise)
  * - Hardware vs Software AEC toggle
@@ -115,7 +115,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
-        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) â€” المكالمة تستمر صوتياً ويُعلم المستخدم. */
+        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — المكالمة تستمر صوتياً ويُعلم المستخدم. */
         fun onCameraUnavailable() {
             android.util.Log.w("WebRtcEngine", "Camera unavailable - call continues in audio-only mode")
         }
@@ -175,7 +175,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     private var svcEnabled: Boolean = false
     private var mediaKind: CallMediaKind = CallMediaKind.VOICE
     private var lastStats: NetworkStats = NetworkStats()
-    // تتبع تفاضلي لمعدل البايتات â€” نحسب kbps الحقيقي كفرق بين دورتين Ã· الزمن
+    // تتبع تفاضلي لمعدل البايتات — نحسب kbps الحقيقي كفرق بين دورتين ÷ الزمن
     private var lastBytesReceived: Long = 0L
     private var lastStatsElapsedMs: Long = 0L
 
@@ -200,7 +200,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     /**
      * ينشئ PeerConnection مع ICE servers و media tracks.
      * @param video true إذا مكالمة فيديو
-     * @param simulcastEnabled true لإرسال 3 طبقات (HD/SD/LD) â€” يقلل الـ bandwidth للـ SFU
+     * @param simulcastEnabled true لإرسال 3 طبقات (HD/SD/LD) — يقلل الـ bandwidth للـ SFU
      */
     suspend fun create(video: Boolean, simulcastEnabled: Boolean = true, svc: Boolean = false): ApiResult<Unit> {
         val kind = when {
@@ -221,7 +221,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
         val pc = created
 
-        // Audio constraints كاملة â€” AEC, NS, AGC, HighPass, Stereo, TypingNoise
+        // Audio constraints كاملة — AEC, NS, AGC, HighPass, Stereo, TypingNoise
         val audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
@@ -254,7 +254,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     /**
      * PeerConnection للاستقبال فقط (SFU consume): بدون أي tracks محلية.
-     * يُستخدم في مسار media-sfu لاستقبال بث الأعضاء الآخرين â€” نفس ICE servers
+     * يُستخدم في مسار media-sfu لاستقبال بث الأعضاء الآخرين — نفس ICE servers
      * ونفس إعدادات السياسة، ويُحدَّث mediaKind لضبط constraints الإجابة (answer).
      */
     suspend fun createReceiverOnly(kind: CallMediaKind): ApiResult<Unit> {
@@ -273,7 +273,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
      * @return true إذا أصبح الفيديو المحلي متاحاً.
      */
     fun retryCamera(): Boolean {
-        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن â€” تُسجَّل الرغبة أولاً
+        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن — تُسجَّل الرغبة أولاً
         cameraRequestedByUser = true
         if (capturer != null || localMedia?.videoTrack != null) return true
         val pc = peer ?: return false
@@ -499,7 +499,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                             jitter = ((stat.members["jitter"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
                             fps = (stat.members["framesPerSecond"] as? Number)?.toInt() ?: 0
                         }
-                        // سعة الشبكة الفعلية تُقرأ من زوج المرشحين الحالي â€” وليس من تقرير الطرف البعيد
+                        // سعة الشبكة الفعلية تُقرأ من زوج المرشحين الحالي — وليس من تقرير الطرف البعيد
                         "candidate-pair" -> {
                             val isSelected = (stat.members["selected"] as? Boolean) ?: false
                             if (isSelected) {
@@ -510,7 +510,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                 }
                 val total = packetsLost + packetsReceived
                 val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
-                // معدل الحزمة الفعلي: فرق البايتات بين الدورتين Ã· الزمن المنقضي (kbps)
+                // معدل الحزمة الفعلي: فرق البايتات بين الدورتين ÷ الزمن المنقضي (kbps)
                 val nowMs = System.currentTimeMillis()
                 val elapsedMs = nowMs - (lastStatsElapsedMs.takeIf { it > 0L } ?: nowMs)
                 lastStatsElapsedMs = nowMs
@@ -533,7 +533,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         localMedia?.audioTrack?.dispose(); localMedia?.videoTrack?.dispose()
         audioSource?.dispose(); videoSource?.dispose(); audioSource = null; videoSource = null
         peer?.close(); peer?.dispose(); peer = null; localMedia = null
-        // factory و audioDevice و egl ثقيلة â€” لا نحذفها كل مكالمة (Singleton). تُحفظ لإعادة الاستخدام
+        // factory و audioDevice و egl ثقيلة — لا نحذفها كل مكالمة (Singleton). تُحفظ لإعادة الاستخدام
     }
 
     private suspend fun loadIce(): IceConfigurationDto? = withContext(Dispatchers.IO) {
@@ -547,7 +547,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     }
 
     private fun createVideoTrack(): VideoTrack? {
-        // إذن الكاميرا غير ممنوح â†’ لا نحاول أبداً (Camera2Enumerator قد يرمي SecurityException)
+        // إذن الكاميرا غير ممنوح → لا نحاول أبداً (Camera2Enumerator قد يرمي SecurityException)
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
             != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {

@@ -16,11 +16,11 @@ import java.time.ZoneId
 import java.util.UUID
 
 /**
- * ðŸ“ž Human Behavior â†’ Phone Number Learning â€” Call mode
+ * 📞 Human Behavior → Phone Number Learning — Call mode
  *
  * محرك سلوك بشري: يُنشئ مكالمات قصيرة عشوائية التوقيت والمدة من شرائح DINSTAR نحو
- * مجمّع أرقام متعلَّمة، ضمن نافذة زمنية وسقف يومي لكل منفذ â€” عبر المسار المعتمد رسمياً
- * (Younes â†’ Asterisk AMI â†’ PJSIP â†’ DINSTAR) وليس عبر نقاط API مختلقة على البوابة.
+ * مجمّع أرقام متعلَّمة، ضمن نافذة زمنية وسقف يومي لكل منفذ — عبر المسار المعتمد رسمياً
+ * (Younes → Asterisk AMI → PJSIP → DINSTAR) وليس عبر نقاط API مختلقة على البوابة.
  */
 @Service
 class NumberLearningService(
@@ -110,10 +110,14 @@ class NumberLearningService(
         }
     }
 
-    // â”â”â”â”â”â”â”â”â”â” Config â”â”â”â”â”â”â”â”â”â”
+    // ━━━━━━━━━━ Config ━━━━━━━━━━
 
     fun getConfig(): Map<String, Any?> {
         val row = jdbc.queryForMap("SELECT * FROM number_learning_config WHERE id = 1")
+        // كان poolSize يعيد تنفيذ استعلام poolActiveSize نفسه، فتعرض اللوحة «المجمّع» بعدد
+        // الفعّال فقط. استعلامان كافيان: الفعّال والإجمالي.
+        val poolActive = jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_pool WHERE active", Int::class.java) ?: 0
+        val poolTotal = jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_pool", Int::class.java) ?: 0
         return mapOf(
             "mode" to row["mode"],
             "windowStartMinute" to row["window_start_minute"],
@@ -124,17 +128,17 @@ class NumberLearningService(
             "maxIntervalMinutes" to row["max_interval_minutes"],
             "dailyCapPerPort" to row["daily_cap_per_port"],
             "enabledPorts" to (row["enabled_ports"]?.toString() ?: ""),
-            // SMS mode â€” comprehensive
+            // SMS mode — comprehensive
             "smsMode" to (row["sms_mode"] ?: "OFF"),
             "smsDailyCapPerPort" to (row["sms_daily_cap_per_port"] ?: 4),
             "smsMinIntervalMinutes" to (row["sms_min_interval_minutes"] ?: 60),
             "smsMaxIntervalMinutes" to (row["sms_max_interval_minutes"] ?: 240),
-            "smsTemplate" to (row["sms_template"] ?: "مرحبا â€” رسالة تعلم"),
+            "smsTemplate" to (row["sms_template"] ?: "مرحبا — رسالة تعلم"),
             "autoLearnFromCdr" to (row["auto_learn_from_cdr"] ?: false),
             "autoLearnFromInbound" to (row["auto_learn_from_inbound"] ?: true),
-            "poolSize" to jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_pool WHERE active", Int::class.java),
-            "poolActiveSize" to jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_pool WHERE active", Int::class.java),
-            "poolTotalSize" to jdbc.queryForObject("SELECT COUNT(*) FROM number_learning_pool", Int::class.java),
+            "poolSize" to poolTotal,
+            "poolActiveSize" to poolActive,
+            "poolTotalSize" to poolTotal,
             "updatedAt" to row["updated_at"]
         )
     }
@@ -168,7 +172,7 @@ class NumberLearningService(
             require(it.matches(Regex("^((1[0-5]|[0-9])(,(1[0-5]|[0-9]))*)?$"))) { "enabledPorts must be CSV of 0-15 or empty" }
             add("enabled_ports", it.trim())
         }
-        // SMS mode â€” comprehensive
+        // SMS mode — comprehensive
         (patch["smsMode"] as? String)?.let {
             require(it in setOf("OFF", "LEARN", "MAINTAIN")) { "smsMode must be OFF|LEARN|MAINTAIN" }
             add("sms_mode", it)
@@ -214,7 +218,7 @@ class NumberLearningService(
         return getConfig()
     }
 
-    // â”â”â”â”â”â”â”â”â”â” Pool â”â”â”â”â”â”â”â”â”â”
+    // ━━━━━━━━━━ Pool ━━━━━━━━━━
 
     fun listPool(): List<Map<String, Any?>> =
         jdbc.queryForList("SELECT id, number, label, source, active, added_at, last_used_at, success_count, fail_count, notes FROM number_learning_pool ORDER BY added_at DESC")
@@ -253,7 +257,7 @@ class NumberLearningService(
         return mapOf("deleted" to true)
     }
 
-    /** Yemeni local format (6..12 digits, known mobile prefix or â‰¥9 digits) */
+    /** Yemeni local format (6..12 digits, known mobile prefix or ≥9 digits) */
     private fun normalizeNumber(raw: String): String? {
         val digits = raw.filter { it.isDigit() }
         val local = when {
@@ -269,7 +273,7 @@ class NumberLearningService(
         return if (validMobile || local.length >= 9) local else null
     }
 
-    // â”â”â”â”â”â”â”â”â”â” Calls & Engine â”â”â”â”â”â”â”â”â”â”
+    // ━━━━━━━━━━ Calls & Engine ━━━━━━━━━━
 
     fun listCalls(limit: Int): List<Map<String, Any?>> =
         jdbc.queryForList("SELECT id,port,number,correlation_id,mode,status,duration_seconds,error,started_at,next_eligible_at FROM number_learning_calls ORDER BY started_at DESC LIMIT ?", limit.coerceIn(1, 200))
@@ -363,7 +367,7 @@ class NumberLearningService(
             if (eligibleAt != null && Instant.now().isBefore(eligibleAt)) continue
 
             originateOne(port, pool[rnd.nextInt(pool.size)], mode, minDur, maxDur, minInt, maxInt)
-            return // مكالمة واحدة لكل نبضة â€” إيقاع بشري غير متزامن بين المنافذ
+            return // مكالمة واحدة لكل نبضة — إيقاع بشري غير متزامن بين المنافذ
         }
     }
 
@@ -458,7 +462,7 @@ class NumberLearningService(
         }.onFailure { log.warn("sweepCompleted failed: {}", it.message) }
     }
 
-    // â”â”â”â”â”â”â”â”â”â” Native-gateway probe (read-only) â”â”â”â”â”â”â”â”â”â”
+    // ━━━━━━━━━━ Native-gateway probe (read-only) ━━━━━━━━━━
 
     /**
      * فحص آمن (GET فقط) لمسارات Human Behavior/Number Learning الأصلية المحتملة على البوابة.
