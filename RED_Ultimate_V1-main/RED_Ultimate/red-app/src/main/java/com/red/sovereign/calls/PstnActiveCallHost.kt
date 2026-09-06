@@ -24,7 +24,7 @@ fun PstnActiveCallHost(
     onDismiss: () -> Unit = {}
 ) {
     // التقط المرجع عند الدخول فقط — لا يعاد التركيب عند تغيره أثناء المكالمة
-    val manager = remember { PstnWebRtcManager.activeUi }
+    val manager = remember { PstnLinphoneManager.activeUi }
     if (manager == null) return
 
     val state by manager.stateFlow.collectAsState()

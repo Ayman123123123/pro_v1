@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.auth.UserResponse
+import com.red.sovereign.calls.PstnLinphoneConfig
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
@@ -40,6 +41,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     init {
         ServerEndpoint.initialize(application)
         serverState = ServerState.Ready(ServerEndpoint.url())
+        // حمّل إعدادات خط PSTN (SIP على UC200 Pro) المخزَّنة محلياً فوق الافتراضية.
+        viewModelScope.launch {
+            runCatching { PstnLinphoneConfig.load(getApplication()) }
+        }
         restore()
     }
 
@@ -114,9 +119,31 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** WebRTC-PSTN bridge: connect to Asterisk via WSS, dial through DINSTAR GSM */
-    private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
+    /** PSTN manager (Linphone) — يسجّل مباشرة على UC200 Pro لا عبر جسر Asterisk */
+    private var pstnWebRtc: com.red.sovereign.calls.PstnLinphoneManager? = null
     var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
+
+    /**
+     * أحداث المكالمات الواردة (تُربط بالمثيل المستمر لـ PstnLinphoneManager).
+     * مع تسجيل Linphone المباشر على UC200 Pro تصل الوارد عبر التسجيل المستمر
+     * (لا عبر WebSocket الخادم)، فهذا المعالج يعرض شاشة الرنين عند وصول INVITE.
+     */
+    private val pstnIncomingEvents = object : com.red.sovereign.calls.PstnWebRtcManager.Events {
+        override fun onConnected() = Unit
+        override fun onRinging() = Unit
+        override fun onAnswered(usedToday: Int, dailyLimit: Int) = Unit
+        override fun onIncoming(sdp: String, fromNumber: String) {
+            incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
+            pstnState = PstnState.Incoming(fromNumber)
+        }
+        override fun onHangup(cause: String?) {
+            pstnState = PstnState.Idle
+            pstnWebRtc?.release()
+            pstnWebRtc = null
+            stopPstnEventStream()
+        }
+        override fun onError(message: String) = Unit
+    }
 
     /**
      * قناة أحداث الخادم الحيّة لمكالمة PSTN الصادرة عبر `/ws/pstn`.
@@ -175,7 +202,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         refreshPstnEntitlement()
         pstnState = PstnState.Bridging
         startPstnEventStream()
-        val mgr = com.red.sovereign.calls.PstnWebRtcManager(getApplication())
+        // مثيل مستمر واحد لصادر/وارد (تسجيل واحد على UC200 Pro)
+        val mgr = com.red.sovereign.calls.PstnLinphoneManager.incoming(getApplication())
+        mgr.setGlobalEvents(pstnIncomingEvents)
         pstnWebRtc = mgr
         mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
             override fun onConnected() { pstnState = PstnState.Registering }
