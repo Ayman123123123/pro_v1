@@ -59,8 +59,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -74,6 +76,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.core.ServerEndpoint
+import com.red.sovereign.calls.PstnLinphoneConfig
+import kotlinx.coroutines.launch
+import org.linphone.core.TransportType
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
@@ -377,10 +382,48 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { LockedSetting("النسخ الاحتياطي السحابي", "معطل لحماية مفاتيح الهوية والمحادثات") }
 }
 
-@Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
-    item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
-    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
-    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
+@Composable private fun CallSettings(vm: SettingsViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pstnExt by remember { mutableStateOf(PstnLinphoneConfig.extension) }
+    var pstnPwd by remember { mutableStateOf(PstnLinphoneConfig.password) }
+    var pstnHost by remember { mutableStateOf(PstnLinphoneConfig.pbxHost) }
+    var pstnPort by remember { mutableStateOf(PstnLinphoneConfig.pbxPort.toString()) }
+    var pstnTransport by remember { mutableStateOf(PstnLinphoneConfig.transport.name) }
+    var pstnSaved by remember { mutableStateOf(false) }
+
+    SettingsList {
+        item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
+        item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
+        item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
+
+        // ===== خط PSTN عبر UC200 Pro (SIP) =====
+        item { InfoCard("خط PSTN عبر UC200 Pro (SIP)", "يُسجَّل التطبيق كـ Extension على IP-PBX للاتصال الداخلي والخارجي.", Icons.Default.Call) }
+        item { OutlinedTextField(pstnExt, { pstnExt = it.take(32) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("رقم Extension") }) }
+        item { OutlinedTextField(pstnPwd, { pstnPwd = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("كلمة سر SIP") }) }
+        item { OutlinedTextField(pstnHost, { pstnHost = it.take(45) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("عنوان UC200 Pro (IP)") }) }
+        item { OutlinedTextField(pstnPort, { pstnPort = it.filter { c -> c.isDigit() }.take(5) }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("المنفذ (5060 UDP / 5061 TLS)") }) }
+        item {
+            Text("نقل النقل (Transport)", fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                listOf("Udp" to "UDP", "Tcp" to "TCP", "Tls" to "TLS").forEach { (id, label) ->
+                    AssistChip({ pstnTransport = id }, { Text(label) }, leadingIcon = { if (pstnTransport == id) Text("●") })
+                }
+            }
+        }
+        item {
+            Button({
+                PstnLinphoneConfig.extension = pstnExt
+                PstnLinphoneConfig.password = pstnPwd
+                PstnLinphoneConfig.pbxHost = pstnHost
+                PstnLinphoneConfig.pbxPort = pstnPort.toIntOrNull() ?: 5060
+                PstnLinphoneConfig.transport = runCatching { TransportType.valueOf(pstnTransport) }.getOrDefault(TransportType.Udp)
+                scope.launch { runCatching { PstnLinphoneConfig.persist(context) } }
+                pstnSaved = true
+            }, Modifier.fillMaxWidth()) { Text("حفظ إعدادات خط PSTN") }
+        }
+        if (pstnSaved) item { Text("تم الحفظ محلياً. أعد الاتصال لتطبيق التغييرات.", color = YounesEmerald, fontSize = 12.sp) }
+    }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {

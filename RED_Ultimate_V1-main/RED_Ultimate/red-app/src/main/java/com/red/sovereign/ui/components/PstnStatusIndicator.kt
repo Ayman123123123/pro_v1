@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.calls.PstnLinphoneManager
 import com.red.sovereign.calls.PstnWebRtcManager
 import com.red.sovereign.calls.YemeniOperatorDetector
 import androidx.compose.material.icons.Icons
@@ -31,7 +32,7 @@ fun PstnStatusIndicator(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val pstnManager = remember { PstnWebRtcManager.incoming(context) }
+    val pstnManager = remember { PstnLinphoneManager.incoming(context) }
     val pstnState by pstnManager.stateFlow.collectAsState()
 
     val operatorInfo = remember(targetNumber) {

@@ -116,6 +116,10 @@ dependencyResolutionManagement {
         maven {
             url = uri("https://maven.aliyun.com/repository/public")
         }
+        // Linphone SDK (liblinphone) — SIP client for PSTN calls via UC200 Pro
+        maven {
+            url = uri("https://download.linphone.org/maven_repository/")
+        }
         mavenCentral()
     }
     versionCatalogs {

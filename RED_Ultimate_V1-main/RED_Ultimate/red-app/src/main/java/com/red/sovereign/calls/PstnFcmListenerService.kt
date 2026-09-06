@@ -48,5 +48,7 @@ class PstnFcmListenerService : FirebaseMessagingService() {
             getSharedPreferences("pstn_fcm", MODE_PRIVATE)
                 .edit().putString("last_token", token).apply()
         }
+        // ارفع الرمز إلى Linphone لدعم المكالمات الواردة في الخلفية عبر التسجيل المباشر.
+        runCatching { PstnLinphoneManager.incoming(applicationContext).setPushToken(token) }
     }
 }

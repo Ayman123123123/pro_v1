@@ -64,7 +64,7 @@ class PstnIncomingCallCoordinator(private val application: Application) {
      */
     fun acceptIncoming(): Boolean {
         val inc = activeIncoming ?: return false
-        val mgr = PstnWebRtcManager.incoming(application)
+        val mgr = PstnLinphoneManager.incoming(application)
         mgr.acceptIncomingListener()
         val ok = socket.sendControl("PSTN_ACCEPT", mapOf("channel" to inc.channel, "callId" to inc.callId))
         Log.i(TAG, "PSTN_ACCEPT sent for ${inc.channel}: $ok")
@@ -74,7 +74,7 @@ class PstnIncomingCallCoordinator(private val application: Application) {
     /** رفض المكالمة: الخادم ينهي قناة GSM فوراً ويحرر المنفذ. */
     fun rejectIncoming(): Boolean {
         val inc = activeIncoming ?: return false
-        PstnWebRtcManager.incoming(application).stopIncomingListener()
+        PstnLinphoneManager.incoming(application).stopIncomingListener()
         val ok = socket.sendControl("PSTN_REJECT", mapOf("channel" to inc.channel, "callId" to inc.callId))
         Log.i(TAG, "PSTN_REJECT sent for ${inc.channel}: $ok")
         if (ok) activeIncoming = null
@@ -88,6 +88,12 @@ class PstnIncomingCallCoordinator(private val application: Application) {
         // تتبع المقدمة: foregroundActivities>0 يعني إطلاق مباشر آمن.
         application.registerActivityLifecycleCallbacks(lifecycleTracker)
         socket.connect()
+        // ارفع رمز Push إلى Linphone لدعم المكالمات الواردة في الخلفية.
+        runCatching {
+            PstnLinphoneManager.incoming(application).setPushToken(
+                TokenStore(application).fcmToken ?: ""
+            )
+        }
     }
 
     private val lifecycleTracker = object : android.app.Application.ActivityLifecycleCallbacks {
@@ -155,7 +161,7 @@ class PstnIncomingCallCoordinator(private val application: Application) {
         // سجّل red-webrtc-client فوراً بالتوازي مع الرنين — الاعتماد على
         // /api/pstn/incoming-bridge (offer قصير العمر مرتبط بـ callId).
         runCatching {
-            PstnWebRtcManager.incoming(application).startIncomingListener(callId)
+            PstnLinphoneManager.incoming(application).startIncomingListener(callId)
         }.onFailure { Log.w(TAG, "incoming listener: ${it.message}") }
 
         // حافظ على العملية حية أثناء الرنين والمكالمة (كانت الخدمة غير مسجلة

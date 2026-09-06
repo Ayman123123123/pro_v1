@@ -280,7 +280,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
 
     // لـ PSTN: راقب انتقال المكالمة إلى ACTIVE — عندها أغلق شاشة الرنين واعرض شاشة المكالمة النشطة
     if (isPstn && viewModel.pstnAccepting) {
-        val pstnManager = remember { PstnWebRtcManager.incoming(viewModel.getApplication()) }
+        val pstnManager = remember { PstnLinphoneManager.incoming(viewModel.getApplication()) }
         val pstnState by pstnManager.stateFlow.collectAsState()
         LaunchedEffect(pstnState) {
             if (pstnState == PstnWebRtcManager.PstnCallState.ACTIVE) {

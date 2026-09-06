@@ -1,4 +1,4 @@
-﻿plugins {
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlinx.serialization)
@@ -157,6 +157,9 @@ dependencies {
     implementation(libs.androidx.core.telecom)
     implementation(libs.webrtc.android)
     implementation(project(":shared-proto"))
+    // Linphone SDK (liblinphone) — SIP client replacing WebRTC for PSTN calls via UC200 Pro.
+    // minimal flavor = no video / no GPL third parties (~19MB AAR).
+    implementation("org.linphone.minimal:linphone-sdk-android:5.3.106")
 
     // DataStore for ScheduledCalls
     implementation(libs.androidx.datastore.preferences)
