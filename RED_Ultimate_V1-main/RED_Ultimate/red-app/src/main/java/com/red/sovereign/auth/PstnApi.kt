@@ -1,26 +1,6 @@
 package com.red.sovereign.auth
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-
-/**
- * يبني جسم `POST /api/pstn/bridge` — دالة نقية قابلة لاختبار JVM.
- *
- * كانت `buildMap<String, Any>` + `encodeToString` ترمي
- * `SerializationException: Serializer for class 'Any' is not found`
- * فتسقط التطبيق عند كل ضغطة زر اتصال (مثبت من logcat حي).
- */
-internal fun buildBridgePayload(number: String, port: Int? = null): String {
-    val json = Json { ignoreUnknownKeys = true }
-    val obj = buildJsonObject {
-        put("number", JsonPrimitive(number))
-        if (port != null) put("port", JsonPrimitive(port))
-    }
-    return json.encodeToString(obj)
-}
 
 @Serializable data class PstnCallRequest(val number: String, val slotIndex: Int? = null)
 @Serializable data class PstnCallResponse(val port: Int?,
@@ -52,7 +32,6 @@ data class BridgeIceConfig(val expiresAt: Long, val iceServers: List<BridgeIceSe
 @Serializable
 data class BridgeIceServerDto(val urls: List<String>, val username: String? = null, val credential: String? = null)
 
-// 📨 SMS Models
 @Serializable data class SmsSendRequest(val text: String, val gatewayHost: String? = null, val encoding: String = "unicode", val param: List<SmsParam>)
 @Serializable data class SmsParam(val number: String, val user_id: String? = null)
 @Serializable data class SmsSendResponse(val status: String, val messageId: String? = null)
@@ -68,85 +47,21 @@ data class BridgeIceServerDto(val urls: List<String>, val username: String? = nu
 )
 
 class PstnApi(private val tokens: TokenStore) {
-    private val client = AuthorizedApiClient(tokens)
-    private val json = Json { ignoreUnknownKeys = true }
-
-    /**
-     * بدء مكالمة PSTN.
-     * @param slotIndex منفذ/شريحة محددة (اختياري) — null يعني الاختيار الذكي
-     *                 عبر موزّع الأحمال (إشارة + مشغل داخل الشبكة + استخدام).
-     */
-    suspend fun dial(number: String, slotIndex: Int? = null): ApiResult<PstnCallResponse> {
-        return when (val result = client.request("POST", "/api/pstn/calls", json.encodeToString(PstnCallRequest(number, slotIndex)))) {
-            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<PstnCallResponse>(result.value)) }
-                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
-
-    suspend fun hangup(callId: String, port: Int = -1): ApiResult<Boolean> {
-        return when (val result = client.request("POST", "/api/pstn/calls/$callId/hangup", "{\"port\":$port}")) {
-            is ApiResult.Success -> ApiResult.Success(result.code, true)
-            is ApiResult.Error -> result.let { ApiResult.Error(it.code, it.message) }
-        }
-    }
-
-    suspend fun hangupBridge(callId: String): ApiResult<Boolean> {
-        return when (val result = client.request("POST", "/api/pstn/bridge/$callId/hangup", "")) {
-            is ApiResult.Success -> ApiResult.Success(result.code, true)
-            is ApiResult.Error -> result
-        }
-    }
-
-    suspend fun bridge(number: String, port: Int? = null): ApiResult<BridgeResponse> {
-        // (انظر buildBridgePayload أعلاه — إصلاح انهيار زر الاتصال.)
-        val payload = buildBridgePayload(number, port)
-        return when (val result = client.request("POST", "/api/pstn/bridge", payload)) {
-            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<BridgeResponse>(result.value)) }
-                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
-
-    /**
-     * بيانات الجسر للمكالمة الواردة (اعتماد المالك + SIP creds + ICE).
-     * لا يحجز منفذ صادر — يعمل فقط أثناء عرض offer قصير العمر.
-     */
-    suspend fun incomingBridge(callId: String): ApiResult<BridgeResponse> {
-        return when (val result = client.request("POST", "/api/pstn/incoming-bridge", json.encodeToString(mapOf("callId" to callId)))) {
-            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<BridgeResponse>(result.value)) }
-                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
-
-    // 📨 SMS — المسار الدائم الموحد /api/sms (سابقاً كان يضرب /api/admin/dinstar/sms مباشرةً
-    // على الجهاز بلا حفظ في sms_messages، فتضيع الرسالة عند إعادة تشغيل البوابة).
-    // الآن يمر عبر SmsService الدائم 1:1 — كل مستخدم يرسل حتماً من شريحته المربوطة.
-    suspend fun sendSms(recipient: String, text: String, encoding: String = "unicode"): ApiResult<SmsSendResponse> {
-        // نوحد على /api/sms/send الدائم — port=null يعني "شريحتي المربوطة"
-        val payload = mapOf("number" to recipient, "text" to text)
-        return when (val result = client.request("POST", "/api/sms/send", json.encodeToString(payload))) {
-            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsSendResponse>(result.value)) }
-                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
-
-    @Deprecated(
-        message = "استخدم SmsApi.conversations() + refresh() — هذا المسار يقرأ صندوق الجهاز المتطاير بلا حفظ",
-        replaceWith = ReplaceWith("SmsApi(tokens).conversations()", "com.red.sovereign.features.sms.SmsApi"),
-        level = DeprecationLevel.WARNING
-    )
-    suspend fun getInbox(): ApiResult<List<SmsIncomingMessage>> {
-        return when (val result = client.request("GET", "/api/admin/dinstar/sms/incoming", "")) {
-            is ApiResult.Success -> runCatching { ApiResult.Success(result.code, json.decodeFromString<SmsIncomingResponse>(result.value).messages) }
-                .getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
-            is ApiResult.Error -> result
-        }
-    }
+    suspend fun dial(number: String, slotIndex: Int? = null): ApiResult<PstnCallResponse> = ApiResult.Error(500, "STUB")
+    suspend fun hangup(callId: String, port: Int = -1): ApiResult<Boolean> = ApiResult.Error(500, "STUB")
+    suspend fun hangupBridge(callId: String): ApiResult<Boolean> = ApiResult.Error(500, "STUB")
+    suspend fun bridge(number: String, port: Int? = null): ApiResult<BridgeResponse> = ApiResult.Error(500, "STUB")
+    suspend fun incomingBridge(callId: String): ApiResult<BridgeResponse> = ApiResult.Error(500, "STUB")
+    suspend fun sendSms(recipient: String, text: String, encoding: String = "unicode"): ApiResult<SmsSendResponse> = ApiResult.Error(500, "STUB")
+    suspend fun getInbox(): ApiResult<List<SmsIncomingMessage>> = ApiResult.Error(500, "STUB")
 }
 
-
-
-
+data class PstnBridgeInfo(
+    val sipServer: String,
+    val sipUsername: String,
+    val sipPassword: String,
+    val targetNumber: String,
+    val callId: String,
+    val gateway: String? = null,
+    val iceServers: BridgeIceConfig = BridgeIceConfig(0L, emptyList())
+)

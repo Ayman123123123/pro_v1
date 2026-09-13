@@ -1,42 +1,5 @@
 package com.red.sovereign.calls
 
-/**
- * نماذج مكالمة البوابة (PSTN) — المصدر الوحيد لحالتها ومقاييسها.
- *
- * استُخرجت من `PstnCallScreen.kt` قبل أرشفته: كان ذلك الملف يحمل
- * شاشةً ميتة لا يستدعيها أحد، لكنه يحمل معها `PstnCallStatus` التي
- * يعتمد عليها 30 موضعًا في التطبيق — من `CallRuntime` إلى الشاشة
- * الحيّة `Material3ExpressivePstnCallScreen`. حذف الملف دون فصل
- * النماذج كان سيُسقط سلسلة PSTN كلها.
- */
-
-/**
- * مراحل مكالمة PSTN كما تصل من الخادم عبر إشارة `PSTN_PROGRESS`.
- *
- * كل مرحلة هنا **تُشتقّ من حدث Asterisk فعلي** يلتقطه
- * `DinstarEventListener` ويوجّهه `PstnCallProgressTracker` إلى صاحب
- * المكالمة وحده:
- *
- * | المرحلة | حدث AMI المُنتِج |
- * |---|---|
- * | [INVITING] | `OriginateResponseEvent` (يربط القناة بالمكالمة) |
- * | [RINGING] | `NewStateEvent` بحالة `Ringing` |
- * | [BRIDGING] | `BridgeEvent` |
- * | [ACTIVE] | `NewStateEvent` بحالة `Up` |
- * | [ENDED] | `HangupEvent` |
- *
- * [REGISTERING] و[ERROR] لا يبثّهما الخادم حالياً: الأولى تخصّ تسجيل
- * البوابة على Asterisk وهو إجراء بدء تشغيل لا يخصّ مكالمة بعينها،
- * والثانية تُعالَج كخطأ REST متزامن من `dialPstn`. تُركتا في التعداد
- * لأن الشاشات تعرضهما بشكل صحيح إن وُجدتا مستقبلاً، ولا يعتمد أي كود
- * على ترتيب العناصر.
- *
- * [EARLY_MEDIA] تُشتقّ من 183 Session Progress بـSDP على قناة WebRTC:
- * مسار الصوت مفتوح والمكالمة **لم تُجَب** بعد. هذه هي المرحلة التي
- * يُسمَع فيها ردّ مزوّد الخدمة (رقم غير متاح، لا رصيد، بريد صوتي، قائمة
- * IVR). تُميَّز عن [ACTIVE] لأن العدّاد اليومي والفاتورة لا يبدآن إلا
- * عند 200 OK.
- */
 enum class PstnCallStatus {
     IDLE,
     REGISTERING,
@@ -49,12 +12,6 @@ enum class PstnCallStatus {
     ERROR
 }
 
-/**
- * مقاييس جودة المكالمة الحيّة والعدّاد اليومي.
- *
- * `jitterMs` و`roundTripMs` بالمللي ثانية، و`packetLossPercent` نسبة
- * مئوية. تُستخدم لتصنيف الجودة المعروض للمستخدم.
- */
 data class CallMetrics(
     val jitterMs: Float = 0f,
     val packetLossPercent: Float = 0f,
@@ -64,7 +21,6 @@ data class CallMetrics(
     val usedToday: Int = 0
 )
 
-/** تنسيق مدّة المكالمة بصيغة دقائق:ثوانٍ. */
 internal fun formatPstnDuration(millis: Long): String {
     val totalSeconds = (millis / 1000).toInt()
     val minutes = totalSeconds / 60

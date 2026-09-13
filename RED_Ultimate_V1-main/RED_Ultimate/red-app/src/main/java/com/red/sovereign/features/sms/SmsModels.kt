@@ -11,20 +11,13 @@ data class SmsSendRequest(
 
 @Serializable
 data class SmsSendResponse(
-    val id: String,
-    val status: String,
-    val number: String,
-    val parts: Int,
+    val id: String = "",
+    val status: String = "",
+    val number: String = "",
+    val parts: Int = 0,
     val encoding_auto: String = "AUTO"
 )
 
-/**
- * محادثة SMS واحدة كما يعيدها الخادم.
- *
- * الحقول غير قابلة لـ null في عقد الخادم
- * (`com.red.server.sms.SmsService.ConversationDto`) — لذلك تُستخدم قيم
- * افتراضية بدل `null` كي لا تنتشر معالجة null في كل الواجهة.
- */
 @Serializable
 data class SmsConversationDto(
     val number: String,
@@ -36,13 +29,6 @@ data class SmsConversationDto(
     val unreadCount: Int = 0
 )
 
-/**
- * رسالة SMS واحدة.
- *
- * `isRead` يجب أن يطابق حرفياً `com.red.server.sms.SmsService.MessageDto.isRead`.
- * كان الاسم `read` فكان kotlinx.serialization لا يجد المفتاح فيسقط دائماً على
- * القيمة الافتراضية `true` — أي أن حالة «مقروءة» كانت وهمية دائماً.
- */
 @Serializable
 data class SmsMessageDto(
     val id: String,
@@ -54,7 +40,6 @@ data class SmsMessageDto(
     val isRead: Boolean = false
 )
 
-/** حدث WebSocket /ws/pstn — توجيهه لكل نوع. */
 @Serializable
 data class PstnWsEnvelope(
     val type: String,
@@ -71,12 +56,8 @@ data class PstnWsEnvelope(
     val caller: String? = null,
     val redId: String? = null,
     val message: String? = null,
-    /** معرف قناة AMI للمكالمة الواردة — مطلوب في PSTN_ACCEPT/PSTN_REJECT. */
     val channel: String? = null,
-    /** قناة البوابة الخام كما وردت من الخادم (تشخيص). */
     val gateway: String? = null,
-    /** الرقم المطلوب (رقم شريحة المالك) في المكالمات الواردة. */
     val called: String? = null,
-    /** مضيف البوابة المستقبِلة (192.168.11.2/.3). */ // ALLOW-IP: documentation of fleet IPs
     val gatewayHost: String? = null
 )
