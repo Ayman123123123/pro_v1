@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Root CI image: compile and test the canonical RED backend with the shared protocol.
-FROM gradle:8.12-jdk21 AS builder
+FROM gradle:9.7.0-jdk21 AS builder
 WORKDIR /build
 COPY RED_Ultimate/backend-server/ backend-server/
 COPY RED_Ultimate/shared-proto/ shared-proto/
