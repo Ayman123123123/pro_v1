@@ -55,8 +55,7 @@ rootProject.name = "RED-Ultimate"
 // Consolidated on 2026-08-19: the android/ and app-android/ extraction trees
 // were merged into red-app/ and deleted. They were parallel prototypes of the
 // same screens under different package roots (com.red.features, com.red.feature),
-// outside the build graph, and had already drifted — android/ shipped a Yemeni
-// operator prefix table that contradicted both red-app/ and the backend.
+// outside the build graph, and had already drifted from the canonical app.
 // Everything of value from them now lives here; see docs/UNIFICATION_2026-08-19.md.
 //
 // The legacy Signal fork remains in app/ as an extraction source only; it is
@@ -112,13 +111,9 @@ dependencyResolutionManagement {
             url = uri("https://repo1.maven.org/maven2")
             content { includeGroup("org.signal") }
         }
-        // Alibaba Maven mirror — fast for users behind GFW (China, Yemen sometimes) — for non-signal deps
+        // Alibaba Maven mirror for non-signal dependencies.
         maven {
             url = uri("https://maven.aliyun.com/repository/public")
-        }
-        // Linphone SDK (liblinphone) — SIP client for PSTN calls via UC200 Pro
-        maven {
-            url = uri("https://download.linphone.org/maven_repository/")
         }
         mavenCentral()
     }

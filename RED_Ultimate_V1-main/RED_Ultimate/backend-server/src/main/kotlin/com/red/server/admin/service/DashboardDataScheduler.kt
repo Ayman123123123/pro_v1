@@ -79,7 +79,6 @@ class DashboardDataScheduler(
             "MINIO" to probe { minioClient.bucketExists(BucketExistsArgs.builder().bucket(minioBucket).build()) },
             "MEDIA_SFU" to probe { httpOk("http://media-sfu:4000/health") },
             "COTURN" to probe { tcpOk("coturn", 3478) },
-            "PSTN_GATEWAY" to probe { tcpOk("pstn-gateway", 5038) },
             "BACKEND" to probe { true }
         )
 
@@ -148,7 +147,6 @@ class DashboardDataScheduler(
         val voiceToday = countMongo("messages", Criteria.where("createdAt").gte(dayStart).and("messageType").`is`("VOICE"))
         val mediaToday = countMongo("messages", Criteria.where("createdAt").gte(dayStart).and("attachments").ne(listOf<Any>()))
         val callsToday = countMongo("call_history", Criteria.where("startedAt").gte(dayStart))
-        val callsPstnToday = countMongo("call_history", Criteria.where("startedAt").gte(dayStart).and("type").`is`("PSTN_DINSTAR"))
 
         val activeDau = runCatching {
             if (mongoTemplate.collectionExists("messages")) {
@@ -177,7 +175,6 @@ class DashboardDataScheduler(
                 voiceMessages = voiceToday,
                 mediaUploads = mediaToday,
                 callsTotal = callsToday,
-                callsPstn = callsPstnToday,
                 storageUsedBytes = storageUsed
             )
         )

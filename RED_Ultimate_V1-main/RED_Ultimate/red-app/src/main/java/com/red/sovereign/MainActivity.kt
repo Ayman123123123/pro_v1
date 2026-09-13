@@ -11,10 +11,6 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -45,16 +41,6 @@ class MainActivity : FragmentActivity() {
 
     /** منسق البداية — يدير تشغيل وإيقاف الخدمات بعيداً عن Activity. */
     private lateinit var startupCoordinator: AppStartupCoordinator
-
-    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN. */
-    private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
-        override fun onResume(owner: LifecycleOwner) {
-            if (authViewModel.state is AuthState.Authenticated) {
-                authViewModel.refreshPstnEntitlement()
-            }
-        }
-    }
-    private var pstnObserverRegistered = false
 
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         Log.i("Permissions", "Initial permissions granted: $grants")
@@ -121,10 +107,6 @@ class MainActivity : FragmentActivity() {
                             if (state is AuthState.Authenticated) {
                                 requestNecessaryPermissions()
                                 startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
-                                if (!pstnObserverRegistered) {
-                                    ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
-                                    pstnObserverRegistered = true
-                                }
                             } else if (state !is AuthState.Loading) {
                                 startupCoordinator.onLoggedOut(this@MainActivity)
                             }
@@ -159,10 +141,6 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         if (!isChangingConfigurations) {
             startupCoordinator.onDestroy()
-            if (pstnObserverRegistered) {
-                runCatching { ProcessLifecycleOwner.get().lifecycle.removeObserver(pstnLifecycleObserver) }
-                pstnObserverRegistered = false
-            }
         }
         super.onDestroy()
     }

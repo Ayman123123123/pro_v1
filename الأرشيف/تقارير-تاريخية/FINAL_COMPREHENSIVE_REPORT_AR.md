@@ -68,10 +68,6 @@
 |---|--------|------|-------|
 | 1 | GET | `/api/admin/calls` | بحث سجل المكالمات |
 | 2 | POST | `/api/admin/calls/{id}/terminate` | إنهاء مكالمة من الإدارة |
-| 3 | GET | `/api/admin/dinstar/ports` | حالة 8 منافذ DINSTAR |
-| 4 | POST | `/api/admin/dinstar/ports/{id}/toggle` | تفعيل/تعطيل منفذ |
-| 5 | POST | `/api/admin/dinstar/ports/{id}/balance` | إعادة تعيين الرصيد |
-| 6 | GET | `/api/admin/dinstar/stats` | إحصائيات DINSTAR |
 | 7 | GET | `/api/admin/groups` | بحث المجموعات |
 | 8 | DELETE | `/api/admin/groups/{id}` | حذف مجموعة (admin) |
 | 9 | GET | `/api/admin/media` | بحث الوسائط |
@@ -99,7 +95,6 @@ RED_Ultimate_V1-main/RED_Ultimate/
 │   │   │   ├── repository/                   (2 files, 203 lines)
 │   │   │   └── service/                      (2 files, 669 lines)
 │   │   ├── auth/                             (JWT, Security, Refresh)
-│   │   ├── calls/                            (DINSTAR, WebRTC, Recording, Telemetry)
 │   │   ├── groups/                           (E2EE Groups)
 │   │   ├── media/                            (Scanner, Thumbs, Security)
 │   │   ├── messaging/                        (MessageService, Delete)

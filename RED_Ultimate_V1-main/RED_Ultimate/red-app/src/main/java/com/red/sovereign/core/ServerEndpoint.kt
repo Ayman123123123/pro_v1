@@ -19,15 +19,14 @@ object ServerEndpoint {
      */
     private val deprecatedDefaults = setOf(
         "http://127.0.0.1:8088",
-        "http://localhost:8088",
-        "http://192.168.11.210:8088" // ALLOW-IP: intentionally migrated-away development default
+        "http://localhost:8088"
     )
 
     private fun buildDefaultUrl(): String = runCatching { normalize(BuildConfig.RED_SERVER_URL) }
         .getOrElse { normalize(FALLBACK_URL) } // ALLOW-IP: last-resort default when BuildConfig is unusable
 
     // Last-resort default used only if BuildConfig.RED_SERVER_URL cannot be parsed.
-    private const val FALLBACK_URL = "http://192.168.11.131:8088" // ALLOW-IP: intentional last-resort default
+    private const val FALLBACK_URL = "http://192.168.0.244:8088" // ALLOW-IP: intentional local-network fallback
 
     @Volatile private var current = buildDefaultUrl()
     private var onEndpointChangedListener: ((String) -> Unit)? = null

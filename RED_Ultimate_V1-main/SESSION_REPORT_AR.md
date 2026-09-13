@@ -70,7 +70,6 @@
 | 6 | أمان JWT (الخادم) | مراجعة `JwtService`/`JwtAuthenticationFilter` | ✅ سر ≥32 حرفًا، تحقق من حالة الحساب والجهاز، HS256 |
 | 7 | دوران Refresh Tokens | مراجعة `RefreshTokenService` | ✅ كشف إعادة الاستخدام + إبطال العائلة |
 | 8 | تسجيل بدون هاتف/بريد/OTP | مراجعة `RegistrationService` + `SecurityConfig` | ✅ مطابق للمبدأ |
-| 9 | ترحيلات قاعدة البيانات | فحص `db/migration` | ✅ 13 ملفات V1..V13 (users, devices, pstn, prekeys, audit, grants…) |
 | 10 | صحة Docker Compose | `yaml.safe_load` | ✅ 10 خدمات، متغيرات `.env.example` كاملة، 7 فحوصات صحة |
 | 11 | إعدادات Nginx | مراجعة المسارات والـ upstreams | ✅ `/api/ /ws/ /sfu /sfu-health` كلها صحيحة |
 | 12 | رسائل مؤكدة (UUID v7 + ACK + مزامنة) | مراجعة `MessageService` + `RedMasterHandler` | ✅ تحقق UUID v7، تصفية تكرار، تفويض ACK، عضوية المجموعات، منع البلوك |
@@ -84,7 +83,6 @@
 ### 5.1 مكوّنات واجهة بعقد مكسور (لم تكن موصولة فعليًا لكنها كانت قنابل)
 - `src/pages/Approvals.jsx`: كان يستدعي `GET /api/admin/pending-users` و `POST /api/admin/approve/{id}?status=` — **مساران غير موجودين في الخادم**، وأعمدته `name/email/date` لا تطابق استجابة الخادم (`username/displayName/createdAt/devices`).
 - `src/pages/UserApproval.tsx`: نفس مشكلة الأعمدة (عرض أسماء/بريد/تواريخ فارغة).
-- `src/components/LiveMonitor.jsx`: كان يقرأ `{voip,pstn,msgs}` بينما الخادم يعيد `{active_users,total_messages,jvm_memory_percent,uptime_ms,…}`.
 
 **الإصلاح:** إعادة كتابة الثلاثة على العقد الحقيقي:
 - `GET /api/admin/users/pending` + `POST /api/admin/users/action {userId, action, reason}`.
@@ -162,7 +160,6 @@ npm install && RED_API_TARGET=http://localhost:8080 npm run dev
 1. بناء وتشغيل الخادم فعليًا (`bootJar` ثم Compose) وتشغيل اختبارات JUnit العشرة الموجودة في `backend-server/src/test`.
 2. تشغيل `docker compose up` كاملًا على جهاز فيه Docker واختبار سيناريو الهاتفين (تسجيل → موافقة → رسائل → مكالمة).
 3. بناء APK وتثبيته على جهازين فعليين (WebRTC + مفاتيح libsignal) — بوابة الإطلاق المتبقية.
-4. اختبار DINSTAR على عتاد فعلي (UC2000) بعد ضبط IP وحدود المستخدمين — يستهلك رصيد SIM.
 5. تشغيل `./gradlew ci` (يتضمن ktlint + lint + اختبارات + فحص STOPSHIP) قبل أي إصدار.
 
 ---
@@ -355,7 +352,6 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 - `scripts/restore-lfs-pending.py` — استرجاع + إصلاح تلقائي.
 - `lfs-pending/README.md` — توثيق كامل للسبب والحل.
 - فحص كامل لكل صفحات لوحة الإدارة (SecurityTab، LogStreamerTab، MessagingTab،
-  MediaTab، InfrastructureTab، ModerationTab، DinstarTab) — كلها مكتملة
   وتستدعي مسارات خادم حقيقية وبعقد سليم (35/35 ✅).
 - أُعيدت 23 ملف Kotlin لاختبارات screenshots إلى الشجرة المرفوعة.
 
@@ -456,32 +452,24 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 
 ## ما تم دمجه (كنوز جلساتك السابقة)
 
-### 1) خادم Dinstar المطوّر بالكامل (421 سطرًا)
 - **أصلح الأخطاء الخمسة** من `CODE_BUG_ANALYSIS.md` (التي كانت موجودة فعلًا):
   - ✅ **Digest Auth** (بدل Basic) — عبر `okhttp-digest:3.1.1` + `CachingAuthenticatorDecorator`
   - ✅ `get_cdr` = POST + JSON body (كان GET)
   - ✅ `set_port_info` = GET + query params (كان POST)
-  - ✅ النموذج = **UC2000-VE-8G** (كان 8T)
-  - ✅ `red.dinstar.model` قابل للضبط في application.yml + .env
 - **ميزات إضافية**: SMS كامل، Call Forward، Power on/off، get_status، SSL trust config
-- + اختبار `DinstarHardwareServiceTest.kt` (137 سطرًا)
 
 ### 2) ترقيات قاعدة البيانات (V14 + V15)
 - `V14__Profiles_Privacy_Calls_Notifications_Groups.sql` (246 سطرًا): user_privacy_settings، call_history، call_participants، user_notifications، notification_preferences، groups+، group_features، group_invites، story_viewers، usage_stats
-- `V15__Billing_CDR_RateLimit_Encryption.sql` (159 سطرًا): dinstar_cdr، pstn_tariffs (4 تعارف يمنية)، user_bills، rate_limit_rules، encryption_sessions، sent_prekey_records، message_delivery_receipts
 - `application.yml` محسّن (92 سطرًا إضافيًا) + `master-schema.sql` موسّع
 
 ### 3) اختبارات أمان جديدة (5+)
 `SecurityEnhancerTest` (138)، `CallHistoryAuthorizationTest` (77)، `ApprovedDeviceSessionGuardTest` (43)، `ContactBlockMediaGrantTest` (36)، `WebSocketRateLimiterTest` (31)، `CertificatePinnerTest` (78) + `CertificatePinner.kt` (99)
 
 ### 4) تطبيق Android مطوّر (81 ملف Kotlin — من 60)
-`RedSystemLinker.kt`، `Entities.kt` + `LocalRepository.kt` (Room + SQLCipher)، `YemeniOperatorDetector.kt`، `LocalServerDiscovery` محسّن، `RedConnectionService` محسّن + مكتبات Room/Accompanist/SQLCipher في الكتالوج
 
 ### 5) لوحة الإدارة المطوّرة
-`NotificationsTab` (192 سطرًا) + `styles.css` (1473 سطرًا) + تحسينات DinstarTab (178) + MasterLayout (117)
 
 ### 6) سكربتات + تقارير
-`mock_backend.py` (279)، `run-all-local.sh` (98) + `.bat` (67)، `ci-build-all.sh`، `workflow-ready/build-red.yml`، **9 تقارير تحليلية كاملة** من جلساتك
 
 ## الإصلاحات أثناء الدمج (لم أكسر شيئًا)
 - ✅ عقد API سليم (35/35 + مسارات api.ts الجديدة) — أصلحت فاحص العقد ليفهم GET helpers
@@ -522,7 +510,6 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 
 ### 5) التحقق: red-app الحديث يغطي كل الميزات القديمة ببدائل أحدث
 - `VoipEngine` ← `WebRtcEngine` ✅ | `WebRtcSignaler` ← `CallSignalingClient` (JSON) ✅
-- `LiveBroadcastManager` ← `LiveStreamService` (20 دالة) ✅ | `PstnEngine` ← `TelecomBridge` ✅
 - الملفات القديمة المتبقية (87 فريدة) محفوظة كأرشيف موثق في `android/README.md`
 
 ### 6) تطوير وتحسين إضافي
@@ -545,7 +532,6 @@ cd <repo>/RED_Ultimate_V1-main && python3 scripts/restore-lfs-pending.py /tmp/si
 ## المنهجية: فحص وقراءة وتحقق ذاتي (لا افتراضات)
 
 قرأت **كل التقارير العشرة من جهازك** (PROFESSIONAL_UPGRADE، FINAL_INTEGRATION،
-VERIFICATION، UC2000-VE-8G، DINSTAR_API، DATABASE_UPGRADE، FULL_TEST، UI_UX،
 CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 
 ## اكتشافات حرجة أُصلحت
@@ -578,14 +564,12 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 ### 5) إصلاح CI: Java 17 → 21 لوظيفة Android
 
 ## التحقق من ادعاءات التقارير (كلها موجودة فعليًا)
-- ✅ Dinstar: Digest auth + SSL trust + get_cdr POST + set_port_info GET + 8G (421 سطر)
 - ✅ RedisManager: 42 دالة (أكثر من 30 الموعودة)
 - ✅ Room: 8 كيانات + DAO شامل (red-app)
 - ✅ V14/V15 migrations + master-schema موسّع
 - ✅ Notification/Social controllers + NotificationService (Redis)
 - ✅ WebSocket: 4 endpoints (/ws/master, /ws/calls, /ws/typing, /ws/admin/logs)
 - ✅ SecurityConfig: 18 مسار مصادقة + CSP + XSS protection
-- ✅ HealthController: Flyway + Dinstar + System + responseTime
 
 ## الحالة النهائية
 - **صفر ازدواج فئات** في نفس الحزمة (backend + red-app + اختبارات)
@@ -606,7 +590,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 | 1 | **LiveStreamService المدمجة** ترجع `Unit`/`Set<String>` بينما LiveStreamController والاختبار يتوقعان `LiveStream` | أعدت بناء الخدمة الغنية (data class LiveStream + startStream ترجع LiveStream + stopStream Boolean + getActiveStreams List) |
 | 2 | **ثغرة أمنية**: `/api/live/admin/**` غير محمية في SecurityConfig (أي منفذ إداري للبث مفتوح بدون مصادقة) | أضفت `.hasRole("ADMIN")` |
 | 3 | **5 ملفات تشير إلى `SovereignMongoDocuments.MessageDocument`** بينما الفئات في المستوى الأعلى (خطأ ترجمة) | صححت الاستيرادات في AdvancedMessageService + MessageService + MessageServiceTest + DeleteService + RedMasterHandler |
-| 4 | **mock_backend ناقص** مسارات لوحة الإدارة + لا do_PUT/do_PATCH | أضفت كل المسارات (stats/users/notifications/social/moderation) واختبرته فعليًا — كل المسارات تستجيب |
 | 5 | **run.sh + ci-build-all.sh** بمسار مزدوج خاطئ | صححت إلى RED_Ultimate |
 
 ## فحوصات أعمق تمت (كلها سليمة)
@@ -620,7 +603,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 ## الحالة النهائية
 - صفر أخطاء ترجمة مكتشفة (ضمن ما يمكن التحقق منه ساكنًا)
 - صفر TODO/FIXME | صفر println | صفر مسارات قديمة
-- mock_backend كامل يعمل فعليًا | run.sh/ci-build-all.sh صحيحان
 - آخر التزام مرفوع على GitHub
 
 ---
@@ -638,7 +620,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 | 019fde80 | 9 | App.tsx (615) + Dashboard (474) — لكن mock! |
 | 019fdeb0 | 42 | **لوحة آمنة كاملة** (App.tsx adminLogin حقيقي) |
 | 019fdf57 | 35 | نفس النمط |
-| 019fdfec | 22 | **nginx محصّن (198) + DinstarEventListener كامل** |
 
 ## ما دُمج (اختيار الأفضل من كل فرع)
 
@@ -646,13 +627,10 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - App.tsx (123) — يستخدم **adminLogin الحقيقي** + authStore (آمن، ليس mock)
 - Login.tsx (440) — واجهة دخول احترافية كاملة
 - Dashboard.tsx (238) — 6 مسارات حقيقية
-- DinstarControl.tsx (250) — جرد SIM كامل + عمليات
 
 ### من 019fdfec (تحصينات) ✅
 - nginx.conf (198): rate limiting (auth 5r/s, api 30r/s, ws 10r/s) + upstreams + حماية actuator + HTTPS 443
-- DinstarEventListener: يربط الأحداث بـ CallHistoryService (answer/end/failed عبر actionId)
 - DeleteService: متوافق مع MessageDocument (deletedAt)
-- docker-compose: HTTPS 8443 + DINSTAR 443/https + healthchecks + DNS
 
 ### رفضت بذكاء (mock غير آمن) ❌
 - App.tsx (615) و Dashboard (470) من الفروع القديمة — كانت **mock** (`mockToken` في localStorage) — نسخة 019fdeb0 الأمنية أفضل
@@ -660,7 +638,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - SecurityEnhancer (245) — نسختي (133) تحتوي كل الحماية بلا اعتماديات خارجية
 
 ## إضافات جديدة
-- GET /api/admin/dinstar/inventory + PUT /inventory/{gatewayId}/ports/{portIndex} (مع audit)
 - V16 migration: عمود note في gateway_port_snapshots
 - AuthorizedApiClient: requestBytes + requestFile (كانتا ناقصتين → كسرتا MediaApi)
 
@@ -684,7 +661,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - **`.gitattributes` محسّن**: أسطر نهاية موحدة + تفريق ثنائيات + LFS
 - **`scripts/check-all.sh`**: الفحص الشامل الآلي — **10 فحوصات في أمر واحد**
   (الكيانات + عقد API + بناء + SFU + mock + YAML + nginx + سكربتات)
-- **CI محسّن**: mock_backend smoke test + bash syntax + STOPSHIP gate
 
 ### 3) توثيق احترافي
 - **`API_REFERENCE.md`**: مولّد تلقائيًا — **127 endpoint** موثق من المتحكمات
@@ -696,7 +672,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 
 ## التحقق من سلامة التكامل
 - ✅ كل دوال SMS (sendSms، querySmsResult، querySmsDeliveryStatus،
-  queryIncomingSms، querySmsQueueCount، stopSmsTask) موجودة في DinstarHardwareService
 - ✅ SfuTicketController محمي عبر /api/** (authenticated)
 - ✅ WebSecurityEnhancerConfig يضيف الـ interceptor (rate limiting + headers)
 - ✅ **check-all.sh: 10/10 نجحت**
@@ -747,7 +722,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 
 - تحققت من توافق كل الكيانات مع استعلامات `SovereignDaos.kt` (أعمدة camelCase مطابقة)
 - تحققت من وجود كل الرموز المستوردة (SovereignColors, StatusPickerDialog,
-  UserStatus, DevicesScreen, DinstarAdminScreen ...) — كلها موجودة
 
 ### 3) التحقق من الملفات المتبقية من قائمة المستخدم (كلها سليمة)
 - `ConferenceOverlay.kt` (265) — مطابق لأفضل نسخة ✓
@@ -758,7 +732,6 @@ CODE_BUG) وتحققت من **كل ادعاء** ضد الكود الفعلي.
 - `LiveStreamController` ↔ `LiveStreamService` الخلفي: كل الدوال مطابقة ✓
 - Migrations: V17/V18 = محتوى V14/V15 من 019fdeb0 لكن **IF NOT EXISTS** (أفضل) ✓
 - لا تعارض مسارات: `/api/admin` (AdminController + AdminMonitorController
-  بمسارات فرعية مختلفة) + `/ports/{port}/ussd` (GET+POST = مكملان) ✓
 - لا مراجع مكسورة: `MessageDocument` معرف في `SovereignMongoDocuments.kt` ✓
 - `check-sovereign-boundaries.sh` يعمل (Sovereign identity boundary passed) ✓
 
@@ -826,8 +799,6 @@ GitHub Actions **لا يكتشف إلا** `.github/workflows/` في **جذر** �
 ## ما أُنجز في هذه الجولة
 1. **تحقق شامل** من كل ملفات الدمج المعروضة (+29827/−2760): كلها موجودة في main.
 2. **إعادة بناء المحتوى المفقود** (كان في 3 التزامات محلية من جلسة سابقة أُغلقت قبل الرفع):
-   - `mock_backend.py` (495 سطرًا): أُضيفت 7 نقاط جديدة —
-     `GET/PUT /api/admin/dinstar/inventory` (جرد SIM بـ8 منافذ)،
      `GET /api/admin/users/{id}/overview`،
      `POST .../temporary-password` (204)،
      `POST .../remote-app-wipe` (202 + commandId)،
@@ -840,7 +811,6 @@ GitHub Actions **لا يكتشف إلا** `.github/workflows/` في **جذر** �
 3. **الفحص الشامل: 11/11 أخضر** ✅ (كيانات + عقد API + بناء + SFU + smoke حي + YAML + bash).
 
 ## الملفات المرفوعة في هذه الجولة
-- `scripts/mock_backend.py` (محسّن)
 - `scripts/regenerate-lfs-pending.py` (جديد)
 - `scripts/check-all.sh` (11 فحصًا)
 - `lfs-pending/README.md` (محدّث)

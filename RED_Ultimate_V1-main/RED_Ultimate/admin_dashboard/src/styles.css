@@ -1477,7 +1477,7 @@ a:hover {
   }
 }
 
-/* Morocco/Yemen Specific Styles */
+/* Regional layout styles */
 .yns-gradient-text {
   background: linear-gradient(135deg, var(--yns-green) 0%, var(--yns-gold) 50%, var(--yns-blue) 100%);
   -webkit-background-clip: text;

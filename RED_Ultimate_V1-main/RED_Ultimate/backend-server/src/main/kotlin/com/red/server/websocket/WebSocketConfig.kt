@@ -10,22 +10,11 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 /**
  * 🌐 إعدادات WebSocket — التسجيل الموحّد لكل معالجات الوقت الحقيقي.
  *
- * ⚠️ إصلاح حرج: بعد حذف `config/WebSocketConfig` المكرر (التزام 6d3a140)، بقي
- * هذا الملف يسجّل `/ws/dinstar` وحده، فأصبحت كل مسارات التطبيق التي يتصل بها
- * عميل الأندرويد غير مسجّلة وتُرجع 404 عند المصافحة:
- *   - /ws/master      الرسائل، ACK، الكتابة، المزامنة، الحذف — RedMasterHandler
- *   - /ws/calls       إشارات مكالمات 1:1 — CallWebSocketHandler
- *   - /ws/conference  المؤتمرات والمساحات الصوتية — ConferenceWebSocketHandler
- *   - /ws/livestream  البث المباشر — LiveStreamWebSocketHandler
- *   - /ws/typing      مؤشر الكتابة — TypingHandler
- *   - /ws/admin/logs  سجلات الإدارة الحية — AdminLogHandler
+ * يسجّل هذا الملف مسارات الرسائل والمكالمات والمؤتمرات والبث وسجلات الإدارة،
+ * وجميعها تمرّ عبر معترض JWT قبل المصافحة.
  *
  * كل المسارات تمرّ عبر JwtHandshakeInterceptor (Bearer JWT، أو تذكرة إدارية
- * قصيرة العمر لمسار /ws/admin/logs)، بما فيها `/ws/dinstar` الذي كان مفتوحًا
- * بلا مصادقة وبـ setAllowedOrigins("*")، فيُسرّب حالات المنافذ والرسائل
- * القصيرة وسجلات المكالمات لأي متصل.
- *
- * CORS: الأنماط المسموحة من `red.security.allowed-origins`؛ عملاء الجوال لا
+ * قصيرة العمر لمسار /ws/admin/logs)، * CORS: الأنماط المسموحة من `red.security.allowed-origins`؛ عملاء الجوال لا
  * يرسلون Origin أصلًا فيُقبلون، و"app://" يغطي من يرسله.
  *
  * ROUTES تعكس بدقة ما يُسجَّل أدناه، ويتحقق منها WebSocketRouteContractTest.
@@ -40,8 +29,6 @@ class WebSocketConfig(
     private val typingHandler: TypingHandler,
     private val conferenceWebSocketHandler: ConferenceWebSocketHandler,
     private val liveStreamWebSocketHandler: LiveStreamWebSocketHandler,
-    private val dinstarWebSocketHandler: DinstarWebSocketHandler,
-    private val pstnEventWebSocketHandler: PstnEventWebSocketHandler,
     @Value("\${red.security.allowed-origins:http://localhost,http://127.0.0.1,app://}")
     private val allowedOrigins: List<String>
 ) : WebSocketConfigurer {
@@ -54,9 +41,7 @@ class WebSocketConfig(
             "/ws/conference",
             "/ws/livestream",
             "/ws/typing",
-            "/ws/admin/logs",
-            "/ws/dinstar",
-            "/ws/pstn"
+            "/ws/admin/logs"
         )
     }
 
@@ -93,15 +78,5 @@ class WebSocketConfig(
             .addInterceptors(jwtHandshakeInterceptor)
             .setAllowedOriginPatterns(*origins)
 
-        // ─── WebSocket DINSTAR — حالة البوابات والمنافذ حيّة ───
-        // كان سابقاً بلا JWT وبـ "*" مفتوح؛ صار مؤمّناً كبقية المسارات.
-        registry.addHandler(dinstarWebSocketHandler, "/ws/dinstar")
-            .addInterceptors(jwtHandshakeInterceptor)
-            .setAllowedOriginPatterns(*origins)
-
-        // ─── WebSocket أحداث PSTN — أحداث DINSTAR (RINGING/ANSWERED/ENDED) + SMS حيّة ───
-        registry.addHandler(pstnEventWebSocketHandler, "/ws/pstn")
-            .addInterceptors(jwtHandshakeInterceptor)
-            .setAllowedOriginPatterns(*origins)
     }
 }

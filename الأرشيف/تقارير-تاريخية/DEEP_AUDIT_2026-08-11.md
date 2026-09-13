@@ -98,14 +98,10 @@
 | **Node 24 + mediasoup 3.24.0 + ws 8.18.3** | ✅ سليم | `package.json engines >=24` + `Dockerfile node:24-bookworm` — `node --check server.js` ✅ — `JWT_SECRET >=32` + `MEDIASOUP_ANNOUNCED_IP` required |
 | **Healthcheck** | ✅ سليم | `curl http://localhost:4000/health` |
 
-### 3.5 Infra (`docker-compose.yml` + `nginx` + `pstn-asterisk`)
 
 | الفحص | النتيجة | التفاصيل |
 |---|---|---|
-| **10 خدمات + 8 volumes + 1 network** | ✅ سليم | `identity-init (alpine 3.21) → backend (1g) → media-sfu (1g) → coturn (256m) → asterisk (512m) → postgres 16.9 → mongo 8.0.13 → redis 7.4.5 → minio 2025-04-22 → nginx 1.28` — كلها `restart unless-stopped` + `deploy.limits` |
-| **Healthchecks (10)** | ✅ سليم | `backend curl /health` + `sfu /health` + `coturn bash /dev/tcp` + `asterisk core show uptime` + `pg_isready` + `mongosh ping` + `redis-cli ping` + `minio /health/live` + `nginx wget /health` + `admin wget :3000` |
 | **Security hardening** | ✅ سليم | `backend` `cap_drop: ALL` + `no-new-privileges:true` + `identity-secrets:ro` + `backup-data` — `media-sfu` `cap_drop: ALL` + `admin-panel` `cap_drop: ALL` — `minio` loopback-only `127.0.0.1:9000` — `certs-init` atomic cert generation + SAN IP validation |
-| **Env required vars (14)** | ✅ سليم | `DB_PASSWORD, MONGO_PASSWORD, MINIO_PASSWORD, REDIS_PASSWORD, AMI_PASSWORD, TURN_SECRET, JWT_SECRET, RED_ADMIN_*, DINSTAR_*, MEDIASOUP_ANNOUNCED_IP` كلها `${VAR:?required}` — يفشل compose بوضوح إذا ناقص |
 | **Nginx** | ✅ سليم | `1.28.0-alpine` + `nginx.conf` بوابة HTTP/WS/SFU/Admin + `certs-init` + `certbot-www` volumes |
 
 ---

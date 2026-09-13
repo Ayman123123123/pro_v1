@@ -21,23 +21,20 @@ class AdminCallHistorySync(
     fun onStarted(event: CallEvent.CallStarted) {
         val caller = users.findByRedId(event.initiatorId) ?: return
         val callee = users.findByRedId(event.targetId)
-        val phone = event.targetId.takeIf { callee == null && AdminCallHistoryMapper.looksLikePhone(it) }
         val sqlId = AdminCallHistoryMapper.sqlId(event.callId)
-        val sqlType = AdminCallHistoryMapper.sqlType(event.type, event.route)
+        val sqlType = AdminCallHistoryMapper.sqlType(event.type)
         runCatching {
             jdbc.update(
                 """
                 INSERT INTO call_history
-                    (id, caller_id, callee_id, callee_phone, call_type, call_route, direction, status, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'OUTGOING', 'RINGING', NOW())
+                    (id, caller_id, callee_id, call_type, call_route, direction, status, started_at)
+                VALUES (?, ?, ?, ?, 'RED', 'OUTGOING', 'RINGING', NOW())
                 ON CONFLICT (id) DO NOTHING
                 """.trimIndent(),
                 sqlId,
                 caller.id,
                 callee?.id,
-                phone,
-                sqlType,
-                if (event.route.equals("DINSTAR", ignoreCase = true)) "DINSTAR" else "RED"
+                sqlType
             )
         }.onFailure { log.warn("admin call_history insert skipped: {}", it.message) }
     }

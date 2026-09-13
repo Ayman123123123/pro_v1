@@ -11,7 +11,7 @@ import androidx.core.app.RemoteInput
 import com.red.sovereign.R
 
 /**
- * مستقبل مركزي لجميع أزرار إشعارات المكالمات (1-to-1, Group, Conference, Zoom, PSTN, Live).
+ * مستقبل مركزي لجميع أزرار إشعارات المكالمات (1-to-1, Group, Conference, Zoom, Live).
  *
  * قبل إنشائه كانت Notification Actions تستخدم `PendingIntent.getService` مباشرة
  * نحو الخدمات، وهذا يخالف سياسات FGS في Android 14 ويستهلك بطارية بدون داعٍ.
@@ -146,7 +146,6 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
         const val CALL_TYPE_GROUP = "group"
         const val CALL_TYPE_CONFERENCE = "conference"
         const val CALL_TYPE_ZOOM = "zoom"
-        const val CALL_TYPE_PSTN = "pstn"
         const val CALL_TYPE_LIVESTREAM = "livestream"
 
         private fun buildIntent(

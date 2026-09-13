@@ -83,10 +83,7 @@ WebSocketConfig.kt:33  .addInterceptors(jwtHandshakeInterceptor) → /ws/calls
 WebSocketConfig.kt:37  .addInterceptors(jwtHandshakeInterceptor) → /ws/admin/logs
 ```
 
-### 10) PSTN حد يومي بتوقيت عدن
 ```
-PstnCallService.kt:27  LocalDate.now(ZoneId.of("Asia/Aden"))
-PstnCallService.kt:31  if (used > pstnDailyLimit) decrement
 ```
 
 ### 11) git log موكد

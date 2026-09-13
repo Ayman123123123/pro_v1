@@ -6,8 +6,7 @@
    1. NGINX Reverse Proxy, SSL/TLS certificates & Modulus match
    2. Docker engine & microservice containers
    3. Sovereign Endpoints & Network Ports
-   4. DINSTAR Hardware Gateway connectivity (192.168.11.1)
-   5. Security & Configuration Audit
+   4. Security & Configuration Audit
 ════════════════════════════════════════════════════════════════════════
 """
 
@@ -134,7 +133,7 @@ def audit_docker_services():
     expected_services = [
         "red-backend", "red-proxy", "red-admin-ui", "red-db-sql",
         "red-db-nosql", "red-cache", "red-storage", "red-media-sfu",
-        "red-turn", "red-pstn-gateway"
+        "red-turn"
     ]
 
     running_lines = out.splitlines()
@@ -163,7 +162,6 @@ def audit_network_ports():
         (8080, "Spring Boot Backend API"),
         (4000, "Media SFU WebRTC Signaling"),
         (3478, "Coturn STUN/TURN"),
-        (5060, "Asterisk SIP Gateway"),
         (5432, "PostgreSQL 16"),
         (27017, "MongoDB 8"),
         (6379, "Redis 7 Cache"),
@@ -179,17 +177,6 @@ def audit_network_ports():
 
     return score
 
-def audit_dinstar_connectivity():
-    print_header("4. DINSTAR UC2000-VE Hardware Gateway")
-    dinstar_ip = "192.168.11.1"
-    code, _, _ = run_cmd(f"curl -k -s --connect-timeout 2 https://{dinstar_ip}/ >/dev/null 2>&1")
-    if code == 0:
-        print(f"  {GREEN}✅ DINSTAR Gateway:{RESET} Online & reachable at https://{dinstar_ip}/")
-        return 100
-    else:
-        print(f"  {CYAN}ℹ️ DINSTAR Gateway ({dinstar_ip}):{RESET} Ready for hardware connection.")
-        print(f"     (Use scripts/configure-windows-lan.ps1 or linux static route when connecting hardware)")
-        return 95
 
 def audit_environment():
     print_header("5. Security & Configuration Audit")
@@ -225,10 +212,9 @@ def main():
     s1 = audit_ssl_certificates()
     s2 = audit_docker_services()
     s3 = audit_network_ports()
-    s4 = audit_dinstar_connectivity()
-    s5 = audit_environment()
+    s4 = audit_environment()
 
-    final_score = int((s1 + s2 + s3 + s4 + s5) / 5)
+    final_score = int((s1 + s2 + s3 + s4) / 4)
 
     print(f"\n{CYAN}{BOLD}{'═' * 76}{RESET}")
     print(f" {BOLD}📊 SYSTEM HEALTH SCORE: {GREEN if final_score >= 85 else YELLOW}{final_score}/100{RESET}")

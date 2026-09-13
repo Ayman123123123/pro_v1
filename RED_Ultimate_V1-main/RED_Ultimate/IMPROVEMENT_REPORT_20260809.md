@@ -7,7 +7,6 @@
 |---|---|---|---|---|
 | 1 | `Approvals.jsx` مساران مكسوران `/api/admin/pending-users` + `/api/admin/approve` | تم التصحيح إلى `/api/admin/users/pending` + `POST /api/admin/users/action` | `admin_dashboard/src/pages/Approvals.jsx` 1.7K→1.9K | ✅ عقد API 51/51 أخضر |
 | 2 | `MessageServiceTest.kt` 5 أسطر وهمية `println` | أُعيدت كتابته 78 سطر — 6 اختبارات حقيقية (UUID v7, RED ID regex, payload 1..1MiB, ciphertext 2/3 vs 4, ACK, conversation 8..128) | `backend-server/.../MessageServiceTest.kt` | ✅ |
-| 3 | `CertificatePinnerTest.kt` 0 بايت فارغ | أُعيدت كتابته 43 سطر — 4 اختبارات (SPKI pin, malformed, hostname private, trust-all لـ DINSTAR فقط) | `backend-server/.../security/CertificatePinnerTest.kt` | ✅ |
 | 4 | `.gradle_user_home` 348 ملف Cache في Git | حُذف + أُضيف إلى `.gitignore` | `.gitignore` + `ab7ee52` | ✅ `working tree clean` |
 
 ### ما اكتُشف ويحتاج تطوير (خارطة الطريق بدون نقص)

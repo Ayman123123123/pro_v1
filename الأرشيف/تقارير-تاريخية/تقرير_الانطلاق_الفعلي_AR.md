@@ -9,7 +9,6 @@
 |---|---|---|
 | توليد مفاتيح الهوية | `bash scripts/generate-local-identity-authority.sh` | `secrets/red_identity_private_key.pem` (241B, 600) + `public_key.pem` (178B) — EC P-256 |
 | إنشاء .env | نسخ `.env.example` مع 9 كلمات سر عشوائية 32-48 hex | `.env` 856B — كل `DB_PASSWORD/MONGO/MINIO/REDIS/AMI/TURN/JWT` = `***` |
-| فحص compose | `grep build: docker-compose.yml` | 4 builds: `backend`, `media-sfu`, `pstn-asterisk`, `admin_dashboard` — 10 خدمات |
 | فحص nginx | `grep location nginx.conf` | 6 locations: `/api/`, `/health`, `/ws/`, `/sfu`, `/sfu-health`, `/` |
 | بناء admin | `npm ci && npm run build` | **✓ SUCCESS** — 5,422 modules, 11.89s, `dist/` 1.09MB antd + 513KB charts |
 | YounesApplication | `cat YounesApplication.kt` | 59 سطر — `ServerEndpoint + SettingsRuntime + 3 NotificationChannels` |

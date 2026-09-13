@@ -18,7 +18,6 @@ data class CallHistoryDocument(
     var answeredAt: Instant? = null,
     var endedAt: Instant? = null,
     var mediaServerId: String? = null,
-    var gatewayUsed: String? = null,
     var durationSeconds: Long = 0L,
     var qualityScore: Float = 0f,
     var callSource: String = "PRIVATE",
@@ -30,7 +29,7 @@ data class CallHistoryDocument(
 )
 
 enum class CallType { AUDIO_1V1, VIDEO_1V1, GROUP_AUDIO, GROUP_VIDEO, LIVE_STREAM, SPACE }
-enum class CallRoute { RED, DINSTAR }
+enum class CallRoute { RED }
 enum class CallStatus { INITIATED, RINGING, ACTIVE, ENDED, MISSED, REJECTED, BUSY, FAILED }
 
 data class CallHistoryItem(
@@ -45,7 +44,6 @@ data class CallHistoryItem(
     val answeredAt: Instant?,
     val endedAt: Instant?,
     val mediaServerId: String? = null,
-    val gatewayUsed: String? = null,
     val durationSeconds: Long = 0L,
     val qualityScore: Float = 0f,
     val callSource: String = "PRIVATE",

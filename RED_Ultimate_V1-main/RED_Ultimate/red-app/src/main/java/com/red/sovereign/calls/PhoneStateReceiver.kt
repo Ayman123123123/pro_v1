@@ -79,7 +79,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         android.util.Log.i("PhoneStateReceiver", "PSTN notification shown for: $displayNumber")
     }
 
-    /** Mask phone number: +9677XXXXXXX → +967••••XXX */
+    /** Mask a phone number before displaying it in a notification. */
     private fun maskPhoneNumber(number: String): String {
         if (number.length < 6) return number
         val prefix = number.take(4)

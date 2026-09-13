@@ -9126,7 +9126,6 @@
  M red-app/src/test/java/com/red/sovereign/calls/NetworkStatsTest.kt
  M red-app/src/test/java/com/red/sovereign/calls/SdpMediaOptimizerTest.kt
  M red-app/src/test/java/com/red/sovereign/calls/SfuSdpFactoryTest.kt
- M red-app/src/test/java/com/red/sovereign/calls/YemeniOperatorDetectorTest.kt
  M red-app/src/test/java/com/red/sovereign/core/FtsSearchManagerTest.kt
  M red-app/src/test/java/com/red/sovereign/core/RichMessageTest.kt
  M red-app/src/test/java/com/red/sovereign/core/YounesServerSignatureTest.kt

@@ -54,7 +54,7 @@ function normalize(p) {
 /**
  * مسارات تُخدَم خارج الـ Kotlin backend ولا يجب أن تُطابَق مع مخططات Spring:
  * - `/sfu-health`: يخدمه nginx بتحويله إلى `media-sfu/health` (حاوية SFU مستقلة)،
- *   ويُنفَّذ في خادم التطوير `dev-server` لكن لا نظير له في `backend-server`.
+ *   ويُنفَّذ في الخادم الحقيقي عبر `backend-server`.
  * أضف هنا أي نقطة بنية تحتية يقدّمها SFU أو الـ proxy بدل الـ backend.
  */
 const INFRA_ENDPOINTS = new Set(['/sfu-health']);

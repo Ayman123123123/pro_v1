@@ -1,14 +1,14 @@
-# backend-server/ — خادم RED القانوني
+# backend-server/ — خادم RED
 
 > **الحالة:** نشط — Spring Boot/Kotlin/JVM 21
 
 ## الوظيفة
 
-يوفر التسجيل دون هاتف، الموافقة الإدارية، JWT/refresh، شهادات الأجهزة، دليل الهوية وPQXDH، الرسائل، المنشورات، المجموعات، الوسائط والحالات، سجل المكالمات، وصلاحيات DINSTAR. يستخدم PostgreSQL وMongoDB وRedis وMinIO.
+يوفر التسجيل المعتمد على هوية RED، الموافقة الإدارية، JWT/refresh، شهادات الأجهزة، دليل الهوية وPQXDH، الرسائل، المنشورات، المجموعات، الوسائط والحالات، وسجل المكالمات. يستخدم PostgreSQL وMongoDB وRedis وMinIO.
 
 ## المحتوى
 
-`src/main/kotlin/com/red/server/` المصدر، `db/migration/V1..V9` Flyway، `src/test/` اختبارات، `Dockerfile` التشغيل.
+`src/main/kotlin/com/red/server/` المصدر، و`src/main/resources/db/migration/` ترحيلات Flyway، و`src/test/` الاختبارات، و`Dockerfile` صورة التشغيل.
 
 ## العلاقة بباقي المشروع
 

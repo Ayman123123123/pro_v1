@@ -27,11 +27,9 @@
 
 | المجموعة | العدد | الأيقونات الرئيسية |
 |---|---|---|
-| 📞 CallIcons | 16 | VoIP Audio, Video, Conference, Live, Space, PSTN, Speaker, Mute, Bluetooth, Hold, Transfer, Record |
 | 💬 ChatIcons | 18 | Message, Reply, Forward, Pin, Star, Attachment, VoiceNote, Search, ReadReceipt, Group |
 | 📖 StoryIcons | 9 | Add, View, Text, Image, Video, Close, Reply, Viewers, Delete |
 | 👥 GroupIcons | 14 | Create, Info, Members, Admin, Owner, Invite, Mute, Pinned, Media, Links, Files, Polls |
-| 🔔 NotificationIcons | 11 | Message, Call, GroupInvite, Story, System, Security, Dinstar, Warning, Success, Error |
 | 👤 ProfileIcons | 12 | Avatar, Edit, Status, Privacy, Security, 2FA, Devices, Backup, Update, Storage, Network |
 | 🔒 PrivacyIcons | 12 | Everyone, Contacts, Selected, Nobody, LastSeen, ProfilePhoto, ReadReceipts |
 | 🎵 MediaIcons | 19 | Play, Pause, Stop, Skip, FastForward, Rewind, Volume, Fullscreen, PiP, Subtitle, Speed, Repeat |
@@ -49,7 +47,6 @@
 | `SovereignGoldButton` | تدرج ذهبي | الأفعال الرئيسية والتأكيد |
 | `SovereignCyanButton` | تدرج سماوي | الإتصالات و VoIP |
 | `SovereignDangerButton` | تدرج أحمر | الحذف وإنهاء المكالمة |
-| `DinstarGoldButton` | تدرج ذهبي يمني | المكالمات الخطية عبر Dinstar |
 | `LiveButton` | تدرج أحمر حي + نبض | البث المباشر (ينبض عند LIVE) |
 | `SpaceButton` | تدرج أرجواني | الغرف الصوتية |
 | `SovereignGlassButton` | زجاجي شفاف | أفعال ثانوية (Glassmorphism) |
@@ -97,12 +94,10 @@
 | الفئة | الأنواع |
 |---|---|
 | الرسائل | NEW_MESSAGE, GROUP_MESSAGE, MENTION |
-| المكالمات | INCOMING_CALL, MISSED_CALL, PSTN_CALL |
 | القصص | STORY_VIEW, STORY_REPLY |
 | المجموعات | GROUP_INVITE, GROUP_UPDATE, ROLE_CHANGE |
 | البث | LIVE_STARTED, SPACE_STARTED |
 | النظام | SECURITY_ALERT, DEVICE_NEW, UPDATE_AVAILABLE |
-| Dinstar | DINSTAR_STATUS, DINSTAR_ALERT |
 
 **ميزات الواجهة:**
 - مركز إشعارات كامل مع فلاتر
@@ -116,7 +111,6 @@
 - WebSocket حقيقي مع OkHttp
 - **توجيه حقيقي لكل أنواع الرسائل** (routing)
 - إنشاء إشعارات أصلية Android لكل نوع
-- قنوات إشعارات منفصلة (messages, calls, groups, live, dinstar, system)
 - Exponential backoff للإعادة (1s, 2s, 4s, 8s, 16s, 30s)
 - StateFlow متصل/isConnected للواجهة
 - MessagingStyle للرسائل
@@ -206,16 +200,13 @@
 | VoIP فيديو | 📹 Videocam | أرجواني | فيديو 1080p بتشفير طرفي |
 | مؤتمر | 👥 Groups | أخضر | حتى 32 مشارك |
 | بث مباشر | 📺 LiveTv | أحمر | 1-إلى-عدة |
-| خطي يمني | 📱 SimCard | ذهبي | عبر Dinstar GSM |
 | غرفة صوتية | 🎤 Mic | أرجواني | مفتوحة على الهواء |
 
 ### `SovereignActiveCallScreen` — واجهة المكالمة النشطة
-- واجهة مختلفة لكل نوع (فيديو/صوتي/مؤتمر/بث/PSTN)
 - SurfaceViewRenderer للفيديو مع معاينة محلية
 - نبض ديناميكي للأفاتار في المكالمات الصوتية
 - شبكة مشاركين للمؤتمر
 - شارة LIVE + عدد المشاهدين للبث
-- إشارة GSM + رقم المنفذ للـ PSTN
 
 **أزرار التحكم:**
 - كتم / إيقاف / مكبر أو فيديو
@@ -224,7 +215,6 @@
 ### `SovereignCallLogScreen` — سجل المكالمات الموحد
 - فلاتر حسب نوع المكالمة (6 فلاتر)
 - شارة نوع ملونة
-- إشارة GSM للـ PSTN
 - زر إعادة اتصال سريع
 
 ### `CallTypePickerSheet` — اختيار نوع المكالمة
@@ -317,7 +307,6 @@
 | `group_info/{id}` | SovereignGroupInfoScreen | ✅ **جديد** |
 | `call_type_picker/{id}` | CallTypePickerSheet | ✅ **جديد** |
 | `voip_call/{id}/{type}` | VideoCallScreen | ✅ |
-| `pstn_call/{num}` | PstnCallScreen | ✅ |
 | `conference/{id}` | ConferenceScreen | ✅ **جديد** |
 | `live_broadcast/{id}` | LiveBroadcastScreen | ✅ **جديد** |
 | `audio_space/{id}` | ConferenceScreen | ✅ **جديد** |
@@ -348,7 +337,6 @@
 7. ✅ **الخصوصية** — 5 مستويات × 9 إعدادات + حوار تحديث
 8. ✅ **الحالات** — 6 حالات مع خصوصية من يستطيع رؤيتها
 9. ✅ **القصص** — 4 أنواع + خصوصية + مشاهدون + تفاعلات
-10. ✅ **المكالمات** — 6 أنواع (VoIP, فيديو, مؤتمر, بث, PSTN, Space)
 11. ✅ **Backend APIs** — 8 endpoints جديدة مع Redis
 12. ✅ **التنقل** — 24 مسار كامل مفعّل
 

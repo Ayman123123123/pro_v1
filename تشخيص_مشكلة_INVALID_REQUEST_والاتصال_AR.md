@@ -16,7 +16,6 @@
 | لوحة الإدارة | `admin_dashboard/` | على 3000 خلف nginx |
 | قواعد البيانات | Postgres + Mongo + Redis | عبر `docker-compose.yml` |
 | التخزين | MinIO | وسائط مشفّرة |
-| الصوت PSTN | DINSTAR / Asterisk | مسار منفصل |
 
 **التسجيل** لا يعتمد على رقم هاتف/OTP: اسم مستخدم + كلمة مرور + اسم ظاهر + **مفاتيح libsignal للجهاز**، ثم ينتظر موافقة الإدارة (`PENDING`).
 

@@ -37,17 +37,12 @@ index b8ffa0eb..0b9ad4c6 100644
  
  
  
--private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN }
-+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN, PSTN_CONFIG }
  
  @OptIn(ExperimentalMaterial3Api::class)
  @Composable
 @@ -390,6 +396,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
-                 val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
-                 com.red.sovereign.features.dinstar.DinstarAdminScreen(dm, onBack = { currentScreen = SovereignScreen.DASHBOARD })
              }
 +            SovereignScreen.PSTN_CONFIG -> {
-+                val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
 +                PstnConfigScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, tokenStore = TokenStore(context), snackbarHostState = remember { SnackbarHostState() })
 +            }
              SovereignScreen.COMMUNITIES -> {
@@ -62,7 +57,6 @@ index b8ffa0eb..0b9ad4c6 100644
 -                MainSection.entries.forEach { item ->
 -                    val itemLabel = item.label
 -                    val isSelected = section == item
--                    val onClick = remember(item) { { section = item; showDinstar = false; if (item == MainSection.CALLS) { callHistory.load(); directory.refreshPresence() } } }
 -                    NavigationBarItem(
 -                        selected = isSelected,
 -                        onClick = onClick,
@@ -73,7 +67,6 @@ index b8ffa0eb..0b9ad4c6 100644
 +                currentSection = section,
 +                onSectionSelected = { item ->
 +                    section = item
-+                    showDinstar = false
 +                    if (item == MainSection.CALLS) {
 +                        callHistory.load()
 +                        directory.refreshPresence()
@@ -87,9 +80,6 @@ index b8ffa0eb..0b9ad4c6 100644
 @@ -443,7 +450,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                  else -> MoreScreen(
                      account,
-                     onDinstar = { showDinstar = true },
--                    onAdmin = { currentScreen = SovereignScreen.DINSTAR_ADMIN },
-+                    onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.DINSTAR_ADMIN },
                      onSettings = { showSettings = true },
                      onContacts = { currentScreen = SovereignScreen.CONTACTS },
                      onDevices = { currentScreen = SovereignScreen.DEVICES },
@@ -190,7 +180,6 @@ index b8ffa0eb..0b9ad4c6 100644
          MoreOption(Icons.Default.Public, "╪º┘ä┘à╪¼╪¬┘à╪╣╪º╪¬ ┘ê╪º┘ä┘é┘å┘ê╪º╪¬", "┘à╪¼╪¬┘à╪╣╪º╪¬ ╪╣╪º┘à╪⌐ ┘ê┘é┘å┘ê╪º╪¬ ΓÇö ╪º┘å╪╢┘à ┘ê╪¬╪º╪¿╪╣ (╪╣╪º┘à╪î ┘ä┘è╪│ ┘à╪┤┘ü╪▒╪º┘ï)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
          MoreOption(Icons.Default.Event, "╪º┘ä┘ü╪╣╪º┘ä┘è╪º╪¬", "┘ü╪╣╪º┘ä┘è╪º╪¬ ┘à╪¼╪¬┘à╪╣┘è╪⌐ ┘à╪╣ RSVP ┘ê╪¬╪│╪¼┘è┘ä ╪¡╪╢┘ê╪▒", Color(0xFFE8B84A), enabled = true, click = onEvents)
          MoreOption(Icons.Default.Poll, "╪º┘ä╪º╪│╪¬╪╖┘ä╪º╪╣╪º╪¬", "╪¬╪╡┘ê┘è╪¬ ┘à╪¼╪¬┘à╪╣┘è ┘à╪╣ ┘å╪¬╪º╪ª╪¼ ┘ü┘ê╪▒┘è╪⌐ ┘ê┘å┘É╪│┘Ä┘à ┘à╪ª┘ê┘è╪⌐", Color(0xFF65D7E7), enabled = true, click = onPolls)
-+        MoreOption(Icons.Default.NetworkCheck, "╪Ñ╪╣╪»╪º╪»╪º╪¬ PSTN / DINSTAR", "╪¿┘ê╪º╪¿╪⌐ DINSTAR╪î ╪¡╪º┘ä╪⌐ ╪º┘ä╪┤╪▒╪º╪ª╪¡╪î SMSC╪î ╪º╪«╪¬╪¿╪º╪▒ SIP Bridge", AqyalGold, click = onPstnConfig)
      }
  }
  
@@ -199,10 +188,8 @@ index b8ffa0eb..0b9ad4c6 100644
  }
  
 -/**
-- * ≡ƒô¿ ╪┤╪º╪┤╪⌐ ╪▒╪│╪º╪ª┘ä DINSTAR SMS ΓÇö ╪Ñ╪▒╪│╪º┘ä/╪º╪│╪¬┘é╪¿╪º┘ä ╪╣╪¿╪▒ ╪┤╪▒┘è╪¡╪⌐ GSM
 - */
 -@Composable
--private fun DinstarSmsScreen(viewModel: AuthViewModel, pstnEnabled: Boolean) {
 -    var recipient by remember { mutableStateOf("") }
 -    var messageText by remember { mutableStateOf("") }
 -    var sentMessages by remember { mutableStateOf<List<SmsItem>>(emptyList()) }
@@ -216,7 +203,6 @@ index b8ffa0eb..0b9ad4c6 100644
 -            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
 -                Icon(Icons.AutoMirrored.Filled.Message, null, tint = AqyalGold, modifier = Modifier.size(35.dp))
 -                Column(Modifier.padding(start = 12.dp)) {
--                    Text("╪▒╪│╪º╪ª┘ä DINSTAR SMS", fontWeight = FontWeight.Bold, color = AqyalGold)
 -                    Text(if (pstnEnabled) "╪º┘ä╪┤╪▒┘è╪¡╪⌐ ╪¼╪º┘ç╪▓╪⌐ ┘ä┘ä╪Ñ╪▒╪│╪º┘ä ┘ê╪º┘ä╪º╪│╪¬┘é╪¿╪º┘ä" else "╪║┘è╪▒ ┘à┘ü╪╣┘ä ΓÇö ┘è┘ü╪╣┘ä┘ç ╪º┘ä┘à╪│╪ñ┘ê┘ä ┘à┘å ╪º┘ä┘ä┘ê╪¡╪⌐", fontSize = 12.sp)
 -                }
 -            }

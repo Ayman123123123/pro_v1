@@ -71,7 +71,6 @@ admin_dashboard/src/index.jsx
 admin_dashboard/src/pages/MasterLayout.tsx
 admin_dashboard/src/pages/UserApproval.tsx
 admin_dashboard/src/pages/tabs/BackupTab.tsx
-admin_dashboard/src/pages/tabs/PstnAccessTab.tsx
 admin_dashboard/src/pages/tabs/UserIntelligenceTab.tsx
 red-app/src/main/java/com/red/sovereign/features/chat/MediaBubble.kt
 pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/...

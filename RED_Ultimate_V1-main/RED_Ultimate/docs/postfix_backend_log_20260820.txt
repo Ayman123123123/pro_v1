@@ -1,4 +1,3 @@
-2026-08-20 01:37:11.942 [http-nio-8080-exec-5] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=3d723086-2a19-41e7-b187-c90525eb403d, uri=ws://192.168.11.131/ws/calls]
 java.util.NoSuchElementException: Call not found
 	at com.red.server.calls.CallHistoryService.update(CallHistoryService.kt:128)
 	at com.red.server.calls.CallHistoryService.end(CallHistoryService.kt:38)
@@ -33,7 +32,6 @@ java.util.NoSuchElementException: Call not found
 2026-08-20 01:37:53.735 [http-nio-8080-exec-7] INFO  c.r.server.calls.CallEventPublisher - CALL_STARTED callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 type=AUDIO_1V1 route=RED from=56511 to=31461
 2026-08-20 01:37:53.738 [http-nio-8080-exec-7] INFO  c.r.s.services.NotificationService - notification.voip_push targetUser=31461 caller=56511 callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 mode=VOICE
 2026-08-20 01:37:54.047 [DefaultDispatcher-worker-2] INFO  c.r.s.services.NotificationService - notification.voip_push targetUser=31461 caller=56511 callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 mode=VOICE
-2026-08-20 01:37:56.053 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Unsupported call signal type
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -61,7 +59,6 @@ java.lang.IllegalArgumentException: Unsupported call signal type
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:37:56.062 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Unsupported call signal type
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -90,7 +87,6 @@ java.lang.IllegalArgumentException: Unsupported call signal type
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
 2026-08-20 01:37:56.502 [DefaultDispatcher-worker-2] INFO  c.r.s.services.NotificationService - notification.voip_push targetUser=31461 caller=56511 callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 mode=VOICE
-2026-08-20 01:37:58.272 [http-nio-8080-exec-9] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Unsupported call signal type
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -120,7 +116,6 @@ java.lang.IllegalArgumentException: Unsupported call signal type
 	at java.base/java.lang.Thread.run(Unknown Source)
 2026-08-20 01:37:58.859 [DefaultDispatcher-worker-2] INFO  c.r.s.services.NotificationService - notification.voip_push targetUser=31461 caller=56511 callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 mode=VOICE
 2026-08-20 01:37:59.228 [http-nio-8080-exec-3] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_answered callId=6c394d18-52d2-4150-9003-2ad65f5e21d3
-2026-08-20 01:37:59.238 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: Message will not be sent because the WebSocket session has been closed
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.writeMessagePart(WsRemoteEndpointImplBase.java:458)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlockInternal(WsRemoteEndpointImplBase.java:316)
@@ -156,7 +151,6 @@ java.lang.IllegalStateException: Message will not be sent because the WebSocket 
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:37:59.275 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -190,7 +184,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:37:59.283 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -224,7 +217,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:37:59.359 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -258,7 +250,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:37:59.364 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -292,7 +283,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:38:00.467 [http-nio-8080-exec-6] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Call is not ringing
 	at com.red.server.calls.CallHistoryService.answer$lambda$0(CallHistoryService.kt:32)
 	at com.red.server.calls.CallHistoryService.update(CallHistoryService.kt:129)
@@ -324,7 +314,6 @@ java.lang.IllegalArgumentException: Call is not ringing
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
 2026-08-20 01:38:08.076 [http-nio-8080-exec-7] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_ended callId=6c394d18-52d2-4150-9003-2ad65f5e21d3 duration_ms=8849 reason=NORMAL
-2026-08-20 01:38:08.410 [http-nio-8080-exec-7] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f5b847f6-3428-40e1-8947-a460d88c1034, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -358,7 +347,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:39:16.173 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=228fc845-78af-41ab-8d62-a39ad9a1f98b, uri=ws://192.168.11.131/ws/calls]
 java.util.NoSuchElementException: Call not found
 	at com.red.server.calls.CallHistoryService.update(CallHistoryService.kt:128)
 	at com.red.server.calls.CallHistoryService.end(CallHistoryService.kt:38)
@@ -389,7 +377,6 @@ java.util.NoSuchElementException: Call not found
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:39:18.052 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=228fc845-78af-41ab-8d62-a39ad9a1f98b, uri=ws://192.168.11.131/ws/calls]
 java.util.NoSuchElementException: Call not found
 	at com.red.server.calls.CallHistoryService.update(CallHistoryService.kt:128)
 	at com.red.server.calls.CallHistoryService.end(CallHistoryService.kt:38)
@@ -423,7 +410,6 @@ java.util.NoSuchElementException: Call not found
 2026-08-20 01:39:55.135 [pool-4-thread-1] INFO  c.r.s.a.s.DashboardDataScheduler - Recorded 8 health checks
 2026-08-20 01:39:56.690 [http-nio-8080-exec-4] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_started hash_initiator=50607828 hash_target=48611025 type=AUDIO_1V1 route=RED
 2026-08-20 01:39:56.690 [http-nio-8080-exec-4] INFO  c.r.server.calls.CallEventPublisher - CALL_STARTED callId=25ff8497-7729-4210-8901-90f3388c0594 type=AUDIO_1V1 route=RED from=56511 to=31461
-2026-08-20 01:39:57.033 [http-nio-8080-exec-9] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Unsupported call signal type
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -452,7 +438,6 @@ java.lang.IllegalArgumentException: Unsupported call signal type
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
 2026-08-20 01:40:00.347 [http-nio-8080-exec-10] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_answered callId=25ff8497-7729-4210-8901-90f3388c0594
-2026-08-20 01:40:00.357 [http-nio-8080-exec-10] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: Message will not be sent because the WebSocket session has been closed
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.writeMessagePart(WsRemoteEndpointImplBase.java:458)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlockInternal(WsRemoteEndpointImplBase.java:316)
@@ -488,7 +473,6 @@ java.lang.IllegalStateException: Message will not be sent because the WebSocket 
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:40:00.397 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -522,7 +506,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:40:00.402 [http-nio-8080-exec-2] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -556,7 +539,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:40:00.458 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -590,7 +572,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:480)
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
-2026-08-20 01:40:00.463 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -625,7 +606,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:57)
 	at java.base/java.lang.Thread.run(Unknown Source)
 2026-08-20 01:40:11.101 [http-nio-8080-exec-3] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_ended callId=25ff8497-7729-4210-8901-90f3388c0594 duration_ms=10750 reason=NORMAL
-2026-08-20 01:40:11.115 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)

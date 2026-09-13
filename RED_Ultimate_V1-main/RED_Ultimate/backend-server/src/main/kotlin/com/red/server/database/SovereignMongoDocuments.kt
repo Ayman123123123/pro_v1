@@ -132,7 +132,6 @@ data class LegacyCallHistoryDraft(
     var status: CallStatus,
     // التفاصيل
     var durationMs: Long = 0,
-    val dinstarPort: Int? = null,
     var signalStrength: Int? = null,
     var viewerCount: Int = 0,
     var isRecorded: Boolean = false,
@@ -152,8 +151,8 @@ data class CallParticipant(
     val leftAt: Instant? = null
 )
 
-enum class CallType { VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE_BROADCAST, PSTN_DINSTAR, AUDIO_SPACE }
-enum class CallRoute { RED, DINSTAR }
+enum class CallType { VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE_BROADCAST, AUDIO_SPACE }
+enum class CallRoute { RED }
 enum class CallStatus { RINGING, CONNECTING, ACTIVE, ON_HOLD, ENDED, MISSED, FAILED }
 
 // ════════════════════════════════════════════════════

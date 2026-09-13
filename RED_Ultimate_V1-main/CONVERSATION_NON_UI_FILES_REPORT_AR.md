@@ -28,7 +28,6 @@
 - `admin_dashboard/src/index.jsx`
 - `admin_dashboard/src/pages/MasterLayout.tsx`
 - `admin_dashboard/src/pages/UserApproval.tsx`
-- تبويبات لوحة قديمة مثل `BackupTab`, `PstnAccessTab`, `UserIntelligenceTab`
 - نسخ `admin_dashboard` داخل `pro/` و `project/pro/`
 - `MediaBubble.kt` كواجهة فقاعة وسائط قديمة، محفوظة كأرشيف/مرجع
 

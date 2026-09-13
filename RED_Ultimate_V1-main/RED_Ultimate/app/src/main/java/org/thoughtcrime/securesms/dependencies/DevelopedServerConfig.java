@@ -15,6 +15,4 @@ public class DevelopedServerConfig {
     public static final String SIGNAL_CONTACT_DISCOVERY_URL = LOCAL_IP + "/directory";
     public static final String SIGNAL_KEY_BACKUP_URL = LOCAL_IP + "/backup";
     
-    // PSTN / Dumin Gateway Endpoint
-    public static final String DUMIN_GATEWAY_URL = "http://192.168.1.100:5060";
 }

@@ -26,7 +26,6 @@ app.jar
 upload-clean/
 /backend-server/
 cookies.txt
-dinstar_cookies.txt
 
 # نفس القواعد للمسارات المتداخلة: القواعد أعلاه بلا `**/` تطابق الجذر فقط،
 # فبقيت ‎RED_Ultimate_V1-main/RED_Ultimate/.android_home/‎ متتبَّعة بالخطأ
@@ -36,7 +35,6 @@ dinstar_cookies.txt
 **/.gradle_user_home/
 **/app.jar
 **/cookies.txt
-**/dinstar_cookies.txt
 **/local-maven/
 **/build-tools/*.tar.gz
 **/build-tools/*.zip
@@ -49,14 +47,6 @@ historical_recovery_audit_*/
 audit_preservation_*/
 
 # سجلات تشخيص محلية مؤرّخة (مخرجات فحص، ليست كوداً)
-ASTERISK_*.txt
-**/ASTERISK_*.txt
-DINSTAR_*.txt
-**/DINSTAR_*.txt
-DINSTAR_*.html
-**/DINSTAR_*.html
-DINSTAR_*.json
-**/DINSTAR_*.json
 AUTH_*.txt
 **/AUTH_*.txt
 RED_BACKEND_*.txt
@@ -69,8 +59,6 @@ CHANGELOG-*.md
 **/CHANGELOG-*.md
 TABITOKEN_*.md
 **/TABITOKEN_*.md
-UC2000-*.md
-**/UC2000-*.md
 MERGE_*.md
 **/MERGE_*.md
 RECOVERY_*.md
@@ -81,8 +69,6 @@ UNIFIED_*.md
 **/UNIFIED_*.md
 COMPREHENSIVE_*.md
 **/COMPREHENSIVE_*.md
-PSTN_*.txt
-**/PSTN_*.txt
 RECOVERY_MAP*.txt
 **/RECOVERY_MAP*.txt
 RED_ANDROID*.md

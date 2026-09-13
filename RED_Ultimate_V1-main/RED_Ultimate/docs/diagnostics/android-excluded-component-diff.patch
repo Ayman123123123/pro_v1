@@ -1,32 +1,20 @@
-diff --git a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarViewModel.kt b/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarViewModel.kt
 index 499e7fe1..dc7b6378 100644
---- a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarViewModel.kt
-+++ b/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarViewModel.kt
-@@ -41,9 +41,6 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
-     private val _commandResult = MutableStateFlow<DinstarCommandResult?>(null)
      val commandResult = _commandResult.asStateFlow()
  
--    private val _smsHistory = MutableStateFlow<List<DinstarSms>>(emptyList())
 -    val smsHistory = _smsHistory.asStateFlow()
 -
      init {
          refreshStatus()
          connectWebSocket()
-@@ -130,25 +127,6 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
          )
      }
  
 -    fun sendSms(text: String, numbers: List<String>) {
 -        viewModelScope.launch {
--            _commandResult.value = DinstarCommandResult.Loading
 -            val body = mapOf("text" to text, "param" to numbers.map { mapOf("number" to it) })
--            when (val response = client.request("POST", "/api/admin/dinstar/sms/send", mapper.writeValueAsString(body))) {
 -                is ApiResult.Success -> {
--                    _commandResult.value = DinstarCommandResult.Success("╪¬┘à ╪Ñ╪▒╪│╪º┘ä ╪º┘ä╪▒╪│╪º╪ª┘ä ╪¿┘å╪¼╪º╪¡")
--                    val newItems = numbers.map { DinstarSms(number = it, content = text, direction = "OUT") }
 -                    _smsHistory.value = newItems + _smsHistory.value
 -                }
--                is ApiResult.Error -> _commandResult.value = DinstarCommandResult.Error(response.message ?: "┘ü╪┤┘ä ╪Ñ╪▒╪│╪º┘ä ╪º┘ä╪▒╪│╪º╪ª┘ä")
 -            }
 -        }
 -    }
@@ -38,18 +26,13 @@ index 499e7fe1..dc7b6378 100644
      private fun connectWebSocket() {
          wsBridge.connect(tokens.accessToken)
          viewModelScope.launch {
-@@ -156,12 +134,23 @@ class DinstarViewModel(application: Application) : AndroidViewModel(application)
                  when (event) {
-                     is DinstarWsEvent.PortStatusChanged -> refreshStatus()
-                     is DinstarWsEvent.CdrReceived -> queryCdr()
-+                    is DinstarWsEvent.PstnIncoming -> handlePstnIncoming(event)
                      else -> Unit
                  }
              }
          }
      }
  
-+    private fun handlePstnIncoming(event: DinstarWsEvent.PstnIncoming) {
 +        IncomingCallActivity.launchPstn(
 +            getApplication(),
 +            event.callId,
@@ -61,7 +44,6 @@ index 499e7fe1..dc7b6378 100644
 +
      fun resetPort(portIndex: Int) {
          viewModelScope.launch {
-             _commandResult.value = DinstarCommandResult.Loading
 diff --git a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/sms/PstnEventSocket.kt b/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/sms/PstnEventSocket.kt
 index dbd70e63..871802bc 100644
 --- a/RED_Ultimate_V1-main/RED_Ultimate/red-app/src/main/java/com/red/sovereign/features/sms/PstnEventSocket.kt

@@ -8,7 +8,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.red.sovereign.core.LocalServerDiscovery
 import com.red.sovereign.auth.UserResponse
-import com.red.sovereign.calls.PstnLinphoneConfig
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.json.Json
@@ -25,13 +24,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
-    private val pstn = PstnApi(tokens)
     private val discovery = LocalServerDiscovery(application)
 
     var serverState: ServerState by mutableStateOf(ServerState.Ready(ServerEndpoint.url()))
-        private set
-
-    var pstnState: PstnState by mutableStateOf(PstnState.Idle)
         private set
 
     var state: AuthState by mutableStateOf(AuthState.Loading)
@@ -41,10 +36,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     init {
         ServerEndpoint.initialize(application)
         serverState = ServerState.Ready(ServerEndpoint.url())
-        // حمّل إعدادات خط PSTN (SIP على UC200 Pro) المخزَّنة محلياً فوق الافتراضية.
-        viewModelScope.launch {
-            runCatching { PstnLinphoneConfig.load(getApplication()) }
-        }
         restore()
     }
 
@@ -119,169 +110,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** PSTN manager (Linphone) — يسجّل مباشرة على UC200 Pro لا عبر جسر Asterisk */
-    private var pstnWebRtc: com.red.sovereign.calls.PstnLinphoneManager? = null
-    var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
-
-    /**
-     * أحداث المكالمات الواردة (تُربط بالمثيل المستمر لـ PstnLinphoneManager).
-     * مع تسجيل Linphone المباشر على UC200 Pro تصل الوارد عبر التسجيل المستمر
-     * (لا عبر WebSocket الخادم)، فهذا المعالج يعرض شاشة الرنين عند وصول INVITE.
-     */
-    private val pstnIncomingEvents = object : com.red.sovereign.calls.PstnWebRtcManager.Events {
-        override fun onConnected() = Unit
-        override fun onRinging() = Unit
-        override fun onAnswered(usedToday: Int, dailyLimit: Int) = Unit
-        override fun onIncoming(sdp: String, fromNumber: String) {
-            incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
-            pstnState = PstnState.Incoming(fromNumber)
-        }
-        override fun onHangup(cause: String?) {
-            pstnState = PstnState.Idle
-            pstnWebRtc?.release()
-            pstnWebRtc = null
-            stopPstnEventStream()
-        }
-        override fun onError(message: String) = Unit
-    }
-
-    /**
-     * قناة أحداث الخادم الحيّة لمكالمة PSTN الصادرة عبر `/ws/pstn`.
-     *
-     * مسار SIP في `PstnWebRtcManager` يستشعر RINGING/ANSWERED من إشارة SIP
-     * المحلية، لكنه أعمى عن مراحل قناة GSM الفعلية على البوابة. الخادم صار
-     * يبثّ `PSTN_CALL_EVENT` (RINGING/BRIDGING/ACTIVE/ENDED) من أحداث
-     * Asterisk الحقيقية — وهي المصدر الموثوق لمرحلة الطرف البعيد. نستهلكها
-     * هنا لتصحيح حالة الواجهة حتى لو تأخّرت إشارة SIP أو غابت.
-     */
-    private var pstnEventSocket: com.red.sovereign.features.sms.PstnEventSocket? = null
-    @Volatile private var activePstnCallId: String? = null
-
-    private fun startPstnEventStream() {
-        if (pstnEventSocket != null) return
-        pstnEventSocket = com.red.sovereign.features.sms.PstnEventSocket(
-            tokens = tokens,
-            onEnvelope = ::onPstnServerEvent
-        ).also { it.connect() }
-    }
-
-    private fun stopPstnEventStream() {
-        pstnEventSocket?.disconnect()
-        pstnEventSocket = null
-        activePstnCallId = null
-    }
-
-    /** يحوّل أحداث الخادم إلى انتقالات حالة الواجهة للمكالمة الصادرة الجارية. */
-    private fun onPstnServerEvent(e: com.red.sovereign.features.sms.PstnWsEnvelope) {
-        if (e.type != "PSTN_CALL_EVENT") return
-        val callId = e.callId ?: return
-        // تجاهل أحداث مكالمة أخرى (مثلاً مكالمة سابقة انتهت متأخرة).
-        val current = activePstnCallId
-        if (current != null && callId != current) return
-        val prev = pstnState as? PstnState.Started
-        when (e.event) {
-            "RINGING" -> pstnState = PstnState.Ringing
-            "BRIDGING" -> pstnState = PstnState.Bridging
-            "ACTIVE" -> pstnState = PstnState.Started(
-                callId = callId,
-                usedToday = prev?.usedToday ?: 0,
-                dailyLimit = prev?.dailyLimit ?: 0,
-                answered = true
-            )
-            "ENDED" -> {
-                pstnWebRtc?.release()
-                pstnWebRtc = null
-                pstnState = PstnState.Idle
-                stopPstnEventStream()
-            }
-            else -> Unit
-        }
-    }
-
-    fun dialPstn(number: String) = viewModelScope.launch {
-        refreshPstnEntitlement()
-        pstnState = PstnState.Bridging
-        startPstnEventStream()
-        // مثيل مستمر واحد لصادر/وارد (تسجيل واحد على UC200 Pro)
-        val mgr = com.red.sovereign.calls.PstnLinphoneManager.incoming(getApplication())
-        mgr.setGlobalEvents(pstnIncomingEvents)
-        pstnWebRtc = mgr
-        mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
-            override fun onConnected() { pstnState = PstnState.Registering }
-            override fun onRinging() { pstnState = PstnState.Ringing }
-            override fun onAnswered(usedToday: Int, dailyLimit: Int) {
-                activePstnCallId = mgr.currentCallId
-                pstnState = PstnState.Started(mgr.currentCallId ?: "", usedToday, dailyLimit)
-            }
-            override fun onHangup(cause: String?) {
-                pstnState = PstnState.Idle
-                pstnWebRtc?.release()
-                pstnWebRtc = null
-                stopPstnEventStream()
-            }
-            override fun onIncoming(sdp: String, fromNumber: String) {
-                incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
-                pstnState = PstnState.Incoming(fromNumber)
-            }
-            override fun onError(message: String) {
-                pstnState = PstnState.Error(localize(message))
-                stopPstnEventStream()
-            }
-        })
-    }
-
-    fun acceptIncomingPstnCall() {
-        val incoming = incomingPstnCall ?: return
-        pstnWebRtc?.answerIncoming(incoming.sdp)
-        incomingPstnCall = null
-    }
-
-    fun rejectIncomingPstnCall() {
-        pstnWebRtc?.rejectIncoming()
-        pstnWebRtc?.release()
-        pstnWebRtc = null
-        incomingPstnCall = null
-        pstnState = PstnState.Idle
-        stopPstnEventStream()
-    }
-
-    fun hangupPstn() = viewModelScope.launch {
-        pstnWebRtc?.hangup()
-        pstnWebRtc?.release()
-        pstnWebRtc = null
-        pstnState = PstnState.Idle
-        stopPstnEventStream()
-    }
-
-    /** كتم/إلغاء كتم الميكروفون في مكالمة PSTN النشطة. */
-    fun togglePstnMute(mute: Boolean) {
-        pstnWebRtc?.isMuted = mute
-    }
-
-    /** تبديل مكبر الصوت في مكالمة PSTN النشطة. */
-    fun togglePstnSpeaker(speakerOn: Boolean) {
-        pstnWebRtc?.isSpeaker = speakerOn
-    }
-
-    fun clearPstnState() { pstnState = PstnState.Idle }
-
-    // 📨 SMS Methods
-    fun sendSms(recipient: String, text: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
-        val result = pstn.sendSms(recipient, text)
-        when (result) {
-            is ApiResult.Success -> onResult(true, "تم الإرسال")
-            is ApiResult.Error -> onResult(false, result.message ?: "فشل الإرسال")
-        }
-    }
-
-    fun loadSmsInbox(onResult: (List<SmsIncomingMessage>) -> Unit = { }) = viewModelScope.launch {
-        val result = pstn.getInbox()
-        when (result) {
-            is ApiResult.Success -> onResult(result.value)
-            is ApiResult.Error -> onResult(emptyList())
-        }
-    }
-
     /** تحديث اسم المستخدم (username) على الخادم ثم محلياً. */
     fun updateUsername(newUsername: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
         val trimmed = newUsername.trim()
@@ -328,7 +156,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (result) {
             is ApiResult.Success -> {
                 tokens.updateTokens(result.value)
-                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
+                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.isAdmin)
             }
             is ApiResult.Error -> {
                 if (result.code == 401 || result.code == 403) tokens.clearSession()
@@ -365,7 +193,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "APPROVED" -> {
                 tokens.save(response)
                 pendingCredentials = null
-                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
+                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.role == "ADMIN")
             }
             "PENDING" -> {
                 pendingCredentials = username to password
@@ -375,21 +203,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "SUSPENDED" -> state = AuthState.Suspended
             "BANNED" -> state = AuthState.Banned
             else -> state = AuthState.Error("حالة حساب غير معروفة")
-        }
-    }
-
-    /** يجلب حالة PSTN من الخادم (/api/auth/me) ويحدث الحالة المحلية.
-     * يستدعى عند: استئناف التطبيق، قبل الاتصال، ودورياً أثناء شاشة DINSTAR. */
-    fun refreshPstnEntitlement() = viewModelScope.launch {
-        val result = api.me()
-        if (result is ApiResult.Success) {
-            val user = result.value
-            tokens.savePstnEnabled(user.pstnEnabled)
-            // تحديث AuthState الحالي إن كان مصادقاً
-            state = when (val current = state) {
-                is AuthState.Authenticated -> current.copy(pstnEnabled = user.pstnEnabled)
-                else -> current
-            }
         }
     }
 
@@ -464,7 +277,7 @@ sealed interface AuthState {
     data object RecoveryComplete : AuthState
     data object Submitting : AuthState
     data class Pending(val redId: String, val username: String, val recoveryCodes: List<String>) : AuthState
-    data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean, val isAdmin: Boolean = false) : AuthState
+    data class Authenticated(val redId: String, val username: String, val isAdmin: Boolean = false) : AuthState
     data class Rejected(val reason: String?) : AuthState
     data object Suspended : AuthState
     data object Banned : AuthState
@@ -476,22 +289,3 @@ sealed interface ServerState {
     data class Ready(val url: String) : ServerState
     data class Error(val message: String, val fallbackUrl: String) : ServerState
 }
-
-sealed interface PstnState {
-    data object Idle : PstnState
-    data object Dialing : PstnState
-    data object Bridging : PstnState
-    data object Registering : PstnState
-    data object Ringing : PstnState
-    data class Incoming(val fromNumber: String) : PstnState
-    data class Started(
-        val callId: String,
-        val usedToday: Int,
-        val dailyLimit: Int,
-        val answered: Boolean = true,
-        val ringing: Boolean = false
-    ) : PstnState
-    data class Error(val message: String) : PstnState
-}
-
-data class IncomingPstnCall(val sdp: String, val fromNumber: String)

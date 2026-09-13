@@ -10,10 +10,8 @@ plugins {
 // البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
 // Default to the host Wi-Fi interface verified for physical Android clients.
 // CI/production may override this with -PRED_SERVER_URL=https://your-domain.
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.11.131:8088")
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.0.244:8088")
 // Comma-separated candidate server URLs tried first during LAN auto-discovery.
-// local-first-run.* builds this from BOTH the Wi-Fi (client) and Ethernet (Dinstar
-// NIC) addresses so a device on either interface connects without scanning.
 // Falls back to the single RED_SERVER_URL when not provided.
 val redServerCandidates = providers.gradleProperty("RED_SERVER_CANDIDATES")
     .orElse(redServerUrl)
@@ -157,9 +155,6 @@ dependencies {
     implementation(libs.androidx.core.telecom)
     implementation(libs.webrtc.android)
     implementation(project(":shared-proto"))
-    // Linphone SDK (liblinphone) — SIP client replacing WebRTC for PSTN calls via UC200 Pro.
-    // minimal flavor = no video / no GPL third parties (~19MB AAR).
-    implementation("org.linphone.minimal:linphone-sdk-android:5.3.106")
 
     // DataStore for ScheduledCalls
     implementation(libs.androidx.datastore.preferences)

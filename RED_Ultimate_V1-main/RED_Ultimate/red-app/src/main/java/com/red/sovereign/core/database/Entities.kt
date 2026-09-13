@@ -105,9 +105,9 @@ data class CallLogEntity(
     @PrimaryKey val id: String,
     val peerId: String,
     val peerLabel: String = "",
-    val type: String, // VOICE, VIDEO, DINSTAR, GROUP, LIVE, SPACE
+    val type: String, // VOICE, VIDEO, GROUP, LIVE, SPACE
     val direction: String, // INCOMING, OUTGOING
-    val route: String = "RED", // RED, DINSTAR
+    val route: String = "RED", // RED transport
     val status: String, // COMPLETED, MISSED, REJECTED, ACTIVE, ENDED, FAILED
     val timestamp: Long,
     val durationMs: Long = 0,

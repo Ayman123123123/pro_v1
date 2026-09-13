@@ -21,7 +21,7 @@ ALTER TABLE users ADD CONSTRAINT users_status_type_check
 ALTER TABLE users ADD CONSTRAINT users_status_visible_to_check
     CHECK (status_visible_to IN ('EVERYONE','CONTACTS','CONTACTS_EXCEPT','ONLY_SHARE_WITH','NOBODY'));
 ALTER TABLE users ADD CONSTRAINT users_theme_preference_check
-    CHECK (theme_preference IN ('SOVEREIGN_DARK','SOVEREIGN_LIGHT','OLED_BLACK','AUTO','YEMENI_GOLD','OCEAN_BLUE','ROYAL_PURPLE','EMERALD'));
+    CHECK (theme_preference IN ('SOVEREIGN_DARK','SOVEREIGN_LIGHT','OLED_BLACK','AUTO','OCEAN_BLUE','ROYAL_PURPLE','EMERALD'));
 ALTER TABLE users ADD CONSTRAINT users_accent_color_check
     CHECK (accent_color IN ('CYAN','GOLD','RED','PURPLE','GREEN','ORANGE','PINK'));
 
@@ -67,16 +67,11 @@ CREATE TABLE IF NOT EXISTS call_history (
     id UUID PRIMARY KEY,
     caller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     callee_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    -- لغير المسجلين (أرقام PSTN)
-    callee_phone VARCHAR(30),
-    call_type VARCHAR(20) NOT NULL, -- VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE_BROADCAST, PSTN_DINSTAR, AUDIO_SPACE
-    call_route VARCHAR(10) NOT NULL DEFAULT 'RED', -- RED = VoIP, DINSTAR = PSTN
+    call_type VARCHAR(20) NOT NULL, -- VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE_BROADCAST, AUDIO_SPACE
+    call_route VARCHAR(10) NOT NULL DEFAULT 'RED',
     direction VARCHAR(10) NOT NULL, -- INCOMING, OUTGOING
     status VARCHAR(15) NOT NULL DEFAULT 'RINGING', -- RINGING, ACTIVE, ENDED, MISSED, FAILED, ON_HOLD
     duration_ms BIGINT NOT NULL DEFAULT 0,
-    -- PSTN-specific
-    dinstar_port INTEGER,
-    signal_strength INTEGER CHECK (signal_strength BETWEEN 0 AND 100),
     -- Conference/Live-specific
     max_participants INTEGER,
     viewer_count INTEGER DEFAULT 0,
@@ -89,8 +84,8 @@ CREATE TABLE IF NOT EXISTS call_history (
     ended_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Constraints
-    CONSTRAINT call_type_check CHECK (call_type IN ('VOIP_AUDIO','VOIP_VIDEO','CONFERENCE','LIVE_BROADCAST','PSTN_DINSTAR','AUDIO_SPACE')),
-    CONSTRAINT call_route_check CHECK (call_route IN ('RED','DINSTAR')),
+    CONSTRAINT call_type_check CHECK (call_type IN ('VOIP_AUDIO','VOIP_VIDEO','CONFERENCE','LIVE_BROADCAST','AUDIO_SPACE')),
+    CONSTRAINT call_route_check CHECK (call_route = 'RED'),
     CONSTRAINT call_direction_check CHECK (direction IN ('INCOMING','OUTGOING')),
     CONSTRAINT call_status_check CHECK (status IN ('RINGING','CONNECTING','ACTIVE','ON_HOLD','ENDED','MISSED','FAILED'))
 );
@@ -135,12 +130,11 @@ CREATE TABLE IF NOT EXISTS user_notifications (
     -- Constraints
     CONSTRAINT notif_type_check CHECK (type IN (
         'NEW_MESSAGE','GROUP_MESSAGE','MENTION',
-        'INCOMING_CALL','MISSED_CALL','PSTN_CALL',
+        'INCOMING_CALL',
         'STORY_VIEW','STORY_REPLY',
         'GROUP_INVITE','GROUP_UPDATE','ROLE_CHANGE',
         'LIVE_STARTED','SPACE_STARTED',
-        'SECURITY_ALERT','DEVICE_NEW','UPDATE_AVAILABLE',
-        'DINSTAR_STATUS','DINSTAR_ALERT'
+        'SECURITY_ALERT','DEVICE_NEW','UPDATE_AVAILABLE'
     )),
     CONSTRAINT notif_priority_check CHECK (priority IN ('URGENT','HIGH','NORMAL','LOW'))
 );
@@ -157,7 +151,6 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     stories BOOLEAN NOT NULL DEFAULT TRUE,
     live BOOLEAN NOT NULL DEFAULT TRUE,
     system BOOLEAN NOT NULL DEFAULT TRUE,
-    dinstar BOOLEAN NOT NULL DEFAULT TRUE,
     security BOOLEAN NOT NULL DEFAULT TRUE,
     quiet_hours_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     quiet_hours_start TIME, -- مثال: 22:00
@@ -234,8 +227,6 @@ CREATE TABLE IF NOT EXISTS usage_stats (
     calls_outgoing INTEGER NOT NULL DEFAULT 0,
     calls_incoming INTEGER NOT NULL DEFAULT 0,
     calls_duration_seconds INTEGER NOT NULL DEFAULT 0,
-    pstn_calls INTEGER NOT NULL DEFAULT 0,
-    pstn_duration_seconds INTEGER NOT NULL DEFAULT 0,
     stories_posted INTEGER NOT NULL DEFAULT 0,
     stories_viewed INTEGER NOT NULL DEFAULT 0,
     media_uploaded INTEGER NOT NULL DEFAULT 0,

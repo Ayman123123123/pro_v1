@@ -37,20 +37,16 @@ DROP INDEX IF EXISTS idx_messages_delivery_receipts_message;
 CREATE OR REPLACE FUNCTION legendary_retention_cleanup() RETURNS VOID AS $$
 DECLARE
     v_audit_days INTERVAL;
-    v_cdr_days INTERVAL;
     v_health_days INTERVAL;
 BEGIN
     SELECT (COALESCE((SELECT setting_value FROM system_settings WHERE setting_key='retention.audit_days'), '90') || ' days')::INTERVAL INTO v_audit_days;
-    SELECT (COALESCE((SELECT setting_value FROM system_settings WHERE setting_key='retention.cdr_days'), '180') || ' days')::INTERVAL INTO v_cdr_days;
     SELECT (COALESCE((SELECT setting_value FROM system_settings WHERE setting_key='retention.health_days'), '7') || ' days')::INTERVAL INTO v_health_days;
 
     -- حارس إضافي: لا تنظيف أبداً بفاصل NULL أو سالب
     IF v_audit_days IS NULL OR v_audit_days < INTERVAL '1 day' THEN v_audit_days := INTERVAL '90 days'; END IF;
-    IF v_cdr_days IS NULL OR v_cdr_days < INTERVAL '1 day' THEN v_cdr_days := INTERVAL '180 days'; END IF;
     IF v_health_days IS NULL OR v_health_days < INTERVAL '1 day' THEN v_health_days := INTERVAL '7 days'; END IF;
 
     DELETE FROM admin_audit_log WHERE created_at < NOW() - v_audit_days;
-    DELETE FROM dinstar_cdr WHERE start_time < NOW() - v_cdr_days;
     DELETE FROM system_health WHERE last_check_at < NOW() - v_health_days;
 
     UPDATE admin_sessions SET is_active = FALSE, terminated_at = NOW(), termination_reason = 'RETENTION_CLEANUP'

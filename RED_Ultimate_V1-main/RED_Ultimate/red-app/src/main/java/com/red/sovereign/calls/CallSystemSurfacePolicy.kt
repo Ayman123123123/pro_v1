@@ -1,11 +1,6 @@
 package com.red.sovereign.calls
 
-/**
- * RED يعرض مكالماته 1:1 داخل MainActivity. بعض إصدارات Android Telecom الذاتية
- * الإدارة تنهي آخر مهمة ظاهرة للتطبيق عند فصل الاتصال؛ لذلك لا نسجل مكالمات RED
- * الداخلية في ذلك السطح. تظل مكالمات PSTN/DINSTAR منفصلة في مسارها الخاص.
- */
+/** RED calls remain in the app UI rather than registering as system phone calls. */
 internal object CallSystemSurfacePolicy {
-    fun usesAndroidTelecom(mode: String): Boolean =
-        mode.equals("PSTN", ignoreCase = true) || mode.equals("DINSTAR", ignoreCase = true)
+    fun usesAndroidTelecom(mode: String): Boolean = false
 }

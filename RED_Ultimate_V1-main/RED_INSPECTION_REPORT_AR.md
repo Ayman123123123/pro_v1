@@ -22,7 +22,6 @@
 | `AuthorizedApiClient.kt` | عميل API مؤهل مع تجديد تلقائي للرمز | ✅ مكتمل |
 | `DeviceKeyManager.kt` | توليد مفاتيحsignal المحلية (Identity, SignedPreKey, Kyber) | ✅ مكتمل |
 | `TokenStore.kt` | تخزين الرموز المميزة في SecureStore | ✅ مكتامل |
-| `PstnApi.kt` | الاتصال بالهاتف اليمني عبر DINSTAR | ✅ مكتمل |
 
 ### 2. نظام التشفير (Crypto Module)
 | الملف | المسؤولية | الحالة |

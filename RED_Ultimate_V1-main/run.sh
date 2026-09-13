@@ -19,8 +19,7 @@ echo "  🏛️  RED Ultimate V1 — تشغيل المنصة على جهازك"
 echo "=============================================================="
 echo "1) تشغيل المنصة الحقيقية عبر Docker Compose"
 echo "2) لوحة Vite مقابل Compose على 8088 (بدون SQLite)"
-echo "3) فحص اتصال DINSTAR (192.168.11.1)"
-echo "4) فحص وإصلاح شهادات NGINX SSL و HTTPS"
+echo "3) فحص وإصلاح شهادات NGINX SSL و HTTPS"
 read -p "اختر رقم الخيار [1]: " OPT
 OPT=${OPT:-1}
 
@@ -36,10 +35,6 @@ case $OPT in
     RED_API_TARGET="http://127.0.0.1:8088" npm run dev
     ;;
   3)
-    echo "🔍 فحص الاتصال ببوابة DINSTAR..."
-    ping -c 3 192.168.11.1 || true
-    ;;
-  4)
     echo "🔒 فحص وإصلاح شهادات NGINX Proxy و TLS..."
     ./scripts/fix-red-proxy-certs.sh
     ;;

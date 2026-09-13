@@ -1,27 +1,30 @@
-# RED Deployment Guide (Sovereign Edition)
+# RED Deployment Guide
 
-## 1. Prerequisites
-- Docker & Docker Compose installed on your local server.
-- A physical Dumin GSM device connected to the same network.
-- No internet connection required (100% Local).
+## المتطلبات
 
-## 2. Server Launch
-Run the following command in the root folder:
+- Docker وDocker Compose.
+- Java 21 لبناء backend محليًا، أو Docker لبناء الصورة.
+- Node.js لبناء لوحة الإدارة عند الحاجة.
+
+## التشغيل
+
 ```bash
-docker-compose up -d --build
+cp .env.example .env
+# استبدل كل القيم السرية
+./scripts/local-first-run.sh SERVER_IP
 ```
 
-## 3. Systems Check
-- **Backend:** http://localhost:8080/api/admin/monitor
-- **Admin Panel:** http://localhost:3000
-- **Dumin Monitor:** Check SIM status in the Admin Panel.
+تتوفر الواجهة عبر `http://SERVER_IP:8088/`، وتتوفر health checks على `/health` و`/sfu-health`.
 
-## 4. App Distribution
-- Build the APK from the `red-app` folder (Gradle module `:app`).
-- Distribute to your users via the local server's internal link.
+## بناء التطبيق
 
-## 5. Security
-- Access the Admin Panel to APPROVE new users.
-- Use the Kill Switch if a device is lost.
+```bash
+cd red-app
+./gradlew :app:assembleDebug
+```
 
-**Rights Reserved to RED © 2026**
+## الأمان
+
+- لا ترفع `.env` أو مجلد `secrets/` إلى Git.
+- وافق على الحسابات والأجهزة من لوحة الإدارة.
+- استخدم kill switch وتدوير الأسرار وفق سياسة التشغيل.

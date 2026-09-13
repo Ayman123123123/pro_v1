@@ -1,31 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message, Tabs, Typography, InputNumber, Switch } from 'antd';
-import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined, PhoneOutlined, KeyOutlined, AuditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { activateKillSwitch, requestSecurityWipe, updatePstnAccess, getPstnUsers, getAuditLog, apiFetch } from '../api';
+import { Card, Row, Col, Statistic, Button, Modal, Input, Alert, Tag, Space, Table, message, Tabs, Typography } from 'antd';
+import { SafetyOutlined, WarningOutlined, DeleteOutlined, LockOutlined, KeyOutlined, AuditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { activateKillSwitch, requestSecurityWipe, getAuditLog, apiFetch } from '../api';
 
-// 🔴 مدموج من SecurityTab + PstnAccessTab القديمتين — كل الميزات في صفحة واحدة موحدة — بيانات حقيقية
+// مركز الأمان الموحد — بيانات حقيقية
 export default function SecurityCenter() {
   const [killModal, setKillModal] = useState(false);
   const [wipeModal, setWipeModal] = useState(false);
   const [targetUserId, setTargetUserId] = useState('');
   const [reason, setReason] = useState('');
   const [events, setEvents] = useState<any[]>([]);
-  const [pstnUsers, setPstnUsers] = useState<any[]>([]);
-  const [limits, setLimits] = useState<Record<string, number>>({});
   const [operational, setOperational] = useState<any>(null);
 
   const loadAudit = async () => {
     try { const r: any = await getAuditLog({ page: 0, size: 20 }); setEvents(Array.isArray(r?.content) ? r.content : (Array.isArray(r) ? r : [])); } catch { /* ignore */ }
-  };
-  const loadPstn = async () => {
-    try {
-      const data: any = await getPstnUsers();
-      const arr: any[] = Array.isArray(data) ? data : (data?.content ?? []);
-      setPstnUsers(arr);
-      setLimits(Object.fromEntries(arr.map((u: any) => [u.id, u.pstnDailyLimit || 10])));
-    } catch {
-      message.error('تعذر تحميل صلاحيات PSTN');
-    }
   };
   const loadOperational = async () => {
     try {
@@ -34,7 +22,7 @@ export default function SecurityCenter() {
       setOperational(await response.json());
     } catch { message.error('تعذر تحميل مقاييس الأمان الحية'); }
   };
-  useEffect(() => { loadAudit(); loadPstn(); loadOperational(); }, []);
+  useEffect(() => { loadAudit(); loadOperational(); }, []);
 
   const handleKill = async () => {
     if (!reason.trim()) return message.error('أدخل سبب تفعيل Kill Switch');
@@ -46,17 +34,12 @@ export default function SecurityCenter() {
     try { await requestSecurityWipe(targetUserId); message.success('تم إرسال أمر المسح للجهاز'); setWipeModal(false); loadAudit(); }
     catch (e:any) { message.error(e.message||'فشل المسح'); }
   };
-  const updatePstn = async (user:any, enabled:boolean) => {
-    const dailyLimit = enabled ? (limits[user.id]||10) : 0;
-    try { await updatePstnAccess(user.id, enabled, dailyLimit); message.success(enabled ? 'تم تفعيل الاتصال اليمني' : 'تم إلغاء الاتصال'); loadPstn(); }
-    catch (e:any) { message.error(e.message||'فشل تحديث الصلاحية'); }
-  };
 
   return (
     <Space direction="vertical" size="large" style={{width:'100%'}}>
       <div>
         <Typography.Title level={2} style={{color:'#FF4D4F', margin:0}}><SafetyOutlined /> مركز الأمان السيادي — موحد</Typography.Title>
-        <Typography.Text type="secondary">Kill Switch + مسح عن بُعد + صلاحيات PSTN + سجل التدقيق — مدموج من SecurityTab/PstnAccessTab القديمتين — بيانات حقيقية</Typography.Text>
+        <Typography.Text type="secondary">Kill Switch + مسح عن بُعد + سجل التدقيق — بيانات حقيقية</Typography.Text>
       </div>
 
       <Alert type="error" showIcon message="تحذير سيادي" description="Kill Switch يمسح كل الأجهزة فوراً ويلغي كل الجلسات — لا يُستخدم إلا بأمر إداري موثق. كل إجراء يُسجل في Audit." />
@@ -105,22 +88,6 @@ export default function SecurityCenter() {
                   <Typography.Text type="secondary" style={{fontSize:11, display:'block', marginTop:8}}>يمكن نسخه من جدول المستخدمين — RED ID</Typography.Text>
                 </Modal>
               </Space>
-            ),
-          },
-          {
-            key: 'pstn',
-            label: <Space><PhoneOutlined /> صلاحيات PSTN اليمني</Space>,
-            children: (
-              <Card title="صلاحيات الاتصال عبر DINSTAR — التحكم بالرصيد">
-                <Typography.Paragraph>لا يحصل أي حساب على رصيد الشريحة تلقائياً. حدد صلاحية وعدداً يومياً لكل مستخدم معتمد — مدموج من PstnAccessTab القديمة.</Typography.Paragraph>
-                <Table rowKey="id" dataSource={pstnUsers} pagination={{pageSize:10}} scroll={{x:900}} columns={[
-                  {title:'معرّف يونس', dataIndex:'redId', render:(v:string)=><Typography.Text copyable>{v}</Typography.Text>},
-                  {title:'المستخدم', render:(_:any,u:any)=><><b>@{u.username}</b><br/><small>{u.displayName}</small></>},
-                  {title:'الحالة', dataIndex:'status', render:(v:string)=><Tag color={v==='APPROVED'?'gold':'orange'}>{v}</Tag>},
-                  {title:'الحد اليومي', render:(_:any,u:any)=><InputNumber min={1} max={1000} value={limits[u.id]||10} onChange={v=>setLimits({...limits,[u.id]:v||10})} disabled={u.status!=='APPROVED'} />},
-                  {title:'PSTN', render:(_:any,u:any)=><Space><Switch checked={u.pstnEnabled} disabled={u.status!=='APPROVED'} onChange={v=>updatePstn(u,v)} /><span>{u.pstnEnabled?`${u.pstnDailyLimit}/يوم`:'معطل'}</span></Space>},
-                ]} />
-              </Card>
             ),
           },
         ]}

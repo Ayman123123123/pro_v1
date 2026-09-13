@@ -2,9 +2,7 @@
 
 ## النتيجة التنفيذية
 
-تمت معالجة عائق الاعتمادات الذي كان يوقف المعالجة، وتأكد أن ملفات `libsignal-android:0.86.5` و`libsignal-client:0.86.5` مكتملة في Gradle cache. كما تأكد تحميل معالج Room عبر KSP بنجاح. عاد تعطل البناء الكامل في شجرة العمل الأصلية لاحقاً إلى مراجع مصدر غير مكتملة ضمن DINSTAR/PSTN/SMS، وهي مكونات استبعدها نطاق العمل صراحةً، وإلى configuration cache متسلسل تالف عند تشغيل build آخر مع إعادة استخدامه.
 
-لتحقق جودة التحسينات الواقعة ضمن النطاق المسموح، تم إنشاء نسخة Git تحقق معزولة خارج مجلد المشروع الأصلي. تضمنت نسخة التحقق جميع تعديلات `red-app` المحلية ثم أُعيدت مكونات DINSTAR وPSTN وSMS ومسار PSTN في `IncomingCallActivity` إلى أساس Git داخل تلك النسخة وحدها. لم يُعدّل أي ملف مصدر في شجرة العمل الأصلية لهذا الغرض.
 
 | بوابة التحقق | النتيجة | الدليل |
 |---|---:|---|
@@ -21,14 +19,10 @@
 
 | المسار | الخطأ المرصود | التصنيف | الإجراء في هذه الجولة |
 |---|---|---|---|
-| `features/dinstar/DinstarViewModel.kt` | مراجع `PstnIncoming` و`IncomingCallActivity` غير محلولة | DINSTAR/PSTN مستبعد | لم يُعدّل |
-| `features/sms/PstnEventSocket.kt` | استخدام `toJsonElement` غير متوافق مع واجهة التسلسل الحالية | PSTN/SMS مستبعد | لم يُعدّل |
 | `features/sms/SmsViewModel.kt` و`SmsConversationsScreen.kt` | عدم اتساق دالة `openNewChat` واستدعاء `suspend` خارج coroutine | SMS مستبعد | لم يُعدّل |
-| `calls/IncomingCallActivity.kt` | الاستدعاء `pstnSocket.send` يعتمد على تعديل PSTN المستبعد | PSTN مستبعد | لم يُعدّل |
 
 كما ظهر في تشغيل مستقل مع configuration cache مفعّل خطأ `StreamCorruptedException: unexpected EOF in middle of data block` ضمن `:app:kspDebugKotlin`. لا يمثل ذلك خطأ KSP أو Room أو Signal؛ إعادة التشغيل مع `--no-configuration-cache` تجاوزت هذا العائق ووصلت إلى تجميع Kotlin الفعلي.
 
-> لا يجوز اعتبار بناء Android الأصلي كاملاً ناجحاً قبل أن يقرر مالك المشروع معالجة أو عزل التناقضات الموجودة في DINSTAR/PSTN/SMS. لم يتم إصلاحها التزاماً بالنطاق الصريح، لكن نجاح نسخة التحقق يثبت أن تحسينات هذه الجولة تجتاز التجميع واختبارات الوحدة بعد استبعاد تلك المكونات فقط.
 
 ## أوامر تحقق موصى بها
 
@@ -54,7 +48,6 @@ $gradleArgs = @(
 | الملف | الغرض |
 |---|---|
 | `docs/diagnostics/signal-cache-inventory.txt` | توثيق وجود ملفات Signal وأحجامها |
-| `docs/diagnostics/android-gradle-daemon-44988-tail.log` | سجل فشل تجميع مصدر DINSTAR/PSTN/SMS في الشجرة الأصلية |
 | `docs/diagnostics/android-excluded-component-diff.patch` | فرق المكونات المستبعدة المصنفة أثناء التحقق |
 | `docs/diagnostics/working-tree-inventory.txt` | جرد واسع للفروق المحلية قبل أي دمج أو نشر |
 

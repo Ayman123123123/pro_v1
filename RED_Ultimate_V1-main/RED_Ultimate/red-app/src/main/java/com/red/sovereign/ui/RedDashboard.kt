@@ -48,8 +48,6 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.NetworkCheck
-import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
@@ -64,7 +62,6 @@ import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.Quickreply
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.EmojiEmotions
@@ -97,7 +94,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -179,7 +175,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.R
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
-import com.red.sovereign.auth.PstnState
 import com.red.sovereign.calls.CallHistoryItem
 import com.red.sovereign.calls.CallHistoryViewModel
 import com.red.sovereign.calls.CallFilterType
@@ -192,7 +187,6 @@ import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.ConferenceUiState
 import com.red.sovereign.calls.LiveStreamService
 import com.red.sovereign.calls.CreateConferenceScreen
-import com.red.sovereign.calls.YemeniOperatorDetector
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.calls.GroupCallRuntime
 import com.red.sovereign.calls.GroupCallService
@@ -234,11 +228,9 @@ import com.red.sovereign.media.voice.VoiceTimerDisplay
 import com.red.sovereign.media.voice.VoiceWaveformCanvas
 import com.red.sovereign.media.voice.VoiceCancelProgressBar
 import com.red.sovereign.media.voice.VoiceLockIndicator
-import com.red.sovereign.settings.PstnConfigScreen
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.settings.YounesSettingsSheet
-import com.red.sovereign.auth.SmsIncomingMessage
 import com.red.sovereign.social.FeedState
 import com.red.sovereign.social.FeedViewModel
 import com.red.sovereign.social.Post
@@ -254,7 +246,6 @@ import com.red.sovereign.ui.theme.AqyalRoyalBlue
 import com.red.sovereign.ui.theme.AqyalSurfaceNavy
 import com.red.sovereign.ui.theme.AqyalSurfaceRaised
 import com.red.sovereign.ui.theme.SovereignGradients
-import com.red.sovereign.ui.components.PstnStatusIndicator
 import com.red.sovereign.features.chat.LuxuryChatBubble
 import androidx.compose.ui.draw.scale
 import com.red.sovereign.ui.theme.YounesEmerald
@@ -291,7 +282,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 
 
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, DINSTAR_ADMIN, PSTN_CONFIG }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -315,9 +306,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     }
     var showCreate by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var showDinstar by remember { mutableStateOf(false) }
-    // رقم مُعبّأ مسبقًا لشاشة الهاتف â€” يصل من لوحة الاتصال السريعة كي لا يُعاد إدخاله
-    var dinstarPrefill by remember { mutableStateOf("") }
     var chatConversationOpen by remember { mutableStateOf(false) }
     // ðŸ”§ إصلاح العيب: dialer حقيقي لإدخال RED ID والاتصال 1-1 من CALLS section
     var showCallDialer by remember { mutableStateOf(false) }
@@ -362,7 +350,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             showSettings -> showSettings = false
             showLiveCreateDialog -> { showLiveCreateDialog = false; livePassword = "" }
             showCallDialer -> { showCallDialer = false; dialerRedId = ""; dialerVideo = false }
-            showDinstar -> showDinstar = false
             currentScreen != SovereignScreen.DASHBOARD -> currentScreen = SovereignScreen.DASHBOARD
             section != MainSection.CHATS -> section = MainSection.CHATS
             else -> {
@@ -429,14 +416,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 )
             }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            SovereignScreen.DINSTAR_ADMIN -> {
-                val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
-                com.red.sovereign.features.dinstar.DinstarAdminScreen(dm, onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            }
-            SovereignScreen.PSTN_CONFIG -> {
-                val dm = remember { com.red.sovereign.features.dinstar.DinstarViewModel(viewModel.getApplication()) }
-                PstnConfigScreen(onBack = { currentScreen = SovereignScreen.DASHBOARD }, tokenStore = TokenStore(context), snackbarHostState = remember { SnackbarHostState() })
-            }
             SovereignScreen.COMMUNITIES -> {
                 val tokens = remember { TokenStore(context) }
                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
@@ -452,7 +431,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     Scaffold(
         containerColor = SovereignColors.ObsidianDeep,
         floatingActionButton = {
-            if (!showDinstar && !chatConversationOpen) when (section) {
+            if (!chatConversationOpen) when (section) {
                 MainSection.CHATS -> FloatingActionButton(
                     onClick = { currentScreen = SovereignScreen.CONTACTS },
                     containerColor = YounesEmerald,
@@ -485,7 +464,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 currentSection = section,
                 onSectionSelected = { item ->
                     section = item
-                    showDinstar = false
                     if (item == MainSection.CALLS) {
                         callHistory.load()
                         directory.refreshPresence()
@@ -498,32 +476,21 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             Column(Modifier.fillMaxSize().padding(padding)) {
                 RedTopBar(account.redId, account.username, compact = SettingsRuntime.current.compactMode, onSettings = { showSettings = true }, onSearch = { currentScreen = SovereignScreen.SEARCH })
             when {
-                showDinstar -> DinstarPhoneScreen(account, viewModel, callHistory, prefillNumber = dinstarPrefill)
                 section == MainSection.HOME -> FeedScreen(account, feed, stories, onCreate = { showCreate = true })
                 section == MainSection.CHATS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = false, deepLinkSender = pendingChatTarget ?: deepLinkSender, deepLinkConversation = deepLinkConversation, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.GROUPS -> ChatHubScreen(account, groups, directory, safety, attachments, voiceMessages, showGroups = true, onManageGroup = { id -> selectedGroupId = id; currentScreen = SovereignScreen.GROUP_INFO }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP }, onConversationOpen = { chatConversationOpen = it })
                 section == MainSection.CALLS -> UnifiedCallsScreen(
                     ownUserId = account.redId,
                     history = callHistory,
-                    // بلا هذين المعاملين كان الاستدعاء يُربط بنسخة أضعف كانت في
-                    // CallsScreens.kt، فتختفي ستّ ميزات مكتوبة ومترجمة: منتقي
-                    // المكالمة الجماعية بحالة الاتصال، إنشاء المؤتمر، تسجيلات
-                    // المكالمات وإحصاءاتها، المكالمات المجدولة، بحث جهات الاتصال
-                    // داخل حوار المكالمة، وإعادة اتصال PSTN برقم مُعبَّأ.
                     contacts = directory.contacts,
                     onlineIds = directory.onlineIds.toSet(),
                     // ما يراه المستلم كاسم للمضيف في دعوة المكالمة الجماعية؛
                     // فارغًا كان يظهر بلا اسم. نفس المصدر المستخدم في ProfileScreen.
                     myDisplayName = account.username,
                     onExplore = { currentScreen = SovereignScreen.EXPLORE },
-                    // الرقم يعبر إلى لوحة الاتصال فتصبح إعادة الاتصال بضغطة واحدة
-                    // بدل إعادة إدخاله يدويًا.
-                    onPstn = { number -> dinstarPrefill = number.orEmpty(); showDinstar = true }
                 )
                 else -> MoreScreen(
                     account,
-                    onDinstar = { showDinstar = true },
-                    onAdmin = { if (account.isAdmin) currentScreen = SovereignScreen.DINSTAR_ADMIN },
                     onSettings = { showSettings = true },
                     onContacts = { currentScreen = SovereignScreen.CONTACTS },
                     onDevices = { currentScreen = SovereignScreen.DEVICES },
@@ -533,7 +500,6 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onProfile = { currentScreen = SovereignScreen.PROFILE },
                     onEvents = { currentScreen = SovereignScreen.EVENTS },
                     onPolls = { currentScreen = SovereignScreen.POLLS },
-                    onPstnConfig = { currentScreen = SovereignScreen.PSTN_CONFIG }
                 )
             }
         }
@@ -552,7 +518,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
     if (showSettings) YounesSettingsSheet(account, settings, viewModel, viewModel::logout) { showSettings = false }
     UnifiedCallOverlays()
 
-    // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو (بدل تحويل لـ DINSTAR)
+    // 🔧 إصلاح العيب: dialer لإدخال RED ID والاتصال 1-1 صوت/فيديو
     if (showCallDialer) {
         AlertDialog(
             onDismissRequest = { showCallDialer = false; dialerRedId = ""; dialerVideo = false },
@@ -673,8 +639,6 @@ private fun RedTopBar(redId: String, username: String, compact: Boolean, onSetti
     Column(Modifier.weight(1f).padding(start = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("يونس • @$username", fontSize = 14.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // 🛡️ مؤشر حالة النظام (PSTN/GSM) بجانب الاسم لتعزيز الشعور بالسيادة والتحكم
-            PstnStatusIndicator(modifier = Modifier.scale(0.85f))
         }
         Text(redId, color = AqyalCyanGlow, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
@@ -739,7 +703,7 @@ private fun PostCard(
             if (post.authorRedId != currentRedId) TextButton({ onFollow(post) }) { Text("إضافة صديق") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AssistChip({}, { Text(if (post.visibility == "LOCAL_YEMEN") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
+            AssistChip({}, { Text(if (post.visibility == "LOCAL") "نبض محلي" else "عام") }, enabled = false, leadingIcon = { Icon(Icons.Default.Public, null, Modifier.size(15.dp)) })
             AssistChip({}, { Text(if (post.poll != null) "استطلاع" else if (post.parentId != null) "رد" else "منشور") }, enabled = false)
             if (post.kind != "POST") AssistChip({}, { Text(post.kind) }, enabled = false)
         }
@@ -2601,20 +2565,18 @@ private fun ChatHubScreen(
 }
 
 @Composable
-private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit, onPstn: (String?) -> Unit = {}) {
+private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel, contacts: List<com.red.sovereign.contacts.PublicRedProfile>, onlineIds: Set<String> = emptySet(), myDisplayName: String = "", onExplore: () -> Unit) {
     var showStatsScreen by remember { mutableStateOf(false) }
     var showScheduledCallsScreen by remember { mutableStateOf(false) }
     var showNewCallDialog by remember { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
-    var showDinstarDialog by remember { mutableStateOf(false) }
     var showGroupCallPicker by remember { mutableStateOf(false) }
     var showCreateConferenceScreen by remember { mutableStateOf(false) }
     var showRecordings by remember { mutableStateOf(false) }
     var showPublicStreamsSearchDialog by remember { mutableStateOf(false) }
     var publicStreamSearchQuery by remember { mutableStateOf("") }
-    var dinstarNumberInput by remember { mutableStateOf("") }
     var newCallTargetInput by remember { mutableStateOf("") }
     var isSpaceHost by remember { mutableStateOf(false) }
     var isBroadcaster by remember { mutableStateOf(false) }
@@ -2699,7 +2661,6 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onConference = { conferenceLauncher() },
             onSpace = { spaceLauncher() },
             onLive = { liveLauncher() },
-            onPstn = { showDinstarDialog = true },
             onExplore = { onExplore() },
             onScheduledCalls = {
                 showScheduledCallsScreen = true
@@ -2762,7 +2723,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         when {
             history.loading -> Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = AqyalGold) }
             history.error != null -> EmptyState(Icons.Default.History, "تعذر تحميل السجل", history.error.orEmpty())
-            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات تطابق البحث", "ستظهر هنا المكالمات المفلترة مع شارة توضح مسار يونس أو DINSTAR.")
+            visible.isEmpty() -> EmptyState(Icons.Default.History, "لا توجد مكالمات تطابق البحث", "ستظهر هنا المكالمات المفلترة مع شارة توضح مسار يونس.")
             else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.id }) { CallHistoryRow(it) } }
         }
     }
@@ -2899,25 +2860,6 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 }
             }
         )
-    }
-
-    if (showDinstarDialog) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showDinstarDialog = false; dinstarNumberInput = "" },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            com.red.sovereign.features.pstn.DialPadScreen(
-                onDismiss = { showDinstarDialog = false },
-                onNavigateToWebRtcCall = { targetNum ->
-                    showDinstarDialog = false
-                    YounesCallService.start(context, targetNum, false)
-                },
-                onNavigateToPstnCall = { targetNum ->
-                    showDinstarDialog = false
-                    onPstn(targetNum)
-                }
-            )
-        }
     }
 
     if (showNewCallDialog) {
@@ -3077,7 +3019,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
                     "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-                    else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                    else -> if (call.peerId.matches(RED_ID_PATTERN)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }
@@ -3148,7 +3090,6 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                         val date = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(call.startedAt.toLongOrNull() ?: System.currentTimeMillis()))
                         append(date)
                         if (durationText.isNotEmpty()) append(" â€¢ $durationText")
-                        if (call.route == "DINSTAR") append(" â€¢ عبر الهاتف")
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
@@ -3167,7 +3108,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
                     "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-                    else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                    else -> if (call.peerId.matches(RED_ID_PATTERN)) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }
@@ -3193,8 +3134,6 @@ private fun RoundCallAction(icon: ImageVector, title: String, color: Color, enab
 @Composable
 private fun MoreScreen(
     account: AuthState.Authenticated,
-    onDinstar: () -> Unit,
-    onAdmin: () -> Unit,
     onSettings: () -> Unit,
     onContacts: () -> Unit,
     onDevices: () -> Unit,
@@ -3204,7 +3143,6 @@ private fun MoreScreen(
     onProfile: () -> Unit = {},
     onEvents: () -> Unit = {},
     onPolls: () -> Unit = {},
-    onPstnConfig: () -> Unit = {}
 ) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -3221,8 +3159,6 @@ private fun MoreScreen(
                 }
             }
         }
-        MoreOption(Icons.Default.AdminPanelSettings, "الإدارة السيادية", "مراقبة أسطول DINSTAR وعمليات يونس ماستر", AqyalGold, click = onAdmin)
-        MoreOption(Icons.Default.SimCard, "الهاتف اليمني", "اتصال صوتي مصرح عبر DINSTAR وشرائح الشبكات اليمنية", AqyalGold, click = onDinstar)
         MoreOption(Icons.Default.Security, "الخصوصية والأمان", "من يرى بياناتك، التشفير، وقفل البصمة", com.red.sovereign.ui.theme.YounesEmerald, click = onPrivacy)
         MoreOption(Icons.Default.CloudSync, "النسخ الاحتياطي", "تأمين محادثاتك وسجلاتك محلياً", com.red.sovereign.ui.theme.YounesGold, click = onBackup)
         MoreOption(Icons.Default.Devices, "الأجهزة المتصلة", "إدارة جلسات يونس على كافة أجهزتك", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onDevices)
@@ -3231,7 +3167,6 @@ private fun MoreScreen(
         MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات â€” انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
         MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
         MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
-        MoreOption(Icons.Default.NetworkCheck, "إعدادات PSTN / DINSTAR", "بوابة DINSTAR، حالة الشرائح، SMSC، اختبار SIP Bridge", AqyalGold, click = onPstnConfig)
     }
 }
 
@@ -3248,141 +3183,6 @@ private fun MoreOption(icon: ImageVector, title: String, detail: String, color: 
             }
         }
     }
-
-@Composable
-private fun DinstarPhoneScreen(account: AuthState.Authenticated, viewModel: AuthViewModel, history: CallHistoryViewModel? = null, prefillNumber: String = "") {
-    var tab by remember { mutableIntStateOf(0) }
-    val smsVm: com.red.sovereign.features.sms.SmsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-    var inChat by remember { mutableStateOf(false) }
-    // ðŸ“ž أكثر الأرقام اليمنية اتصالًا â€” تُشتق من سجل DINSTAR الحقيقي (لا بيانات وهمية)
-    val dinstarCalls = history?.calls?.filter { it.route == "DINSTAR" }.orEmpty()
-    val favorites = dinstarCalls.groupingBy { it.peerLabel.ifBlank { it.peerId } }.eachCount()
-        .entries.sortedByDescending { it.value }.take(8).map { it.key }
-    Column(Modifier.fillMaxSize()) {
-        Card(Modifier.fillMaxWidth().padding(horizontal = 14.dp), colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = .14f))) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.SimCard, null, tint = AqyalGold, modifier = Modifier.size(35.dp)); Column(Modifier.padding(start = 12.dp)) {
-                    Text("الهاتف اليمني عبر DINSTAR", fontWeight = FontWeight.Bold, color = AqyalGold)
-                    Text(if (account.pstnEnabled) "مصرح لك â€” مكالمات صوتية فقط" else "غير مفعل â€” يفعله المسؤول من اللوحة", fontSize = 12.sp)
-                }
-            }
-        }
-        PrimaryTabRow(tab) {
-            listOf(
-                Icons.Default.Dialpad to "الأرقام",
-                Icons.AutoMirrored.Filled.Message to "الرسائل",
-                Icons.Default.Star to "المفضلة",
-                Icons.Default.History to "السجل",
-                Icons.Default.Contacts to "جهات الاتصال"
-            ).forEachIndexed { i, item -> Tab(tab == i, { tab = i }, icon = { Icon(item.first, null) }, text = { Text(item.second, fontSize = 10.sp) }) }
-        }
-        when (tab) {
-            0 -> DialPad(account.pstnEnabled, viewModel, prefillNumber)
-            // ðŸ“¨ الرسائل â€” SMS احترافي: محادثات + دردشة + إرسال/استقبال/تسليم
-            1 -> if (inChat && smsVm.chatNumber != null) {
-                com.red.sovereign.features.sms.SmsChatScreen(smsVm, onBack = {
-                    smsVm.closeChat(); inChat = false
-                })
-            } else {
-                com.red.sovereign.features.sms.SmsConversationsScreen(smsVm, onOpenChat = {
-                    smsVm.openChat(it); inChat = true
-                })
-            }
-            // â­ المفضلة â€” أكثر الأرقام اتصالًا عبر DINSTAR مع إعادة اتصال بنقرة
-            2 -> if (favorites.isEmpty()) {
-                EmptyState(Icons.Default.Star, "لا مفضلة بعد", "ستظهر هنا أكثر الأرقام اليمنية اتصالًا عبر DINSTAR تلقائيًا")
-            } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(favorites.size) { i ->
-                        val number = favorites[i]
-                        Card(Modifier.fillMaxWidth()) {
-                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, null, tint = AqyalGold)
-                                Text(number, Modifier.weight(1f).padding(horizontal = 10.dp), fontWeight = FontWeight.Bold)
-                                com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
-                                    Text(op.name, color = op.brandColor, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
-                                }
-                                IconButton(onClick = { if (account.pstnEnabled) { viewModel.clearPstnState(); viewModel.dialPstn(number) } }, enabled = account.pstnEnabled) {
-                                    Icon(Icons.Default.Call, "اتصال", tint = if (account.pstnEnabled) YounesEmerald else Color.Gray)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // ðŸ—‚ï¸ سجل DINSTAR الحقيقي â€” مفلتر من السجل الموحد
-            3 -> if (dinstarCalls.isEmpty()) {
-                EmptyState(Icons.Default.History, "لا مكالمات DINSTAR بعد", "ستظهر هنا كل مكالماتك الهاتفية اليمنية")
-            } else {
-                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(dinstarCalls.size) { i -> CallHistoryRow(dinstarCalls[i]) }
-                }
-            }
-            else -> EmptyState(Icons.Default.Contacts, "جهات الاتصال", "اختر جهة من تبويب جهات الاتصال الرئيسي ثم اطلبها عبر DINSTAR")
-        }
-    }
-}
-
-@Composable
-private fun DialPad(enabled: Boolean, viewModel: AuthViewModel, prefill: String = "") {
-    var number by remember(prefill) { mutableStateOf(prefill) }
-    // ðŸ“ž أثناء المكالمة النشطة نستبدل اللوحة بشاشة الاتصال الفاخرة كاملة التحكم
-    val pstnState = viewModel.pstnState
-    // مكالمة واردة: شاشة قبول/رفض â€” كانت معطّلة (لا توجد واجهة تربطها)
-    val incomingPstn = viewModel.incomingPstnCall
-    if (incomingPstn != null) {
-        com.red.sovereign.features.pstn.IncomingPstnCallScreen(
-            number = incomingPstn.fromNumber,
-            onAccept = { viewModel.acceptIncomingPstnCall() },
-            onDecline = { viewModel.rejectIncomingPstnCall() }
-        )
-        return
-    }
-    val isInPstnCall = pstnState is PstnState.Started || pstnState is PstnState.Bridging || pstnState is PstnState.Registering || pstnState is PstnState.Ringing || pstnState is PstnState.Dialing
-    if (isInPstnCall) {
-        com.red.sovereign.features.pstn.PstnCallScreen(
-            number = number,
-            state = viewModel.pstnState,
-            onHangup = { viewModel.hangupPstn() },
-            onMuteToggle = { viewModel.togglePstnMute(it) },
-            onSpeakerToggle = { viewModel.togglePstnSpeaker(it) },
-            viewModel = viewModel
-        )
-        return
-    }
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(number.ifEmpty { "أدخل الرقم" }, fontSize = 27.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            IconButton({ if (number.isNotEmpty()) number = number.dropLast(1) }) { Icon(Icons.AutoMirrored.Filled.Backspace, "حذف") }
-        }
-        com.red.sovereign.calls.YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                Box(Modifier.size(8.dp).background(op.brandColor, CircleShape))
-                Text("  ${op.name} (${op.technology})", color = op.brandColor, style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        listOf(listOf("1","2","3"), listOf("4","5","6"), listOf("7","8","9"), listOf("*","0","#")).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) { row.forEach { digit -> FilledIconButton({ number += digit }, Modifier.size(64.dp)) { Text(digit, fontSize = 23.sp) } } }
-        }
-        Button({ viewModel.clearPstnState(); viewModel.dialPstn(number) }, enabled = enabled && number.filter(Char::isDigit).length >= 6, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Call, null); Text(" اتصال صوتي عبر DINSTAR") }
-        when (val state = viewModel.pstnState) {
-            PstnState.Dialing -> CircularProgressIndicator(color = AqyalGold)
-            PstnState.Bridging -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري تجهيز الاتصال الآمن...", color = AqyalGold, fontSize = 13.sp)
-            }
-            PstnState.Registering -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(18.dp)); Text("جاري التسجيل في بوابة الصوت...", color = AqyalGold, fontSize = 13.sp)
-            }
-            PstnState.Ringing -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(18.dp)); Text("جاري رنين الهاتف...", color = YounesEmerald, fontSize = 13.sp)
-            }
-is PstnState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
-            PstnState.Idle -> Unit
-            is PstnState.Started -> Unit // عُالجت أعلاه بشاشة الاتصال الكاملة
-            is PstnState.Incoming -> Unit // عُولجت أعلاه بشاشة المكالمة الواردة
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

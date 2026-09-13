@@ -39,11 +39,8 @@
 | `core/utils/RedMediaTransporter.kt` | أنشئ `MinioUploader` في :app (انسخ من `android/core/network/MinioUploader.kt`) أو احذف الملف إن لم يُستخدم |
 | `features/chat/RedChatDetail.kt` | احذفه (مكرر متعارض مع ChatDetailScreen) — أو أعد كتابته باستخدام RedChatBubble الموجودة في android/ |
 | `features/chat/RedChatScreen.kt` | أنشئ `RedChatTopBar` + `RedMessageInput` أو استبدل الاستدعاءات بشاشة ChatDetailScreen الموجودة |
-| `features/pstn/DialPadScreen.kt` | أنشئ `YemeniOperatorDetector` (كشف مشغّل يمني: 77/73/71/70 → يمن موبايل/سبأفون/يمن) — ملف صغير مفيد فعلاً |
 | `features/chat/GroupIDManager.kt` | أضف `import com.red.sovereign.core.network.RedWebSocketClient` |
 | `network/RedPushService.kt` | استبدل `R.drawable.ic_launcher_red` بأيقونة موجودة + أنشئ Notification Channel + سجّله في Manifest |
-| `features/calls/CallOrchestrator.kt` | غيّر `makePstnCall(target)` ← `dialPstn(target)` |
-| `ui/RedMainHost.kt` | صحح import DialPadScreen إلى `com.red.sovereign.features.pstn` |
 
 ### 0.4 إصلاح الخادم `backend-server` (10 أخطاء مؤكدة) — **الأسرع ربحاً**
 | الملف | الإصلاح |
@@ -52,22 +49,17 @@
 | `websocket/RedMasterHandler.kt` + `RedWebSocketHandler.kt` + `ChatWebSocketHandler.kt` | عدّل النداء إلى `messageService.processIncoming(msg.senderId, msg.receiverId, msg.conversationId, msg.payload.toByteArray(), msg.type)` (أو أضف overload يقبل ChatMessage) |
 | `RedWebSocketHandler` + `ChatWebSocketHandler` | `MessageAck` في `messages.proto` بلا `sequence_number` — إما أضف الحقل للبروتوكول، أو احذف `.setSequenceNumber(seq)` وعدّل `.setStatus("SENT")` إلى `.setStatus(ChatProtos.AckStatus.SENT)` |
 | `services/CoreService.kt` | عرّف `GroupEntity`/`StoryEntity` محلياً في الخادم (أو استخدم MongoEntities) |
-| `pstn/PstnManager.kt` | أضف `import org.springframework.beans.factory.annotation.Value` |
 | `websocket/CallWebSocketHandler.kt` | أضف `CallProtos` إلى `red_protocol.proto` (message CallSignal + enum SignalType) أو احذف الملف واجعل WebRTC signaling عبر TextMessage JSON |
 | `developedchat/*` (حزمة com.red.admin/com.red.auth) | احذف المجلد كاملاً (خارج نطاق المسح الضوئي ويسبب فوضى) |
-| `AdminMasterController.executeDinstarAction` | وجّهه إلى `DinstarHardwareService` الحقيقي (reboot/sip/dial) بدل "EXECUTED" |
 
 **التحقق:** `cd backend-server && gradle build -x test` (متوفر) ثم تشغيله واختبار `/health` و`/api/master/v1/stats/realtime`.
 
 ### 0.5 إصلاح لوحة التحكم (خطآن يمنعان البناء)
-- `DuminAdvanced.tsx`: `signalFilled` ← `SignalFilled` (يوقف بناء CRA بالكامل)
 - `Dockerfile` اللوحة: أضف `RUN npm run build` وانسخ `build/` إلى nginx (أو serve على `build` بدل `public`)
 
 ### 0.6 توحيد build-logic
 - `settings.gradle.kts`: استبدل `include(":build-logic:tools")` بـ `includeBuild("build-logic")` (لأن الجذر يستدعي `gradle.includedBuild("build-logic")` في مهمات buildQa/format) — أو احذف السطرين معاً إن لم نحتجهما الآن.
 
-### 0.7 إصلاح أستريكس (خطأ واحد يجعل PSTN وهمياً)
-- `pstn-asterisk/extensions.conf` + `backend-server/pstn/PstnManager.kt`: غيّر `dumin-trunk` ← `dinstar-gateway` (المعرّف الفعلي في pjsip.conf).
 
 ---
 
@@ -94,8 +86,6 @@
 |---|---|---|
 | AuthorityTab | `/api/admin/users/approve/:id` | `/api/admin/users/update-status?userId=&status=APPROVED` |
 | SecurityTab | `/api/master/v1/security/kill-switch` + `/wipe/:id` | `/api/master/v1/security/wipe?userId=` (وأضف endpoint kill-switch في الخادم) |
-| MasterOverview | `ws_active/pending_auth/gsm_signal/db_storage` | `active_users/messages_24h/system_load/db_health/pending_approvals` |
-| Dashboard.tsx | `weekly_messages/gsm_active/pending_users/cpu_load` | مفتاح الخادم الفعلي |
 | LogStreamerTab | `ws://host:8080` | `/ws/admin/logs` عبر nginx (نفس المنفذ 80) |
 | MasterLayout | تبويبات 5 و7 بلا محتوى | أضف محتوى (Media SFU → إحصائيات من الخادم، Infrastructure → /health) |
 
@@ -123,7 +113,6 @@
 |---|---|---|
 | نظام C: توصيل مضمون | منطق موجود لكن معطل بخطأ التوقيع | أصلحه (0.4) ثم فعّل ACK/إعادة تسليم (2.3) |
 | نظام A: مكالمات 1080p | SFU كامل + WebRTC جزئي في android/ | انقل `RedVoipMaster`+`VoipEngine`+`WebRtcSignaler` من android/ واربط signaling عبر CallSignal |
-| نظام B: Dinstar | DinstarHardwareService حقيقي لكن DinstarMasterClient عشوائي | وحد الاستخدام على DinstarHardwareService + أصلح dumin-trunk |
 | الموافقة الإدارية | `checkApprovalStatus() = true` وهمية | اربطها بـ `/api/auth/register` → PENDING → موافقة اللوحة → APPROVED → التطبيق يفتح |
 | التشفير الكمومي | يعيد البيانات كما هي | استخدم Kyber من libsignal (موجود فعلاً) أو احذف الادعاء |
 | قصص 24 ساعة | ViewModel + Room + تنظيف Mongo موجود | اربط الرفع عبر `/api/media/upload` إلى MinIO |
@@ -132,7 +121,6 @@
 
 ## 🟪 المرحلة 5 — تنظيف ووثائق (ساعة واحدة — يمكن فعلها الآن)
 
-- ❌ **حذف/عزل**: `android/` و`app-android/` و`server/` و`admin-dashboard/` و`demo/` و`temp-dc.yml` و`pjsip_dinstar.conf` (بعد نقل ما يلزم) — 3 نسخ متداخلة = كارثة إصدارات
 - ❌ **حذف `imports_list.txt` و`used_imports.txt`** (نواتج فحص مشوهة بلا قيمة) — أو أعد توليدها نظيفة
 - ✅ **تحديث `FINAL_SUMMARY.md`** (أرقامه غير دقيقة الآن) و`MASTER_CHECKLIST.txt` (يدّعي "NO FEATURES MISSING" وهذا غير صحيح)
 - ✅ إصلاح `build-and-run.sh` (استخدم `docker compose` بدل `docker-compose`)
@@ -150,7 +138,6 @@
 | **اليوم 2** | 0.5 + 0.6 + 0.7 + المرحلة 1 (قرار معماري + نقل AQYAL) | اللوحة تعمل وتتصل بالخادم + APK يُبنى |
 | **اليوم 3** | المرحلة 2 (توصيل WebSocket + مطابقة endpoints + sync) | رسالة من هاتف إلى هاتف عبر خادمك المحلي 🎉 |
 | **اليوم 4-5** | المرحلة 3 (أمن أساسي) | لا انتحال ولا أسرار مكشوفة |
-| **الأسبوع 2+** | المرحلة 4 (VoIP + PSTN + قصص + Kyber) | الأنظمة A/B/C حقيقية |
 
 ---
 

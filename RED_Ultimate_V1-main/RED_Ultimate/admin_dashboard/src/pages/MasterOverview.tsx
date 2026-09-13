@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Card, Col, Progress, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
+import { Alert, Card, Col, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import {
-  ApiOutlined,
   CloudServerOutlined,
   DatabaseFilled,
-  PhoneOutlined,
   SafetyCertificateFilled,
   ThunderboltFilled,
   VideoCameraOutlined,
@@ -12,45 +10,21 @@ import {
 import { apiFetch } from '../api';
 import { usePolling } from '../hooks/usePolling';
 
-type Slot = {
-  index?: number;
-  status?: string;
-  signal?: number | null;
-  signalLabel?: string;
-  signalUsable?: boolean;
-  operator?: string;
-  callState?: string;
-};
-
-const SIGNAL_COLOR: Record<string, string> = {
-  EXCELLENT: 'gold', GOOD: 'cyan', FAIR: 'gold', WEAK: 'orange', UNUSABLE: 'red', NO_SIGNAL: 'default',
-};
-
-/** UC2000 يعيد REGISTER_OK أحيانًا — كل صور التسجيل سواء. */
-function isRegistered(status?: string): boolean {
-  return status === 'REGISTERED' || status === 'REGISTER_OK' || status === 'Mobile Registered';
-}
-
+/** Live overview for the RED application services and media layer. */
 export default function MasterOverview() {
   const [stats, setStats] = useState<any>({});
-  const [slots, setSlots] = useState<Slot[]>([]);
   const [calls, setCalls] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [s, d, c, h] = await Promise.all([
+      const [s, c, h] = await Promise.all([
         apiFetch('/api/master/v1/stats/realtime'),
-        apiFetch('/api/master/v1/hardware/dinstar/slots'),
         apiFetch('/api/master/v1/media/active-calls'),
         apiFetch('/health'),
       ]);
       if (s.ok) setStats(await s.json());
-      if (d.ok) {
-        const body = await d.json();
-        setSlots(Array.isArray(body) ? body : []);
-      }
       if (c.ok) {
         const body = await c.json();
         setCalls(Array.isArray(body) ? body : Array.isArray(body?.calls) ? body.calls : []);
@@ -64,11 +38,6 @@ export default function MasterOverview() {
 
   usePolling(load, 5000);
 
-  const usable = slots.filter((x) => x.signalUsable).length;
-  const registered = slots.filter((x) => isRegistered(x.status)).length;
-  const signals = slots.map((x) => Number(x.signal || 0)).filter(Number.isFinite);
-  const signal = signals.length ? Math.round(signals.reduce((a, b) => a + b, 0) / signals.length) : 0;
-
   const services = useMemo(() => {
     const map = health?.services && typeof health.services === 'object' ? health.services : {};
     return Object.entries(map) as Array<[string, any]>;
@@ -81,7 +50,7 @@ export default function MasterOverview() {
           المراقبة الحية — مركز السيادة
         </Typography.Title>
         <Typography.Text type="secondary">
-          نبض المنصة كل 5 ثوانٍ: المستخدمون، المكالمات، DINSTAR، وصحة الخدمات.
+          نبض المنصة كل 5 ثوانٍ: المستخدمون، الرسائل، المكالمات، وصحة الخدمات.
         </Typography.Text>
       </div>
 
@@ -102,53 +71,32 @@ export default function MasterOverview() {
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="متوسط إشارة DINSTAR" value={signal} suffix="%" prefix={<ApiOutlined />} />
-            <Progress percent={signal} showInfo={false} strokeColor={signal >= 60 ? '#B78A2E' : '#E8B84A'} />
-            <Tag color={slots.length ? 'gold' : 'red'}>{usable} جاهزة / {registered} مسجّلة</Tag>
+            <Statistic title="قاعدة البيانات" value={stats.db_health || health?.status || 'UNKNOWN'} prefix={<DatabaseFilled />} />
+            <Tag color={(stats.db_health || health?.status) === 'UP' ? 'gold' : 'red'}>REAL CHECK</Tag>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card>
-            <Statistic title="قاعدة البيانات" value={stats.db_health || health?.status || 'UNKNOWN'} prefix={<DatabaseFilled />} />
-            <Tag color={(stats.db_health || health?.status) === 'UP' ? 'gold' : 'red'}>REAL CHECK</Tag>
+            <Statistic title="المكالمات النشطة" value={calls.length} prefix={<VideoCameraOutlined />} />
+            <Tag color="cyan">MEDIA</Tag>
           </Card>
         </Col>
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="رسائل 24 ساعة" value={stats.messages_24h ?? '—'} prefix={<CloudServerOutlined />} />
-          </Card>
+        <Col xs={24} sm={6}>
+          <Card><Statistic title="رسائل 24 ساعة" value={stats.messages_24h ?? '—'} prefix={<CloudServerOutlined />} /></Card>
         </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="معدل التوصيل" value={stats.delivery_rate_percent ?? '—'} suffix="%" prefix={<PhoneOutlined />} />
-          </Card>
+        <Col xs={24} sm={6}>
+          <Card><Statistic title="معدل التوصيل" value={stats.delivery_rate_percent ?? '—'} suffix="%" prefix={<CloudServerOutlined />} /></Card>
         </Col>
-        <Col xs={24} sm={8}>
-          <Card>
-            <Statistic title="مكالمات SFU نشطة" value={calls.length} prefix={<VideoCameraOutlined />} />
-          </Card>
+        <Col xs={24} sm={6}>
+          <Card><Statistic title="مكالمات SFU" value={calls.length} prefix={<VideoCameraOutlined />} /></Card>
+        </Col>
+        <Col xs={24} sm={6}>
+          <Card><Statistic title="حالة الخادم" value={health?.status || 'UNKNOWN'} prefix={<DatabaseFilled />} /></Card>
         </Col>
       </Row>
-
-      <Card title="منافذ DINSTAR الحية">
-        <Table
-          size="small"
-          rowKey={(r) => String(r.index)}
-          pagination={false}
-          dataSource={slots}
-          locale={{ emptyText: 'لا توجد قراءات منافذ' }}
-          columns={[
-            { title: 'SIM', dataIndex: 'index', render: (v: number) => `SIM ${(v ?? 0) + 1}` },
-            { title: 'الحالة', dataIndex: 'status', render: (v: string) => <Tag color={isRegistered(v) ? 'gold' : 'red'}>{v || '—'}</Tag> },
-            { title: 'الإشارة', dataIndex: 'signalLabel', render: (v: string, r: Slot) => <Tag color={SIGNAL_COLOR[v] || 'default'}>{v || '—'}{r.signal != null ? ` · ${r.signal}%` : ''}</Tag> },
-            { title: 'المشغل', dataIndex: 'operator', render: (v?: string) => v || '—' },
-            { title: 'المكالمة', dataIndex: 'callState', render: (v?: string) => v || '—' },
-          ]}
-        />
-      </Card>
 
       <Card title="المكالمات النشطة عبر SFU">
         <Table

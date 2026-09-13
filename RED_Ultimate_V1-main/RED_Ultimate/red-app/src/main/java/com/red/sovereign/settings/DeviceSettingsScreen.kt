@@ -115,8 +115,7 @@ import kotlinx.coroutines.launch
 fun DeviceSettingsScreen(
     onBack: () -> Unit,
     tokenStore: TokenStore,
-    snackbarHostState: SnackbarHostState,
-    onPstnConfigClick: (() -> Unit)? = null
+    snackbarHostState: SnackbarHostState
 ) {
     Scaffold(
         topBar = {
@@ -174,41 +173,6 @@ fun DeviceSettingsScreen(
                 subtitle = "View and revoke active login sessions",
                 icon = Icons.Filled.MoreVert,
                 onClick = { /* navigate to sessions */ }
-            )
-
-            // PSTN / DINSTAR
-            SettingsSectionItem(
-                title = "PSTN / DINSTAR",
-                icon = Icons.Filled.Call,
-                color = YounesEmerald
-            )
-            SettingsItem(
-                title = "PSTN Configuration",
-                subtitle = "DINSTAR gateway, SIM status, port mapping",
-                icon = Icons.Filled.NetworkCell,
-                onClick = { 
-                    // Navigate to PSTN Config Screen
-                    // This requires a navigation controller - for now we'll use a callback approach
-                    onPstnConfigClick?.invoke()
-                }
-            )
-            SettingsItem(
-                title = "Call Limits & Quotas",
-                subtitle = "Daily/minute limits, per-number restrictions",
-                icon = Icons.Filled.Call,
-                onClick = { /* navigate to limits */ }
-            )
-            SettingsItem(
-                title = "Call Recording",
-                subtitle = "Auto-record, storage, retention policy",
-                icon = Icons.Filled.Mic,
-                onClick = { /* navigate to recording */ }
-            )
-            SettingsItem(
-                title = "Call Forwarding & Voicemail",
-                subtitle = "Conditional forwarding, voicemail settings",
-                icon = Icons.Filled.CallReceived,
-                onClick = { /* navigate to forwarding */ }
             )
 
             // Network & Connectivity

@@ -15,7 +15,6 @@
 3. **إدارة الأجهزة** - أجهزة المستخدمين، شهادات، إActions
 4. **نظرة النظام** - صحة الخدمات، Docker containers، ق databases
 5. **مركز الرسائل** - إحصاءات مجمعة فقط (لا محتوى رسائل)
-6. **مركز المكالمات** - سجل المكالمات، Dinstar status
 7. **إدارة المجموعات** - قائمة المجموعات، الأعضاء، الإActions
 8. **التصديق** - قائمة الطلبات المعلقة، decompose/رفض
 9. **الأذونات** - إدارة الصلاحيات، الأدوار
@@ -69,7 +68,6 @@
    - Call signaling
    - Conference management
    - Live streaming
-   - PSTN/DINSTAR integration
 
 4. **Media:**
    - S3/MinIO storage
@@ -123,7 +121,6 @@
    - 1:1 WebRTC (voice/video)
    - Conference calls
    - Live streaming
-   - PSTN/DINSTAR calls
 
 4. **Social:**
    - Feed (local)

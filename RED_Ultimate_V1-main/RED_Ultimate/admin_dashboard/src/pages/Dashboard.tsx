@@ -9,7 +9,6 @@ import {
   ClockCircleOutlined,
   DatabaseOutlined,
   ThunderboltOutlined,
-  DollarOutlined,
   MessageOutlined,
   PhoneOutlined,
   UserAddOutlined,
@@ -36,8 +35,6 @@ interface AnalyticsRow {
   messagesSent: number;
   voiceMessages: number;
   callsTotal: number;
-  callsPstn: number;
-  dinstarBalanceRemaining: number;
   storageUsedBytes: number;
 }
 
@@ -305,26 +302,13 @@ export default function Dashboard() {
 
       {/* Storage */}
       {rows.length > 0 && (
-        <Card title={<><DatabaseOutlined /> التخزين والـ DINSTAR</>}>
-          <Row gutter={[16, 16]}>
-            <Col xs={24} md={12}>
-              <Statistic
-                title="التخزين المستخدم"
-                value={formatBytes(rows[rows.length - 1]?.storageUsedBytes ?? 0)}
-                prefix={<DatabaseOutlined style={{ color: '#4FC3F7' }} />}
-                valueStyle={{ color: '#4FC3F7' }}
-              />
-            </Col>
-            <Col xs={24} md={12}>
-              <Statistic
-                title="رصيد DINSTAR المتبقي"
-                value={rows[rows.length - 1]?.dinstarBalanceRemaining ?? 0}
-                prefix={<DollarOutlined style={{ color: '#E0A83C' }} />}
-                valueStyle={{ color: '#E0A83C' }}
-                suffix="ريال"
-              />
-            </Col>
-          </Row>
+        <Card title={<><DatabaseOutlined /> التخزين</>}>
+          <Statistic
+            title="التخزين المستخدم"
+            value={formatBytes(rows[rows.length - 1]?.storageUsedBytes ?? 0)}
+            prefix={<DatabaseOutlined style={{ color: '#4FC3F7' }} />}
+            valueStyle={{ color: '#4FC3F7' }}
+          />
         </Card>
       )}
 

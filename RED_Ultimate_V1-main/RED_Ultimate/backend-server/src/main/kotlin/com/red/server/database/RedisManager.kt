@@ -27,9 +27,6 @@ import java.util.concurrent.TimeUnit
  * │ red:notify:unread:{userId}      │ عداد الإشعارات غير المقروءة          │
  * │ red:notify:queue:{userId}       │ قائمة إشعارات مؤقتة                   │
  * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة                  │
- * │ red:dinstar:status:{gatewayId}  │ حالة بوابة Dinstar                    │
- * │ red:dinstar:ports:{gatewayId}   │ منافذ Dinstar الحالية (hash)          │
- * │ red:dinstar:loadbalancer        │ Round-robin counter                   │
  * │ red:media:grant:{objectKey}     │ صلاحية وسائط مؤقتة                    │
  * │ red:search:recent:{userId}      │ عمليات البحث الأخيرة (list)           │
  * │ red:backup:progress:{userId}    │ تقدم النسخ الاحتياطي                  │
@@ -257,30 +254,6 @@ class RedisManager(private val redis: StringRedisTemplate) {
 
     fun removeCallSignal(callId: String) {
         redis.delete("red:call:signaling:$callId")
-    }
-
-    // ══════════════════════════════════════════
-    // 📡 حالة0 Dinstar حالة البوابة
-    // ══════════════════════════════════════════
-
-    fun cacheDinstarStatus(gatewayId: String, statusJson: String) {
-        redis.opsForValue().set("red:dinstar:status:$gatewayId", statusJson, 2, TimeUnit.MINUTES)
-    }
-
-    fun getDinstarStatus(gatewayId: String): String? {
-        return redis.opsForValue().get("red:dinstar:status:$gatewayId")
-    }
-
-    fun cacheDinstarPorts(gatewayId: String, portIndex: Int, portJson: String) {
-        redis.opsForHash<String, String>().put("red:dinstar:ports:$gatewayId", portIndex.toString(), portJson)
-    }
-
-    fun getDinstarPorts(gatewayId: String): Map<String, String> {
-        return redis.opsForHash<String, String>().entries("red:dinstar:ports:$gatewayId")
-    }
-
-    fun incrementLoadBalancerCounter(): Long {
-        return redis.opsForValue().increment("red:dinstar:loadbalancer") ?: 1L
     }
 
     // ══════════════════════════════════════════

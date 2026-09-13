@@ -29,13 +29,11 @@ CREATE TABLE IF NOT EXISTS admin_permissions (
 INSERT INTO admin_permissions (id, role, permission) VALUES
     (gen_random_uuid(), 'SUPER_ADMIN', '*'),
     (gen_random_uuid(), 'ADMIN', 'USER_MANAGE'),
-    (gen_random_uuid(), 'ADMIN', 'DINSTAR_MANAGE'),
     (gen_random_uuid(), 'ADMIN', 'CONTENT_MODERATE'),
     (gen_random_uuid(), 'ADMIN', 'SECURITY_VIEW'),
     (gen_random_uuid(), 'MODERATOR', 'CONTENT_MODERATE'),
     (gen_random_uuid(), 'MODERATOR', 'USER_VIEW'),
     (gen_random_uuid(), 'SUPPORT', 'USER_VIEW'),
-    (gen_random_uuid(), 'SUPPORT', 'DINSTAR_VIEW')
 ON CONFLICT DO NOTHING;
 
 -- ━━━━ Extended Audit Metadata ━━━━

@@ -1,6 +1,5 @@
 # YOUNES / RED Sovereign
 
-Sovereign end-to-end-encrypted communication platform: Android app, Spring backend, admin dashboard, media SFU, and PSTN/DINSTAR gateway integration with SIM card provisioning and VoIP calls.
 
 > The canonical project tree lives under [`RED_Ultimate_V1-main/`](RED_Ultimate_V1-main/README.md).
 
@@ -13,7 +12,6 @@ Sovereign end-to-end-encrypted communication platform: Android app, Spring backe
 | Admin Dashboard | `RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/` | Vite + TypeScript |
 | Shared Protocol | `RED_Ultimate_V1-main/RED_Ultimate/shared-proto/` | Protobuf schemas |
 | Media SFU | `RED_Ultimate_V1-main/RED_Ultimate/media-sfu/` | Node.js WebRTC SFU |
-| PSTN/DINSTAR | `RED_Ultimate_V1-main/RED_Ultimate/pstn-asterisk/` | Asterisk + PJSIP config |
 | Runtime | `RED_Ultimate_V1-main/RED_Ultimate/docker-compose.yml` | Full stack containers |
 | CI | `.github/workflows/` | `quality-gate.yml` is the canonical workflow |
 

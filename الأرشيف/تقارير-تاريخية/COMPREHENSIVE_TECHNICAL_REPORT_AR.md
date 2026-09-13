@@ -167,7 +167,6 @@ unexpected status from HEAD request to https://registry-1.docker.io/v2/library/g
 ### Backend (100%)
 - ✅ JacksonConfig - ObjectMapper Bean
 - ✅ AdminV2Controller - مترجم sortBy
-- ✅ DINSTAR Integration - Fleet Management
 - ✅ WebSocket Handler - بث مباشر
 - ✅ V26 Database Migration - 10 جداول جديدة
 
@@ -186,11 +185,9 @@ unexpected status from HEAD request to https://registry-1.docker.io/v2/library/g
 - ✅ 31 نمط (TextAppearance.Younes + Widget.Younes)
 - ✅ WebSocket Integration
 
-### DINSTAR Integration (100%)
 - ✅ Fleet Management - عدة بوابات
 - ✅ Port Monitoring - 8 منافذ
 - ✅ Signal Quality - 3GPP TS 27.007
-- ✅ SMS/USSD - إرسال واستقبال
 - ✅ CDR - سجل المكالمات
 - ✅ Call Routing - موزع أحمال ذكي
 
@@ -198,10 +195,8 @@ unexpected status from HEAD request to https://registry-1.docker.io/v2/library/g
 
 ## 🎯 ما تبقى الآن
 
-### 1. اتصال العتاد (DINSTAR)
 ```bash
 # التحقق من الوصول
-ping 192.168.11.1
 
 # إذا لم يرد:
 # - تأكد من أن السيرفر على نفس الشبكة
@@ -233,21 +228,18 @@ cd C:\Users\hpc01\red_build\RED_Ultimate_V1-main\RED_Ultimate
 - ✅ **272 خطأ Android** → **14 خطأ** (95% تم إصلاحه)
 - ✅ **Backend Failure** → **يعمل** (ObjectMapper Bean)
 - ✅ **Build System** → **Docker-based** (بيئة نظيفة)
-- ✅ **DINSTAR Integration** → **100% مكتمل**
 - ✅ **Admin Dashboard** → **4 صفحات جديدة**
 - ✅ **Database** → **10 جداول جديدة**
 
 ### الحالة الحالية:
 - **Backend:** ✅ جاهز للتشغيل
 - **Admin Dashboard:** ✅ يعمل بالكامل
-- **DINSTAR:** ✅ متكامل وموثق
 - **Android:** ⚠️ 95% مكتمل (14 خطأ بسيط)
 
 ### الخطوات التالية:
 1. **اسحب التحديثات:** `git pull origin arena/019ff8f2-pro-v1`
 2. **شغّل السيرفر:** `docker compose up -d`
 3. **ابني APK:** `.\scripts\build-apk.ps1`
-4. **اختبر DINSTAR:** تأكد من الوصول لـ `192.168.11.1`
 
 ---
 
@@ -271,13 +263,10 @@ docker logs red-backend --tail 100
 docker compose restart backend
 ```
 
-### إذا لم يرد DINSTAR:
 ```bash
 # اختبر الوصول
-ping 192.168.11.1
 
 # تحقق من المنفذ
-curl -k https://192.168.11.1:443/api/get_port_info
 ```
 
 ---

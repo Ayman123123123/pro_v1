@@ -22,15 +22,6 @@ class RedSovereignApplication {
     fun restTemplate() = RestTemplate()
 
     @Bean
-    @Suppress("unused")
-    fun pstnRetryScheduler(): ScheduledExecutorService {
-        var threadNum = AtomicInteger(0)
-        return Executors.newScheduledThreadPool(2) { r ->
-            Thread(r, "pstn-retry-${threadNum.incrementAndGet()}").apply { isDaemon = true }
-        }
-    }
-
-    @Bean
     fun taskScheduler(): TaskScheduler = ThreadPoolTaskScheduler().apply {
         poolSize = 4
         setThreadNamePrefix("sched-")

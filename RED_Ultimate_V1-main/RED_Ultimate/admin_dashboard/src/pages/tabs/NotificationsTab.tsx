@@ -5,23 +5,21 @@ import { getNotifications, getUnreadCount, markAllNotificationsRead, markNotific
 
 const typeColors: Record<string, string> = {
   NEW_MESSAGE: 'blue', GROUP_MESSAGE: 'gold', MENTION: 'cyan',
-  INCOMING_CALL: 'blue', MISSED_CALL: 'red', PSTN_CALL: 'gold',
+  INCOMING_CALL: 'blue', MISSED_CALL: 'red',
   STORY_VIEW: 'cyan', STORY_REPLY: 'blue',
   GROUP_INVITE: 'gold', GROUP_UPDATE: 'default', ROLE_CHANGE: 'orange',
   LIVE_STARTED: 'red', SPACE_STARTED: 'purple',
   SECURITY_ALERT: 'red', DEVICE_NEW: 'orange', UPDATE_AVAILABLE: 'cyan',
-  DINSTAR_STATUS: 'gold', DINSTAR_ALERT: 'red',
   APPROVAL: 'gold', SECURITY: 'red', SYSTEM: 'blue',
 };
 
 const typeLabels: Record<string, string> = {
   NEW_MESSAGE: 'رسالة', GROUP_MESSAGE: 'رسالة مجموعة', MENTION: 'إشارة',
-  INCOMING_CALL: 'مكالمة واردة', MISSED_CALL: 'مكالمة فائتة', PSTN_CALL: 'مكالمة خطية',
+  INCOMING_CALL: 'مكالمة واردة', MISSED_CALL: 'مكالمة فائتة',
   STORY_VIEW: 'مشاهدة قصة', STORY_REPLY: 'رد قصة',
   GROUP_INVITE: 'دعوة مجموعة', GROUP_UPDATE: 'تحديث مجموعة', ROLE_CHANGE: 'تغيير دور',
   LIVE_STARTED: 'بث مباشر', SPACE_STARTED: 'غرفة صوتية',
   SECURITY_ALERT: 'تنبيه أمني', DEVICE_NEW: 'جهاز جديد', UPDATE_AVAILABLE: 'تحديث',
-  DINSTAR_STATUS: 'Dinstar', DINSTAR_ALERT: 'تنبيه Dinstar',
   APPROVAL: 'موافقة', SECURITY: 'أمان', SYSTEM: 'نظام',
 };
 

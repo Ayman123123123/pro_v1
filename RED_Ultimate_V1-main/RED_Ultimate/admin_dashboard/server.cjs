@@ -63,7 +63,6 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({
       active_users: 142,
       pending_approvals: 3,
-      gsm_signal: 'STABLE',
       db_storage: '4.2 GB / 25 GB',
       messages_24h: 12480,
       system_load: '12%',

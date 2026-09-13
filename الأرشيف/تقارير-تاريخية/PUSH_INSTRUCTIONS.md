@@ -19,7 +19,6 @@ git push origin main
 ## Notes
 
 - `.gradle_home/`, `.android_home/`, `app.jar`, `upload-clean/`, `backend-server/`
-  (root husk), `cookies.txt` and `dinstar_cookies.txt` are intentionally
   untracked (see root `.gitignore`) — do not `git add -f` them.
 - `scripts/merge-local-copies.ps1` and `scripts/BACKUP_EVERYTHING.ps1` will NOT
   push unless you pass `-Push` explicitly (safety gate added 2026-08-18).

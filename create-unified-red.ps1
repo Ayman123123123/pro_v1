@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path $meta | Out-Null
   BaseSource = $source
   GitHubSource = 'C:\Users\hpc01\Pictures\pro_new\github-git-partial-clone\RED_Ultimate_V1-main\RED_Ultimate'
   GitHubCommit = '4a54de714b88191691aad29ff429ebb6b8171a77'
-  GitHubBranch = 'feature/uc2000-ve-sms-browser-audit'
+  GitHubBranch = 'main'
   BackupRoot = (Get-ChildItem 'C:\Users\hpc01\Pictures' -Directory -Filter 'RED_consolidation_backup_*' | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName)
 } | ConvertTo-Json | Set-Content (Join-Path $meta 'provenance.json') -Encoding UTF8
 @'

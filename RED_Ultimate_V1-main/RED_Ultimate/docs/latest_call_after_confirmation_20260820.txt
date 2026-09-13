@@ -57,7 +57,6 @@ ZY22CRW9T2             device product:guamna_a model:moto_g_play__2021_ device:g
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:40:00.458 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -82,7 +81,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:40:00.463 [http-nio-8080-exec-4] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -107,7 +105,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:40:11.115 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=e500bfcb-075e-4b0c-a7ec-230cbccd5195, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -132,7 +129,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:14.364 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=f908bfbd-9bac-48bb-b8e2-3e434f46fc5d, uri=ws://192.168.11.131/ws/calls]
 java.util.NoSuchElementException: Call not found
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:159)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -151,7 +147,6 @@ java.util.NoSuchElementException: Call not found
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:54.631 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalArgumentException: Unsupported call signal type
 	at com.red.server.websocket.CallWebSocketHandler.handleTextMessage(CallWebSocketHandler.kt:163)
 	at org.springframework.web.socket.handler.AbstractWebSocketHandler.handleMessage(AbstractWebSocketHandler.java:43)
@@ -171,7 +166,6 @@ java.lang.IllegalArgumentException: Unsupported call signal type
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
 2026-08-20 01:43:58.149 [http-nio-8080-exec-6] INFO  c.r.s.calls.CallEventAuditListener - AUDIT call_answered callId=e441fe7b-3474-4f6e-bc86-6abb33d56664
-2026-08-20 01:43:58.154 [http-nio-8080-exec-6] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: Message will not be sent because the WebSocket session has been closed
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.writeMessagePart(WsRemoteEndpointImplBase.java:458)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase.sendMessageBlockInternal(WsRemoteEndpointImplBase.java:316)
@@ -198,7 +192,6 @@ java.lang.IllegalStateException: Message will not be sent because the WebSocket 
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:58.215 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -223,7 +216,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:58.220 [http-nio-8080-exec-1] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -248,7 +240,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:58.277 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -273,7 +264,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:43:58.280 [http-nio-8080-exec-3] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)
@@ -298,7 +288,6 @@ java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_
 	at org.apache.tomcat.websocket.server.WsFrameServer.doOnDataAvailable(WsFrameServer.java:184)
 	at org.apache.tomcat.websocket.server.WsFrameServer.notifyDataAvailable(WsFrameServer.java:164)
 	at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.upgradeDispatch(WsHttpUpgradeHandler.java:152)
-2026-08-20 01:44:09.406 [http-nio-8080-exec-5] ERROR o.s.w.s.h.ExceptionWebSocketHandlerDecorator - Closing session due to exception for StandardWebSocketSession[id=668ca057-552b-4fc2-8d9b-927228a9a8c0, uri=ws://192.168.11.131/ws/calls]
 java.lang.IllegalStateException: The remote endpoint was in state [TEXT_PARTIAL_WRITING] which is an invalid state for called method
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.checkState(WsRemoteEndpointImplBase.java:1213)
 	at org.apache.tomcat.websocket.WsRemoteEndpointImplBase$StateMachine.textPartialStart(WsRemoteEndpointImplBase.java:1178)

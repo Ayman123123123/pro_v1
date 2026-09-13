@@ -1,14 +1,6 @@
-# 🔴 تحليل كود المشروع — الأخطاء الموجودة في DinstarHardwareService.kt
 
-## 📂 الملفات المرتبطة بـ Dinstar
 
 ```
-backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt  ← 🔴 الملف الرئيسي
-backend-server/src/main/kotlin/com/red/server/controllers/DinstarController.kt
-backend-server/src/main/kotlin/com/red/server/infrastructure/dinstar/DinstarMasterClient.kt
-backend-server/src/main/kotlin/com/red/server/pstn/DinstarEventListener.kt
-backend-server/src/main/kotlin/com/red/server/pstn/DinstarLoadBalancer.kt
-admin_dashboard/src/pages/tabs/DinstarTab.tsx
 backend-server/src/main/resources/application.yml
 .env.example
 ```
@@ -17,7 +9,6 @@ backend-server/src/main/resources/application.yml
 
 ## 🚨 الخطأ #1 (القاتل): HTTP Basic Auth بدل Digest Auth
 
-### الموقع: `DinstarHardwareService.kt` سطر 176
 
 ```kotlin
 // ❌ الكود الحالي:
@@ -30,9 +21,7 @@ val request = unsigned.newBuilder()
 ### المشكلة:
 `Credentials.basic()` يرسل **HTTP Basic Auth** (`Authorization: Basic YWRtaW46YWRtaW4=`)
 
-لكن Dinstar UC2000-VE يستخدم **HTTP Digest Auth** — هذا يفسر لماذا تحصل على **401 "Wrong Password"**!
 
-الـ Basic auth يرسل كلمة المرور مشفرة base64 (قابلة لفك التشفير بسهولة) — Dinstar يتوقع Digest auth حيث كلمة المرور تُرسل كـ MD5 hash مع nonce.
 
 ### ✅ الإصلاح:
 
@@ -54,7 +43,6 @@ val client = OkHttpClient.Builder()
 
 ## 🚨 الخطأ #2: get_cdr و query_cdr تستخدم GET بدل POST
 
-### الموقع: `DinstarHardwareService.kt` سطر 85
 
 ```kotlin
 // ❌ الكود الحالي:
@@ -62,7 +50,6 @@ fun queryCdr(): Map<String, Any?> = getJson("/api/query_cdr", emptyMap())
 ```
 
 ### المشكلة:
-وثائق Dinstar الرسمية تُظهر أن **get_cdr = POST مع JSON body**:
 ```bash
 curl -k --anyauth -u admin:admin -d '{"port":[2,3]}' -H "Content-Type: application/json" https://gateway_ip/api/get_cdr
 ```
@@ -79,7 +66,6 @@ fun queryCdr(): Map<String, Any?> = postJson("/api/query_cdr", mapOf("port" to (
 
 ## 🚨 الخطأ #3: set_port_info يستخدم POST بدل GET
 
-### الموقع: `DinstarHardwareService.kt` سطر 67
 
 ```kotlin
 // ❌ الكود الحالي:
@@ -87,7 +73,6 @@ val response = postJson("/api/set_port_info", mapOf("action" to "reset", "port" 
 ```
 
 ### المشكلة:
-وثائق Dinstar تُظهر أن **set_port_info = GET مع query parameters**:
 ```
 https://gateway_ip/api/set_port_info?port=1&action=reset
 ```
@@ -107,26 +92,13 @@ val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" t
 ```yaml
 # ❌ الكود الحالي:
 red:
-  dinstar:
-    ip: ${DINSTAR_IP:192.168.11.1}
-    port: ${DINSTAR_PORT:80}        # ← بورت 80!
-    scheme: ${DINSTAR_SCHEME:http}   # ← HTTP!
-    username: ${DINSTAR_USERNAME:}
-    password: ${DINSTAR_PASSWORD:}
 ```
 
 ### المشكلة:
-- **بورت 80**: Dinstar API يعمل على **بورت 443 (HTTPS)** أو على نفس بورت الويب
-- **scheme = http**: الـ Web UI يستخدم **HTTPS** (أنت تتصل بـ `https://192.168.11.1:443`)
 - لكن قد يعمل على HTTP أيضاً — يجب اختبار كلاهما
 
 ### ✅ الإصلاح في `.env`:
 ```env
-DINSTAR_IP=192.168.11.1
-DINSTAR_PORT=443
-DINSTAR_SCHEME=https
-DINSTAR_USERNAME=admin
-DINSTAR_PASSWORD=admin   # ← أو كلمة المرور الفعلية
 ```
 
 ---
@@ -137,22 +109,15 @@ DINSTAR_PASSWORD=admin   # ← أو كلمة المرور الفعلية
 
 ```kotlin
 // ❌ الكود الحالي:
-"model" to "UC2000-VE-8T"   // سطر 50
-"UC2000-VE-8T port must be 0-7"  // سطر 63
-"UC2000-VE-8T", activeHost, configuredScheme  // سطر 130 في registerGateway
 ```
 
-وفي `DinstarTab.tsx`:
 ```tsx
 // ❌ الكود الحالي:
-<h2>🔴 DINSTAR UC2000-VE-8T (GSM Gateway)</h2>
 ```
 
 ### المشكلة:
-الجهاز فعلياً **UC2000-VE-8G** (GSM فقط) — التسمية خاطئة في الكود.
 
 ### ✅ الإصلاح:
-استبدل كل `"UC2000-VE-8T"` بـ `"UC2000-VE-8G"` أو اجعله configurable.
 
 ---
 
@@ -160,9 +125,6 @@ DINSTAR_PASSWORD=admin   # ← أو كلمة المرور الفعلية
 
 | # | الملف | السطر | الخطأ | الأثر | الإصلاح |
 |---|---|---|---|---|---|
-| **1** | DinstarHardwareService.kt | 176 | **Basic Auth بدل Digest Auth** | 🔴 **401 على كل endpoint** | استخدام DigestAuthenticator |
-| **2** | DinstarHardwareService.kt | 85 | **GET بدل POST لـ get_cdr** | 🟠 **403 على get_cdr** | تحويل لـ postJson |
-| **3** | DinstarHardwareService.kt | 67 | **POST بدل GET لـ set_port_info** | 🟠 سلوك غير متوقع | تحويل لـ getJson |
 | **4** | application.yml + .env | 32-36 | **بورت 80 + HTTP** | 🟡 فشل الاتصال | بورت 443 + HTTPS |
 | **5** | عدة ملفات | — | **Model hardcoded 8T** | 🟢 عرض فقط | تغيير لـ 8G |
 
@@ -190,7 +152,6 @@ DINSTAR_PASSWORD=admin   # ← أو كلمة المرور الفعلية
 implementation("io.github.rburgst:okhttp-digest:1.3")
 ```
 
-### خطوة 2: تعديل DinstarHardwareService.kt
 
 استبدل الـ `execute` method بـ:
 ```kotlin
@@ -246,9 +207,4 @@ val response = getJson("/api/set_port_info", mapOf("action" to "reset", "port" t
 ### خطوة 5: تحديث .env
 
 ```env
-DINSTAR_IP=192.168.11.1
-DINSTAR_PORT=443
-DINSTAR_SCHEME=https
-DINSTAR_USERNAME=admin
-DINSTAR_PASSWORD=admin
 ```

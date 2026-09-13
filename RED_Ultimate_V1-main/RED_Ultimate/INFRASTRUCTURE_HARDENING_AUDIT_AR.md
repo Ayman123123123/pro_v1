@@ -114,7 +114,6 @@ bind mount يحتفظ بملكية الملف على المضيف، بينما b
 
 ### 14. سياقات Docker كانت تنسخ `node_modules`
 
-لم توجد `.dockerignore` داخل admin/SFU/PSTN context. كان `COPY . .` قادراً على نسخ dependencies من نظام المضيف فوق dependencies المبنية داخل Linux image. أضيفت ملفات ignore محلية لكل context.
 
 ### 15. Media SFU يعمل كـ root
 
@@ -146,7 +145,6 @@ bind mount يحتفظ بملكية الملف على المضيف، بينما b
 | Infrastructure regression checks | 74/74 PASS |
 | خادم لوحة الإدارة الحي | 25/25 PASS |
 | ربط Android ↔ server ↔ dashboard | 36/36 PASS |
-| تطابق Asterisk fleet | PASS لثلاث بوابات + رفض anonymous |
 | Admin API/guards/roles/TypeScript | PASS |
 | Vite production build | PASS، 5446 module |
 | SQL static validator | PASS، 27 ملفاً، 70 جدولاً، 121 index |
@@ -177,7 +175,6 @@ bind mount يحتفظ بملكية الملف على المضيف، بينما b
 ### أولوية متوسطة
 
 6. **تعارض المنافذ:** 8088/8443، 4000، 3478، 5060، نطاقات UDP 10000-10100 و40000-40100 و45000-45050، وloopback 9000/9001 قد تكون مشغولة.
-7. **NAT/firewall:** SFU وTURN وAsterisk لن تعمل خارج LAN بمجرد نجاح health؛ يجب فتح UDP وتحديد announced/public IP واختبار ICE من شبكة خارجية.
 8. **ثقة الشهادة:** self-signed تصلح للتطوير ولا تجعل المتصفح/Android يثق تلقائياً. production يجب أن يستخدم CA موثوقة أو pinning مدروس وتدوير آمن.
 9. **انحراف الوقت:** JWT/TURN/certificates تتأثر بساعة النظام. استخدام `Instant.now()` لا يصلح ساعة جهاز خاطئة؛ يلزم NTP ومراقبة clock offset.
 10. **WebSocket idle/NAT:** timeout ساعة يمنع Nginx من القطع المبكر لكنه لا يمنع NAT/mobile carrier من إسقاط socket. يلزم heartbeat وإعادة اتصال backoff واختبار شبكة هاتف حقيقية.

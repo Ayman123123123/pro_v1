@@ -79,11 +79,11 @@ fun CallTransferScreen(
     // Mock contacts — في التطبيق الفعلي يتم جلبها من قاعدة البيانات
     val contacts = remember {
         listOf(
-            ContactInfo("user-001", "أحمد محمد", "+9677XXXXXXXX", true),
-            ContactInfo("user-002", "محمد علي", "+9677XXXXXXXX", true),
-            ContactInfo("user-003", "فاطمة أحمد", "+9677XXXXXXXX", false),
-            ContactInfo("user-004", "خالد عبدالله", "+9677XXXXXXXX", true),
-            ContactInfo("user-005", "نورة سعيد", "+9677XXXXXXXX", false),
+            ContactInfo("user-001", "أحمد محمد", "contact-001", true),
+            ContactInfo("user-002", "محمد علي", "contact-001", true),
+            ContactInfo("user-003", "فاطمة أحمد", "contact-001", false),
+            ContactInfo("user-004", "خالد عبدالله", "contact-001", true),
+            ContactInfo("user-005", "نورة سعيد", "contact-001", false),
         )
     }
 

@@ -16,7 +16,6 @@ The **two systemic weaknesses** are configuration defaults rather than code defe
 1. Every transport defaults to cleartext in the build that is actually runnable (`debug`), and TLS pinning is **never enabled for either variant** because the default `RED_TLS_PINS` Gradle property is empty.
 2. The `release` variant cannot be signed/installed (no `signingConfig`), so there is currently no production build at all — everything in practice runs on the cleartext debug path.
 
-Beyond that, the finding that is independent of the deployment configuration (i.e. it leaks credentials *even when* pinning is correctly configured elsewhere) is the Dinstar gateway: its access token is sent over a `ws://` WebSocket built with a plain, unpinned `OkHttpClient`.
 
 Severity counts: **2 HIGH**, **6 MEDIUM**, **9 LOW/informational**.
 
@@ -37,7 +36,6 @@ RED_TLS_PINS      = ""                             // :12 — empty → pinning 
 
 * `YounesApplication.kt:25-27` only calls `provisionPins()` when `BuildConfig.RED_TLS_PINS.isNotBlank()`. With the default `""`, no pins are ever loaded, and `CertificatePinner.isEnabled = !BuildConfig.DEBUG` stays passive for debug builds.
 * The `debug` variant (the only variant with a usable signing config — see H2) explicitly permits cleartext, **and the default URL is HTTP anyway**. Client-side cleartext ban in release is moot because release cannot be built/installed.
-* **Impact:** on the only runnable build, every login (`POST /api/auth/...`), every REST call (`AuthorizedApiClient`), the main message socket, media uploads (MinIO), and the Dinstar WS handshake travel over plaintext. On a shared Wi-Fi/LAN an attacker who can sniff (rogue AP, ARP spoof) captures credentials and access tokens.
 
 **Fix:** make the SDK default `https://`; ship real `RED_TLS_PINS` values at build time; make `CertificatePinner.provisionPins()` refuse to build in `release` when pins are blank (fail-closed), and have `ServerEndpoint.initialize` reject `http` URLs unless `BuildConfig.DEBUG` and an explicit opt-in flag is set.
 
@@ -55,18 +53,14 @@ The `release` buildType declares neither `signingConfig` nor `minifyEnabled`; th
 
 ## MEDIUM
 
-### M1. Dinstar access token sent over unpinned `ws://` WebSocket (independent of H1)
 
-**Files:** `...\features\dinstar\DinstarWebSocketBridge.kt:24-26, 37-39`; caller `...\features\dinstar\DinstarViewModel.kt` (passes `tokens.accessToken`).
 
 ```kotlin
-// DinstarWebSocketBridge
 OkHttpClient.Builder().pingInterval(...).build()          // plain client, NO SecureOkHttpClient, NO pinning
 val wsUrl = backendUrl.replace("http", "ws")               // → ws:// when backend is http
 Authorization: Bearer $token                                // access token on the wire
 ```
 
-This is the one path that escapes the app's own hardening story: even on a deployment where REST is correctly pinned (release + pins provisioned), the Dinstar bridge still uses a bare `OkHttpClient`, downgrades `http→ws` (`https→wss` never happens), and the endpoint scheme is not validated. The bearer token therefore leaks over cleartext regardless of pin configuration.
 
 **Fix:** build the WS client from `SecureOkHttpClient`/`CertificatePinner`; enforce `wss` (reject `ws`) via the same policy; keep the token in an Authenticator, not a request header.
 
@@ -150,7 +144,6 @@ Client-side this is just server ACL enforcement; flagging so the backend restric
 - **Path-traversal guards** on authenticated media (`MediaApi.kt:27,41,83`), extension allowlist, size limits.
 - **Fails-closed SDP** fingerprint fallback (`calls/SfuSdpFactory.kt:19`), zeroed-out secret buffers after use (`EncryptedAttachment`, `VoiceMessageViewModel`).
 - **Ticket-based SFU auth** via `SecureOkHttpClient`: `calls/SfuMediaClient.kt`.
-- **Masked PII** in Dinstar telemetry (`IMSI/ICCID/number` masked) and presence (`PresenceInfo`).
 - **Foreground-service notification routing** with dedicated channels and no world-readable output (`network/SovereignNotificationRouter.kt`).
 
 ---
@@ -161,7 +154,6 @@ All 176 handwritten Kotlin files reviewed. Summaries by package:
 
 | Package | Verdict |
 |---|---|
-| `auth/` (AuthViewModel, TokenStore, DeviceKeyManager, AuthorizedApiClient, AuthApi, AuthModels, DevicesApi, PstnApi) | Mostly solid (L6). TokenStore logout residue previously reported; authorize-verify present |
 | `calls/` (30 files: services, signaling, recording, mesh/SFU, receivers, overlays) | M4, M5-adjacent, M6, L2; SFU/SDP/mesh good |
 | `contacts/`, `social/`, `stories/`, `features/communities`, `features/contacts`, `features/devices`, `features/explore`, `features/profile`, `features/media` | REST+UI, no new findings (excl. noted) |
 | `crypto/` (Signal store, sessions, identity dir, prekey pool, protocol record cipher, ack/decrypt buses) | M3; core E2EE good |
@@ -172,7 +164,6 @@ All 176 handwritten Kotlin files reviewed. Summaries by package:
 | `media/` (Events/Polls/Sticker/Attachment/Voice/EncryptedMediaCache/voice panel) | M6; encryption good |
 | `security/` (CertificatePinner, SecureOkHttpClient, AppLockScreen, DebugSecurityManager, RemoteAppWipe, SecurityHeaders) | H1 interplay, L1, L4 |
 | `settings/` (SettingsViewModel+Runtime, SettingsScreen, DeviceSettingsViewModel) | L3; `SettingsRuntime` object at `SettingsViewModel.kt:106` |
-| `features/dinstar/` (WebSocketBridge, ViewModel, Models) | M1 — highest standalone credential exposure |
 | `features/privacy/PrivacySettingsScreen.kt` | M2 |
 | `ui/`, `ui/theme`, `ui/screens`, `MainActivity.kt`, `YounesApplication.kt`, `groups/`, `stories/` | Scaffolding (`ui/screens/*` are placeholders pointing at `RedDashboard.kt`) and presentation only |
 | `test/` (27 files) | Unit tests, not shipped; exercise pin/cipher paths |

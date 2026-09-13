@@ -63,23 +63,6 @@ RUN npm ci --omit=dev --no-audit --no-fund
 COPY RED_Ultimate/media-sfu/server.js ./
 RUN npm run check && touch /tmp/red-sfu-check-ok
 
-FROM andrius/asterisk AS pstn-check
-COPY RED_Ultimate/pstn-asterisk/extensions.conf /etc/asterisk/extensions.conf
-COPY RED_Ultimate/pstn-asterisk/docker-entrypoint.sh /usr/local/bin/red-asterisk-entrypoint
-COPY RED_Ultimate/scripts/local-first-run.sh /tmp/local-first-run.sh
-# Normalize shell files defensively because Windows worktrees may already contain CRLF
-# before .gitattributes is applied.
-RUN sed -i 's/\r$//' /tmp/local-first-run.sh /usr/local/bin/red-asterisk-entrypoint /etc/asterisk/extensions.conf \
-    && sh -n /tmp/local-first-run.sh \
-    && chmod 0755 /usr/local/bin/red-asterisk-entrypoint \
-    && AMI_PASSWORD=Ci_safe-secret DINSTAR_IP=192.168.11.1 \
-       ASTERISK_CONFIG_DIR=/tmp/red-asterisk RED_ASTERISK_CONFIG_ONLY=1 \
-       /usr/local/bin/red-asterisk-entrypoint \
-    && grep -q 'secret = Ci_safe-secret' /tmp/red-asterisk/manager.conf \
-    && grep -q 'contact=sip:192.168.11.1:5060' /tmp/red-asterisk/pjsip.conf \
-    && ! grep -q 'webrtc-client' /tmp/red-asterisk/pjsip.conf \
-    && touch /tmp/red-pstn-check-ok
-
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 RUN apt-get update \
@@ -89,7 +72,6 @@ COPY --from=builder /build/backend-server/build/libs/red-backend.jar app.jar
 COPY --from=android-builder /build/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk /opt/red-app-debug.apk
 COPY --from=admin-builder /build/admin/dist /opt/red-admin-dashboard
 COPY --from=sfu-check /tmp/red-sfu-check-ok /opt/verification/red-sfu-check-ok
-COPY --from=pstn-check /tmp/red-pstn-check-ok /opt/verification/red-pstn-check-ok
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:8080/health || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

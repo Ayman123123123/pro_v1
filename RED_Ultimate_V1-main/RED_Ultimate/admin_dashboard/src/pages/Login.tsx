@@ -69,7 +69,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
   const featureCards = [
     { icon: <SafetyCertificateOutlined />, title: 'سلطة محلية', desc: 'موافقات الحسابات والأجهزة بلا هاتف أو OTP' },
     { icon: <LockOutlined />, title: 'إدارة أمنية', desc: 'Kill Switch، مسح عن بُعد، تدقيق، وجلسات' },
-    { icon: <ApiOutlined />, title: 'مراكز موحدة', desc: 'المستخدمون، المحتوى، DINSTAR، الوسائط، الرسائل' },
+    { icon: <ApiOutlined />, title: 'مراكز موحدة', desc: 'المستخدمون، المحتوى، الوسائط، الرسائل' },
     { icon: <CloudServerOutlined />, title: 'Local-first', desc: 'Nginx + Backend + SFU + PostgreSQL + Mongo + Redis' },
   ];
 
@@ -92,7 +92,7 @@ export default function Login({ onLogin, onSuccess, isLoading }: LoginProps) {
             <span style={{ background: 'linear-gradient(90deg, #B78A2E, #4FC3F7, #E0A83C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' as any }}>لكل عمليات يونس</span>
           </Typography.Title>
           <Typography.Paragraph style={{ color: '#94A3B8', fontSize: 16, lineHeight: 1.9, maxWidth: 560 }}>
-            تم اعتماد النسخة الحديثة ودمج وظائف النسخ القديمة داخلها: تسجيل دخول آمن، مراقبة حية، إدارة المستخدمين، الموافقات، المحتوى، DINSTAR، الوسائط، الإشعارات، النسخ الاحتياطي، والتدقيق.
+            تم اعتماد النسخة الحديثة ودمج وظائف النسخ القديمة داخلها: تسجيل دخول آمن، مراقبة حية، إدارة المستخدمين، الموافقات، المحتوى، الوسائط، الإشعارات، النسخ الاحتياطي، والتدقيق.
           </Typography.Paragraph>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginTop: 28 }}>

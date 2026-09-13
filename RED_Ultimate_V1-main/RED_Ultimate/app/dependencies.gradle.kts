@@ -13,9 +13,6 @@ dependencies {
   implementation(libs.signal.ringrtc)
   implementation(libs.bundles.media3)
 
-  // System B: PSTN Dinstar
-  implementation("org.asteriskjava:asterisk-java:3.40.0")
-
   // System C: Messaging
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)

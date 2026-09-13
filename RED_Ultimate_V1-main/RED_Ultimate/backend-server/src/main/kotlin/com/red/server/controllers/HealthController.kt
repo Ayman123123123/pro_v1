@@ -20,7 +20,7 @@ import java.util.concurrent.TimeoutException
 
 /**
  * المصنع: `/health/live` و `/health` عامان لمراقبة النشر (status فقط).
- * `/health/detailed` كامل (قواعد البيانات، Dinstar، Flyway، خصائص المضيف)
+ * `/health/detailed` كامل (قواعد البيانات، Flyway، خصائص المضيف)
  * ومحميّ بصلاحية ADMIN — تُحفظ كل المعلومات لكن لا تتسرب للعامة.
  */
 @RestController
@@ -31,10 +31,6 @@ class HealthController(
     private val minioClient: MinioClient,
     @Value("\${red.minio.bucket:red-media}") private val minioBucket: String,
     @Value("\${spring.datasource.url:}") private val dbUrl: String,
-    @Value("\${red.dinstar.ip:}") private val dinstarIp: String,
-    @Value("\${red.dinstar.port:443}") private val dinstarPort: Int,
-    @Value("\${red.dinstar.scheme:https}") private val dinstarScheme: String,
-    @Value("\${red.dinstar.enabled:false}") private val dinstarEnabled: Boolean,
     @Value("\${spring.mongodb.uri:}") private val mongoUri: String,
     @Value("\${spring.data.redis.host:}") private val redisHost: String
 ) {
@@ -80,7 +76,7 @@ class HealthController(
     }
 
     /**
-     * 👑 تفاصيل كاملة (مسارات قواعد البيانات، Dinstar، Flyway، خصائص المضيف، دلو MinIO).
+     * 👑 تفاصيل كاملة (مسارات قواعد البيانات، Flyway، خصائص المضيف، دلو MinIO).
      * محمي بصلاحية ADMIN في SecurityConfig — لا يُكشف للعامة.
      */
     @GetMapping("/health/detailed")
@@ -126,12 +122,6 @@ class HealthController(
                     "bucket" to minioBucket,
                     "error" to if (probes.minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE"
                 )
-            ),
-            "dinstar" to mapOf(
-                "enabled" to dinstarEnabled,
-                "host" to dinstarIp,
-                "port" to dinstarPort,
-                "scheme" to dinstarScheme
             ),
             "flyway" to mapOf(
                 "latestVersion" to flywayResult.getOrNull()?.first,

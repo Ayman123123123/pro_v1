@@ -14,7 +14,6 @@
  M ../../CONVERSATION_RECOVERY_REPORT_AR.md
  M ../../DATABASE_UPGRADE_REPORT.md
  M ../../DEEP_AUDIT_2026-08-11.md
- M ../../DINSTAR_API_DEEP_ANALYSIS.md
  M ../../FINAL_COMPREHENSIVE_REPORT_AR.md
  M ../../FINAL_INTEGRATION_REPORT.md
  M ../../FULL_TEST_REPORT.md
@@ -42,7 +41,6 @@
  M ../DATABASE_UPGRADE_REPORT.md
  M ../DEPENDENCY_POLICY.md
  M ../DEVELOPMENT_PLAN.md
- M ../DINSTAR_API_DEEP_ANALYSIS.md
  M ../Dockerfile
  M ../FINAL_DEVELOPMENT_REPORT.md
  M ../FINAL_INTEGRATION_REPORT.md
@@ -133,14 +131,12 @@
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Approvals.jsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Dashboard.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Diagnostics.jsx
- M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/DinstarControl.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Login.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/MasterLayout.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/MasterOverview.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/UserApproval.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/UserManagement.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/AuthorityTab.tsx
- M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/DinstarTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/InfrastructureTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/LogStreamerTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/MediaTab.tsx
@@ -168,14 +164,12 @@
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Approvals.jsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Dashboard.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Diagnostics.jsx
- M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/DinstarControl.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/Login.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/MasterLayout.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/MasterOverview.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/UserApproval.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/UserManagement.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/AuthorityTab.tsx
- M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/DinstarTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/InfrastructureTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/LogStreamerTab.tsx
  M _conversation_archive/arena-019fe4dd/missing_files/project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/src/pages/tabs/MediaTab.tsx
@@ -205,7 +199,6 @@
  M admin_dashboard/public/younes-app-icon.svg
  M admin_dashboard/scripts/check-api-contract.mjs
  M admin_dashboard/scripts/check-app-roles.mjs
- M admin_dashboard/scripts/check-asterisk-fleet.mjs
  M admin_dashboard/scripts/check-dev-server.mjs
  M admin_dashboard/scripts/check-frontend-guards.mjs
  M admin_dashboard/scripts/check-integration.mjs
@@ -303,15 +296,6 @@
  M android/features/chat/SovereignGroupSystem.kt
  M android/features/chat/VoiceRecorder.kt
  M android/features/devices/DevicesScreen.kt
- M android/features/dinstar/DinstarAdminScreen.kt
- M android/features/dinstar/DinstarModels.kt
- M android/features/dinstar/DinstarModelsTest.kt
- M android/features/dinstar/DinstarSmsScreen.kt
- M android/features/dinstar/DinstarTab.kt
- M android/features/dinstar/DinstarViewModel.kt
- M android/features/dinstar/DinstarWebSocketBridge.kt
- M android/features/dinstar/IncomingPstnCallScreen.kt
- M android/features/dinstar/PstnCallScreen.kt
  M android/features/explore/RedExploreScreen.kt
  M android/features/media/SovereignMediaPlayer.kt
  M android/features/privacy/SovereignPrivacySystem.kt
@@ -2264,7 +2248,6 @@
  M app/src/main/java/org/thoughtcrime/securesms/developed/DevelopedChatInitialization.java
  M app/src/main/java/org/thoughtcrime/securesms/developed/MasterIntegration.kt
  M app/src/main/java/org/thoughtcrime/securesms/developed/delivery/GuaranteedDelivery.kt
- M app/src/main/java/org/thoughtcrime/securesms/developed/pstn/DuminManager.kt
  M app/src/main/java/org/thoughtcrime/securesms/developed/voip/DevelopedVoipController.java
  M app/src/main/java/org/thoughtcrime/securesms/developed/voip/QualityController.kt
  M app/src/main/java/org/thoughtcrime/securesms/developed/voip/UltraHDCall.kt
@@ -6569,13 +6552,11 @@
  M backend-server/src/main/kotlin/com/red/server/controllers/AdminMonitorController.kt
  M backend-server/src/main/kotlin/com/red/server/controllers/AdminUserIntelligenceController.kt
  M backend-server/src/main/kotlin/com/red/server/controllers/AdminWebSocketTicketController.kt
- M backend-server/src/main/kotlin/com/red/server/controllers/DinstarSmsController.kt
  M backend-server/src/main/kotlin/com/red/server/controllers/GatewaySimInventoryController.kt
  M backend-server/src/main/kotlin/com/red/server/controllers/LiveStreamController.kt
  M backend-server/src/main/kotlin/com/red/server/groups/GroupInviteModels.kt
  M backend-server/src/main/kotlin/com/red/server/groups/GroupModels.kt
  M backend-server/src/main/kotlin/com/red/server/groups/GroupService.kt
- M backend-server/src/main/kotlin/com/red/server/infrastructure/dinstar/DinstarMasterClient.kt
  M backend-server/src/main/kotlin/com/red/server/media/MediaAccessService.kt
  M backend-server/src/main/kotlin/com/red/server/media/MediaController.kt
  M backend-server/src/main/kotlin/com/red/server/media/MediaSecurityScanner.kt
@@ -6584,14 +6565,10 @@
  M backend-server/src/main/kotlin/com/red/server/messaging/AdvancedMessageService.kt
  M backend-server/src/main/kotlin/com/red/server/messaging/DeleteService.kt
  M backend-server/src/main/kotlin/com/red/server/messaging/MessageService.kt
- M backend-server/src/main/kotlin/com/red/server/pstn/DinstarEventListener.kt
- M backend-server/src/main/kotlin/com/red/server/pstn/DinstarHeartbeatService.kt
  M backend-server/src/main/kotlin/com/red/server/pstn/PstnCallService.kt
  M backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt
  M backend-server/src/main/kotlin/com/red/server/services/AdminUserIntelligenceService.kt
  M backend-server/src/main/kotlin/com/red/server/services/CoreService.kt
- M backend-server/src/main/kotlin/com/red/server/services/DinstarFleetBootstrap.kt
- M backend-server/src/main/kotlin/com/red/server/services/DinstarModelProfile.kt
  M backend-server/src/main/kotlin/com/red/server/services/GatewaySimInventoryService.kt
  M backend-server/src/main/kotlin/com/red/server/services/IronSyncService.kt
  M backend-server/src/main/kotlin/com/red/server/services/MasterStatsService.kt
@@ -6639,7 +6616,6 @@
  M backend-server/src/main/resources/db/migration/V27__Operational_Retention_Indexes.sql
  M backend-server/src/main/resources/db/migration/V28__Admin_RBAC_and_Security_Hardening.sql
  M backend-server/src/main/resources/db/migration/V29__Drop_Stale_Postgres_Group_Fks.sql
- M backend-server/src/main/resources/db/migration/V2__Dinstar_Master_Control.sql
  M backend-server/src/main/resources/db/migration/V30__Widen_Admin_Audit_Constraints.sql
  M backend-server/src/main/resources/db/migration/V31__Legendary_Operational_Hardening.sql
  M backend-server/src/main/resources/db/migration/V3__Username_Approval_Accounts.sql
@@ -6654,9 +6630,6 @@
  M backend-server/src/test/kotlin/com/red/server/ContactBlockMediaGrantTest.kt
  M backend-server/src/test/kotlin/com/red/server/DeviceCertificateServiceTest.kt
  M backend-server/src/test/kotlin/com/red/server/DeviceEnrollmentServiceTest.kt
- M backend-server/src/test/kotlin/com/red/server/DinstarApiContractTest.kt
- M backend-server/src/test/kotlin/com/red/server/DinstarModelProfileTest.kt
- M backend-server/src/test/kotlin/com/red/server/DinstarOperatorRoutingTest.kt
  M backend-server/src/test/kotlin/com/red/server/GroupE2EETest.kt
  M backend-server/src/test/kotlin/com/red/server/LiveStreamServiceTest.kt
  M backend-server/src/test/kotlin/com/red/server/MediaAccessServiceTest.kt
@@ -6683,7 +6656,6 @@
  M backend-server/src/test/kotlin/com/red/server/calls/CallRecordingApiTest.kt
  M backend-server/src/test/kotlin/com/red/server/config/InfrastructureBindingTest.kt
  M backend-server/src/test/kotlin/com/red/server/security/CertificatePinnerTest.kt
- M backend-server/src/test/kotlin/com/red/server/services/DinstarHardwareServiceTest.kt
  M backend-server/src/test/kotlin/com/red/server/websocket/CallWebSocketHandlerTest.kt
  M backend-server/src/test/kotlin/com/red/server/websocket/ConferenceWebSocketHandlerTest.kt
  M backend-server/src/test/kotlin/com/red/server/websocket/LiveStreamWebSocketHandlerTest.kt
@@ -7480,8 +7452,6 @@
  M demo/video/src/main/res/values/themes.xml
  M demo/video/src/main/res/xml/file_paths.xml
  M demo/video/src/test/java/org/thoughtcrime/video/app/ExampleUnitTest.kt
- M dinstar_route_ip.html
- M dinstar_route_tel.html
  M docker-compose.host-debug.yml
  M docker-compose.lan.yml
  M docker-compose.pstn-only.yml
@@ -7490,18 +7460,12 @@
  M docs/02-DATABASES.md
  M docs/03-SERVER-ADMIN-PANEL.md
  M docs/04-APPS.md
- M docs/05-DINSTAR-UC2000-VE-8G.md
- M docs/05-DINSTAR-UC2000-VE-8T.md
- M docs/06-DINSTAR-ANDROID-FEATURE.md
- M docs/07-DINSTAR-ANDROID-V2.md
- M docs/08-DINSTAR-COMPLETE-PLATFORM-GUIDE-AR.md
  M docs/31-YOUNES-PRODUCT-UX-ROADMAP.md
  M docs/AUDIT_FIXES_VERIFIED_AR.md
  M docs/BACKUP_RESTORE_RUNBOOK_AR.md
  M docs/CALLS_AR.md
  M docs/CALLS_DEEP_AUDIT_AR.md
  M docs/DEEP_AUDIT_2_AR.md
- M docs/DINSTAR_UC2000_GUIDE_AR.md
  M docs/FOUR_FEATURES_BUNDLE_AR.md
  M docs/GROUP_E2EE_SENDER_KEYS.md
  M docs/IMPROVEMENT_LOG.md
@@ -8990,12 +8954,6 @@
  M microbenchmark/src/main/AndroidManifest.xml
  M nginx.conf
  M pkcs11.config
- M pstn-asterisk/Dockerfile
- M pstn-asterisk/README.md
- M pstn-asterisk/docker-entrypoint.sh
- M pstn-asterisk/extensions.conf
- M pstn-asterisk/modules.conf
- M pstn-asterisk/pjsip.conf
  M red-app/README.md
  M red-app/artwork/README.md
  M red-app/artwork/younes-launcher-source.svg
@@ -9028,17 +8986,12 @@
  M red-app/src/main/java/com/red/sovereign/core/database/RedDao.kt
  M red-app/src/main/java/com/red/sovereign/core/database/RedDatabase.kt
  M red-app/src/main/java/com/red/sovereign/features/chat/SovereignGroupSystem.kt
- M red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarModels.kt
- D red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarSmsScreen.kt
- M red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarViewModel.kt
- M red-app/src/main/java/com/red/sovereign/features/dinstar/DinstarWebSocketBridge.kt
  M red-app/src/main/java/com/red/sovereign/features/media/MediaGallery.kt
  M red-app/src/main/java/com/red/sovereign/features/sms/PstnEventSocket.kt
  M red-app/src/main/java/com/red/sovereign/features/sms/SmsChatScreen.kt
  M red-app/src/main/java/com/red/sovereign/features/sms/SmsConversationsScreen.kt
  M red-app/src/main/java/com/red/sovereign/features/sms/SmsViewModel.kt
  M red-app/src/main/java/com/red/sovereign/groups/GroupViewModel.kt
- D red-app/src/main/java/com/red/sovereign/hardware/DinstarHardwareService.kt
  M red-app/src/main/java/com/red/sovereign/media/AttachmentViewModel.kt
  M red-app/src/main/java/com/red/sovereign/media/VoiceMessageViewModel.kt
  M red-app/src/main/java/com/red/sovereign/media/VoiceNotePlayer.kt
@@ -9114,7 +9067,6 @@
  M red-app/src/test/java/com/red/sovereign/calls/NetworkStatsTest.kt
  M red-app/src/test/java/com/red/sovereign/calls/SdpMediaOptimizerTest.kt
  M red-app/src/test/java/com/red/sovereign/calls/SfuSdpFactoryTest.kt
- M red-app/src/test/java/com/red/sovereign/calls/YemeniOperatorDetectorTest.kt
  M red-app/src/test/java/com/red/sovereign/core/FtsSearchManagerTest.kt
  M red-app/src/test/java/com/red/sovereign/core/RichMessageTest.kt
  M red-app/src/test/java/com/red/sovereign/core/YounesServerSignatureTest.kt
@@ -9155,7 +9107,6 @@
  M scripts/compose-recover.sh
  M scripts/configure-windows-lan.ps1
  M scripts/diagnose-stack.ps1
- M scripts/enable-dinstar-ready.ps1
  M scripts/fetch-lfs-content.py
  M scripts/fix-build-cache.ps1
  M scripts/fix-red-proxy-certs.sh
@@ -9190,7 +9141,6 @@
  M ../SESSION_REPORT_AR.md
  M ../TECHNICAL_REPORT_AR.md
  M ../TODO_FIX_REPORT_AR.md
- M ../UC2000-VE-8G_ANALYSIS.md
  M ../UI_UX_UPGRADE_REPORT.md
  M ../VERIFICATION_REPORT.md
  M ../VERIFICATION_REPORT_AR.md
@@ -9211,7 +9161,6 @@
  M ../workflow-ready/repair-lfs.yml
  M "../\330\247\331\204\330\252\331\202\330\261\331\212\330\261_\330\247\331\204\330\264\330\247\331\205\331\204_\330\247\331\204\330\255\330\261\331\201\331\212_\330\247\331\204\331\203\330\247\331\205\331\204.md"
  M "../\330\247\331\204\330\252\331\203\330\247\331\205\331\204_\330\247\331\204\331\206\331\207\330\247\330\246\331\212_\330\247\331\204\331\205\331\210\330\255\330\257_2026-08-10.md"
- M ../../UC2000-VE-8G_ANALYSIS.md
  M ../../UI_UX_UPGRADE_REPORT.md
  M ../../UPGRADE_LEGENDARY_2026-08-11.md
  M ../../VERIFICATION_REPORT.md
@@ -9275,12 +9224,10 @@
 ?? admin_dashboard/role-check-output.txt
 ?? backend-server/Dockerfile.local
 ?? backend-server/src/main/kotlin/com/red/server/admin/controller/AdminEventsController.kt
-?? backend-server/src/main/kotlin/com/red/server/services/DinstarSmsContract.kt
 ?? backend-server/src/test/kotlin/com/red/server/AdvancedMessageServiceQueryTest.kt
 ?? backend-server/src/test/kotlin/com/red/server/ConferenceRoomServiceTest.kt
 ?? backend-server/src/test/kotlin/com/red/server/RoomPasswordHasherTest.kt
 ?? backend-server/src/test/kotlin/com/red/server/calls/CallPendingEndpointContractTest.kt
-?? backend-server/src/test/kotlin/com/red/server/services/DinstarSmsContractTest.kt
 ?? build-android.ps1
 ?? build-apk.ps1
 ?? docs/DEVELOPMENT_AUDIT_2026-08-19_AR.md
@@ -9325,7 +9272,6 @@
 ?? red-app/src/test/java/com/red/sovereign/stories/
 ?? red-app/src/test/java/com/red/sovereign/ui/
 ?? todo.md
-?? ../../UC2000-VE_Complete_Reference.md
 ?? ../../UNIFIED_LOCAL_RUN_REPORT_AR.md
 ?? ../../backup-red-consolidation.ps1
 ?? ../../call-debug-20260820/
@@ -9378,12 +9324,10 @@
  .../com/red/server/calls/ConferenceController.kt   |   12 +-
  .../com/red/server/calls/LiveStreamService.kt      |    8 +-
  .../com/red/server/calls/RoomPasswordHasher.kt     |    7 +-
- .../red/server/controllers/DinstarSmsController.kt |   32 +-
  .../kotlin/com/red/server/groups/GroupModels.kt    |    2 +-
  .../kotlin/com/red/server/groups/GroupService.kt   |   23 +-
  .../com/red/server/media/MediaSecurityScanner.kt   |    4 +-
  .../red/server/messaging/AdvancedMessageService.kt |    5 +-
- .../com/red/server/pstn/DinstarEventListener.kt    |  185 +-
  .../kotlin/com/red/server/pstn/PstnCallService.kt  |   20 +-
  .../main/kotlin/com/red/server/pstn/PstnManager.kt |   55 +
  .../com/red/server/services/NotificationService.kt |  114 +-
@@ -9404,11 +9348,6 @@
  .../RED_Ultimate/docker-compose.pstn-only.yml      |   13 +-
  .../RED_Ultimate/docker-compose.yml                |   58 +-
  RED_Ultimate_V1-main/RED_Ultimate/nginx.conf       |    2 +-
- .../RED_Ultimate/pstn-asterisk/Dockerfile          |   74 +-
- .../pstn-asterisk/docker-entrypoint.sh             |   57 +-
- .../RED_Ultimate/pstn-asterisk/extensions.conf     |   44 +-
- .../RED_Ultimate/pstn-asterisk/modules.conf        |    5 +-
- .../RED_Ultimate/pstn-asterisk/pjsip.conf          |   22 +-
  .../RED_Ultimate/red-app/build.gradle.kts          |    3 +-
  .../java/com/red/sovereign/YounesApplication.kt    |   17 +
  .../main/java/com/red/sovereign/auth/AuthApi.kt    |   26 +-
@@ -9435,16 +9374,11 @@
  .../java/com/red/sovereign/core/database/RedDao.kt |   62 +
  .../com/red/sovereign/core/database/RedDatabase.kt |   44 +-
  .../features/chat/SovereignGroupSystem.kt          |  135 +-
- .../sovereign/features/dinstar/DinstarModels.kt    |    8 -
- .../sovereign/features/dinstar/DinstarSmsScreen.kt |  198 -
- .../sovereign/features/dinstar/DinstarViewModel.kt |   33 +-
- .../features/dinstar/DinstarWebSocketBridge.kt     |   14 -
  .../red/sovereign/features/sms/PstnEventSocket.kt  |   53 +-
  .../red/sovereign/features/sms/SmsChatScreen.kt    |   68 +-
  .../features/sms/SmsConversationsScreen.kt         |   23 +-
  .../com/red/sovereign/features/sms/SmsViewModel.kt |  192 +-
  .../com/red/sovereign/groups/GroupViewModel.kt     |   22 +-
- .../sovereign/hardware/DinstarHardwareService.kt   |  177 -
  .../com/red/sovereign/media/AttachmentViewModel.kt |   23 +
  .../red/sovereign/media/VoiceMessageViewModel.kt   |   17 +
  .../com/red/sovereign/media/VoiceNotePlayer.kt     |   67 +-

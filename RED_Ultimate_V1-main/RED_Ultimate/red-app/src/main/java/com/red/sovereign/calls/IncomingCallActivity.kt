@@ -54,105 +54,6 @@ import androidx.lifecycle.lifecycleScope
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-/**
- * شاشة واردة كاملة لكل أنواع المكالمات — من شاشة القفل.
- */
-class IncomingCallActivity : ComponentActivity() {
-    private val viewModel: IncomingCallViewModel by viewModels()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.addFlags(
-            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
-        )
-        bindIntent(intent)
-        setContent {
-            IncomingCallScreen(viewModel = viewModel, onFinish = { finish() })
-        }
-        lifecycleScope.launch {
-            delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
-            if (!viewModel.isHandled) {
-                viewModel.decline()
-                finish()
-            }
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        bindIntent(intent)
-    }
-
-    private fun bindIntent(intent: Intent?) {
-        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: CALL_TYPE_CONFERENCE
-        viewModel.callType = callType
-        when (callType) {
-            CALL_TYPE_PSTN -> {
-                viewModel.callId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
-                viewModel.peer = intent?.getStringExtra(EXTRA_PEER).orEmpty()
-                viewModel.mode = "PSTN"
-                viewModel.inviter = viewModel.peer
-            }
-            CALL_TYPE_1TO1 -> {
-                viewModel.callId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
-                viewModel.peer = intent?.getStringExtra(EXTRA_PEER).orEmpty()
-                viewModel.mode = intent?.getStringExtra(EXTRA_MODE) ?: "VOICE"
-                viewModel.inviter = intent?.getStringExtra(EXTRA_INVITER).orEmpty().ifBlank { viewModel.peer }
-            }
-            CALL_TYPE_GROUP -> {
-                viewModel.groupCallId = intent?.getStringExtra(GroupCallService.EXTRA_GROUP_CALL_ID).orEmpty()
-                viewModel.myUserId = intent?.getStringExtra(GroupCallService.EXTRA_MY_USER_ID).orEmpty()
-                viewModel.peer = intent?.getStringExtra(GroupCallService.EXTRA_HOST_NAME).orEmpty()
-                viewModel.mode = if (intent?.getBooleanExtra(GroupCallService.EXTRA_IS_VIDEO, false) == true) "VIDEO" else "VOICE"
-                viewModel.inviter = viewModel.peer
-            }
-            CALL_TYPE_LIVESTREAM -> {
-                viewModel.streamId = intent?.getStringExtra(LiveStreamService.EXTRA_STREAM_ID).orEmpty()
-                viewModel.userId = intent?.getStringExtra(LiveStreamService.EXTRA_USER_ID).orEmpty()
-                viewModel.peer = intent?.getStringExtra(LiveStreamService.EXTRA_BROADCASTER_NAME).orEmpty()
-                viewModel.mode = "VIDEO"
-                viewModel.inviter = viewModel.peer
-            }
-            else -> {
-                viewModel.roomId = intent?.getStringExtra(ConferenceService.EXTRA_ROOM_ID).orEmpty()
-                viewModel.userId = intent?.getStringExtra(ConferenceService.EXTRA_USER_ID).orEmpty()
-                viewModel.inviter = intent?.getStringExtra(ConferenceService.EXTRA_INVITER).orEmpty()
-                viewModel.video = intent?.getBooleanExtra(ConferenceService.EXTRA_VIDEO, false) ?: false
-                viewModel.mode = if (viewModel.video) "VIDEO" else "VOICE"
-            }
-        }
-    }
-
-    companion object {
-        const val EXTRA_CALL_TYPE = "call_type"
-        const val CALL_TYPE_1TO1 = "1to1"
-        const val CALL_TYPE_PSTN = "pstn"
-        const val CALL_TYPE_GROUP = "group"
-        const val CALL_TYPE_CONFERENCE = "conference"
-        const val CALL_TYPE_LIVESTREAM = "livestream"
-        const val EXTRA_CALL_ID = "call_id"
-        const val EXTRA_PEER = "peer"
-        const val EXTRA_MODE = "mode"
-        const val EXTRA_INVITER = "inviter"
-
-        /** إطلاق شاشة رنين PSTN (مكالمة على شريحة المالك عبر DINSTAR). */
-        fun launchPstn(context: Context, callId: String, peer: String) {
-            context.startActivity(
-                Intent(context, IncomingCallActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    putExtra(EXTRA_CALL_TYPE, CALL_TYPE_PSTN)
-                    putExtra(EXTRA_CALL_ID, callId)
-                    putExtra(EXTRA_PEER, peer)
-                    putExtra(EXTRA_MODE, "PSTN")
-                }
-            )
-        }
-
         fun launch1to1(context: Context, callId: String, peer: String, mode: String, inviter: String = peer) {
             context.startActivity(
                 Intent(context, IncomingCallActivity::class.java).apply {
@@ -219,26 +120,11 @@ class IncomingCallViewModel(application: android.app.Application) : AndroidViewM
     var userId = ""
     var video = false
     var streamId = ""
-    /** هل تم قبول مكالمة PSTN وينتظر انتقالها للحالة النشطة */
-    var pstnAccepting by androidx.compose.runtime.mutableStateOf(false)
 
     fun accept(withVideo: Boolean) {
         isHandled = true
         val app = getApplication<android.app.Application>()
         when (callType) {
-            // مكالمة PSTN واردة على شريحة المالك: القبول يمر عبر منسق /ws/pstn
-            // (PSTN_ACCEPT → AMI Redirect) ثم المستمع المسجَّل يجيب بـ 200 OK.
-            IncomingCallActivity.CALL_TYPE_PSTN -> {
-                pstnAccepting = true
-                val ok = PstnIncomingCallCoordinator.active?.acceptIncoming() ?: false
-                if (!ok) {
-                    // فشل إرسال PSTN_ACCEPT (WebSocket مقطوع) — أبلغ المستخدم
-                    android.util.Log.w("PstnIncoming", "PSTN_ACCEPT failed, coordinator not active")
-                    pstnAccepting = false
-                }
-                // لا ننهي الـ Activity هنا — ننتظر انتقال PstnWebRtcManager إلى ACTIVE
-                // عبر مراقبة الحالة في الـ Composable (LaunchedEffect)
-            }
             IncomingCallActivity.CALL_TYPE_1TO1 -> {
                 YounesCallService.accept(app, cameraOn = withVideo && mode == "VIDEO", micOn = true)
             }
@@ -261,7 +147,6 @@ class IncomingCallViewModel(application: android.app.Application) : AndroidViewM
         isHandled = true
         val app = getApplication<android.app.Application>()
         when (callType) {
-            IncomingCallActivity.CALL_TYPE_PSTN -> PstnIncomingCallCoordinator.active?.rejectIncoming()
             IncomingCallActivity.CALL_TYPE_1TO1 -> YounesCallService.action(app, YounesCallService.ACTION_REJECT)
             IncomingCallActivity.CALL_TYPE_GROUP -> GroupCallService.decline(app, groupCallId)
             IncomingCallActivity.CALL_TYPE_LIVESTREAM -> LiveStreamService.stop(app)
@@ -276,36 +161,6 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
     var showVideoToggle by remember { mutableStateOf(viewModel.mode == "VIDEO" || viewModel.video) }
     val isVideoCapable = viewModel.mode == "VIDEO" || viewModel.video ||
         viewModel.callType == IncomingCallActivity.CALL_TYPE_LIVESTREAM
-    val isPstn = viewModel.callType == IncomingCallActivity.CALL_TYPE_PSTN
-
-    // لـ PSTN: راقب انتقال المكالمة إلى ACTIVE — عندها أغلق شاشة الرنين واعرض شاشة المكالمة النشطة
-    if (isPstn && viewModel.pstnAccepting) {
-        val pstnManager = remember { PstnLinphoneManager.incoming(viewModel.getApplication()) }
-        val pstnState by pstnManager.stateFlow.collectAsState()
-        LaunchedEffect(pstnState) {
-            if (pstnState == PstnWebRtcManager.PstnCallState.ACTIVE) {
-                viewModel.pstnAccepting = false
-                onFinish()
-            }
-        }
-    }
-
-    // شاشة انتظار بعد قبول PSTN (قبل انتقال الصوت)
-    if (isPstn && viewModel.pstnAccepting) {
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A)),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.material3.CircularProgressIndicator(color = Color(0xFF00C98C))
-                Spacer(Modifier.height(16.dp))
-                Text("جاري توصيل المكالمة...", color = Color.White, fontSize = 16.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(inviterName, color = Color.White.copy(0.6f), fontSize = 14.sp)
-            }
-        }
-        return
-    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A))) {
         Column(
@@ -397,10 +252,8 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             contentAlignment = Alignment.Center
                         ) {
                             IconButton(onClick = {
-                                val isPstn = viewModel.callType == IncomingCallActivity.CALL_TYPE_PSTN
                                 viewModel.accept(withVideo = showVideoToggle && isVideoCapable)
-                                // لـ PSTN: لا نغلق الشاشة فوراً — ننتظر انتقال WebRTC إلى ACTIVE (يُظهر شاشة "جاري التوصيل")
-                                if (!isPstn) onFinish()
+                                onFinish()
                             }) {
                                 Icon(
                                     if (showVideoToggle && isVideoCapable) Icons.Default.Videocam else Icons.Default.Call,

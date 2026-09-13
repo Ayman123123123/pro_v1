@@ -145,7 +145,7 @@ export default function BrowserSettings() {
           ولا تمنح المتصفح صلاحيات نظام تشغيل أو وصولًا إلى ملفات الأسرار.
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary">
-          Kill Switch، المسح عن بُعد، التحكم في PSTN، وإدارة الأدوار تبقى خلف مسارات ADMIN منفصلة تحتاج تأكيدًا وتدقيقًا؛
+          Kill Switch، المسح عن بُعد، وإدارة الأدوار تبقى خلف مسارات ADMIN منفصلة تحتاج تأكيدًا وتدقيقًا؛
           هذه الصفحة للفحص لا لتجاوز تلك الحواجز.
         </Typography.Paragraph>
       </Card>
