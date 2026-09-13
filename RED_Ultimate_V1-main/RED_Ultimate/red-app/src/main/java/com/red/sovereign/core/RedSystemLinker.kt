@@ -19,9 +19,6 @@ class RedSystemLinker(private val context: Context) {
             "HD_VOIP" -> {
                 // النظام A: مكالمات 4K/SFU
             }
-            "PSTN_GSM" -> {
-                // النظام B: بوابة Dinstar
-            }
         }
         
         reportToAdmin(actionType, target)

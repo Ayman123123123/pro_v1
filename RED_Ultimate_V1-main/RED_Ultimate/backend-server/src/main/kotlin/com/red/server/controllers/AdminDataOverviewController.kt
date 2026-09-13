@@ -84,10 +84,7 @@ class AdminDataOverviewController(
             ),
             "communications" to mapOf(
                 "callHistory" to sqlCount(postgresql, "call_history"),
-                "activeCalls" to activeCalls,
-                "dinstarCdr" to sqlCount(postgresql, "dinstar_cdr"),
-                "gateways" to sqlCount(postgresql, "telecom_gateways"),
-                "gatewayPorts" to sqlCount(postgresql, "gateway_port_snapshots")
+                "activeCalls" to activeCalls
             ),
             "storage" to mapOf(
                 "mediaGrants" to sqlCount(postgresql, "media_grants"),

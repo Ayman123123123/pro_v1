@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -36,7 +35,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -59,20 +57,17 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.ui.theme.YounesVoid
-import com.red.sovereign.calls.Material3ExpressivePstnCallScreen
-import com.red.sovereign.calls.Material3ExpressiveIncomingPstnCallScreen
 
 /**
  * مكالمة فردية عبر الإنترنت — سلوك واتساب/تلجرام:
  * رنين + قبول/رفض، صوت = صورة ونبض، فيديو = شاشة كاملة + نافذة صغيرة.
- * لا لوحة DTMF (تلك للهواتف PSTN).
+ * الواجهة مخصصة لمكالمات RED الصوتية والمرئية.
  */
 @Composable
 fun YounesCallOverlay() {
     val state = CallRuntime.state
     if (state is CallUiState.Idle) return
     val context = LocalContext.current
-    val declineScope = androidx.compose.runtime.rememberCoroutineScope()
     val mode = when (state) {
         is CallUiState.Incoming -> state.mode
         is CallUiState.Connecting -> state.mode
@@ -94,16 +89,6 @@ fun YounesCallOverlay() {
         is CallUiState.Reconnecting -> state.peer
         else -> ""
     }
-    val callId = when (state) {
-        is CallUiState.Incoming -> state.callId
-        is CallUiState.Connecting -> state.callId
-        is CallUiState.Active -> state.callId
-        is CallUiState.ActiveWithIncoming -> state.active.callId
-        is CallUiState.CallEnded -> state.callId
-        is CallUiState.Reconnecting -> state.callId
-        else -> ""
-    }
-    val isPstnCall = mode == "PSTN" || mode == "DINSTAR" || callId.startsWith("pstn-") || callId.startsWith("dinstar-")
     val video = mode == "VIDEO"
     var acceptCamera by remember { mutableStateOf(true) }
     var acceptMic by remember { mutableStateOf(true) }
@@ -261,97 +246,23 @@ fun YounesCallOverlay() {
                 }
 
                 when (state) {
-                    // PSTN/DINSTAR calls use Material 3 Expressive screens
-                    is CallUiState.Incoming -> if (isPstnCall) {
-                        Material3ExpressiveIncomingPstnCallScreen(
-                            callerNumber = peer,
-                            callerName = null, // Could be enhanced with contact lookup
-                            callId = callId,
-                            onAccept = {
-                                // مسار PSTN الصحيح: منسق /ws/pstn (PSTN_ACCEPT →
-                                // AMI Redirect) — YounesCallService مخصص app-to-app.
-                                val coord = PstnIncomingCallCoordinator.active
-                                if (coord?.activeIncoming != null) coord.acceptIncoming()
-                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT)
-                            },
-                            onReject = {
-                                val coord = PstnIncomingCallCoordinator.active
-                                if (coord?.activeIncoming != null) coord.rejectIncoming()
-                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
-                            },
-                            onDeclineWithMessage = { msg ->
-                                // رفض المكالمة مع إرسال رسالة SMS للمتصل عبر البوابة —
-                                // كان TODO فارغاً فكان الزر يرفض دون إرسال أي رسالة.
-                                val coord = PstnIncomingCallCoordinator.active
-                                val callerNumber = peer
-                                if (coord?.activeIncoming != null) coord.rejectIncoming()
-                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
-                                val body = msg?.trim().orEmpty()
-                                if (body.isNotEmpty() && callerNumber.isNotBlank()) {
-                                    declineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                        runCatching {
-                                            com.red.sovereign.features.sms.SmsApi(
-                                                com.red.sovereign.auth.TokenStore(context)
-                                            ).send(callerNumber, body)
-                                        }
-                                    }
-                                }
-                            },
-                            onAcceptVideo = {
-                                // مكالمات PSTN صوتية فقط — القبول يعالجها صوتياً
-                                val coord = PstnIncomingCallCoordinator.active
-                                if (coord?.activeIncoming != null) coord.acceptIncoming()
-                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT_VIDEO)
-                            },
-                            context = context
-                        )
-                    } else {
-                        IncomingBody(peer, video, onAccept = { requestAccept(true, true) }, onAcceptPrivate = { requestAccept(false, true) }, onReject = {
-                            YounesCallService.action(context, YounesCallService.ACTION_REJECT)
-                        })
-                    }
-                    is CallUiState.Connecting -> if (isPstnCall) {
-                        Material3ExpressivePstnCallScreen(
-                            status = PstnCallStatus.BRIDGING,
-                            metrics = CallMetrics(),
-                            onMuteToggle = { YounesCallService.action(context, YounesCallService.ACTION_MIC, it) },
-                            onSpeakerToggle = { YounesCallService.action(context, YounesCallService.ACTION_SPEAKER, it) },
-                            onKeypadToggle = { /* show keypad */ },
-                            onHoldToggle = { YounesCallService.action(context, if (it) YounesCallService.ACTION_HOLD else YounesCallService.ACTION_RESUME) },
-                            onRecordToggle = { /* record toggle */ },
-                            onVideoToggle = { /* video toggle */ },
-                            onHangup = { YounesCallService.action(context, YounesCallService.ACTION_END) }
-                        )
-                    } else {
-                        ConnectingBody(peer, video)
-                    }
+                    is CallUiState.Incoming -> IncomingBody(
+                        peer,
+                        video,
+                        onAccept = { requestAccept(true, true) },
+                        onAcceptPrivate = { requestAccept(false, true) },
+                        onReject = { YounesCallService.action(context, YounesCallService.ACTION_REJECT) }
+                    )
                     is CallUiState.Error -> ErrorBody(state.message) {
                         YounesCallService.action(context, YounesCallService.ACTION_END)
                     }
                     is CallUiState.Busy -> ErrorBody("المشترك مشغول بمكالمة أخرى") { YounesCallService.action(context, YounesCallService.ACTION_END) }
                     is CallUiState.Declined -> ErrorBody("تم رفض المكالمة") { YounesCallService.action(context, YounesCallService.ACTION_END) }
                     is CallUiState.NoAnswer -> ErrorBody("لم يتم الرد") { YounesCallService.action(context, YounesCallService.ACTION_END) }
-                    is CallUiState.CallEnded -> if (isPstnCall) {
-                        Material3ExpressivePstnCallScreen(
-                            status = PstnCallStatus.ENDED,
-                            metrics = CallMetrics(),
-                            onHangup = { /* handled */ },
-                            onBack = { /* handled by overlay */ }
-                        )
-                    } else {
-                        CallEndedBody(state) {
-                            if (state.canRedial) YounesCallService.start(context, state.peer, state.mode == "VIDEO")
-                        }
+                    is CallUiState.CallEnded -> CallEndedBody(state) {
+                        if (state.canRedial) YounesCallService.start(context, state.peer, state.mode == "VIDEO")
                     }
-                    is CallUiState.Reconnecting -> if (isPstnCall) {
-                        Material3ExpressivePstnCallScreen(
-                            status = PstnCallStatus.BRIDGING,
-                            metrics = CallMetrics(),
-                            onHangup = { YounesCallService.action(context, YounesCallService.ACTION_END) }
-                        )
-                    } else {
-                        ReconnectingBody(peer)
-                    }
+                    is CallUiState.Reconnecting -> ReconnectingBody(peer)
                     else -> {
                         if (video) {
                             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomEnd) {

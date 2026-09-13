@@ -110,7 +110,6 @@ class CallHistoryService(
                 answeredAt = call.answeredAt,
                 endedAt = call.endedAt,
                 mediaServerId = call.mediaServerId,
-                gatewayUsed = call.gatewayUsed,
                 durationSeconds = call.durationSeconds,
                 qualityScore = call.qualityScore,
                 callSource = call.callSource,

@@ -1,7 +1,6 @@
 package com.red.server.admin.model
 
 import jakarta.persistence.*
-import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -39,16 +38,9 @@ class SystemAnalytics(
     @Column(name = "calls_video", nullable = false) var callsVideo: Int = 0,
     @Column(name = "calls_conference", nullable = false) var callsConference: Int = 0,
     @Column(name = "calls_live", nullable = false) var callsLive: Int = 0,
-    @Column(name = "calls_pstn", nullable = false) var callsPstn: Int = 0,
     @Column(name = "calls_duration_seconds", nullable = false) var callsDurationSeconds: Long = 0,
     @Column(name = "calls_failed", nullable = false) var callsFailed: Int = 0,
     @Column(name = "calls_missed", nullable = false) var callsMissed: Int = 0,
-
-    // DINSTAR
-    @Column(name = "dinstar_active_ports", nullable = false) var dinstarActivePorts: Int = 0,
-    @Column(name = "dinstar_total_calls", nullable = false) var dinstarTotalCalls: Int = 0,
-    @Column(name = "dinstar_total_duration_seconds", nullable = false) var dinstarTotalDurationSeconds: Long = 0,
-    @Column(name = "dinstar_balance_remaining", nullable = false) var dinstarBalanceRemaining: BigDecimal = BigDecimal.ZERO,
 
     // Groups
     @Column(name = "groups_created", nullable = false) var groupsCreated: Int = 0,

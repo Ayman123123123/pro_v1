@@ -31,7 +31,6 @@ enum class CallFilterType(val label: String) {
     GROUP("جماعية"),
     LIVE("بث/مساحات"),
     VIDEO("مرئية"),
-    DINSTAR("GSM يمني")
 }
 
 data class CallStatsSummary(
@@ -41,7 +40,6 @@ data class CallStatsSummary(
     val totalDurationSeconds: Long,
     val videoCallsCount: Int,
     val voiceCallsCount: Int,
-    val dinstarCallsCount: Int,
     val successRate: Int,
     val topPeer: Pair<String, Int>?,
     val peakHour: Int?
@@ -67,7 +65,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             val matchesQuery = if (q.isEmpty()) true else {
                 item.peerId.lowercase(Locale.getDefault()).contains(q) ||
                 item.peerLabel.lowercase(Locale.getDefault()).contains(q) ||
-                item.route.lowercase(Locale.getDefault()).contains(q) ||
                 item.type.lowercase(Locale.getDefault()).contains(q)
             }
 
@@ -80,7 +77,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true)
                 CallFilterType.LIVE -> item.type in setOf("LIVE", "SPACE", "CONFERENCE")
                 CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true) || (item.type.equals("GROUP", true) && false)
-                CallFilterType.DINSTAR -> item.route.equals("DINSTAR", ignoreCase = true) || item.route.equals("PSTN", ignoreCase = true)
             }
 
             matchesQuery && matchesCategory
@@ -131,7 +127,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 totalDurationSeconds = 0L,
                 videoCallsCount = 0,
                 voiceCallsCount = 0,
-                dinstarCallsCount = 0,
                 successRate = 100,
                 topPeer = null,
                 peakHour = null
@@ -142,7 +137,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         val missed = calls.count { it.status.equals("MISSED", ignoreCase = true) || it.status.equals("NO_ANSWER", ignoreCase = true) }
         val video = calls.count { it.type.equals("VIDEO", ignoreCase = true) }
         val voice = calls.count { it.type.equals("VOICE", ignoreCase = true) }
-        val dinstar = calls.count { it.route.equals("DINSTAR", ignoreCase = true) || it.route.equals("PSTN", ignoreCase = true) }
         val totalDuration = calls.sumOf { it.computedDurationSeconds() }
         val successRate = if (total > 0) ((answered.toDouble() / total.toDouble()) * 100).toInt() else 100
 
@@ -166,7 +160,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             totalDurationSeconds = totalDuration,
             videoCallsCount = video,
             voiceCallsCount = voice,
-            dinstarCallsCount = dinstar,
             successRate = successRate,
             topPeer = topPeer,
             peakHour = peakHour
@@ -175,7 +168,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun exportCsvString(): String {
         val sb = StringBuilder()
-        sb.append("ID,Date,PeerID,PeerName,Direction,Type,Route,Status,DurationSeconds\n")
+        sb.append("ID,Date,PeerID,PeerName,Direction,Type,Status,DurationSeconds\n")
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         for (c in calls) {
             val dateStr = parseCallTimestamp(c.startedAt)?.let { sdf.format(Date(it)) } ?: c.startedAt
@@ -186,7 +179,6 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             sb.append("\"${c.peerLabel}\",")
             sb.append("\"${c.direction}\",")
             sb.append("\"${c.type}\",")
-            sb.append("\"${c.route}\",")
             sb.append("\"${c.status}\",")
             sb.append("$dur\n")
         }

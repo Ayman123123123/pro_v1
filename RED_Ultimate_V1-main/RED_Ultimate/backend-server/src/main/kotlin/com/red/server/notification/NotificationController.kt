@@ -130,7 +130,6 @@ data class NotificationPreferences(
     val stories: Boolean = true,
     val live: Boolean = true,
     val system: Boolean = true,
-    val dinstar: Boolean = true,
     val security: Boolean = true,
     val quietHoursEnabled: Boolean = false,
     val quietHoursStart: String? = null, // "22:00"

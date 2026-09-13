@@ -122,7 +122,6 @@
 
 - خادم الإدارة: 25/25.
 - التكامل Android ↔ server ↔ dashboard: 36/36، ويشمل الآن بثاً ومساحة ومجتمعاً كاملاً.
-- Asterisk fleet: ناجح.
 - Android integrity: 89 فحصاً ناجحاً قبل إضافة هذه الجولة إلى الحراس النهائية.
 - Version catalog: 190 alias سليمة.
 - Kotlin static: 255 فحصاً.

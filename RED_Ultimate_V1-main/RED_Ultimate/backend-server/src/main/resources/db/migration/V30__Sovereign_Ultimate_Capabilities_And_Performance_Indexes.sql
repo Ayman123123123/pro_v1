@@ -1,11 +1,6 @@
 -- 🚀 V30__Sovereign_Ultimate_Capabilities_And_Performance_Indexes.sql
 -- استعادة القدرات السيادية التي فُقدت أثناء إعادة ترقيم Flyway
 --
--- الأصل: V23__Sovereign_Ultimate_Capabilities_And_Performance_Indexes.sql
---        في الفرع arena/019ff019-pro-v1 (2026-08-11)
--- سبب الفقد: تعارض رقم V23 مع V23__Multi_Gateway_Fleet.sql فحُذف الملف
---            بالكامل بدل إعادة ترقيمه، فضاعت 4 جداول نهائياً.
---
 -- تصحيحات مطبّقة على الأصل لتوافق المخطط الفعلي:
 --   • communities        → channels            (الجدول الفعلي، V26)
 --   • user_devices       → device_registry     (إن وُجد، وإلا بلا مفتاح خارجي)
@@ -20,7 +15,7 @@ CREATE TABLE IF NOT EXISTS call_qoe_telemetry (
     id UUID PRIMARY KEY,
     call_id VARCHAR(128) NOT NULL,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    route VARCHAR(32) NOT NULL, -- WEBRTC_SFU, P2P_DIRECT, DINSTAR_PSTN
+    route VARCHAR(32) NOT NULL, -- WEBRTC_SFU, P2P_DIRECT
     duration_seconds INT NOT NULL DEFAULT 0,
     audio_bitrate_kbps INT,
     video_bitrate_kbps INT,

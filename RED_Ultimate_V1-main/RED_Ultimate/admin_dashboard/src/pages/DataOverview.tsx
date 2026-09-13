@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
   revoked: 'ملغى', activeRefreshSessions: 'جلسات تجديد نشطة', openReports: 'بلاغات مفتوحة', securityAlerts24h: 'تنبيهات أمنية 24س',
   auditEvents24h: 'أحداث تدقيق 24س', groups: 'مجموعات', messages: 'رسائل مشفرة (عدد فقط)', stories: 'قصص', posts: 'منشورات',
   channels: 'قنوات', polls: 'استطلاعات', events: 'فعاليات', stickerPacks: 'حزم ملصقات', callHistory: 'سجل مكالمات',
-  activeCalls: 'مكالمات نشطة', dinstarCdr: 'سجلات PSTN', gateways: 'بوابات', gatewayPorts: 'لقطات منافذ',
+  activeCalls: 'مكالمات نشطة',
   mediaGrants: 'تصاريح وسائط', backups: 'سجلات نسخ', notifications: 'إشعارات'
 };
 

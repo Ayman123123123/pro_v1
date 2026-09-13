@@ -10,8 +10,7 @@
  * `SecurityConfig` دور ADMIN.
  *
  * النتيجة: مسار يعمل في التطوير ويعيد **403** في الإنتاج لكل مستخدم
- * عادي. وهو بالضبط نمط العطل الذي أنتج اختلال نظراء PJSIP: كل طرف
- * سليم وحده، والعطب في العقد بينهما.
+ * عادي. الفحص يمنع هذا التعارض بين الواجهة والخادم.
  *
  * هذا الفحص يستخرج قواعد `hasRole("ADMIN")` من `SecurityConfig.kt`،
  * ويستخرج المسارات التي يستدعيها `red-app`، ثم يبلّغ عن كل تقاطع.
@@ -42,11 +41,6 @@ const SECURITY_CONFIG = join(
  * قرار صريح: إما دور ADMIN داخل التطبيق، أو مسار عام بديل.
  */
 const ADMIN_BY_DESIGN = new Map([
-  // شاشة DINSTAR داخل التطبيق — غير مربوطة بأي تنقّل، والحزمة كلها
-  // لا يُشار إليها من خارجها. لو رُبطت يومًا فشل الفحص.
-  ['/api/admin/dinstar/fleet/ports', 'features/dinstar'],
-  ['/api/admin/dinstar/sms/send', 'features/dinstar'],
-  ['/api/admin/dinstar/cdr', 'features/dinstar'],
 
   // إدارة المحتوى (إنشاء/تعديل/حذف/إغلاق/إلغاء) — إدارية بحق.
   // أفعال المشاركة (vote/rsvp/checkin) والقراءات المنشورة
@@ -60,11 +54,6 @@ const ADMIN_BY_DESIGN = new Map([
   ['/api/admin/content/polls:p', 'media/PollsApi'],
   ['/api/admin/content/polls/:p', 'media/PollsApi'],
   ['/api/admin/content/polls/:p/close', 'media/PollsApi'],
-
-  // Dinstar/AdminViewModel is reachable only from the guarded admin surface.
-  ['/api/admin/dinstar/ports/:p/reset', 'features/dinstar'],
-  ['/api/admin/dinstar/ports/:p/ussd', 'features/dinstar'],
-  ['/api/master/admin/hardware/dinstar/action', 'features/admin'],
   ['/api/master/admin/system/stats', 'features/admin'],
   ['/api/master/admin/users/pending', 'features/admin'],
 ]);

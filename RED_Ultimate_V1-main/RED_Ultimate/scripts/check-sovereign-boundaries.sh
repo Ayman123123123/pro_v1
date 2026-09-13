@@ -14,8 +14,6 @@ if [[ -e "$root/red-app/src/main/java/com/red/sovereign/ui/AuthFlow.kt" ]]; then
   exit 1
 fi
 
-# PSTN is intentionally outside these identity/auth sources. Do not scan the whole product: the
-# hardware gateway is allowed to handle a phone number only after explicit PSTN authorization.
 for source in "${auth_sources[@]}"; do
   if grep -RInE 'OTP|PHONE_INPUT|OtpVerification|PhoneInput|sms verification|email verification|smtp\.gmail' "$source" --include='*.kt' 2>/dev/null; then
     echo "Phone/SMS/email onboarding is forbidden in the RED identity flow" >&2

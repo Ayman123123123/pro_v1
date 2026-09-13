@@ -36,17 +36,16 @@ data class GroupEntity(
 )
 
 /**
- * 3. جدول سجل المكالمات الموحد (System A & B)
+ * 3. جدول سجل المكالمات الموحد
  */
 @Entity(tableName = "call_logs")
 data class CallLogEntity(
     @PrimaryKey val id: String,
-    val remoteId: String,        // المعرف السيادي أو رقم GSM
-    val type: String,            // VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE, PSTN
+    val remoteId: String,        // المعرف السيادي أو الوجهة الخارجية
+    val type: String,            // VOIP_AUDIO, VOIP_VIDEO, CONFERENCE, LIVE
     val direction: String,       // INCOMING, OUTGOING, MISSED
     val timestamp: Long,
-    val duration: Long,
-    val dinstarSlot: Int? = null // إذا كانت مكالمة عبر DINSTAR
+    val duration: Long
 )
 
 @Dao

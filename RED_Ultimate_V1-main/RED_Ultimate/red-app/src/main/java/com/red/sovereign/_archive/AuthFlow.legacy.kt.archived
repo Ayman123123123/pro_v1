@@ -55,7 +55,6 @@ enum class AuthStep {
 data class CountryCode(val name: String, val code: String, val flag: String)
 
 val DefaultCountries = listOf(
-    CountryCode("اليمن", "+967", "🇾🇪"),
     CountryCode("السعودية", "+966", "🇸🇦"),
     CountryCode("الإمارات", "+971", "🇦🇪"),
     CountryCode("قطر", "+974", "🇶🇦"),

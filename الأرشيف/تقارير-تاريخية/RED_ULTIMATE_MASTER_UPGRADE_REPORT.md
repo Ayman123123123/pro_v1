@@ -25,12 +25,10 @@
 1. **تطبيق الأندرويد النشط (`red-app/`)**:
    * يعتمد على Jetpack Compose بالكامل مع نظام ثيمات راقي `SovereignThemeSystem`.
    * يدعم تشفير بروتوكول Signal المعدل مع خوادم PreKeys الذرية.
-   * مدمج بسلاسة مع بوابة **Dinstar UC2000-VE** للاتصالات الصوتية والـ SMS والـ USSD.
 
 2. **سيرفر الخادم الخلفي (`backend-server/`)**:
    * Spring Boot 3.x + Kotlin + Flyway DB Migrations (23 ملف SQL).
    * إدارة التواجد والحدود اليومية بـ Redis Atomic Counters.
-   * ربط سنترال Asterisk عبر بروتوكول PJSIP وموزع الحمل العادل WFQ.
 
 3. **لوحة التحكم الإدارية (`admin_dashboard/`)**:
    * React 19 + TypeScript + Vite.

@@ -9,11 +9,8 @@
 - **MediaLogicTest.kt**: استعادة ملف الاختبارات الشامل لضمان سلامة منطق الوسائط.
 
 ### 2. الباكند (Backend Server)
-- **PstnManager.kt**: دمج أحدث تقنيات إدارة القنوات مع الحفاظ على استقرار الـ Heartbeat ونظام "Number Learning".
-- **DinstarFleetController.kt**: تحديث مسارات التحكم لتشمل كافة ميزات إدارة الأسطول.
 
 ### 3. لوحة التحكم (Admin Dashboard)
-- **DinstarControl.tsx**: دمج الرسوم البيانية التفاعلية مع أدوات التحكم العميق في الشرائح.
 - **SecurityDashboard.tsx**: إضافة شاشة مراقبة الأمان والشهادات الجديدة.
 - **NumberLearningCard.tsx**: تحديث واجهة تعلم الأرقام لتصبح أكثر احترافية.
 
@@ -26,4 +23,3 @@
 
 ## حالة المشروع الحالية
 - المشروع الآن في حالة "Legendary Completeness" (اكتمال أسطوري).
-- كافة الميزات المتقدمة (PSTN, Advanced Media, Security Center) مفعلة وموحدة.

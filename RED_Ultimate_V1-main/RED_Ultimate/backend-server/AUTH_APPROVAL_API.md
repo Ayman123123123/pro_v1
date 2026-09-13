@@ -1,6 +1,5 @@
 # RED registration, device identity and administrator approval
 
-RED accounts never require a phone number, SIM card, OTP, or SMS. Private identity keys are generated and retained by the client; the API accepts public key material only.
 
 ## Local identity authority
 

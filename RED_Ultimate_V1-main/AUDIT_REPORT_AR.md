@@ -145,7 +145,6 @@ RED_Ultimate_V1-main/RED_Ultimate/
 │   │   │   ├── repository/            (2 files)
 │   │   │   └── service/               (2 files)
 │   │   ├── auth/                      (Jwt + Security)
-│   │   ├── calls/                     (DINSTAR + LiveStream)
 │   │   ├── groups/                    (E2EE Groups)
 │   │   ├── media/                     (Security scanner + Thumbs)
 │   │   ├── messaging/                 (MessageService + Delete)

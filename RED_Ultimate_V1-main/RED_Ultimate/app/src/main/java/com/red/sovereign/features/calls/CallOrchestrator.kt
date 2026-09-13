@@ -6,7 +6,6 @@ import android.util.Log
 import com.red.sovereign.features.calls.data.CallRepository
 import com.red.sovereign.features.calls.data.CallResult
 import com.red.sovereign.features.calls.sfu.SfuClient
-import com.red.sovereign.features.pstn.PstnViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,10 +31,9 @@ data class ConferenceState(
 // ─── CallOrchestrator ──────────────────────────────────────────────────────
 
 /**
- * RED Call Orchestrator — حكم بين ثلاثة أنظمة مكالمات:
+ * RED Call Orchestrator — حكم بين مكالمات RED ومؤتمرات SFU:
  *
  * - **System A**: WebRTC P2P عبر [RedVoipMaster] (مكالمات RED↔RED)
- * - **System B**: PSTN/GSM عبر [PstnViewModel] (بوابة Dinstar)
  * - **System C**: SFU Conference/Space عبر [SfuClient] (مؤتمرات وبث)
  *
  * يختار المسار الصحيح بناءً على نوع الطلب والصلاحيات.
@@ -44,7 +42,6 @@ data class ConferenceState(
 class CallOrchestrator @Inject constructor(
     @ApplicationContext private val context: Context,
     private val voipMaster: RedVoipMaster,
-    private val pstnViewModel: PstnViewModel,
     private val callRepository: CallRepository
 ) {
     companion object {
@@ -72,20 +69,13 @@ class CallOrchestrator @Inject constructor(
     /**
      * بدء مكالمة WebRTC مع مستخدم RED آخر.
      */
-    fun initiateCall(targetRedId: String, videoEnabled: Boolean = false, isGsm: Boolean = false) {
-        if (isGsm) {
-            // System B: GSM عبر Dinstar
-            pstnViewModel.dialPstn(targetRedId)
-        } else {
-            // System A: WebRTC P2P
-            voipMaster.startSecureCall(targetRedId, videoEnabled)
-        }
+    fun initiateCall(targetRedId: String, videoEnabled: Boolean = false) {
+        voipMaster.startSecureCall(targetRedId, videoEnabled)
     }
 
     fun endActiveCall() {
         when {
             voipMaster.isCallActive() -> voipMaster.endCall()
-            pstnViewModel.hasActiveCall() -> pstnViewModel.endGsmCall()
             _conferenceState.value != null -> leaveConference()
         }
     }

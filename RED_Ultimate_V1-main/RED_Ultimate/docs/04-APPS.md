@@ -1,83 +1,21 @@
-# 04 — تطبيقات Android: المنتج والمصادر التاريخية
+# Applications
 
-## القرار المعماري الحالي
+## Canonical Android app
 
-يوجد **منتج Android واحد فقط** في graph:
+`red-app/` is the active Gradle `:app` module. It contains the RED identity flow, encrypted messaging, groups, stories, media, notifications and WebRTC calls.
 
-```kotlin
-include(":app")
-project(":app").projectDir = file("red-app")
+Build it with:
+
+```bash
+./gradlew :app:assembleDebug \
+  -PRED_SERVER_URL=http://SERVER_IP:8088 \
+  --dependency-verification strict
 ```
 
-وجود مجلدات Android أخرى لا يعني وجود ثلاثة APKs قابلة للإطلاق. هي مصادر تاريخية للاستخراج، موثقة كي لا يعيد مطور توصيلها بالخطأ.
+## Legacy sources
 
-## المقارنة
+`app/`, `core/`, `lib/` and inactive feature directories are reference material outside the canonical build graph. Do not add new product code there. Changes needed by the product belong in `red-app/` or the backend.
 
-| المسار | الدور الحالي | يدخل البناء؟ | الاستخدام الصحيح |
-|---|---|---:|---|
-| `red-app/` | تطبيق RED القانوني | نعم، `:app` | التطوير والاختبار والإصدار |
-| `app/` | فورك Signal تاريخي كبير | لا | Gold mine لتقنيات منتقاة ومراجعة الترخيص |
+## Validation
 
-## `red-app/`
-
-### الهوية والمصادقة
-
-- username/password/display name بلا هاتف أو بريد أو OTP.
-- RED ID مولد من الخادم.
-- PENDING حتى موافقة الإدارة.
-- Device ID وشهادة بصمة، JWT وrefresh rotation.
-- recovery codes محلية أحادية الاستخدام.
-
-### E2EE
-
-- libsignal 0.86.5 المنشور والمتوافق.
-- identity + signed EC + Kyber-1024 generated locally.
-- one-time EC/Kyber pool وتجديد تلقائي.
-- PQXDH session ثم Double Ratchet.
-- protocol records مشفرة بـ Android Keystore AES-GCM.
-- targeted per-device envelopes وSENT/DELIVERED/READ.
-
-المتبقي: Safety Number/QR UX وKey Transparency وSender Keys distribution للمجموعات واختبار هاتفين فعلي.
-
-### الواجهة
-
-خمس وجهات: المنشورات، المحادثات، إنشاء، المكالمات الموحدة، هاتف DINSTAR. Feed/following/Yemen/posts والمجموعات والحالات ورفع الوسائط موجودة بمستويات متفاوتة. أي engine غير موصول يجب أن يبقى disabled.
-
-### الاتصال المحلي
-
-`RED_SERVER_URL` يحقن وقت البناء. Debug يسمح HTTP داخل LAN؛ release يمنع cleartext ويتطلب HTTPS. foreground WebSocket يعوض cloud push في local-first deployment.
-
-## `app/` — Signal Gold Mine
-
-هذا ليس التطبيق الرئيسي الآن. الاحتفاظ به يتيح دراسة تطبيقات Signal الأصلية، لكنه يحمل افتراضات وبنية واعتماديات ضخمة لا تناسب الخادم المحلي تلقائيًا. يمنع:
-
-- اعتباره دليلًا أن ميزة ما مفعلة.
-- استعادة endpoints سحابية.
-- إعادة الحزم/الخدمات المكررة إلى graph.
-- نسخ كود دون مراجعة AGPL/التراخيص والأمان.
-
-## `android/` و`app-android/` — أُزيلا في 2026-08-19
-
-كانا شجرتين متوازيتين خارج build graph، ولم يستوردهما `red-app` بحرف
-واحد. دُمج ما يفيد منهما في `red-app` وحُذفا. أبرز ما نُقل: 20 عملية
-DINSTAR (USSD، إدارة المنافذ، الرسائل الواردة، تحويل المكالمات)،
-وعامل تنظيف القصص المنتهية.
-
-وقد كان بقاؤهما خطراً لا فوضى فحسب: `android/` حمل جدول بادئات مشغّلين
-يمنيين مخالفاً للواقع وللخادم. التفاصيل الكاملة والقرارات المعمارية في
-[`UNIFICATION_2026-08-19.md`](UNIFICATION_2026-08-19.md).
-
-## كيفية إضافة ميزة Android بصورة صحيحة
-
-1. أضفها في `red-app/src/main/java/com/red/sovereign/`.
-2. استخدم `AuthorizedApiClient` وmodels قانونية.
-3. للمراسلة عدّل `shared-proto` أولًا وحدث الطرفين.
-4. لا ترسل private key/plaintext إلى backend.
-5. اجعل UI معطلًا إذا لم يوجد runtime engine.
-6. أضف unit/instrumentation test مناسبًا.
-7. مرر `:app:assembleDebug --dependency-verification strict`.
-8. اختبر على جهاز حقيقي عند الكاميرا/الصوت/WebRTC/Keystore.
-
-## حالة الإصدار
-
-APK Debug يُنتج في CI وصورة artifacts. هذا لا يساوي Release: ما تزال مفاتيح التوقيع، R8 release validation، TLS، سياسة الخصوصية، SBOM/licensing، واختبارات الأجهزة مطلوبة.
+Run unit tests for the relevant module, then the dashboard checks and Compose configuration validation. A feature is not complete until the applicable build and runtime checks pass.

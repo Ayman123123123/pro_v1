@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
     admin_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
     admin_username VARCHAR(100),  -- denormalized for fast lookup
     action VARCHAR(50) NOT NULL,  -- USER_APPROVED, USER_BANNED, CONFIG_CHANGED, MEDIA_DELETED, etc.
-    category VARCHAR(30) NOT NULL, -- USER, SYSTEM, MEDIA, BILLING, SECURITY, DINSTAR
+    category VARCHAR(30) NOT NULL, -- USER, SYSTEM, MEDIA, BILLING, SECURITY
     target_type VARCHAR(30),       -- USER, GROUP, MEDIA, CONFIG, etc.
     target_id VARCHAR(100),        -- reference to the affected entity
     description TEXT,
@@ -22,14 +22,14 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
         'USER_APPROVED','USER_BANNED','USER_REJECTED','USER_UNBANNED','USER_PROMOTED','USER_DEMOTED',
         'MEDIA_DELETED','MEDIA_GRANTED','MEDIA_REVOKED',
         'GROUP_CREATED','GROUP_DELETED','GROUP_MEMBER_ADDED','GROUP_MEMBER_REMOVED',
-        'CONFIG_CHANGED','DINSTAR_PORT_TOGGLED','DINSTAR_SIM_SWAPPED','DINSTAR_BALANCE_RESET',
+        'CONFIG_CHANGED',
         'BILLING_RATE_CHANGED','BILLING_CDR_EXPORTED',
         'SECURITY_ALERT','LOGIN_FAILED','PERMISSION_GRANTED','PERMISSION_REVOKED',
         'BACKUP_CREATED','BACKUP_RESTORED',
         'STORY_DELETED','POST_DELETED','CALL_TERMINATED'
     )),
     CONSTRAINT admin_audit_category_check CHECK (category IN (
-        'USER','SYSTEM','MEDIA','BILLING','SECURITY','DINSTAR','CONTENT','CALL'
+        'USER','SYSTEM','MEDIA','BILLING','SECURITY','CONTENT','CALL'
     )),
     CONSTRAINT admin_audit_severity_check CHECK (severity IN ('INFO','WARNING','CRITICAL'))
 );
@@ -64,16 +64,10 @@ CREATE TABLE IF NOT EXISTS system_analytics (
     calls_video INTEGER NOT NULL DEFAULT 0,
     calls_conference INTEGER NOT NULL DEFAULT 0,
     calls_live INTEGER NOT NULL DEFAULT 0,
-    calls_pstn INTEGER NOT NULL DEFAULT 0,
     calls_duration_seconds BIGINT NOT NULL DEFAULT 0,
     -- المكالمات الفاشلة
     calls_failed INTEGER NOT NULL DEFAULT 0,
     calls_missed INTEGER NOT NULL DEFAULT 0,
-    -- DINSTAR
-    dinstar_active_ports INTEGER NOT NULL DEFAULT 0,
-    dinstar_total_calls INTEGER NOT NULL DEFAULT 0,
-    dinstar_total_duration_seconds BIGINT NOT NULL DEFAULT 0,
-    dinstar_balance_remaining DECIMAL(12,2) NOT NULL DEFAULT 0,
     -- المجموعات
     groups_created INTEGER NOT NULL DEFAULT 0,
     groups_active INTEGER NOT NULL DEFAULT 0,
@@ -274,8 +268,6 @@ SELECT
     COUNT(*) FILTER (WHERE call_type = 'VOIP_VIDEO') AS video_calls,
     COUNT(*) FILTER (WHERE call_type = 'CONFERENCE') AS conference_calls,
     COUNT(*) FILTER (WHERE call_type = 'LIVE_BROADCAST') AS live_calls,
-    COUNT(*) FILTER (WHERE call_type = 'PSTN_DINSTAR') AS pstn_calls,
-    COUNT(*) FILTER (WHERE call_route = 'DINSTAR') AS dinstar_calls,
     COUNT(*) FILTER (WHERE call_route = 'RED') AS red_calls,
     COUNT(*) FILTER (WHERE status = 'MISSED') AS missed_calls,
     COUNT(*) FILTER (WHERE status = 'FAILED') AS failed_calls,
@@ -304,7 +296,7 @@ BEGIN
     INSERT INTO system_analytics (
         id, stat_date,
         total_users, new_users, messages_sent, voice_messages,
-        calls_total, calls_audio, calls_video, calls_pstn,
+        calls_total, calls_audio, calls_video,
         groups_active, storage_used_bytes
     )
     SELECT
@@ -316,7 +308,6 @@ BEGIN
         (SELECT COUNT(*) FROM call_history WHERE DATE(started_at) = target_date),
         (SELECT COUNT(*) FROM call_history WHERE call_type = 'VOIP_AUDIO' AND DATE(started_at) = target_date),
         (SELECT COUNT(*) FROM call_history WHERE call_type = 'VOIP_VIDEO' AND DATE(started_at) = target_date),
-        (SELECT COUNT(*) FROM call_history WHERE call_type = 'PSTN_DINSTAR' AND DATE(started_at) = target_date),
         (SELECT COUNT(*) FROM groups),
         0 -- storage_used_bytes: تُحسب من MinIO/MongoDB (لا جدول media_objects في PG)
     ON CONFLICT (stat_date) DO UPDATE SET
@@ -327,7 +318,6 @@ BEGIN
         calls_total = EXCLUDED.calls_total,
         calls_audio = EXCLUDED.calls_audio,
         calls_video = EXCLUDED.calls_video,
-        calls_pstn = EXCLUDED.calls_pstn,
         groups_active = EXCLUDED.groups_active,
         storage_used_bytes = EXCLUDED.storage_used_bytes,
         updated_at = NOW();

@@ -27,10 +27,8 @@
 
 ## ما اختبرته سطر سطر
 
-- **Kotlin:** قرأت `MainActivity.kt` (64) + `RedWebSocketClient.kt` (79) + `MessageService.kt` (153) + `SignalSessionManager.kt` (80) + `PstnCallService.kt` (60) سطر سطر — لا println وهمي، كلها منطق حقيقي.
 - **SQL:** فحصت 13 migration (V1 34 + V2 29 + ... V13 11) — كلها `CREATE TABLE` سليم مع `UNIQUE` و `CHECK` و `REFERENCES`.
 - **YAML:** `docker-compose` 181 سطر — 20 متغير `?required` + 4 builds + healthchecks. `application.yml` 75 سطر — `datasource + flyway + red`.
-- **أمني:** `0` كلمة سر مكشوفة — كلها `${VAR:?required}`. WebSocket يتحقق `senderId == authenticated`. PSTN يتحقق `pstn_enabled + dailyLimit Asia/Aden INCR`.
 - **Admin:** `api.ts` يخزن `access` في `sessionStorage` + `refresh` في `localStorage` + rotation تلقائي عند 401.
 - **E2EE:** السيرفر يحفظ `payload.toByteArray()` فقط (1..1MiB) — لا plaintext. `SessionCipher.encrypt/decrypt` عبر libsignal.
 

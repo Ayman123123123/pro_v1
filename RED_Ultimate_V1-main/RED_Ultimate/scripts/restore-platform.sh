@@ -34,7 +34,7 @@ fi
 set -a; source .env; set +a
 
 echo "[restore] stopping application writers"
-docker compose stop backend media-sfu pstn-gateway admin
+docker compose stop backend media-sfu admin-panel
 
 echo "[restore] restoring PostgreSQL"
 docker exec -i red-db-sql pg_restore --clean --if-exists --no-owner --no-privileges -U admin -d red_sovereign < "$WORK/postgres/red_sovereign.dump"
@@ -50,4 +50,4 @@ docker cp "$WORK/minio/." red-storage:/data/
 docker cp "$WORK/identity/." red-backend:/run/secrets/
 
 echo "[restore] starting services; inspect health before accepting traffic"
-docker compose start backend media-sfu pstn-gateway admin
+docker compose start backend media-sfu admin-panel

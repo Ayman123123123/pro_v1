@@ -36,7 +36,7 @@ fun PermissionRequestScreen(onAllGranted: () -> Unit) {
             Text("RED Access", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
             Text(
-                "To enable 1080p calls, GSM gateway, and encrypted chat, RED requires all system permissions.",
+                "To enable 1080p calls and encrypted chat, RED requires the requested system permissions.",
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(32.dp))

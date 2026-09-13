@@ -7,11 +7,9 @@ Folder 1: [app-android]
 - Feature: Chat (Guaranteed delivery, UUID v7, ACK).
 - Feature: Stories (24h Auto-delete).
 - Feature: VoIP (System A - 4K Video support).
-- Feature: PSTN (System B - Dumin Gateway - Isolated).
 
 Folder 2: [backend-server]
 - Spring Boot 3.4 engine.
-- Handles Auth approval, Message relay, and PSTN signaling.
 
 Folder 3: [admin-dashboard]
 - React 19 interface for the Admin.
@@ -20,8 +18,6 @@ Folder 3: [admin-dashboard]
 Folder 4: [media-sfu]
 - Mediasoup worker configured for AV1/VP9 at 4K resolution.
 
-Folder 5: [pstn-asterisk]
-- Asterisk configuration files for Dumin SIM/GSM integration.
 
 Shared: [shared-proto]
 - ProtoBuf definitions ensuring binary speed across all systems.

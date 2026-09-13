@@ -41,7 +41,6 @@ project/pro/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
 - `Login.tsx`
 - `Dashboard.tsx`
 - `UserManagement.tsx`
-- `DinstarControl.tsx`
 - `MasterLayout.tsx`
 - `api.ts`
 - كل صفحات `src/pages/`
@@ -70,7 +69,6 @@ src/_archive/
 src/pages/UserApproval.tsx
 src/components/LiveMonitor.jsx
 src/pages/tabs/BackupTab.tsx
-src/pages/tabs/PstnAccessTab.tsx
 src/pages/tabs/UserIntelligenceTab.tsx
 src/pages/tabs/OverviewTab.tsx
 ```
@@ -80,7 +78,6 @@ src/pages/tabs/OverviewTab.tsx
 | القديم | المدموج في الحديث |
 |---|---|
 | `UserIntelligenceTab` | `UserManagement.tsx` |
-| `PstnAccessTab` | `SecurityCenter.tsx` |
 | `BackupTab` | `Backups.tsx` |
 | `AuthorityTab` | `Approvals.jsx` مع إبقاء tab داخلي مستخدم |
 | `LogStreamerTab` | `SystemLogs.tsx` |
@@ -194,7 +191,6 @@ RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/
 - SystemLogs
 - MediaCenter
 - InfrastructureCenter
-- DinstarControl
 - MasterOverview
 - Diagnostics
 

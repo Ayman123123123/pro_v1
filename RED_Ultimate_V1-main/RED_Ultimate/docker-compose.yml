@@ -2,7 +2,7 @@ name: red-sovereign
 
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Platform — Docker Compose
-# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Asterisk + Coturn
+# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Coturn
 # ══════════════════════════════════════════════════════════════════
 
 services:
@@ -40,7 +40,6 @@ services:
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
   # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
   # Never publish 8080 to the host — that port is reserved for the optional
-  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
@@ -68,26 +67,9 @@ services:
       - MONGO_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      - ASTERISK_AMI_HOST=pstn-gateway
-      - ASTERISK_AMI_USER=red_admin
-      - ASTERISK_AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
-      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
-      - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
-      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
-      # الأسطول كما يقرؤه `DinstarFleetService`. بدونه يبقى الخادم على بوابة
-      # البذرة وحدها، فيصبح الجهاز الثاني مسجَّلًا في القاعدة وغير مُستعلَم.
-      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
-      - DINSTAR_PORT=${DINSTAR_PORT:-443}
-      - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
-      # نفس السر الذي يحمله dialplan في ترويسة X-Internal-Secret. الربط المرن
-      # في Spring يحوّله إلى الخاصية pstn.internal-secret التي يقرأها
-      # InternalPstnController. بدونه يتحقق الخادم من سرّه الافتراضي فتُرفض
-      # كل مكالمة واردة بـBAD_SECRET بينما البوابة ترسل السر الصحيح.
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -202,55 +184,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    networks: ["red-net"]
-
-  # ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
-  pstn-gateway:
-    build: ./pstn-asterisk
-    image: red-pstn-gateway:local
-    container_name: red-pstn-gateway
-    restart: unless-stopped
-    mem_limit: 512m
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-    environment:
-      - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.2}
-      # قائمة الأسطول الكاملة. `docker-entrypoint.sh` يولّد من كل عنوان فيها
-      # نظيرًا للبوابة + نظيرًا لكل منفذ GSM على مقبسه (5060+index)، ولا يقرأ
-      # `DINSTAR_IP` المفرد إطلاقًا. تركه غير مُمرَّر كان يُسقط كل بوابة عدا
-      # الافتراضية داخل الحاوية: الخادم يختار منفذًا على البوابة الثانية ثم
-      # ينادي `PJSIP/<num>@dinstar-gw-192-168-11-3-port-N` وهو نظير غير موجود،
-      # فتفشل المكالمة بلا أي أثر يشير إلى السبب.
-      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.2}}
-      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
-      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
-      # هوية المتصل الافتراضية للجذع — اتركه فارغاً ليمرّر كل شريحة رقمها الحقيقي
-      # (`CALLERID(num)=RED_SIM_NUMBER` من الـdialplan). عيّنه فقط إن طلبت
-      # الشبكة From ثابتاً (مثلاً E.164 موحّد).
-      - DINSTAR_FROM_USER=${DINSTAR_FROM_USER:-}
-      # Dinstar-facing external addresses: advertise the Ethernet NIC IP (192.168.11.x)
-      # so the UC2000 can route SIP/RTP back to this host. Falls back to the client
-      # Wi-Fi IP when no Dinstar NIC is present (single-interface dev boxes).
-      - EXTERNAL_MEDIA_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
-      - EXTERNAL_SIGNALING_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
-      - ASTERISK_EXTERNAL_IP=${PSTN_EXTERNAL_IP:-${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}}
-      # سر مصادقة مسار الوارد: dialplan يستدعي /api/internal/pstn بترويسة
-      # X-Internal-Secret، ويتحقق منها InternalPstnController. اختياري لأن
-      # للمتحكم افتراضًا معلنًا، لكن تركه فارغًا يُبقي المسار على السر الافتراضي.
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
-    ports:
-      - "5060:5060/udp"
-      - "10000-10100:10000-10100/udp"
-    expose: ["5038"]
-    healthcheck:
-      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 5. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━

@@ -49,9 +49,6 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
-    // PSTN / Asterisk
-    implementation("org.asteriskjava:asterisk-java:3.41.0")
-
     // One authoritative RED protocol shared by Android and the backend
     implementation(project(":shared-proto"))
 
@@ -61,10 +58,6 @@ dependencies {
     // Local S3-compatible object storage
     implementation("io.minio:minio:8.6.0")
     implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
-
-    // OkHttp for Dinstar API
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.github.rburgst:okhttp-digest:3.1.1")  // HTTP Digest auth (Dinstar New API â‰¥1102)
 
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")

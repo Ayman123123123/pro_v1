@@ -1,7 +1,6 @@
 package com.red.sovereign.developed
 
 import com.red.sovereign.developed.delivery.GuaranteedDelivery
-import com.red.sovereign.developed.pstn.DuminManager
 import com.red.sovereign.developed.voip.UltraHDCall
 
 /**
@@ -13,9 +12,6 @@ object REDCore {
     // System A: 4K VoIP Integration
     private val voipEngine = UltraHDCall(codec = "AV1", resolution = "4K")
 
-    // System B: PSTN / Dumin Integration (Strict Isolation)
-    private val pstnEngine = DuminManager(gatewayIp = "192.168.1.100")
-
     // System C: Messaging (Guaranteed Delivery Engine)
     private val deliveryEngine = GuaranteedDelivery(retryStrategy = "ExponentialBackoff")
 
@@ -24,7 +20,6 @@ object REDCore {
         if (checkApprovalStatus()) {
             deliveryEngine.start()
             voipEngine.setup()
-            pstnEngine.connect()
         }
     }
 

@@ -8,14 +8,10 @@ import javax.inject.Singleton
 class RedIdentityManager @Inject constructor(private val context: Context) : IdentityManager {
     private val prefs = context.getSharedPreferences("red_sovereign_identity", Context.MODE_PRIVATE)
 
-    /**
-     * يتم استدعاؤه فور استلام إشارة APPROVED من السيرفر
-     * يقوم بربط المعرف السيادي (مثلاً: @RED_967_77) ورقم الـ GSM المخصص
-     */
-    fun finalizeIdentity(redId: String, gsmNumber: String, token: String) {
+    /** Stores the approved RED identity and its authentication token. */
+    fun finalizeIdentity(redId: String, token: String) {
         prefs.edit().apply {
             putString("RED_ID", redId)
-            putString("GSM_NUMBER", gsmNumber)
             putString("AUTH_TOKEN", token)
             putBoolean("IS_APPROVED", true)
             apply()

@@ -52,7 +52,6 @@
 
 ## تطوير كل وحدة — بالتفصيل
 
-### 1. المكالمات الصوتية (غير DINSTAR) — WebRTC
 - **الحالي:** `YounesCallService + WebRtcEngine + CallSignalingClient` — يعمل
 - **التطوير:** إضافة `simulcast` + ` Opus 48kHz` + `echo cancellation` + واجهة `CallOverlay` بتصميم يونس (خلفية شعاعية + زر ذهبي)
 
@@ -84,9 +83,6 @@
 - **الحالي:** `LiveBroadcastManager`
 - **التطوير:** `SFU broadcast` — مشاهدون غير محدودون + تعليقات حية + هدايا
 
-### 9. مكالمات DINSTAR — اليمنية
-- **الحالي:** `PstnApi + PstnCallService` — يتحقق `Asia/Aden + dailyLimit`
-- **التطوير:** واجهة `DialPad` ذهبية منفصلة + عرض `SIM slot` + رصيد + `USSD`
 
 ---
 

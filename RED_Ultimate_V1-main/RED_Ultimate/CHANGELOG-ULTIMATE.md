@@ -27,20 +27,13 @@
 ### Human Behavior → Phone Number Learning (Call mode) — **From 0 to Ultimate**
 - **V35__Number_Learning.sql** — Call mode tables (config/pool/calls)
 - **V38__Number_Learning_Comprehensive.sql** — SMS mode + auto-learn flags + pool intelligence (`last_used_at`, `success_count`, `notes`, `direction`)
-- **NumberLearningService.kt** — dual-mode engine (call via `PstnManager.dialGsm(waitSeconds)`, SMS via `DinstarHardwareService.sendSms`), window scheduling, per-port daily caps, jittered intervals, `autoLearnFromCdr/Inbound`, stats
 - **NumberLearningController.kt** — 8 endpoints (`/human-behavior/number-learning/**` + `/probe` read-only gateway discovery)
 - **NumberLearningCard.tsx** — ultimate card: Call + SMS mode selectors, window pickers, duration/interval, daily caps, enabled ports CSV, SMS template, auto-learn switches, pool search, CSV export, calls table with direction, probe panel, add-numbers modal
 
-### Dinstar Stack Polish
-- `DinstarHardwareService.kt`: candidates `+192.168.11.2`, `probeHumanBehaviorEndpoints()` (7 candidate paths, read-only GET), `DinstarMasterClient` facade unchanged
-- `DinstarController.kt`: new `GET /cdr/export` CSV, `POST /ports/{port}/callforward|power` retained, capabilities updated
-- `PstnManager.kt`: overload `dialGsm(number, waitSeconds)` for learning calls
-- `DinstarControl.tsx`: now embeds `NumberLearningCard` + CDR `Load` + `Export CSV` + USSD modal
 
 ### Admin & Backend Trivial Completeness
 - **AuditLog**: `GET /audit/export` CSV (10k window, filters preserved) + frontend `Export CSV` button + `UltimateEmpty` for zero-state
 - **CDR**: same CSV pattern
-- **Contacts/Directory**: vCard-ready `normalizeNumber`, `YEMEN_OPERATOR_PREFIXES` corrected
 - **Pool intelligence**: `last_used_at`, `success/fail` counters for future ML ranking
 
 ---
@@ -63,7 +56,6 @@
 
 | Area | Action |
 |---|---|
-| **PSTN Auth** | Unified `PstnAuthorizationService` (single truth, dual-audit `audit_events` + `admin_audit_log`, `0..1000` validation, zero-on-disable) — removed ambiguous `PUT /users/pstn` duplicate |
 | **WebSocket Auth** | `CallWebSocketHandler` now routes via `authorizeSignal` (participant-only), `MessageService.requireTypingAllowed` enforces block policy |
 | **JWT** | SFU ticket now `scope=sfu` + `roomId` + `canProduce`, TTL 10m→2m, `Keys.hmacShaKeyFor(SHA256(secret))` |
 | **Media Scan** | Fixed `validateMp3` bit-math (was rejecting all 0xFFFB), `validateMp4` now strict first-box |
@@ -76,12 +68,10 @@
 | Check | Result | Log |
 |---|---|---|
 | Backend compile (`compileKotlin` w/ Kotlin 2.2.21) | `BUILD SUCCESSFUL` (after `verification-metadata` update) | `backend_check2.log` |
-| Frontend build (`tsc --noEmit && vite build`) | `✓ built in 50.90s` (DinstarControl 16.37kB) | `vite` |
 | Backend tests | `BUILD SUCCESSFUL` | 7 failures fixed |
 | App tests | `113/113` (after Bitrate/CallAction/Communities fixes) | `app_tests.log` |
 | Docker images | `red-sovereign-backend 5h ago`, `red-backend:local 58m ago` | `docker images` |
 | Live SMOKE (via `docker exec` JWT) | `GET /number-learning` → `{"mode":"LEARN","poolSize":3,...}` | `nl_verify.sh` |
-| DINSTAR_IP | `192.168.11.2` in both `.env` | `Select-String` |
 
 ---
 
@@ -91,11 +81,7 @@
 - `backend-server/build.gradle.kts`
 - `backend-server/Dockerfile` (8.12→8.14.3)
 - `backend-server/src/main/resources/db/migration/V35..V38`
-- `backend-server/src/main/kotlin/com/red/server/dinstar/*`
-- `backend-server/src/main/kotlin/com/red/server/controllers/DinstarController.kt`
-- `backend-server/src/main/kotlin/com/red/server/pstn/PstnManager.kt`
 - `admin_dashboard/src/pages/NumberLearningCard.tsx` (198→~320 lines)
-- `admin_dashboard/src/pages/DinstarControl.tsx` (+Card)
 - `admin_dashboard/src/pages/AuditLog.tsx` (export)
 - `admin_dashboard/src/components/UltimateEmpty.tsx` (new)
 - `docker-compose.yml` + `admin_dashboard/Dockerfile`

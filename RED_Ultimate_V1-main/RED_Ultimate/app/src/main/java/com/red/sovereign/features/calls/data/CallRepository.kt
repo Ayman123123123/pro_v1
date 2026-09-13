@@ -2,7 +2,6 @@ package com.red.sovereign.features.calls.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.google.gson.annotations.SerializedName
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,17 +26,6 @@ data class IceServerDto(
 data class IceConfigurationDto(
     val expiresAt: Long,
     val iceServers: List<IceServerDto>
-)
-
-data class PstnCallRequest(@SerializedName("number") val number: String)
-
-data class PstnCallResponseDto(
-    val callId: String,
-    val status: String,
-    val number: String,
-    val usedToday: Int,
-    val dailyLimit: Int,
-    val slot: Int = -1
 )
 
 data class CreateConferenceRequest(
@@ -136,19 +124,6 @@ interface RedCallApiService {
     // Telemetry
     @POST("/api/calls/telemetry")
     suspend fun uploadTelemetry(@Body event: CallTelemetryDto): Map<String, String>
-
-    // PSTN calls
-    @POST("/api/pstn/calls")
-    suspend fun dialPstn(@Body request: PstnCallRequest): PstnCallResponseDto
-
-    @POST("/api/pstn/calls/{callId}/hangup")
-    suspend fun hangupPstn(
-        @Path("callId") callId: String,
-        @Body body: Map<String, Int>? = null
-    ): Map<String, Any>
-
-    @GET("/api/pstn/status")
-    suspend fun getPstnStatus(): Map<String, Any>
 
     // SFU Tickets
     @GET("/api/sfu/groups/{groupId}/ticket")
@@ -270,17 +245,6 @@ class CallRepository @Inject constructor(
 
     suspend fun getIceServers(): CallResult<IceConfigurationDto> = safeCall {
         api.getIceServers()
-    }
-
-    // ── PSTN ──────────────────────────────────────────────────────────
-
-    suspend fun dialPstn(number: String): CallResult<PstnCallResponseDto> = safeCall {
-        api.dialPstn(PstnCallRequest(number))
-    }
-
-    suspend fun hangupPstn(callId: String, slot: Int? = null): CallResult<Map<String, Any>> = safeCall {
-        val body = if (slot != null && slot >= 0) mapOf("port" to slot) else null
-        api.hangupPstn(callId, body)
     }
 
     // ── SFU Ticket ────────────────────────────────────────────────────

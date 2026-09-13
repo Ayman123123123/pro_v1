@@ -20,7 +20,7 @@ docker compose down 2>&1 || true
 
 # Remove old images
 echo "[2/5] Removing old images..."
-for img in red-sovereign-backend red-sovereign-admin-panel red-sovereign-pstn-gateway red-sovereign-media-sfu; do
+for img in red-sovereign-backend red-sovereign-admin-panel red-sovereign-media-sfu; do
     if docker images -q "$img" 2>/dev/null; then
         docker rmi -f "$img" 2>&1 || true
     fi
@@ -39,7 +39,7 @@ docker builder prune -f
 
 # Build fresh
 echo "[5/5] Starting fresh build..."
-SERVER_IP="${SERVER_IP:-192.168.137.19}"
+SERVER_IP="${SERVER_IP:-192.168.0.244}"
 echo "  Server IP: $SERVER_IP"
 echo "  This will take 5-10 minutes..."
 echo ""

@@ -8,7 +8,6 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.UserDeviceRepository
 import com.red.server.auth.toResponse
 import com.red.server.services.CoreService
-import com.red.server.services.DinstarFleetService
 import com.red.server.services.RedSecurityService
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Pageable
@@ -27,7 +26,6 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/admin")
 class AdminController(
-    private val fleet: DinstarFleetService,
     private val approvalService: RedApprovalService,
     private val coreService: CoreService,
     private val securityService: RedSecurityService,

@@ -23,12 +23,3 @@ CREATE TABLE IF NOT EXISTS group_members (
     role VARCHAR(20) DEFAULT 'MEMBER', -- OWNER, ADMIN, MEMBER
     PRIMARY KEY (group_id, user_id)
 );
-
--- 3. جدول مراقبة DINSTAR (UC2000-VE-8G)
-CREATE TABLE IF NOT EXISTS dinstar_slots (
-    slot_index INT PRIMARY KEY,
-    operator VARCHAR(50), -- Yemen Mobile, Sabafon, etc.
-    status VARCHAR(20),   -- IDLE, CALLING, ERROR
-    signal_strength INT,
-    balance DECIMAL(10,2)
-);

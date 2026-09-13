@@ -124,9 +124,7 @@ docker rm red-apk-build
 |-------|---------|------|
 | `MainActivity.kt` |Missing `Intent` import | ✅ تمت الإضافة |
 | `CallOverlay.kt` | Missing Compose imports | ✅ تمت الإضافة |
-| `DinstarViewModel.kt` | Missing Jackson import | ✅ تمت الإضافة |
 | `AdminV2Controller.kt` | Type mismatch | ✅ تم الإصلاح |
-| `DinstarFleetController.kt` | Unclosed comment | ✅ تم الإصلاح |
 | وغيرها... | | |
 
 ---

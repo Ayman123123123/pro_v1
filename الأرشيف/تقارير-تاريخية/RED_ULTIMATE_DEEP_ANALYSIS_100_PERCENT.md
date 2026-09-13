@@ -12,7 +12,6 @@
 2. طبقة auth + PreKeys الذري + Redis/Mongo
 3. RedDashboard 1610 + 24 اختبار + كل سكربت + Dockerfiles
 4. docs 06-08 + verification SHA-256 + lint + V10→V18
-5. DinstarHardware 421 + Feed + WebRTC + SecureStore + ServerEndpoint
 6. NORTH_STAR 170 + MASTER_CHECKLIST + Conference/Live/YounesCall 696
 7. YOUNES-ROADMAP 147 + check-all + IronSync/Master/Storage
 8. libs.versions.toml 400 + SecurityTab KILL SWITCH + MediaTab SFU
@@ -34,7 +33,6 @@
 - `repair-lfs.yml`: يصلح `lfs-pending`
 
 ### scripts/ci-build-all.sh (الجذر + داخل RED_Ultimate)
-- نسختان متطابقتان: `npm install + npm run build admin_dashboard → python mock_backend.py & + npm run dev &` — مشغل سريع للمطور
 
 ### declared_deps.txt / used_imports.txt / imports_list.txt
 - `declared_deps.txt` يعدد 60 `implementation(project(":lib:..."))` من `app/` القديم — يثبت أن `app/` كان Signal Fork ضخماً (lib:archive, libsignal-service, paging, device-transfer, donations, sticky-header-grid, photoview, blurhash...) — كلها **خارج** `red-app` الحالي

@@ -76,7 +76,7 @@ async function readJson(res: Response) {
  * استعماله: أي محاولة باستخدام رمز مُدوَّر سابقًا تُفسَّر سرقةً
  * فتُبطَل **كل جلسات الحساب** ويُرمى `REFRESH_TOKEN_REUSE_DETECTED`.
  *
- * واللوحة تُطلق طلبات متوازية كثيرة (صفحة DINSTAR وحدها تطلق أربعة
+ * واللوحة تُطلق طلبات متوازية كثيرة؛ لا تبدأ الصفحة طلبًا جديدًا قبل انتهاء السابق.
  * عبر `Promise.all`). فإن انتهت صلاحية رمز الوصول أثناءها، عاد كل
  * طلب بـ401 واستدعى `rotate()` بالرمز **نفسه**: أولها ينجح ويُدوّر
  * الرمز، والبقية تصل برمز صار مُدوَّرًا ⇒ الخادم يظنّها سرقة ويطرد
@@ -356,8 +356,6 @@ export interface UserRecord {
   displayName: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
   role: 'USER' | 'ADMIN';
-  pstnEnabled: boolean;
-  pstnDailyLimit?: number;
   createdAt: string;
   approvedAt?: string;
   lastSeen?: number;
@@ -1000,7 +998,6 @@ export interface UserOverview {
   callsMade: number;
   callsReceived: number;
   redCalls: number;
-  pstnCalls: number;
   passwordResetRequired: boolean;
   remoteWipeStatus: string;
   managedDeviceWipeAllowed: boolean;
@@ -1030,61 +1027,6 @@ export async function requestSecurityWipe(userId: string) {
 
 export async function activateKillSwitch(reason: string) {
   return writeJson(await apiFetch(`/api/admin/security/kill-switch?reason=${encodeURIComponent(reason)}`, { method: 'POST' }));
-}
-
-export async function updatePstnAccess(userId: string, enabled: boolean, dailyLimit: number) {
-  return writeJson(await apiFetch('/api/admin/users/pstn', {
-    method: 'PUT',
-    body: JSON.stringify({ userId, enabled, dailyLimit }),
-  }));
-}
-
-export async function bindSim(userId: string, gatewayId: string, portIndex: number, number?: string) {
-  return writeJson(await apiFetch('/api/admin/dinstar/bindings', {
-    method: 'POST',
-    body: JSON.stringify({ userId, gatewayId, portIndex, number }),
-  }));
-}
-
-export async function unbindSim(userId: string) {
-  return writeJson(await apiFetch(`/api/admin/dinstar/bindings/${userId}`, {
-    method: 'DELETE',
-  }));
-}
-
-export async function getPstnEligibleUsers() {
-  // Returns APPROVED users who are pstnEnabled but not necessarily bound
-  const res = await apiFetch('/api/master/v1/pstn/users?size=1000');
-  const data = await res.json().catch(() => ({ content: [] }));
-  return asArray(data.content);
-}
-
-export interface SimInventoryUpdate {
-  simLabel?: string;
-  operatorLabel?: string;
-  lastFourDigits?: string;
-  verificationState: 'UNVERIFIED' | 'VERIFIED' | 'FAILED' | 'LEARNED';
-  verificationMethod?: 'MANUAL' | 'USSD' | 'SMS_KEYWORD' | 'CALL_LOOP';
-  notes?: string;
-}
-
-export async function updateSimInventory(gatewayId: string, portIndex: number, data: SimInventoryUpdate) {
-  return writeJson(await apiFetch(`/api/admin/dinstar/inventory/${gatewayId}/ports/${portIndex}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }));
-}
-
-export async function bulkBindSims(bindings: { userId: string; gatewayId: string; portIndex: number; number?: string }[]) {
-  return writeJson(await apiFetch('/api/admin/dinstar/bindings/bulk', {
-    method: 'POST',
-    body: JSON.stringify({ bindings }),
-  }));
-}
-
-export async function getPstnUsers(): Promise<any> {
-  const res = await apiFetch('/api/admin/users');
-  return res.json();
 }
 
 // ━━━━━━━━━━━━━━━━ 👥 Groups (Admin) — /api/admin/social/groups ━━━━━━━━━━━━━━━━

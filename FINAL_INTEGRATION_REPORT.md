@@ -38,7 +38,6 @@
 ### HealthController*kt — فحص شامل
 - فحص PostgreSQL + MongoDB + Redis مع تفاصيل الخطأ
 - Flyway: عرض آخر migration version
-- Dinstar: عرض host/port3port/scheme
 - System: javaVersion, osName, availableProcessors, maxMemoryMb, freeMemoryMb, usedMemoryMb
 - responseTimeMs: زمن الاستجابة
 - timestamp: ISO-8601
@@ -50,7 +49,6 @@
 - **Hibernate**:Ebatch_size=25, order_inserts/updates=true
 - **Actuator**: health, info, metrics exposed; health details when authorized
 - **Logging**: structured pattern with timestamps
-- **Dinstar*: connect-timeout=10s, read-timeout=30s, max-retries=3
 - **Rate-limit*: enabled, 60/min default
 - **Storage**: 3 MinIO buckets (media, avatars, stories)
 
@@ -64,7 +62,6 @@
 | **backend** | gradle:8.12-jdk21 → temurin:21-jre | JAVA_OPTS configurable, 60s start_period, secrets volume |
 | **media-sfu** | custom | healthcheck, MEDIASOUP_WORKERS |
 | **coturn** | coturn/coturn | min/max port 45000-45050 |
-| **pstn-gateway** | custom | AMI healthcheck |
 | **db-postgres** | postgres:16 | shared_buffers=128MB, work_mem=4MB, log_min_duration=500ms, max_connections=100 |
 | **db-mongo** | mongo:8 | wiredTigerCacheSizeGB=0.( |
 | **cache-redis** | redis:7 | maxmemory=256mb LRU, appendonly yes |
@@ -140,15 +137,11 @@
 ### RedMainDashboard.kt — 5 تبويبات متكاملة
 | التبويب | الشاشة | الربط |
 |---|---|---|
-| المحادثات (3+) | RedChatListScreen | onChatClick → chat%etail, onDinstarDial → pstn_call |
 | المكالمات (1+) | RedCallLogScreen | — |
-| لوحة الاتصال | PstnDialerScreen | Dual Engine VoIP/Dinstar |
 | الاستكشاف | RedExploreScreen | onStartLive, onStartSpace |
-| المزيد | RedSettingsScreen | onManageDinstar, onLogout |
 
 **ميزات:**
 - **BadgedBox** على تبويب المحادثات و المكالمات (عد, غير مقروء)
-- **لون ذهبي** لتبويب Dinstar
 - **Scaffold** مع3NavigationBar
 
 ### MainAppNavigation.kt — 24 مسار متكامل
@@ -158,13 +151,11 @@
 |---|---|---|
 | splash | RedSplashScreen | onFinished → auth |
 | auth | Welcome( | onLogin → main |
-| main | RedMainDashboard | 10 callbacks (chat, call, video, pstn, live, space, profile, settings, dinstar, logout) |
 | chat_detail/{id} | ChatDetailScreen | chat ID |
 | create_group | CreateStoryScreen | onCreate, onBack |
 | group_info/{id} | SovereignGroupInfoScreen | onBack |
 | call_type_picker/{id} | CallTypePickerSheet | onCallTypeSelected → 6 أنواع |
 | voip_call/{id}/{type} | VideoCallScreen | VoipEngine, onEndCall |
-| pstn_call/{num} | PstnCallScreen | onEnd |
 | conference/{id} | ConferenceScreen | participants |
 | live_broadcast/{id} | LiveBroadcastScreen | isBroadcaster, onClose |
 | audio_space/{id} | ConferenceScreen | space mode |
@@ -206,7 +197,6 @@
 
 ## 🔜 المتبقي (غير حرج)
 
-- DevicesScreen و DinstarAdminScreen (2 شاشات)
 - SharedPreferences/DataStore لـ WebSocket URL في Android
 - Protobuf parsing للرسائل الثنائية
 - أفاتار ح"قيقي عبر AsyncImage + Minio

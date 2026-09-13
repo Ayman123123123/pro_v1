@@ -158,9 +158,7 @@
 ## 8) المكالمات ✅
 
 ### UnifiedCallsScreen — مركز موحد
-- **فلاتر:** الكل/فائتة/صوت/فيديو/جماعية/بث/مساحات/DINSTAR — FilterChip
 - **أزرار دائرية:** جماعية (AqyalCyanGlow) / بث مباشر (أحمر) / مساحات (بنفسجي)
-- **سجل:** CallHistoryViewModel.load() → LazyColumn مع CallHistoryRow (Avatar 44dp, ذهبي لDINSTAR سماوي ليونس, أيقونة Call/Videocam, الاتجاه, الحالة, AssistChip "يونس VIDEO" أو "DINSTAR صوت")
 - **انضمام مؤتمر:** AlertDialog مع حقل roomInput → ConferenceService.join(room, ownUserId, true)
 - **بث مباشر:** AlertDialog مع roomInput + Checkbox broadcaster → LiveStreamService.start
 
@@ -170,13 +168,9 @@
 - **CallSignalingClient / ConferenceSignalingClient:** WebSocket آمن مع CertificatePinner
 - **YounesCallOverlay / ConferenceOverlay / LiveStreamViewerOverlay:** واجهات عائمة
 
-### DINSTAR — الهاتف اليمني
-- **DinstarPhoneScreen:** 4 تبويبات (الأرقام/المفضلة/السجل/جهات الاتصال) + DialPad مع أرقام 1-# + زر اتصال صوتي
-- **PstnState:** Dialing / Started (usedToday/dailyLimit) / Error
 
 ### مقارنة
 - واتساب: مكالمة جماعية 8 — يونس: **مؤتمر SFU غير محدود + بث + مساحات**
-- زنجي: DINSTAR — يونس: **DINSTAR + WebRTC متكامل**
 
 ---
 
@@ -242,7 +236,6 @@
 ### هوية سيادية
 - **بدون رقم هاتف** — RED-ID فقط (YNS-XXXX-XXXX)
 - **بدون شريحة** — مصادقة ECDSA شهادات
-- **يمني 100%** — DINSTAR + نبض محلي "اليمن"
 
 ### تجربة مستخدم عربية فاخرة
 - **Cairo/Tajawal** — أجمل من Roboto النظام
@@ -250,8 +243,6 @@
 - **Obsidian داكن** — راحة عين أفضل من واتساب #0B141A
 
 ### شمول الميزات
-- **رسائل + نبض + حالات + مجموعات + مكالمات 1-1 + مؤتمر + بث + مساحات + DINSTAR** — لا تطبيق آخر يجمعها كلها
-- **تيليغرام:** لا DINSTAR / **واتساب:** لا نبض / **زنجي:** لا حالات / **فيسبوك:** لا تشفير افتراضي
 
 ### أداء وأمان
 - **E2EE افتراضي** — تيليغرام اختياري

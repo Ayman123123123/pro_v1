@@ -44,7 +44,7 @@ class KeysApiV2(
   /**
    * Fetch prekeys for all of the recipient's devices. (Server returns a bundle per device.)
    *
-   * Wildcard device specifier: `GET /v2/keys/{identifier}/{asterisk}`
+   * Wildcard device specifier: `GET /v2/keys/{identifier}/*`
    */
   suspend fun getPreKeysForAllDevices(
     identifier: String,

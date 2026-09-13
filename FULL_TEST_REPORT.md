@@ -1,4 +1,3 @@
-# 🔴 تقرير الفحص والاختبار الشامل — DINSTAR UC2000-VE-8G
 **التاريخ**: 2026-08-08  
 **الفاحص**: Arena AI Agent  
 
@@ -12,7 +11,6 @@
 | فحص الاستيرادات | ✅ 29/29 مستخدمة |
 | فحص سلسلة Controller → Service | ✅ 10/10 methods |
 | فحص سلسلة Frontend → Controller | ✅ 7/7 endpoints |
-| فحص Frontend (DinstarTab → MasterClient) | ✅ 1/1 |
 | فحص SecurityConfig | ✅ ADMIN role محمي |
 | فحص Flyway migrations (table schema) | ✅ متطابقة |
 | فحص توافقية الإصدارات | ✅ okhttp 4.12 ↔ digest 3.1.1 |
@@ -32,22 +30,15 @@
 
 ### مُعدّلة:
 1. **`build.gradle.kts`** — إضافة `io.github.rburgst:okhttp-digest:3.1.1`
-2. **`DinstarHardwareService.kt`** — إعادة كتابة كاملة (+112/-23 سطر):
    - `DispatchingAuthenticator` مع `DigestAuthenticator` + `BasicAuthenticator` + caching
    - SSL trust للشهادات الموقعة ذاتياً
    - `queryCdr()`: GET→POST, `/api/query_cdr`→`/api/get_cdr`, أضف `maximum:100`
    - `resetPort()`: POST→GET (query params)
    - كل "8T" → "8G"
 3. **`application.yml`** — defaults: https/443/admin:admin
-4. **`.env.example`** — DINSTAR_PORT=443, SCHEME=https
-5. **`DinstarTab.tsx`** — "8T" → "8G"
-6. **`DinstarControl.tsx`** — "8T" → "8G"
 7. **`RedSettingsScreen.kt`** — "8T" → "8G"
-8. **`docs/05-DINSTAR-UC2000-VE-8T.md`** — محذوف
 
 ### جديدة:
-9. **`docs/05-DINSTAR-UC2000-VE-8G.md`** — توثيق محدّث مع قسم المصادقة
-10. **`DinstarHardwareServiceTest.kt`** — اختبارات وحدة (10 tests)
 
 ---
 
@@ -71,19 +62,10 @@
 ## سلسلة الاتصال الكاملة
 
 ```
-DinstarTab.tsx
-  → apiFetch('/api/master/v1/hardware/dinstar/slots')
   → RedMasterController.getSlots()
-  → DinstarMasterClient.getPortsRealtimeStatus()
-  → DinstarHardwareService.getHardwareStatus()
   → getJson("/api/get_port_info", {...})
   → OkHttpClient (with Digest+Basic auth, SSL trust)
-  → HTTPS 192.168.11.1:443
 
-DinstarControl.tsx
-  → apiFetch('/api/admin/dinstar/discover')
-  → DinstarController.discover()
-  → DinstarHardwareService.discoverGateway()
   → ... same chain ...
 ```
 
@@ -116,7 +98,3 @@ DinstarControl.tsx
 
 1. **شغّل**: `./gradlew :backend-server:compileKotlin` للتأكد من التجميع
 2. **شغّل**: `./gradlew :backend-server:test` لتشغيل الاختبارات
-3. **فعّل**: "New Version API" من واجهة Dinstar: Mobile Configuration → Basic Configuration
-4. **اختبر**: شغّل الـ backend واستدعِ `GET /api/admin/dinstar/discover`
-5. **إذا فشل HTTPS**: جرب `DINSTAR_PORT=80` و `DINSTAR_SCHEME=http` كبديل مؤقت
-6. **تأكد من firmware**: اسأل دعم Dinstar: "هل firmware 04240302 متوافق مع HWID 7036-cf4b-3125 على UC2000-VE-8G؟"

@@ -104,7 +104,6 @@
 | password hashing | ✅ BCrypt (PasswordEncoder) |
 | SSRF | ✅ لا جلب URLs من المستخدم |
 | الملكية في edit/delete message | ✅ محقّقة (senderId) |
-| PSTN — الصلاحية والحد اليومي | ✅ |
 | CORS | ✅ allowedOriginPatterns (لا `*`) |
 | TTL الجلسات | ✅ مفعّل |
 | CallRuntime.state آمن للتزامن | ✅ mutableStateOf thread-safe |

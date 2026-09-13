@@ -50,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.red.sovereign.features.dinstar.YemenOperator
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.SovereignGradients
 import kotlin.math.sin
@@ -366,50 +365,5 @@ fun SovereignAvatarRing(
                     .border(1.5.dp, SovereignColors.Obsidian, CircleShape)
             )
         }
-    }
-}
-
-/**
- * شارة المشغّل اليمني الذكية (سبأفون، يمن موبايل، يو، واي).
- *
- * البادئات مأخوذة من [YemenOperator] وهي المصدر الوحيد للحقيقة؛ لا تُكتب
- * الأرقام يدويًا هنا حتى لا يتكرّر خطأ الجداول المتوازية.
- */
-@Composable
-fun SovereignOperatorBadge(
-    operator: YemenOperator,
-    modifier: Modifier = Modifier
-) {
-    val gradient = when (operator) {
-        YemenOperator.SABAFON -> SovereignGradients.danger
-        YemenOperator.YEMEN_MOBILE -> SovereignGradients.emerald
-        YemenOperator.YOU -> SovereignGradients.gold
-        YemenOperator.Y_TELECOM -> SovereignGradients.cyan
-        YemenOperator.UNKNOWN -> Brush.linearGradient(
-            listOf(Color(0xFF475569), Color(0xFF334155))
-        )
-    }
-
-    val label = if (operator == YemenOperator.UNKNOWN) {
-        operator.arabicName
-    } else {
-        // YemenOperator.prefixes كان Unresolved في بعض بيئات البناء بسبب تظليل
-        // الاستيراد؛ نعرض الاسم العربي فقط كحلّ آمن — البادئات تُستنتج من الرقم نفسه.
-        operator.arabicName
-    }
-
-    Surface(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(gradient),
-        color = Color.Transparent
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp)
-        )
     }
 }

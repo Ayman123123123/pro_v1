@@ -10,10 +10,10 @@
 included build → build-logic/
 
 backend-server/ بناء Spring مستقل يضم shared-proto
-admin_dashboard/, media-sfu/, pstn-asterisk/ تبنيها Docker/CI
+admin_dashboard/, media-sfu/ تبنيها Docker/CI
 ```
 
-## المجلدات الأربعة والعشرون
+## المكونات الأساسية
 
 | المجلد | الحالة والدور |
 |---|---|
@@ -22,33 +22,22 @@ admin_dashboard/, media-sfu/, pstn-asterisk/ تبنيها Docker/CI
 | [`shared-proto/`](shared-proto/README.md) | Protobuf الموحد |
 | [`admin_dashboard/`](admin_dashboard/README.md) | لوحة الإدارة القانونية |
 | [`media-sfu/`](media-sfu/README.md) | mediasoup SFU |
-| [`pstn-asterisk/`](pstn-asterisk/README.md) | DINSTAR/Asterisk صوت فقط — الدليل: [`docs/DINSTAR_UC2000_GUIDE_AR.md`](docs/DINSTAR_UC2000_GUIDE_AR.md) |
 | [`scripts/`](scripts/README.md) | تشغيل محلي ومفاتيح الهوية |
 | [`gradle/`](gradle/README.md) | Wrapper/catalogs/dependency verification |
 | [`build-logic/`](build-logic/README.md) | منطق وأدوات Gradle |
 | [`wire-handler/`](wire-handler/README.md) | Wire build-time handler |
 | [`app/`](app/README.md) | Signal gold mine خارج البناء |
-| [`docs/UNIFICATION_2026-08-19.md`](docs/UNIFICATION_2026-08-19.md) | توحيد `android/` و`app-android/` في `red-app/` |
-| [`core/`](core/README.md) | مكتبات Signal قديمة خارج graph |
-| [`lib/`](lib/README.md) | مكتبات Signal قديمة خارج graph |
+| [`core/`](core/README.md) و[`lib/`](lib/README.md) | مكتبات Signal قديمة خارج graph |
 | [`feature/`](feature/README.md) | ميزات Signal قديمة خارج graph |
-| [`demo/`](demo/README.md) | عينات غير منشورة |
-| [`fast-lint/`](fast-lint/README.md) | Lint تاريخي غير مسجل حاليًا |
-| [`lintchecks/`](lintchecks/README.md) | Detectors تاريخية غير مسجلة |
-| [`benchmark/`](benchmark/README.md) | Macrobenchmark تاريخي |
-| [`microbenchmark/`](microbenchmark/README.md) | Microbenchmark تاريخي |
-| [`baseline-profile/`](baseline-profile/README.md) | Profile generator تاريخي |
-| [`reproducible-builds/`](reproducible-builds/README.md) | أدوات مقارنة APK تحتاج مواءمة |
 | [`infrastructure/`](infrastructure/README.md) | أدوات مساعدة؛ Compose هو المرجع |
 
-## التشغيل الحقيقي (المسار الوحيد)
+## التشغيل الحقيقي
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
 ```
 
-ثم http://127.0.0.1:8088/ — الدخول من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`).
-لا يوجد خادم Node/SQLite ولا كلمة مرور تجريبية.
+ثم افتح `http://127.0.0.1:8088/`. بيانات الدخول تُنشأ من `.env` (`RED_ADMIN_USERNAME` و`RED_ADMIN_PASSWORD`).
 
 ## ملفات التشغيل الأساسية
 
@@ -58,25 +47,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildB
 - `LOCAL_FIRST_RUN_AR.md`: تجربة Windows/Linux الأولى.
 - `W0_MODULE_BOUNDARIES.md`: ما هو قانوني وما هو مرجع.
 
-## التوثيقات الشاملة
-
-- [`docs/01-PROJECT-OVERVIEW.md`](docs/01-PROJECT-OVERVIEW.md)
-- [`docs/02-DATABASES.md`](docs/02-DATABASES.md)
-- [`docs/03-SERVER-ADMIN-PANEL.md`](docs/03-SERVER-ADMIN-PANEL.md)
-- [`docs/04-APPS.md`](docs/04-APPS.md)
-
 ## أوامر التحقق
 
 ```bash
-# Backend + tests
 cd backend-server && gradle clean build
-
-# Android المحلي
-cd .. && ./gradlew :app:assembleDebug \
-  -PRED_SERVER_URL=http://SERVER_IP \
-  --dependency-verification strict
-
-# المنظومة
+cd .. && ./gradlew :app:assembleDebug -PRED_SERVER_URL=http://SERVER_IP --dependency-verification strict
 ./scripts/local-first-run.sh SERVER_IP
 ```
 

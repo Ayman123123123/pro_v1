@@ -6,7 +6,6 @@ import com.red.sovereign.features.calls.CallOrchestrator
 import com.red.sovereign.features.calls.RedVoipMaster
 import com.red.sovereign.features.calls.data.CallRepository
 import com.red.sovereign.features.calls.signaling.CallSignalingClient
-import com.red.sovereign.features.pstn.PstnViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

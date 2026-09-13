@@ -89,7 +89,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Ayman", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                            Text("+967 77X XXX XXX", color = Color.Gray, fontSize = 14.sp)
+                            Text("RED account", color = Color.Gray, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("Online | RED Sovereign", color = Color(0xFF00E676), fontSize = 12.sp)
                         }

@@ -11,7 +11,6 @@ This file is the build and ownership gate for RED. A second implementation of an
 | Messaging protocol | `shared-proto/src/main/proto/red_protocol.proto` | legacy `messages.proto`, `/ws/chat`, and `/ws/red` removed |
 | Chat WebSocket | `/ws/master` using `RedProtos.RedRED` | no second ACK/message envelope allowed |
 | Call signaling/media | `/ws/calls` + WebRTC + `media-sfu/` | SIP must not be exposed to Android clients |
-| Yemeni PSTN | `pstn-asterisk/` → DINSTAR | voice only unless verified hardware evidence proves otherwise |
 | Durable identities/approval | PostgreSQL in `backend-server/auth` | no in-memory account store |
 | Media storage | local MinIO | no Signal CDN dependency |
 

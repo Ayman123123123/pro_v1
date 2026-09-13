@@ -38,7 +38,6 @@
 - يعمل على LAN والبنية الذاتية الاستضافة أولاً.
 - اكتشاف الخادم المحلي Development-only وبهوية خادم قابلة للتحقق.
 - Docker deployment واضح، بلا خدمات سحابية إلزامية.
-- مكالمات RED عبر WebRTC/SFU، وPSTN عبر DINSTAR مسار منفصل ومصرح به فقط.
 
 ### د. إدارة قابلة للمساءلة وليست مراقبة خفية
 
@@ -127,7 +126,6 @@
 - إطلاق stories/feed/live/conference قبل إثبات الرسائل والمكالمات الخاصة.
 - وصف محتوى اجتماعي عام بأنه E2EE.
 - تشغيل SFU room access بناء على roomId فقط.
-- ربط PSTN بالمراسلة الخاصة أو تقديمه كبديل عن RED VoIP.
 - إضافة ذكاء اصطناعي أو blockchain أو وعود «مقاومة كمومية» بلا نموذج تهديد واختبار.
 
 ---
@@ -141,7 +139,6 @@
 | C — المكالمات | call state machine، multi-device ring، TURN، history، device tests |
 | D — المجموعات وSFU | room capability، group ACL، mediasoup client حقيقي، moderation |
 | E — المجتمع | feed/stories بسياسة خصوصية ومراجعة واضحة |
-| F — PSTN المؤسسي | DINSTAR/Asterisk على عتاد حقيقي مع quota/audit/operational controls |
 
 ---
 

@@ -12,7 +12,6 @@
 ### A — حرج قبل الإنتاج
 1. **نقل فعلي لمنطق RedDashboard** (الـ 5 ملفات placeholder → نقل 29 دالة)
 2. **Groups E2EE Sender Keys** (توزيع وتدوير عند add/remove)
-3. **اختبار TURN بين شبكتين + DINSTAR عتاد حقيقي**
 4. ** thumbnails حقيقية + malware scan + backup drill**
 
 ### B — تحسين

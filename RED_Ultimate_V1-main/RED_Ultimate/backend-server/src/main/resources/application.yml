@@ -80,36 +80,6 @@ management:
 red:
   # Enable only behind a proxy that discards client-supplied X-Forwarded-For.
   trust-x-forwarded-for: ${RED_TRUST_X_FORWARDED_FOR:false}
-  dinstar:
-    # false = no hardware / Docker cannot see the LAN box. IP calls stay on.
-    enabled: ${DINSTAR_ENABLED:false}
-    number-learning:
-      # يُرسل SMS مدفوعًا (سبأفون: 10 YER للطلب). كانت القيمة مثبّتة `true`
-      # فتتجاهل RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED=false في .env،
-      # فتُنفق البوابة على ثمانية منافذ كل ساعة بلا إذن. الآن تُقرأ من البيئة
-      # وتبقى معطّلة افتراضيًا.
-      auto-enabled: ${RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED:false}
-      # سقف المحاولات لكل منفذ قبل طلب تدخّل يدوي.
-      max-attempts-per-port: ${RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS:3}
-      # مهلة التهدئة بين محاولتين على المنفذ نفسه (ساعات).
-      cooldown-hours: ${RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS:24}
-    heartbeat-ms: ${DINSTAR_HEARTBEAT_MS:30000}
-    ip: ${DINSTAR_IP:192.168.11.2}
-    ips: ${DINSTAR_IPS:}
-    port: ${DINSTAR_PORT:443}
-    scheme: ${DINSTAR_SCHEME:https}
-    username: ${DINSTAR_USERNAME:admin}
-    password: ${DINSTAR_PASSWORD:}
-    cert-pins: ${DINSTAR_CERT_SHA256_PINS:}
-    connect-timeout: 10s
-    read-timeout: 30s
-    max-retries: 3
-    connect-timeout-seconds: ${DINSTAR_CONNECT_TIMEOUT:5}
-    read-timeout-seconds: ${DINSTAR_READ_TIMEOUT:10}
-    probe-timeout-seconds: ${DINSTAR_PROBE_TIMEOUT:2}
-    discovery:
-      enabled: ${DINSTAR_DISCOVERY_ENABLED:false}
-      subnets: ${DINSTAR_DISCOVERY_SUBNETS:}
   security:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost,http://127.0.0.1}
   jwt:
@@ -147,17 +117,6 @@ red:
       enabled: ${OPENRELAY_ENABLED:false}
       username: ${OPENRELAY_USERNAME:openrelayproject}
       password: ${OPENRELAY_PASSWORD:openrelayproject}
-  pstn:
-    daily-limit-default: 100
-    signal-threshold: 20
-    sip-secret: ${WEBRTC_SIP_SECRET:red-secret-token}
-    bridge-secret-ttl-minutes: ${PSTN_BRIDGE_SECRET_TTL_MINUTES:60}
-    turn-url: ${PSTN_TURN_URL:}
-    turn-username: ${PSTN_TURN_USERNAME:}
-    turn-password: ${PSTN_TURN_PASSWORD:}
-    # WebRTC-PSTN bridge: Asterisk WSS endpoint visible to the Android app.
-    # Behind nginx this is typically wss://host:8443/ws/sip; direct is ws://host:8089/ws
-    wss-url: ${ASTERISK_WSS_URL:wss://localhost:8089/ws}
   rate-limit:
     enabled: true
     default-requests-per-minute: 60

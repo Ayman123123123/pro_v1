@@ -7,7 +7,6 @@
 ### 1. توحيد تطبيق الأندرويد (Android Consolidation)
 
 - **[تعديل] [settings.gradle.kts](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/settings.gradle.kts)**: جعل مجلد `app/` هو الموديول الرئيسي `:app` بدلاً من `red-app/`.
-- **[تعديل] [AndroidManifest.xml](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/app/src/main/AndroidManifest.xml)**: دمج كافة الخدمات والـ Receivers السيادية (PSTN, VoIP, NotificationRouter).
 - **[تعديل] [MainActivity.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/app/src/main/java/org/thoughtcrime/securesms/MainActivity.kt)**:
     - استدعاء `RedConnector.autoBind()` عند التشغيل.
     - دمج منطق `AppLock` السيادي مع نظام قفل الشاشة الحالي.
@@ -22,9 +21,7 @@
 
 - **[تعديل] [ContentController.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/admin/controller/ContentController.kt)**: إضافة الـ Endpoints اللازمة لإدارة حزم الملصقات (Stickers) والاستطلاعات (Polls).
 
-### 4. نظام Dinstar المتقدم
 
-- **[تعديل] [NumberLearningService.kt](file:///C:/Users/hpc01/Pictures/pro_new/RED_Ultimate_V1-main/RED_Ultimate/backend-server/src/main/kotlin/com/red/server/dinstar/NumberLearningService.kt)**: التأكد من دمج منطق تعلم الأرقام المتقدم لضمان استقرار الخدمة في المناطق الضعيفة.
 
 ## خطة التحقق (Verification Plan)
 

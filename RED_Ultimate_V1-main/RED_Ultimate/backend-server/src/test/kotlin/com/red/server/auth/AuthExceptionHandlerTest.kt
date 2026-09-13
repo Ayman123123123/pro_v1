@@ -13,7 +13,7 @@ class AuthExceptionHandlerTest {
 
     @Test
     fun `illegal argument never exposes operational detail`() {
-        val secret = "DINSTAR gateway 192.168.11.1 rejected admin password"
+        val secret = "internal provider rejected admin password"
 
         val response = handler.badRequest(IllegalArgumentException(secret))
 
@@ -31,7 +31,7 @@ class AuthExceptionHandlerTest {
 
     @Test
     fun `conflict never exposes provider detail`() {
-        val secret = "Asterisk SIP trunk secret is invalid"
+        val secret = "internal service secret is invalid"
 
         val response = handler.conflict(IllegalStateException(secret))
 

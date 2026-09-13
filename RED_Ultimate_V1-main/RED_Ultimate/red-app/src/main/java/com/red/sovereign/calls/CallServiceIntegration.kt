@@ -99,31 +99,12 @@ object CallServiceIntegration {
     }
 
     /**
-     * بدء مكالمة PSTN
-     */
-    fun startPstnCall(context: Context, phoneNumber: String) {
-        val intent = Intent(context, PstnCallForegroundService::class.java).apply {
-            action = PstnCallForegroundService.ACTION_DIAL
-            putExtra(PstnCallForegroundService.EXTRA_PHONE_NUMBER, phoneNumber)
-        }
-        ContextCompat.startForegroundService(context, intent)
-    }
-
-    /**
-     * إنهاء مكالمة PSTN
-     */
-    fun endPstnCall(context: Context) {
-        PstnCallForegroundService.action(context, PstnCallForegroundService.ACTION_HANGUP)
-    }
-
-    /**
      * التحقق من وجود مكالمة نشطة
      */
     fun hasActiveCall(context: Context): Boolean {
         return YounesCallService.isCallActive(context) ||
                GroupCallService.isGroupCallActive(context) ||
-               ConferenceService.isConferenceActive(context) ||
-               PstnCallForegroundService.isPstnCallActive(context)
+               ConferenceService.isConferenceActive(context)
     }
 
     /**
@@ -134,7 +115,6 @@ object CallServiceIntegration {
             YounesCallService.isCallActive(context) -> "1to1"
             GroupCallService.isGroupCallActive(context) -> "group"
             ConferenceService.isConferenceActive(context) -> "conference"
-            PstnCallForegroundService.isPstnCallActive(context) -> "pstn"
             else -> null
         }
     }

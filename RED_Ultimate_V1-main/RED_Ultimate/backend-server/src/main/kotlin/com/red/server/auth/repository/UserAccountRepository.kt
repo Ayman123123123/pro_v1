@@ -1,4 +1,4 @@
-﻿package com.red.server.auth.repository
+package com.red.server.auth.repository
 
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
@@ -30,10 +30,6 @@ interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecifica
 
     fun countByCreatedAtAfter(after: Instant): Long
 
-    fun findByPstnGatewayId(pstnGatewayId: UUID): List<UserAccount>
-    fun findByPstnNumber(pstnNumber: String): UserAccount?
-    fun findByPstnGatewayIdAndPstnPortIndex(pstnGatewayId: UUID, pstnPortIndex: Int): UserAccount?
-    fun existsByPstnGatewayIdAndPstnPortIndex(pstnGatewayId: UUID, pstnPortIndex: Int): Boolean
 }
 
 fun UserAccountRepository.searchForAdmin(
@@ -41,5 +37,4 @@ fun UserAccountRepository.searchForAdmin(
     role: AccountRole?,
     search: String?,
     pageable: Pageable,
-    pstnEnabled: Boolean? = null,
-): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search, pstnEnabled), pageable)
+): Page<UserAccount> = findAll(UserAccountSpecs.adminSearch(status, role, search), pageable)

@@ -48,7 +48,6 @@ class NotificationService(
             "story", "stories" -> prefs.stories
             "live" -> prefs.live
             "system" -> prefs.system
-            "dinstar" -> prefs.dinstar
             "security" -> prefs.security
             else -> true
         }
@@ -192,7 +191,6 @@ class NotificationService(
             stories = data["stories"]?.toBoolean() ?: true,
             live = data["live"]?.toBoolean() ?: true,
             system = data["system"]?.toBoolean() ?: true,
-            dinstar = data["dinstar"]?.toBoolean() ?: true,
             security = data["security"]?.toBoolean() ?: true,
             quietHoursEnabled = data["quietHoursEnabled"]?.toBoolean() ?: false,
             quietHoursStart = data["quietHoursStart"],
@@ -210,7 +208,6 @@ class NotificationService(
         ops.put(key, "stories", prefs.stories.toString())
         ops.put(key, "live", prefs.live.toString())
         ops.put(key, "system", prefs.system.toString())
-        ops.put(key, "dinstar", prefs.dinstar.toString())
         ops.put(key, "security", prefs.security.toString())
         ops.put(key, "quietHoursEnabled", prefs.quietHoursEnabled.toString())
         prefs.quietHoursStart?.let { ops.put(key, "quietHoursStart", it) }

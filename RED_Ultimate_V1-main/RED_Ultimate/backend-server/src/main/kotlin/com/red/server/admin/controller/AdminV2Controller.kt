@@ -15,7 +15,7 @@ import java.util.UUID
 
 /**
  * 🛡️ Admin V2 Controller - APIs شاملة للوحة الإدارة
- * يغطي: Audit, Analytics, Users, Calls, DINSTAR, Reports, Media, Security, Announcements, Backups
+ * يغطي: Audit, Analytics, Users, Calls, Reports, Media, Security, Announcements, Backups
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -116,7 +116,6 @@ class AdminV2Controller(
                 "displayName" to user.displayName,
                 "status" to user.status.name,
                 "role" to user.role.name,
-                "pstnEnabled" to user.pstnEnabled,
                 "createdAt" to user.createdAt,
                 "approvedAt" to user.approvedAt,
                 "lastSeen" to user.lastSeen
@@ -151,8 +150,6 @@ class AdminV2Controller(
             "displayName" to user.displayName,
             "status" to user.status.name,
             "role" to user.role.name,
-            "pstnEnabled" to user.pstnEnabled,
-            "pstnDailyLimit" to user.pstnDailyLimit,
             "createdAt" to user.createdAt,
             "approvedAt" to (user.approvedAt ?: Instant.MIN),
             "approvedBy" to (user.approvedBy?.toString() ?: ""),
@@ -282,10 +279,6 @@ class AdminV2Controller(
         )
         return ResponseEntity.ok(mapOf("success" to true))
     }
-
-    // ملاحظة معمارية: تفعيل PSTN/Dinstar أُزيل من هنا عمداً — كان يتعارض في خرائط Spring
-    // مع PUT /api/admin/users/pstn (PstnAuthorizationController) وبسلوك منحرف
-    // (لا يصفّر الحد اليومي عند التعطيل). المصدر الوحيد الآن: PstnAuthorizationService.
 
     @DeleteMapping("/users/{userId}")
     fun deleteUser(

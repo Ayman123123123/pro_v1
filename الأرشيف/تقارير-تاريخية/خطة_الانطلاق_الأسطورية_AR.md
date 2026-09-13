@@ -46,7 +46,6 @@ adb install red-app/build/outputs/apk/debug/app-debug.apk
 1. سجل مستخدمين مختلفين (username + password + displayName)
 2. وافق عليهما من اللوحة → يصبحان APPROVED + شهادة ECDSA
 3. تبادلا رسالة → يجب أن ترى SENT → DELIVERED → READ (E2EE)
-4. جرب مكالمة RED (WebRTC) ومكالمة DINSTAR (إذا عندك العتاد)
 
 ## المرحلة 3 — الاختبارات الأسطورية
 
@@ -58,7 +57,6 @@ adb install red-app/build/outputs/apk/debug/app-debug.apk
 | SFU | `node --check media-sfu/server.js` | ✓ (تم) |
 | E2EE حقيقي | هاتفين + Wireshark | لا plaintext على السيرفر |
 | TURN بين شبكتين | هاتف على 4G + هاتف على WiFi | ICE عبر coturn 45000-45050 |
-| DINSTAR | `http://192.168.11.1` + SIM يمني | `SimSlotInfo BUSY/IDLE` حقيقي |
 
 ---
 

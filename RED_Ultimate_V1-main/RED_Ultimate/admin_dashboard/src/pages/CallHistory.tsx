@@ -7,9 +7,7 @@ type HistoryRow = {
   id: string;
   caller_id?: string | null;
   callee_id?: string | null;
-  callee_phone?: string | null;
   call_type?: string;
-  call_route?: string;
   direction?: string;
   status?: string;
   started_at?: string;
@@ -88,7 +86,7 @@ export default function CallHistory() {
     },
     {
       title: 'المُستدعى',
-      render: (_: unknown, r: HistoryRow) => r.callee_id || r.callee_phone || '—',
+      render: (_: unknown, r: HistoryRow) => r.callee_id || '—',
     },
     {
       title: 'النوع',
@@ -97,13 +95,6 @@ export default function CallHistory() {
         <Tag color={(v || '').startsWith('VIDEO') ? 'purple' : 'blue'}>
           {TYPE_LABEL[v] || v || '—'}
         </Tag>
-      ),
-    },
-    {
-      title: 'المسار',
-      dataIndex: 'call_route',
-      render: (v: string) => (
-        <Tag color={v === 'DINSTAR' ? 'orange' : 'gold'}>{v === 'DINSTAR' ? 'DINSTAR' : 'RED'}</Tag>
       ),
     },
     {
@@ -141,7 +132,7 @@ export default function CallHistory() {
           سجل المكالمات الموحّد
         </Typography.Title>
         <Typography.Text type="secondary">
-          كل مكالمات RED و DINSTAR من قاعدة Postgres الحية — تُحدَّث لحظياً من أحداث الخادم.
+          كل مكالمات RED من قاعدة Postgres الحية — تُحدَّث لحظياً من أحداث الخادم.
         </Typography.Text>
       </div>
 
