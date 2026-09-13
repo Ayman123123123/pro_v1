@@ -1,6 +1,7 @@
 package com.red.sovereign.calls
 
 import android.content.Context
+import android.util.Log
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
@@ -38,39 +39,98 @@ class LiveStreamSignalingClient(
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
+    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context).newBuilder()
+        .pingInterval(20, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     private var socket: WebSocket? = null
+    private val pendingSignals = PendingCallSignalQueue()
+    private val epoch = SignalingSocketEpoch()
+
+    @Volatile
+    private var connected = false
+
+    @Volatile
+    private var activeStreamId: String = ""
+
+    fun isConnected(): Boolean = connected
 
     fun reconnect(streamId: String) {
-        runCatching { socket?.cancel() }
+        Log.d(TAG, "reconnect() streamId=$streamId")
+        epoch.invalidate()
+        connected = false
+        val oldSocket = socket
         socket = null
+        runCatching { oldSocket?.cancel() }
         connect(streamId)
     }
 
     fun connect(streamId: String) {
-        if (socket != null) return
-        val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")
+        if (socket != null && connected && activeStreamId == streamId) {
+            Log.d(TAG, "connect(): already connected to $streamId")
+            return
+        }
+
+        activeStreamId = streamId
+        epoch.invalidate()
+        val currentEpoch = epoch.begin()
+
+        if (socket != null) {
+            val oldSocket = socket
+            socket = null
+            runCatching { oldSocket?.close(1000, "reconnect") }
+        }
+
+        val token = tokens.accessToken
+        if (token == null) {
+            listener.onError("UNAUTHORIZED")
+            return
+        }
+
         val baseUrl = ServerEndpoint.url()
             .replaceFirst("http://", "ws://")
             .replaceFirst("https://", "wss://")
         val url = "$baseUrl/ws/livestream?roomId=$streamId"
+        Log.d(TAG, "connect(): connecting to $url")
+
         socket = http.newWebSocket(
             Request.Builder()
                 .url(url)
                 .header("Authorization", "Bearer $token")
                 .build(),
             object : WebSocketListener() {
-                override fun onOpen(webSocket: WebSocket, response: Response) = listener.onConnected()
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = true
+                    Log.d(TAG, "onOpen: live stream signaling connected, flushing queued signals")
+                    pendingSignals.flush { signalJson ->
+                        runCatching { webSocket.send(signalJson) }.getOrDefault(false)
+                    }
+                    listener.onConnected()
+                }
+
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     runCatching { json.decodeFromString<LiveStreamSignal>(text) }
                         .onSuccess(listener::onSignal)
-                        .onFailure { listener.onError("INVALID_LIVE_SIGNAL: ${it.message}") }
+                        .onFailure {
+                            Log.w(TAG, "onMessage: parse failed, ignoring frame: ${it.message}")
+                        }
                 }
+
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    socket = null; listener.onDisconnected()
-                }
-                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = false
                     socket = null
+                    Log.w(TAG, "onClosed: code=$code reason=$reason")
+                    listener.onDisconnected()
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = false
+                    socket = null
+                    Log.e(TAG, "onFailure ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
                 }
             }
@@ -78,7 +138,24 @@ class LiveStreamSignalingClient(
     }
 
     fun send(signal: LiveStreamSignal) {
-        socket?.send(json.encodeToString(signal)) ?: listener.onError("LIVESTREAM_NOT_CONNECTED")
+        val signalJson = runCatching { json.encodeToString(signal) }.getOrNull()
+        if (signalJson == null) {
+            Log.e(TAG, "send: serialization failed for type=${signal.type}")
+            return
+        }
+
+        val currentSocket = socket
+        val ok = if (connected && currentSocket != null) {
+            runCatching { currentSocket.send(signalJson) }.getOrDefault(false)
+        } else false
+
+        if (!ok) {
+            pendingSignals.enqueue(signalJson)
+            val targetStream = signal.roomId.ifBlank { activeStreamId }
+            if (!connected && targetStream.isNotBlank()) {
+                runCatching { connect(targetStream) }
+            }
+        }
     }
 
     fun join(streamId: String, userId: String, role: String, password: String? = null) = send(
@@ -130,12 +207,16 @@ class LiveStreamSignalingClient(
         )
     )
 
-    fun sendChatMessage(streamId: String, userId: String, senderName: String, text: String) = send(
+    fun sendChatMessage(streamId: String, userId: String, senderName: String, text: String, replyToId: String? = null) = send(
         LiveStreamSignal(
             type = "CHAT",
             roomId = streamId,
             userId = userId,
-            payload = mapOf("senderName" to senderName, "text" to text)
+            payload = buildMap {
+                put("senderName", senderName)
+                put("text", text)
+                if (!replyToId.isNullOrBlank()) put("replyToId", replyToId)
+            }
         )
     )
 
@@ -148,6 +229,37 @@ class LiveStreamSignalingClient(
         )
     )
 
+    /**
+     * الهدايا معطلة بقرار المنتج ("بدون هدايا"): يُحفظ التوقيع للتوافق مع أي
+     * مستدعٍ قديم، لكن الإرسال يتحول لتفاعل مجاني REACTION — لا يُبث حدث GIFT
+     * ولا تُخصم عملات. التفاعلات المجانية هي البديل الوحيد.
+     */
+    @Deprecated(
+        "Gifts disabled by product decision — sends a free REACTION instead",
+        ReplaceWith("sendReaction(streamId, userId, giftEmoji)")
+    )
+    fun sendGift(streamId: String, userId: String, senderName: String, giftId: String, giftEmoji: String, costCoins: Int) =
+        sendReaction(streamId, userId, giftEmoji.ifBlank { "❤️" })
+
+    /** تثبيت تعليق (المذيع فقط — الخادم يتحقق من الدور ويُرحّل للجميع). */
+    fun sendPinMessage(streamId: String, userId: String, messageId: String, senderName: String, text: String) = send(
+        LiveStreamSignal(
+            type = "PIN_MESSAGE",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("messageId" to messageId, "senderName" to senderName, "text" to text)
+        )
+    )
+
+    /** إلغاء تثبيت التعليق (المذيع فقط). */
+    fun sendUnpinMessage(streamId: String, userId: String) = send(
+        LiveStreamSignal(
+            type = "UNPIN_MESSAGE",
+            roomId = streamId,
+            userId = userId
+        )
+    )
+
     fun raiseHand(streamId: String, userId: String, userName: String) = send(
         LiveStreamSignal(
             type = "RAISE_HAND",
@@ -155,6 +267,10 @@ class LiveStreamSignalingClient(
             userId = userId,
             payload = mapOf("userName" to userName)
         )
+    )
+
+    fun lowerHand(streamId: String, userId: String) = send(
+        LiveStreamSignal(type = "LOWER_HAND", roomId = streamId, userId = userId)
     )
 
     fun approveCoHost(streamId: String, userId: String, targetUserId: String) = send(
@@ -166,10 +282,75 @@ class LiveStreamSignalingClient(
         )
     )
 
+    fun rejectCoHost(streamId: String, userId: String, targetUserId: String) = send(
+        LiveStreamSignal(
+            type = "REJECT_COHOST",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun removeCoHost(streamId: String, userId: String, targetUserId: String) = send(
+        LiveStreamSignal(
+            type = "REMOVE_COHOST",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun leaveCoHost(streamId: String, userId: String) = send(
+        LiveStreamSignal(type = "LEAVE_COHOST", roomId = streamId, userId = userId)
+    )
+
+    fun kickViewer(streamId: String, userId: String, targetUserId: String) = send(
+        LiveStreamSignal(
+            type = "KICK",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun setSlowMode(streamId: String, userId: String, seconds: Int) = send(
+        LiveStreamSignal(
+            type = "SLOW_MODE_SET",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("seconds" to seconds.toString())
+        )
+    )
+
+    fun muteViewer(streamId: String, userId: String, targetUserId: String, muted: Boolean) = send(
+        LiveStreamSignal(
+            type = if (muted) "MUTED" else "UNMUTED",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun setQuality(streamId: String, userId: String, quality: String) = send(
+        LiveStreamSignal(
+            type = "SET_QUALITY",
+            roomId = streamId,
+            userId = userId,
+            payload = mapOf("quality" to quality)
+        )
+    )
+
     fun close() {
-        socket?.close(1000, "livestream ended")
+        Log.d(TAG, "close()")
+        epoch.invalidate()
+        connected = false
+        val oldSocket = socket
         socket = null
+        runCatching { oldSocket?.close(1000, "livestream ended") }
+        pendingSignals.clear()
     }
 
-    val isConnected: Boolean get() = socket != null
+    companion object {
+        private const val TAG = "LiveSignal"
+    }
 }

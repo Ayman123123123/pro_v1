@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,7 +37,9 @@ data class DeviceSession(
     val lastActiveAt: String,
     val ipAddress: String,
     val isCurrentDevice: Boolean = false,
+    val isDinstar: Boolean = false,
     val signalPercent: Int? = null,
+    val portCount: Int? = null
 )
 
 enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val color: Color) {
@@ -44,6 +47,7 @@ enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.
     IOS("iOS", Icons.Rounded.PhoneIphone, Color(0xFF007AFF)),
     WEB("ويب", Icons.Rounded.Language, SovereignColors.Cyan),
     DESKTOP("سطح المكتب", Icons.Rounded.Computer, Color(0xFF7C4DFF)),
+    DINSTAR("DINSTAR", Icons.Rounded.Router, SovereignColors.DinstarGold),
     UNKNOWN("غير معروف", Icons.Rounded.Devices, Color.Gray)
 }
 
@@ -51,6 +55,7 @@ enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.
 fun DevicesScreen(
     onBack: () -> Unit = {},
     onLogoutDevice: (String) -> Unit = {},
+    onNavigateToDinstar: (() -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -104,14 +109,22 @@ fun DevicesScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.Rounded.ArrowBack, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "رجوع", tint = Color.White)
             }
             Spacer(Modifier.width(8.dp))
-            Icon(Icons.Rounded.Devices, null, tint = SovereignColors.Cyan, modifier = Modifier.size(24.dp))
+            Icon(Icons.Rounded.Devices, "الأجهزة المتصلة", tint = SovereignColors.Cyan, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("الأجهزة المتصلة", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.White)
-                Text(if (loading) "جارٍ التحميل…" else "${devices.size} جلسات نشطة", fontSize = 12.sp, color = Color.Gray)
+                Text(
+                    when {
+                        loading && devices.isEmpty() -> "جارٍ التحميل…"
+                        loadError != null && devices.isEmpty() -> "تعذّر التحميل — تحقق من الاتصال"
+                        devices.isEmpty() -> "لا توجد أجهزة"
+                        else -> "${devices.size} جلسات نشطة"
+                    },
+                    fontSize = 12.sp, color = Color.Gray
+                )
             }
             // 🔄 زر تحديث يدوي
             IconButton(onClick = { /* إعادة الجلب */ reloadTrigger++ }) {
@@ -121,8 +134,9 @@ fun DevicesScreen(
 
         HorizontalDivider(color = Color.Gray.copy(alpha = 0.1f))
 
-        // ⚠️ شريط خطأ الشبكة — مع إعادة المحاولة
+        // ⚠️ شريط خطأ الشبكة — مع إعادة المحاولة (للأخطاء الجزئية مع بقاء قائمة)
         loadError?.let { err ->
+            if (devices.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFF43F5E).copy(alpha = 0.12f)),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
@@ -132,8 +146,57 @@ fun DevicesScreen(
                     TextButton(onClick = { reloadTrigger++ }) { Text("إعادة") }
                 }
             }
+            }
         }
 
+        // حالات التحميل / الخطأ الكامل / الفراغ — بدل نص "جارٍ التحميل..." وحده
+        when {
+            loading && devices.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CircularProgressIndicator(color = SovereignColors.Cyan, modifier = Modifier.size(36.dp))
+                        Text("جارٍ التحميل…", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            }
+            !loading && loadError != null && devices.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Rounded.ErrorOutline, "خطأ التحميل", tint = SovereignColors.Danger, modifier = Modifier.size(48.dp))
+                        Text("تعذّر تحميل الأجهزة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                        Text(loadError ?: "", fontSize = 12.sp, color = Color.Gray)
+                        Button(onClick = { reloadTrigger++ }) {
+                            Icon(Icons.Rounded.Refresh, "إعادة المحاولة", Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("إعادة المحاولة")
+                        }
+                    }
+                }
+            }
+            !loading && loadError == null && devices.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Icon(Icons.Rounded.DevicesOther, "لا توجد أجهزة", tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Text("لا توجد أجهزة متصلة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                        Text("ستظهر هنا الجلسات النشطة لحسابك", fontSize = 12.sp, color = Color.Gray)
+                        OutlinedButton(onClick = { reloadTrigger++ }) {
+                            Icon(Icons.Rounded.Refresh, "تحديث", Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("تحديث")
+                        }
+                    }
+                }
+            }
+            else -> {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -160,7 +223,7 @@ fun DevicesScreen(
                 }
             }
 
-            items(devices) { device ->
+            items(devices, key = { it.id }) { device ->
                 DeviceCard(
                     device = device,
                     onLogout = {
@@ -175,6 +238,7 @@ fun DevicesScreen(
                             }
                         }
                     },
+                    onNavigateToDinstar = onNavigateToDinstar
                 )
             }
 
@@ -194,11 +258,13 @@ fun DevicesScreen(
                 }
             }
         }
+        }
     }
+}
 }
 
 @Composable
-private fun DeviceCard(device: DeviceSession, onLogout: () -> Unit) {
+private fun DeviceCard(device: DeviceSession, onLogout: () -> Unit, onNavigateToDinstar: (() -> Unit)?) {
     val typeColor = device.deviceType.color
     Card(
         shape = RoundedCornerShape(14.dp),

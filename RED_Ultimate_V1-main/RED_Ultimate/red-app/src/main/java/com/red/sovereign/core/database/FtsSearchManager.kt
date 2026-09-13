@@ -61,6 +61,36 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
             .replace('\u0649', '\u064A')   // ى ⇒ ي
             .replace('\u0629', '\u0647')   // ة ⇒ ه
 
+        /**
+         * يستخرج النص القابل للفهرسة من حمولة مخزّنة (P0-C 2026-09-12).
+         *
+         * - RICH_TEXT: يُفك عبر RichMessage ويُؤخذ `text` فقط (تُتجاهل
+         *   REACTION/DELETE/EDIT/POLL_VOTE لأنها نظام لا محتوى بحثي).
+         * - وسائط (IMAGE/VIDEO/FILE/AUDIO/VOICE/STICKER/GROUP_MESSAGE):
+         *   الحمولة JSON لمانيفست — تُفهرس كما هي (اسم الملف داخلها
+         *   قابل للبحث) ما لم تكن ثنائية خالصة.
+         * - TEXT/غيره: الخام UTF-8 مباشرة.
+         *
+         * @return النص الخام (قبل تطبيع الفهرسة) أو null للتخطّي.
+         */
+        fun extractIndexableText(plaintext: ByteArray, messageType: String): String? {
+            val raw = (if (messageType == "RICH_TEXT") {
+                val rich = runCatching {
+                    com.red.sovereign.core.RichMessage.decode(plaintext)
+                }.getOrNull() ?: return null
+                if (rich.action in setOf("POLL_VOTE", "REACTION", "REACTION_REMOVE", "DELETE", "EDIT")) return null
+                val t = rich.text.trim()
+                if (t.isEmpty()) {
+                    // RICH_TEXT بلا نص (موقع/جهة اتصال/استطلاع): لا شيء يُفهرس.
+                    if (rich.location != null) "موقع ${rich.location.name}" else null
+                } else t
+            } else {
+                runCatching { plaintext.toString(Charsets.UTF_8).trim() }.getOrNull()
+            }) ?: return null
+            if (raw.length < MIN_QUERY_LENGTH || raw.length > MAX_INDEXED_LENGTH) return null
+            return raw
+        }
+
         private const val MIN_QUERY_LENGTH = 2
         private const val MAX_INDEXED_LENGTH = 5000
         private const val MAX_QUERY_LENGTH = 100
@@ -97,6 +127,37 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
                 "VALUES (?, ?, ?, ?)",
             arrayOf(messageId, conversationId, senderId, normalizeArabic(plaintext))
         )
+    }
+
+    /**
+     * Hook P0-C: فهرسة كيان سجل محلي كامل (2026-09-12).
+     *
+     * يستخرج النص القابل للفهرسة عبر [extractIndexableText] (يفك RichMessage
+     * وإلا الخام UTF-8) ثم ينادي [indexMessage] — فيُضمن أن كل حفظ يُفهرس.
+     *
+     * TODO(P0-C): انقل النداء إلى `LocalRepository.saveLocalHistory`
+     * (خارج نطاق P0-C — ممنوع لمسه هنا):
+     * ```
+     * suspend fun saveLocalHistory(h: LocalHistoryEntity) {
+     *     dao.insertLocalHistory(h)
+     *     runCatching {
+     *         FtsSearchManager(RedDatabase.getInstance(ctx).openHelper.writableDatabase)
+     *             .indexLocalHistory(h)
+     *     }
+     * }
+     * ```
+     * وحتى يتم ذلك، ينادي `ChatHistoryPagingViewModel.saveAndIndex()`
+     * (داخل النطاق المسموح) نفس الـ hook — انظر `ChatHistoryPaging.kt`.
+     *
+     * @return true إذا فُهرس فعلًا، false إذا تُخطّي (نظام/تفاعل/فارغ).
+     */
+    fun indexLocalHistory(entity: LocalHistoryEntity): Boolean {
+        val text = extractIndexableText(entity.encryptedPlaintext, entity.messageType)
+            ?: return false
+        return runCatching {
+            indexMessage(entity.id, entity.conversationId, entity.senderId, text)
+            true
+        }.getOrDefault(false)
     }
 
     /**

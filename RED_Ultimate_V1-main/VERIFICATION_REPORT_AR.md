@@ -46,6 +46,7 @@ JAR:             2 ملف
 ```
 ✅ app/                    ✅ core/                   ✅ lib/
 ✅ backend-server/         ✅ admin_dashboard/        ✅ media-sfu/
+✅ pstn-asterisk/          ✅ shared-proto/           ✅ wire-handler/
 ✅ build-logic/            ✅ fast-lint/              ✅ lintchecks/
 ✅ feature/                ✅ gradle/                 ✅ infrastructure/
 ✅ reproducible-builds/    ✅ server/ (قديم)          ✅ android/ (قديم)
@@ -61,6 +62,7 @@ JAR:             2 ملف
 - جميع الملفات الحرجة موجودة (docker-compose, build.gradle.kts, settings.gradle.kts)
 - AndroidManifest.xml موجود (71KB)
 - Gradle wrapper موجود وقابل للتنفيذ
+- جميع Dockerfiles الموجودة (backend-server, pstn-asterisk, reproducible-builds)
 
 ### 2. بناء الصيغة (Syntax Validation) ✅
 - **YAML:** docker-compose.yml صالح (13 خدمة)
@@ -103,6 +105,7 @@ JAR:             2 ملف
 ```kotlin
 include(":features:chat")      // ❌ غير موجود
 include(":features:calls")     // ❌ غير موجود
+include(":features:pstn")      // ❌ غير موجود
 include(":features:stories")   // ❌ غير موجود
 include(":features:auth")      // ❌ غير موجود
 include(":features:profile")   // ❌ غير موجود
@@ -161,6 +164,7 @@ id("org.jetbrains.kotlin.plugin.serialization")
 | IdentityManager | 6 | ❌ غير معرّفة |
 | RedSplashScreen | 1 | ❌ غير معرّفة |
 | REDTheme | 75 | ❌ غير معرّفة |
+| PstnViewModel | 3 | ❌ غير معرّفة |
 | StoryViewModel | 1 | ❌ غير معرّفة |
 | MasterDao | 2 | ❌ غير معرّفة |
 | RedWebSocketClient | 4 | ❌ غير معرّفة |
@@ -250,8 +254,10 @@ AMI_PASSWORD: red_secret_123       # ❌
 TURN_SECRET: redturnsecret         # ❌
 MINIO_PASSWORD: redsecret123       # ❌
 
+# pstn-asterisk/manager.conf
 secret = red_secret_123            # ❌
 
+# pstn-asterisk/pjsip.conf
 password = red_secure_pass         # ❌
 
 # server/application.properties
@@ -261,6 +267,8 @@ server.ssl.key-store-password = red-secret-password  # ❌
 ### 2. ❌ IPs خاصة مكشوفة
 ```java
 DevelopedServerConfig.java:10:  LOCAL_IP = "http://192.168.1.50:8080"
+DevelopedServerConfig.java:19:  DUMIN_GATEWAY_URL = "http://192.168.1.100:5060"
+DinstarHardwareService.kt:14:   deviceUrl = "http://192.168.1.100"
 ```
 
 ### 3. ❌ لا مصادقة على endpoints إدارية
@@ -325,12 +333,15 @@ println("Quality parameters: $parameters")
 **الإدعاء:** ضبط جودة المكالمة  
 **الواقع:** println فقط — الخريطة لا تُمرر لأي شيء
 
+### 5. ❌ DinstarMasterClient
 ```kotlin
 // Mock data
 slotStatus = listOf(
+    SimSlotInfo(0, "BUSY", 85, "Yemen Mobile", "86422104550123"),
     // ...
 )
 ```
+**الإدعاء:** قراءة حالة Dinstar الحقيقية  
 **الواقع:** بيانات عشوائية/مزيّفة — الطلب HTTP الحقيقي معلّق كتعليق
 
 ### 6. ❌ Kill Switch
@@ -402,6 +413,7 @@ fun checkApprovalStatus(): Boolean = true
 ### المرحلة 5: تنفيذ الميزات الحقيقية (Features) — متوسط
 1. UltraHDCall: تكوين WebRTC فعلياً
 2. GuaranteedDelivery: آلية retry + ACK
+3. DinstarMasterClient: طلب HTTP حقيقي
 4. Kill Switch: تنفيذ المسح الفعلي
 5. checkApprovalStatus: تحقق من DB
 

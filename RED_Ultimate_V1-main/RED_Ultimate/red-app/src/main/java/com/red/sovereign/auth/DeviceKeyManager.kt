@@ -25,8 +25,8 @@ class DeviceKeyManager(context: Context) {
         if (!store.contains(IDENTITY_PUBLIC)) generate()
         val signed = signedPreKeyRecord()
         val kyber = kyberPreKeyRecord()
-        val registration = store.get(REGISTRATION_ID)?.toInt() ?: (SecureRandom().nextInt(16_380) + 1).also { store.put(REGISTRATION_ID, it.toString()) }
-        val deviceId = store.get(PROTOCOL_DEVICE_ID)?.toInt() ?: (SecureRandom().nextInt(127) + 1).also { store.put(PROTOCOL_DEVICE_ID, it.toString()) }
+        val registration = store.get(REGISTRATION_ID)?.toIntOrNull() ?: (SecureRandom().nextInt(16_380) + 1).also { store.put(REGISTRATION_ID, it.toString()) }
+        val deviceId = store.get(PROTOCOL_DEVICE_ID)?.toIntOrNull() ?: (SecureRandom().nextInt(127) + 1).also { store.put(PROTOCOL_DEVICE_ID, it.toString()) }
         return DeviceEnrollmentRequest(
             deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
             platform = "ANDROID",
@@ -49,13 +49,14 @@ class DeviceKeyManager(context: Context) {
 
     fun registrationId(): Int {
         enrollment()
-        store.get(REGISTRATION_ID)?.let { return it.toInt() }
+        store.get(REGISTRATION_ID)?.toIntOrNull()?.let { return it }
         return (SecureRandom().nextInt(16_380) + 1).also { store.put(REGISTRATION_ID, it.toString()) }
     }
 
     fun protocolDeviceId(): Int {
         enrollment()
-        return requireValue(PROTOCOL_DEVICE_ID).toInt()
+        return requireValue(PROTOCOL_DEVICE_ID).toIntOrNull()
+            ?: (SecureRandom().nextInt(127) + 1).also { store.put(PROTOCOL_DEVICE_ID, it.toString()) }
     }
 
     fun signedPreKeyRecord() = SignedPreKeyRecord(decoder.decode(requireValue(SIGNED_PRE_KEY)))

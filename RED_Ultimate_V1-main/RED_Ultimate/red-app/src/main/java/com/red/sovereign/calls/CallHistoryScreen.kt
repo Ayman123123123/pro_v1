@@ -33,6 +33,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +44,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +59,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.SovereignColors
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,14 +72,15 @@ import java.util.Locale
 /**
  * شاشة سجل المكالمات — Call History Screen
  *
- * تعرض كل المكالمات (Voice, Video, Group, Conference) مع:
- * - فلترة حسب النوع (الكل، فائتة، واردة، صادرة، جماعية، بث، فيديو)
+ * تعرض كل المكالمات (Voice, Video, Group, Conference, PSTN) مع:
+ * - فلترة حسب النوع (الكل، فائتة، واردة، صادرة، جماعية، بث، فيديو، PSTN)
  * - بحث بالاسم أو الرقم
  * - إحصائيات سريعة (إجمالي المكالمات، معدل النجاح، أكثر جهة اتصال)
  * - تصدير CSV
  * - حذف فردي / مسح الكل
  * - تشفير محلي لبيانات المشاركين (CallLogCipher)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallHistoryScreen(
     viewModel: CallHistoryViewModel = viewModel(),
@@ -81,11 +88,24 @@ fun CallHistoryScreen(
     onBack: () -> Unit = {}
 ) {
     var showFilterMenu by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val listState = rememberLazyListState()
 
     LaunchedEffect(Unit) {
         viewModel.load()
+    }
+
+    // Paging: عند الاقتراب من النهاية (آخر 4 عناصر) حمّل المزيد تلقائياً —
+    // يتفوق على واتساب الذي يجمّد القوائم الطويلة.
+    LaunchedEffect(listState, viewModel.pagedCalls.size) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .distinctUntilChanged()
+            .collect { lastVisible ->
+                val total = viewModel.pagedCalls.size
+                if (lastVisible != null && total > 0 && lastVisible >= total - 4) {
+                    viewModel.loadMore()
+                }
+            }
     }
 
     Scaffold(
@@ -122,35 +142,42 @@ fun CallHistoryScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            // Search Bar
+            // Search Bar — حقل بحث حقيقي مرتبط بالـ ViewModel (كان نصاً ثابتاً
+            // "بحث بالاسم أو الرقم..." بلا إدخال فعلي — UX مكسور).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
+                OutlinedTextField(
+                    value = viewModel.searchQuery,
+                    onValueChange = { viewModel.onSearchChange(it) },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(SovereignColors.SurfaceDarkVariant)
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Search, "بحث", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
-                        Text(
-                            "بحث بالاسم أو الرقم...",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
+                        .weight(1f)
+                        .height(52.dp),
+                    placeholder = { Text("بحث بالاسم أو الرقم...", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, "بحث", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp)) },
+                    trailingIcon = {
+                        if (viewModel.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.onSearchChange("") }) {
+                                Icon(Icons.Default.CallEnd, "مسح", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = SovereignColors.SurfaceDarkVariant,
+                        unfocusedContainerColor = SovereignColors.SurfaceDarkVariant,
+                        focusedBorderColor = AqyalGold.copy(alpha = 0.6f),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = AqyalGold
+                    )
+                )
                 IconButton(
                     onClick = { showFilterMenu = !showFilterMenu },
                     modifier = Modifier.size(48.dp)
@@ -168,10 +195,23 @@ fun CallHistoryScreen(
                     DropdownMenuItem(
                         text = { Text(filter.label, color = if (viewModel.selectedFilter == filter) AqyalGold else Color.White) },
                         onClick = {
-                            viewModel.selectedFilter = filter
+                            viewModel.onFilterChange(filter)
                             showFilterMenu = false
                         }
                     )
+                }
+            }
+
+            // LEGENDARY: شرائح فائتة بنقرة واحدة (كانت داخل قائمة فقط — الفائتة أهم ما يُفقد)
+            androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(CallFilterType.ALL, CallFilterType.MISSED, CallFilterType.INCOMING, CallFilterType.OUTGOING).forEach { f ->
+                    item(key = f.name) {
+                        androidx.compose.material3.FilterChip(
+                            selected = viewModel.selectedFilter == f,
+                            onClick = { viewModel.onFilterChange(f) },
+                            label = { Text(f.label, fontSize = 12.sp) }
+                        )
+                    }
                 }
             }
 
@@ -180,7 +220,7 @@ fun CallHistoryScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // Call List
+            // Call List — عرض مُرقّم (Paging): أول visibleLimit فقط + تحميل تلقائي.
             when {
                 viewModel.loading -> {
                     Box(
@@ -213,21 +253,54 @@ fun CallHistoryScreen(
                     ) {
                         Icon(Icons.Default.History, "لا يوجد سجل", tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(64.dp))
                         Spacer(Modifier.height(8.dp))
-                        Text("لا توجد مكالمات", color = Color.White.copy(alpha = 0.5f))
+                        Text(
+                            if (viewModel.searchQuery.isNotBlank()) "لا نتائج لـ \"${viewModel.searchQuery}\""
+                            else "لا توجد مكالمات",
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                        if (viewModel.searchQuery.isNotBlank() || viewModel.selectedFilter != CallFilterType.ALL) {
+                            Spacer(Modifier.height(8.dp))
+                            androidx.compose.material3.TextButton(onClick = {
+                                viewModel.onSearchChange("")
+                                viewModel.onFilterChange(CallFilterType.ALL)
+                            }) { Text("مسح البحث والفلتر", color = AqyalGold) }
+                        }
                     }
                 }
                 else -> {
                     LazyColumn(
+                        state = listState,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(viewModel.filteredCalls, key = { it.id }) { call ->
+                        items(viewModel.pagedCalls, key = { it.id }) { call ->
                             CallHistoryItemCard(
                                 call = call,
                                 onClick = { onCallClick(call) },
                                 onDelete = { viewModel.deleteCall(call.id) }
                             )
                         }
-                        item { Spacer(Modifier.height(16.dp)) }
+                        // مؤشر Paging: عدّاد + تحميل المزيد (يتفوق على واتساب بالشفافية).
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    "عرض ${viewModel.pagedCalls.size} من ${viewModel.filteredCalls.size}",
+                                    color = Color.White.copy(alpha = 0.45f),
+                                    fontSize = 11.sp
+                                )
+                                if (viewModel.isLoadingMore) {
+                                    CircularProgressIndicator(color = AqyalGold, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else if (viewModel.hasMore) {
+                                    androidx.compose.material3.TextButton(onClick = { viewModel.loadMore() }) {
+                                        Text("تحميل المزيد", color = AqyalGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(Modifier.height(16.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -282,16 +355,38 @@ fun CallHistoryItemCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
     val icon = when {
         call.type.equals("VIDEO", ignoreCase = true) -> Icons.Default.VideoCall
         call.direction.equals("INCOMING", ignoreCase = true) -> Icons.Default.CallReceived
         call.direction.equals("OUTGOING", ignoreCase = true) -> Icons.Default.Call
         else -> Icons.Default.CallEnd
     }
+    // UX يتفوق على واتساب: ENDED تُحسب ناجحة (كانت رمادية مجهولة)، وحالات
+    // عربية صريحة بدل رموز خام MISSED/NO_ANSWER.
     val iconColor = when {
-        call.status.equals("MISSED", ignoreCase = true) || call.status.equals("NO_ANSWER", ignoreCase = true) -> Color.Red
-        call.status.equals("ANSWERED", ignoreCase = true) || call.status.equals("COMPLETED", ignoreCase = true) -> Color(0xFF14C79A)
+        call.status.equals("MISSED", ignoreCase = true) || call.status.equals("NO_ANSWER", ignoreCase = true) -> Color(0xFFF44336)
+        call.status.equals("ANSWERED", ignoreCase = true) || call.status.equals("COMPLETED", ignoreCase = true) || call.status.equals("ENDED", ignoreCase = true) -> Color(0xFF14C79A)
+        call.status.equals("REJECTED", ignoreCase = true) || call.status.equals("DECLINED", ignoreCase = true) -> Color(0xFFFF9800)
         else -> Color.White.copy(alpha = 0.7f)
+    }
+    val statusAr = when {
+        call.status.equals("MISSED", ignoreCase = true) -> "فائتة"
+        call.status.equals("NO_ANSWER", ignoreCase = true) -> if (call.direction.equals("OUTGOING", true)) "لم يتم الرد" else "فائتة"
+        call.status.equals("REJECTED", ignoreCase = true) || call.status.equals("DECLINED", ignoreCase = true) -> "مرفوضة"
+        call.status.equals("ENDED", ignoreCase = true) || call.status.equals("ANSWERED", ignoreCase = true) || call.status.equals("COMPLETED", ignoreCase = true) -> "تمت"
+        call.status.equals("FAILED", ignoreCase = true) -> "فشلت"
+        call.status.equals("BUSY", ignoreCase = true) -> "مشغول"
+        else -> call.status
+    }
+    val typeAr = when {
+        call.type.equals("VIDEO", ignoreCase = true) -> "فيديو"
+        call.type.equals("VOICE", ignoreCase = true) -> "صوت"
+        call.type.equals("GROUP", ignoreCase = true) -> "جماعية"
+        call.type.equals("CONFERENCE", ignoreCase = true) -> "مؤتمر"
+        call.type.equals("SPACE", ignoreCase = true) -> "مساحة"
+        call.type.equals("LIVE", ignoreCase = true) -> "بث"
+        else -> call.type
     }
 
     Card(
@@ -336,12 +431,13 @@ fun CallHistoryItemCard(
                     )
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        "${call.direction.lowercase()} • ${call.type.uppercase()} • ${call.route.uppercase()}",
+                        "${if (call.direction.equals("INCOMING", true)) "واردة" else "صادرة"} • $typeAr",
                         color = Color.White.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
+                    val dur = call.computedDurationSeconds().formatCallDuration()
                     Text(
-                        "المدة: ${call.computedDurationSeconds().formatCallDuration()}",
+                        if (dur.isNotBlank()) "المدة: $dur" else statusAr,
                         color = Color.White.copy(alpha = 0.5f),
                         fontSize = 10.sp
                     )
@@ -355,17 +451,36 @@ fun CallHistoryItemCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    call.status.uppercase(),
+                    statusAr,
                     color = iconColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(4.dp))
-                IconButton(
-                    onClick = { onDelete() },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(Icons.Default.Delete, "حذف", tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // UX واتساب+: زر اتصال فوري من السجل (كان النقر بلا أثر في أغلب الشاشات).
+                    IconButton(
+                        onClick = {
+                            val peer = call.peerId.ifBlank { call.peerLabel }
+                            if (peer.isNotBlank()) {
+                                YounesCallService.start(context, peer, call.type.equals("VIDEO", true))
+                            } else onClick()
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            if (call.type.equals("VIDEO", true)) Icons.Default.VideoCall else Icons.Default.Call,
+                            "إعادة الاتصال",
+                            tint = Color(0xFF14C79A),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { onDelete() },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, "حذف", tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }

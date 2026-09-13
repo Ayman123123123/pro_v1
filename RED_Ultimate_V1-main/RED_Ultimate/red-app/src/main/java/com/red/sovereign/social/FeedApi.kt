@@ -1,5 +1,7 @@
 package com.red.sovereign.social
 
+import android.util.Log
+import com.red.sovereign.BuildConfig
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import kotlinx.serialization.encodeToString
@@ -56,13 +58,25 @@ class FeedApi(private val client: AuthorizedApiClient) {
     suspend fun vote(postId: String, optionId: String): ApiResult<Post> =
         client.request("POST", "/api/feed/posts/$postId/vote", json.encodeToString(PollVoteRequest(optionId))).decode { json.decodeFromString<Post>(it) }
 
+    /**
+     * إعادة نشر (repost): يزيد `repostCount` في الأصل. الخادم يمنع
+     * التكرار لكل مستخدم (مجموعة `reposts` بمعرف `postId:userId`)،
+     * فيُرجع نفس المنشور المحدَّث عند التكرار — والزر يعكس العدّاد فقط.
+     */
+    suspend fun repost(postId: String): ApiResult<Post> =
+        client.request("POST", "/api/feed/posts/$postId/repost").decode { json.decodeFromString<Post>(it) }
+
     suspend fun requestFriend(redId: String): ApiResult<Unit> = when (val result = client.request("POST", "/api/contacts/requests/$redId")) {
         is ApiResult.Success -> ApiResult.Success(result.code, Unit)
         is ApiResult.Error -> result
     }
 
     private inline fun <T> ApiResult<String>.decode(block: (String) -> T): ApiResult<T> = when (this) {
-        is ApiResult.Success -> runCatching { ApiResult.Success(code, block(value)) }.getOrElse { ApiResult.Error(code, "INVALID_SERVER_RESPONSE") }
+        is ApiResult.Success -> runCatching { ApiResult.Success(code, block(value)) }.getOrElse { e ->
+            // التفاصيل (e.message) للسجل في builds التطوير فقط — رسالة المستخدم تبقى عامة.
+            if (BuildConfig.DEBUG) Log.e("FeedApi", "decode failed (code=$code): ${e.message}", e)
+            ApiResult.Error(code, "INVALID_SERVER_RESPONSE")
+        }
         is ApiResult.Error -> this
     }
 }

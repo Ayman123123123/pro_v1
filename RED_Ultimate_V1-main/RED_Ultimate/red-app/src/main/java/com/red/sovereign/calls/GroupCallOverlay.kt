@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +33,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
@@ -54,8 +56,9 @@ import com.red.sovereign.ui.theme.YounesPrimary
 fun GroupCallOverlay() {
     val state = GroupCallRuntime.state
     if (state is GroupCallUiState.Idle || state is GroupCallUiState.Ended) return
-    // ◀️ الرجوع أثناء مكالمة جماعية لا يخرج من التطبيق — يستهلك الحدث (المكالمة تُنهى عبر زر الإنهاء فقط)
-    BackHandler { /* consume */ }
+    // ◀️ الرجوع أثناء مكالمة جماعية لا ينهي المكالمة ولا يحبس المستخدم —
+    // يُصغّر إلى الشريط العائم مع بقاء ForegroundService (الإنهاء لزر الإنهاء فقط).
+    BackHandler { GroupCallRuntime.isMinimized = true }
 
     // 📱 وضع مصغّر — نافذة عائمة صغيرة (مثل واتساب)
     if (GroupCallRuntime.isMinimized && state is GroupCallUiState.Active) {
@@ -117,25 +120,36 @@ private fun MinimizedGroupCallBar(state: GroupCallUiState.Active) {
                     Text("$joinedCount مشاركون", color = Color.White.copy(0.7f), fontSize = 10.sp)
                     WhatsAppElapsedTimer(state.startedAt)
                 }
-                if (state.isVideo && GroupCallRuntime.localVideo != null && GroupCallRuntime.eglContext != null) {
-                    var renderer: SurfaceViewRenderer? by remember { mutableStateOf(null) }
-                    val track = GroupCallRuntime.localVideo!!
+                if (state.isVideo && GroupCallRuntime.eglContext != null) {
+                    var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+                    val egl = GroupCallRuntime.eglContext
+                    GroupCallRuntime.localVideo?.let { track ->
                     AndroidView(
                         factory = { ctx ->
                             SurfaceViewRenderer(ctx).apply {
-                                init(GroupCallRuntime.eglContext, null)
+                                init(egl, null)
                                 setMirror(true)
                                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                                 setEnableHardwareScaler(true)
-                                renderer = this
-                                track.addSink(this)
+                                viewRef = this
                             }
                         },
-                        update = { view -> track.addSink(view) },
+                        update = { view -> view.setMirror(true) },
                         modifier = Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(10.dp))
                     )
-                    DisposableEffect(track, renderer) {
-                        onDispose { renderer?.let { track.removeSink(it); it.release() } }
+                    DisposableEffect(track, viewRef) {
+                        if (viewRef != null) track.addSink(viewRef)
+                        onDispose { if (viewRef != null) track.removeSink(viewRef) }
+                    }
+                    DisposableEffect(viewRef) {
+                        onDispose { viewRef?.release() }
+                    }
+                    } ?: Box(
+                        Modifier.fillMaxWidth().height(100.dp).clip(RoundedCornerShape(10.dp))
+                            .background(Color.White.copy(0.06f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.VideocamOff, null, tint = Color.White.copy(0.5f), modifier = Modifier.size(24.dp))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -272,7 +286,7 @@ private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
 private fun WhatsAppElapsedTimer(startedAt: Long) {
     var elapsed by remember { mutableStateOf(0L) }
     LaunchedEffect(startedAt) {
-        while (true) {
+        while (isActive) {
             elapsed = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L)
             delay(1000)
         }
@@ -287,8 +301,10 @@ private fun WhatsAppElapsedTimer(startedAt: Long) {
 @Composable
 private fun WhatsAppVoiceGrid(state: GroupCallUiState.Active) {
     val joined = state.members.filter { it.status == GroupCallMemberStatus.JOINED }
-    // واتساب: المتحدث الحالي مضاء — نحاكي بأول غير مكتوم كـ active speaker
-    val speakerId = joined.firstOrNull { !it.isMuted }?.userId
+    // المتكلمون الحقيقيون من SFU/Mesh — مع سقوط لطيف لأول غير مكتوم عند غياب القياس.
+    val speaking = GroupCallRuntime.speakingPeers
+    val speakerId = speaking.firstOrNull { id -> joined.any { it.userId == id } }
+        ?: joined.firstOrNull { !it.isMuted }?.userId
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -307,7 +323,7 @@ private fun WhatsAppVoiceGrid(state: GroupCallUiState.Active) {
                 isSelf = true
             )
         }
-        items(joined) { member ->
+        items(joined, key = { it.userId }) { member ->
             WhatsAppAvatarTile(
                 label = member.displayName,
                 initial = member.displayName.take(2).uppercase(),
@@ -327,17 +343,10 @@ private fun WhatsAppAvatarTile(
     isSpeaking: Boolean,
     isSelf: Boolean
 ) {
-    val infinite = rememberInfiniteTransition(label = "speak_$label")
-    val pulse by infinite.animateFloat(
-        initialValue = 1f, targetValue = if (isSpeaking) 1.08f else 1f,
-        animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse"
-    )
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(96.dp)) {
             if (isSpeaking) {
-                Box(Modifier.size(96.dp).scale(pulse).clip(CircleShape).background(YounesEmerald.copy(0.18f)))
-                Box(Modifier.size(86.dp).scale(pulse * 0.96f).clip(CircleShape).background(YounesEmerald.copy(0.12f)))
+                SpeakingHalo(label)
             }
             Box(
                 Modifier.size(74.dp).clip(CircleShape)
@@ -426,7 +435,7 @@ private fun WhatsAppVideoGrid(
                 item {
                     GroupCallVideoTile("أنت", localVideo, GroupCallRuntime.isMuted, true, GroupCallRuntime.eglContext, false)
                 }
-                items(joined) { m ->
+                items(joined, key = { it.userId }) { m ->
                     GroupCallVideoTile(m.displayName, remoteVideos[m.userId], m.isMuted, false, GroupCallRuntime.eglContext, false)
                 }
             }
@@ -514,7 +523,7 @@ private fun WhatsAppControlIsland(
                     }
                 } else {
                     // صوت: زر السماعة — تبديل بين الأذن والسماعة الخارجية مثل واتساب
-                    IslandButton(icon = Icons.Default.VolumeUp, bg = Color.White.copy(0.14f)) {
+                    IslandButton(icon = Icons.AutoMirrored.Filled.VolumeUp, bg = Color.White.copy(0.14f)) {
                         GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_SPEAKER)
                     }
                 }
@@ -560,12 +569,6 @@ private fun IslandButton(
 @Composable
 private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
     val context = LocalContext.current
-    val infinite = rememberInfiniteTransition(label = "ring")
-    val pulse by infinite.animateFloat(
-        initialValue = 0.95f, targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "pulse"
-    )
     val groupName = GroupCallRuntime.activeGroupName.ifBlank { "مجموعة يونس" }
 
     Column(
@@ -589,10 +592,10 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
             Text("المكالمة مشفّرة E2EE", color = Color.White.copy(0.4f), fontSize = 11.sp)
         }
 
-        // أفاتار نابض مع دوائر متحدة
+        // أفاتار نابض مع دوائر متحدة — InfiniteTransition يعيش فقط داخل
+        // IncomingRingHalo ويُدمَّر بخروج شاشة الوارد.
         Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(160.dp).scale(pulse).clip(CircleShape).background(YounesEmerald.copy(0.10f)))
-            Box(Modifier.size(130.dp).scale(pulse * 0.97f).clip(CircleShape).background(YounesEmerald.copy(0.14f)))
+            IncomingRingHalo()
             Box(
                 Modifier.size(96.dp).clip(CircleShape)
                     .background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A))))
@@ -613,10 +616,13 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
 
         // أزرار pill واتساب — كبسولات كبيرة
         Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            // قبول
+            // قبول — P0: تمرير الهوية الحقيقية (كان "" فيكسر attachPeer والردود)
             Box(
                 Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(28.dp)).background(YounesEmerald)
-                    .clickable { GroupCallService.accept(context, state.groupCallId, "", state.isVideo) },
+                    .clickable {
+                        val me = com.red.sovereign.auth.TokenStore(context.applicationContext).redId.orEmpty()
+                        GroupCallService.accept(context, state.groupCallId, me, state.isVideo)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -638,6 +644,32 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
             Text("يمكنك الانضمام لاحقاً من داخل المجموعة حتى بعد الرفض", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
         }
     }
+}
+
+@Composable
+private fun SpeakingHalo(label: String) {
+    // Gated: created only for the speaking tile; static tiles hold no animation.
+    val infinite = rememberInfiniteTransition(label = "speak_$label")
+    val pulse by infinite.animateFloat(
+        initialValue = 1f, targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
+    Box(Modifier.size(96.dp).scale(pulse).clip(CircleShape).background(YounesEmerald.copy(0.18f)))
+    Box(Modifier.size(86.dp).scale(pulse * 0.96f).clip(CircleShape).background(YounesEmerald.copy(0.12f)))
+}
+
+@Composable
+private fun IncomingRingHalo() {
+    // Gated: lives only while the incoming panel is composed.
+    val infinite = rememberInfiniteTransition(label = "ring")
+    val pulse by infinite.animateFloat(
+        initialValue = 0.95f, targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(800, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
+    Box(Modifier.size(160.dp).scale(pulse).clip(CircleShape).background(YounesEmerald.copy(0.10f)))
+    Box(Modifier.size(130.dp).scale(pulse * 0.97f).clip(CircleShape).background(YounesEmerald.copy(0.14f)))
 }
 
 // ── Ringing — واتساب grid ───────────────────────────────────────────
@@ -667,7 +699,7 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.weight(1f).padding(vertical = 18.dp)
         ) {
-            items(state.members) { member ->
+            items(state.members, key = { it.userId }) { member ->
                 WhatsAppMemberTile(member)
             }
         }
@@ -741,25 +773,26 @@ private fun GroupCallVideoTile(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (track != null && eglContext != null && track.enabled()) {
-                var renderer: SurfaceViewRenderer? by remember { mutableStateOf(null) }
-                // اكتمال الصوت: تأكد من تمكين المسار الصوتي المرافق
+                var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
                 AndroidView(
                     factory = { ctx ->
                         SurfaceViewRenderer(ctx).apply {
                             init(eglContext, null)
                             setMirror(isMirror)
-                            // واتساب: ملء البطاقة دون تشويه — قص الحواف الزائدة
                             setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                             setEnableHardwareScaler(true)
-                            renderer = this
-                            track.addSink(this)
+                            viewRef = this
                         }
                     },
-                    update = { view -> track.addSink(view) },
+                    update = { view -> view.setMirror(isMirror) },
                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp))
                 )
-                DisposableEffect(track, renderer) {
-                    onDispose { renderer?.let { track.removeSink(it); it.release() } }
+                DisposableEffect(track, viewRef) {
+                    if (viewRef != null) track.addSink(viewRef)
+                    onDispose { if (viewRef != null) track.removeSink(viewRef) }
+                }
+                DisposableEffect(viewRef) {
+                    onDispose { viewRef?.release() }
                 }
             } else {
                 // صورة/أفاتار مرتبة في المنتصف — دائرة 72dp مع تدرج + أحرف أولى واضحة

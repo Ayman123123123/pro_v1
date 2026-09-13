@@ -49,15 +49,37 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         private set
     var message by mutableStateOf<String?>(null)
         private set
+    var loadError by mutableStateOf<String?>(null)
+        private set
 
     /** يحمّل بيانات البروفايل الحالية من TokenStore. */
     fun load(currentRedId: String, currentUsername: String, currentDisplayName: String) {
         redId = currentRedId
         username = currentUsername
         displayName = currentDisplayName
-        // تحميل الصورة إن وُجد مرجعها
-        loadAvatar(avatarUrl)
+        loadError = null
+        // محاولة جلب البيانات من الخادم
+        viewModelScope.launch {
+            when (val result = client.request("GET", "/api/auth/profile")) {
+                is ApiResult.Success -> {
+                    try {
+                        val jsonResp = json.decodeFromString<ProfileResponse>(result.value)
+                        displayName = jsonResp.displayName ?: currentDisplayName
+                        bio = jsonResp.bio ?: ""
+                        avatarUrl = jsonResp.avatarUrl
+                        loadAvatar(avatarUrl)
+                    } catch (_: Exception) {
+                        // بيانات محلية كافية
+                    }
+                }
+                is ApiResult.Error -> {
+                    loadError = "تعذر تحميل البروفايل: ${result.message}"
+                }
+            }
+        }
     }
+
+    fun clearLoadError() { loadError = null }
 
     /** يحدّث الاسم المعروض والبايو عبر PATCH /api/auth/profile. */
     fun updateProfile(newDisplayName: String, newBio: String, done: () -> Unit) = viewModelScope.launch {
@@ -112,6 +134,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             is ApiResult.Success -> {
                 avatarUrl = null
                 avatar = null
+                avatarLoadedFor = null
                 message = "تمت إزالة الصورة"
             }
             is ApiResult.Error -> message = "تعذر إزالة الصورة: ${result.message}"
@@ -120,15 +143,37 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** يحمّل الصورة المشفّرة من MinIO ويفك تشفيرها للعرض. */
+    private var avatarLoadedFor: String? = null
+    private var avatarLoading = false
     private fun loadAvatar(url: String?) {
-        val key = url ?: return
-        if (avatar != null) return
+        val key = url?.ifBlank { null } ?: return
+        // نفس المفتاح محمّل → لا عمل؛ مفتاح جديد → أبطل الحماية وأعد التحميل.
+        if (avatar != null && avatarLoadedFor == key) return
+        if (avatarLoadedFor != key) avatar = null
+        if (avatarLoading) return
+        avatarLoading = true
         viewModelScope.launch {
-            when (val response = media.download(key, 10 * 1024 * 1024)) {
-                is ApiResult.Success -> BitmapFactory.decodeByteArray(response.value, 0, response.value.size)?.let {
-                    avatar = it.asImageBitmap()
+            try {
+                val path = if (key.startsWith("/api/media/")) key else "/api/media/$key"
+                when (val response = media.download(path, 10 * 1024 * 1024)) {
+                    is ApiResult.Success -> withContext(Dispatchers.IO) {
+                        runCatching {
+                            BitmapFactory.decodeByteArray(response.value, 0, response.value.size)
+                        }.getOrNull()?.let { bmp ->
+                            val img = bmp.asImageBitmap()
+                            withContext(Dispatchers.Main) {
+                                // تجاهل نتيجة قديمة إن تبدّل المفتاح أثناء التنزيل.
+                                if (avatarUrl == key || avatarLoadedFor == null) {
+                                    avatar = img
+                                    avatarLoadedFor = key
+                                }
+                            }
+                        }
+                    }
+                    is ApiResult.Error -> Unit // تجاهل صامت — الصورة الاختيارية
                 }
-                is ApiResult.Error -> Unit // تجاهل صامت — الصورة الاختيارية
+            } finally {
+                avatarLoading = false
             }
         }
     }
@@ -141,4 +186,11 @@ data class UpdateProfileRequest(
     val displayName: String,
     val avatarUrl: String? = null,
     val bio: String? = null
+)
+
+@kotlinx.serialization.Serializable
+data class ProfileResponse(
+    val displayName: String? = null,
+    val bio: String? = null,
+    val avatarUrl: String? = null
 )

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -42,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,17 +60,21 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.ui.theme.YounesVoid
+import com.red.sovereign.calls.Material3ExpressivePstnCallScreen
+import com.red.sovereign.calls.Material3ExpressiveIncomingPstnCallScreen
+import android.widget.Toast
 
 /**
  * مكالمة فردية عبر الإنترنت — سلوك واتساب/تلجرام:
  * رنين + قبول/رفض، صوت = صورة ونبض، فيديو = شاشة كاملة + نافذة صغيرة.
- * الواجهة مخصصة لمكالمات RED الصوتية والمرئية.
+ * لا لوحة DTMF (تلك للهواتف PSTN).
  */
 @Composable
 fun YounesCallOverlay() {
     val state = CallRuntime.state
     if (state is CallUiState.Idle) return
     val context = LocalContext.current
+    val declineScope = androidx.compose.runtime.rememberCoroutineScope()
     val mode = when (state) {
         is CallUiState.Incoming -> state.mode
         is CallUiState.Connecting -> state.mode
@@ -89,6 +96,16 @@ fun YounesCallOverlay() {
         is CallUiState.Reconnecting -> state.peer
         else -> ""
     }
+    val callId = when (state) {
+        is CallUiState.Incoming -> state.callId
+        is CallUiState.Connecting -> state.callId
+        is CallUiState.Active -> state.callId
+        is CallUiState.ActiveWithIncoming -> state.active.callId
+        is CallUiState.CallEnded -> state.callId
+        is CallUiState.Reconnecting -> state.callId
+        else -> ""
+    }
+    val isPstnCall = mode == "PSTN" || mode == "DINSTAR" || callId.startsWith("pstn-") || callId.startsWith("dinstar-")
     val video = mode == "VIDEO"
     var acceptCamera by remember { mutableStateOf(true) }
     var acceptMic by remember { mutableStateOf(true) }
@@ -101,18 +118,18 @@ fun YounesCallOverlay() {
         if (video && !camOk) {
             // رفض الكاميرا ≠ رفض المكالمة — نكمل صوتياً ونخبر المستخدم (لا نجمّد زر القبول)
             android.widget.Toast.makeText(context, "الكاميرا غير متاحة — ستستمر المكالمة صوتياً", android.widget.Toast.LENGTH_SHORT).show()
-            YounesCallService.accept(context, cameraOn = false, micOn = acceptMic)
+            YounesCallService.accept(context, cameraOn = false, micOn = acceptMic, isVideo = false)
         } else {
-            YounesCallService.accept(context, cameraOn = acceptCamera && camOk, micOn = acceptMic)
+            YounesCallService.accept(context, cameraOn = acceptCamera && camOk, micOn = acceptMic, isVideo = video)
         }
     }
     val bluetooth = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) YounesCallService.action(context, YounesCallService.ACTION_BLUETOOTH)
     }
-    var mic by remember { mutableStateOf(true) }
-    var camera by remember { mutableStateOf(true) }
-    var showRecordConsent by remember { mutableStateOf(false) }
-    var showKeypad by remember { mutableStateOf(false) }
+    var mic by rememberSaveable { mutableStateOf(true) }
+    var camera by rememberSaveable { mutableStateOf(true) }
+    var showRecordConsent by rememberSaveable { mutableStateOf(false) }
+    var showKeypad by rememberSaveable { mutableStateOf(false) }
 
     fun requestAccept(cameraOn: Boolean = true, micOn: Boolean = true) {
         acceptCamera = cameraOn
@@ -246,23 +263,103 @@ fun YounesCallOverlay() {
                 }
 
                 when (state) {
-                    is CallUiState.Incoming -> IncomingBody(
-                        peer,
-                        video,
-                        onAccept = { requestAccept(true, true) },
-                        onAcceptPrivate = { requestAccept(false, true) },
-                        onReject = { YounesCallService.action(context, YounesCallService.ACTION_REJECT) }
-                    )
+                    // PSTN/DINSTAR calls use Material 3 Expressive screens
+                    is CallUiState.Incoming -> if (isPstnCall) {
+                        Material3ExpressiveIncomingPstnCallScreen(
+                            callerNumber = peer,
+                            callerName = null, // Could be enhanced with contact lookup
+                            callId = callId,
+                            onAccept = {
+                                // مسار PSTN الصحيح: منسق /ws/pstn (PSTN_ACCEPT →
+                                // AMI Redirect) — YounesCallService مخصص app-to-app.
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.acceptIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT)
+                            },
+                            onReject = {
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.rejectIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                            },
+                            onDeclineWithMessage = { msg ->
+                                // رفض المكالمة مع إرسال رسالة SMS للمتصل عبر البوابة —
+                                // كان TODO فارغاً فكان الزر يرفض دون إرسال أي رسالة.
+                                val coord = PstnIncomingCallCoordinator.active
+                                val callerNumber = peer
+                                if (coord?.activeIncoming != null) coord.rejectIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                                val body = msg?.trim().orEmpty()
+                                if (body.isNotEmpty() && callerNumber.isNotBlank()) {
+                                    declineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        runCatching {
+                                            com.red.sovereign.features.sms.SmsApi(
+                                                com.red.sovereign.auth.TokenStore(context)
+                                            ).send(callerNumber, body)
+                                        }
+                                    }
+                                }
+                            },
+                            onAcceptVideo = {
+                                // مكالمات PSTN صوتية فقط — القبول يعالجها صوتياً
+                                val coord = PstnIncomingCallCoordinator.active
+                                if (coord?.activeIncoming != null) coord.acceptIncoming()
+                                else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT_VIDEO)
+                            },
+                            context = context
+                        )
+                    } else {
+                        IncomingBody(peer, video, onAccept = { requestAccept(true, true) }, onAcceptPrivate = { requestAccept(false, true) }, onReject = {
+                            YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                        })
+                    }
+                    is CallUiState.Connecting -> if (isPstnCall) {
+                        Material3ExpressivePstnCallScreen(
+                            status = PstnCallStatus.BRIDGING,
+                            metrics = CallMetrics(),
+                            onMuteToggle = { YounesCallService.action(context, YounesCallService.ACTION_MIC, it) },
+                            onSpeakerToggle = { YounesCallService.action(context, YounesCallService.ACTION_SPEAKER, it) },
+                            onKeypadToggle = { showKeypad = !showKeypad },
+                            onHoldToggle = { YounesCallService.action(context, if (it) YounesCallService.ACTION_HOLD else YounesCallService.ACTION_RESUME) },
+                            onRecordToggle = {
+                                if (CallRuntime.isRecording) {
+                                    YounesCallService.action(context, YounesCallService.ACTION_STOP_RECORDING)
+                                } else {
+                                    showRecordConsent = true
+                                }
+                            },
+                            onVideoToggle = { camera = !camera; YounesCallService.action(context, YounesCallService.ACTION_CAMERA, camera) },
+                            onHangup = { YounesCallService.action(context, YounesCallService.ACTION_END) }
+                        )
+                    } else {
+                        ConnectingBody(peer, video)
+                    }
                     is CallUiState.Error -> ErrorBody(state.message) {
                         YounesCallService.action(context, YounesCallService.ACTION_END)
                     }
                     is CallUiState.Busy -> ErrorBody("المشترك مشغول بمكالمة أخرى") { YounesCallService.action(context, YounesCallService.ACTION_END) }
                     is CallUiState.Declined -> ErrorBody("تم رفض المكالمة") { YounesCallService.action(context, YounesCallService.ACTION_END) }
                     is CallUiState.NoAnswer -> ErrorBody("لم يتم الرد") { YounesCallService.action(context, YounesCallService.ACTION_END) }
-                    is CallUiState.CallEnded -> CallEndedBody(state) {
-                        if (state.canRedial) YounesCallService.start(context, state.peer, state.mode == "VIDEO")
+                    is CallUiState.CallEnded -> if (isPstnCall) {
+                        Material3ExpressivePstnCallScreen(
+                            status = PstnCallStatus.ENDED,
+                            metrics = CallMetrics(),
+                            onHangup = { /* handled */ },
+                            onBack = { /* handled by overlay */ }
+                        )
+                    } else {
+                        CallEndedBody(state) {
+                            if (state.canRedial) YounesCallService.start(context, state.peer, state.mode == "VIDEO")
+                        }
                     }
-                    is CallUiState.Reconnecting -> ReconnectingBody(peer)
+                    is CallUiState.Reconnecting -> if (isPstnCall) {
+                        Material3ExpressivePstnCallScreen(
+                            status = PstnCallStatus.BRIDGING,
+                            metrics = CallMetrics(),
+                            onHangup = { YounesCallService.action(context, YounesCallService.ACTION_END) }
+                        )
+                    } else {
+                        ReconnectingBody(peer)
+                    }
                     else -> {
                         if (video) {
                             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomEnd) {
@@ -328,7 +425,20 @@ fun YounesCallOverlay() {
                                         YounesCallService.action(context, YounesCallService.ACTION_BLUETOOTH)
                                     } else bluetooth.launch(Manifest.permission.BLUETOOTH_CONNECT)
                                 },
-                                onCamera = { camera = !camera; YounesCallService.action(context, YounesCallService.ACTION_CAMERA, camera) },
+                                onCamera = { 
+                camera = !camera 
+                YounesCallService.action(context, YounesCallService.ACTION_CAMERA, camera)
+                if (camera) {
+                    // Check if camera actually enabled after a short delay
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                        kotlinx.coroutines.delay(500)
+                        val localVideo = CallRuntime.localVideo
+                        if (localVideo == null || !localVideo.enabled()) {
+                            Toast.makeText(context, "تعذر تفعيل الكاميرا — تحقق من الأذونات", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
                                 onFlip = { YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA) },
                                 onEnd = { YounesCallService.action(context, YounesCallService.ACTION_END) }
                             )
@@ -367,6 +477,20 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CallElapsedTimer(active.startedAt)
                 NetworkQualityBars(CallRuntime.networkStats)
+            }
+            // مؤشر المتكلم الحقيقي من مستوى الصوت (inbound-rtp) — لا تخمين.
+            if (CallRuntime.networkStats.audioLevel >= 0.12f) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0x332DBBA4))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFF2DBBA4)))
+                    Text("يتحدث الآن", color = Color(0xFF7DE8BC), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         // مؤشر التسجيل — نقطة حمراء نابضة + "جارٍ التسجيل"
@@ -496,22 +620,27 @@ private fun ActiveControls(
     onFlip: () -> Unit,
     onEnd: () -> Unit
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
-        CallRoundButton(if (mic) Icons.Default.Mic else Icons.Default.MicOff, "كتم", onMic, if (mic) Color.White.copy(0.14f) else Color(0x33E53935))
-        CallRoundButton(Icons.Default.SpeakerPhone, "سماعة", onSpeaker)
-        CallRoundButton(
-            if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
-            if (isRecording) "إيقاف التسجيل" else "تسجيل",
-            onRecord,
-            if (isRecording) Color(0xFFB71C1C) else Color(0x33E53935)
-        )
-        CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
-        if (video) {
-            CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "كاميرا", onCamera)
-            CallRoundButton(Icons.Default.Cameraswitch, "تدوير", onFlip)
-        } else {
-            CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, if (held) "استئناف" else "تعليق", onHold)
-            CallRoundButton(Icons.Default.Bluetooth, "بلوتوث", onBluetooth)
+    // واتساب: صف الأزرار ثم زر الإنهاء معزولاً بفجوة سفلية (منع اللمس العرضي).
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
+            CallRoundButton(if (mic) Icons.Default.Mic else Icons.Default.MicOff, "كتم", onMic, if (mic) Color.White.copy(0.14f) else Color(0x33E53935))
+            CallRoundButton(Icons.Default.SpeakerPhone, "سماعة", onSpeaker, if (CallRuntime.speaker) Color.White.copy(0.14f) else Color.Transparent)
+            CallRoundButton(
+                if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                if (isRecording) "إيقاف التسجيل" else "تسجيل",
+                onRecord,
+                if (isRecording) Color(0xFFB71C1C) else Color(0x33E53935)
+            )
+            CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
+            if (video) {
+                CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "كاميرا", onCamera)
+                CallRoundButton(Icons.Default.Cameraswitch, "تدوير", onFlip)
+                // AUTO-FIX (call UI): hold must be available in video mode too (was audio-only).
+                CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, "تعليق", onHold)
+            } else {
+                CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, if (held) "استئناف" else "تعليق", onHold)
+                CallRoundButton(Icons.Default.Bluetooth, "بلوتوث", onBluetooth)
+            }
         }
         EndCallButton(onClick = onEnd)
     }

@@ -1,12 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Android 17 / targetSdk 37: mandatory runtime grant for LAN server discovery and calls. -->
-    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- P2-LAN: مكالمات نفس الواي فاي — NSD/mDNS يتطلب MulticastLock (تثبيت فقط، بلا runtime) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- LAN discovery uses INTERNET only, no runtime permission needed -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Android 13+ granular media — إصلاح P0: منتقي الوسائط كان يرجع SecurityException -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Android 14 partial access -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <!-- Android 14/15 FGS للرفع والتشغيل في الخلفية -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -24,6 +38,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
         android:name=".YounesApplication"
@@ -35,6 +52,48 @@
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
+        <service
+            android:name=".calls.YounesCallService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall|mediaProjection" />
+        <service
+            android:name=".calls.ConferenceService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall|mediaProjection" />
+        <service
+            android:name=".calls.LiveStreamService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall|mediaProjection" />
+        <service
+            android:name=".calls.GroupCallService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|phoneCall|mediaProjection" />
+        <!-- Zoom: اجتماعات مستقلة حتى 100 مشارك. كانت الخدمة غير مُعلَنة إطلاقاً
+             فكان تشغيلها يرمي ServiceNotFound؛ mediaProjection لمشاركة الشاشة داخلها. -->
+        <service
+            android:name=".calls.ZoomGroupCallService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|mediaProjection" />
+        <service
+            android:name=".calls.PstnCallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|phoneCall" />
+        <!-- LEGENDARY FIX (مكتشف على الجهاز): خدمة WorkManager الأمامية بنوع dataSync —
+             بدونه ينهار أي Worker مُستعجل بـ IllegalArgumentException على Android 14+.
+             (الرفع/المزامنة عبر Workers تُجدول من YounesApplication — لا خدمات مخصصة.) -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge"
+            tools:replace="android:foregroundServiceType" />
+        <service
+            android:name=".calls.YounesConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
         <service
             android:name=".core.RedConnectionService"
             android:exported="false"
@@ -98,5 +157,30 @@
             android:showForAllUsers="true"
             android:turnScreenOn="true"
             android:showWhenLocked="true" />
+
+        <receiver
+            android:name=".calls.SmsReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".calls.ScheduledCallReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
+        <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
+        <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
+        <service
+            android:name=".calls.PstnFcmListenerService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 </application>
 </manifest>

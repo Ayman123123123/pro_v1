@@ -31,6 +31,7 @@ enum class CallFilterType(val label: String) {
     GROUP("جماعية"),
     LIVE("بث/مساحات"),
     VIDEO("مرئية"),
+    DINSTAR("GSM يمني")
 }
 
 data class CallStatsSummary(
@@ -40,6 +41,7 @@ data class CallStatsSummary(
     val totalDurationSeconds: Long,
     val videoCallsCount: Int,
     val voiceCallsCount: Int,
+    val dinstarCallsCount: Int,
     val successRate: Int,
     val topPeer: Pair<String, Int>?,
     val peakHour: Int?
@@ -50,7 +52,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
     private val repository = LocalRepository(application)
     private val cipher = CallLogCipher()
     private val json = Json { ignoreUnknownKeys = true }
-    
+
     val calls = mutableStateListOf<CallHistoryItem>()
     var loading by mutableStateOf(false); private set
     var error: String? by mutableStateOf(null); private set
@@ -58,17 +60,22 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
     var searchQuery by mutableStateOf("")
     var selectedFilter by mutableStateOf(CallFilterType.ALL)
 
+    // ── Paging للسجل (يتفوق على واتساب في القوائم الطويلة) ──────────────
+    var visibleLimit by mutableStateOf(PAGE_SIZE); private set
+    var isLoadingMore by mutableStateOf(false); private set
+    var remoteExhausted by mutableStateOf(false); private set
+
     val filteredCalls by derivedStateOf {
         val q = searchQuery.trim().lowercase(Locale.getDefault())
         calls.filter { item ->
-            // Search Query Filter
             val matchesQuery = if (q.isEmpty()) true else {
                 item.peerId.lowercase(Locale.getDefault()).contains(q) ||
                 item.peerLabel.lowercase(Locale.getDefault()).contains(q) ||
-                item.type.lowercase(Locale.getDefault()).contains(q)
+                item.route.lowercase(Locale.getDefault()).contains(q) ||
+                item.type.lowercase(Locale.getDefault()).contains(q) ||
+                item.status.lowercase(Locale.getDefault()).contains(q)
             }
 
-            // Category Filter
             val matchesCategory = when (selectedFilter) {
                 CallFilterType.ALL -> true
                 CallFilterType.MISSED -> item.status.equals("MISSED", ignoreCase = true) || item.status.equals("NO_ANSWER", ignoreCase = true)
@@ -76,18 +83,54 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 CallFilterType.OUTGOING -> item.direction.equals("OUTGOING", ignoreCase = true)
                 CallFilterType.GROUP -> item.type.equals("GROUP", ignoreCase = true)
                 CallFilterType.LIVE -> item.type in setOf("LIVE", "SPACE", "CONFERENCE")
-                CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true) || (item.type.equals("GROUP", true) && false)
+                CallFilterType.VIDEO -> item.type.equals("VIDEO", ignoreCase = true)
+                CallFilterType.DINSTAR -> item.route.equals("DINSTAR", ignoreCase = true) || item.route.equals("PSTN", ignoreCase = true)
             }
 
             matchesQuery && matchesCategory
         }
     }
 
+    val pagedCalls by derivedStateOf { filteredCalls.take(visibleLimit) }
+    val hasMore: Boolean by derivedStateOf { filteredCalls.size > visibleLimit }
+
+    fun resetPaging() { visibleLimit = PAGE_SIZE }
+
+    fun onSearchChange(q: String) { searchQuery = q; resetPaging() }
+    fun onFilterChange(f: CallFilterType) { selectedFilter = f; resetPaging() }
+
+    fun loadMore() {
+        if (isLoadingMore) return
+        if (hasMore) {
+            visibleLimit = (visibleLimit + PAGE_SIZE).coerceAtMost(filteredCalls.size + PAGE_SIZE)
+            return
+        }
+        if (!remoteExhausted) loadMoreRemote()
+    }
+
+    private fun loadMoreRemote() = viewModelScope.launch {
+        isLoadingMore = true
+        val offset = calls.size
+        when (val result = client.request("GET", "/api/calls/history?limit=$PAGE_SIZE&offset=$offset")) {
+            is ApiResult.Success -> runCatching {
+                json.decodeFromString<List<CallHistoryItem>>(result.value)
+            }.onSuccess { list ->
+                if (list.isEmpty()) {
+                    remoteExhausted = true
+                } else {
+                    repository.saveCallLogs(list.map { it.toCallLogEntity() })
+                    visibleLimit += PAGE_SIZE
+                }
+            }.onFailure { remoteExhausted = true }
+            is ApiResult.Error -> remoteExhausted = true
+        }
+        isLoadingMore = false
+    }
+
     init {
         viewModelScope.launch {
             repository.getCallLogs().collectLatest { entities ->
                 calls.clear()
-                // نُفك تشفير peerId/label للعرض في الواجهة فقط — DB تبقى مشفرة
                 calls.addAll(entities.map { it.toCallHistoryItem() })
             }
         }
@@ -96,20 +139,49 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun load() = viewModelScope.launch {
         loading = true; error = null
+        resetPaging()
+        remoteExhausted = false
         when (val result = client.request("GET", "/api/calls/history?limit=100")) {
             is ApiResult.Success -> runCatching {
                 json.decodeFromString<List<CallHistoryItem>>(result.value)
             }.onSuccess { list ->
                 if (list.isNotEmpty()) repository.saveCallLogs(list.map { it.toCallLogEntity() })
+                runCatching { applyRetentionPolicy() }
             }.onFailure { error = "INVALID_CALL_HISTORY: ${it.message}" }
             is ApiResult.Error -> error = result.message
         }
         loading = false
     }
 
+    fun syncNow() = viewModelScope.launch {
+        val syncEnabled = com.red.sovereign.settings.SettingsRuntime.current.callHistorySync
+        if (!syncEnabled) {
+            runCatching { applyRetentionPolicy() }
+            return@launch
+        }
+        load()
+    }
+
+    suspend fun applyRetentionPolicy(): Int {
+        val days = com.red.sovereign.settings.SettingsRuntime.current.callHistoryRetentionDays.coerceIn(1, 365)
+        val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
+        return runCatching { repository.deleteCallLogsOlderThan(cutoff) }.getOrDefault(0)
+    }
+
+    fun pruneExpired(onDone: ((Int) -> Unit)? = null) = viewModelScope.launch {
+        val deleted = runCatching { applyRetentionPolicy() }.getOrDefault(0)
+        onDone?.invoke(deleted)
+    }
+
     fun deleteCall(callId: String) = viewModelScope.launch {
         repository.deleteCallLog(callId)
         calls.removeAll { it.id == callId }
+    }
+
+    fun deleteCalls(callIds: List<String>) = viewModelScope.launch {
+        if (callIds.isEmpty()) return@launch
+        repository.deleteCallLogs(callIds)
+        calls.removeAll { it.id in callIds }
     }
 
     fun clearHistory() = viewModelScope.launch {
@@ -127,24 +199,24 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
                 totalDurationSeconds = 0L,
                 videoCallsCount = 0,
                 voiceCallsCount = 0,
+                dinstarCallsCount = 0,
                 successRate = 100,
                 topPeer = null,
                 peakHour = null
             )
         }
 
-        val answered = calls.count { it.status.equals("ANSWERED", ignoreCase = true) || it.status.equals("COMPLETED", ignoreCase = true) }
+        val answered = calls.count { it.status.equals("ANSWERED", ignoreCase = true) || it.status.equals("COMPLETED", ignoreCase = true) || it.status.equals("ENDED", ignoreCase = true) || it.status.equals("ACTIVE", ignoreCase = true) }
         val missed = calls.count { it.status.equals("MISSED", ignoreCase = true) || it.status.equals("NO_ANSWER", ignoreCase = true) }
         val video = calls.count { it.type.equals("VIDEO", ignoreCase = true) }
         val voice = calls.count { it.type.equals("VOICE", ignoreCase = true) }
+        val dinstar = calls.count { it.route.equals("DINSTAR", ignoreCase = true) || it.route.equals("PSTN", ignoreCase = true) }
         val totalDuration = calls.sumOf { it.computedDurationSeconds() }
         val successRate = if (total > 0) ((answered.toDouble() / total.toDouble()) * 100).toInt() else 100
 
-        // Top Peer
         val peerCounts = calls.groupingBy { if (it.peerLabel.isNotBlank()) it.peerLabel else it.peerId }.eachCount()
         val topPeer = peerCounts.maxByOrNull { it.value }?.toPair()
 
-        // Peak Hour
         val hours = calls.mapNotNull { item ->
             parseCallTimestamp(item.startedAt)?.let { ts ->
                 val cal = Calendar.getInstance().apply { timeInMillis = ts }
@@ -160,6 +232,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             totalDurationSeconds = totalDuration,
             videoCallsCount = video,
             voiceCallsCount = voice,
+            dinstarCallsCount = dinstar,
             successRate = successRate,
             topPeer = topPeer,
             peakHour = peakHour
@@ -168,7 +241,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
 
     fun exportCsvString(): String {
         val sb = StringBuilder()
-        sb.append("ID,Date,PeerID,PeerName,Direction,Type,Status,DurationSeconds\n")
+        sb.append("ID,Date,PeerID,PeerName,Direction,Type,Route,Status,DurationSeconds\n")
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         for (c in calls) {
             val dateStr = parseCallTimestamp(c.startedAt)?.let { sdf.format(Date(it)) } ?: c.startedAt
@@ -179,6 +252,7 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
             sb.append("\"${c.peerLabel}\",")
             sb.append("\"${c.direction}\",")
             sb.append("\"${c.type}\",")
+            sb.append("\"${c.route}\",")
             sb.append("\"${c.status}\",")
             sb.append("$dur\n")
         }
@@ -217,7 +291,13 @@ class CallHistoryViewModel(application: Application) : AndroidViewModel(applicat
         route = route,
         status = status,
         timestamp = parseCallTimestamp(startedAt) ?: 0L,
+        // AUTO-FIX (calls history): the server-side duration was dropped, so imported calls showed 0:00.
+        durationMs = computedDurationSeconds() * 1000L,
         answeredAt = parseCallTimestamp(answeredAt),
         endedAt = parseCallTimestamp(endedAt)
     )
+
+    companion object {
+        const val PAGE_SIZE = 20
+    }
 }

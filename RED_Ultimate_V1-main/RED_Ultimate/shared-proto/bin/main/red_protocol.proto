@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package com.red.sovereign.proto;
+
+option java_package = "com.red.sovereign.proto";
+option java_outer_classname = "RedProtos";
+
+// الرسالة الموحدة لكافة العمليات
+message RedRED {
+    oneof signal {
+        ChatMessage message = 1;
+        MessageAck ack = 2;
+        SyncRequest sync_req = 3;
+        TypingRED typing = 4;
+        DeleteRED delete = 5;
+        RemoteWipe remote_wipe = 6;
+        RemoteWipeAck remote_wipe_ack = 7;
+        ReactionRED reaction = 8;
+        CallSignalRED call_signal = 9;
+    }
+}
+
+message ChatMessage {
+    string id = 1;              // UUID v7
+    string conversation_id = 2;
+    string sender_id = 3;
+    string receiver_id = 4;
+    bytes payload = 5;          // المحتوى المشفر (Envelope)
+    int64 timestamp = 6;
+    int64 sequence_number = 7;
+    string type = 8;            // TEXT, IMAGE, VIDEO, STICKER, POLL, etc.
+    int32 sender_device_id = 9;
+    int32 receiver_device_id = 10;
+    int32 ciphertext_type = 11; // 2=SignalMessage, 3=PreKeySignalMessage
+    StickerRED sticker = 12;    // مبيّنات الملصق (اختياري للفلترة السريعة)
+    PollRED poll = 13;          // هيكلية الاستطلاع
+}
+
+message StickerRED {
+    string pack_id = 1;
+    string pack_key = 2;
+    int32 sticker_id = 3;
+    string emoji = 4;
+}
+
+message PollRED {
+    string question = 1;
+    repeated string options = 2;
+    bool multiselect = 3;
+    int64 expiry = 4;
+}
+
+message ReactionRED {
+    string target_message_id = 1;
+    string emoji = 2;
+    bool remove = 3;
+}
+
+message CallSignalRED {
+    string call_id = 1;
+    string type = 2; // OFFER, ANSWER, ICE, BYE
+    string sdp = 3;
+}
+
+message MessageAck {
+    string message_id = 1;
+    int64 sequence_number = 2;
+    string status = 3;          // SENT, DELIVERED, READ
+}
+
+message SyncRequest {
+    string conversation_id = 1;
+    int64 from_sequence = 2;
+    int64 to_sequence = 3;
+}
+
+message TypingRED {
+    string conversation_id = 1;
+    string user_id = 2;
+    bool is_typing = 3;
+    string target_user_id = 4;
+}
+
+message DeleteRED {
+    string message_id = 1;
+    string conversation_id = 2;
+    bool for_everyone = 3;
+}
+
+// Server-issued command for the authenticated device to erase YOUNES application data.
+// This is an application wipe, never an unmanaged Android factory reset.
+message RemoteWipe {
+    string command_id = 1;
+    string reason = 2;
+}
+
+// Device-side acknowledgement that a REMOTE_APP_WIPE command was received and applied.
+// The server maps this to AdminUserIntelligenceService.markRemoteWipeAcknowledged.
+message RemoteWipeAck {
+    string command_id = 1;
+}

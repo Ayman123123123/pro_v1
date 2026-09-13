@@ -1,5 +1,6 @@
 package com.red.server.social
 
+import jakarta.validation.Valid
 import com.red.server.auth.RateLimitService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -25,7 +26,7 @@ class ChannelController(
 ) {
 
     @PostMapping
-    fun create(@RequestBody req: ChannelService.CreateChannelRequest, auth: Authentication): ResponseEntity<Any> {
+    fun create(@Valid @RequestBody req: ChannelService.CreateChannelRequest, auth: Authentication): ResponseEntity<Any> {
         val userId = auth.name
         return try {
             // Rate limit: 5 قنوات في الساعة

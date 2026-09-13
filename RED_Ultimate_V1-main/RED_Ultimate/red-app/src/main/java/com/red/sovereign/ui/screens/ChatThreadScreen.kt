@@ -1,13 +1,22 @@
 package com.red.sovereign.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Forward
+import androidx.compose.material.icons.filled.Star
+import com.red.sovereign.core.RichMessage
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Videocam
@@ -18,14 +27,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.crypto.DecryptedMessage
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.red.sovereign.core.database.ChatHistoryPagingViewModel
+import com.red.sovereign.core.database.LocalHistoryEntity
 
 import com.red.sovereign.features.chat.LuxuryChatBubble
+import com.red.sovereign.settings.ChatFontPolicy
+import com.red.sovereign.settings.SettingsRuntime
+import com.red.sovereign.ui.screens.scrollOnce
+import android.widget.Toast
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.red.sovereign.ui.components.ChatWallpaper
+import com.red.sovereign.ui.components.rememberSovereignHaze
+import com.red.sovereign.ui.components.sovereignHazeEffect
+import com.red.sovereign.ui.components.sovereignHazeSource
 import com.red.sovereign.ui.theme.*
 import java.time.Instant
 import java.time.LocalDateTime
@@ -44,84 +72,369 @@ fun ChatThreadScreen(
     onAudioCallClick: () -> Unit,
     onVideoCallClick: () -> Unit,
     onReplyClick: (DecryptedMessage) -> Unit = {},
+    onDeleteClick: (List<DecryptedMessage>) -> Unit = {},
+    onForwardClick: (List<DecryptedMessage>) -> Unit = {},
+    onStarClick: (List<DecryptedMessage>) -> Unit = {},
     isTyping: Boolean = false,
     bottomBar: @Composable () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // G3: معرف جهة الاتصال — اسم + Red ID ظاهر في الترويسة.
+    contactRedId: String = "",
+    // G3: أسماء المرسلين للدردشات الجماعية (RedId -> اسم العرض).
+    senderNames: Map<String, String> = emptyMap(),
+    // P1-A: يُستدعى بنص "#topic-name " عند إنشاء موضوع جديد ليُلحقه المُستدعي
+    // (RedDashboard/ChatsScreen) بحقل الإدخال. افتراضيًا no-op فلا يكسر المُستدعين.
+    onTopicCreated: (String) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
+    // زجاج مثلج حقيقي للشريط العلوي — المصدر: قائمة الرسائل تحته.
+    val hazeState = rememberSovereignHaze()
+    // خلفية المحادثة: حزمة المستخدم أو السيادية الافتراضية.
+    val wallpaperContext = androidx.compose.ui.platform.LocalContext.current
+    val customTheme = remember { CustomThemeStore.loadActiveCustomTheme(wallpaperContext) }
+    val wallpaperDark = when (AppThemeState.themeMode) {
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+        AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    // G3: منسق الوقت يُنشأ مرة واحدة بدل إعادة الإنشاء لكل رسالة في كل تركيب.
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+    // ── Multi-Select Mode ──
+    var multiSelectMode by remember { mutableStateOf(false) }
+    val selectedMessageIds = remember { mutableStateSetOf<String>() }
+
+    // ── Reply State ──
+    var replyToMessage by remember { mutableStateOf<DecryptedMessage?>(null) }
+
+    // ── P1-A: فلترة Thread حسب الموضوع (محليًا فقط، لا تمس قاعدة البيانات) ──
+    // المصدر: RichMessage.topicId أولًا ثم hashtags ثم #topic من النص.
+    var selectedTopic by remember { mutableStateOf<String?>(null) }
+    var showCreateTopic by remember { mutableStateOf(false) }
+    var topicInput by remember { mutableStateOf("") }
+    // مواضيع أُنشئت من الزر قبل وصول أي رسالة بها — تظهر كـ chips فورًا.
+    val createdTopics = remember { mutableStateSetOf<String>() }
+    val extractedTopics = remember(messages) { messages.flatMap { it.threadTopics() }.distinct().sorted() }
+    val allTopics = remember(extractedTopics, createdTopics.toList()) {
+        (extractedTopics + createdTopics.toList()).distinct().sorted()
+    }
+    // إن حُذفت كل رسائل الموضوع المحدد يُعاد التعيين تلقائيًا إلى «الكل».
+    LaunchedEffect(allTopics) {
+        if (selectedTopic != null && selectedTopic !in allTopics) selectedTopic = null
+    }
+    val filteredMessages = remember(messages, selectedTopic) {
+        if (selectedTopic == null) messages
+        else messages.filter { it.threadTopics().contains(selectedTopic) }
+    }
+
+    // المفتاح معرف آخر رسالة لا الحجم — يمنع عاصفة إعادة التمرير.
+    LaunchedEffect(filteredMessages.lastOrNull()?.id) {
+        if (filteredMessages.isNotEmpty()) {
+            // G3: scrollOnce موحد بدل animate — أخف ولا يرمي عند تقلص القائمة
+            // أثناء الحذف/التحرير (IndexOutOfBounds كان يسقط الشاشة).
+            listState.scrollOnce(filteredMessages.lastIndex)
         }
     }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = YounesVoid,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            ChatThreadTopBar(
-                contactName = contactName,
-                contactStatus = contactStatus,
-                onNavigateBack = onNavigateBack,
-                onAudioCallClick = onAudioCallClick,
-                onVideoCallClick = onVideoCallClick
-            )
+            if (multiSelectMode && selectedMessageIds.isNotEmpty()) {
+                MultiSelectTopBar(
+                    selectedCount = selectedMessageIds.size,
+                    onSelectAll = {
+                        selectedMessageIds.clear()
+                        selectedMessageIds.addAll(filteredMessages.map { it.id })
+                    },
+                    onClearSelection = {
+                        selectedMessageIds.clear()
+                        multiSelectMode = false
+                    },
+                    onDelete = {
+                        val selected = messages.filter { it.id in selectedMessageIds }
+                        onDeleteClick(selected)
+                        selectedMessageIds.clear()
+                        multiSelectMode = false
+                    },
+                    onForward = {
+                        val selected = messages.filter { it.id in selectedMessageIds }
+                        onForwardClick(selected)
+                        selectedMessageIds.clear()
+                        multiSelectMode = false
+                    },
+                    onStar = {
+                        val selected = messages.filter { it.id in selectedMessageIds }
+                        onStarClick(selected)
+                        selectedMessageIds.clear()
+                        multiSelectMode = false
+                    }
+                )
+            } else {
+                ChatThreadTopBar(
+                    contactName = contactName,
+                    contactStatus = contactStatus,
+                    onNavigateBack = onNavigateBack,
+                    onAudioCallClick = onAudioCallClick,
+                    onVideoCallClick = onVideoCallClick,
+                    contactRedId = contactRedId,
+                    hazeState = hazeState
+                )
+            }
         },
         bottomBar = bottomBar
     ) { paddingValues ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
+        Box(
+            Modifier
                 .fillMaxSize()
+                .sovereignHazeSource(hazeState)
                 .padding(paddingValues)
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            items(messages, key = { it.id }) { message ->
-                val formatter = DateTimeFormatter.ofPattern("HH:mm")
-                val messageTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(message.timestamp), ZoneId.systemDefault())
-
-                var showMenu by remember { mutableStateOf(false) }
-                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
-
-                Box {
-                    LuxuryChatBubble(
-                        message = String(message.plaintext, Charsets.UTF_8),
-                        isMe = message.outgoing,
-                        time = messageTime.format(formatter),
-                        status = message.status,
-                        onLongClick = { showMenu = true }
-                    )
-
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
+            // هالة شبكية خافتة فوق الخلفية — لا تمس تباين النص
+            Box(
+                Modifier.fillMaxSize()
+                    .background(SovereignGradients.meshChat)
+            )
+            // زخرفة المحادثة الهندسية — 4% فقط، خلف الرسائل وفوق الهالة
+            ChatWallpaper(
+                package_ = customTheme,
+                isDark = wallpaperDark
+            )
+            Column(Modifier.fillMaxSize()) {
+                // ── Reply Banner ──
+                replyToMessage?.let { replyMsg ->
+                    val replyText = runCatching { String(replyMsg.plaintext, Charsets.UTF_8) }.getOrDefault("")
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("رد") },
-                            onClick = {
-                                showMenu = false
-                                onReplyClick(message)
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = if (replyMsg.outgoing) "الرد على نفسك" else "الرد على ${senderNames[replyMsg.senderRedId]?.orEmpty() ?: replyMsg.senderRedId.take(8)}",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = replyText,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("نسخ") },
-                            onClick = {
-                                showMenu = false
-                                clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(String(message.plaintext, Charsets.UTF_8)))
+                            IconButton(onClick = { replyToMessage = null }) {
+                                Icon(Icons.Default.Close, "إلغاء الرد", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                             }
+                        }
+                    }
+                }
+                // ── P1-A: chips فلترة Topics أعلى الشاشة (الكل + المستخرجة + زر إنشاء) ──
+                TopicFilterBar(
+                    topics = allTopics,
+                    selectedTopic = selectedTopic,
+                    onSelectTopic = { selectedTopic = it },
+                    onCreateClick = {
+                        topicInput = ""
+                        showCreateTopic = true
+                    }
+                )
+                if (showCreateTopic) {
+                    AlertDialog(
+                        onDismissRequest = { showCreateTopic = false },
+                        title = { Text("موضوع جديد", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                Text(
+                                    "سيُضاف كهاشتاغ #topic-name في رسالتك القادمة.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = topicInput,
+                                    onValueChange = { topicInput = it },
+                                    label = { Text("اسم الموضوع") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val slug = RichMessage.normalizeTopicName(topicInput)
+                                    if (slug.isNotBlank()) {
+                                        createdTopics.add(slug)
+                                        selectedTopic = slug
+                                        onTopicCreated("#$slug ")
+                                    }
+                                    showCreateTopic = false
+                                }
+                            ) { Text("إنشاء") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCreateTopic = false }) { Text("إلغاء") }
+                        }
+                    )
+                }
+                // LEGENDARY: تجميع الرسائل مع فواصل تاريخ بأسلوب واتساب — قبل LazyColumn
+                // (remember لا يعمل داخل DSL). كانت الرسائل مكدسة بلا سياق زمني.
+                val groupedWithDates = remember(filteredMessages) {
+                    val out = ArrayList<ChatListItem>(filteredMessages.size + 4)
+                    var lastDay: String? = null
+                    val dayFmt = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                    filteredMessages.forEach { m ->
+                        val day = runCatching {
+                            java.time.LocalDateTime.ofInstant(
+                                java.time.Instant.ofEpochMilli(m.timestamp),
+                                java.time.ZoneId.systemDefault()
+                            ).format(dayFmt)
+                        }.getOrDefault("")
+                        if (day.isNotBlank() && day != lastDay) {
+                            lastDay = day
+                            out += ChatListItem.DateHeader(day)
+                        }
+                        out += ChatListItem.Message(m)
+                    }
+                    out
+                }
+                LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                // LEGENDARY: تباعد ذكي — رسائل متتالية من نفس المرسل متقاربة (4dp) والبقية 8dp (كانت 8dp ثابتة تسبب تباعداً مزعجاً)
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+            if (filteredMessages.isEmpty() && selectedTopic != null) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "لا رسائل في موضوع #$selectedTopic بعد",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
                         )
                     }
                 }
+            }
+            // LEGENDARY: contentType يمنع إعادة تركيب الفقاعات كلها + فواصل التاريخ من groupedWithDates أعلاه
+            items(
+                groupedWithDates,
+                key = { when (it) { is ChatListItem.DateHeader -> "date-${it.day}"; is ChatListItem.Message -> it.msg.id } },
+                contentType = { when (it) { is ChatListItem.DateHeader -> "date"; is ChatListItem.Message -> if (it.msg.outgoing) "out" else "in" } }
+            ) { item ->
+                when (item) {
+                    is ChatListItem.DateHeader -> DateSeparatorChip(item.day)
+                    is ChatListItem.Message -> {
+                        val message = item.msg
+                // G3: نص الوقت يُحسب مرة لكل رسالة (مفتاح id) بدل كل تركيب.
+                val messageTimeText = remember(message.id, message.timestamp) {
+                    runCatching {
+                        LocalDateTime.ofInstant(Instant.ofEpochMilli(message.timestamp), ZoneId.systemDefault()).format(timeFormatter)
+                    }.getOrDefault("--:--")
+                }
+                // G3: فك التشفير النصي مرة لكل رسالة بدل مرتين في كل تركيب.
+                val messageText = remember(message.id, message.timestamp) {
+                    runCatching { String(message.plaintext, Charsets.UTF_8) }.getOrDefault("")
+                }
+
+                var showMenu by remember { mutableStateOf(false) }
+                val clipCtx = androidx.compose.ui.platform.LocalContext.current
+                val sysClipboard = clipCtx
+                    .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+
+                val isSelected = selectedMessageIds.contains(message.id)
+
+                Box {
+                    LuxuryChatBubble(
+                        message = messageText,
+                        isMe = message.outgoing,
+                        time = messageTimeText,
+                        status = message.status,
+                        onLongClick = {
+                            if (!multiSelectMode) {
+                                multiSelectMode = true
+                                selectedMessageIds.add(message.id)
+                            } else {
+                                if (isSelected) selectedMessageIds.remove(message.id)
+                                else selectedMessageIds.add(message.id)
+                                if (selectedMessageIds.isEmpty()) multiSelectMode = false
+                            }
+                        },
+                        onClick = {
+                            if (multiSelectMode) {
+                                if (isSelected) selectedMessageIds.remove(message.id)
+                                else selectedMessageIds.add(message.id)
+                                if (selectedMessageIds.isEmpty()) multiSelectMode = false
+                            }
+                        },
+                        onSwipeReply = { msgId ->
+                            val repliedMsg = messages.firstOrNull { it.id == msgId }
+                            repliedMsg?.let { replyToMessage = it }
+                        },
+                        messageId = message.id,
+                        senderName = if (message.outgoing) "" else senderNames[message.senderRedId].orEmpty(),
+                        senderRedId = if (message.outgoing) "" else message.senderRedId,
+                        fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily),
+                        bubbleStyle = SettingsRuntime.current.bubbleStyle,
+                        isSelected = isSelected
+                    )
+
+                    if (!multiSelectMode) {
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("رد") },
+                                onClick = {
+                                    showMenu = false
+                                    onReplyClick(message)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("نسخ") },
+                                onClick = {
+                                    showMenu = false
+                                    val cm = sysClipboard ?: run {
+                                        android.widget.Toast.makeText(clipCtx, "الحافظة غير متاحة", android.widget.Toast.LENGTH_SHORT).show()
+                                        return@DropdownMenuItem
+                                    }
+                                    cm.setPrimaryClip(
+                                        android.content.ClipData.newPlainText("رسالة", messageText)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                    } // إغلاق فرع Message
+                } // إغلاق when (تاريخ/رسالة)
             }
             if (isTyping) {
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                         androidx.compose.material3.Card(
                             modifier = Modifier.padding(vertical = 4.dp),
-                            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = YounesSurface),
+                            colors = androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
                             shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 5.dp)
                         ) {
                             val lottieComposition by com.airbnb.lottie.compose.rememberLottieComposition(
@@ -137,7 +450,146 @@ fun ChatThreadScreen(
                 }
             }
         }
+        }
     }
+    }
+}
+
+/**
+ * LEGENDARY: عناصر القائمة (تاريخ/رسالة) — فواصل واتساب بلا تداخل
+ */
+private sealed interface ChatListItem {
+    data class DateHeader(val day: String) : ChatListItem
+    data class Message(val msg: DecryptedMessage) : ChatListItem
+}
+
+@Composable
+private fun DateSeparatorChip(day: String) {
+    // اليوم/أمس/التاريخ — عزل Bidi + تباين عالٍ
+    val label = runCatching {
+        val today = java.time.LocalDate.now()
+        val d = java.time.LocalDate.parse(day)
+        when (d) {
+            today -> "اليوم"
+            today.minusDays(1) -> "أمس"
+            else -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale("ar")))
+        }
+    }.getOrDefault(day)
+    Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+        Surface(shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            shadowElevation = 1.dp) {
+            Text(
+                text = android.text.BidiFormatter.getInstance().unicodeWrap(label),
+                fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+/**
+ * P1-A: استخراج topics رسالة مفكوكة محليًا (بدون قاعدة بيانات).
+ * الأولوية: RichMessage.topicId ← hashtags ← regex #topic من النص.
+ * يتحمّل الخام UTF-8 القديم (decode=null) عبر regex مباشر.
+ */
+private val ThreadTopicRegex = Regex("#[\\w\u0600-\u06FF\\-]{2,30}")
+
+private fun DecryptedMessage.threadTopics(): List<String> {
+    val rich = runCatching { RichMessage.decode(plaintext) }.getOrNull()
+    if (rich != null) {
+        val out = LinkedHashSet<String>()
+        rich.topicId?.trim()?.removePrefix("#")?.takeIf { it.isNotBlank() }?.let { out += it }
+        rich.hashtags.forEach { h -> h.trim().removePrefix("#").takeIf { it.isNotBlank() }?.let { out += it } }
+        ThreadTopicRegex.findAll(rich.text).forEach { out += it.value.removePrefix("#") }
+        if (out.isNotEmpty()) return out.toList()
+    }
+    val raw = runCatching { String(plaintext, Charsets.UTF_8) }.getOrDefault("")
+    return ThreadTopicRegex.findAll(raw).map { it.value.removePrefix("#") }.distinct().toList()
+}
+
+/**
+ * P1-A: شريط chips لفلترة الـ Thread حسب الموضوع.
+ * «الكل» (null) + chip لكل topic مستخرج + زر «+» للإنشاء.
+ * عرض فقط — الفلترة تتم محليًا في ChatThreadScreen عبر filteredMessages.
+ */
+@Composable
+private fun TopicFilterBar(
+    topics: List<String>,
+    selectedTopic: String?,
+    onSelectTopic: (String?) -> Unit,
+    onCreateClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(
+            selected = selectedTopic == null,
+            onClick = { onSelectTopic(null) },
+            label = { Text("الكل") }
+        )
+        topics.forEach { topic ->
+            FilterChip(
+                selected = selectedTopic == topic,
+                onClick = { onSelectTopic(if (selectedTopic == topic) null else topic) },
+                label = { Text("#$topic", maxLines = 1) }
+            )
+        }
+        AssistChip(
+            onClick = onCreateClick,
+            label = { Text("موضوع جديد") },
+            leadingIcon = {
+                Icon(Icons.Default.Add, contentDescription = "إنشاء موضوع", modifier = Modifier.size(16.dp))
+            }
+        )
+    }
+}
+
+/**
+ * شريط الأدوات العلوي لوضع التحديد المتعدد — يعرض عدد العناصر المحددة
+ * وأزرار الإجراءات المجمّعة (حذف/إعادة توجيه/تعليم).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MultiSelectTopBar(
+    selectedCount: Int,
+    onSelectAll: () -> Unit,
+    onClearSelection: () -> Unit,
+    onDelete: () -> Unit,
+    onForward: () -> Unit,
+    onStar: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("$selectedCount محدد", fontWeight = FontWeight.Bold) },
+        navigationIcon = {
+            IconButton(onClick = onClearSelection) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "إلغاء التحديد", tint = MaterialTheme.colorScheme.onSurface)
+            }
+        },
+        actions = {
+            IconButton(onClick = onSelectAll) {
+                Icon(Icons.Default.CheckCircle, "تحديد الكل", tint = YounesEmerald)
+            }
+            IconButton(onClick = onStar) {
+                Icon(Icons.Default.Star, "تعليم", tint = AqyalGold)
+            }
+            IconButton(onClick = onForward) {
+                Icon(Icons.Default.Forward, "إعادة توجيه", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -147,32 +599,49 @@ fun ChatThreadTopBar(
     contactStatus: String,
     onNavigateBack: () -> Unit,
     onAudioCallClick: () -> Unit,
-    onVideoCallClick: () -> Unit
+    onVideoCallClick: () -> Unit,
+    contactRedId: String = "",
+    hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     TopAppBar(
+        modifier = Modifier.sovereignHazeEffect(
+            state = hazeState,
+            tier = SovereignGlassTier.NavBar,
+            isDark = true
+        ),
         title = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = contactName,
-                        color = YounesOnSurface,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 18.sp,
-                        fontFamily = CairoFamily,
+                        fontFamily = PlexArabicFamily,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
                         imageVector = Icons.Rounded.Lock,
-                        contentDescription = "E2EE",
-                        tint = YounesPrimary,
+                        contentDescription = stringResource(com.red.sovereign.R.string.e2ee_badge_desc),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(14.dp)
+                    )
+                }
+                // G3: معرف المتصل/المرسل — Red ID ظاهر تحت الاسم حيث كان ناقصاً.
+                if (contactRedId.isNotBlank()) {
+                    Text(
+                        text = contactRedId,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontFamily = PlexArabicFamily,
+                        maxLines = 1
                     )
                 }
                 Text(
                     text = contactStatus,
-                    color = YounesPrimary.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 12.sp,
-                    fontFamily = TajawalFamily
+                    fontFamily = PlexArabicFamily
                 )
             }
         },
@@ -181,7 +650,7 @@ fun ChatThreadTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
                     contentDescription = "عودة",
-                    tint = YounesOnSurface
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
@@ -190,20 +659,21 @@ fun ChatThreadTopBar(
                 Icon(
                     imageVector = Icons.Rounded.Call,
                     contentDescription = "مكالمة صوتية",
-                    tint = YounesOnSurface
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
             IconButton(onClick = onVideoCallClick) {
                 Icon(
                     imageVector = Icons.Rounded.Videocam,
                     contentDescription = "مكالمة فيديو",
-                    tint = YounesOnSurface
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = YounesSurface.copy(alpha = 0.85f), // Glassmorphism feel
-            scrolledContainerColor = YounesSurface
+            // زجاج علوي خفيف (tier 8dp): سطح شبه معتم + fallback تلقائي للفاتح
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+            scrolledContainerColor = MaterialTheme.colorScheme.surface
         )
     )
 }
@@ -212,23 +682,38 @@ fun ChatThreadTopBar(
 fun MessageBubble(
     message: DecryptedMessage,
     isMine: Boolean,
-    onReplyClick: () -> Unit = {}
+    onReplyClick: () -> Unit = {},
+    senderName: String = "",
+    senderRedId: String = message.senderRedId
 ) {
-    // Bubble colors based on master plan
-    val backgroundBrush = if (isMine) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFF005C48), // Deep Emerald
-                Color(0xFF007D63)
+    // فقاعات واعية بالثيم: داكن = كحلي/فحمي السيادي، فاتح = حاويات Material.
+    // النص والطابع الزمني من colorScheme فيُحققان AA في الوضعين معًا.
+    // (كانت ألوان YounesBubble* مثبتة داكنة فتكسر الوضع الفاتح كليًا.)
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.4f
+    val backgroundBrush = if (isDark) {
+        if (isMine) {
+            Brush.linearGradient(
+                colors = listOf(YounesBubbleOut, YounesBubbleOutGlow)
             )
-        )
+        } else {
+            Brush.linearGradient(colors = listOf(YounesBubbleIn, YounesBubbleIn))
+        }
     } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFF182430), // Premium Carbon
-                Color(0xFF182430)
+        if (isMine) {
+            Brush.linearGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.primaryContainer
+                )
             )
-        )
+        } else {
+            Brush.linearGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                )
+            )
+        }
     }
 
     val shape = if (isMine) {
@@ -237,11 +722,20 @@ fun MessageBubble(
         RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
     }
 
-    val formatter = DateTimeFormatter.ofPattern("HH:mm")
-    val messageTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(message.timestamp), ZoneId.systemDefault())
+    val formatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    val messageTime = remember(message.id, message.timestamp) {
+        runCatching {
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(message.timestamp), ZoneId.systemDefault())
+        }.getOrNull()
+    }
+    val messageText = remember(message.id, message.timestamp) {
+        runCatching { String(message.plaintext, Charsets.UTF_8) }.getOrDefault("")
+    }
 
     var showMenu by remember { mutableStateOf(false) }
-    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val bubbleCtx = androidx.compose.ui.platform.LocalContext.current
+    val sysClipboard = bubbleCtx
+        .getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -261,11 +755,36 @@ fun MessageBubble(
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 Column(horizontalAlignment = if (isMine) Alignment.End else Alignment.Start) {
+                    val bubbleTextColor = if (isDark) Color.White
+                        else if (isMine) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
+                    val bubbleDimColor = if (isDark) Color.White.copy(alpha = 0.55f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    // G3: معرف المرسل في الفقاعة القديمة — اسم + Red ID للوارد.
+                    if (!isMine && (senderName.isNotBlank() || senderRedId.isNotBlank())) {
+                        Text(
+                            text = senderName.ifBlank { senderRedId },
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontFamily = PlexArabicFamily,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        if (senderName.isNotBlank() && senderRedId.isNotBlank()) {
+                            Text(
+                                text = senderRedId,
+                                color = bubbleDimColor,
+                                fontSize = 10.sp,
+                                fontFamily = PlexArabicFamily,
+                                maxLines = 1
+                            )
+                        }
+                    }
                     Text(
-                        text = String(message.plaintext, Charsets.UTF_8),
-                        color = Color.White,
+                        text = messageText,
+                        color = bubbleTextColor,
                         fontSize = 15.sp,
-                        fontFamily = TajawalFamily,
+                        fontFamily = PlexArabicFamily,
                         lineHeight = 22.sp
                     )
 
@@ -276,20 +795,21 @@ fun MessageBubble(
                         horizontalArrangement = Arrangement.End
                     ) {
                         Text(
-                            text = messageTime.format(formatter),
-                            color = Color.White.copy(alpha = 0.5f),
+                            text = messageTime?.format(formatter) ?: "--:--",
+                            color = bubbleDimColor,
                             fontSize = 11.sp,
-                            fontFamily = TajawalFamily
+                            fontFamily = PlexArabicFamily
                         )
 
                         if (isMine) {
                             Spacer(modifier = Modifier.width(4.dp))
-                            val isRead = message.status == "READ" || message.status == "DELIVERED"
+                            // واتساب: ✓ رمادي (مرسَل) / ✓✓ رمادي (مستلَم) / ✓✓ أزرق (مقروء).
+                            // المقروء بـ YounesReadTick (4.75:1 على الصادرة) لا أزرق عشوائي.
                             Text(
-                                text = if (isRead) "✓✓" else "✓",
-                                color = if (message.status == "READ") YounesPrimary else Color.White.copy(alpha = 0.5f),
+                                text = if (message.status == "READ" || message.status == "DELIVERED") "✓✓" else "✓",
+                                color = if (message.status == "READ") YounesReadTick else bubbleDimColor,
                                 fontSize = 10.sp,
-                                fontFamily = TajawalFamily,
+                                fontFamily = PlexArabicFamily,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -312,9 +832,171 @@ fun MessageBubble(
                     text = { Text("نسخ") },
                     onClick = {
                         showMenu = false
-                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(String(message.plaintext, Charsets.UTF_8)))
+                        val cm = sysClipboard ?: run {
+                            android.widget.Toast.makeText(bubbleCtx, "الحافظة غير متاحة", android.widget.Toast.LENGTH_SHORT).show()
+                            return@DropdownMenuItem
+                        }
+                        cm.setPrimaryClip(
+                            android.content.ClipData.newPlainText("رسالة", messageText)
+                        )
                     }
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Paging3 لسجل المحادثة (2026-09-10): `Pager` حقيقي بدل `Flow<List>` الكامل.
+ *
+ * كان `ChatHistoryPagingSource` و`chatHistoryPager()` بلا أي استخدام
+ * (`collectAsLazyPagingItems` صفر) — هذه العمود يفعّلهما:
+ * صفحات 30 عنصرًا من `local_history` (الأحدث أولًا) مع `loadState`
+ * كاملة (تحميل/خطأ/إعادة) وتمرير `key = id`.
+ *
+ * ترتيب العرض: المصدِر يُرجع الأحدث أولًا (DESC)، والقائمة تستخدم
+ * `reverseLayout = true` فيكون الأحدث في الأسفل (سلوك واتساب) وتُحمَّل
+ * الصفحات الأقدم بالتمرير للأعلى. بدون العكس كان الأحدث يظهر في الأعلى.
+ *
+ * الاستخدام: `ChatHistoryPagingColumn(conversationId = convId, ...)`
+ * بدل تمرير `messages = repository.getLocalHistory(convId).collectAsState()`.
+ * المسار القديم `ChatThreadScreen(messages: List<…>)` يبقى للتوافق
+ * (RedDashboard يمرر `decrypted` المفكوكة تشفيريًا).
+ */
+@Composable
+fun ChatHistoryPagingColumn(
+    conversationId: String,
+    modifier: Modifier = Modifier,
+    pagingViewModel: ChatHistoryPagingViewModel = viewModel(),
+    senderNames: Map<String, String> = emptyMap(),
+    onReplyClick: (DecryptedMessage) -> Unit = {}
+) {
+    val lazyItems = remember(conversationId) { pagingViewModel.pager(conversationId) }
+        .collectAsLazyPagingItems()
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+    // P0-C: المسار الافتراضي — cachedIn(viewModelScope) في الـ ViewModel +
+    // كاش مفكوك LRU (200) + تمرير واحد لآخر id (لا عاصفة عند الحذف/التحديث).
+    val pagingListState = rememberLazyListState()
+    var lastPinnedId by remember { mutableStateOf<String?>(null) }
+    val latestPagingId: String? =
+        if (lazyItems.itemCount > 0) runCatching { lazyItems[0]?.id }.getOrNull() else null
+    LaunchedEffect(latestPagingId) {
+        if (latestPagingId != null && latestPagingId != lastPinnedId) {
+            lastPinnedId = latestPagingId
+            pagingListState.scrollOnce(0)
+        }
+    }
+
+    when {
+        // التحميل الأولي — شاشة كاملة
+        lazyItems.loadState.refresh is LoadState.Loading && lazyItems.itemCount == 0 -> {
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        // خطأ أولي — مع إعادة المحاولة
+        lazyItems.loadState.refresh is LoadState.Error && lazyItems.itemCount == 0 -> {
+            val message = (lazyItems.loadState.refresh as? LoadState.Error)?.error?.message
+            Column(
+                modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("تعذر تحميل السجل", fontWeight = FontWeight.Bold)
+                if (!message.isNullOrBlank()) {
+                    Text(message, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { lazyItems.retry() }) { Text("إعادة المحاولة") }
+            }
+        }
+        // فارغ — لا رسائل بعد
+        lazyItems.itemCount == 0 -> {
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("لا توجد رسائل بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        else -> {
+            LazyColumn(
+                state = pagingListState,
+                modifier = modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                // المصدِر DESC (الأحدث أولًا) — العكس يضع الأحدث في الأسفل.
+                reverseLayout = true
+            ) {
+                items(
+                    count = lazyItems.itemCount,
+                    key = { index -> lazyItems[index]?.id ?: "placeholder-$index" }
+                ) { index ->
+                    val entity: LocalHistoryEntity? = lazyItems[index]
+                    if (entity == null) {
+                        // عنصر نائب أثناء التحميل التدريجي (placeholders معطلة، لكن null ممكن عابرًا)
+                        Box(
+                            Modifier.fillMaxWidth().height(48.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        )
+                    } else {
+                        // P0-C: كاش مفكوك LRU (200) في الـ ViewModel بدل فك UTF-8 كل تركيب.
+                        val decoded = remember(entity.id, entity.createdAt) {
+                            pagingViewModel.decryptedText(entity)
+                        }
+                        val timeText = remember(entity.id, entity.createdAt) {
+                            runCatching {
+                                LocalDateTime.ofInstant(
+                                    Instant.ofEpochMilli(entity.createdAt),
+                                    ZoneId.systemDefault()
+                                ).format(timeFormatter)
+                            }.getOrDefault("--:--")
+                        }
+                        LuxuryChatBubble(
+                            message = decoded,
+                            isMe = entity.outgoing,
+                            time = timeText,
+                            status = entity.status,
+                            onLongClick = {
+                                onReplyClick(
+                                    DecryptedMessage(
+                                        id = entity.id,
+                                        conversationId = entity.conversationId,
+                                        senderRedId = entity.senderId,
+                                        plaintext = entity.encryptedPlaintext,
+                                        timestamp = entity.createdAt,
+                                        sequence = 0,
+                                        type = entity.messageType,
+                                        outgoing = entity.outgoing,
+                                        status = entity.status
+                                    )
+                                )
+                            },
+                            senderName = if (entity.outgoing) "" else senderNames[entity.senderId].orEmpty(),
+                            senderRedId = if (entity.outgoing) "" else entity.senderId,
+                            fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily),
+                            bubbleStyle = SettingsRuntime.current.bubbleStyle
+                        )
+                    }
+                }
+                // تذييل التحميل التدريجي (append)
+                when (val append = lazyItems.loadState.append) {
+                    is LoadState.Loading -> item {
+                        Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(24.dp))
+                        }
+                    }
+                    is LoadState.Error -> item {
+                        Row(
+                            Modifier.fillMaxWidth().padding(8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("تعذر تحميل المزيد", fontSize = 12.sp)
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { lazyItems.retry() }) { Text("إعادة") }
+                        }
+                    }
+                    else -> Unit
+                }
             }
         }
     }

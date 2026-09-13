@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoTrack
@@ -44,7 +46,8 @@ private val ZoomDark = Color(0xFF0B1426)
 fun ZoomGroupCallOverlay() {
     val state = ZoomRuntime.state
     if (state is ZoomUiState.Idle || state is ZoomUiState.Ended) return
-    BackHandler { }
+    // رجوع متدرج: يُصغّر إلى الشريط العائم مع بقاء الخدمة — لا ينهي الاجتماع ولا يحبس المستخدم.
+    BackHandler { ZoomRuntime.isMinimized = true }
     if (ZoomRuntime.isMinimized && state is ZoomUiState.Active) {
         ZoomMinimizedBar(state); return
     }
@@ -73,12 +76,17 @@ private fun ZoomMinimizedBar(state: ZoomUiState.Active){
                     Text("اجتماع Zoom", color=Color.White, fontSize=12.sp, fontWeight=FontWeight.Bold)
                 }
                 Text("$joined مشارك · ${ZoomRuntime.meetingTitle}", color=Color.White.copy(0.7f), fontSize=10.sp, maxLines=1)
-                if(state.isVideo && ZoomRuntime.localVideo!=null && ZoomRuntime.eglContext!=null){
-                    val egl=ZoomRuntime.eglContext!!; val track=ZoomRuntime.localVideo!!
-                    androidx.compose.runtime.key(track, egl){
-                        var r: SurfaceViewRenderer? by remember{mutableStateOf(null)}
-                        AndroidView(factory={ctx-> SurfaceViewRenderer(ctx).apply{ init(egl,null); setMirror(true); setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL); setEnableHardwareScaler(true); r=this; track.addSink(this)}}, update={v-> if(r==v) track.addSink(v)}, onRelease={v-> track.removeSink(v); v.release()}, modifier=Modifier.fillMaxWidth().height(90.dp).clip(RoundedCornerShape(10.dp)))
-                        DisposableEffect(track, r){ onDispose{ r?.let{track.removeSink(it)}}}
+                if(state.isVideo){
+                    ZoomRuntime.eglContext?.let { egl ->
+                        ZoomRuntime.localVideo?.let { track ->
+                            WebrtcVideo(
+                                track = track,
+                                egl = egl,
+                                mirror = true,
+                                modifier = Modifier.fillMaxWidth().height(90.dp).clip(RoundedCornerShape(10.dp)),
+                                isOverlay = true
+                            )
+                        }
                     }
                 }
                 Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
@@ -216,7 +224,7 @@ private fun ZoomHeader(state: ZoomUiState.Active){
 @Composable
 private fun ZoomElapsedTimer(startedAt: Long){
     var elapsed by remember{mutableStateOf(0L)}
-    LaunchedEffect(startedAt){ while(true){ elapsed=(System.currentTimeMillis()-startedAt).coerceAtLeast(0L); delay(1000)}}
+    LaunchedEffect(startedAt){ while(isActive){ elapsed=(System.currentTimeMillis()-startedAt).coerceAtLeast(0L); delay(1000)}}
     val secs=(elapsed/1000)%60; val mins=(elapsed/1000)/60
     Text(String.format("%02d:%02d", mins, secs), color=Color.White.copy(0.85f), fontSize=11.sp)
 }
@@ -233,11 +241,9 @@ private fun ZoomVoiceGrid(state: ZoomUiState.Active){
 
 @Composable
 private fun ZoomAvatarTile(label: String, initial: String, isMuted: Boolean, isSpeaking: Boolean, isSelf: Boolean){
-    val inf=rememberInfiniteTransition(label="z_$label")
-    val pulse by inf.animateFloat(initialValue=1f, targetValue=if(isSpeaking)1.08f else 1f, animationSpec=infiniteRepeatable(tween(700), RepeatMode.Reverse), label="p")
     Column(horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(8.dp)){
         Box(contentAlignment=Alignment.Center, modifier=Modifier.size(96.dp)){
-            if(isSpeaking){ Box(Modifier.size(96.dp).scale(pulse).clip(CircleShape).background(ZoomBlue.copy(0.18f))); Box(Modifier.size(86.dp).scale(pulse*0.96f).clip(CircleShape).background(ZoomBlue.copy(0.12f)))}
+            if(isSpeaking){ ZoomSpeakingHalo(label) }
             Box(Modifier.size(74.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A)))).border(if(isSpeaking)2.dp else 1.dp, if(isSpeaking) ZoomBlue else Color.White.copy(0.12f), CircleShape), contentAlignment=Alignment.Center){ Text(initial.uppercase(), color=Color.White, fontSize=22.sp, fontWeight=FontWeight.Bold)}
             if(isMuted) Box(Modifier.align(Alignment.BottomEnd).size(26.dp).clip(CircleShape).background(Color(0xFFE53935)).border(2.dp, Color(0xFF02070E), CircleShape), contentAlignment=Alignment.Center){ Icon(Icons.Default.MicOff, null, tint=Color.White, modifier=Modifier.size(14.dp))}
         }
@@ -284,7 +290,7 @@ private fun ZoomVideoGrid(state: ZoomUiState.Active, isSpeakerView: Boolean, onT
 @Composable
 private fun ZoomControlIsland(state: ZoomUiState.Active, isSpeakerView: Boolean, onToggleSpeakerView:()->Unit, onRecordClick:()->Unit){
     val context=LocalContext.current
-    val screenLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){ res-> if(res.resultCode==Activity.RESULT_OK && res.data!=null) ZoomGroupCallService.startScreenShare(context, res.data!!)}
+    val screenLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){ res-> if(res.resultCode==Activity.RESULT_OK) res.data?.let { ZoomGroupCallService.startScreenShare(context, it) } }
     Column(Modifier.fillMaxWidth().padding(top=10.dp, bottom=18.dp, start=16.dp, end=16.dp), verticalArrangement=Arrangement.spacedBy(12.dp), horizontalAlignment=Alignment.CenterHorizontally){
         if(ZoomRuntime.isHost && state.members.any{it.status==ZoomMemberStatus.JOINED}){
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF1E293B)).border(1.dp, ZoomBlue.copy(0.2f), RoundedCornerShape(12.dp)).padding(horizontal=14.dp, vertical=8.dp), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically){
@@ -309,7 +315,7 @@ private fun ZoomControlIsland(state: ZoomUiState.Active, isSpeakerView: Boolean,
                     }
                     ZoomIslandBtn(if(ZoomRuntime.isHandRaised) Icons.Default.BackHand else Icons.Default.PanTool, if(ZoomRuntime.isHandRaised) ZoomBlue else Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_RAISE_HAND)}
                 } else {
-                    ZoomIslandBtn(Icons.Default.VolumeUp, Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_TOGGLE_SPEAKER)}
+                    ZoomIslandBtn(Icons.AutoMirrored.Filled.VolumeUp, Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_TOGGLE_SPEAKER)}
                 }
                 Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0xFFE53935)).clickable{ ZoomGroupCallService.end(context)}, contentAlignment=Alignment.Center){ Icon(Icons.Default.CallEnd, null, tint=Color.White, modifier=Modifier.size(26.dp))}
             }
@@ -372,9 +378,15 @@ private fun ZoomIncomingPanel(state: ZoomUiState.Incoming){
     }
 }
 
+@Composable private fun ZoomSpeakingHalo(label: String){
+    val inf=rememberInfiniteTransition(label="z_$label")
+    val pulse by inf.animateFloat(initialValue=1f, targetValue=1.08f, animationSpec=infiniteRepeatable(tween(700), RepeatMode.Reverse), label="p")
+    Box(Modifier.size(96.dp).scale(pulse).clip(CircleShape).background(ZoomBlue.copy(0.18f))); Box(Modifier.size(86.dp).scale(pulse*0.96f).clip(CircleShape).background(ZoomBlue.copy(0.12f)))
+}
+
 @Composable private fun ZoomMemberTile(member: ZoomMember){
-    val inf=rememberInfiniteTransition(label="z_${member.userId}")
-    val pulse by inf.animateFloat(initialValue=1f, targetValue=if(member.status==ZoomMemberStatus.RINGING)1.10f else 1f, animationSpec=infiniteRepeatable(tween(650), RepeatMode.Reverse), label="p")
+    val isRinging = member.status==ZoomMemberStatus.RINGING
+    val pulse: Float = if (isRinging) { ZoomRingPulse(member.userId) } else 1f
     val (border, label, col)=when(member.status){
         ZoomMemberStatus.RINGING-> Triple(ZoomBlue, "يرن...", Color(0xFFFFC107))
         ZoomMemberStatus.JOINED-> Triple(ZoomBlue, "انضم ✓", ZoomBlue)
@@ -390,6 +402,12 @@ private fun ZoomIncomingPanel(state: ZoomUiState.Incoming){
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(col.copy(0.15f)).padding(horizontal=7.dp, vertical=2.dp)){ Text(label, color=col, fontSize=10.sp, fontWeight=FontWeight.Bold)}
         if(member.isHandRaised) Text("✋ رافع يده", color=ZoomBlue, fontSize=9.sp)
     }
+}
+
+@Composable private fun ZoomRingPulse(userId: String): Float{
+    val inf=rememberInfiniteTransition(label="z_$userId")
+    val pulse by inf.animateFloat(initialValue=1f, targetValue=1.10f, animationSpec=infiniteRepeatable(tween(650), RepeatMode.Reverse), label="p")
+    return pulse
 }
 
 @Composable
@@ -506,11 +524,13 @@ private fun ZoomVideoTile(label:String, track: VideoTrack?, isMuted:Boolean, isM
     androidx.compose.material3.Card(modifier=modifier.border(width=if(isMuted)0.dp else 1.dp, color=if(isMuted) Color.Transparent else ZoomBlue.copy(0.45f), shape=RoundedCornerShape(14.dp)), shape=RoundedCornerShape(14.dp), colors=CardDefaults.cardColors(containerColor=Color(0xFF0F172A)), elevation=CardDefaults.cardElevation(2.dp)){
         Box(Modifier.fillMaxSize()){
             if(track!=null && eglContext!=null){
-                androidx.compose.runtime.key(track, eglContext){
-                    var r: SurfaceViewRenderer? by remember{mutableStateOf(null)}
-                    AndroidView(factory={ctx-> SurfaceViewRenderer(ctx).apply{ init(eglContext,null); setMirror(isMirror); setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL); setEnableHardwareScaler(true); r=this; track.addSink(this)}}, update={v-> if(r==v) track.addSink(v)}, onRelease={v-> track.removeSink(v); v.release()}, modifier=Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)))
-                    DisposableEffect(track, r){ onDispose{ r?.let{track.removeSink(it)}}}
-                }
+                WebrtcVideo(
+                    track = track,
+                    egl = eglContext,
+                    mirror = isMirror,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+                    isOverlay = true
+                )
             } else {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF162544), Color(0xFF040A14)))), contentAlignment=Alignment.Center){
                     Column(horizontalAlignment=Alignment.CenterHorizontally, verticalArrangement=Arrangement.spacedBy(10.dp)){

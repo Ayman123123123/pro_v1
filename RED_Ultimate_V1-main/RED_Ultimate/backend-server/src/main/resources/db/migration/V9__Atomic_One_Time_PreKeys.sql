@@ -1,5 +1,5 @@
--- Public one-time pre-keys only. Private key material is generated and retained on Android.
-CREATE TABLE one_time_ec_prekeys (
+﻿-- Public one-time pre-keys only. Private key material is generated and retained on Android.
+CREATE TABLE IF NOT EXISTS one_time_ec_prekeys (
     device_id UUID NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
     key_id INTEGER NOT NULL CHECK (key_id >= 0),
     public_key BYTEA NOT NULL CHECK (octet_length(public_key) BETWEEN 16 AND 4096),
@@ -8,7 +8,7 @@ CREATE TABLE one_time_ec_prekeys (
     PRIMARY KEY (device_id, key_id)
 );
 
-CREATE TABLE one_time_kyber_prekeys (
+CREATE TABLE IF NOT EXISTS one_time_kyber_prekeys (
     device_id UUID NOT NULL REFERENCES user_devices(id) ON DELETE CASCADE,
     key_id INTEGER NOT NULL CHECK (key_id >= 0),
     public_key BYTEA NOT NULL CHECK (octet_length(public_key) BETWEEN 32 AND 16384),
@@ -18,5 +18,6 @@ CREATE TABLE one_time_kyber_prekeys (
     PRIMARY KEY (device_id, key_id)
 );
 
-CREATE INDEX idx_ec_prekeys_available ON one_time_ec_prekeys(device_id, created_at, key_id) WHERE consumed_at IS NULL;
-CREATE INDEX idx_kyber_prekeys_available ON one_time_kyber_prekeys(device_id, created_at, key_id) WHERE consumed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ec_prekeys_available ON one_time_ec_prekeys(device_id, created_at, key_id) WHERE consumed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_kyber_prekeys_available ON one_time_kyber_prekeys(device_id, created_at, key_id) WHERE consumed_at IS NULL;
+

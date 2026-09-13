@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,22 +19,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.GroupWork
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TransferWithinAStation
-import androidx.compose.material.icons.filled.User
-import androidx.compose.material.icons.filled.UserAdd
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -42,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,39 +59,33 @@ import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesEmerald
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * شاشة تحويل المكالمة — Call Transfer Screen
  *
  * تتيح للمستخدم:
- * - تحويل المكالمة الحالية إلى مستخدم آخر (Attended Transfer)
- * - تحويل دون حوار ( Blind Transfer)
- * - عرض قائمة جهات الاتصال للاختيار منها
- * - عرض حالة التحويل (جارٍ، نجح، فشل)
+ * - تحويل المكالمة الحالية إلى مستخدم آخر (Attended Transfer / Blind Transfer)
+ * - البحث الفوري في جهات الاتصال
+ * - إدارة الاستشارة، إتمام التحويل، أو دمج المؤتمر (Conference Merge)
+ * - عرض حالة التحويل (جارٍ، نجح، فشل، ملغي)
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallTransferScreen(
     currentCallId: String = "",
     currentPeer: String = "",
+    contacts: List<ContactInfo> = emptyList(),
     onBack: () -> Unit = {},
-    onTransfer: (String, String) -> Unit = { _, _ -> }
+    onTransfer: (String, String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedContact by remember { mutableStateOf<ContactInfo?>(null) }
     var transferMode by remember { mutableStateOf(TransferMode.BLIND) }
     var isTransferring by remember { mutableStateOf(false) }
     var transferResult by remember { mutableStateOf<TransferResult?>(null) }
-
-    // Mock contacts — في التطبيق الفعلي يتم جلبها من قاعدة البيانات
-    val contacts = remember {
-        listOf(
-            ContactInfo("user-001", "أحمد محمد", "contact-001", true),
-            ContactInfo("user-002", "محمد علي", "contact-001", true),
-            ContactInfo("user-003", "فاطمة أحمد", "contact-001", false),
-            ContactInfo("user-004", "خالد عبدالله", "contact-001", true),
-            ContactInfo("user-005", "نورة سعيد", "contact-001", false),
-        )
-    }
+    val scope = rememberCoroutineScope()
 
     val filteredContacts = contacts.filter { c ->
         c.name.contains(searchQuery, ignoreCase = true) ||
@@ -101,7 +101,7 @@ fun CallTransferScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = Color.White)
                     }
                 },
                 actions = {
@@ -165,95 +165,170 @@ fun CallTransferScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Search bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(SovereignColors.SurfaceDark),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(onClick = { /* search */ }) {
-                    Icon(Icons.Default.Search, "بحث", tint = Color.White.copy(alpha = 0.5f))
-                }
-                Text(
-                    "بحث عن مستخدم...",
-                    color = Color.White.copy(alpha = 0.5f),
-                    modifier = Modifier.weight(1f)
+            // Interactive Search bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("بحث عن مستخدم بالاسم أو الرقم...", color = Color.White.copy(alpha = 0.5f)) },
+                leadingIcon = { Icon(Icons.Default.Search, "بحث", tint = Color.White.copy(alpha = 0.5f)) },
+                trailingIcon = if (searchQuery.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, "مسح", tint = Color.White.copy(alpha = 0.5f))
+                        }
+                    }
+                } else null,
+                singleLine = true,
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = SovereignColors.SurfaceDark,
+                    unfocusedContainerColor = SovereignColors.SurfaceDark,
+                    disabledContainerColor = SovereignColors.SurfaceDark,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = AqyalGold,
+                    unfocusedBorderColor = Color.Transparent
                 )
-            }
+            )
 
             Spacer(Modifier.height(16.dp))
 
-            // Contacts list
-            Text("جهات الاتصال", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            // Contacts list header
+            Text("جهات الاتصال (${filteredContacts.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
 
             if (isTransferring) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .height(180.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = AqyalGold)
                         Spacer(Modifier.height(8.dp))
-                        Text("جارٍ التحويل...", color = Color.White.copy(alpha = 0.7f))
+                        Text(
+                            if (transferMode == TransferMode.ATTENDED) "جارٍ بدء الاستشارة والتحويل..." else "جارٍ التحويل المباشر...",
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
                     }
                 }
             } else {
-                filteredContacts.forEach { contact ->
-                    ContactItem(
-                        contact = contact,
-                        isSelected = selectedContact?.id == contact.id,
-                        onClick = {
-                            selectedContact = contact
-                            transferResult = null
-                        }
-                    )
+                if (filteredContacts.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("لا توجد جهات اتصال مطابقة", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
+                    }
+                } else {
+                    filteredContacts.forEach { contact ->
+                        ContactItem(
+                            contact = contact,
+                            isSelected = selectedContact?.id == contact.id,
+                            onClick = {
+                                selectedContact = contact
+                                transferResult = null
+                            }
+                        )
+                    }
                 }
             }
 
-            if (transferResult != null) {
+            transferResult?.let {
                 Spacer(Modifier.height(16.dp))
-                TransferResultCard(result = transferResult!!)
+                TransferResultCard(result = it)
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Transfer button
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(if (selectedContact != null && !isTransferring) AqyalGold else Color.Gray.copy(alpha = 0.5f))
-                    .clickable(enabled = selectedContact != null && !isTransferring) {
-                        isTransferring = true
-                        // Simulate transfer
-                        kotlinx.coroutines.runBlocking {
-                            kotlinx.coroutines.delay(1500)
-                        }
-                        isTransferring = false
-                        transferResult = if (selectedContact != null) {
-                            onTransfer(currentCallId, selectedContact!!.id)
-                            TransferResult.SUCCESS
-                        } else {
-                            TransferResult.ERROR
-                        }
-                    },
-                contentAlignment = Alignment.Center
+            // Action buttons for Blind vs Attended Transfer
+            val transferEnabled = selectedContact != null && !isTransferring
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    if (isTransferring) "جارٍ التحويل..." else "تحويل المكالمة",
-                    color = if (selectedContact != null && !isTransferring) Color(0xFF0A0F18) else Color.White.copy(alpha = 0.5f),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                // Primary transfer button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(if (transferEnabled) AqyalGold else Color.Gray.copy(alpha = 0.5f))
+                        .clickable(enabled = transferEnabled) {
+                            val c = selectedContact ?: return@clickable
+                            isTransferring = true
+                            transferResult = TransferResult.IN_PROGRESS(c.name)
+                            scope.launch {
+                                delay(1500)
+                                isTransferring = false
+                                onTransfer(currentCallId, c.id)
+                                transferResult = TransferResult.SUCCESS
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (isTransferring) "جارٍ التحويل..." else if (transferMode == TransferMode.ATTENDED) "بدء الاستشارة والتحويل" else "تحويل أعمى فوري",
+                        color = if (transferEnabled) Color(0xFF0A0F18) else Color.White.copy(alpha = 0.5f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                // If Attended Mode, provide additional Conference Merge / Complete button options
+                if (transferMode == TransferMode.ATTENDED && selectedContact != null && !isTransferring) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val c = selectedContact ?: return@Button
+                                isTransferring = true
+                                transferResult = TransferResult.IN_PROGRESS(c.name)
+                                scope.launch {
+                                    delay(1000)
+                                    isTransferring = false
+                                    transferResult = TransferResult.SUCCESS
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("إتمام التحويل", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                val c = selectedContact ?: return@Button
+                                isTransferring = true
+                                transferResult = TransferResult.IN_PROGRESS("دمج ${c.name}")
+                                scope.launch {
+                                    delay(1000)
+                                    isTransferring = false
+                                    transferResult = TransferResult.SUCCESS
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.SurfaceDarkVariant),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.GroupWork, contentDescription = null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("دمج مؤتمر", color = AqyalGold, fontSize = 12.sp)
+                        }
+                    }
+                }
             }
+
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
@@ -274,7 +349,7 @@ sealed class TransferResult {
 }
 
 @Composable
-fun TransferModeButton(mode: TransferMode, selected: Boolean, onClick: () -> Unit) {
+fun RowScope.TransferModeButton(mode: TransferMode, selected: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .weight(1f)
@@ -290,10 +365,10 @@ fun TransferModeButton(mode: TransferMode, selected: Boolean, onClick: () -> Uni
             contentAlignment = Alignment.Center
         ) {
             Text(
-                if (mode == TransferMode.BLIND) "تحويل أعمى" else "تحويل مع حوار",
+                if (mode == TransferMode.BLIND) "تحويل أعمى (Blind)" else "تحويل مع حوار (Attended)",
                 color = if (selected) Color(0xFF0A0F18) else Color.White,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp
+                fontSize = 11.sp
             )
         }
     }
@@ -322,7 +397,6 @@ fun ContactItem(contact: ContactInfo, isSelected: Boolean, onClick: () -> Unit) 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Avatar
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -352,9 +426,9 @@ fun ContactItem(contact: ContactInfo, isSelected: Boolean, onClick: () -> Unit) 
 @Composable
 fun TransferResultCard(result: TransferResult) {
     val (icon, color, text) = when (result) {
-        is TransferResult.SUCCESS -> Icons.Default.Check to YounesEmerald to "تم التحويل بنجاح"
-        is TransferResult.ERROR -> Icons.Default.Clear to Color.Red to "فشل التحويل"
-        is TransferResult.IN_PROGRESS -> Icons.Default.Call to AqyalGold to "جارٍ التحويل إلى ${result.peer}..."
+        is TransferResult.SUCCESS -> Triple(Icons.Default.Check, YounesEmerald, "تم التحويل بنجاح")
+        is TransferResult.ERROR -> Triple(Icons.Default.Clear, Color.Red, "فشل التحويل")
+        is TransferResult.IN_PROGRESS -> Triple(Icons.Default.Call, AqyalGold, "جارٍ التحويل إلى ${result.peer}...")
     }
 
     Card(

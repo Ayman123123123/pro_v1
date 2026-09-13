@@ -56,7 +56,11 @@ class RegistrationService(
         } catch (_: DataIntegrityViolationException) {
             throw IllegalArgumentException("Username is already registered")
         }
+        // الحساب الجديد يبقى PENDING حتى يعتمده المسؤول — لا رموز ولا جلسات قبل الاعتماد.
+        // الجهاز الأول يبقى PENDING مع الحساب (DeviceEnrollmentService ينشئه PENDING أصلًا).
         val device = enrollment.enroll(user, request.device)
+        devices.save(device)
+
         val recoveryCodes = recovery.createFor(user)
         return AuthResponse(
             status = user.status,

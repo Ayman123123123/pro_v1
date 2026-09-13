@@ -31,6 +31,9 @@ class CallBootReceiver : BroadcastReceiver() {
         // دون ذلك يتجمد التسجيل حتى يفتح المستخدم التطبيق يدوياً.
         // آمن بدون Firebase SDK: لا يُرسَل شيء إن لم يوجد توكن مخزّن.
         runCatching { VoipPushRegistrar.register(context) }
+        // أعد جدولة منبهات المكالمات المجدولة — AlarmManager لا ينجو من reboot
+        // (المخزن ينجو، المنبهات لا) فتضيع المواعيد بصمت دونه.
+        runCatching { ScheduledCallScheduler.rescheduleAll(context) }
     }
 
     companion object {

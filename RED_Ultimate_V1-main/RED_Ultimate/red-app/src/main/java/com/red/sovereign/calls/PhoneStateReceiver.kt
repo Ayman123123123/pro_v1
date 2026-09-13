@@ -19,11 +19,14 @@ import com.red.sovereign.MainActivity
 class PhoneStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
+        val subId = intent.getIntExtra("subscription", -1)
+            .let { if (it != -1) it else intent.getIntExtra(android.telephony.SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, -1) }
+
         when (state) {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
                 if (CallRuntime.state is CallUiState.Active) {
-                    showPstnReminderNotification(context, incomingNumber)
+                    showPstnReminderNotification(context, incomingNumber, subId)
                 }
                 // Silence current RED ringer to avoid acoustic conflict
                 YounesCallService.silenceRinger(context)
@@ -41,7 +44,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun showPstnReminderNotification(context: Context, number: String?) {
+    private fun showPstnReminderNotification(context: Context, number: String?, subId: Int) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         // Ensure channel exists
@@ -58,6 +61,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
         }
 
         val displayNumber = number?.let { maskPhoneNumber(it) } ?: "رقم مخفي"
+        val simInfo = if (subId != -1) " [SIM $subId]" else ""
         val openAppIntent = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java),
@@ -66,7 +70,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(context, PSTN_CHANNEL)
             .setSmallIcon(com.red.sovereign.R.drawable.ic_stat_call)
-            .setContentTitle("مكالمة هاتفية واردة")
+            .setContentTitle("مكالمة هاتفية واردة$simInfo")
             .setContentText("PSTN: $displayNumber — رُد من تطبيق الهاتف")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -76,10 +80,10 @@ class PhoneStateReceiver : BroadcastReceiver() {
             .build()
 
         manager.notify(PSTN_NOTIFICATION_ID, notification)
-        android.util.Log.i("PhoneStateReceiver", "PSTN notification shown for: $displayNumber")
+        android.util.Log.i("PhoneStateReceiver", "PSTN notification shown for: $displayNumber (subId=$subId)")
     }
 
-    /** Mask a phone number before displaying it in a notification. */
+    /** Mask phone number: +9677XXXXXXX → +967••••XXX */
     private fun maskPhoneNumber(number: String): String {
         if (number.length < 6) return number
         val prefix = number.take(4)

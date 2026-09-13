@@ -1,4 +1,4 @@
-CREATE TABLE user_devices (
+CREATE TABLE IF NOT EXISTS user_devices (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_name VARCHAR(100) NOT NULL,
@@ -19,9 +19,9 @@ CREATE TABLE user_devices (
     CONSTRAINT uq_user_identity_fingerprint UNIQUE (user_id, identity_fingerprint)
 );
 
-CREATE INDEX idx_user_devices_user_status ON user_devices(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_user_devices_user_status ON user_devices(user_id, status);
 
-CREATE TABLE refresh_sessions (
+CREATE TABLE IF NOT EXISTS refresh_sessions (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_id UUID REFERENCES user_devices(id) ON DELETE CASCADE,
@@ -32,5 +32,5 @@ CREATE TABLE refresh_sessions (
     replaced_by UUID
 );
 
-CREATE INDEX idx_refresh_sessions_user_active ON refresh_sessions(user_id, revoked_at);
-CREATE INDEX idx_refresh_sessions_device_active ON refresh_sessions(device_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_sessions_user_active ON refresh_sessions(user_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_refresh_sessions_device_active ON refresh_sessions(device_id, revoked_at);

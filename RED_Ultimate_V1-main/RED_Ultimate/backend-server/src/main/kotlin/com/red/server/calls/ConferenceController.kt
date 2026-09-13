@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.stereotype.Service
 import org.springframework.web.bind.annotation.*
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotBlank
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -24,11 +26,15 @@ data class ConferenceRoomRecord(
     val hostName: String = "",
     val hostRedId: String = "",
     val title: String = "",
+    val description: String = "",
     val isSpace: Boolean = false, // true for Audio Space, false for Video Conference
     val isPrivate: Boolean = false,
     val passwordHash: String? = null,
     val createdAt: Instant = Instant.now(),
-    var endedAt: Instant? = null
+    var endedAt: Instant? = null,
+    val maxSpeakers: Int = 20,
+    val maxVideo: Int = 12,
+    val maxCoHosts: Int = 2
 ) {
     var participantCount: Int = 0
 }
@@ -37,7 +43,16 @@ data class ConferenceRoomRecord(
 class ConferenceRoomService(
     private val passwordHasher: RoomPasswordHasher
 ) {
-    companion object { private val log = LoggerFactory.getLogger(ConferenceRoomService::class.java) }
+    companion object {
+        private val log = LoggerFactory.getLogger(ConferenceRoomService::class.java)
+        /** حدود سعة مُنفذة (X Spaces: حتى 10-13 متحدث، مستمعون بلا حد). */
+        const val MAX_PARTICIPANTS = 100
+        const val MAX_VIDEO_TILES = 12
+        const val MAX_SPEAKERS = 20
+        const val MAX_COHOSTS = 2
+        /** الغرف العامة تُخفى بعد 12 ساعة من الإنشاء (تنظيف منطقي بدون كسر in-memory). */
+        const val PUBLIC_ROOM_TTL_HOURS = 12L
+    }
 
     private val roomParticipants = ConcurrentHashMap<String, MutableSet<String>>()
     private val activeRooms = ConcurrentHashMap<String, ConferenceRoomRecord>()
@@ -53,7 +68,8 @@ class ConferenceRoomService(
         isSpace: Boolean,
         isPrivate: Boolean,
         password: String?,
-        inviteeRedIds: Collection<String> = emptyList()
+        inviteeRedIds: Collection<String> = emptyList(),
+        description: String = ""
     ): ConferenceRoomRecord {
         require(roomId.isNotBlank()) { "ROOM_ID_REQUIRED" }
         require(hostId.isNotBlank()) { "HOST_ID_REQUIRED" }
@@ -70,10 +86,14 @@ class ConferenceRoomService(
             hostName = hostName.ifBlank { "مضيف المساحة" },
             hostRedId = hostRedId,
             title = title.ifBlank { if (isSpace) "مساحة صوتية 🎙️" else "مؤتمر جماعي 👥" },
+            description = description.take(200),
             isSpace = isSpace,
             isPrivate = isPrivate,
             passwordHash = passHash,
-            createdAt = Instant.now()
+            createdAt = Instant.now(),
+            maxSpeakers = if (isSpace) MAX_SPEAKERS else MAX_VIDEO_TILES,
+            maxVideo = MAX_VIDEO_TILES,
+            maxCoHosts = MAX_COHOSTS
         )
         roomParticipants[roomId] = ConcurrentHashMap.newKeySet()
         roomInvitees[roomId] = ConcurrentHashMap.newKeySet<String>().apply {
@@ -96,8 +116,10 @@ class ConferenceRoomService(
 
     fun searchPublicRooms(query: String?, isSpaceOnly: Boolean = false): List<ConferenceRoomRecord> {
         val cleanQuery = query?.trim()?.lowercase().orEmpty()
+        val cutoff = Instant.now().minusSeconds(PUBLIC_ROOM_TTL_HOURS * 3600)
         return activeRooms.values
             .filter { !it.isPrivate }
+            .filter { it.endedAt == null && it.createdAt.isAfter(cutoff) }
             .filter { if (isSpaceOnly) it.isSpace else true }
             .filter { record ->
                 if (cleanQuery.isBlank()) true
@@ -118,6 +140,12 @@ class ConferenceRoomService(
         return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true
     }
 
+    /** مدعو صراحةً (أو المضيف) — يتجاوز كلمة السر لأن الدعوة نفسها اعتماد. */
+    fun isInvited(roomId: String, accountId: String, redId: String): Boolean {
+        val room = activeRooms[roomId] ?: return false
+        return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true
+    }
+
     fun addInvitees(roomId: String, redIds: Collection<String>) {
         val invitees = roomInvitees[roomId] ?: return
         invitees.addAll(redIds.filter { it.isNotBlank() })
@@ -125,11 +153,14 @@ class ConferenceRoomService(
 
     fun addParticipant(roomId: String, userId: String): Int {
         val set = roomParticipants[roomId] ?: return -1
+        if (!set.contains(userId) && set.size >= MAX_PARTICIPANTS) return -2 // ROOM_FULL
         set.add(userId)
         val count = set.size
         activeRooms[roomId]?.participantCount = count
         return count
     }
+
+    fun isRoomFull(roomId: String): Boolean = getParticipantCount(roomId) >= MAX_PARTICIPANTS
 
     fun removeParticipant(roomId: String, userId: String) {
         roomParticipants[roomId]?.remove(userId)
@@ -160,12 +191,14 @@ class ConferenceController(
 
     @PostMapping("/create")
     fun createRoom(
-        @RequestBody request: CreateRoomRequest,
+        @Valid @RequestBody request: CreateRoomRequest,
         authentication: Authentication
     ): ResponseEntity<ConferenceRoomResponse> {
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        val roomId = request.roomId.trim().ifBlank { "room_${UUID.randomUUID().toString().take(12)}" }
+        // roomId اختياري: إن كان فارغاً يولّد الخادم معرفاً (إصلاح فشل Explore الذي كان يرسل "")
+        val roomId = request.roomId.trim().ifBlank { "room_${UUID.randomUUID().toString().replace("-", "").take(12)}" }
+        require(roomId.matches(Regex("^[A-Za-z0-9_-]{4,128}$"))) { "Invalid roomId" }
         val record = roomService.createRoom(
             roomId = roomId,
             hostId = user.id.toString(),
@@ -175,7 +208,8 @@ class ConferenceController(
             isSpace = request.isSpace,
             isPrivate = request.isPrivate,
             password = request.password,
-            inviteeRedIds = request.inviteeRedIds
+            inviteeRedIds = request.inviteeRedIds,
+            description = request.description
         )
         val inviteLink = "younes://${if (request.isSpace) "space" else "conference"}/$roomId"
         runCatching {
@@ -191,12 +225,15 @@ class ConferenceController(
         return ResponseEntity.ok(ConferenceRoomResponse(
             roomId = record.roomId,
             title = record.title,
+            description = record.description,
             hostName = record.hostName,
             hostRedId = record.hostRedId,
             isSpace = record.isSpace,
             isPrivate = record.isPrivate,
             participantCount = 0,
-            inviteLink = inviteLink
+            inviteLink = inviteLink,
+            maxSpeakers = record.maxSpeakers,
+            maxVideo = record.maxVideo
         ))
     }
 
@@ -210,12 +247,15 @@ class ConferenceController(
             ConferenceRoomResponse(
                 roomId = record.roomId,
                 title = record.title,
+                description = record.description,
                 hostName = record.hostName,
                 hostRedId = record.hostRedId,
                 isSpace = record.isSpace,
                 isPrivate = record.isPrivate,
                 participantCount = record.participantCount,
-                inviteLink = "younes://${if (record.isSpace) "space" else "conference"}/${record.roomId}"
+                inviteLink = "younes://${if (record.isSpace) "space" else "conference"}/${record.roomId}",
+                maxSpeakers = record.maxSpeakers,
+                maxVideo = record.maxVideo
             )
         }
         return ResponseEntity.ok(responses)
@@ -231,8 +271,11 @@ class ConferenceController(
             ?: throw NoSuchElementException("Conference room not found")
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        // المدعو/المضيف يتجاوز كلمة السر (الدعوة اعتماد) — كلمة السر للعامة المحمية فقط.
+        // (كان المدعو لغرفة خاصة بكلمة سر يُرفض 403 بلا طريق دخول).
+        val member = roomService.isInvited(roomId, authentication.name, user.redId)
         val authorized = roomService.canJoin(roomId, authentication.name, user.redId) &&
-            roomService.verifyPassword(roomId, request.password)
+            (member || roomService.verifyPassword(roomId, request.password))
         if (!authorized) {
             return ResponseEntity.status(403).body(JoinRoomResponse(
                 authorized = false,
@@ -240,11 +283,19 @@ class ConferenceController(
                 errorMessage = "لا تملك صلاحية الانضمام إلى هذه المكالمة"
             ))
         }
+        if (roomService.isRoomFull(roomId)) {
+            return ResponseEntity.status(429).body(JoinRoomResponse(
+                authorized = false,
+                roomId = roomId,
+                errorMessage = "الغرفة ممتلئة (حتى ${ConferenceRoomService.MAX_PARTICIPANTS} مشارك)"
+            ))
+        }
         roomService.addParticipant(roomId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
             roomId = record.roomId,
             title = record.title,
+            description = record.description,
             isSpace = record.isSpace,
             hostName = record.hostName
         ))
@@ -303,7 +354,8 @@ class ConferenceController(
 
 data class CreateRoomRequest(
     val roomId: String = "",
-    val title: String = "",
+    @field:NotBlank val title: String,
+    val description: String = "",
     val isSpace: Boolean = false,
     val isPrivate: Boolean = false,
     val password: String? = null,
@@ -313,12 +365,15 @@ data class CreateRoomRequest(
 data class ConferenceRoomResponse(
     val roomId: String,
     val title: String,
+    val description: String = "",
     val hostName: String,
     val hostRedId: String,
     val isSpace: Boolean,
     val isPrivate: Boolean,
     val participantCount: Int,
-    val inviteLink: String
+    val inviteLink: String,
+    val maxSpeakers: Int = 20,
+    val maxVideo: Int = 12
 )
 
 data class JoinRoomRequest(
@@ -329,6 +384,7 @@ data class JoinRoomResponse(
     val authorized: Boolean,
     val roomId: String,
     val title: String = "",
+    val description: String = "",
     val isSpace: Boolean = false,
     val hostName: String = "",
     val errorMessage: String? = null

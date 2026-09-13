@@ -138,6 +138,15 @@ function PollsTab() {
         message.error('أضف خيارين على الأقل');
         return;
       }
+      // صور الخيارات (نمط X): روابط موازية للخيارات — تُقبل مع 2..4 خيارات فقط.
+      const optionImages = (Array.isArray(values.optionImages) ? values.optionImages : [])
+        .map((item: unknown) => String(item ?? '').trim() || null)
+        .slice(0, options.length);
+      while (optionImages.length < options.length) optionImages.push(null);
+      if (optionImages.some(Boolean) && options.length > 4) {
+        message.error('الخيارات المصوّرة تدعم من خيارين إلى أربعة فقط');
+        return;
+      }
       await createPoll({
         question: values.question,
         options,
@@ -145,6 +154,7 @@ function PollsTab() {
         isAnonymous: values.isAnonymous,
         allowAddOptions: values.allowAddOptions,
         endsAt: values.endDate?.toISOString(),
+        optionImages,
       });
       message.success('تم إنشاء الاستطلاع');
       setCreateModalOpen(false);
@@ -320,6 +330,25 @@ function PollsTab() {
                   <Form.Item>
                     <Button onClick={() => add('')} icon={<PlusOutlined />}>إضافة خيار</Button>
                     <Form.ErrorList errors={errors} />
+                  </Form.Item>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
+          <Form.Item label="صور الخيارات (اختياري — روابط، حتى 4 خيارات)" tooltip="رابط صورة لكل خيار بنفس الترتيب. اتركه فارغًا للخيار النصي.">
+            <Form.List name="optionImages">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map((field, idx) => (
+                    <Space key={field.key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                      <Form.Item name={field.name} style={{ margin: 0, width: 350 }}>
+                        <Input placeholder={`رابط صورة الخيار ${idx + 1} (https://…)`} />
+                      </Form.Item>
+                      <Button danger onClick={() => remove(field.name)} icon={<DeleteOutlined />} />
+                    </Space>
+                  ))}
+                  <Form.Item>
+                    <Button onClick={() => add('')} icon={<PlusOutlined />}>إضافة صورة خيار</Button>
                   </Form.Item>
                 </>
               )}

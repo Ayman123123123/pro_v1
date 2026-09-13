@@ -8,20 +8,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +35,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -91,6 +99,12 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
         // لا onUnlocked() عند الفشل — القفل إجباري
     }
 
+    // PIN المحلي المشفر (AppLockStore) — بديل البصمة عند غيابها أو فشلها.
+    // يُحفظ كبصمة SHA-256 في SecureStore (Keystore) لا كنص خام.
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    val hasPin = remember { AppLockStore.hasPin(context) }
+
     // إطلاق البصمة تلقائياً عند ظهور الشاشة (فقط إن كانت متوفرة)
     LaunchedEffect(Unit) {
         if (canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS) {
@@ -128,12 +142,37 @@ fun AppLockScreen(onUnlocked: () -> Unit) {
             Icon(Icons.Default.Lock, null)
             Text(" فتح بالبصمة")
         }
+        // فتح بـ PIN المشفر — يعمل حتى بلا بصمة مسجلة على الجهاز.
+        if (hasPin) {
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = pinInput,
+                onValueChange = { pinInput = it.filter(Char::isDigit).take(8); pinError = null },
+                label = { Text("رمز PIN (4–8 أرقام)") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    if (AppLockStore.verifyPin(context, pinInput)) onUnlocked()
+                    else pinError = "رمز غير صحيح — حاول مرة أخرى"
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("فتح بالرمز") }
+            pinError?.let { msg ->
+                Spacer(Modifier.height(8.dp))
+                Text(msg, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+            }
+        }
         // رسالة الحالة (فشل/إرشاد) — تبقى التطبيق مقفلاً حتى النجاح
         statusMessage?.let { msg ->
             Spacer(Modifier.height(16.dp))
             Text(msg, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
         }
-        if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS) {
+        if (canAuthenticate != BiometricManager.BIOMETRIC_SUCCESS && !hasPin) {
             Spacer(Modifier.height(12.dp))
             Text(
                 "لا توجد بصمة/نمط مُسجّل على الجهاز. فعّل قفل الشاشة من إعدادات Android أولاً.",

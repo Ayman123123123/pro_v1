@@ -168,8 +168,10 @@ private fun PdfPages(file: File) {
 
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (error != null) {
+            error?.let { err ->
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Text(error!!, color = Color(0xFFD32F2F), textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+                Text(err, color = Color(0xFFD32F2F), textAlign = TextAlign.Center, modifier = Modifier.padding(24.dp))
+            }
             }
         } else {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -225,9 +227,9 @@ private fun TextViewerPane(file: File, query: String) {
         content == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("جارٍ القراءة…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        else -> SelectionContainer {
+        else -> content?.let { text ->
+            SelectionContainer {
             LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
-                val text = content!!
                 if (query.isBlank()) {
                     item { Text(text, fontSize = 13.sp, fontFamily = FontFamily.Monospace, lineHeight = 20.sp) }
                 } else {
@@ -245,6 +247,7 @@ private fun TextViewerPane(file: File, query: String) {
                         )
                     }
                 }
+            }
             }
         }
     }

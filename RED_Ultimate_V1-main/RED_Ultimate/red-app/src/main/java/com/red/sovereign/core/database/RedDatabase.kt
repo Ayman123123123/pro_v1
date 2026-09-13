@@ -1,6 +1,7 @@
 package com.red.sovereign.core.database
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -18,16 +19,20 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         StoryEntity::class,
         DraftEntity::class,
         MessageReactionEntity::class,
-        OutboxMessageEntity::class
+        OutboxMessageEntity::class,
+        StarredMessageEntity::class,
+        MediaUploadEntity::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
     abstract fun redDao(): RedDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun mediaUploadDao(): MediaUploadDao
 
     companion object {
+        private const val TAG = "RedDatabase"
         @Volatile
         private var INSTANCE: RedDatabase? = null
 
@@ -57,7 +62,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -67,7 +72,7 @@ abstract class RedDatabase : RoomDatabase() {
                 try {
                     java.io.File("${dbFile().absolutePath}-wal").delete()
                     java.io.File("${dbFile().absolutePath}-shm").delete()
-                } catch (_: Exception) {}
+                } catch (e: Exception) { Log.w(TAG, "deleteSideFiles failed", e) }
             }
 
             fun backupCorrupted(): java.io.File? {
@@ -77,7 +82,7 @@ abstract class RedDatabase : RoomDatabase() {
                         val backup = java.io.File(f.parent, "red_sovereign.db.corrupted.${System.currentTimeMillis()}.bak")
                         if (f.renameTo(backup)) backup else null
                     } else null
-                } catch (_: Exception) { null }
+                } catch (e: Exception) { Log.w(TAG, "backupCorrupted failed", e); null }
             }
 
             fun latestCorruptedBackup(): java.io.File? {
@@ -85,7 +90,7 @@ abstract class RedDatabase : RoomDatabase() {
                     java.io.File(dbFile().parent)
                         .listFiles { _, name -> name.startsWith("red_sovereign.db.corrupted.") && name.endsWith(".bak") }
                         ?.maxByOrNull { it.name }
-                } catch (_: Exception) { null }
+                } catch (e: Exception) { Log.w(TAG, "latestCorruptedBackup failed", e); null }
             }
 
             fun restoreFromBackup(backup: java.io.File): RedDatabase? {
@@ -95,7 +100,7 @@ abstract class RedDatabase : RoomDatabase() {
                     backup.copyTo(target, overwrite = true)
                     deleteSideFiles()
                     create().also { db -> db.openHelper.writableDatabase }
-                } catch (_: Exception) { null }
+                } catch (e: Exception) { Log.w(TAG, "restoreFromBackup failed for ${backup.name}", e); null }
             }
 
             // 1) Normal open
@@ -121,7 +126,7 @@ abstract class RedDatabase : RoomDatabase() {
                     try {
                         java.io.File(dbFile().parent, "red_sovereign.db.legacy-${System.currentTimeMillis()}.bak")
                             .writeBytes(byteArrayOf()) // placeholder marker; old bytes already backed up above
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) { Log.w(TAG, "legacy marker write failed", e) }
                     secureStore.remove("passphrase")
                     val newPass = java.util.UUID.randomUUID().toString()
                     secureStore.put("passphrase", newPass)
@@ -132,7 +137,7 @@ abstract class RedDatabase : RoomDatabase() {
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -201,5 +206,68 @@ private val OUTBOX_MIGRATION_4_5 = object : androidx.room.migration.Migration(4,
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_messages_status_nextAttemptAt` ON `outbox_messages` (`status`, `nextAttemptAt`)")
         database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_messages_conversationId` ON `outbox_messages` (`conversationId`)")
         database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_outbox_messages_idempotencyKey` ON `outbox_messages` (`idempotencyKey`)")
+    }
+}
+
+/** جدول الرسائل المُعلَّمة (Starred/Bookmarked) — للرجوع السريع إليها. */
+private val STARRED_MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `starred_messages` (
+                `messageId` TEXT NOT NULL,
+                `conversationId` TEXT NOT NULL,
+                `senderId` TEXT NOT NULL,
+                `messageText` TEXT NOT NULL,
+                `messageType` TEXT NOT NULL,
+                `starredAt` INTEGER NOT NULL,
+                PRIMARY KEY(`messageId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_starred_messages_conversationId` ON `starred_messages` (`conversationId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_starred_messages_starredAt` ON `starred_messages` (`starredAt`)")
+    }
+}
+
+/** LEGENDARY P1: رفع الوسائط + إثراء المجموعات + فهارس الأداء 6→7 (ترحيل واحد موحد) */
+private val MEDIA_UPLOAD_MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `media_uploads` (
+                `messageId` TEXT NOT NULL,
+                `conversationId` TEXT NOT NULL,
+                `targetRedId` TEXT,
+                `localPath` TEXT NOT NULL,
+                `mimeType` TEXT NOT NULL,
+                `size` INTEGER NOT NULL,
+                `thumbPath` TEXT,
+                `blurHash` TEXT,
+                `width` INTEGER NOT NULL,
+                `height` INTEGER NOT NULL,
+                `durationMs` INTEGER NOT NULL,
+                `objectKey` TEXT,
+                `url` TEXT,
+                `status` TEXT NOT NULL,
+                `retryCount` INTEGER NOT NULL,
+                `nextAttemptAt` INTEGER NOT NULL,
+                `idempotencyKey` TEXT NOT NULL,
+                PRIMARY KEY(`messageId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_media_uploads_status_nextAttemptAt` ON `media_uploads` (`status`,`nextAttemptAt`)")
+        database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_media_uploads_messageId` ON `media_uploads` (`messageId`)")
+        // إثراء groups
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `ownerRedId` TEXT NOT NULL DEFAULT ''") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `privacy` TEXT NOT NULL DEFAULT 'PRIVATE'") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `settingsJson` TEXT NOT NULL DEFAULT '{}'") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `communityId` TEXT") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `slowModeSeconds` INTEGER NOT NULL DEFAULT 0") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `disappearingSeconds` INTEGER NOT NULL DEFAULT 0") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `archived` INTEGER NOT NULL DEFAULT 0") }
+        runCatching { database.execSQL("ALTER TABLE `groups` ADD COLUMN `updatedAt` INTEGER NOT NULL DEFAULT 0") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_archived` ON `groups` (`archived`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_groups_updatedAt` ON `groups` (`updatedAt`)") }
+        // فهارس الأداء الحاسمة للدردشة
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_created_desc` ON `local_history` (`conversationId`, `createdAt` DESC, `id` DESC)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_status` ON `local_history` (`conversationId`, `status`)") }
     }
 }

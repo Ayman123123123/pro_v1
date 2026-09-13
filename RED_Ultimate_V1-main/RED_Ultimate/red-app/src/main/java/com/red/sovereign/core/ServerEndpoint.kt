@@ -19,14 +19,22 @@ object ServerEndpoint {
      */
     private val deprecatedDefaults = setOf(
         "http://127.0.0.1:8088",
-        "http://localhost:8088"
+        "http://localhost:8088",
+        "http://10.38.160.42:8088", // former developer-network build default
+        "http://192.168.11.210:8088", // ALLOW-IP: intentionally migrated-away development default
+        "http://192.168.11.131:8088", // ALLOW-IP: dead host address
+        "http://192.168.11.10:8088",   // ALLOW-IP: former site-specific fallback
+        "http://192.168.11.163:8088",  // ALLOW-IP: stale development IP from device cache
+        "http://192.168.1.200:8088",   // ALLOW-IP: stale development IP
+        "http://192.168.1.200",
+        "http://10.0.2.2:8088"
     )
 
     private fun buildDefaultUrl(): String = runCatching { normalize(BuildConfig.RED_SERVER_URL) }
         .getOrElse { normalize(FALLBACK_URL) } // ALLOW-IP: last-resort default when BuildConfig is unusable
 
-    // Last-resort default used only if BuildConfig.RED_SERVER_URL cannot be parsed.
-    private const val FALLBACK_URL = "http://192.168.0.244:8088" // ALLOW-IP: intentional local-network fallback
+    // Last-resort default used when BuildConfig.RED_SERVER_URL cannot be parsed.
+    private const val FALLBACK_URL = "http://192.168.1.112:8088"
 
     @Volatile private var current = buildDefaultUrl()
     private var onEndpointChangedListener: ((String) -> Unit)? = null
@@ -89,10 +97,19 @@ object ServerEndpoint {
         return URI(uri.scheme, null, uri.host, uri.port, null, null, null).toString().trimEnd('/')
     }
 
-    /** فحص حرفي (بدون DNS) لأن cleartext محلي فقط: localhost، مضيف المحاكي، أو نطاق خاص. */
-    private fun isLocalCleartextHost(host: String): Boolean {
+    /** فحص حرفي (بدون DNS) لأن cleartext محلي فقط: localhost، مضيف المحاكي، أو نطاق خاص — IPv4 وIPv6. */
+    fun isLocalCleartextHost(host: String): Boolean {
         if (host == "localhost" || host == "10.0.2.2" || host.endsWith(".local")) return true
-        val octets = host.split('.').mapNotNull { it.toIntOrNull() }
+        val h = host.lowercase().trim('[', ']')
+        // IPv6 محلي: loopback ::1، رابط محلي fe80::/10، خاص fc00::/7
+        if (':' in h) {
+            if (h == "::1") return true
+            val first = h.split(':').firstOrNull().orEmpty()
+            if (first.startsWith("fe80")) return true
+            if (first.startsWith("fc") || first.startsWith("fd")) return true
+            return false
+        }
+        val octets = h.split('.').mapNotNull { it.toIntOrNull() }
         if (octets.size != 4 || octets.any { it !in 0..255 }) return false
         return octets[0] == 127 || octets[0] == 10 ||
             (octets[0] == 192 && octets[1] == 168) ||

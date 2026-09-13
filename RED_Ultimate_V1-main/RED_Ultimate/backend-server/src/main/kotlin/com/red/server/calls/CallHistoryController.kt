@@ -30,9 +30,29 @@ class CallHistoryController(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @GetMapping("/history")
-    fun history(@RequestParam(defaultValue = "50") limit: Int, auth: Authentication): List<CallHistoryItem> {
+    fun history(
+        @RequestParam(defaultValue = "50") limit: Int,
+        @RequestParam(required = false) since: Long?,
+        @RequestParam(required = false) offset: Int? = null,
+        auth: Authentication
+    ): List<CallHistoryItem> {
         val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
-        return history.history(user.redId, limit)
+        // AUTO-FIX (calls history): since/offset are now honoured by the Mongo query itself, so
+        // "load more" returns real older pages instead of repeating the newest 20 rows.
+        val sinceInstant = since?.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it) }
+        return history.history(user.redId, limit, offset ?: 0, sinceInstant) { peerRedId ->
+            runCatching { users.findByRedId(peerRedId)?.displayName }.getOrNull()
+        }
+    }
+
+    @PostMapping("/history/sync")
+    fun syncHistory(@RequestBody(required = false) body: List<Map<String, Any?>>?, auth: Authentication): ResponseEntity<Map<String, Any>> {
+        val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
+        // AUTO-FIX (calls history): this endpoint used to be a stub that stored nothing, so call logs
+        // created while offline were silently dropped. Rows are upserted into call_history now.
+        val rows = body ?: emptyList()
+        val stored = runCatching { history.upsertFromSync(user.redId, rows) }.getOrElse { 0 }
+        return ResponseEntity.ok(mapOf("status" to "synced", "received" to rows.size, "stored" to stored))
     }
 
     /** FCM wake endpoint — يخزن العرض للسحب لاحقاً عند اتصال المستلم (Path 2 of Multi-Path Delivery). */
@@ -134,17 +154,32 @@ class CallHistoryController(
         val user = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
         val callSignalingHandler = callWebSocketHandler
             ?: throw IllegalStateException("signaling unavailable")
-        request.inviteeIds.filter { it.isNotBlank() && it != user.redId }.forEach { invitee ->
-            // نفس مسار GROUP_CALL_INVITE الأولي — الخادم يسجل ويرسل الرنين
-            callWebSocketHandler?.deliverGroupCallInvite(request.groupCallId, user.redId, listOf(invitee), "VOICE", mapOf("hostName" to request.hostName))
+        require(request.groupCallId.isNotBlank()) { "groupCallId is required" }
+        // فقط مضيف الغرفة يدعو إضافيين — كان أي مصادق يستطيع الحقن في أي مكالمة.
+        // (غرفة مجهولة بعد إعادة التشغيل تُقبل من المدعي مضيفاً — تُعاد إنشاؤها عبر الدمج).
+        val knownHost = callSignalingHandler.groupCallHost(request.groupCallId)
+        if (knownHost != null) {
+            require(knownHost.equals(user.redId, ignoreCase = true)) { "ONLY_HOST_CAN_INVITE" }
         }
-        return ResponseEntity.ok(mapOf("status" to "invited", "count" to request.inviteeIds.size))
+        // وضع المكالمة الحقيقي (كان VOICE ثابتاً فيُدعى أعضاء الفيديو بدعوة صوتية).
+        val mode = request.mode.takeIf { it.isNotBlank() }?.uppercase() ?: "VOICE"
+        val added = callSignalingHandler.addGroupCallMembers(
+            request.groupCallId, user.redId, request.inviteeIds, mode, mapOf("hostName" to request.hostName)
+        )
+        return ResponseEntity.ok(mapOf(
+            "status" to "invited",
+            "invitedCount" to added.size,
+            "skippedCount" to (request.inviteeIds.size - added.size),
+            "roomSize" to callSignalingHandler.groupCallSize(request.groupCallId),
+            "maxMembers" to com.red.server.websocket.CallWebSocketHandler.MAX_GROUP_CALL_MEMBERS
+        ))
     }
 
     data class InviteExtraRequest(
         val groupCallId: String,
         val inviteeIds: List<String> = emptyList(),
-        val hostName: String = ""
+        val hostName: String = "",
+        val mode: String = "VOICE"
     )
 
     data class PendingOffer(

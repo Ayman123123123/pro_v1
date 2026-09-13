@@ -12,7 +12,9 @@ class CallLogCipher {
 
     fun encryptPeerId(redId: String): String {
         if (redId.isBlank()) return ""
-        return cipher.encrypt(redId.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        return runCatching {
+            cipher.encrypt(redId.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        }.getOrDefault(redId)
     }
 
     fun decryptPeerId(hex: String): String {
@@ -20,7 +22,7 @@ class CallLogCipher {
         return runCatching {
             val bytes = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
             String(cipher.decrypt(bytes), Charsets.UTF_8)
-        }.getOrDefault("")
+        }.getOrElse { hex } // Fallback to raw string if decryption fails (e.g. legacy plaintext records)
     }
 
     fun encryptLabel(label: String): String = encryptPeerId(label)

@@ -20,12 +20,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import com.red.sovereign.R
+import androidx.compose.ui.res.stringResource
 import com.red.sovereign.ui.theme.AqyalGold
 
 @Composable
 fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
     val stats by viewModel.systemStats.collectAsState()
     val pendingUsers by viewModel.pendingUsers.collectAsState()
+    val users by viewModel.users.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     Column(Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
@@ -34,7 +42,7 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.admin_back), tint = Color.White)
             }
             Spacer(Modifier.width(8.dp))
             Icon(Icons.Default.Security, contentDescription = null, tint = AqyalGold, modifier = Modifier.size(28.dp))
@@ -61,6 +69,23 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard("البثوث المباشرة", "${stats.activeStreams}", Icons.Default.LiveTv, Modifier.weight(1f))
+                    StatCard("منافذ Dinstar", "${stats.dinstarPortsOnline}", Icons.Default.Router, Modifier.weight(1f))
+                }
+            }
+
+            // Hardware Actions
+            item {
+                Divider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 12.dp))
+                Text("التحكم بالهاردوير 🔧", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { viewModel.rebootDinstar() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Icon(Icons.Default.RestartAlt, null, tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text("إعادة تشغيل البوابات (Dinstar Reboot)", color = Color.White, fontSize = 16.sp)
                 }
             }
 
@@ -78,10 +103,79 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
                 }
             }
 
-            items(pendingUsers) { user ->
+            items(pendingUsers, key = { "pending_${it.id}" }) { user ->
                 PendingUserCard(user) {
                     viewModel.approveUser(user.id)
                 }
+            }
+
+            // All Users & Real-Time Presence
+            item {
+                Divider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("المستخدمون وحالة الاتصال 🟢", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Badge(containerColor = AqyalGold) { Text("${users.size}", color = Color.Black) }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (users.isEmpty()) {
+                    Text("لا يوجد مستخدمون حالياً.", color = Color.Gray)
+                }
+            }
+
+            items(users, key = { "user_${it.id}" }) { user ->
+                UserOverviewCard(user) {
+                    viewModel.deleteUser(user.id)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserOverviewCard(user: UserOverview, onDelete: () -> Unit) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("حذف مستخدم") },
+            text = { Text("هل أنت متأكد من حذف ${user.displayName}؟ سيتم مسح حساب المستخدم وكل بياناته من قواعد البيانات نهائياً.") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
+                    Text("حذف نهائي", color = Color(0xFFE53935))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("إلغاء")
+                }
+            }
+        )
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(if (user.isOnline) Color(0xFF00C98C) else Color.Gray))
+                    Spacer(Modifier.width(8.dp))
+                    Text(user.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(user.phoneNumber, color = Color.Gray, fontSize = 12.sp)
+                Text("آخر ظهور: ${if (user.isOnline) "الآن" else formatDate(user.lastSeenAt)}", color = Color.Gray, fontSize = 10.sp)
+            }
+            IconButton(onClick = { showDeleteConfirm = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "حذف المستخدم", tint = Color(0xFFE53935))
             }
         }
     }
@@ -120,7 +214,7 @@ private fun PendingUserCard(user: PendingUser, onApprove: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(user.id, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(user.phoneNumber, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text(formatDate(user.registeredAt), color = Color.Gray, fontSize = 12.sp)
             }
             Button(

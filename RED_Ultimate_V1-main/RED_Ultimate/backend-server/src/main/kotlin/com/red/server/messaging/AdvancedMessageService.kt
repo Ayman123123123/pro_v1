@@ -1,5 +1,7 @@
 package com.red.server.messaging
 
+import com.red.server.database.ChannelMessageDocument
+import com.red.server.database.GroupMessageDocument
 import com.red.server.database.MessageDocument
 import org.slf4j.LoggerFactory
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -93,21 +95,22 @@ class AdvancedMessageService(
     }
 
     /**
-     * تنظيف الرسائل ذاتية الاختفاء — يعمل كل 5 دقائق
+     * تنظيف الرسائل ذاتية الاختفاء — يعمل كل 5 دقائق.
+     * يغطي المحادثات الخاصة + رسائل المجموعات + رسائل القنوات
+     * (إعدادات GroupService.updateDisappearing تُفرض عند الكتابة عبر
+     * MessageService.disappearingSecondsForConversation، وهنا تُحذف المنتهية).
      */
     @Scheduled(fixedDelay = 300_000)
     fun cleanupDisappearing() {
         val now = Instant.now()
-        // Mongo: احذف الرسائل التي انتهى وقتها
-        val expired = mongoTemplate.find(
-            expiredDisappearingMessagesQuery(now),
-            MessageDocument::class.java
-        )
-        if (expired.isNotEmpty()) {
-            expired.forEach { msg ->
-                mongoTemplate.remove(Query(Criteria.where("uuid").`is`(msg.uuid)), MessageDocument::class.java)
-            }
-            log.info("Cleaned {} disappearing messages", expired.size)
+        // LEGENDARY FIX: حذف جماعي deleteMany بدل find + remove واحداً واحداً (كان N+1 ينهار مع آلاف المؤقتة)
+        val q = expiredDisappearingMessagesQuery(now)
+        val d1 = mongoTemplate.remove(q, MessageDocument::class.java).deletedCount
+        val d2 = mongoTemplate.remove(q, GroupMessageDocument::class.java).deletedCount
+        val d3 = mongoTemplate.remove(q, ChannelMessageDocument::class.java).deletedCount
+        val total = d1 + d2 + d3
+        if (total > 0) {
+            log.info("Cleaned {} disappearing messages (private={}, group={}, channel={})", total, d1, d2, d3)
         }
         // Postgres: نظف التثبيتات المنتهية
         try {

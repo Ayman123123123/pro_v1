@@ -10,7 +10,7 @@ data class CallHistoryItem(
     val peerLabel: String,
     val direction: String,        // OUTGOING / INCOMING
     val type: String,             // VOICE / VIDEO / GROUP / CONFERENCE / LIVE / SPACE
-    val route: String = "RED",    // RED call transport
+    val route: String,            // RED / DINSTAR
     val status: String,           // ANSWERED / MISSED / REJECTED / FAILED
     val startedAt: String,
     val answeredAt: String? = null,
@@ -45,7 +45,7 @@ fun parseCallTimestamp(value: String?): Long? {
 /** حساب مدة المكالمة من الطوابع الزمنية */
 fun CallHistoryItem.computedDurationSeconds(): Long {
     if (durationSeconds > 0) return durationSeconds
-    val start = parseCallTimestamp(answeredAt) ?: return 0L
+    val start = parseCallTimestamp(answeredAt) ?: parseCallTimestamp(startedAt) ?: return 0L
     val end   = parseCallTimestamp(endedAt)   ?: return 0L
     return (end - start).coerceAtLeast(0L) / 1000L
 }
@@ -58,4 +58,3 @@ fun Long.formatCallDuration(): String {
     val s = this % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
-

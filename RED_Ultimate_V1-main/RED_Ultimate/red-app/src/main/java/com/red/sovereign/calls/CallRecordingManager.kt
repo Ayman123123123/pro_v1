@@ -34,9 +34,11 @@ class CallRecordingManager(
 ) {
     private var mediaRecorder: MediaRecorder? = null
     private var outputFile: File? = null
+    @Volatile
     private var isRecording: Boolean = false
     private var startedAtElapsed: Long = 0L
     private val cipher = ProtocolRecordCipher()
+    private val lock = Any()
 
     /**
      * يبدأ تسجيل. يُرجع true عند النجاح.
@@ -48,29 +50,39 @@ class CallRecordingManager(
             android.util.Log.w("CallRecording", "Recording refused: consent not granted")
             return false
         }
-        if (isRecording) return true
-        // تخزين دائم في filesDir (وليس cacheDir) — لا يُمحى عند مسح كاش التطبيق
-        val dir = File(context.filesDir, "recordings").apply { mkdirs() }
-        outputFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
-        val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
-        try {
-            recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            recorder.setAudioEncodingBitRate(128_000)
-            recorder.setAudioSamplingRate(48_000)
-            val outPath = outputFile?.absolutePath ?: return false
-            recorder.setOutputFile(outPath)
-            recorder.prepare()
-            recorder.start()
-            mediaRecorder = recorder
-            isRecording = true
-            startedAtElapsed = SystemClock.elapsedRealtime()
-            return true
-        } catch (e: Exception) {
-            android.util.Log.e("CallRecording", "Failed to start: ${e.message}")
-            release()
-            return false
+        synchronized(lock) {
+            if (isRecording) return true
+            // إصلاح خصوصية/تسرب: الخام يُكتب بامتداد .tmp (وليس .enc المضلل)
+            // حتى لا يُظن ملف خام غير مشفر تسجيلاً آمناً، ويُحذف حتماً عند stop().
+            // تخزين دائم في filesDir (وليس cacheDir) — لا يُمحى عند مسح كاش التطبيق
+            val dir = File(context.filesDir, "recordings").apply { mkdirs() }
+            // تنظيف بقايا tmp من تسجيل سابق تحطم قبل stop() (خام غير مشفر).
+            dir.listFiles { f -> f.name.startsWith(callId) && f.name.endsWith(".tmp") }
+                ?.forEach { runCatching { it.delete() } }
+            outputFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.tmp")
+            val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
+            try {
+                recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                recorder.setAudioEncodingBitRate(128_000)
+                recorder.setAudioSamplingRate(48_000)
+                val outPath = outputFile?.absolutePath ?: return false
+                recorder.setOutputFile(outPath)
+                recorder.prepare()
+                recorder.start()
+                mediaRecorder = recorder
+                isRecording = true
+                startedAtElapsed = SystemClock.elapsedRealtime()
+                return true
+            } catch (e: Exception) {
+                android.util.Log.e("CallRecording", "Failed to start: ${e.message}")
+                runCatching { recorder.release() }
+                runCatching { outputFile?.delete() }
+                outputFile = null
+                isRecording = false
+                return false
+            }
         }
     }
 
@@ -79,19 +91,29 @@ class CallRecordingManager(
      * Returns a [CallRecording] descriptor with the encrypted path.
      */
     suspend fun stop(): CallRecording? = withContext(Dispatchers.IO) {
-        if (!isRecording) return@withContext null
-        val recorder = mediaRecorder
-        val tempRawFile = outputFile
+        val recorder: MediaRecorder?
+        val tempRawFile: File?
+        synchronized(lock) {
+            if (!isRecording) return@withContext null
+            recorder = mediaRecorder
+            tempRawFile = outputFile
+            mediaRecorder = null
+            outputFile = null
+            isRecording = false
+        }
         try {
             recorder?.stop()
         } catch (_: Exception) { /* may throw if too short */ }
-        recorder?.release()
-        mediaRecorder = null
-        isRecording = false
+        runCatching { recorder?.release() }
         // المدة الفعلية تُحسب من ساعة الإيقاف — كانت 0 دائماً من قبل
         val durationMs = (SystemClock.elapsedRealtime() - startedAtElapsed).coerceAtLeast(0L)
         startedAtElapsed = 0L
         if (tempRawFile == null || !tempRawFile.exists()) return@withContext null
+        // تسجيل أقصر من ثانية غالباً ملف تالف — احذف الخام ولا تُنتج مشفراً فارغاً.
+        if (durationMs < 1_000L || tempRawFile.length() == 0L) {
+            runCatching { tempRawFile.delete() }
+            return@withContext null
+        }
 
         val dir = File(context.filesDir, "recordings").apply { mkdirs() }
         val encFile = File(dir, "${callId}_${System.currentTimeMillis()}.m4a.enc")
@@ -100,10 +122,9 @@ class CallRecordingManager(
             // Encrypt raw M4A audio bytes using AES-GCM
             val raw = tempRawFile.readBytes()
             val encrypted = cipher.encrypt(raw)
+            // مسح مرجع raw من الذاكرة فوراً قبل الكتابة.
+            raw.fill(0)
             FileOutputStream(encFile).use { it.write(encrypted) }
-            
-            // Wipe raw unencrypted file from disk
-            tempRawFile.delete()
 
             CallRecording(
                 callId = callId,
@@ -115,17 +136,26 @@ class CallRecordingManager(
             )
         } catch (e: Exception) {
             android.util.Log.e("CallRecording", "Failed to encrypt recording: ${e.message}")
-            tempRawFile.delete()
+            runCatching { encFile.delete() }
             null
+        } finally {
+            // Wipe raw unencrypted file from disk — في finally حتى لو فشل التشفير.
+            runCatching { tempRawFile.delete() }
         }
     }
 
     fun isRecording() = isRecording
 
     fun release() {
-        try { mediaRecorder?.release() } catch (_: Exception) {}
-        mediaRecorder = null
-        isRecording = false
+        synchronized(lock) {
+            try { mediaRecorder?.release() } catch (_: Exception) {}
+            mediaRecorder = null
+            isRecording = false
+            // لا نترك خاماً غير مشفر على القرص عند الإلغاء.
+            runCatching { outputFile?.delete() }
+            outputFile = null
+            startedAtElapsed = 0L
+        }
     }
 
     /**

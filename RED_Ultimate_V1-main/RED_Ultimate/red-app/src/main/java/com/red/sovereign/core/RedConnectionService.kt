@@ -30,6 +30,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -77,6 +78,7 @@ class RedConnectionService : Service() {
     private lateinit var groupCrypto: GroupCryptoManager
     private lateinit var keyManager: DeviceKeyManager
     private lateinit var socket: RedWebSocketClient
+    private val messageStore by lazy { com.red.sovereign.core.MessageStore(applicationContext) }
 
     override fun onCreate() {
         super.onCreate()
@@ -114,26 +116,39 @@ class RedConnectionService : Service() {
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
             val type = intent.getStringExtra(EXTRA_TYPE)?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: return START_STICKY
             val payload = intent.getByteArrayExtra(EXTRA_PAYLOAD)?.takeIf { it.isNotEmpty() && it.size <= 256 * 1024 } ?: return START_STICKY
-            pendingSends.add(PendingSend(target, conversation, type, payload))
+            val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)?.takeIf { it.isNotBlank() }
+            // عرض متفائل: تُحفظ الرسالة وتظهر فوراً قبل نجاح التشفير/الإرسال.
+            if (clientId != null) persistOptimistic(clientId, conversation, tokenStore.redId.orEmpty(), payload, type, target)
+            pendingSends.add(PendingSend(target, conversation, type, payload, clientId))
             if (connected) drainSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_GROUP_TEXT) {
             val encodedGroup = intent.getStringExtra(EXTRA_GROUP) ?: return START_STICKY
             val text = intent.getStringExtra(EXTRA_TEXT)?.takeIf(String::isNotBlank) ?: return START_STICKY
             val isRich = intent.getBooleanExtra(EXTRA_GROUP_RICH, false)
-            pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich))
+            val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)?.takeIf { it.isNotBlank() }
+            if (clientId != null) {
+                val gid = runCatching { json.decodeFromString<Group>(encodedGroup).id }.getOrNull()
+                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), text.toByteArray(Charsets.UTF_8), if (isRich) "RICH_TEXT" else "GROUP_MESSAGE", null)
+            }
+            pendingGroupSends.add(PendingGroupSend(encodedGroup, text, isRich, clientId))
             if (connected) drainGroupSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_GROUP_PAYLOAD) {
             val encodedGroup = intent.getStringExtra(EXTRA_GROUP) ?: return START_STICKY
             val type = intent.getStringExtra(EXTRA_TYPE)?.takeIf { it in ALLOWED_MESSAGE_TYPES } ?: return START_STICKY
             val payload = intent.getByteArrayExtra(EXTRA_PAYLOAD)?.takeIf { it.isNotEmpty() && it.size <= 256 * 1024 } ?: return START_STICKY
-            pendingGroupPayloadSends.add(PendingGroupPayloadSend(encodedGroup, type, payload))
+            val clientId = intent.getStringExtra(EXTRA_CLIENT_ID)?.takeIf { it.isNotBlank() }
+            if (clientId != null) {
+                val gid = runCatching { json.decodeFromString<Group>(encodedGroup).id }.getOrNull()
+                if (gid != null) persistOptimistic(clientId, gid, tokenStore.redId.orEmpty(), payload, type, null)
+            }
+            pendingGroupPayloadSends.add(PendingGroupPayloadSend(encodedGroup, type, payload, clientId))
             if (connected) drainGroupPayloadSends() else socket.connect()
         } else if (intent?.action == ACTION_SEND_TYPING) {
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
             val target = intent.getStringExtra(EXTRA_TARGET) // قد يكون null للمجموعات
             val isTyping = intent.getBooleanExtra(EXTRA_IS_TYPING, false)
             if (connected) {
-                if (conversation.length > 32) {
+                if (isGroupConversation(conversation)) {
                     // مجموعة: بث جماعي
                     socket.typingGroup(conversation, isTyping)
                 } else {
@@ -166,8 +181,8 @@ class RedConnectionService : Service() {
                 scope.launch {
                     val myId = tokenStore.redId ?: return@launch
                     // حاول استنتاج target من conversationId أو من السجل قبل الحذف
-                    // للتبسيط: إن كانت محادثة فردية (<=32) نرسل Rich DELETE أيضاً
-                    if (conversation.length <= 32) {
+                    // للتبسيط: إن كانت محادثة فردية نرسل Rich DELETE أيضاً
+                    if (!isGroupConversation(conversation)) {
                         val peerId = conversation // في المحادثات الفردية conversationId = hash أو peerId — fallback
                         val richDelete = com.red.sovereign.core.RichMessage(action = "DELETE", deleteOf = messageId)
                         val payload = com.red.sovereign.core.RichMessage.encode(richDelete)
@@ -180,11 +195,30 @@ class RedConnectionService : Service() {
             val conversation = intent.getStringExtra(EXTRA_CONVERSATION) ?: return START_STICKY
             val text = intent.getStringExtra(EXTRA_QUICK_REPLY_TEXT) ?: return START_STICKY
             if (text.isNotBlank()) {
-                pendingSends.add(PendingSend(target, conversation, "TEXT", text.toByteArray(Charsets.UTF_8)))
+                val clientId = UuidV7.next()
+                persistOptimistic(clientId, conversation, tokenStore.redId.orEmpty(), text.toByteArray(Charsets.UTF_8), "TEXT", target)
+                pendingSends.add(PendingSend(target, conversation, "TEXT", text.toByteArray(Charsets.UTF_8), clientId))
                 if (connected) drainSends() else socket.connect()
             }
         } else socket.connect()
         return START_STICKY
+    }
+
+    /**
+     * حفظ متفائل فوري للرسائل الصادرة: تُحفظ في Room وتُبث للواجهة وتُنشئ صف
+     * المحادثة لحظة الضغط على إرسال — قبل نجاح التشفير/الشبكة. عند اكتمال
+     * الإرسال يُعاد استخدام نفس المعرف سلكياً فلا تكرار ولا فقدان.
+     */
+    private fun persistOptimistic(id: String, conversation: String, senderId: String, payload: ByteArray, type: String, peerId: String?) {
+        scope.launch {
+            runCatching { repository.saveLocalHistory(LocalHistoryEntity(id, conversation, senderId, payload, type, System.currentTimeMillis(), true)) }
+                .onFailure { e -> android.util.Log.w("RedConnectionService", "optimistic save failed for $id", e) }
+            DecryptedMessageBus.publish(DecryptedMessage(id, conversation, senderId, payload, System.currentTimeMillis(), 0, type = type, outgoing = true))
+            if (peerId != null) {
+                runCatching { repository.onMessageStored(conversation, peerId, decodeMessagePreview(payload).orEmpty(), System.currentTimeMillis(), isIncoming = false) }
+                    .onFailure { e -> android.util.Log.w("RedConnectionService", "optimistic conversation row failed for $conversation", e) }
+            }
+        }
     }
 
     private fun drainSends() {
@@ -212,13 +246,21 @@ class RedConnectionService : Service() {
                             applyOutgoingReactionLocally(outgoingRich, group.id, tokenStore.redId.orEmpty())
                             return@launch
                         }
+                        // AUTO-FIX (message reliability): one message UUID must NOT be reused for every
+                        // fan-out target. The server keys messages by uuid (unique index) and rejects a
+                        // repeated uuid addressed to a different receiver/device ("Message UUID collision"),
+                        // so every member/device except the first silently lost the message. Only the first
+                        // copy keeps the clientId (it matches the local optimistic row); the rest get fresh ids.
+                        var fanoutClientIdUsed = false
                         var firstId: String? = null
                         prepared.value.recipients.forEach { recipient ->
                             val envelope = prepared.value.groupCiphertext.copy(receiverDeviceId = recipient.protocolDeviceId)
-                            val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope)
+                            val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope, if (fanoutClientIdUsed) null else pending.clientId.also { fanoutClientIdUsed = true })
                             if (firstId == null) firstId = id
                         }
                         firstId?.let {
+                            // عرض متفائل مسبق (clientId) → لا حفظ ولا بث مكرر.
+                            if (pending.clientId != null) return@launch
                             val bytes = pending.text.toByteArray(Charsets.UTF_8); val timestamp = System.currentTimeMillis()
                             repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), bytes, sendType, timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), bytes, timestamp, 0, type = sendType, outgoing = true))
@@ -241,13 +283,20 @@ class RedConnectionService : Service() {
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
                         }
                         val sendType = pending.type
+                        // AUTO-FIX (message reliability): one message UUID must NOT be reused for every
+                        // fan-out target. The server keys messages by uuid (unique index) and rejects a
+                        // repeated uuid addressed to a different receiver/device ("Message UUID collision"),
+                        // so every member/device except the first silently lost the message. Only the first
+                        // copy keeps the clientId (it matches the local optimistic row); the rest get fresh ids.
+                        var fanoutClientIdUsed = false
                         var firstId: String? = null
                         prepared.value.recipients.forEach { recipient ->
                             val envelope = prepared.value.groupCiphertext.copy(receiverDeviceId = recipient.protocolDeviceId)
-                            val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope)
+                            val id = socket.sendEncrypted(recipient.redId, group.id, sendType, keyManager.protocolDeviceId(), envelope, if (fanoutClientIdUsed) null else pending.clientId.also { fanoutClientIdUsed = true })
                             if (firstId == null) firstId = id
                         }
                         firstId?.let {
+                            if (pending.clientId != null) return@launch
                             val timestamp = System.currentTimeMillis()
                             repository.saveLocalHistory(LocalHistoryEntity(it, group.id, tokenStore.redId.orEmpty(), pending.payload, sendType, timestamp, true))
                             DecryptedMessageBus.publish(DecryptedMessage(it, group.id, tokenStore.redId.orEmpty(), pending.payload, timestamp, 0, type = sendType, outgoing = true))
@@ -263,9 +312,15 @@ class RedConnectionService : Service() {
             when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
                 is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
                 is ApiResult.Success -> {
+                    // AUTO-FIX (message reliability): one message UUID must NOT be reused for every
+                    // fan-out target. The server keys messages by uuid (unique index) and rejects a
+                    // repeated uuid addressed to a different receiver/device ("Message UUID collision"),
+                    // so every member/device except the first silently lost the message. Only the first
+                    // copy keeps the clientId (it matches the local optimistic row); the rest get fresh ids.
+                    var fanoutClientIdUsed = false
                     var firstId: String? = null
                     encrypted.value.forEach { envelope ->
-                        val id = socket.sendEncrypted(pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope)
+                        val id = socket.sendEncrypted(pending.target, pending.conversation, pending.type, keyManager.protocolDeviceId(), envelope, if (fanoutClientIdUsed) null else pending.clientId.also { fanoutClientIdUsed = true })
                         if (firstId == null) firstId = id
                     }
                     firstId?.let {
@@ -273,6 +328,12 @@ class RedConnectionService : Service() {
                         val rich = com.red.sovereign.core.RichMessage.decode(pending.payload)
                         if (rich?.action == "REACTION" || rich?.action == "REACTION_REMOVE") {
                             applyOutgoingReactionLocally(rich, pending.conversation, tokenStore.redId.orEmpty())
+                            return@launch
+                        }
+                        // عرض متفائل مسبق (clientId) → يُكتفى بتحديث صف المحادثة.
+                        if (pending.clientId != null) {
+                            val timestamp = System.currentTimeMillis()
+                            runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
                             return@launch
                         }
                         val timestamp = System.currentTimeMillis()
@@ -318,6 +379,7 @@ class RedConnectionService : Service() {
                 drainSends()
                 drainGroupSends()
                 drainGroupPayloadSends()
+                scope.launch { catchUpMissedMessages() }
             }
             ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
             ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }
@@ -356,12 +418,59 @@ class RedConnectionService : Service() {
 
     /** إعادة اكتشاف عنوان الخادم على الشبكة المحلية عند فشل الاتصال المتكرر. */
     private suspend fun rediscoverAndConnect() {
-        val found = LocalServerDiscovery(applicationContext).discover(LocalServerDiscovery.Mode.FAST)
+        // AUTO-FIX (network resilience): FAST discovery only probes a static candidate list, so a
+        // changed server IP used to end in YOUNES_SERVER_NOT_FOUND. Escalate to the full /24 + mDNS
+        // scan (THOROUGH) before giving up; FAST already tries the last known-good endpoint first.
+        val discovery = LocalServerDiscovery(applicationContext)
+        var found = discovery.discover(LocalServerDiscovery.Mode.FAST)
+        if (found !is ApiResult.Success) {
+            found = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)
+        }
         if (found is ApiResult.Success) {
             attempts = 0
             notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
         }
         socket.connect()
+    }
+
+    /** AUTO-FIX (message reliability): pull messages stored for us while offline and feed them
+     * through the normal envelope pipeline (decrypt + store + notify). */
+    private suspend fun catchUpMissedMessages() {
+        runCatching {
+            val client = com.red.sovereign.auth.AuthorizedApiClient(tokenStore)
+            val store = com.red.sovereign.core.SecureStore(applicationContext, "red_catchup")
+            var cursor = store.get("since")?.toLongOrNull() ?: (System.currentTimeMillis() - 48L * 3600_000L)
+            // AUTO-FIX (message reliability): page through the whole backlog and advance the cursor to
+            // the newest message actually returned - never blindly to `now`. The previous version set
+            // `since = now` even when the server truncated the page at `limit`, permanently dropping
+            // every message beyond the first page and anything that arrived during the pull.
+            var pages = 0
+            while (pages < CATCHUP_MAX_PAGES) {
+                pages++
+                val result = client.request("GET", "/api/messages/catchup?since=$cursor&limit=$CATCHUP_PAGE_SIZE")
+                if (result !is ApiResult.Success) break
+                val arr = org.json.JSONArray(result.value)
+                if (arr.length() == 0) break
+                var newest = cursor
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val b64 = obj.optString("envelope")
+                    if (b64.isBlank()) continue
+                    runCatching {
+                        val env = RedProtos.RedRED.parseFrom(android.util.Base64.decode(b64, android.util.Base64.DEFAULT))
+                        if (env.hasMessage()) {
+                            handleEnvelope(env)
+                            if (env.message.timestamp > newest) newest = env.message.timestamp
+                        }
+                    }
+                }
+                // Stop when the page made no forward progress (avoid an infinite loop).
+                if (newest <= cursor) break
+                cursor = newest
+                if (arr.length() < CATCHUP_PAGE_SIZE) break
+            }
+            store.put("since", cursor.toString())
+        }
     }
 
     private fun onEnvelope(envelope: RedProtos.RedRED) {
@@ -373,15 +482,14 @@ class RedConnectionService : Service() {
             RedProtos.RedRED.SignalCase.MESSAGE -> {
                 val message = envelope.message
                 if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
-                    val isGroupConversation = message.conversationId.length > 32
+                    val isGroupConversation = isGroupConversation(message.conversationId)
                     val plaintext = try {
                         repository.saveIncomingMessage(message)
                         when (message.type) {
                             // توزيع مفاتيح المجموعة يُشفَّر زوجياً لكل عضو (ليس SenderKey)
                             "GROUP_KEY_DISTRIBUTION" -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
                             "RICH_TEXT" -> {
-                                // رسالة غنية: قد تكون فردية أو جماعية. نحسم عبر طول conversationId:
-                                // محادثة فردية = hash مُقتطع (32 حرفاً)، معرف مجموعة = UUID طويل (>32).
+                                // رسالة غنية: قد تكون فردية أو جماعية. نحسم عبر isGroupConversation (prefix صريح).
                                 if (isGroupConversation) {
                                     groupCrypto.decrypt(message.senderId, message.senderDeviceId, message.payload.toByteArray())
                                 } else {
@@ -411,10 +519,13 @@ class RedConnectionService : Service() {
                                 socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                             } else when (rich?.action) {
                                 // التعديل: تحديث نص الرسالة الأصلية في التخزين (لا إضافة سجل جديد).
-                                // 🔐 يُطبق فقط إن كان مُرسل التعديل هو مالك الرسالة الأصلية.
+                                // 🔐 يُطبق فقط إن كان مُرسل التعديل هو مالك الرسالة الأصلية + ضمن 24h.
                                 "EDIT" -> rich.editOf?.let { editOf ->
                                     val original = repository.getLocalHistoryEntry(editOf)
-                                    if (original != null && original.senderId == message.senderId) {
+                                    if (original != null && original.senderId == message.senderId &&
+                                        message.timestamp >= original.createdAt &&
+                                        message.timestamp - original.createdAt <= EDIT_WINDOW_MS
+                                    ) {
                                         repository.updateLocalHistoryText(editOf, com.red.sovereign.core.RichMessage.encode(rich.copy(replyTo = rich.replyTo)))
                                         DecryptedMessageBus.publish(DecryptedMessage(editOf, message.conversationId, message.senderId, com.red.sovereign.core.RichMessage.encode(rich), message.timestamp, message.sequenceNumber, type = "RICH_TEXT"))
                                     }
@@ -491,12 +602,15 @@ class RedConnectionService : Service() {
         repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
         DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
         val preview = decodeMessagePreview(plaintext)
-        if (message.conversationId.length <= 32) {
-            // المحادثة الفردية تُدار في جدول conversations مع تتبع غير المقروء
-            runCatching { repository.onMessageStored(message.conversationId, message.senderId, preview.orEmpty(), message.timestamp, isIncoming = true) }
+        val isGroup = message.type == "GROUP_MESSAGE" ||
+                message.conversationId.startsWith("group-", ignoreCase = true) ||
+                message.conversationId.startsWith("group_", ignoreCase = true)
+        if (!isGroup) {
+            // المحادثة الفردية تُدار في جدول conversations مع تتبع غير المقروء والمستلم الحقيقي
+            val peerId = if (message.senderId == tokenStore.redId) message.conversationId else message.senderId
+            runCatching { repository.onMessageStored(message.conversationId, peerId, preview.orEmpty(), message.timestamp, isIncoming = true) }
         } else {
             // المجموعات: صف محادثة بمعرف المجموعة نفسه لتتبع عدد غير المقروء عبر عمليات إعادة التشغيل.
-            // قوائم الواجهة تستبعد صفوف المجموعات من المحادثات الفردية (معرف UUID > 32).
             runCatching { repository.onMessageStored(message.conversationId, message.conversationId, preview.orEmpty(), message.timestamp, isIncoming = true) }
         }
         if (SettingsRuntime.current.messageNotifications && !isConversationMuted(message.conversationId)) {
@@ -505,9 +619,17 @@ class RedConnectionService : Service() {
     }
 
     /** هل المحادثة (فردية أو مجموعة) مكتومة حالياً؟ يقرأ تفضيل muted_until. */
-    private fun isConversationMuted(conversationId: String): Boolean = runCatching {
-        val store = com.red.sovereign.core.MessageStore(applicationContext)
-        store.conversationPreference(conversationId).third > System.currentTimeMillis()
+    private suspend fun isConversationMuted(conversationId: String): Boolean = runCatching {
+        val now = System.currentTimeMillis()
+        // المخزن الأول: MessageStore (تفضيلات المحادثة,F الكتم من شاشة المجموعة/الخاص).
+        val viaPrefs = messageStore.conversationPreference(conversationId).third > now
+        if (viaPrefs) return true
+        // المخزن الثاني: جدول conversations (الكتم من قائمة الدردشات/الأرشيف).
+        // كان يُفحص الأول فقط فتصل إشعارات لمحادثة كُتمت من القائمة.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dao = com.red.sovereign.core.database.RedDatabase.getInstance(applicationContext).redDao()
+            (dao.getConversation(conversationId)?.mutedUntil ?: 0L) > System.currentTimeMillis()
+        }
     }.getOrDefault(false)
 
     private fun decodeMessagePreview(plaintext: ByteArray): String? {
@@ -525,7 +647,7 @@ class RedConnectionService : Service() {
     private fun notifyEncryptedMessage(sender: String, plaintext: String?, messageType: String = "TEXT") {
         val manager = getSystemService(NotificationManager::class.java)
         val convoId = currentConversationId ?: sender
-        val isGroup = convoId.length > 32
+        val isGroup = isGroupConversation(convoId)
         val rawPreview = plaintext?.take(120)
         val preview = rawPreview?.takeIf { SettingsRuntime.current.notificationPreview }
         val body = preview ?: getString(com.red.sovereign.R.string.notif_new_message_body, sender)
@@ -620,6 +742,8 @@ class RedConnectionService : Service() {
         const val EXTRA_MESSAGE_ID = "msgId"
         const val EXTRA_TARGET = "target"
         const val EXTRA_CONVERSATION = "conversation"
+        /** معرف العميل للعرض المتفائل: تُولّده الواجهة، تُحفظ به الرسالة فوراً، ويُعاد استخدامه سلكياً. */
+        const val EXTRA_CLIENT_ID = "clientId"
         const val EXTRA_SEQUENCE = "sequence"
         const val EXTRA_IS_TYPING = "isTyping"
         const val EXTRA_QUICK_REPLY_TEXT = "quickReplyText"
@@ -629,37 +753,89 @@ class RedConnectionService : Service() {
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_GROUP_RICH = "groupRich"
         private val ALLOWED_MESSAGE_TYPES = setOf("TEXT", "RICH_TEXT", "FILE", "VOICE", "IMAGE", "VIDEO", "AUDIO", "STICKER")
+        /** حد زمني للتعديل الوارد: 24 ساعة من إنشاء الرسالة الأصلية. */
+        private const val EDIT_WINDOW_MS = 24L * 60L * 60L * 1000L
+        // AUTO-FIX (message reliability): offline catch-up page size / hard page cap.
+        private const val CATCHUP_PAGE_SIZE = 200
+        private const val CATCHUP_MAX_PAGES = 25
 
-        fun start(context: Context) = context.startForegroundService(Intent(context, RedConnectionService::class.java))
-        fun sendText(context: Context, targetRedId: String, conversationId: String, text: String) =
-            sendPayload(context, targetRedId, conversationId, "TEXT", text.toByteArray(Charsets.UTF_8))
+        /**
+         * هل المحادثة مجموعة؟ يعتمد على prefix صريح بدل magic number (length>32).
+         * TODO: ربطه بـ GroupDocument/جدول groups لاحقاً (lookup صريح) بدل الاعتماد على prefix فقط.
+         */
+        fun isGroupConversation(conversationId: String): Boolean =
+            conversationId.startsWith("grp_") ||
+                conversationId.startsWith("group-", ignoreCase = true) ||
+                conversationId.startsWith("group_", ignoreCase = true) ||
+                conversationId.contains(":group:")
 
-        fun sendRichText(context: Context, targetRedId: String, conversationId: String, message: RichMessage) =
-            sendPayload(context, targetRedId, conversationId, "RICH_TEXT", RichMessage.encode(message))
+        fun start(context: Context) {
+            try {
+                context.startForegroundService(Intent(context, RedConnectionService::class.java))
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "start failed: not allowed in background", e)
+            }
+        }
+        fun sendText(context: Context, targetRedId: String, conversationId: String, text: String, clientId: String? = null) =
+            sendPayload(context, targetRedId, conversationId, "TEXT", text.toByteArray(Charsets.UTF_8), clientId ?: UuidV7.next())
 
-        fun sendPayload(context: Context, targetRedId: String, conversationId: String, type: String, payload: ByteArray) =
-            context.startForegroundService(
-                Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_PAYLOAD)
-                    .putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_CONVERSATION, conversationId)
-                    .putExtra(EXTRA_TYPE, type).putExtra(EXTRA_PAYLOAD, payload)
-            )
-        fun sendGroupText(context: Context, group: Group, text: String) = context.startForegroundService(
-            Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
-                .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, text)
-        )
+        fun sendRichText(context: Context, targetRedId: String, conversationId: String, message: RichMessage, clientId: String? = null) =
+            sendPayload(context, targetRedId, conversationId, "RICH_TEXT", RichMessage.encode(message), clientId ?: UuidV7.next())
 
-        fun sendGroupPayload(context: Context, group: Group, type: String, payload: ByteArray) = context.startForegroundService(
-            Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_PAYLOAD)
-                .putExtra(EXTRA_GROUP, Json.encodeToString(group))
-                .putExtra(EXTRA_TYPE, type)
-                .putExtra(EXTRA_PAYLOAD, payload)
-        )
+        fun sendPayload(context: Context, targetRedId: String, conversationId: String, type: String, payload: ByteArray, clientId: String? = null) {
+            val cid = clientId ?: UuidV7.next()
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_PAYLOAD)
+                        .putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_CONVERSATION, conversationId)
+                        .putExtra(EXTRA_TYPE, type).putExtra(EXTRA_PAYLOAD, payload)
+                        .putExtra(EXTRA_CLIENT_ID, cid)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "sendPayload failed: not allowed in background", e)
+            }
+        }
+        fun sendGroupText(context: Context, group: Group, text: String, clientId: String? = null) {
+            val cid = clientId ?: UuidV7.next()
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
+                        .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, text)
+                        .putExtra(EXTRA_CLIENT_ID, cid)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "sendGroupText failed: not allowed in background", e)
+            }
+        }
+
+        fun sendGroupPayload(context: Context, group: Group, type: String, payload: ByteArray, clientId: String? = null) {
+            val cid = clientId ?: UuidV7.next()
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_PAYLOAD)
+                        .putExtra(EXTRA_GROUP, Json.encodeToString(group))
+                        .putExtra(EXTRA_TYPE, type)
+                        .putExtra(EXTRA_PAYLOAD, payload)
+                        .putExtra(EXTRA_CLIENT_ID, cid)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "sendGroupPayload failed: not allowed in background", e)
+            }
+        }
 
         /** يرسل رسالة جماعية غنية (RICH_TEXT) — تدعم الرد/الاقتباس والرسائل المؤقتة. */
-        fun sendGroupRichText(context: Context, group: Group, message: RichMessage) = context.startForegroundService(
-            Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
-                .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, RichMessage.encode(message).toString(Charsets.UTF_8)).putExtra(EXTRA_GROUP_RICH, true)
-        )
+        fun sendGroupRichText(context: Context, group: Group, message: RichMessage, clientId: String? = null) {
+            val cid = clientId ?: UuidV7.next()
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
+                        .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, RichMessage.encode(message).toString(Charsets.UTF_8)).putExtra(EXTRA_GROUP_RICH, true)
+                        .putExtra(EXTRA_CLIENT_ID, cid)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "sendGroupRichText failed: not allowed in background", e)
+            }
+        }
 
         /** إرسال تفاعل إيموجي على رسالة في محادثة فردية (E2EE ضمن حمولة RICH_TEXT). */
         fun sendReaction(context: Context, targetRedId: String, conversationId: String, messageId: String, emoji: String) =
@@ -673,21 +849,43 @@ class RedConnectionService : Service() {
         fun sendGroupReaction(context: Context, group: Group, messageId: String, emoji: String) =
             sendGroupRichText(context, group, RichMessage(action = "REACTION", reactionOf = messageId, emoji = emoji))
 
+        /**
+         * تصويت على استطلاع دردشة فردي (E2EE): `optionIndex = null` تعني
+         * سحب الصوت. تُجمَع الأصوات من هذه الرسائل عبر ChatPollVoteStore.
+         */
+        fun sendPollVote(context: Context, targetRedId: String, conversationId: String, pollId: String, optionIndex: Int?) =
+            sendRichText(context, targetRedId, conversationId, RichMessage(action = "POLL_VOTE", pollVoteOf = pollId, pollVoteOption = optionIndex))
+
+        /** تصويت على استطلاع مجموعة (E2EE بـ Sender Keys) — null لسحب الصوت. */
+        fun sendGroupPollVote(context: Context, group: Group, pollId: String, optionIndex: Int?) =
+            sendGroupRichText(context, group, RichMessage(action = "POLL_VOTE", pollVoteOf = pollId, pollVoteOption = optionIndex))
+
         /** إزالة تفاعل إيموجي على رسالة في مجموعة (E2EE بـ Sender Keys). */
         fun removeGroupReaction(context: Context, group: Group, messageId: String) =
             sendGroupRichText(context, group, RichMessage(action = "REACTION_REMOVE", reactionOf = messageId))
 
-        fun markRead(context: Context, messageId: String, sequence: Long) = context.startForegroundService(
-            Intent(context, RedConnectionService::class.java).setAction(ACTION_MARK_READ)
-                .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_SEQUENCE, sequence)
-        )
+        fun markRead(context: Context, messageId: String, sequence: Long) {
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_MARK_READ)
+                        .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_SEQUENCE, sequence)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "markRead failed: not allowed in background", e)
+            }
+        }
 
         /** إرسال مؤشر كتابة — فردي (target مطلوب) أو جماعي (target فارغ). */
-        fun sendTyping(context: Context, conversationId: String, targetRedId: String?, isTyping: Boolean) =
-            context.startForegroundService(
-                Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_TYPING)
-                    .putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_IS_TYPING, isTyping)
-            )
+        fun sendTyping(context: Context, conversationId: String, targetRedId: String?, isTyping: Boolean) {
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_TYPING)
+                        .putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_IS_TYPING, isTyping)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "sendTyping failed: not allowed in background", e)
+            }
+        }
 
         /** اختصار للمجموعات */
         fun sendGroupTyping(context: Context, groupId: String, isTyping: Boolean) = sendTyping(context, groupId, null, isTyping)
@@ -696,23 +894,33 @@ class RedConnectionService : Service() {
         const val EXTRA_FOR_EVERYONE = "forEveryone"
 
         /** حذف للجميع — يُرسل DeleteRED عبر الخادم ليصل للطرفين */
-        fun deleteForEveryone(context: Context, messageId: String, conversationId: String) =
-            context.startForegroundService(
-                Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
-                    .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, true)
-            )
+        fun deleteForEveryone(context: Context, messageId: String, conversationId: String) {
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
+                        .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, true)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "deleteForEveryone failed: not allowed in background", e)
+            }
+        }
 
         /** حذف لدي فقط — محلي */
-        fun deleteForMe(context: Context, messageId: String, conversationId: String) =
-            context.startForegroundService(
-                Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
-                    .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, false)
-            )
+        fun deleteForMe(context: Context, messageId: String, conversationId: String) {
+            try {
+                context.startForegroundService(
+                    Intent(context, RedConnectionService::class.java).setAction(ACTION_DELETE)
+                        .putExtra(EXTRA_MESSAGE_ID, messageId).putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_FOR_EVERYONE, false)
+                )
+            } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
+                android.util.Log.w("RedConnectionService", "deleteForMe failed: not allowed in background", e)
+            }
+        }
 
         fun stop(context: Context) = context.stopService(Intent(context, RedConnectionService::class.java))
     }
 }
 
-private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray)
-private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false)
-private data class PendingGroupPayloadSend(val groupJson: String, val type: String, val payload: ByteArray)
+private data class PendingSend(val target: String, val conversation: String, val type: String, val payload: ByteArray, val clientId: String? = null)
+private data class PendingGroupSend(val groupJson: String, val text: String, val isRich: Boolean = false, val clientId: String? = null)
+private data class PendingGroupPayloadSend(val groupJson: String, val type: String, val payload: ByteArray, val clientId: String? = null)

@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import android.content.Context
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,7 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.red.sovereign.ui.theme.CairoFamily
+import com.red.sovereign.core.SecureStore
+import com.red.sovereign.ui.theme.PlexArabicFamily
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.SovereignGradients
 
@@ -51,11 +53,15 @@ object SovereignGiftsCatalog {
 
 /**
  * 🎁 نافذة إهداء الهدايا الفاخرة للبث المباشر والمساحات
+ *
+ * @param coinBalance رصيد العملات الحالي للعرض (null = إخفاء السطر).
+ * الخصم نفسه مسؤولية المستدعي عبر [LiveGiftWallet.tryDeduct] قبل الإرسال.
  */
 @Composable
 fun LiveGiftsSheet(
     onDismiss: () -> Unit,
-    onSendGift: (SovereignGift) -> Unit
+    onSendGift: (SovereignGift) -> Unit,
+    coinBalance: Int? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -93,7 +99,7 @@ fun LiveGiftsSheet(
                                 text = "متجر الهدايا السيادية",
                                 color = Color.White,
                                 fontSize = 16.sp,
-                                fontFamily = CairoFamily,
+                                fontFamily = PlexArabicFamily,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
@@ -116,6 +122,23 @@ fun LiveGiftsSheet(
                 }
 
                 // Gifts Grid
+                if (coinBalance != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(SovereignColors.Gold.copy(alpha = 0.12f))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Rounded.Diamond, null, tint = SovereignColors.GoldNeon, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "رصيدك: $coinBalance عملة",
+                            color = SovereignColors.GoldNeon,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -178,5 +201,45 @@ private fun GiftItemCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * دفتر عملات الهدايا — محلي فقط حتى تصل محفظة الخادم.
+ *
+ * لا يوجد بعد endpoint للأرصدة، فالرصيد يُحفظ مشفّرًا على الجهاز
+ * (SecureStore) ويُخصم ذريًا قبل إرسال إشارة GIFT. الخادم يُرحّل
+ * الحدث دون تحقق من الرصيد — عند إضافة المحفظة الخادمية يُستبدل
+ * هذا الكائن بنداء REST دون تغيير واجهة المستدعين.
+ */
+object LiveGiftWallet {
+    private const val STORE = "red_gifts"
+    private const val KEY_BALANCE = "gift_coins"
+    private const val KEY_WELCOMED = "gift_welcomed"
+
+    /** مكافأة ترحيبية لمرة واحدة حتى تعمل الهدايا قبل أي شحن. */
+    const val WELCOME_BONUS = 100
+
+    fun balance(context: Context): Int {
+        val store = SecureStore(context.applicationContext, STORE)
+        if (store.get(KEY_WELCOMED) == null) {
+            store.put(KEY_WELCOMED, "1")
+            store.put(KEY_BALANCE, WELCOME_BONUS.toString())
+            return WELCOME_BONUS
+        }
+        return store.get(KEY_BALANCE)?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    /**
+     * يخصم [cost] ويعيد true. عند عدم كفاية الرصيد يعيد false
+     * ولا يخصم شيئًا — على المستدعي إظهار "رصيد غير كافٍ".
+     */
+    fun tryDeduct(context: Context, cost: Int): Boolean {
+        if (cost <= 0) return true
+        val store = SecureStore(context.applicationContext, STORE)
+        val current = balance(context)
+        if (current < cost) return false
+        store.put(KEY_BALANCE, (current - cost).toString())
+        return true
     }
 }

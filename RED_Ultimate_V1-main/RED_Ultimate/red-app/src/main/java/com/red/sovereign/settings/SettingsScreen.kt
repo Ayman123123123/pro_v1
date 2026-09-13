@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -56,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,12 +76,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.red.sovereign.auth.AuthState
 import com.red.sovereign.auth.AuthViewModel
 import com.red.sovereign.core.ServerEndpoint
-import kotlinx.coroutines.launch
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.YounesEmerald
+import androidx.compose.ui.res.stringResource
+import com.red.sovereign.R
 
-private enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, SERVER_ADVANCED, FOLDERS, STARRED, BLOCKED, ABOUT }
+enum class SettingsPage { ROOT, ACCOUNT, PRIVACY, APPEARANCE, CHATS, NOTIFICATIONS, DATA, CALLS, DEVICES, SERVER, SERVER_ADVANCED, FOLDERS, STARRED, BLOCKED, ABOUT, NETWORK_DIAG, DEVELOPER }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,9 +91,16 @@ fun YounesSettingsSheet(
     viewModel: SettingsViewModel,
     authViewModel: AuthViewModel,
     logout: () -> Unit,
-    dismiss: () -> Unit
+    dismiss: () -> Unit,
+    // ربط P0: يسمح لشاشة إعدادات الجهاز بفتح صفحة داخلية مباشرة
+    // (AppLock/ReadReceipts→PRIVACY، Theme→APPEARANCE، الإشعارات→NOTIFICATIONS،
+    // AutoDownload→CHATS، Storage→DATA، Profile→ACCOUNT، Sessions→DEVICES،
+    // Server→SERVER_ADVANCED) — بلا تخزين جديد، مجرد حالة تنقل أولية.
+    initialPage: SettingsPage = SettingsPage.ROOT
 ) {
-    var page by remember { mutableStateOf(SettingsPage.ROOT) }
+    var page by remember(initialPage) { mutableStateOf(initialPage) }
+    // إن أُعيد فتح الشيت بصفحة مختلفة أثناء بقائه مركّباً، اتبعها.
+    LaunchedEffect(initialPage) { if (initialPage != SettingsPage.ROOT) page = initialPage }
     val deviceSettings: DeviceSettingsViewModel = viewModel()
     LaunchedEffect(page) { if (page == SettingsPage.DEVICES) deviceSettings.load() }
     var confirmLogout by remember { mutableStateOf(false) }
@@ -114,7 +124,7 @@ fun YounesSettingsSheet(
                 SettingsPage.DATA -> DataSettings(viewModel)
                 SettingsPage.CALLS -> CallSettings(viewModel)
                 SettingsPage.DEVICES -> DevicesSettings(deviceSettings)
-                SettingsPage.SERVER -> ServerSettings(onAdvanced = { page = SettingsPage.SERVER_ADVANCED })
+                SettingsPage.SERVER -> ServerSettings(onAdvanced = { page = SettingsPage.SERVER_ADVANCED }, onDiagnostics = { page = SettingsPage.NETWORK_DIAG })
                 // الشاشة الغنية (اكتشاف تلقائي + إدخال يدوي + تحقق توقيع السلطة)
                 // كانت مكتوبة بالكامل لكن غير موصولة بأي تنقّل، فبقيت كوداً ميتاً.
                 SettingsPage.SERVER_ADVANCED -> SmartServerSettingsScreen(onBack = { page = SettingsPage.SERVER })
@@ -122,6 +132,8 @@ fun YounesSettingsSheet(
                 SettingsPage.STARRED -> StarredSettings()
                 SettingsPage.BLOCKED -> BlockedSettings()
                 SettingsPage.ABOUT -> AboutSettings()
+                SettingsPage.NETWORK_DIAG -> NetworkDiagnosticsScreen(onBack = { page = SettingsPage.SERVER })
+                SettingsPage.DEVELOPER -> DeveloperScreen(viewModel, onBack = { page = SettingsPage.ROOT })
             }
             Spacer(Modifier.height(28.dp))
         }
@@ -143,17 +155,19 @@ private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onP
         SettingDestination(SettingsPage.APPEARANCE, Icons.Default.Palette, "المظهر والوصولية", "الخط والتباين والحركة والكثافة", Color(0xFFA78BFA)),
         SettingDestination(SettingsPage.CHATS, Icons.AutoMirrored.Filled.Chat, "الدردشات والوسائط", "التنزيل وسرعة الصوت وسلوك المحادثة", Color(0xFF5CC8FF)),
         SettingDestination(SettingsPage.NOTIFICATIONS, Icons.Default.Notifications, "الإشعارات", "الرسائل والمكالمات ومعاينة المحتوى", Color(0xFFFFB65C)),
-        SettingDestination(SettingsPage.DATA, Icons.Default.Storage, "البيانات والتخزين", "${formatBytes(cacheBytes)} مستخدمة في cache", Color(0xFF8BC34A)),
-        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت لمكالمات RED", AqyalGold),
+        SettingDestination(SettingsPage.DATA, Icons.Default.Storage, "البيانات والتخزين", "${formatBytes(cacheBytes)} مستخدمة في ذاكرة مؤقتة", Color(0xFF8BC34A)),
+        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
         SettingDestination(SettingsPage.DEVICES, Icons.Default.Devices, "الأجهزة والشهادات", "الأجهزة المعتمدة وتنبيهات المفاتيح", Color(0xFFEC7FA9)),
-        SettingDestination(SettingsPage.SERVER, Icons.Default.Wifi, "الخادم والشبكة", "Local-first وWireGuard وحالة نقطة الاتصال", Color(0xFF4DD0E1)),
+        SettingDestination(SettingsPage.SERVER, Icons.Default.Wifi, "الخادم والشبكة", "منصة سيادية وWireGuard وحالة نقطة الاتصال", Color(0xFF4DD0E1)),
         SettingDestination(SettingsPage.FOLDERS, Icons.Default.Folder, "مجلدات الدردشة", "تنظيم محلي مثل تلجرام — على الجهاز فقط", Color(0xFF81C784)),
         SettingDestination(SettingsPage.STARRED, Icons.Default.Star, "الرسائل المميّزة", "الرسائل التي نجّمتها من المحادثة", AqyalGold),
         SettingDestination(SettingsPage.BLOCKED, Icons.Default.Block, "المحظورون", "من لا يصل إليك برسالة أو مكالمة", Color(0xFFE57373)),
-        SettingDestination(SettingsPage.ABOUT, Icons.Default.Info, "حول يونس", "الإصدار والبنية والتراخيص", MaterialTheme.colorScheme.onSurfaceVariant)
+        SettingDestination(SettingsPage.ABOUT, Icons.Default.Info, "حول يونس", "الإصدار والبنية والتراخيص", MaterialTheme.colorScheme.onSurfaceVariant),
+        SettingDestination(SettingsPage.NETWORK_DIAG, Icons.Default.Wifi, "تشخيص الشبكة", "Ping وDNS وزمن HTTP وWebRTC", Color(0xFF4DD0E1)),
+        SettingDestination(SettingsPage.DEVELOPER, Icons.Default.Build, "خيارات المطور", "Telemetry وسجلات وFlags دائمة", Color(0xFFFF8A65))
     )
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(570.dp)) {
-        items(rows) { row -> DestinationRow(row) { onPage(row.page) } }
+        items(rows, key = { it.page }) { row -> DestinationRow(row) { onPage(row.page) } }
         item { OutlinedButton(onLogout, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("تسجيل الخروج من هذا الجهاز") } }
     }
 }
@@ -174,7 +188,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 
 @Composable private fun AccountSettings(account: AuthState.Authenticated, authViewModel: AuthViewModel) {
     var username by remember(account.username) { mutableStateOf(account.username) }
-    var displayName by remember { mutableStateOf("") }
+    var displayName by remember(account) { mutableStateOf("") }
     var savingUsername by remember { mutableStateOf(false) }
     var savingName by remember { mutableStateOf(false) }
     var msgUsername by remember { mutableStateOf<String?>(null) }
@@ -193,6 +207,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                 }
             }
         }
+        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
         item {
             Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)
@@ -213,7 +228,25 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     }
 }
 
-@Composable private fun PrivacySettings(vm: SettingsViewModel) = SettingsList {
+@Composable private fun PrivacySettings(vm: SettingsViewModel) {
+    val syncError by vm.syncError.collectAsState()
+    SettingsList {
+    syncError?.let { err ->
+        item {
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("فشل مزامنة الخصوصية", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(err, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+                    }
+                    TextButton(onClick = vm::clearSyncError) { Text("إخفاء") }
+                }
+            }
+        }
+    }
     item { ToggleSetting("قفل التطبيق بالبصمة", "اطلب بصمة/نمط الجهاز لفتح يونس — مفاتيحك محمية بخطوة إضافية", vm.state.appLockEnabled, vm::setAppLockEnabled) }
     item {
         Text("مهلة إعادة القفل · ${vm.state.lockTimeoutSeconds} ث", fontWeight = FontWeight.SemiBold)
@@ -227,12 +260,14 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { VisibilityPicker("من يتصل بي عبر يونس", vm.state.whoCanCall, vm::setWhoCanCall) }
     item { ToggleSetting("إيصالات القراءة", "إرسال READ بعد فتح الرسالة — إن أوقفتها لن ترى إيصالات الآخرين", vm.state.readReceipts, vm::setReadReceipts) }
     item { ToggleSetting("مؤشر الكتابة", "أرسل «يكتب…» فقط أثناء الكتابة الفعلية", vm.state.typingIndicators, vm::setTypingIndicators) }
-    item { LockedSetting("معاينات الروابط", "متوقفة حتى اكتمال proxy آمن وحماية SSRF وإخفاء عنوان IP") }
+    item { ToggleSetting("معاينات الروابط", "معاينة آمنة عبر proxy سيادي يحمي IP ويمنع SSRF — أوقفها لحماية قصوى", vm.state.linkPreviews, vm::setLinkPreviews) }
     item { LockedSetting("حماية لقطات الشاشة", "مفعلة إجباريًا للمحادثات والمفاتيح الحساسة") }
     item { LockedSetting("مفاتيح الهوية", "تبقى داخل Android Keystore ولا يمكن تصديرها") }
+    }
 }
 
 @Composable private fun AppearanceSettings(vm: SettingsViewModel) {
+    var showFontDialog by remember { mutableStateOf(false) }
     // مزامنة AppThemeState مع SettingsViewModel
     val s = vm.state
     androidx.compose.runtime.LaunchedEffect(s.themePreset, s.themeMode, s.liquidGlassEnabled, s.customPrimary, s.highContrast, s.reduceMotion, s.fontScale) {
@@ -344,8 +379,10 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                 }
             }
         }
+        item { FontBubblesEntry(onOpen = { showFontDialog = true }) }
         item { LockedSetting("RTL والعربية", "مفعلة تلقائيًا حسب لغة النظام — Plex Arabic ثنائي النص") }
     }
+    if (showFontDialog) FontBubblesDialog(viewModel = vm, onDismiss = { showFontDialog = false })
 }
 
 @Composable private fun ChatSettings(vm: SettingsViewModel) = SettingsList {
@@ -360,26 +397,108 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { ToggleSetting("Enter للإرسال", "زر الإدخال يرسل الرسالة بدل سطر جديد", vm.state.enterToSend, vm::setEnterToSend) }
     item { ToggleSetting("حفظ الوسائط في المعرض", "بعد فك التشفير فقط وبموافقتك — الافتراضي مغلق", vm.state.saveMediaToGallery, vm::setSaveMediaToGallery) }
     item { ToggleSetting("أرشفة المكتوم تلقائياً", "إن كتمت محادثة دائماً تُنقل للأرشيف", vm.state.autoArchiveMuted, vm::setAutoArchiveMuted) }
+    item { WallpaperSettings() }
 }
 
-@Composable private fun NotificationSettings(vm: SettingsViewModel) = SettingsList {
+@Composable
+private fun WallpaperSettings() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pkg by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(
+            com.red.sovereign.ui.theme.CustomThemeStore.loadActiveCustomTheme(context)
+                ?: com.red.sovereign.ui.theme.CustomThemePackage(
+                    name = "سيادي",
+                    primaryColor = androidx.compose.ui.graphics.Color(0xFF14C79A),
+                    backgroundColor = androidx.compose.ui.graphics.Color(0xFF0A0F18),
+                    outgoingBubbleColor = androidx.compose.ui.graphics.Color(0xFF14304F),
+                    incomingBubbleColor = androidx.compose.ui.graphics.Color(0xFF182533),
+                    accentColor = androidx.compose.ui.graphics.Color(0xFFE0B551)
+                )
+        )
+    }
+    fun save(next: com.red.sovereign.ui.theme.CustomThemePackage) {
+        pkg = next
+        runCatching { com.red.sovereign.ui.theme.CustomThemeStore.saveCustomTheme(context, next) }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("خلفية المحادثة", fontWeight = FontWeight.SemiBold)
+        Text(
+            "زخرفة هندسية خافتة (4%) لا تنافس النص — أو سادة. تُطبق فورًا.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                com.red.sovereign.ui.theme.CustomThemePackage.WALLPAPER_PATTERN to "مزخرفة",
+                com.red.sovereign.ui.theme.CustomThemePackage.WALLPAPER_SOLID to "سادة"
+            ).forEach { (id, label) ->
+                val sel = pkg.wallpaperStyle == id
+                AssistChip(
+                    onClick = { save(pkg.copy(wallpaperStyle = id)) },
+                    label = { Text(label, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal) },
+                    leadingIcon = { if (sel) Text("●") }
+                )
+            }
+        }
+        Text("صبغة المحادثات", fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val tints: List<Pair<Long?, String>> = listOf(
+                null to "بلا",
+                0xFF14C79A to "زمرد",
+                0xFF4D9FE8 to "أزرق",
+                0xFFB07CE8 to "بنفسجي",
+                0xFFE0B551 to "ذهب"
+            )
+            tints.forEach { (argb, _) ->
+                val sel = pkg.wallpaperTintArgb == argb
+                val dot = if (argb == null) MaterialTheme.colorScheme.surfaceVariant
+                else androidx.compose.ui.graphics.Color(argb)
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(dot)
+                        .clickable { save(pkg.copy(wallpaperTintArgb = argb)) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (sel) Icon(
+                        Icons.Default.Check, null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        Text("تعتيم الزخرفة · ${(pkg.wallpaperDim * 100).toInt()}%", fontWeight = FontWeight.SemiBold)
+        Slider(
+            value = pkg.wallpaperDim,
+            onValueChange = { save(pkg.copy(wallpaperDim = it)) },
+            valueRange = 0f..0.6f
+        )
+    }
+}
+
+@Composable private fun NotificationSettings(vm: SettingsViewModel) {
+    var showDnd by remember { mutableStateOf(false) }
+    SettingsList {
     item { ToggleSetting("إشعارات الرسائل", "تنبيه عند وصول رسالة مشفرة", vm.state.messageNotifications, vm::setMessageNotifications) }
     item { ToggleSetting("إشعارات المجموعات", "تنبيهات المحادثات الجماعية بشكل مستقل", vm.state.groupNotifications, vm::setGroupNotifications) }
     item { ToggleSetting("إشعارات المكالمات", "رنين وارد عبر خدمة المكالمات الأمامية", vm.state.callNotifications, vm::setCallNotifications) }
     item { ToggleSetting("إظهار محتوى الرسالة", "غير موصى به على شاشة القفل", vm.state.notificationPreview, vm::setNotificationPreview) }
-    item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس ومكالمات يونس.", Icons.Default.Notifications) }
+    item { DndEntry(onOpen = { showDnd = true }) }
+    item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس، مكالمات يونس، DINSTAR.", Icons.Default.Notifications) }
+    }
+    if (showDnd) DndScheduleDialog(viewModel = vm, onDismiss = { showDnd = false })
 }
 
 @Composable private fun DataSettings(vm: SettingsViewModel) = SettingsList {
     item { InfoCard("ذاكرة التخزين المؤقت", formatBytes(vm.cacheBytes), Icons.Default.Storage) }
-    item { Button(vm::clearCache, Modifier.fillMaxWidth()) { Text("مسح cache والوسائط المفكوكة المؤقتة") } }
+    item { Button(vm::clearCache, Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_clear_cache)) } }
     item { InfoCard("الحد الحالي للمرفق", "99 MiB قبل التشفير", Icons.Default.DataUsage) }
     item { LockedSetting("النسخ الاحتياطي السحابي", "معطل لحماية مفاتيح الهوية والمحادثات") }
 }
 
 @Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
     item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
-    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — مكالمات RED داخل التطبيق", Icons.Default.Call) }
+    item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
+    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {
@@ -399,10 +518,13 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     item { LockedSetting("تنبيه تغير المفتاح", "يجب إعادة مقارنة Safety Number عند تغير بصمة الجهاز") }
 }
 
-@Composable private fun ServerSettings(onAdvanced: () -> Unit) = SettingsList {
+@Composable private fun ServerSettings(onAdvanced: () -> Unit, onDiagnostics: () -> Unit) = SettingsList {
     item { InfoCard("نقطة YOUNES الحالية", ServerEndpoint.url(), Icons.Default.Wifi) }
     item {
         Button(onAdvanced, Modifier.fillMaxWidth()) { Text("إعدادات الخادم المتقدمة (اكتشاف وإدخال يدوي)") }
+    }
+    item {
+        OutlinedButton(onDiagnostics, Modifier.fillMaxWidth()) { Text("تشخيص الشبكة (Ping وDNS وWebRTC)") }
     }
     item { LockedSetting("اكتشاف LAN", "يعمل في Debug ويتحقق من /health وبصمة سلطة الهوية قبل حفظ العنوان") }
     item { LockedSetting("الوصول البعيد", "استخدم WireGuard أو TLS موثقًا؛ لا تفتح HTTP المحلي مباشرة للإنترنت") }
@@ -410,7 +532,15 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
 }
 
 @Composable private fun AboutSettings() = SettingsList {
-    item { InfoCard("YOUNES · يونس", "1.0.0-alpha · Local-first sovereign platform", Icons.Default.Info) }
+    // versionName داخلياً يبقى "1.0.0-alpha02" (build.gradle.kts) — العرض فقط
+    // يُجرَّد من لاحقة alpha في release عبر BUILD_TYPE ليظهر "1.0.0".
+    val rawVersion = com.red.sovereign.BuildConfig.VERSION_NAME
+    val displayVersion = if (com.red.sovereign.BuildConfig.BUILD_TYPE == "release") {
+        rawVersion.substringBefore("-").ifEmpty { "1.0.0" }
+    } else {
+        rawVersion
+    }
+    item { InfoCard("YOUNES · يونس", "$displayVersion · منصة سيادية", Icons.Default.Info) }
     item { InfoCard("التشفير", "libsignal PQXDH + Double Ratchet + Kyber prekeys", Icons.Default.Security) }
     item { InfoCard("الشفافية", "لا نعرض ميزة غير مكتملة كمكتملة، ولا بيانات أجهزة وهمية.", Icons.Default.Info) }
 }
@@ -449,7 +579,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     val ids = remember(revision) { org.starredIds() }
     SettingsList {
         item { InfoCard("الرسائل المميّزة", if (ids.isEmpty()) "نجّم رسالة من الضغط الطويل داخل المحادثة." else "${ids.size} رسالة محفوظة محلياً", Icons.Default.Star) }
-        items(ids.toList()) { id ->
+        items(ids.toList(), key = { it }) { id ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(id.take(16), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -465,7 +595,7 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
     SettingsList {
         item { InfoCard("المحظورون", "الحظر يمنع الرسائل والمكالمات من هذا المعرّف على جهازك والخادم.", Icons.Default.Block) }
         if (directory.blocked.isEmpty()) item { Text("لا يوجد محظورون حالياً.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(directory.blocked) { redId ->
+        items(directory.blocked, key = { it }) { redId ->
             Card(Modifier.fillMaxWidth()) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(redId, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -521,6 +651,9 @@ private fun pageTitle(page: SettingsPage) = when (page) {
     SettingsPage.SERVER_ADVANCED -> "الخادم المتقدم"
     SettingsPage.FOLDERS -> "مجلدات الدردشة"; SettingsPage.STARRED -> "الرسائل المميّزة"; SettingsPage.BLOCKED -> "المحظورون"
     SettingsPage.ABOUT -> "حول يونس"; SettingsPage.ROOT -> "الإعدادات"
+    SettingsPage.NETWORK_DIAG -> "تشخيص الشبكة"; SettingsPage.DEVELOPER -> "خيارات المطور"
 }
-private fun formatBytes(bytes: Long): String = when { bytes >= 1024L * 1024 -> "%.1f MiB".format(bytes / 1048576.0); bytes >= 1024 -> "%.1f KiB".format(bytes / 1024.0); else -> "$bytes B" }
+// تعريب 2026-09-10: وحدات عربية مطابقة لـ strings.xml (file_size_*) وبـ Locale("ar") — لا MiB/KiB ولا Locale.US.
+private val settingsArabicLocale: java.util.Locale = java.util.Locale("ar")
+private fun formatBytes(bytes: Long): String = when { bytes >= 1024L * 1024 -> String.format(settingsArabicLocale, "%.1f م.ب", bytes / 1048576.0); bytes >= 1024 -> String.format(settingsArabicLocale, "%.1f ك.ب", bytes / 1024.0); else -> String.format(settingsArabicLocale, "%d بايت", bytes) }
 private data class SettingDestination(val page: SettingsPage, val icon: ImageVector, val title: String, val detail: String, val color: Color)

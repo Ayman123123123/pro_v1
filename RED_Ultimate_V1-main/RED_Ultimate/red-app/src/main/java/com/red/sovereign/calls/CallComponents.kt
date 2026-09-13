@@ -20,10 +20,11 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.theme.AqyalGold
@@ -195,6 +197,7 @@ fun CallQualityIndicator(
         NetworkQuality.GOOD -> Color(0xFF4D9FE8) to "جيد"
         NetworkQuality.FAIR -> Color(0xFFF0B551) to "متوسط"
         NetworkQuality.POOR -> Color(0xFFF25C5C) to "ضعيف"
+        NetworkQuality.UNKNOWN -> Color(0xFF9E9E9E) to ""
     }
 
     Row(

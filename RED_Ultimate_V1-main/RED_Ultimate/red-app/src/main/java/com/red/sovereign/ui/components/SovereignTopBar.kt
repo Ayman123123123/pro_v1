@@ -52,13 +52,19 @@ fun SovereignTopBar(
     onSettings: () -> Unit,
     onSearch: () -> Unit,
     onProfileClick: () -> Unit = {},
-    isEncrypted: Boolean = true
+    isEncrypted: Boolean = true,
+    hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     val dimens = rememberAdaptiveDimens()
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .sovereignHazeEffect(
+                state = hazeState,
+                tier = com.red.sovereign.ui.theme.SovereignGlassTier.NavBar,
+                isDark = true
+            )
             .padding(
                 horizontal = dimens.contentHorizontalPadding,
                 vertical = dimens.headerVerticalPadding

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -35,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +71,7 @@ fun SmartServerSettingsScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var inputText by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<ServerStatus>(ServerStatus.IDLE) }
     var showAdvanced by remember { mutableStateOf(false) }
@@ -91,10 +94,10 @@ fun SmartServerSettingsScreen(
     }
 
     // Define callback functions using remember to avoid recompilation issues
-    val validateAndSave = remember {
-        { 
+    val validateAndSave = remember(scope, context) {
+        {
             status = ServerStatus.CHECKING
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            scope.launch(Dispatchers.IO) {
                 val discovery = LocalServerDiscovery(context.applicationContext)
                 val result = discovery.verifyUserInput(inputText)
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
@@ -119,13 +122,13 @@ fun SmartServerSettingsScreen(
         }
     }
 
-    val autoDiscover = remember {
+    val autoDiscover = remember(scope, context, currentUrl) {
         {
             status = ServerStatus.DISCOVERING
             discoveredServers = emptyList()
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            scope.launch(Dispatchers.IO) {
                 val discovery = LocalServerDiscovery(context.applicationContext)
-                
+
                 // أولاً: تحقق من العناوين المعروفة بسرعة
                 val quick = discovery.quickVerifyKnown()
                 if (quick != null) {
@@ -171,10 +174,10 @@ fun SmartServerSettingsScreen(
         }
     }
 
-    val checkCurrentConnection = remember {
+    val checkCurrentConnection = remember(scope, context, currentUrl) {
         {
             status = ServerStatus.CHECKING
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            scope.launch(Dispatchers.IO) {
                 val discovery = LocalServerDiscovery(context.applicationContext)
                 val result = discovery.verifyUserInput(currentUrl)
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
@@ -213,7 +216,7 @@ fun SmartServerSettingsScreen(
                 Text("أدخل IP الخادم فقط - البورت والمسار يُضافان تلقائياً", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
             IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, "رجوع", tint = MaterialTheme.colorScheme.onSurface)
+                Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = MaterialTheme.colorScheme.onSurface)
             }
         }
 
@@ -338,7 +341,24 @@ fun SmartServerSettingsScreen(
                 if (showAdvanced) {
                     AdvancedOptions(
                         currentUrl = currentUrl,
-                        onResetToDefault = resetToDefault
+                        onResetToDefault = resetToDefault,
+                        onQuickSet = { host ->
+                            inputText = host
+                            validateAndSave()
+                        },
+                        onCopyCurrent = {
+                            runCatching {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                if (clipboard == null) {
+                                    Toast.makeText(context, "تعذر النسخ", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("server", currentUrl))
+                                    Toast.makeText(context, "تم نسخ العنوان الحالي", Toast.LENGTH_SHORT).show()
+                                }
+                            }.onFailure {
+                                Toast.makeText(context, "تعذر النسخ", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
                 }
             }
@@ -539,7 +559,9 @@ fun DiscoveredServersList(
 @Composable
 fun AdvancedOptions(
     currentUrl: String,
-    onResetToDefault: () -> Unit
+    onResetToDefault: () -> Unit,
+    onQuickSet: (String) -> Unit = {},
+    onCopyCurrent: () -> Unit = {}
 ) {
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -560,9 +582,9 @@ fun AdvancedOptions(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickAction(Icons.Default.PhoneAndroid, "محاكي", "10.0.2.2") { }
-            QuickAction(Icons.Default.Computer, "Localhost", "127.0.0.1") { }
-            QuickAction(Icons.Default.ContentCopy, "نسخ الحالي", "") { }
+            QuickAction(Icons.Default.PhoneAndroid, "محاكي", "10.0.2.2") { onQuickSet("10.0.2.2") }
+            QuickAction(Icons.Default.Computer, "Localhost", "127.0.0.1") { onQuickSet("127.0.0.1") }
+            QuickAction(Icons.Default.ContentCopy, "نسخ الحالي", "") { onCopyCurrent() }
             QuickAction(Icons.Default.Usb, "adb reverse", "adb reverse tcp:8088 tcp:8088") {
                 try {
                     val process = Runtime.getRuntime().exec("adb reverse tcp:8088 tcp:8088")
@@ -577,13 +599,15 @@ fun AdvancedOptions(
 }
 
 @Composable
-fun QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, onClick: () -> Unit) {
+fun androidx.compose.foundation.layout.RowScope.QuickAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, onClick: () -> Unit) {
+    // وزن متساوٍ داخل الصف: أربعة أزرار fillMaxWidth كانت تفيض خارج الشاشة
+    // فيُقصى بعضها عن اللمس — الآن تتقاسم العرض وكلها عاملة.
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp)
-            .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+            .weight(1f)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(

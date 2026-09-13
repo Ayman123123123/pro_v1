@@ -42,6 +42,34 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
 
     private val encryptedCache by lazy { EncryptedMediaCache(context) }
 
+    /**
+     * بوابة التنزيل التلقائي: يقرأ (auto_download_wifi/mobile) من Prefs + نوع الشبكة
+     * الحالية. يُستخدم من شاشة "التنزيل التلقائي للوسائط" — WiFi/Mobile/Never.
+     * يعيد false في وضع Never أو عند انعدام الشبكة المسموحة.
+     */
+    fun isAutoDownloadAllowedNow(): Boolean {
+        val prefs = context.getSharedPreferences("younes_user_preferences", Context.MODE_PRIVATE)
+        val wifi = prefs.getBoolean("auto_download_wifi", true)
+        val mobile = prefs.getBoolean("auto_download_mobile", false)
+        if (!wifi && !mobile) return false
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java) ?: return wifi
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        val isWifi = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+        val isCell = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+        return (isWifi && wifi) || (isCell && mobile)
+    }
+
+    /**
+     * تنزيل مشروط بالسياسة: يعيد null دون شبكة/دون سماح بدل إخفاء الفشل —
+     * المستدعي يعرض "بانتظار WiFi" بدل زر ميت.
+     */
+    suspend fun downloadToPrivateCacheIfAllowed(path: String, extension: String): ApiResult<File>? {
+        if (!isAutoDownloadAllowedNow()) return null
+        return downloadToPrivateCache(path, extension)
+    }
+
     suspend fun downloadToPrivateCache(path: String, extension: String): ApiResult<File> {
         require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
         require(extension.matches(Regex("^[a-z0-9]{2,5}$")))
@@ -49,20 +77,36 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
         val cacheKey = "story:$path"
         encryptedCache.get(cacheKey)?.let { bytes ->
             val tmp = File.createTempFile("story-cached-", ".$extension", context.cacheDir)
-            tmp.writeBytes(bytes)
+            // LEGENDARY FIX: كتابة متدفقة بحد 8KB (كان writeBytes دفعة واحدة لملف 99MB)
+            tmp.outputStream().use { out -> bytes.inputStream().copyTo(out, 8 * 1024) }
             if (tmp.length() in 1..100L * 1024 * 1024) return ApiResult.Success(200, tmp)
+            else runCatching { tmp.delete() }
         }
         val directory = File(context.cacheDir, "story_media").apply { mkdirs() }
         val digest = MessageDigest.getInstance("SHA-256").digest(path.toByteArray()).joinToString("") { "%02x".format(it) }
         val destination = File(directory, "$digest.$extension")
         if (destination.isFile && destination.length() in 1..100L * 1024 * 1024) {
-            // Warm encrypted cache
-            try { encryptedCache.put(cacheKey, destination.readBytes()) } catch (_: Exception) {}
+            // Warm encrypted cache — فقط للملفات الصغيرة (<=8MB) لمنع OOM
+            try {
+                if (destination.length() <= 8L * 1024 * 1024) {
+                    destination.inputStream().use { ins ->
+                        val buf = ins.readBytes()
+                        encryptedCache.put(cacheKey, buf)
+                    }
+                }
+            } catch (_: Exception) {}
             return ApiResult.Success(200, destination)
         }
         return when (val result = client.download(path, destination)) {
             is ApiResult.Success -> {
-                try { encryptedCache.put(cacheKey, result.value.readBytes()) } catch (_: Exception) {}
+                // LEGENDARY FIX: تخزين مؤقت للصغير فقط + قراءة متدفقة (كان readBytes() مرتين لملف 99MB = OOM)
+                try {
+                    if (result.value.length() <= 8L * 1024 * 1024) {
+                        result.value.inputStream().use { ins ->
+                            encryptedCache.put(cacheKey, ins.readBytes())
+                        }
+                    }
+                } catch (_: Exception) {}
                 result
             }
             is ApiResult.Error -> result

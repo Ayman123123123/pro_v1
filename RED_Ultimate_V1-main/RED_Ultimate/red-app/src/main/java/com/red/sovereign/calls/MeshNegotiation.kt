@@ -17,6 +17,7 @@ object MeshNegotiation {
 
     fun shouldAcceptRemoteOffer(localUserId: String, remoteUserId: String, haveLocalOffer: Boolean): Boolean {
         if (!haveLocalOffer) return true
+        if (localUserId.isBlank() || remoteUserId.isBlank()) return true
         return localUserId < remoteUserId
     }
 

@@ -101,6 +101,21 @@ jobs:
           npm ci --no-audit --no-fund
           npm run check
           npm run build
+      - name: Run persistent dev-server integration suite
+        working-directory: ${{ env.PROJECT }}/admin_dashboard
+        run: |
+          set -euo pipefail
+          npm run dev:server:reset > /tmp/younes-dev-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; cat /tmp/younes-dev-server.log' EXIT
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/health >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/health >/dev/null
+          npm run check:server
+          npm run check:integration
+          npm run check:asterisk
 
   android:
     name: Android 17 build and unit tests

@@ -1211,6 +1211,7 @@ com.mobilecoin.lib.exceptions.AttestationException
 com.mobilecoin.lib.exceptions.BadMnemonicException
 com.mobilecoin.lib.exceptions.SerializationException
 com.red.core.delivery.DeliveryEngine
+com.red.features.pstn.PstnEngine
 com.red.sovereign.app.RedDashboard
 com.red.sovereign.core.auth.IdentityManager
 com.red.sovereign.core.database.RedDao
@@ -1221,10 +1222,14 @@ com.red.sovereign.features.auth.*
 com.red.sovereign.features.calls.*
 com.red.sovereign.features.calls.CallLogScreen
 com.red.sovereign.features.calls.RedVoipMaster
+com.red.sovereign.features.calls.YemeniOperatorDetector
 com.red.sovereign.features.chat.*
 com.red.sovereign.features.chat.ChatListScreen
 com.red.sovereign.features.chat.LuxuryChatBubble
 com.red.sovereign.features.profile.SettingsScreen
+com.red.sovereign.features.pstn.*
+com.red.sovereign.features.pstn.DialPadScreen
+com.red.sovereign.features.pstn.PstnViewModel
 com.red.sovereign.features.stories.StoryListSection
 com.red.sovereign.features.stories.StoryViewModel
 com.red.sovereign.proto.RedProtos
@@ -3743,6 +3748,7 @@ org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider
 org.thoughtcrime.securesms.dependencies.GooglePlayBillingDependencies
 org.thoughtcrime.securesms.dependencies.KeyTransparencyApi
 org.thoughtcrime.securesms.developed.delivery.GuaranteedDelivery
+org.thoughtcrime.securesms.developed.pstn.DuminManager
 org.thoughtcrime.securesms.developed.voip.UltraHDCall
 org.thoughtcrime.securesms.devicetransfer.olddevice.OldDeviceExitActivity
 org.thoughtcrime.securesms.devicetransfer.olddevice.OldDeviceTransferActivity

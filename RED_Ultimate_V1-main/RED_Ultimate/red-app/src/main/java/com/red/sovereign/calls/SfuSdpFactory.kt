@@ -1,12 +1,12 @@
 package com.red.sovereign.calls
 
 /**
- * SDP bridge for mediasoup (RFC 8829 Unified Plan + ICE-lite).
+ * SDP bridge for mediasoup & SFU systems (RFC 8829 Unified Plan + ICE-lite).
  *
  * The SFU owns ICE (ice-lite). The client:
  * 1. Builds a remote offer from the transport's ice/dtls parameters.
  * 2. Answers with its own DTLS fingerprint.
- * 3. Extracts RTP parameters (payload type, SSRC, cname) to call produce/consume.
+ * 3. Extracts RTP parameters (payload type, SSRC, cname, fmtp, header extensions) to call produce/consume.
  */
 object SfuSdpFactory {
     fun remoteOffer(
@@ -17,6 +17,11 @@ object SfuSdpFactory {
     ): String {
         val fingerprint = dtls.fingerprints.firstOrNull()
             ?: SfuDtlsFingerprint("sha-256", "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00")
+        val bundleLine = if (sections.isNotEmpty()) {
+            "a=group:BUNDLE ${sections.indices.joinToString(" ")}"
+        } else {
+            "a=group:BUNDLE"
+        }
         val lines = mutableListOf(
             "v=0",
             "o=- 1000 1 IN IP4 127.0.0.1",
@@ -24,7 +29,7 @@ object SfuSdpFactory {
             "t=0 0",
             "a=ice-lite",
             "a=msid-semantic: WMS *",
-            "a=group:BUNDLE ${sections.indices.joinToString(" ")}"
+            bundleLine
         )
         sections.forEachIndexed { index, section ->
             lines += mediaSection(index, section, ice, candidates, fingerprint)
@@ -52,7 +57,7 @@ object SfuSdpFactory {
     }
 
     fun firstSsrc(sdp: String): Long? =
-        Regex("a=ssrc:(\\d+) ").find(sdp)?.groupValues?.get(1)?.toLongOrNull()
+        Regex("a=ssrc:(\\d+)[\\s\\r\\n]").find(sdp)?.groupValues?.get(1)?.toLongOrNull()
 
     fun cname(sdp: String): String =
         Regex("a=ssrc:\\d+ cname:([^\\r\\n]+)").find(sdp)?.groupValues?.get(1).orEmpty()
@@ -61,12 +66,25 @@ object SfuSdpFactory {
         Regex("a=rtpmap:(\\d+) ${Regex.escape(codec)}/", RegexOption.IGNORE_CASE)
             .find(sdp)?.groupValues?.get(1)?.toIntOrNull()
 
+    fun extractHeaderExtensions(sdp: String): List<SfuHeaderExtension> {
+        val list = mutableListOf<SfuHeaderExtension>()
+        val matches = Regex("a=extmap:(\\d+) ([^\\r\\n\\s]+)").findAll(sdp)
+        for (m in matches) {
+            val id = m.groupValues[1].toIntOrNull() ?: continue
+            val uri = m.groupValues[2]
+            list.add(SfuHeaderExtension(uri = uri, id = id))
+        }
+        return list
+    }
+
     fun rtpParametersFromLocal(sdp: String, kind: String): SfuRtpParameters? {
         val codec = if (kind == "audio") "opus" else preferredVideoCodec(sdp)
         val pt = payloadType(sdp, codec) ?: return null
         val ssrc = firstSsrc(sdp)
         val clock = if (kind == "audio") 48000 else 90000
         val mime = if (kind == "audio") "audio/opus" else "video/$codec"
+        val headerExts = extractHeaderExtensions(sdp)
+
         return SfuRtpParameters(
             codecs = listOf(
                 SfuRtpCodec(
@@ -83,7 +101,8 @@ object SfuSdpFactory {
                     )
                 )
             ),
-            encodings = listOf(SfuRtpEncoding(ssrc = ssrc)),
+            headerExtensions = headerExts,
+            encodings = listOf(SfuRtpEncoding(ssrc = ssrc, active = true)),
             rtcp = SfuRtcpParameters(cname = cname(sdp).ifBlank { "younes" }, reducedSize = true)
         )
     }
@@ -101,7 +120,8 @@ object SfuSdpFactory {
             payloadTypes = rtp.codecs.map { it.payloadType },
             codecs = rtp.codecs,
             ssrc = rtp.encodings.firstOrNull()?.ssrc,
-            cname = rtp.rtcp.cname
+            cname = rtp.rtcp.cname,
+            headerExtensions = rtp.headerExtensions
         )
         return remoteOffer(ice, candidates, dtls, listOf(section))
     }
@@ -133,6 +153,12 @@ object SfuSdpFactory {
             "a=rtcp-mux",
             "a=rtcp-rsize"
         )
+        section.msid?.takeIf { it.isNotBlank() }?.let { msid ->
+            lines += "a=msid:$msid $msid"
+        }
+        section.headerExtensions.forEach { ext ->
+            lines += "a=extmap:${ext.id} ${ext.uri}"
+        }
         candidates.forEach { candidate ->
             val tcp = candidate.tcpType?.let { " tcptype $it" }.orEmpty()
             lines += "a=candidate:${candidate.foundation} 1 ${candidate.protocol.uppercase()} ${candidate.priority} ${candidate.host} ${candidate.port} typ ${candidate.type}$tcp"
@@ -163,7 +189,11 @@ object SfuSdpFactory {
             lines += "a=rtcp-fb:96 transport-cc"
         }
         section.ssrc?.let { ssrc ->
-            lines += "a=ssrc:$ssrc cname:${section.cname.ifBlank { "younes" }}"
+            val cname = section.cname.ifBlank { "younes" }
+            lines += "a=ssrc:$ssrc cname:$cname"
+            section.msid?.takeIf { it.isNotBlank() }?.let { msid ->
+                lines += "a=ssrc:$ssrc msid:$msid $msid"
+            }
         }
         return lines
     }
@@ -175,5 +205,7 @@ data class SfuMediaKind(
     val payloadTypes: List<Int> = emptyList(),
     val codecs: List<SfuRtpCodec> = emptyList(),
     val ssrc: Long? = null,
-    val cname: String = "younes"
+    val cname: String = "younes",
+    val msid: String? = null,
+    val headerExtensions: List<SfuHeaderExtension> = emptyList()
 )

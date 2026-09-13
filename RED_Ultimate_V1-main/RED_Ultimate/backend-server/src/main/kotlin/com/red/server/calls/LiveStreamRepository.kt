@@ -6,4 +6,7 @@ import org.springframework.stereotype.Repository
 @Repository
 interface LiveStreamRepository : MongoRepository<LiveStreamRecord, String> {
     fun findByBroadcasterId(broadcasterId: String): List<LiveStreamRecord>
+    fun findByEndedAtIsNull(): List<LiveStreamRecord>
+    fun findByBroadcasterIdOrderByStartedAtDesc(broadcasterId: String): List<LiveStreamRecord>
+    fun findByCategoryAndEndedAtIsNull(category: String): List<LiveStreamRecord>
 }

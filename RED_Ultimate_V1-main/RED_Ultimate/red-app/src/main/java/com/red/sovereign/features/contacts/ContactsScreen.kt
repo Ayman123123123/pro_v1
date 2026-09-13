@@ -8,12 +8,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.GroupAdd
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,20 +62,29 @@ fun ContactsScreen(
     val myRedId = tokens.redId.orEmpty()
     val myUsername = tokens.username.orEmpty()
     var query by remember { mutableStateOf("") }
+    // المدخل المستقر للفلترة المضمنة — debounce 350ms حتى لا تُعاد فلترة
+    // القائمة وفرزها مع كل حرف أثناء الكتابة السريعة.
+    var debouncedQuery by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        snapshotFlow { query }
+            .debounce(350)
+            .distinctUntilChanged()
+            .collectLatest { stable -> debouncedQuery = stable }
+    }
     var showQrScanner by remember { mutableStateOf(false) }
     var showAddContact by remember { mutableStateOf(false) }
     var contactRedId by remember { mutableStateOf("") }
     var showShareSheet by remember { mutableStateOf(false) }
     var searchFocused by remember { mutableStateOf(false) }
     val filtered = directory.contacts.filter {
-        query.isBlank() || it.displayName.contains(query, true) || it.username.contains(query, true) || it.redId.contains(query, true)
+        debouncedQuery.isBlank() || it.displayName.contains(debouncedQuery, true) || it.username.contains(debouncedQuery, true) || it.redId.contains(debouncedQuery, true)
     }.sortedWith(compareByDescending<PublicRedProfile> { directory.isOnline(it.redId) }.thenBy { it.displayName })
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Column { Text("جهات الاتصال", fontWeight = FontWeight.Bold); Text("${directory.contacts.size} جهة • ${directory.onlineIds.size} متصل", color = Color.Gray, fontSize = 12.sp) } },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "رجوع") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
                 actions = {
                     IconButton(onClick = { showQrScanner = true }) { Icon(Icons.Rounded.QrCodeScanner, "مسح RED ID") }
                     IconButton(onClick = { searchFocused = true }) { Icon(Icons.Default.Search, "بحث") }
@@ -95,7 +109,7 @@ fun ContactsScreen(
                 item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("لا توجد نتائج لـ \"$query\"", color = Color.Gray) } }
             } else {
                 items(filtered, key = { it.redId }) { person ->
-                    WhatsAppContactRow(person, isOnline = directory.isOnline(person.redId), onChat = { onChat(person) }, onCall = { video -> onCall(person, video) })
+                    WhatsAppContactRow(person, isOnline = directory.isOnline(person.redId), lastSeen = directory.lastSeenLabel(person.redId), onChat = { onChat(person) }, onCall = { video -> onCall(person, video) })
                     HorizontalDivider(Modifier.padding(start = 72.dp), color = Color(0xFF1E293B))
                 }
             }
@@ -172,10 +186,12 @@ fun ContactsScreen(
         )
     }
 
-    // Focused Search Dialog
+    // Focused Search Dialog — يُمرَّر الدليل الحقيقي مع debounce داخلي 350ms.
     if (searchFocused) {
         FocusedSearchDialog(
             initialQuery = query,
+            contacts = directory.contacts,
+            isOnline = directory::isOnline,
             onDismiss = { searchFocused = false },
             onResultClick = { person ->
                 searchFocused = false
@@ -208,7 +224,7 @@ private fun ContactActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
 }
 
 @Composable
-private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, onChat: () -> Unit, onCall: (Boolean) -> Unit) {
+private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, lastSeen: String?, onChat: () -> Unit, onCall: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onChat).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.BottomEnd) {
             Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF0F172A)), contentAlignment = Alignment.Center) { Text(person.displayName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
@@ -216,7 +232,9 @@ private fun WhatsAppContactRow(person: PublicRedProfile, isOnline: Boolean, onCh
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(person.displayName, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1)
-            Text(if (isOnline) "متصل الآن" else "آخر ظهور منذ قليل • @${person.username}", color = if (isOnline) Color(0xFF00C98C) else Color.Gray, fontSize = 13.sp, maxLines = 1)
+            // آخر ظهور حقيقي من الخادم بدل النص الثابت المضلل (كان "منذ قليل" دائماً).
+            val subtitle = if (isOnline) "متصل الآن" else lastSeen ?: "@${person.username}"
+            Text(subtitle, color = if (isOnline) Color(0xFF00C98C) else Color.Gray, fontSize = 13.sp, maxLines = 1)
             Text(person.redId, color = Color(0xFF64748B), fontSize = 11.sp, maxLines = 1)
         }
         IconButton(onClick = { onCall(false) }) { Icon(Icons.Default.Call, "صوت", tint = YounesEmerald) }

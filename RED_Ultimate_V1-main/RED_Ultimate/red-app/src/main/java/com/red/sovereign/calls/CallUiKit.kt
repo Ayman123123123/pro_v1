@@ -46,6 +46,7 @@ import com.red.sovereign.ui.theme.YounesMuted
 import com.red.sovereign.ui.theme.YounesRose
 import com.red.sovereign.ui.theme.YounesVoid
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.webrtc.EglBase
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
@@ -55,7 +56,7 @@ import org.webrtc.VideoTrack
 fun CallElapsedTimer(startedAt: Long, color: Color = Color.White) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(startedAt) {
-        while (true) {
+        while (isActive) {
             now = System.currentTimeMillis()
             delay(1_000)
         }
@@ -66,16 +67,9 @@ fun CallElapsedTimer(startedAt: Long, color: Color = Color.White) {
 
 @Composable
 fun PulseAvatar(size: Dp = 128.dp, letter: String, pulsing: Boolean = true) {
-    val pulse = rememberInfiniteTransition(label = "ring")
-    val scale by pulse.animateFloat(
-        initialValue = 1f,
-        targetValue = if (pulsing) 1.18f else 1f,
-        animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
-        label = "scale"
-    )
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size * 1.35f)) {
         if (pulsing) {
-            Box(Modifier.size(size * 1.28f).scale(scale).clip(CircleShape).background(YounesEmerald.copy(alpha = 0.16f)))
+            PulseHalo(size)
             Box(Modifier.size(size * 1.12f).clip(CircleShape).background(YounesEmerald.copy(alpha = 0.22f)))
         }
         Box(
@@ -94,6 +88,20 @@ fun PulseAvatar(size: Dp = 128.dp, letter: String, pulsing: Boolean = true) {
             }
         }
     }
+}
+
+@Composable
+private fun PulseHalo(size: Dp) {
+    // Created only while pulsing; disposed the moment pulsing=false so the
+    // InfiniteTransition never runs on static avatars.
+    val pulse = rememberInfiniteTransition(label = "ring")
+    val scale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
+        label = "scale"
+    )
+    Box(Modifier.size(size * 1.28f).scale(scale).clip(CircleShape).background(YounesEmerald.copy(alpha = 0.16f)))
 }
 
 @Composable
@@ -175,33 +183,36 @@ fun NetworkQualityBars(stats: NetworkStats) {
 }
 
 @Composable
-fun WebrtcVideo(track: VideoTrack?, egl: EglBase.Context?, mirror: Boolean, modifier: Modifier) {
+fun WebrtcVideo(track: VideoTrack?, egl: EglBase.Context?, mirror: Boolean, modifier: Modifier, isOverlay: Boolean = false) {
     if (egl == null) {
         Box(modifier.background(YounesVoid))
         return
     }
-    
+
     var rendererRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
-    
+
     AndroidView(
         factory = { context ->
             SurfaceViewRenderer(context).apply {
                 init(egl, null)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                 setEnableHardwareScaler(true)
+                if (isOverlay) setZOrderMediaOverlay(true)
                 setMirror(mirror)
                 rendererRef = this
             }
         },
-        update = { view -> 
+        update = { view ->
             view.setMirror(mirror)
+            if (isOverlay) view.setZOrderMediaOverlay(true)
         },
         onRelease = { view ->
+            rendererRef = null
             view.release()
         },
         modifier = modifier
     )
-    
+
     DisposableEffect(track, rendererRef) {
         val view = rendererRef
         if (track != null && view != null) {

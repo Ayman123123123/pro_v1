@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * - توصيات تلقائية لتحسين الجودة
  */
 object CallPerformanceManager {
+    private const val TAG = "CallPerformanceManager"
 
     data class PerformanceStats(
         val rttMs: Int = 0,
@@ -23,10 +25,12 @@ object CallPerformanceManager {
         val resolutionWidth: Int = 0,
         val resolutionHeight: Int = 0,
         val mosScore: Float = 0f,
-        val jitterMs: Float = 0f
-    ) {
-        val quality: NetworkQuality get() = CallQualityManager.classify(rttMs, packetLossPercent, bitrateKbps)
-    }
+        val jitterMs: Float = 0f,
+        /**
+         * تصنيف الشبكة كما نشره [CallQualityManager] في آخر `update(...)`.
+         */
+        val quality: NetworkQuality = NetworkQuality.GOOD
+    )
 
     data class PerformanceRecommendation(
         val title: String,
@@ -42,15 +46,29 @@ object CallPerformanceManager {
     private val _recommendations = MutableStateFlow<List<PerformanceRecommendation>>(emptyList())
     val recommendations: StateFlow<List<PerformanceRecommendation>> = _recommendations.asStateFlow()
 
-    fun updateStats(rttMs: Int, packetLoss: Float, bitrateKbps: Int, fps: Int = 30) {
-        val current = _stats.value
-        _stats.value = current.copy(
-            rttMs = rttMs,
-            packetLossPercent = packetLoss,
-            bitrateKbps = bitrateKbps,
-            fps = fps
-        )
-        evaluateRecommendations()
+    /**
+     * يمرّر القياسات إلى [CallQualityManager] عبر واجهته العامة `update(...)`
+     * ثم يقرأ التصنيف ونقاط MOS من `CallQualityManager`.
+     */
+    fun updateStats(rttMs: Int, packetLoss: Float, bitrateKbps: Int, fps: Int = 30, jitterMs: Int = 0) {
+        runCatching {
+            CallQualityManager.update(rttMs, packetLoss, bitrateKbps, fps, jitterMs)
+            val qualityStats = CallQualityManager.lastStats
+            val current = _stats.value
+            _stats.value = current.copy(
+                rttMs = rttMs,
+                packetLossPercent = packetLoss,
+                bitrateKbps = bitrateKbps,
+                fps = fps,
+                jitterMs = jitterMs.toFloat(),
+                mosScore = qualityStats.mos.toFloat(),
+                quality = qualityStats.quality
+            )
+            evaluateRecommendations()
+            Log.d(TAG, "Stats updated: RTT=${rttMs}ms, Loss=${packetLoss}%, Bitrate=${bitrateKbps}kbps, MOS=${qualityStats.mos}, Quality=${qualityStats.quality}")
+        }.getOrElse { e ->
+            Log.w(TAG, "Error updating performance stats: ${e.message}", e)
+        }
     }
 
     fun updateVideoStats(width: Int, height: Int) {
@@ -59,6 +77,7 @@ object CallPerformanceManager {
             resolutionWidth = width,
             resolutionHeight = height
         )
+        Log.d(TAG, "Video stats updated: resolution=${width}x${height}")
     }
 
     private fun evaluateRecommendations() {
@@ -89,21 +108,30 @@ object CallPerformanceManager {
             ))
         }
 
+        if (s.mosScore > 0f && s.mosScore < 2.5f) {
+            recs.add(PerformanceRecommendation(
+                title = "جودة صوت منخفضة (MOS ضعيف)",
+                description = "نقاط تقييم الصوت منخفضة، يُنصح بتحسين الاتصال",
+                action = RecommendationAction.SWITCH_TO_AUDIO
+            ))
+        }
+
         _recommendations.value = recs
     }
 
     fun clearStats() {
         _stats.value = PerformanceStats()
         _recommendations.value = emptyList()
+        Log.d(TAG, "Performance stats cleared.")
     }
 
     fun getAdaptiveBitrate(): Int = when (_stats.value.quality) {
         NetworkQuality.EXCELLENT -> 1500
         NetworkQuality.GOOD -> 900
         NetworkQuality.FAIR -> 450
-        NetworkQuality.POOR -> 150
+        NetworkQuality.POOR, NetworkQuality.UNKNOWN -> 150
     }
 
     fun shouldDisableVideo(): Boolean = _stats.value.quality == NetworkQuality.POOR
-    fun shouldSwitchToAudio(): Boolean = _stats.value.rttMs > 400 || _stats.value.packetLossPercent > 5f
+    fun shouldSwitchToAudio(): Boolean = _stats.value.rttMs > 400 || _stats.value.packetLossPercent > 5f || _stats.value.mosScore < 2.0f
 }

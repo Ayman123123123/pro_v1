@@ -23,11 +23,49 @@ class DeviceController(
     private val devices: UserDeviceRepository,
     private val users: UserAccountRepository,
     private val refreshTokens: RefreshTokenService,
-    private val pushTokens: DevicePushTokenService
+    private val pushTokens: DevicePushTokenService,
+    private val preKeys: OneTimePreKeyService
 ) {
     @GetMapping
     fun list(authentication: Authentication) =
         devices.findAllByUserIdOrderByCreatedAtAsc(UUID.fromString(authentication.name)).map { it.toResponse() }
+
+    /** LEGENDARY: حالة مفاتيح كل أجهزة المستخدم — الهاتف الثاني يعرف متى يعيد التعبئة قبل النفاد */
+    @GetMapping("/prekeys/status")
+    fun prekeyStatus(authentication: Authentication): List<Map<String, Any>> {
+        val userId = UUID.fromString(authentication.name)
+        return devices.findAllByUserIdOrderByCreatedAtAsc(userId)
+            .filter { it.status == DeviceStatus.APPROVED }
+            .map { d ->
+                val stock = runCatching { preKeys.stock(userId, d.id) }
+                    .getOrDefault(PreKeyStockResponse(0, 0))
+                mapOf(
+                    "deviceId" to d.id.toString(),
+                    "ecAvailable" to stock.ecAvailable,
+                    "kyberAvailable" to stock.kyberAvailable,
+                    "needsRefill" to (stock.ecAvailable < 10 || stock.kyberAvailable < 10)
+                )
+            }
+    }
+
+    /** LEGENDARY: اعتماد الجهاز الثاني ذاتياً (هاتف/تابلت) — بلا انتظار أدمن، بحد 5 أجهزة */
+    @PostMapping("/{deviceId}/approve-self")
+    fun approveSelf(
+        @PathVariable deviceId: UUID,
+        authentication: Authentication
+    ): ResponseEntity<Any> {
+        val userId = UUID.fromString(authentication.name)
+        val device = devices.findByIdAndUserId(deviceId, userId)
+            ?: throw NoSuchElementException("Device not found")
+        require(device.status == DeviceStatus.PENDING) { "Device is not pending" }
+        val approvedCount = devices.findAllByUserIdOrderByCreatedAtAsc(userId)
+            .count { it.status == DeviceStatus.APPROVED }
+        require(approvedCount < 5) { "DEVICE_LIMIT_REACHED" }
+        device.status = DeviceStatus.APPROVED
+        device.revokedAt = null
+        devices.save(device)
+        return ResponseEntity.ok(mapOf("status" to "APPROVED", "deviceId" to device.id.toString()))
+    }
 
     /**
      * يسجّل رمز FCM/VoIP للجهاز — يُستدعى من التطبيق عند كل إطلاق

@@ -1,5 +1,13 @@
 -- RED accounts do not require a phone number or SIM card.
-ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+-- Guarded: live DBs created by Hibernate may lack the legacy email column.
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email'
+    ) THEN
+        ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+    END IF;
+END $$;
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS red_id VARCHAR(32);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(40);

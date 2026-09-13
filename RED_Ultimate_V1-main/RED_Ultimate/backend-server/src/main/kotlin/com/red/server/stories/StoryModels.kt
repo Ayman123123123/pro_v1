@@ -21,6 +21,11 @@ data class StoryDocument(
     val backgroundColor: String? = null,
     val durationMs: Long? = null,
     val createdAt: Instant = Instant.now(),
+    // TTL safety net (expireAfter 0) is created programmatically in
+    // StoryIndexInitializer so expired docs auto-delete even if the
+    // @Scheduled sweeper is delayed. @Scheduled cleanupExpired is kept as
+    // the primary path because it also deletes the MinIO object (TTL alone
+    // would orphan media; OrphanCleanupScheduler is the final backstop).
     @Indexed val expiresAt: Instant,
     var deletedAt: Instant? = null
 )
@@ -45,7 +50,7 @@ data class StoryReaction(
 enum class StoryVisibility { CONTACTS, EVERYONE, SELECTED }
 data class StoryReactionRequest(val emoji: String)
 data class CreateStoryRequest(
-    val mediaKey: String,
+    @field:jakarta.validation.constraints.NotBlank val mediaKey: String,
     val caption: String? = null,
     val visibility: StoryVisibility = StoryVisibility.CONTACTS,
     val allowedUserIds: Set<String> = emptySet(),
@@ -60,4 +65,11 @@ data class StoryResponse(
     val viewCount: Long,
     val backgroundColor: String? = null,
     val durationMs: Long? = null,
+)
+
+data class StoryViewerResponse(
+    val redId: String,
+    val username: String,
+    val displayName: String,
+    val viewedAt: Instant
 )

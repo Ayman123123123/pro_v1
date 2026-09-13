@@ -1,4 +1,4 @@
-﻿package com.red.sovereign.calls
+package com.red.sovereign.calls
 
 import android.content.Context
 import com.red.sovereign.auth.ApiResult
@@ -6,6 +6,8 @@ import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.RedQualityManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -35,6 +37,7 @@ import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import org.webrtc.audio.JavaAudioDeviceModule
+import java.util.Collections
 
 @Serializable data class IceConfigurationDto(val expiresAt: Long, val iceServers: List<IceServerDto>)
 @Serializable data class IceServerDto(val urls: List<String>, val username: String? = null, val credential: String? = null)
@@ -52,7 +55,9 @@ data class NetworkStats(
     val availableBitrateKbps: Long = 0L,
     val jitterMs: Long = 0L,
     val framesPerSecond: Int = 0,
-    val quality: Quality = Quality.UNKNOWN
+    val quality: Quality = Quality.UNKNOWN,
+    /** مستوى صوت الطرف البعيد (0..1) من inbound-rtp — لمؤشر "يتحدث". */
+    val audioLevel: Float = 0f
 ) {
     enum class Quality { UNKNOWN, POOR, FAIR, GOOD, EXCELLENT }
 
@@ -98,7 +103,7 @@ data class NetworkStats(
 }
 
 /**
- * WebRtcEngine â€” المحرك الأساسي للمكالمات.
+ * WebRtcEngine — المحرك الأساسي للمكالمات.
  * يتضمن:
  * - Audio constraints كاملة (AEC, NS, AGC, HighPass, Stereo, TypingNoise)
  * - Hardware vs Software AEC toggle
@@ -108,32 +113,44 @@ data class NetworkStats(
  * - ICE servers من backend (HMAC time-limited)
  */
 class WebRtcEngine(private val context: Context, private val events: Events) {
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     interface Events {
         fun onLocalDescription(description: SessionDescription)
         fun onIceCandidate(candidate: IceCandidate)
         fun onRemoteVideo(track: VideoTrack)
+        // LEGENDARY: حدث الصوت البعيد (كان يُتجاهل فيسبب صمت SFU)
+        fun onRemoteAudio(track: AudioTrack) { runCatching { track.setEnabled(true) } }
         fun onConnectionState(state: PeerConnection.PeerConnectionState)
         fun onNetworkStats(stats: NetworkStats)
         fun onError(message: String)
-        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) â€” المكالمة تستمر صوتياً ويُعلم المستخدم. */
+        /** الكاميرا غير متاحة (إذن مرفوض/فشل فتح) — المكالمة تستمر صوتياً ويُعلم المستخدم. */
         fun onCameraUnavailable() {
             android.util.Log.w("WebRtcEngine", "Camera unavailable - call continues in audio-only mode")
         }
     }
 
-    private val egl = EglBase.create()
+    private val egl = WebRtcBootstrap.sharedEgl
     val eglContext: EglBase.Context get() = egl.eglBaseContext
 
     /**
-     * Hardware vs Software AEC:
-     * - WebRTC's built-in AEC is generally more reliable across devices.
-     * - Hardware AEC varies wildly by device + OS version.
-     * - We disable HW AEC + NS to use WebRTC's software implementation.
-     * This is the production-recommended setup per WebRTC maintainers.
+     * Hardware vs Software AEC/NS — اختيار تلقائي لكل جهاز:
+     * - إن وُجد معالج عتادي حقيقي (غير AOSP البرمجي) نستخدمه ونتجاوز البرمجي
+     *   لتفادي المعالجة المزدوجة التي تشوّه الصوت على أجهزة سامسونغ/شاومي.
+     * - وإلا نبقى على برمجيات WebRTC (AEC3 + NS) — التوصية الإنتاجية.
      */
+    private val hwAec = hasVendorAudioEffect(
+        android.media.audiofx.AcousticEchoCanceler::class.java,
+        android.media.audiofx.AudioEffect.EFFECT_TYPE_AEC
+    )
+    private val hwNs = hasVendorAudioEffect(
+        android.media.audiofx.NoiseSuppressor::class.java,
+        android.media.audiofx.AudioEffect.EFFECT_TYPE_NS
+    )
+
     private val audioDevice = JavaAudioDeviceModule.builder(context)
-        .setUseHardwareAcousticEchoCanceler(false)
-        .setUseHardwareNoiseSuppressor(false)
+        .setUseHardwareAcousticEchoCanceler(hwAec)
+        .setUseHardwareNoiseSuppressor(hwNs)
+        .setAudioSource(android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION)
         .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
             override fun onWebRtcAudioRecordInitError(errorMessage: String) {
                 events.onError("AUDIO_RECORD_INIT_ERROR: $errorMessage")
@@ -168,14 +185,18 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     var localMedia: LocalMedia? = null; private set
     var lastLocalSdp: String? = null; private set
 
+    // ICE Candidate buffering before remote SDP
+    private val pendingIceCandidates: MutableList<IceCandidate> = Collections.synchronizedList(mutableListOf())
+    private var isRemoteDescriptionSet = false
+
     // الإعدادات الحالية
     private var currentBitrateProfile: NetworkStats.BitrateProfile = NetworkStats.BitrateProfile.STANDARD
     private var cameraRequestedByUser: Boolean = true
+    private var micEnabledByUser: Boolean = true
     private var hasVideo: Boolean = false
     private var svcEnabled: Boolean = false
     private var mediaKind: CallMediaKind = CallMediaKind.VOICE
     private var lastStats: NetworkStats = NetworkStats()
-    // تتبع تفاضلي لمعدل البايتات â€” نحسب kbps الحقيقي كفرق بين دورتين Ã· الزمن
     private var lastBytesReceived: Long = 0L
     private var lastStatsElapsedMs: Long = 0L
 
@@ -187,7 +208,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     init {
         WebRtcBootstrap.ensure(context)
-        // Encoder/decoder factories مع hardware acceleration حيث متاح
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDevice)
             .setVideoEncoderFactory(
@@ -197,11 +217,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             .createPeerConnectionFactory()
     }
 
-    /**
-     * ينشئ PeerConnection مع ICE servers و media tracks.
-     * @param video true إذا مكالمة فيديو
-     * @param simulcastEnabled true لإرسال 3 طبقات (HD/SD/LD) â€” يقلل الـ bandwidth للـ SFU
-     */
     suspend fun create(video: Boolean, simulcastEnabled: Boolean = true, svc: Boolean = false): ApiResult<Unit> {
         val kind = when {
             svc && video -> CallMediaKind.CONFERENCE
@@ -221,22 +236,9 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         val created = createPeerConnection(kind) ?: return ApiResult.Error(null, "PEER_CONNECTION_FAILED")
         val pc = created
 
-        // Audio constraints كاملة â€” AEC, NS, AGC, HighPass, Stereo, TypingNoise
-        val audioConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("stereo", if (mediaKind.stereoAudio) "true" else "false"))
-        }
-        audioSource = factory.createAudioSource(audioConstraints)
-        val audio = factory.createAudioTrack("younes-audio", audioSource).apply { setEnabled(true) }
+        val src = newAudioSource() ?: return ApiResult.Error(null, "AUDIO_SOURCE_FAILED")
+        audioSource = src
+        val audio = factory.createAudioTrack("younes-audio", src).apply { setEnabled(micEnabledByUser) }
         pc.addTrack(audio, listOf("younes-stream"))
 
         val videoTrack = if (hasVideo) createVideoTrack() else null
@@ -252,11 +254,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         return ApiResult.Success(200, Unit)
     }
 
-    /**
-     * PeerConnection للاستقبال فقط (SFU consume): بدون أي tracks محلية.
-     * يُستخدم في مسار media-sfu لاستقبال بث الأعضاء الآخرين â€” نفس ICE servers
-     * ونفس إعدادات السياسة، ويُحدَّث mediaKind لضبط constraints الإجابة (answer).
-     */
     suspend fun createReceiverOnly(kind: CallMediaKind): ApiResult<Unit> {
         mediaKind = kind
         hasVideo = kind.wantsVideo
@@ -267,13 +264,47 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         return ApiResult.Success(200, Unit)
     }
 
-    /**
-     * إعادة محاولة فتح الكاميرا بعد فشل سابق (إذن مرفوض ثم مُنح من الإعدادات،
-     * أو خلل مؤقت في الأجهزة). تُضاف مسار الفيديو إلى الاتصال القائم وتُطلب إعادة تفاوض.
-     * @return true إذا أصبح الفيديو المحلي متاحاً.
-     */
+    fun startPublishing(video: Boolean): Boolean {
+        val pc = peer ?: return false
+        if (localMedia != null) return true
+        val src = newAudioSource() ?: return false
+        audioSource = src
+        val audio = factory.createAudioTrack("younes-audio", src).apply { setEnabled(micEnabledByUser) }
+        pc.addTrack(audio, listOf("younes-stream"))
+        var videoTrack: VideoTrack? = null
+        if (video && hasVideo) {
+            videoTrack = createVideoTrack()
+            if (videoTrack != null) {
+                pc.addTrack(videoTrack, listOf("younes-stream"))
+            }
+        }
+        localMedia = LocalMedia(audio, videoTrack)
+        applyCodecPreferences(mediaKind)
+        return true
+    }
+
+    private fun newAudioSource(): AudioSource? {
+        val audioConstraints = MediaConstraints().apply {
+            if (!hwAec) {
+                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation2", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googDAEchoCancellation", "true"))
+            }
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl2", "true"))
+            if (!hwNs) {
+                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+                mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression2", "true"))
+            }
+            mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googTypingNoiseDetection", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googAudioMirroring", "false"))
+            mandatory.add(MediaConstraints.KeyValuePair("stereo", if (mediaKind.stereoAudio) "true" else "false"))
+        }
+        return factory.createAudioSource(audioConstraints)
+    }
+
     fun retryCamera(): Boolean {
-        // إعادة المحاولة تعني أن المستخدم يريد الكاميرا الآن â€” تُسجَّل الرغبة أولاً
         cameraRequestedByUser = true
         if (capturer != null || localMedia?.videoTrack != null) return true
         val pc = peer ?: return false
@@ -309,22 +340,19 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             iceTransportsType = PeerConnection.IceTransportsType.ALL
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
-            // استخدام unified plan + multi-stream
             keyType = PeerConnection.KeyType.ECDSA
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
             iceCandidatePoolSize = 2
-            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
         val pc = factory.createPeerConnection(config, observer) ?: return null
         peer = pc
+        isRemoteDescriptionSet = false
+        synchronized(pendingIceCandidates) {
+            pendingIceCandidates.clear()
+        }
         return pc
     }
 
-    /**
-     * تضبط أولوية الكوديكس عبر RtpTransceiver.setCodecPreferences.
-     * المكالمات الفردية 1:1 -> تفضيل H.264 (تسريع عتادي وتقليل حرارة الجهاز واستهلاك البطارية).
-     * المؤتمرات والجماعي -> تفضيل VP9 / VP9-SVC (توفير البنطاق العريض وطبقات الجودة التكيفية).
-     */
     private fun applyCodecPreferences(kind: CallMediaKind) {
         val pc = peer ?: return
         val preferred = kind.preferredVideoCodec
@@ -361,10 +389,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         }
     }
 
-    /**
-     * يطبق Simulcast على video track: 3 طبقات بقدرات مختلفة.
-     * الـ SFU/Receiver يختار أفضل طبقة حسب الشبكة.
-     */
     private fun applySimulcast(sender: RtpSender?, profile: NetworkStats.BitrateProfile, svcEnabled: Boolean = false) {
         val s = sender ?: return
         val params = s.parameters
@@ -398,10 +422,6 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (mediaKind.wantsVideo) "true" else "false"))
     }
 
-    /**
-     * Re-negotiates ICE candidates with IceRestart=true constraint.
-     * Essential for seamless network transitions (Wi-Fi -> 4G/LTE or IP change) during an active call.
-     */
     fun restartIce() {
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
@@ -409,8 +429,36 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         peer?.createOffer(sdpObserver(setLocal = true), constraints)
     }
 
-    fun setRemote(description: SessionDescription, after: (() -> Unit)? = null) = peer?.setRemoteDescription(sdpObserver(after = after), description)
-    fun addIce(candidate: IceCandidate) { peer?.addIceCandidate(candidate) }
+    fun setRemote(description: SessionDescription, after: (() -> Unit)? = null) {
+        peer?.setRemoteDescription(sdpObserver(after = {
+            isRemoteDescriptionSet = true
+            drainPendingIceCandidates()
+            after?.invoke()
+        }), description)
+    }
+
+    fun addIce(candidate: IceCandidate) {
+        val pc = peer
+        if (pc != null && isRemoteDescriptionSet && pc.remoteDescription != null) {
+            pc.addIceCandidate(candidate)
+        } else {
+            synchronized(pendingIceCandidates) {
+                pendingIceCandidates.add(candidate)
+            }
+        }
+    }
+
+    private fun drainPendingIceCandidates() {
+        val pc = peer ?: return
+        val list = synchronized(pendingIceCandidates) {
+            val tmp = ArrayList(pendingIceCandidates)
+            pendingIceCandidates.clear()
+            tmp
+        }
+        for (candidate in list) {
+            pc.addIceCandidate(candidate)
+        }
+    }
 
     // ── مشاركة الشاشة (Zoom-style) ───────────────────────────────
     private var screenCapturer: org.webrtc.VideoCapturer? = null
@@ -438,27 +486,44 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
     fun stopScreenShare(): VideoTrack? = try {
         runCatching { screenCapturer?.stopCapture() }
         screenCapturer?.dispose(); screenCapturer = null
+        screenSource?.dispose(); screenSource = null
         null
     } catch (_: Exception) { null }
-    fun setMicrophoneEnabled(enabled: Boolean) { localMedia?.audioTrack?.setEnabled(enabled) }
+
+    fun setMicrophoneEnabled(enabled: Boolean) {
+        micEnabledByUser = enabled
+        localMedia?.audioTrack?.setEnabled(enabled)
+    }
+
     fun setCameraEnabled(enabled: Boolean) {
         cameraRequestedByUser = enabled
-        applyEffectiveCameraState()
+        if (enabled && hasVideo && localMedia?.videoTrack == null) {
+            scope.launch {
+                val track = createVideoTrack()
+                if (track != null) {
+                    val pc = peer ?: return@launch
+                    val audio = localMedia?.audioTrack ?: return@launch
+                    val sender = pc.addTrack(track, listOf("younes-stream"))
+                    videoSender = sender
+                    applySimulcast(sender, currentBitrateProfile, svcEnabled)
+                    applyCodecPreferences(mediaKind)
+                    localMedia = LocalMedia(audio, track)
+                    hasVideo = true
+                    pc.createOffer(sdpObserver(setLocal = true), offerAnswerConstraints())
+                }
+            }
+        } else {
+            applyEffectiveCameraState()
+        }
     }
+
     fun switchCamera() { (capturer as? org.webrtc.CameraVideoCapturer)?.switchCamera(null) }
 
-    /**
-     * Adaptive bitrate: يضبط الـ simulcast بناءً على جودة الشبكة.
-     * يستدعى من الـ service بعد كل stats poll.
-     */
     fun applyAdaptiveBitrate(stats: NetworkStats) {
         lastStats = stats
         val recommended = NetworkStats.recommendBitrate(stats.quality)
         if (recommended == currentBitrateProfile) return
         currentBitrateProfile = recommended
-        // Network adaptation must never overwrite the user's camera choice.
-        // It may suspend video temporarily, then restore it only if the user
-        // still requested video when network quality recovers.
         applyEffectiveCameraState()
         if (recommended != NetworkStats.BitrateProfile.AUDIO_ONLY) {
             applySimulcast(videoSender, recommended, svcEnabled)
@@ -472,82 +537,104 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     fun currentBitrate() = currentBitrateProfile
 
-    /**
-     * Polls peer connection stats every 2s. Parses RTCStatsReport for RTT, packet loss,
-     * bandwidth, jitter, framerate. Triggers adaptive bitrate via [applyAdaptiveBitrate].
-     */
     fun pollStats() {
         val pc = peer ?: return
         pc.getStats(object : RTCStatsCollectorCallback {
             override fun onStatsDelivered(report: RTCStatsReport) {
-                var rtt = 0L
-                var packetsLost = 0L
-                var packetsReceived = 0L
-                var bytesReceived = 0L
-                var availableBitrate = 0L
-                var jitter = 0L
-                var fps = 0
-                report.statsMap.values.forEach { stat ->
-                    when (stat.type) {
-                        "remote-inbound-rtp" -> {
-                            rtt = ((stat.members["roundTripTime"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
-                        }
-                        "inbound-rtp" -> {
-                            packetsLost += (stat.members["packetsLost"] as? Number)?.toLong() ?: 0L
-                            packetsReceived += (stat.members["packetsReceived"] as? Number)?.toLong() ?: 0L
-                            bytesReceived += (stat.members["bytesReceived"] as? Number)?.toLong() ?: 0L
-                            jitter = ((stat.members["jitter"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
-                            fps = (stat.members["framesPerSecond"] as? Number)?.toInt() ?: 0
-                        }
-                        // سعة الشبكة الفعلية تُقرأ من زوج المرشحين الحالي â€” وليس من تقرير الطرف البعيد
-                        "candidate-pair" -> {
-                            val isSelected = (stat.members["selected"] as? Boolean) ?: false
-                            if (isSelected) {
-                                availableBitrate = (stat.members["availableOutgoingBitrate"] as? Number)?.toLong() ?: 0L
+                runCatching {
+                    var rtt = 0L
+                    var packetsLost = 0L
+                    var packetsReceived = 0L
+                    var bytesReceived = 0L
+                    var availableBitrate = 0L
+                    var jitter = 0L
+                    var fps = 0
+                    var audioLevel = 0f
+                    report.statsMap.values.forEach { stat ->
+                        when (stat.type) {
+                            "remote-inbound-rtp" -> {
+                                rtt = ((stat.members["roundTripTime"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
+                            }
+                            "inbound-rtp" -> {
+                                packetsLost += (stat.members["packetsLost"] as? Number)?.toLong() ?: 0L
+                                packetsReceived += (stat.members["packetsReceived"] as? Number)?.toLong() ?: 0L
+                                bytesReceived += (stat.members["bytesReceived"] as? Number)?.toLong() ?: 0L
+                                jitter = ((stat.members["jitter"] as? Number)?.toDouble() ?: 0.0).times(1000).toLong()
+                                fps = (stat.members["framesPerSecond"] as? Number)?.toInt() ?: 0
+                                if (stat.members["kind"] == "audio") {
+                                    val v = (stat.members["audioLevel"] as? Number)?.toFloat() ?: 0f
+                                    if (v > audioLevel) audioLevel = v
+                                }
+                            }
+                            "candidate-pair" -> {
+                                val isSelected = (stat.members["selected"] as? Boolean) ?: false
+                                if (isSelected) {
+                                    availableBitrate = (stat.members["availableOutgoingBitrate"] as? Number)?.toLong() ?: 0L
+                                }
                             }
                         }
                     }
+                    val total = packetsLost + packetsReceived
+                    val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
+                    val nowMs = System.currentTimeMillis()
+                    val elapsedMs = nowMs - (lastStatsElapsedMs.takeIf { it > 0L } ?: nowMs)
+                    lastStatsElapsedMs = nowMs
+                    var kbps = 0L
+                    if (bytesReceived > lastBytesReceived && elapsedMs > 0L) {
+                        kbps = ((bytesReceived - lastBytesReceived) * 8L / 1024L) * 1000L / elapsedMs
+                    }
+                    lastBytesReceived = bytesReceived
+                    val quality = NetworkStats.classify(rtt, lossPct, availableBitrate / 1000L)
+                    val ns = NetworkStats(rtt, lossPct, kbps, availableBitrate / 1000L, jitter, fps, quality, audioLevel)
+                    events.onNetworkStats(ns)
+                    applyAdaptiveBitrate(ns)
                 }
-                val total = packetsLost + packetsReceived
-                val lossPct = if (total > 0) (packetsLost.toDouble() / total * 100) else 0.0
-                // معدل الحزمة الفعلي: فرق البايتات بين الدورتين Ã· الزمن المنقضي (kbps)
-                val nowMs = System.currentTimeMillis()
-                val elapsedMs = nowMs - (lastStatsElapsedMs.takeIf { it > 0L } ?: nowMs)
-                lastStatsElapsedMs = nowMs
-                var kbps = 0L
-                if (bytesReceived > lastBytesReceived && elapsedMs > 0L) {
-                    kbps = ((bytesReceived - lastBytesReceived) * 8L / 1024L) * 1000L / elapsedMs
-                }
-                lastBytesReceived = bytesReceived
-                val quality = NetworkStats.classify(rtt, lossPct, availableBitrate / 1000L)
-                val ns = NetworkStats(rtt, lossPct, kbps, availableBitrate / 1000L, jitter, fps, quality)
-                events.onNetworkStats(ns)
-                // تطبيق adaptive bitrate تلقائياً
-                applyAdaptiveBitrate(ns)
             }
         })
     }
 
     fun release() {
+        scope.cancel()
+        stopScreenShare()
         runCatching { capturer?.stopCapture() }; capturer?.dispose(); textureHelper?.dispose(); capturer = null; textureHelper = null
         localMedia?.audioTrack?.dispose(); localMedia?.videoTrack?.dispose()
         audioSource?.dispose(); videoSource?.dispose(); audioSource = null; videoSource = null
         peer?.close(); peer?.dispose(); peer = null; localMedia = null
-        // factory و audioDevice و egl ثقيلة â€” لا نحذفها كل مكالمة (Singleton). تُحفظ لإعادة الاستخدام
+        // AUTO-FIX (call audio): the ADM owns AudioRecord/AudioTrack threads - release it with
+        // the engine, otherwise it leaks across calls and can starve the next call's mic.
+        runCatching { audioDevice.release() }
+        isRemoteDescriptionSet = false
+        synchronized(pendingIceCandidates) {
+            pendingIceCandidates.clear()
+        }
     }
 
     private suspend fun loadIce(): IceConfigurationDto? = withContext(Dispatchers.IO) {
         WebRtcBootstrap.getCachedIce()?.let { return@withContext it }
-        val client = AuthorizedApiClient(TokenStore(context))
-        val json = Json { ignoreUnknownKeys = true }
-        when (val response = client.request("GET", "/api/calls/ice-servers")) {
-            is ApiResult.Success -> runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()?.also { WebRtcBootstrap.setCachedIce(it) }
-            is ApiResult.Error -> WebRtcBootstrap.getCachedIce()
+        val fetched = runCatching {
+            val tokens = TokenStore(context)
+            val client = AuthorizedApiClient(tokens, com.red.sovereign.auth.AuthApi(tokens.context), com.red.sovereign.security.SecureOkHttpClient.buildIceClient(context))
+            val json = Json { ignoreUnknownKeys = true }
+            var got: IceConfigurationDto? = null
+            repeat(2) { attempt ->
+                if (got == null) {
+                    when (val response = client.request("GET", "/api/calls/ice-servers")) {
+                        is ApiResult.Success -> got = runCatching { json.decodeFromString<IceConfigurationDto>(response.value) }.getOrNull()?.also { WebRtcBootstrap.setCachedIce(it) }
+                        is ApiResult.Error -> {
+                            android.util.Log.w("WebRtcEngine", "ICE fetch failed: ${response.message} — using fallback STUN")
+                            if (attempt == 0) kotlinx.coroutines.delay(600)
+                        }
+                    }
+                }
+            }
+            got
+        }.getOrNull()
+        fetched ?: WebRtcBootstrap.getCachedIce() ?: WebRtcBootstrap.fallbackIce(com.red.sovereign.core.ServerEndpoint.host()).also {
+            android.util.Log.w("WebRtcEngine", "ICE backend unreachable — using embedded fallback STUN")
         }
     }
 
     private fun createVideoTrack(): VideoTrack? {
-        // إذن الكاميرا غير ممنوح â†’ لا نحاول أبداً (Camera2Enumerator قد يرمي SecurityException)
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
             != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -555,20 +642,31 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             return null
         }
         return runCatching {
-            val selected = camera(Camera2Enumerator(context)) ?: return null
+            val selected = camera(context) ?: return null
             capturer = selected
             videoSource = factory.createVideoSource(false)
             textureHelper = SurfaceTextureHelper.create("YounesCamera", egl.eglBaseContext)
             selected.initialize(textureHelper, context, videoSource?.capturerObserver)
             val profile = currentBitrateProfile.takeUnless { it == NetworkStats.BitrateProfile.AUDIO_ONLY }
                 ?: NetworkStats.BitrateProfile.LOW
-            selected.startCapture(profile.videoWidth, profile.videoHeight, profile.videoFramerate)
+            selected.startCapture(
+                profile.videoWidth.coerceAtLeast(640),
+                profile.videoHeight.coerceAtLeast(480),
+                profile.videoFramerate.coerceAtLeast(24)
+            )
             factory.createVideoTrack("younes-video", videoSource).apply {
                 setEnabled(cameraRequestedByUser && currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY)
             }
-        }.onFailure {
+        }.onFailure { e ->
+            android.util.Log.e("WebRtcEngine", "Failed to create video track", e)
             events.onCameraUnavailable()
             runCatching { capturer?.stopCapture() }
+            capturer?.dispose()
+            textureHelper?.dispose()
+            videoSource?.dispose()
+            capturer = null
+            textureHelper = null
+            videoSource = null
         }.getOrNull()
     }
 
@@ -581,9 +679,22 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         }
     }
 
-    private fun camera(enumerator: CameraEnumerator): VideoCapturer? {
-        enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let { enumerator.createCapturer(it, null)?.let { camera -> return camera } }
-        return enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
+    private fun camera(context: Context): VideoCapturer? {
+        val camera2Capturer = runCatching {
+            val enumerator = Camera2Enumerator(context)
+            enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let {
+                enumerator.createCapturer(it, null)
+            } ?: enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
+        }.getOrNull()
+
+        if (camera2Capturer != null) return camera2Capturer
+
+        return runCatching {
+            val enumerator = org.webrtc.Camera1Enumerator(true)
+            enumerator.deviceNames.firstOrNull(enumerator::isFrontFacing)?.let {
+                enumerator.createCapturer(it, null)
+            } ?: enumerator.deviceNames.firstNotNullOfOrNull { enumerator.createCapturer(it, null) }
+        }.getOrNull()
     }
 
     private fun sdpObserver(setLocal: Boolean = false, after: (() -> Unit)? = null): SdpObserver = object : SdpObserver {
@@ -599,16 +710,52 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
 
     private val observer = object : PeerConnection.Observer {
         override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
-        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) = Unit
+        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+            android.util.Log.d("WebRtcEngine", "onIceConnectionChange: $state")
+            if (state == PeerConnection.IceConnectionState.FAILED) {
+                restartIce()
+            }
+        }
         override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
         override fun onIceCandidate(candidate: IceCandidate) = events.onIceCandidate(candidate)
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
-        override fun onAddStream(stream: MediaStream) = Unit
+        override fun onAddStream(stream: MediaStream) {
+            stream.audioTracks.forEach { it.setEnabled(true) }
+            stream.videoTracks.forEach(events::onRemoteVideo)
+        }
         override fun onRemoveStream(stream: MediaStream) = Unit
         override fun onDataChannel(channel: DataChannel) = Unit
         override fun onRenegotiationNeeded() = Unit
-        override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) { (receiver.track() as? VideoTrack)?.let(events::onRemoteVideo) }
+        override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
+            when (val track = receiver.track()) {
+                is VideoTrack -> events.onRemoteVideo(track)
+                is AudioTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteAudio(track) }
+            }
+        }
+        override fun onTrack(transceiver: RtpTransceiver) {
+            val receiver = transceiver.receiver ?: return
+            when (val track = receiver.track()) {
+                is VideoTrack -> events.onRemoteVideo(track)
+                is AudioTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteAudio(track) }
+            }
+        }
         override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) = events.onConnectionState(newState)
+    }
+
+    companion object {
+        private val AOSP_AEC_UUID = java.util.UUID.fromString("bb392ec0-8d4d-11e0-a896-0002a5d5c51b")
+        private val AOSP_NS_UUID = java.util.UUID.fromString("c06c8400-8e06-11e0-9cb4-0002a5d5c51b")
+
+        fun hasVendorAudioEffect(effectClass: Class<*>, type: java.util.UUID): Boolean {
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) return false
+            return runCatching {
+                val method = effectClass.getMethod("queryEffects")
+                @Suppress("UNCHECKED_CAST")
+                val effects = method.invoke(null) as? Array<android.media.audiofx.AudioEffect.Descriptor> ?: return false
+                val aospUuid = if (type == android.media.audiofx.AudioEffect.EFFECT_TYPE_AEC) AOSP_AEC_UUID else AOSP_NS_UUID
+                effects.any { it.type == type && it.uuid != aospUuid }
+            }.getOrDefault(false)
+        }
     }
 }

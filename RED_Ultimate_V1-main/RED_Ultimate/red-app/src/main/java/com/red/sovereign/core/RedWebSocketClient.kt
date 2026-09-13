@@ -21,17 +21,31 @@ class RedWebSocketClient(
     private val onEnvelope: (RedProtos.RedRED) -> Unit,
     private val onState: (ConnectionState) -> Unit = {}
 ) {
-    private val client = SecureOkHttpClient.buildWebSocketClient(context)
+    // LEGENDARY FIX: heartbeat 25s ضد NAT + إغلاق السوكت القديم قبل فتح جديد (كان يتسرب) + طابور offline
+    private val client: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context).newBuilder()
+        .pingInterval(25, TimeUnit.SECONDS)
+        .build()
     private var socket: WebSocket? = null
+    private val pendingQueue = java.util.concurrent.ConcurrentLinkedQueue<okio.ByteString>()
 
     fun connect() {
         val token = tokens.accessToken ?: return onState(ConnectionState.UNAUTHORIZED)
+        // أغلق القديم أولاً لمنع تسرب سوكتين
+        runCatching { socket?.close(1000, "reconnect") }
+        socket = null
         val wsBase = ServerEndpoint.url().replaceFirst("http://", "ws://").replaceFirst("https://", "wss://")
         val request = Request.Builder().url(wsBase.trimEnd('/') + "/ws/master")
             .header("Authorization", "Bearer $token").build()
         onState(ConnectionState.CONNECTING)
         socket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) = onState(ConnectionState.CONNECTED)
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                onState(ConnectionState.CONNECTED)
+                // إرسال الطابور المعلق
+                while (true) {
+                    val bytes = pendingQueue.poll() ?: break
+                    if (webSocket.send(bytes) != true) { pendingQueue.offer(bytes); break }
+                }
+            }
             override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
                 runCatching { RedProtos.RedRED.parseFrom(bytes.toByteArray()) }.onSuccess(onEnvelope)
             }
@@ -57,19 +71,28 @@ class RedWebSocketClient(
         conversationId: String,
         messageType: String,
         senderDeviceId: Int,
-        encrypted: EncryptedEnvelope
+        encrypted: EncryptedEnvelope,
+        messageId: String? = null
     ): String? {
-        val sender = requireNotNull(tokens.redId) { "RED ID is unavailable" }
-        val id = UuidV7.next()
+        val sender = tokens.redId
+        if (sender == null) {
+            android.util.Log.w("RedWebSocketClient", "unauthenticated, skip send")
+            return null
+        }
+        val id = messageId ?: UuidV7.next()
         val chat = RedProtos.ChatMessage.newBuilder()
             .setId(id).setConversationId(conversationId).setSenderId(sender).setReceiverId(receiverRedId)
             .setPayload(ByteString.copyFrom(encrypted.bytes)).setTimestamp(System.currentTimeMillis()).setType(messageType)
             .setSenderDeviceId(senderDeviceId).setReceiverDeviceId(encrypted.receiverDeviceId)
             .setCiphertextType(encrypted.ciphertextType).build()
         val envelope = RedProtos.RedRED.newBuilder().setMessage(chat).build()
-        val sent = socket?.send(envelope.toByteArray().toByteString()) == true
-        if (!sent) android.util.Log.w("RedWebSocketClient", "sendEncrypted failed: socket not connected")
-        return if (sent) id else null
+        val bytes = envelope.toByteArray().toByteString()
+        val sent = socket?.send(bytes) == true
+        if (!sent) {
+            android.util.Log.w("RedWebSocketClient", "sendEncrypted queued: socket not connected")
+            pendingQueue.offer(bytes)
+        }
+        return id
     }
 
     fun acknowledge(messageId: String, sequence: Long, status: String): Boolean {
@@ -81,7 +104,11 @@ class RedWebSocketClient(
     }
 
     fun typing(conversationId: String, targetRedId: String?, active: Boolean) {
-        val sender = requireNotNull(tokens.redId)
+        val sender = tokens.redId
+        if (sender == null) {
+            android.util.Log.w("RedWebSocketClient", "unauthenticated, skip send")
+            return
+        }
         val builder = RedProtos.TypingRED.newBuilder().setConversationId(conversationId).setUserId(sender)
             .setIsTyping(active)
         // للمجموعات (conversationId > 32) target قد يكون فارغاً — البث للكل. للفرد مطلوب.

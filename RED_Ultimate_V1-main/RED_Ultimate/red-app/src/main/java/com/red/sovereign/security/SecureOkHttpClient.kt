@@ -14,18 +14,25 @@ object SecureOkHttpClient {
     /**
      * Timeouts are **seconds**. Passing 800 here is 13 minutes, not 800ms.
      * LAN probes must build their own client with `TimeUnit.MILLISECONDS`.
+     *
+     * Yemen-hardened defaults: connect short for fast failover (10s),
+     * read/write tolerant for slow 4G TTFB (30s), plus an overall
+     * callTimeout deadline so hung chains can't pin the dispatcher.
      */
     fun build(
         context: Context,
-        connectTimeout: Long = 15,
-        readTimeout: Long = 20,
-        writeTimeout: Long = 20,
-        pingInterval: Long = 25
+        connectTimeout: Long = 10,
+        readTimeout: Long = 30,
+        writeTimeout: Long = 30,
+        pingInterval: Long = 25,
+        callTimeout: Long = 90
     ): OkHttpClient = baseBuilder(context, connectTimeout, readTimeout, writeTimeout)
+        .callTimeout(callTimeout, TimeUnit.SECONDS)
         .pingInterval(pingInterval, TimeUnit.SECONDS)
         .followSslRedirects(false)
         .followRedirects(false)
         .retryOnConnectionFailure(true)
+        .connectionPool(okhttp3.ConnectionPool(5, 2, TimeUnit.MINUTES))
         .build()
 
     fun getDefault(context: Context): OkHttpClient {
@@ -48,8 +55,18 @@ object SecureOkHttpClient {
         }
     }
 
-    fun buildWithTimeouts(context: Context, connect: Long = 15, read: Long = 20, write: Long = 20): OkHttpClient =
+    fun buildWithTimeouts(context: Context, connect: Long = 10, read: Long = 30, write: Long = 30): OkHttpClient =
         build(context, connectTimeout = connect, readTimeout = read, writeTimeout = write)
+
+    /**
+     * Fast client for ICE/TURN credential fetches on the call-setup path:
+     * fails fast (10s total) instead of blocking media negotiation.
+     */
+    fun buildIceClient(context: Context): OkHttpClient =
+        baseBuilder(context, connectTimeout = 5, readTimeout = 8, writeTimeout = 8)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
 
     fun buildWebSocketClient(context: Context): OkHttpClient =
         baseBuilder(context, connectTimeout = 15, readTimeout = 0, writeTimeout = 20)

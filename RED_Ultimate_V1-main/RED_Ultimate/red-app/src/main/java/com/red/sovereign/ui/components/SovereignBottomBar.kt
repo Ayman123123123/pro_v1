@@ -45,7 +45,8 @@ import com.red.sovereign.ui.theme.SovereignColors
 @Composable
 fun SovereignBottomBar(
     currentSection: MainSection,
-    onSectionSelected: (MainSection) -> Unit
+    onSectionSelected: (MainSection) -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     val dimens = rememberAdaptiveDimens()
     val liquidGlass = com.red.sovereign.ui.theme.AppThemeState.liquidGlassEnabled
@@ -64,6 +65,11 @@ fun SovereignBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(dimens.bottomBarHeight)
+                .sovereignHazeEffect(
+                    state = hazeState,
+                    tier = com.red.sovereign.ui.theme.SovereignGlassTier.NavBar,
+                    isDark = true
+                )
                 .clip(RoundedCornerShape(36.dp))
                 .border(
                     width = 1.2.dp,

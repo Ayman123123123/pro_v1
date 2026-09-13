@@ -1,11 +1,18 @@
 package com.red.sovereign.media
 
 import android.content.Context
+import android.Manifest
+import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.content.ContextCompat
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
-import com.red.sovereign.core.utils.MediaCompressor
+import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -50,26 +57,6 @@ class EncryptedAttachmentRepository(
         val metadata = metadata(uri) ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT")
         if (metadata.size !in 1..MAX_BYTES) return@withContext ApiResult.Error(413, "ATTACHMENT_TOO_LARGE")
         if (!allowedMime(metadata.mimeType)) return@withContext ApiResult.Error(415, "ATTACHMENT_TYPE_NOT_ALLOWED")
-        // ضغط الصور محلياً قبل التشفير والرفع (مثل واتساب) — كان MediaCompressor كوداً ميتاً.
-        // أي فشل في الضغط لا يمنع الإرسال: يُرسَل الأصل كما كان.
-        var compressedFile: File? = null
-        if (metadata.mimeType.startsWith("image/")) {
-            val raw = File.createTempFile("attachment-raw-", ".img", context.cacheDir)
-            val compressed = File.createTempFile("attachment-", ".jpg", context.cacheDir)
-            try {
-                val copied = context.contentResolver.openInputStream(uri)?.use { input ->
-                    raw.outputStream().use { out -> input.copyTo(out) }
-                } ?: 0L
-                if (copied > 0L) {
-                    val result = MediaCompressor.compressImage(raw.absolutePath, compressed.absolutePath)
-                    if (result.isFile && result.length() in 1..MAX_BYTES) compressedFile = result
-                }
-            } catch (_: Exception) {
-                compressedFile = null
-            } finally {
-                raw.delete()
-            }
-        }
         val key = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(12).also(random::nextBytes)
         val encrypted = File.createTempFile("attachment-", ".bin", context.cacheDir)
@@ -78,96 +65,73 @@ class EncryptedAttachmentRepository(
             val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
             }
-            val source: java.io.InputStream = if (compressedFile != null) {
-                FileInputStream(compressedFile)
-            } else {
-                context.contentResolver.openInputStream(uri)
-                    ?: return@withContext ApiResult.Error(null, "ATTACHMENT_OPEN_FAILED")
-            }
-            source.use { input -> CipherOutputStream(FileOutputStream(encrypted), cipher).use { output ->
+            val input = context.contentResolver.openInputStream(uri)
+                ?: return@withContext ApiResult.Error(null, "ATTACHMENT_OPEN_FAILED")
+            input.use { source -> CipherOutputStream(FileOutputStream(encrypted), cipher).use { output ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
-                    val count = input.read(buffer)
+                    val count = source.read(buffer)
                     if (count < 0) break
                     digest.update(buffer, 0, count)
                     output.write(buffer, 0, count)
                 }
-            }
-            }
-            val shaHex = digest.digest().toHex()
-            val safeName = metadata.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
-            val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
-            val localCache = File(outputDir, "${shaHex.take(16)}-$safeName")
-            runCatching {
-                if (compressedFile != null) {
-                    compressedFile.copyTo(localCache, overwrite = true)
-                } else {
-                    context.contentResolver.openInputStream(uri)?.use { inStream ->
-                        FileOutputStream(localCache).use { outStream ->
-                            inStream.copyTo(outStream)
-                        }
-                    }
-                }
-            }
-            val effectiveMime = if (compressedFile != null) "image/jpeg" else metadata.mimeType
-            val effectiveSize = compressedFile?.length() ?: metadata.size
+            } }
             when (val uploaded = media.uploadEncrypted(encrypted, metadata.name.substringBeforeLast('.'))) {
                 is ApiResult.Error -> uploaded
                 is ApiResult.Success -> {
-                    // منح الوصول لكل مستلم (فرد واحد أو أعضاء المجموعة). فشل منح عضو واحد
-                    // (حساب غير معتمد مثلاً) لا يمنع الإرسال — يُتخطى، والعضو يرى الملف غير متاح.
-                    var anyGranted = false
-                    for (grantee in targetRedIds) {
-                        if (grantee.isBlank()) continue
-                        when (media.grant(uploaded.value.objectKey, grantee)) {
-                            is ApiResult.Success -> anyGranted = true
-                            is ApiResult.Error -> Unit
+                    val senderRedId = TokenStore(context).redId.orEmpty()
+                    val allRecipients = (targetRedIds + senderRedId).filter { it.isNotBlank() }.distinct()
+                    var grantError: ApiResult.Error? = null
+                    for (target in allRecipients) {
+                        when (val granted = media.grant(uploaded.value.objectKey, target)) {
+                            is ApiResult.Error -> grantError = granted
+                            else -> {}
                         }
                     }
-                    if (!anyGranted) {
+                    if (grantError != null && allRecipients.size == 1) {
                         media.delete(uploaded.value.url)
-                        return@withContext ApiResult.Error(null, "ATTACHMENT_GRANT_FAILED")
+                        grantError
+                    } else {
+                        val manifest = AttachmentManifest(
+                            objectKey = uploaded.value.objectKey,
+                            url = uploaded.value.url,
+                            name = metadata.name,
+                            mimeType = metadata.mimeType,
+                            size = metadata.size,
+                            sha256 = digest.digest().toHex(),
+                            key = Base64.getEncoder().encodeToString(key),
+                            nonce = Base64.getEncoder().encodeToString(nonce)
+                        )
+                        ApiResult.Success(uploaded.code, PreparedAttachment(json.encodeToString(manifest), metadata.name, metadata.mimeType, metadata.size))
                     }
-                    val manifest = AttachmentManifest(
-                        objectKey = uploaded.value.objectKey,
-                        url = uploaded.value.url,
-                        name = metadata.name,
-                        mimeType = effectiveMime,
-                        size = effectiveSize,
-                        sha256 = shaHex,
-                        key = Base64.getEncoder().encodeToString(key),
-                        nonce = Base64.getEncoder().encodeToString(nonce)
-                    )
-                    ApiResult.Success(uploaded.code, PreparedAttachment(manifestJson = json.encodeToString(manifest), name = metadata.name, mimeType = effectiveMime, size = effectiveSize))
                 }
             }
         } catch (error: Exception) {
             ApiResult.Error(null, error.message ?: "ATTACHMENT_ENCRYPTION_FAILED")
         } finally {
             encrypted.delete()
-            compressedFile?.delete()
             key.fill(0)
             nonce.fill(0)
         }
     }
+
+    suspend fun prepare(uri: Uri, targetRedId: String): ApiResult<PreparedAttachment> = prepare(uri, listOf(targetRedId))
 
     suspend fun downloadAndDecrypt(manifestJson: String): ApiResult<File> = withContext(Dispatchers.IO) {
         val manifest = runCatching { json.decodeFromString<AttachmentManifest>(manifestJson) }.getOrNull()
             ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_MANIFEST")
         if (manifest.version != 1 || manifest.size !in 1..MAX_BYTES || !allowedMime(manifest.mimeType))
             return@withContext ApiResult.Error(null, "UNSUPPORTED_ATTACHMENT_MANIFEST")
-        val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
-        val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
-        val output = File(outputDir, "${manifest.sha256.take(16)}-$safeName")
-        if (output.exists() && output.length() == manifest.size) {
-            return@withContext ApiResult.Success(200, output)
-        }
         val key = runCatching { Base64.getDecoder().decode(manifest.key) }.getOrNull()
             ?.takeIf { it.size == 32 } ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_KEY")
         val nonce = runCatching { Base64.getDecoder().decode(manifest.nonce) }.getOrNull()
             ?.takeIf { it.size == 12 } ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_NONCE")
+        val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "attachment" }
+        val outputDir = File(context.cacheDir, "decrypted_attachments").apply { mkdirs() }
+        val output = File(outputDir, "${manifest.sha256.take(16)}-$safeName")
+        android.util.Log.e("RED_ATTACHMENT", "downloadAndDecrypt url=${manifest.url} name=$safeName expectedSize=${manifest.size}")
         when (val downloaded = media.downloadToPrivateCache(manifest.url, "bin")) {
-            is ApiResult.Error -> downloaded
+            is ApiResult.Error -> { android.util.Log.e("RED_ATTACHMENT", "download step failed: ${downloaded.message}"); downloaded }
             is ApiResult.Success -> try {
                 val digest = MessageDigest.getInstance("SHA-256")
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
@@ -187,13 +151,51 @@ class EncryptedAttachmentRepository(
                     destination.fd.sync()
                 } }
                 if (output.length() != manifest.size || digest.digest().toHex() != manifest.sha256.lowercase()) {
+                    android.util.Log.e("RED_ATTACHMENT", "integrity failed: size=${output.length()} expected=${manifest.size}")
                     output.delete(); ApiResult.Error(null, "ATTACHMENT_INTEGRITY_FAILED")
                 } else ApiResult.Success(downloaded.code, output)
             } catch (error: Exception) {
+                android.util.Log.e("RED_ATTACHMENT", "decrypt failed: ${error.message}")
                 output.delete(); ApiResult.Error(null, error.message ?: "ATTACHMENT_DECRYPTION_FAILED")
             } finally {
                 key.fill(0); nonce.fill(0)
             }
+        }
+    }
+
+    /**
+     * يحفظ نسخة مفكَّكة من المرفق تلقائياً في ملفات الجهاز (مجلد Download/Younes).
+     * Android 10+ عبر MediaStore (بلا أذونات)؛ Android 9 والأقدم عبر المجلد العام إن كان الإذن مفوّضاً.
+     */
+    suspend fun saveToDownloads(manifestJson: String, decrypted: File): ApiResult<Uri> = withContext(Dispatchers.IO) {
+        val manifest = runCatching { json.decodeFromString<AttachmentManifest>(manifestJson) }.getOrNull()
+            ?: return@withContext ApiResult.Error(null, "INVALID_ATTACHMENT_MANIFEST")
+        if (!decrypted.isFile) return@withContext ApiResult.Error(null, "ATTACHMENT_FILE_UNAVAILABLE")
+        val safeName = manifest.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(150).ifBlank { "attachment" }
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                    put(MediaStore.Downloads.MIME_TYPE, manifest.mimeType)
+                    put(MediaStore.Downloads.RELATIVE_PATH, "Download/Younes")
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: return@withContext ApiResult.Error(null, "ATTACHMENT_SAVE_FAILED")
+                resolver.openOutputStream(uri, "w")?.use { output -> decrypted.inputStream().use { it.copyTo(output, 64 * 1024) } }
+                    ?: return@withContext ApiResult.Error(null, "ATTACHMENT_SAVE_FAILED")
+                ApiResult.Success(200, uri)
+            } else {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    return@withContext ApiResult.Error(null, "ATTACHMENT_SAVE_PERMISSION")
+                }
+                val directory = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Younes").apply { mkdirs() }
+                val target = File(directory, safeName)
+                decrypted.copyTo(target, overwrite = true)
+                ApiResult.Success(200, Uri.fromFile(target))
+            }
+        } catch (error: Exception) {
+            ApiResult.Error(null, error.message ?: "ATTACHMENT_SAVE_FAILED")
         }
     }
 

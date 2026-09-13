@@ -1,4 +1,4 @@
-﻿package com.red.sovereign
+package com.red.sovereign
 
 import android.app.Activity
 import android.app.Application
@@ -7,11 +7,14 @@ import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
 import com.red.sovereign.calls.IncomingCallUiPolicy
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.memory.MemoryCache
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.settings.SettingsRuntime
 
 /**
- * يونس Application â€” نقطة الدخول القانونية للتطبيق
+ * يونس Application — نقطة الدخول القانونية للتطبيق
  * تهيئ كل الأنظمة قبل أول Activity
  */
 class YounesApplication : Application() {
@@ -72,14 +75,33 @@ class YounesApplication : Application() {
                 workManager.enqueueUniquePeriodicWork("sync_poll", androidx.work.ExistingPeriodicWorkPolicy.KEEP, syncWork2)
             }
         } catch (_: Exception) {}
-        // قنوات الإشعارات â€” مطلوبة لـ RedConnectionService و YounesCallService
+        // قنوات الإشعارات — مطلوبة لـ RedConnectionService و YounesCallService
         createNotificationChannels()
         // تنظيف دوري للقصص المنتهية — بدونه تتراكم صفوفها في القاعدة بلا حد
         com.red.sovereign.core.workers.StoryCleanupWorker.enqueue(this)
+        // LEGENDARY: تنظيف الرسائل المؤقتة المنتهية كل ساعة (الخادم ينظف سحابياً بالجملة)
+        runCatching { com.red.sovereign.core.workers.MessageCleanupWorker.enqueue(this) }
+        // إعادة جدولة المنشورات المجدولة بعد reboot — بلا هذا تضيع الجدولة.
+        runCatching { com.red.sovereign.social.ScheduledPostsStore(this).rescheduleAll() }
         // صندوق الصادر المتين — يعيد الرسائل بعد قتل العملية أو انقطاع الشبكة
         // حتى لو لم يُستدعَ schedule() يدويًا (مثلاً بعد reboot)، فالمجدولة الدورية كل 15 دقيقة
         // تضمن عدم بقاء أي رسالة PENDING إلى الأبد
         try { com.red.sovereign.core.outbox.OutboxRetryWorker.schedulePeriodic(this) } catch (_: Exception) {}
+        // LEGENDARY: مسح الملفات الحديثة المعلقة (media_uploads PENDING) عند كل إقلاع
+        runCatching { com.red.sovereign.core.workers.MediaUploadWorker.enqueue(this) }
+
+        // 🖼️ ضبط ذاكرة الصور (Coil 3.x) بحد أقصى 25% من ذاكرة الجهاز لمنع انهيارات OOM
+        runCatching {
+            SingletonImageLoader.setSafe { ctx ->
+                ImageLoader.Builder(ctx)
+                    .memoryCache {
+                        MemoryCache.Builder()
+                            .maxSizePercent(ctx, 0.25)
+                            .build()
+                    }
+                    .build()
+            }
+        }
     }
 
     private fun createNotificationChannels() {
@@ -92,7 +114,7 @@ class YounesApplication : Application() {
             NotificationChannel("red_calls", getString(R.string.channel_calls_name), NotificationManager.IMPORTANCE_HIGH).apply {
                 description = getString(R.string.channel_calls_desc)
             },
-            // قناة المكالمات الواردة â€” أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
+            // قناة المكالمات الواردة — أولوية قصوى مع رنين (على عكس قناة المكالمة العادية)
             NotificationChannel("red_calls_incoming", getString(R.string.channel_calls_incoming_name), NotificationManager.IMPORTANCE_MAX).apply {
                 description = getString(R.string.channel_calls_incoming_desc)
                 enableVibration(true)

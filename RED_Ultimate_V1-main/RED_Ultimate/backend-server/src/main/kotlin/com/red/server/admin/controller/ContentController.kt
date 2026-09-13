@@ -61,6 +61,8 @@ class ContentController(
         @Suppress("UNCHECKED_CAST")
         val options = (body["options"] as? List<*>)?.mapNotNull { it as? String }?.filter { it.isNotBlank() }
             ?: return ResponseEntity.badRequest().body(mapOf("success" to false, "error" to "MISSING_OPTIONS"))
+        // صور الخيارات (نمط X): عناصر نصية أو null موازيةً للخيارات.
+        val optionImages = (body["optionImages"] as? List<*>)?.map { it as? String } ?: emptyList()
         val poll = service.createPoll(
             creatorId = adminId,
             question = question,
@@ -68,7 +70,8 @@ class ContentController(
             pollType = body["pollType"] as? String ?: "SINGLE_CHOICE",
             isAnonymous = body["isAnonymous"] as? Boolean ?: false,
             allowAddOptions = body["allowAddOptions"] as? Boolean ?: false,
-            endsAt = (body["endsAt"] as? String)?.let { Instant.parse(it) }
+            endsAt = (body["endsAt"] as? String)?.let { Instant.parse(it) },
+            optionImages = optionImages
         )
         return ResponseEntity.ok(mapOf("success" to true, "poll" to poll))
     }

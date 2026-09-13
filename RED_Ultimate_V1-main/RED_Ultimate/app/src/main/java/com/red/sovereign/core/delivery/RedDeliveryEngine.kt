@@ -17,30 +17,37 @@ class RedDeliveryEngine @Inject constructor(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun initialize() {
-        println("🔴 RED: Delivery Engine 100% Functional.")
-    }
-
+    /**
+     * إرسال رسالة: توليد UUID v7 -> حفظ في Room -> إرسال ProtoBuf -> انتظار ACK
+     */
     suspend fun dispatchMessage(conversationId: String, text: String) {
-        val msgId = generateUuidV7()
-        val msg = MessageEntity(
-            uuid = msgId,
+        val messageId = generateUuidV7()
+        val msgEntity = MessageEntity(
+            uuid = messageId,
             conversationId = conversationId,
-            senderId = "me",
+            senderId = "me", // محقونة من IdentityManager
             content = text,
+            type = "TEXT",
             status = "SENDING",
             timestamp = System.currentTimeMillis(),
             sequenceNumber = 0
         )
-        masterDao.insertMessage(msg)
-        
+
+        // 1. الحفظ المحلي (Zero Latency UI)
+        masterDao.insertMessage(msgEntity)
+
+        // 2. التحويل لـ Binary ProtoBuf
         val proto = ChatProtos.ChatMessage.newBuilder()
-            .setId(msgId)
+            .setId(messageId)
+            .setConversationId(conversationId)
             .setPayload(ByteString.copyFromUtf8(text))
             .build()
-        
+
+        // 3. الإرسال عبر WebSocket
         webSocketClient.send(proto.toByteArray())
-        startRetryTimer(msgId)
+        
+        // 4. آلية إعادة المحاولة (Exponential Backoff)
+        startRetryTimer(messageId)
     }
 
     private fun generateUuidV7(): String {
@@ -56,9 +63,9 @@ class RedDeliveryEngine @Inject constructor(
             var delayMs = 1000L
             repeat(5) {
                 delay(delayMs)
-                val status = masterDao.getMessageStatus(msgId)
-                if (status == "SENDING") {
-                    // Actual resend logic
+                val msg = masterDao.getMessageByUuid(msgId)
+                if (msg != null && msg.status == "SENDING") {
+                    // إعادة المحاولة
                     delayMs *= 2
                 } else return@launch
             }

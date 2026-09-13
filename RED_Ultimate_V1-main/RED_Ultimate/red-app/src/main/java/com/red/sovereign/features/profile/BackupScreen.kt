@@ -5,11 +5,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -55,32 +59,36 @@ fun BackupScreen(onBack: () -> Unit = {}) {
                 res.onSuccess { file ->
                     refresh()
                     resultMessage = "تم استيراد الملف: ${file.name} — يمكنك الآن الاستعادة"
-                }.onFailure { e -> errorMessage = "فشل الاستيراد: ${e.message}" }
+                }.onFailure { e -> errorMessage = "فشل الاستيراد: ${e.message?.substringAfterLast('/')}" }
             }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("السيادة الرقمية وتأمين البيانات", style = MaterialTheme.typography.headlineMedium)
+        Text("ملف النسخة المشفرة", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "نسخ احتياطي سيادي مشفّر بالكامل عبر Android Keystore (AES256-GCM). المفتاح في جهازك فقط.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
         )
+        Text(
+            "هذا الملف لبيانات الجهاز المشفرة فقط — لاستعادة الحساب برمز ورقي استخدم شاشة «رموز الحساب الورقية» عند تسجيل الدخول.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
 
-        if (lastBackup != null) {
+        lastBackup?.let { backup ->
             Spacer(modifier = Modifier.height(16.dp))
-            val backup = lastBackup!!
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("آخر نسخة احتياطية", style = MaterialTheme.typography.labelMedium)
                     Text(
-                        "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(backup.createdAt))}",
+                        "${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale("ar")).format(Date(backup.createdAt))}",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("الحجم: ${backup.sizeBytes / 1024} KB", style = MaterialTheme.typography.bodySmall)
+                    Text("الحجم: ${backup.sizeBytes / 1024} ك.ب", style = MaterialTheme.typography.bodySmall)
                     Text("SHA-256: ${backup.checksum.take(16)}...", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp)
                     Text("الملف: ${backup.fileName}", style = MaterialTheme.typography.bodySmall)
                 }
@@ -89,7 +97,8 @@ fun BackupScreen(onBack: () -> Unit = {}) {
 
         if (backups.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
-            Text("${backups.size} نسخة محفوظة في files/sovereign_backups", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            // بلا أي مسار (نسبي أو مطلق) — عدّد عربي فقط.
+            Text("${backups.size} نسخة محفوظة على هذا الجهاز", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -105,10 +114,11 @@ fun BackupScreen(onBack: () -> Unit = {}) {
                         isExporting = false
                         result.onSuccess { info ->
                             refresh()
-                            resultMessage = "تم إنشاء النسخة بنجاح: ${info.fileName} (${info.sizeBytes / 1024} KB)"
-                            Toast.makeText(context, "Backup: ${info.absolutePath}", Toast.LENGTH_LONG).show()
+                            resultMessage = "تم إنشاء النسخة الاحتياطية بنجاح: ${info.fileName} (${info.sizeBytes / 1024} ك.ب)"
+                            // عربي كامل باسم الملف المجرّد فقط — لا مسار مطلق أبداً.
+                            Toast.makeText(context, "تم إنشاء النسخة الاحتياطية بنجاح", Toast.LENGTH_LONG).show()
                         }.onFailure { e ->
-                            errorMessage = "فشل النسخ: ${e.message}"
+                            errorMessage = "فشل النسخ: ${e.message?.substringAfterLast('/')}"
                         }
                     }
                 }
@@ -140,9 +150,9 @@ fun BackupScreen(onBack: () -> Unit = {}) {
                         isImporting = false
                         res.onSuccess {
                             resultMessage = "تمت الاستعادة بنجاح — أعد تشغيل التطبيق لتطبيق البيانات"
-                            Toast.makeText(context, "Restore completed — restart app", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "تمت الاستعادة بنجاح — أعد تشغيل التطبيق", Toast.LENGTH_LONG).show()
                         }.onFailure { e ->
-                            errorMessage = "فشل الاستعادة: ${e.message}"
+                            errorMessage = "فشل الاستعادة: ${e.message?.substringAfterLast('/')}"
                         }
                     }
                 }
@@ -152,7 +162,7 @@ fun BackupScreen(onBack: () -> Unit = {}) {
         ) {
             if (isImporting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(if (isImporting) "جاري الاستعادة..." else "استعادة البيانات السيادية")
+            Text(if (isImporting) "جاري الاستعادة..." else "استعادة ملف النسخة المشفرة")
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -172,7 +182,7 @@ fun BackupScreen(onBack: () -> Unit = {}) {
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         context.startActivity(Intent.createChooser(intent, "تصدير نسخة مشفرة").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    } catch (e: Exception) { errorMessage = "فشل التصدير: ${e.message}" }
+                    } catch (e: Exception) { errorMessage = "فشل التصدير: ${e.message?.substringAfterLast('/')}" }
                 },
                 modifier = Modifier.weight(1f)
             ) { Text("تصدير/مشاركة", fontSize = 12.sp) }
@@ -189,7 +199,7 @@ fun BackupScreen(onBack: () -> Unit = {}) {
                         val res = backupManager.uploadToCloud(file)
                         withContext(Dispatchers.Main) {
                             isUploading = false
-                            res.onSuccess { msg -> resultMessage = "☁️ $msg" }.onFailure { e -> errorMessage = "فشل الرفع: ${e.message}" }
+                            res.onSuccess { msg -> resultMessage = "☁️ $msg" }.onFailure { e -> errorMessage = "فشل الرفع: ${e.message?.substringAfterLast('/')}" }
                         }
                     }
                 },
@@ -212,11 +222,35 @@ fun BackupScreen(onBack: () -> Unit = {}) {
 
         resultMessage?.let { msg ->
             Spacer(modifier = Modifier.height(16.dp))
-            Text(msg, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(msg, color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                }
+            }
         }
         errorMessage?.let { msg ->
             Spacer(modifier = Modifier.height(16.dp))
-            Text(msg, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ErrorOutline, "خطأ", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(msg, color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = {
+                        errorMessage = null
+                        resultMessage = null
+                    }) {
+                        Icon(Icons.Default.Refresh, "إعادة المحاولة", Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("إعادة", fontSize = 12.sp)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))

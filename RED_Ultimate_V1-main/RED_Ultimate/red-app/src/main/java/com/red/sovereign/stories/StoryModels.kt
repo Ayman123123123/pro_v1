@@ -87,6 +87,14 @@ data class Story(
 data class StoryView(val storyId: String, val viewerRedId: String, val reaction: String? = null)
 
 @Serializable
+data class StoryViewerDto(
+    val redId: String,
+    val username: String = "",
+    val displayName: String = "",
+    val viewedAt: String = ""
+)
+
+@Serializable
 data class StoryReactionRequest(val emoji: String)
 
 /**

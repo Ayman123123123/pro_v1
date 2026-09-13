@@ -35,6 +35,11 @@ class JwtHandshakeInterceptor(
         else authenticateAdminTicket(request)
         val (user, deviceId, device) = authenticated ?: return reject(response)
 
+        // /ws/master بروتوكولي خالص (RedMasterHandler يتطلب protocolDeviceId).
+        // رفض ADMIN بلا جهاز هنا بـ 401 بدل قبول TCP ثم رمي استثناء وإغلاق —
+        // كان يسبب حلقة reconnect تبدو للمستخدم كتعليق/خروج (OK كل 1-3د في اللوق).
+        if (request.uri.path == "/ws/master" && device == null) return reject(response)
+
         attributes["userId"] = user.redId
         attributes["accountId"] = user.id.toString()
         attributes["redId"] = user.redId

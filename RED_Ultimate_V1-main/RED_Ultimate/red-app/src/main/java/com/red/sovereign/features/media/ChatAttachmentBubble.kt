@@ -1,6 +1,7 @@
 package com.red.sovereign.features.media
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -211,7 +212,9 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = {})
+            // لا long-action هنا — clickable فقط (combinedClickable مع onLongClick فارغ
+            // كان يعلن عن إجراء ضغط مطوّل وهمي لقارئ الشاشة).
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

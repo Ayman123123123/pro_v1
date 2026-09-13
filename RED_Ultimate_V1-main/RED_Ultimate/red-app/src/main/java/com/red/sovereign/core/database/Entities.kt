@@ -28,6 +28,11 @@ data class MessageEntity(
     val deletedBySenderId: String? = null
 )
 
+// TODO(P1-A): عمود topicId مقترح لجدول local_history لم يُضف عمدًا هنا —
+// إضافة عمود Room تتطلب Migration (6→7) + تعديل RedDatabase.kt وهو خارج
+// نطاق P1-A («ملفاتك فقط»). البديل الحالي: hashtags الموجودة داخل حمولة
+// RichMessage (topicId أولًا، ثم hashtags، ثم #topic من النص) تُستخدم كـ topics
+// وتُستخرج محليًا عبر LocalHistoryEntity.extractTopics() أدناه دون كسر البناء.
 @Entity(
     tableName = "local_history",
     indices = [
@@ -82,15 +87,23 @@ data class ContactEntity(
 
 @Entity(
     tableName = "groups",
-    indices = [Index("createdAt")]
+    indices = [Index("createdAt"), Index("archived"), Index("updatedAt")]
 )
 data class GroupEntity(
     @PrimaryKey val id: String,
     val name: String,
     val description: String? = null,
     val avatarUrl: String? = null,
+    val ownerRedId: String = "",
     val myRole: String = "MEMBER",
+    val privacy: String = "PRIVATE",
+    val settingsJson: String = "{}",
+    val communityId: String? = null,
     val memberCount: Int = 0,
+    val slowModeSeconds: Int = 0,
+    val disappearingSeconds: Int = 0,
+    val archived: Boolean = false,
+    val updatedAt: Long = 0,
     val createdAt: Long = 0
 )
 
@@ -105,9 +118,9 @@ data class CallLogEntity(
     @PrimaryKey val id: String,
     val peerId: String,
     val peerLabel: String = "",
-    val type: String, // VOICE, VIDEO, GROUP, LIVE, SPACE
+    val type: String, // VOICE, VIDEO, DINSTAR, GROUP, LIVE, SPACE
     val direction: String, // INCOMING, OUTGOING
-    val route: String = "RED", // RED transport
+    val route: String = "RED", // RED, DINSTAR
     val status: String, // COMPLETED, MISSED, REJECTED, ACTIVE, ENDED, FAILED
     val timestamp: Long,
     val durationMs: Long = 0,
@@ -151,4 +164,73 @@ data class MessageReactionEntity(
     val senderId: String,
     val emoji: String,
     val timestamp: Long = System.currentTimeMillis()
+)
+
+/**
+ * P1-A: استخراج topics رسالة من local_history دون تغيير السكيما.
+ * الأولوية: RichMessage.topicId ← hashtags ← regex #topic من النص/الخام.
+ * تُستخدم للفلترة المحلية في ChatThreadScreen (chips). لا تمس Room.
+ */
+private val LocalHistoryTopicRegex = Regex("#[\\w\u0600-\u06FF\\-]{2,30}")
+
+fun LocalHistoryEntity.extractTopics(): List<String> {
+    val rich = runCatching { com.red.sovereign.core.RichMessage.decode(encryptedPlaintext) }.getOrNull()
+    if (rich != null) {
+        val out = LinkedHashSet<String>()
+        rich.topicId?.trim()?.removePrefix("#")?.takeIf { it.isNotBlank() }?.let { out += it }
+        rich.hashtags.forEach { h -> h.trim().removePrefix("#").takeIf { it.isNotBlank() }?.let { out += it } }
+        LocalHistoryTopicRegex.findAll(rich.text).forEach { out += it.value.removePrefix("#") }
+        if (out.isNotEmpty()) return out.toList()
+    }
+    // خام UTF-8 (مسار متفائل/قديم): استخراج مباشر من النص
+    val raw = runCatching { encryptedPlaintext.toString(Charsets.UTF_8) }.getOrDefault("")
+    return LocalHistoryTopicRegex.findAll(raw).map { it.value.removePrefix("#") }.distinct().toList()
+}
+
+fun List<LocalHistoryEntity>.distinctTopics(): List<String> =
+    flatMap { runCatching { it.extractTopics() }.getOrDefault(emptyList()) }.distinct().sorted()
+
+/**
+ * رسالة مُعلَّمة (Starred/Bookmarked) — تُخزّن محلياً في Room للرجوع السريع.
+ * لا ت arrived مع Restroom لأن التعليق محلي فقط (E2EE: لا معرف للرسالة على الخادم).
+ */
+@Entity(
+    tableName = "starred_messages",
+    indices = [Index("conversationId"), Index("starredAt")])
+data class StarredMessageEntity(
+    @PrimaryKey val messageId: String,
+    val conversationId: String,
+    val senderId: String,
+    val messageText: String,
+    val messageType: String,
+    val starredAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * LEGENDARY P1: رفع الوسائط المتين — outbox خاص بالصور/الصوت/الفيديو.
+ * يحل: قتل العملية أثناء الرفع = فقدان + رفع على Main + حذف الملف عند الفشل.
+ * idempotencyKey = messageId يمنع التكرار عند retry.
+ */
+@Entity(
+    tableName = "media_uploads",
+    indices = [Index(value = ["status", "nextAttemptAt"]), Index(value = ["messageId"], unique = true)]
+)
+data class MediaUploadEntity(
+    @PrimaryKey val messageId: String,
+    val conversationId: String,
+    val targetRedId: String? = null,
+    val localPath: String,
+    val mimeType: String,
+    val size: Long = 0,
+    val thumbPath: String? = null,
+    val blurHash: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+    val durationMs: Long = 0,
+    val objectKey: String? = null,
+    val url: String? = null,
+    val status: String = "PENDING",
+    val retryCount: Int = 0,
+    val nextAttemptAt: Long = System.currentTimeMillis(),
+    val idempotencyKey: String = messageId
 )

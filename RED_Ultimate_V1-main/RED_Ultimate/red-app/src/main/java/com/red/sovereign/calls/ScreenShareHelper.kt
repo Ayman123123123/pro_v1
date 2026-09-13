@@ -4,21 +4,23 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.util.Log
-import org.webrtc.ScreenCapturerAndroid
-import org.webrtc.SurfaceTextureHelper
-import org.webrtc.VideoCapturer
-import org.webrtc.VideoSource
-import org.webrtc.VideoTrack
 import org.webrtc.EglBase
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.ScreenCapturerAndroid
+import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoSource
+import org.webrtc.VideoTrack
 
 /**
- * مساعد مشاركة الشاشة — يعتمد أحدث تقنيات 2026:
- * • ScreenCapturerAndroid مع MediaProjection (Android 14+ MediaProjectionConfig)
- * • hardware scaler + 1080p adaptive
- * • يعمل مع كل الأنواع: جماعية / مؤتمر / بث
+ * Screen Share Helper — RED Sovereign 2026
+ *
+ * • Uses ScreenCapturerAndroid with MediaProjection (Android 14+ MediaProjectionConfig support)
+ * • Hardware scaler + adaptive resolution (1080p / 720p)
+ * • Compatible with group calls, conferences, and live streaming.
  */
 class ScreenShareHelper(
     private val context: Context,
@@ -36,8 +38,8 @@ class ScreenShareHelper(
 
     fun createScreenCaptureIntent(): Intent {
         val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        return if (android.os.Build.VERSION.SDK_INT >= 34) {
-            manager.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay())
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14 (API 34)
+            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
         } else {
             manager.createScreenCaptureIntent()
         }
@@ -47,29 +49,32 @@ class ScreenShareHelper(
         if (isSharing) return videoTrack
         return try {
             val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            val resultCode = Activity.RESULT_OK
-            mediaProjection = manager.getMediaProjection(resultCode, data)
+            mediaProjection = manager.getMediaProjection(Activity.RESULT_OK, data)
             if (mediaProjection == null) {
-                Log.e(TAG, "MediaProjection null")
+                Log.e(TAG, "MediaProjection is null")
                 return null
             }
             val callback = object : MediaProjection.Callback() {
                 override fun onStop() {
-                    Log.d(TAG, "MediaProjection stopped")
+                    Log.d(TAG, "MediaProjection stopped by system")
                     stop()
                 }
             }
             mediaProjection?.registerCallback(callback, null)
             capturer = ScreenCapturerAndroid(data, callback)
             videoSource = factory.createVideoSource(true)
-            textureHelper = SurfaceTextureHelper.create("ScreenShare", eglContext)
+            textureHelper = SurfaceTextureHelper.create("ScreenShareThread", eglContext)
+
             capturer?.initialize(textureHelper, context, videoSource?.capturerObserver)
             capturer?.startCapture(width, height, fps)
-            videoTrack = factory.createVideoTrack("screen-share", videoSource).apply { setEnabled(true) }
-            Log.d(TAG, "Screen share started ${width}x${height}@$fps track=${videoTrack?.id()}")
+
+            videoTrack = factory.createVideoTrack("red-screen-share-track", videoSource).apply {
+                setEnabled(true)
+            }
+            Log.d(TAG, "Screen share started successfully: ${width}x${height}@${fps}fps")
             videoTrack
         } catch (e: Exception) {
-            Log.e(TAG, "Screen share start failed: ${e.message}", e)
+            Log.e(TAG, "Failed to start screen share: ${e.message}", e)
             stop()
             null
         }
@@ -81,12 +86,13 @@ class ScreenShareHelper(
         try { textureHelper?.dispose() } catch (_: Exception) {}
         try { videoSource?.dispose() } catch (_: Exception) {}
         try { mediaProjection?.stop() } catch (_: Exception) {}
+
         capturer = null
         textureHelper = null
         videoSource = null
         videoTrack = null
         mediaProjection = null
-        Log.d(TAG, "Screen share stopped")
+        Log.d(TAG, "Screen share stopped and resources released")
     }
 
     companion object {

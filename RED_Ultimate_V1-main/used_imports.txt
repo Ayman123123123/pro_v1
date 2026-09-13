@@ -1888,6 +1888,7 @@ com.mobilecoin.lib.log.Logger;
 com.mobilecoin.lib.network.TransportProtocol;
 com.pnikosis.materialishprogress.ProgressWheel;
 com.red.core.delivery.DeliveryEngine
+com.red.features.pstn.PstnEngine
 com.red.sovereign.app.RedDashboard
 com.red.sovereign.core.auth.IdentityManager
 com.red.sovereign.core.database.RedDao
@@ -1898,10 +1899,14 @@ com.red.sovereign.features.auth.*
 com.red.sovereign.features.calls.*
 com.red.sovereign.features.calls.CallLogScreen
 com.red.sovereign.features.calls.RedVoipMaster
+com.red.sovereign.features.calls.YemeniOperatorDetector
 com.red.sovereign.features.chat.*
 com.red.sovereign.features.chat.ChatListScreen
 com.red.sovereign.features.chat.LuxuryChatBubble
 com.red.sovereign.features.profile.SettingsScreen
+com.red.sovereign.features.pstn.*
+com.red.sovereign.features.pstn.DialPadScreen
+com.red.sovereign.features.pstn.PstnViewModel
 com.red.sovereign.features.stories.StoryListSection
 com.red.sovereign.features.stories.StoryViewModel
 com.red.sovereign.proto.RedProtos
@@ -5436,6 +5441,7 @@ org.thoughtcrime.securesms.dependencies.GooglePlayBillingDependencies
 org.thoughtcrime.securesms.dependencies.KeyTransparencyApi
 org.thoughtcrime.securesms.developed.delivery.GuaranteedDelivery
 org.thoughtcrime.securesms.developed.delivery.GuaranteedDelivery;
+org.thoughtcrime.securesms.developed.pstn.DuminManager
 org.thoughtcrime.securesms.developed.voip.UltraHDCall
 org.thoughtcrime.securesms.devicetransfer.DeviceTransferSetupFragment;
 org.thoughtcrime.securesms.devicetransfer.SetupStep;
@@ -6340,6 +6346,7 @@ org.thoughtcrime.securesms.migrations.ClearGlideCacheMigrationJob;
 org.thoughtcrime.securesms.migrations.ContactLinkRebuildMigrationJob;
 org.thoughtcrime.securesms.migrations.CopyUsernameToSignalStoreMigrationJob;
 org.thoughtcrime.securesms.migrations.DatabaseMigrationJob;
+org.thoughtcrime.securesms.migrations.DeleteDeprecatedLogsMigrationJob;
 org.thoughtcrime.securesms.migrations.DirectoryRefreshMigrationJob;
 org.thoughtcrime.securesms.migrations.DuplicateE164MigrationJob;
 org.thoughtcrime.securesms.migrations.E164FormattingMigrationJob
@@ -6390,6 +6397,7 @@ org.thoughtcrime.securesms.migrations.SyncChatFoldersMigrationJob;
 org.thoughtcrime.securesms.migrations.SyncDistributionListsMigrationJob;
 org.thoughtcrime.securesms.migrations.SyncKeysMigrationJob;
 org.thoughtcrime.securesms.migrations.SyncStickerPacksMigrationJob;
+org.thoughtcrime.securesms.migrations.TrimByLengthSettingsMigrationJob;
 org.thoughtcrime.securesms.migrations.UpdateSmsJobsMigrationJob;
 org.thoughtcrime.securesms.migrations.UserNotificationMigrationJob;
 org.thoughtcrime.securesms.migrations.UuidMigrationJob;

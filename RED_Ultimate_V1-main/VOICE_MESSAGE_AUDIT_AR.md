@@ -273,6 +273,7 @@ val isValid = when (mime) {
 
 #### النتيجة: **لا شيء**
 - **بحث في كل `*.tsx, *.ts, *.jsx, *.js`:** صفر نتائج
+- **استثناء واحد:** `DinstarControl.tsx` يعرض "Voice" كـ capability label للمكالمات PSTN
 
 > **طبيعي:** Admin Dashboard للإدارة، ليس للمراسلة. لا يحتاج voice UI.
 

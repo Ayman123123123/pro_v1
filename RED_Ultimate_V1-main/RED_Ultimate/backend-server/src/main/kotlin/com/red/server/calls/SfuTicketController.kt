@@ -37,7 +37,7 @@ class SfuTicketController(
         val ticket = jwt.issueSfuTicket(user, deviceId, groupId, groupRole.name, canProduce)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
-            .body(SfuTicketResponse(ticket, 120, groupId, groupRole.name, canProduce))
+            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, groupId, groupRole.name, canProduce))
     }
 
     /** Conference / live rooms that are not a stored group still need a short SFU capability. */
@@ -59,7 +59,7 @@ class SfuTicketController(
         val ticket = jwt.issueSfuTicket(user, deviceId, roomId, "MEMBER", canProduce = true)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
-            .body(SfuTicketResponse(ticket, 120, roomId, "MEMBER", true))
+            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, roomId, "MEMBER", true))
     }
 
     /**
@@ -75,7 +75,7 @@ class SfuTicketController(
         val accountIdText = accountId.toString()
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         val isBroadcaster = record.broadcasterId == accountIdText
-        require(isBroadcaster || liveStreams.isViewer(streamId, accountIdText)) {
+        require(isBroadcaster || liveStreams.isViewerAny(streamId, user.redId, accountIdText)) {
             "Join the live stream before requesting media access"
         }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
@@ -89,11 +89,14 @@ class SfuTicketController(
         )
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
-            .body(SfuTicketResponse(ticket, 120, streamId, if (isBroadcaster) "BROADCASTER" else "VIEWER", isBroadcaster))
+            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, streamId, if (isBroadcaster) "BROADCASTER" else "VIEWER", isBroadcaster))
     }
 
     companion object {
-        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{8,128}$")
+        /** معرف الغرفة موحّد مع SFU (4..128) ومع ConferenceWebSocketHandler — كان 8..128 فيسبب فشل الغرف القصيرة. */
+        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{4,128}$")
+        /** يطابق JwtService.issueSfuTicket (10 دقائق) — كان 120 فيسبب تجديداً مبكراً خاطئاً. */
+        const val SFU_TICKET_EXPIRES_SECONDS = 600L
     }
 }
 

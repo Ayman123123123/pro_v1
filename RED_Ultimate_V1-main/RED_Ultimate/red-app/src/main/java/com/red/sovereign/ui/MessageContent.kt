@@ -20,6 +20,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -99,6 +100,7 @@ import com.red.sovereign.media.VoiceMessageState
 import com.red.sovereign.media.VoiceMessageViewModel
 import com.red.sovereign.media.VoiceNotePlayer
 import com.red.sovereign.media.voice.VoiceBubble
+import com.red.sovereign.settings.ChatFontPolicy
 import com.red.sovereign.settings.SettingsRuntime
 import com.red.sovereign.stories.StoryVideoPlayer
 import com.red.sovereign.ui.theme.AqyalCyanGlow
@@ -124,12 +126,133 @@ internal fun resolveRichMessages(source: List<DecryptedMessage>): List<Decrypted
     return visible.values.toList()
 }
 
+/**
+ * دمج الفقاعات المتتالية (2026-09-10): رسالتان متتاليتان من نفس المرسل
+ * بفارق أقل من دقيقتين تُدمجان بصريًا — تُخفى ترويسة المرسل عن الثانية
+ * ويُقلَّص التباعد. يمنع ازدحام الترويسات في المجموعات النشطة.
+ */
+internal fun shouldMergeWithPrevious(
+    previous: DecryptedMessage?,
+    current: DecryptedMessage,
+    mergeWindowMs: Long = 120_000L
+): Boolean {
+    if (previous == null) return false
+    if (previous.senderRedId != current.senderRedId) return false
+    if (previous.outgoing != current.outgoing) return false
+    return (current.timestamp - previous.timestamp) in 0..mergeWindowMs
+}
+
 internal fun messageDisplayText(message: DecryptedMessage): String =
     if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext)?.text.orEmpty() else message.plaintext.toString(Charsets.UTF_8)
 
+/**
+ * فقاعة موحدة (2026-09-10): تدمج `LuxuryChatBubble` (نص) مع عارضات
+ * `MessageContent` (وسائط/صوت/استطلاع) في مسار واحد.
+ *
+ * كانت `RedDashboard` تفرّع يدويًا: `LuxuryChatBubble` للنص الصرف و`Card`
+ * مكررة للوسائط — أي تغيير في الشكل كان يتطلب تعديلين. الآن كل الأنواع
+ * تمر هنا: الترويسة + المحتوى + الوقت/العلامات + التفاعلات في مكان واحد.
+ * `ChatThreadScreen` و`ChatHubScreen` يستدعيانها؛ المسارات القديمة تبقى
+ * للتوافق حتى اكتمال الهجرة.
+ */
+@Composable
+internal fun UnifiedMessageBubble(
+    message: DecryptedMessage,
+    conversation: List<DecryptedMessage>,
+    isOutgoing: Boolean = message.outgoing,
+    senderName: String = "",
+    senderRedId: String = message.senderRedId,
+    hideSenderHeader: Boolean = false,
+    timeText: String,
+    isEdited: Boolean = false,
+    reactions: List<MessageReactionEntity> = emptyList(),
+    currentRedId: String = "",
+    onToggleReaction: ((String) -> Unit)? = null,
+    attachments: AttachmentViewModel? = null,
+    myRedId: String? = null,
+    onPollVote: ((pollId: String, optionIndex: Int?) -> Unit)? = null,
+    onLongClick: () -> Unit = {},
+    onInfoClick: () -> Unit = {}
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .combinedClickable(onClick = onInfoClick, onLongClick = onLongClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isOutgoing) YounesEmerald.copy(alpha = .82f)
+            else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(
+            topStart = 20.dp, topEnd = 20.dp,
+            bottomStart = if (isOutgoing) 20.dp else 5.dp,
+            bottomEnd = if (isOutgoing) 5.dp else 20.dp
+        )
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (!isOutgoing && !hideSenderHeader && (senderName.isNotBlank() || senderRedId.isNotBlank())) {
+                Text(
+                    senderName.ifBlank { senderRedId },
+                    color = YounesEmerald,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (senderName.isNotBlank() && senderRedId.isNotBlank()) {
+                    Text(
+                        senderRedId,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+            }
+            when (message.type) {
+                "FILE", "IMAGE", "VIDEO", "AUDIO" -> if (attachments != null) AttachmentMessage(message, attachments) else Text(messageDisplayText(message))
+                "VOICE" -> if (attachments != null) VoiceMessage(message, attachments) else Text(messageDisplayText(message))
+                "STICKER" -> if (attachments != null) StickerMessage(message, attachments) else Text(messageDisplayText(message))
+                "RICH_TEXT" -> RichTextMessage(message, conversation, myRedId = myRedId, onPollVote = onPollVote)
+                "GROUP_MESSAGE" -> {
+                    val text = message.plaintext.toString(Charsets.UTF_8)
+                    val asVoice = runCatching { ATTACHMENT_JSON.decodeFromString<VoiceManifest>(text) }.isSuccess
+                    val asFile = runCatching { ATTACHMENT_JSON.decodeFromString<AttachmentManifest>(text) }.isSuccess
+                    when {
+                        asVoice && attachments != null -> VoiceMessage(message, attachments)
+                        asFile && attachments != null -> AttachmentMessage(message, attachments)
+                        else -> Text(text, fontSize = 16.sp)
+                    }
+                }
+                else -> Text(message.plaintext.toString(Charsets.UTF_8), fontSize = 16.sp)
+            }
+            if (reactions.isNotEmpty() && onToggleReaction != null) {
+                Spacer(Modifier.height(4.dp))
+                MessageReactions(reactions = reactions, currentRedId = currentRedId, onToggle = onToggleReaction)
+            }
+            Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(timeText, fontSize = 10.sp, color = if (isOutgoing) Color(0x99001B14) else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (isEdited) Text("✏️", fontSize = 10.sp)
+                if (isOutgoing) {
+                    val ticks = when (message.status) { "READ", "DELIVERED" -> "✓✓" else -> "✓" }
+                    Text(ticks, color = if (message.status == "READ") AqyalCyanGlow else Color(0x99001B14), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 
-internal fun RichTextMessage(message: DecryptedMessage, conversation: List<DecryptedMessage>, mentionLabel: (String) -> String = { it }) {
+internal fun RichTextMessage(
+    message: DecryptedMessage,
+    conversation: List<DecryptedMessage>,
+    mentionLabel: (String) -> String = { it },
+    /** معرفي الحالي — مع onPollVote يفعّل وضع التصويت المتزامن E2EE. */
+    myRedId: String? = null,
+    /** يُرسل POLL_VOTE عبر RedConnectionService (فردي/جماعي حسب الموقع). */
+    onPollVote: ((pollId: String, optionIndex: Int?) -> Unit)? = null
+) {
     val rich = RichMessage.decode(message.plaintext)
     if (rich == null) { Text("رسالة غير صالحة", color = MaterialTheme.colorScheme.error); return }
     rich.replyTo?.let { replyId -> conversation.firstOrNull { it.id == replyId }?.let { quoted -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .45f))) { Text(messageDisplayText(quoted), Modifier.padding(7.dp), maxLines = 2, style = MaterialTheme.typography.bodySmall) } } }
@@ -144,9 +267,9 @@ internal fun RichTextMessage(message: DecryptedMessage, conversation: List<Decry
             hashtags.forEach { h -> val idx = t.indexOf(h); if (idx >= 0) addStyle(androidx.compose.ui.text.SpanStyle(color = AqyalCyanGlow), idx, idx + h.length) }
         }
     }
-    Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface)
+    Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface, fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily))
     rich.poll?.let { poll ->
-        InlinePollCard(poll, isOutgoing = message.outgoing)
+        InlinePollCard(poll, isOutgoing = message.outgoing, myRedId = myRedId, onVote = onPollVote)
     }
     rich.expiresAt?.let {
         val remaining = (it - System.currentTimeMillis()).coerceAtLeast(0)
@@ -163,9 +286,35 @@ internal fun RichTextMessage(message: DecryptedMessage, conversation: List<Decry
 
 @Composable
 
-private fun InlinePollCard(poll: com.red.sovereign.core.InlinePoll, isOutgoing: Boolean) {
-    var selected by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf<String?>(null) }
-    var votes by remember(poll.pollId) { androidx.compose.runtime.mutableStateOf(poll.votes) }
+private fun InlinePollCard(
+    poll: com.red.sovereign.core.InlinePoll,
+    isOutgoing: Boolean,
+    myRedId: String? = null,
+    onVote: ((pollId: String, optionIndex: Int?) -> Unit)? = null
+) {
+    // وضع متزامن E2EE: الأصوات تُجمَع من رسائل POLL_VOTE الواردة عبر
+    // ChatPollVoteStore (كانت البطاقة تزيد عدّادًا محليًا فقط ولا ترسل شيئًا).
+    // بلا onVote تبقى البطاقة عرضًا محليًا كما كانت.
+    val synced = myRedId != null && onVote != null
+    val storeCounts = if (synced) ChatPollVoteStore.counts(poll.pollId, poll.options.size) else emptyList()
+    val id = myRedId ?: null
+    val myVote = if (synced && id != null) ChatPollVoteStore.myVote(poll.pollId, id) else null
+    val baseVotes = poll.votes
+    val votes = if (synced && storeCounts.any { it > 0 }) {
+        // دمج لقطة المُنشئ (تتضمن أصواتًا سابقة للإرسال) مع الوارد الجديد.
+        baseVotes.mapIndexed { index, base -> base + storeCounts.getOrElse(index) { 0 } }
+            .let { merged ->
+                // إن صوّتُّ ولم أظهر في اللقطة، أضف صوتي (تفادي النقصان البصري).
+                if (myVote != null && baseVotes.getOrElse(myVote) { 0 } == 0 &&
+                    storeCounts.getOrElse(myVote) { 0 } == 0
+                ) merged.toMutableList().also { it[myVote] = it[myVote] + 1 } else merged
+            }
+    } else if (synced && myVote != null) {
+        baseVotes.mapIndexed { index, base -> if (index == myVote) base + 1 else base }
+            .let { if (it.size < poll.options.size) it + List(poll.options.size - it.size) { 0 } else it }
+    } else {
+        baseVotes
+    }
     val total = votes.sum().coerceAtLeast(1)
     Card(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -181,35 +330,59 @@ private fun InlinePollCard(poll: com.red.sovereign.core.InlinePoll, isOutgoing: 
             poll.options.forEachIndexed { index, option ->
                 val optionVotes = votes.getOrElse(index) { 0 }
                 val ratio = (optionVotes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                val isSelected = selected == option
+                val isSelected = if (synced) myVote == index else null
                 Card(
-                    Modifier.fillMaxWidth().clickable(enabled = !poll.isClosed) {
-                        if (selected == option) {
-                            selected = null
-                            votes = votes.toMutableList().also { it[index] = (it.getOrElse(index) { 0 } - 1).coerceAtLeast(0) }
-                        } else {
-                            selected = option
-                            votes = votes.toMutableList().also { it[index] = it.getOrElse(index) { 0 } + 1 }
-                        }
+                    Modifier.fillMaxWidth().clickable(enabled = !poll.isClosed && onVote != null) {
+                        if (onVote != null) onVote(poll.pollId, if (myVote == index) null else index)
                     },
-                    colors = CardDefaults.cardColors(containerColor = if (isSelected) YounesEmerald.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected == true) YounesEmerald.copy(alpha = 0.18f)
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(Modifier.padding(10.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(option, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                            if (poll.isClosed || selected != null) Text("${(ratio * 100).toInt()}%", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(option, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = if (isSelected == true) FontWeight.Bold else FontWeight.Normal)
+                            if (poll.isClosed || (synced && myVote != null) || (!synced)) Text(
+                                "${(ratio * 100).toInt()}%",
+                                color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            )
                         }
-                        if (poll.isClosed || selected != null) {
+                        if (poll.isClosed || (synced && myVote != null)) {
                             Spacer(Modifier.height(6.dp))
                             LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)), color = YounesEmerald, trackColor = MaterialTheme.colorScheme.surface)
                         }
                     }
                 }
             }
-            Text("إجمالي الأصوات: $total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (synced) "إجمالي الأصوات: $total · صوتك: ${myVote?.let { poll.options.getOrNull(it) } ?: "لا شيء"}"
+                else "إجمالي الأصوات: $total",
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
+}
+
+/**
+ * مخزن تصويتات استطلاعات الدردشة (E2EE): pollId -> (مصوّت -> فهرس الخيار).
+ * يُغذّى من رسائل POLL_VOTE الواردة (انظر RedDashboard) ومن التصويت
+ * الصادر المتفائل، وتقرأه بطاقات الاستطلاع الحيّة.
+ */
+internal object ChatPollVoteStore {
+    val votersByPoll = androidx.compose.runtime.mutableStateMapOf<String, Map<String, Int>>()
+    fun record(pollId: String, voter: String, optionIndex: Int?) {
+        val next = (votersByPoll[pollId] ?: emptyMap()).toMutableMap()
+        if (optionIndex == null) next.remove(voter) else next[voter] = optionIndex
+        votersByPoll[pollId] = next.toMap()
+    }
+    fun counts(pollId: String, optionCount: Int): List<Int> {
+        val counts = IntArray(optionCount)
+        votersByPoll[pollId]?.values?.forEach { idx -> if (idx in counts.indices) counts[idx]++ }
+        return counts.toList()
+    }
+    fun myVote(pollId: String, me: String): Int? = votersByPoll[pollId]?.get(me)
 }
 
 @Composable
@@ -230,8 +403,8 @@ private fun VoiceRecordingControls(
             Box(Modifier.size(10.dp).clip(CircleShape).background(if (voiceState.paused) AqyalGold else MaterialTheme.colorScheme.error))
             Spacer(Modifier.width(6.dp))
             Text(
-                if (voiceState.paused) "متوقف مؤقتًا ${formatDuration(voiceMessages.elapsedSeconds)}"
-                else "● تسجيل ${formatDuration(voiceMessages.elapsedSeconds)}",
+                if (voiceState.paused) "متوقف مؤقتًا ${dashboardFormatDuration(voiceMessages.elapsedSeconds)}"
+                else "● تسجيل ${dashboardFormatDuration(voiceMessages.elapsedSeconds)}",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1f)
@@ -252,24 +425,9 @@ private fun VoiceRecordingControls(
             )
         }
 
-        // 🔒 إذا قُفل التسجيل، اعرض أزرار الإرسال والإلغاء
+        // 🔒 إذا قُفل التسجيل، اعرض تلميح القفل الموحد (زر حذف فعال + نص فقط)
         if (isLocked) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = voiceMessages::cancel,
-                    modifier = Modifier.weight(1f)
-                ) { Text("حذف") }
-                // الإرسال يتم عبر زر الإرسال الرئيسي في شريط الكتابة
-                OutlinedButton(
-                    onClick = { /* triggered via main send button */ },
-                    modifier = Modifier.weight(1f),
-                    enabled = false
-                ) { Text("🔒 مُقفل — استخدم زر الإرسال") }
-            }
+            VoiceLockHint(onDelete = voiceMessages::cancel)
         } else {
             // 🔓 نصيحة للمستخدم: اسحب للقفل أو ارفع الإصبع للإرسال
             Text(
@@ -296,7 +454,7 @@ private fun VoicePreviewControls(
             Icon(Icons.Default.PlayArrow, null, tint = YounesEmerald)
             Spacer(Modifier.width(6.dp))
             Text(
-                "معاينة الرسالة الصوتية • ${formatDuration(duration)}",
+                "معاينة الرسالة الصوتية • ${dashboardFormatDuration(duration)}",
                 color = YounesEmerald,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -321,7 +479,7 @@ private fun VoicePreviewControls(
                 enabled = !isSending && duration >= 1
             ) {
                 if (isSending) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White)
-                else { Icon(Icons.Default.Send, null); Text(" إرسال") }
+                else { Icon(Icons.AutoMirrored.Filled.Send, null); Text(" إرسال") }
             }
         }
     }
@@ -445,14 +603,30 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
     val isWorking = attachments.getDownloadState(item.id) is AttachmentState.Working
     if (downloaded?.second == manifest.name) {
         val file = java.io.File(downloaded.first)
-        val bitmap = remember(file.lastModified()) {
-            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
-            android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
+        // G3: فك الترميز كان على الخيط الرئيسي (remember + decodeFile) — يسبب
+        // تقطعاً وANR مع الصور الكبيرة. الآن لاتزامني على IO مع تقليص
+        // محسوب لحد أقصى 1024px لتقليل الذاكرة وإعادة التركيب.
+        val fileKey = file.absolutePath to runCatching { file.lastModified() }.getOrDefault(0L)
+        val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+            initialValue = null, fileKey
+        ) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+                    var sample = 1
+                    val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+                    while (maxDim / (sample * 2) >= 1024 && sample < 8) sample *= 2
+                    val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+                    android.graphics.BitmapFactory.decodeFile(file.absolutePath, opts)?.asImageBitmap()
+                }.getOrNull()
+            }
         }
-        if (bitmap != null) {
+        val currentBitmap = bitmap
+        if (currentBitmap != null) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomEnd) {
                 androidx.compose.foundation.Image(
-                    bitmap, contentDescription = "صورة",
+                    currentBitmap, contentDescription = "صورة",
                     modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                         val uri = android.net.Uri.fromFile(file)
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
@@ -465,7 +639,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 )
                 // شارة الحجم والتحقق المشفر
                 Surface(Modifier.padding(6.dp), shape = RoundedCornerShape(8.dp), color = Color.Black.copy(alpha = 0.6f)) {
-                    Text(" ✓ مشفرة • ${formatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                    Text(" ✓ مشفرة • ${dashboardFormatBytes(manifest.size)}", color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
                 }
             }
         }
@@ -480,7 +654,7 @@ private fun ImageMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                     Icon(Icons.Default.Photo, null, tint = YounesEmerald, modifier = Modifier.size(52.dp))
                     Spacer(Modifier.height(6.dp))
                     Text(manifest.name.take(24), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 1)
-                    Text("${formatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                    Text("${dashboardFormatBytes(manifest.size)} • مشفرة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                     IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
                         Surface(Modifier.size(44.dp), shape = CircleShape, color = YounesEmerald) {
                             Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Download, "تنزيل", tint = Color(0xFF002118)) }
@@ -535,7 +709,7 @@ private fun VideoMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text("فيديو مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                    Text("فيديو مشفر · ${dashboardFormatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
                 else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
@@ -579,7 +753,7 @@ private fun AudioMessage(item: DecryptedMessage, manifest: AttachmentManifest, a
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(manifest.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    Text("صوت مشفر · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                    Text("صوت مشفر · ${dashboardFormatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
                 }
                 IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = attachments.getDownloadState(item.id) !is AttachmentState.Working) {
                     Icon(Icons.Default.Download, "تنزيل الصوت")
@@ -612,7 +786,7 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(manifest.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                Text("${manifest.mimeType} · ${formatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
+                Text("${manifest.mimeType} · ${dashboardFormatBytes(manifest.size)}", style = MaterialTheme.typography.labelSmall)
             }
             if (isWorking) CircularProgressIndicator(Modifier.size(24.dp), color = YounesEmerald, strokeWidth = 3.dp)
             else IconButton({ attachments.download(item.id, item.plaintext.toString(Charsets.UTF_8)) }, enabled = !isWorking) {
@@ -625,13 +799,7 @@ private fun FileMessage(item: DecryptedMessage, manifest: AttachmentManifest, at
 private fun shouldAutoDownload(context: android.content.Context, sizeBytes: Long): Boolean =
     RedQualityManager.shouldAutoDownload(context, sizeBytes)
 
-private fun formatDuration(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
-
-private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-    bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
-    else -> "$bytes B"
-}
+// (نُقلت formatDuration/formatBytes إلى DashboardMedia.kt بصيغة dashboard* وLocale("ar"). 2026-09-10)
 
 @Composable
 internal fun MessageActionRow(icon: ImageVector, title: String, detail: String, onClick: () -> Unit) {
@@ -775,7 +943,7 @@ internal fun AttachmentSheet(
 
 // الهاشتاجات العربية/اللاتينية
 
-private val ATTACHMENT_JSON = Json { ignoreUnknownKeys = true }
+// ATTACHMENT_JSON معرّف في DashboardIdentifiers.kt (نفس الحزمة) — لا تكرره هنا.
 
 internal val HASHTAG_PARTIAL = Regex("#[\\w\u0600-\u06FF]{2,30}")
 // اسم المستخدم للـ @ autocomplete

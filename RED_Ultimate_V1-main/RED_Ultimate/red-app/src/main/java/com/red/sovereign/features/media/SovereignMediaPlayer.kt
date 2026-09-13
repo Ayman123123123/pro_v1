@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,22 +34,33 @@ fun SovereignVideoPlayer(
     uri: Uri,
     onBack: () -> Unit = {}
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
+    // G3: مفتاح uri يمنع إعادة استخدام مشغل قديم لملف جديد، وسياق
+    // التطبيق يمنع تسرب Activity، والإيقاف عند ON_PAUSE يمنع استمرار
+    // الصوت بعد مغادرة الشاشة (تسرب ExoPlayer).
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    val exoPlayer = remember(uri) {
+        ExoPlayer.Builder(appContext).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
             playWhenReady = true
         }
     }
 
-    DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
+    androidx.compose.runtime.DisposableEffect(lifecycle, exoPlayer) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) exoPlayer.pause()
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) exoPlayer.play()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); exoPlayer.release() }
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(factory = { PlayerView(it).apply { player = exoPlayer } }, modifier = Modifier.fillMaxSize())
         
         IconButton(onClick = onBack, modifier = Modifier.padding(16.dp).align(Alignment.TopStart)) {
-            Icon(Icons.Rounded.ArrowBack, null, tint = Color.White)
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color.White)
         }
     }
 }

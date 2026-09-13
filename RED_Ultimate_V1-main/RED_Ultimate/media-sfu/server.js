@@ -10,8 +10,18 @@ const { clientErrorPayload } = require('./protocol');
 // ─── Configuration ─────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT || 4000);
+// Defaults match docker-compose.yml ports "40000-40100:40000-40100/udp" +
+// Dockerfile EXPOSE. Override via RTC_MIN/MAX env ONLY together with the
+// compose mapping + EXPOSE, otherwise ports are unreachable.
 const RTC_MIN_PORT = Number(process.env.RTC_MIN_PORT || 40000);
-const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT || 40200);
+const RTC_MAX_PORT = Number(process.env.RTC_MAX_PORT || 40100);
+if (!Number.isInteger(RTC_MIN_PORT) || !Number.isInteger(RTC_MAX_PORT) ||
+    RTC_MIN_PORT < 1024 || RTC_MAX_PORT > 65535 || RTC_MIN_PORT > RTC_MAX_PORT) {
+  throw new Error(`Invalid RTC port range ${RTC_MIN_PORT}-${RTC_MAX_PORT} (expect 1024-65535, min<=max)`);
+}
+if (RTC_MAX_PORT - RTC_MIN_PORT + 1 < 10) {
+  console.warn(`RTC port range ${RTC_MIN_PORT}-${RTC_MAX_PORT} is very small; concurrent calls may exhaust ports`);
+}
 const WORKER_COUNT = Math.max(1, Number(process.env.MEDIASOUP_WORKERS || Math.min(4, os.cpus().length)));
 const ANNOUNCED_IP = process.env.MEDIASOUP_ANNOUNCED_IP || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -19,8 +29,8 @@ const JWT_SECRET = process.env.JWT_SECRET || '';
 // Empty room cleanup delay (ms) — prevents immediate cleanup on brief disconnects
 const ROOM_CLEANUP_DELAY_MS = Number(process.env.ROOM_CLEANUP_DELAY_MS || 30_000);
 
-// Max producers per peer per kind (rate limiting)
-const MAX_PRODUCERS_PER_KIND = Number(process.env.MAX_PRODUCERS_PER_KIND || 2);
+// Max producers per peer per kind (supports multi-stream live broadcasts: camera, screenshare, co-hosts)
+const MAX_PRODUCERS_PER_KIND = Number(process.env.MAX_PRODUCERS_PER_KIND || 4);
 
 if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
 if (!ANNOUNCED_IP) console.warn('MEDIASOUP_ANNOUNCED_IP is unset; LAN/WAN ICE candidates may be unreachable');
@@ -61,7 +71,19 @@ const mediaCodecs = [
       'x-google-start-bitrate': 800
     }
   },
-  // Video: H264 — hardware acceleration on iOS/Android (HW decode)
+  // Video: H264 — Constrained Baseline (Android/iOS Native)
+  {
+    kind: 'video',
+    mimeType: 'video/H264',
+    clockRate: 90000,
+    parameters: {
+      'packetization-mode': 1,
+      'profile-level-id': '42001f',     // Constrained Baseline 3.1
+      'level-asymmetry-allowed': 1,
+      'x-google-start-bitrate': 800
+    }
+  },
+  // Video: H264 — Baseline 3.1
   {
     kind: 'video',
     mimeType: 'video/H264',
@@ -107,7 +129,8 @@ function authenticate(header) {
   const supplied = base64UrlDecode(parts[2]);
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw new Error('Unauthorized');
   const claims = JSON.parse(base64UrlDecode(parts[1]).toString('utf8'));
-  if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now()) throw new Error('Expired or invalid token');
+  // سماح انحراف الساعة 120s (LAN بلا NTP) — يطابق clockSkewSeconds في JwtService
+  if (!claims.sub || !claims.redId || !claims.exp || claims.exp * 1000 <= Date.now() - 120000) throw new Error('Expired or invalid token');
   return claims;
 }
 
@@ -142,9 +165,27 @@ async function roomFor(id) {
   let room = rooms.get(id);
   if (!room) {
     const router = await nextWorker().createRouter({ mediaCodecs });
-    room = { router, peers: new Map(), cleanupTimer: null };
+    // مراقب مستوى الصوت — من يتكلم يُبث للغرفة (بدل التخمين من الواجهة).
+    const audioLevelObserver = await router.createAudioLevelObserver({
+      maxEntries: 1,
+      threshold: -80,
+      interval: 800
+    });
+    room = { router, peers: new Map(), cleanupTimer: null, audioLevelObserver };
     rooms.set(id, room);
     console.log(`Room created: ${id} (total rooms: ${rooms.size})`);
+    audioLevelObserver.on('volumes', (volumes) => {
+      const roomNow = rooms.get(id);
+      if (!roomNow || volumes.length === 0) return;
+      const top = volumes[0];
+      const peerId = peerIdOfProducer(roomNow, top.producer.id);
+      if (peerId) broadcast(roomNow, null, { type: 'activeSpeaker', peerId });
+    });
+    audioLevelObserver.on('silence', () => {
+      const roomNow = rooms.get(id);
+      if (!roomNow) return;
+      broadcast(roomNow, null, { type: 'activeSpeaker', peerId: '' });
+    });
   } else if (room.cleanupTimer) {
     // Cancel pending cleanup — someone rejoined
     clearTimeout(room.cleanupTimer);
@@ -186,8 +227,8 @@ async function createTransport(router) {
     initialAvailableOutgoingBitrate: 1_000_000,    // 1 Mbps start
     minimumAvailableOutgoingBitrate: 100_000,      // Min BWE threshold
     maxSctpMessageSize: 262144,
-    // Bandwidth estimation - REMB (receiver-side) + TWCC (transport-wide)
-    enableSctp: false  // Not needed for A/V calls
+    // Enable SCTP DataChannels for in-band text/data messaging in calls & live streams
+    enableSctp: true
   });
 
   // Track BWE (Bandwidth Estimation)
@@ -217,7 +258,7 @@ function transportOptions(transport) {
   };
 }
 
-//  Pipe Transport (For Broadcast/1-to-N scaling across workers) 
+//  Pipe Transport (For Broadcast/1-to-N scaling across workers)
 
 async function createPipeTransport(router) {
   const listenInfo = { protocol: 'udp', ip: '127.0.0.1' };
@@ -244,6 +285,13 @@ function sendError(ws, requestId, error) {
 function requirePeer(context) {
   if (!context.room || !context.peer) throw new Error('Join a room first');
   return context.peer;
+}
+
+function peerIdOfProducer(room, producerId) {
+  for (const [id, peer] of room.peers) {
+    if (peer.producers.has(producerId)) return id;
+  }
+  return null;
 }
 
 function broadcast(room, excludedPeerId, payload) {
@@ -433,6 +481,11 @@ wss.on('connection', (ws, _req, claims) => {
         });
         peer.producers.set(producer.id, producer);
         producer.on('transportclose', () => peer.producers.delete(producer.id));
+        // سجّل منتجي الصوت في مراقب المستوى (المنتجات المغلقة تُزال تلقائياً).
+        if (producer.kind === 'audio' && context.room.audioLevelObserver) {
+          context.room.audioLevelObserver.addProducer({ producerId: producer.id })
+            .catch((e) => console.debug(`observer addProducer failed: ${e.message}`));
+        }
 
         // Notify all other peers about new producer
         broadcast(context.room, context.peerId, {

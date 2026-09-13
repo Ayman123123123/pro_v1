@@ -8,7 +8,7 @@ import {
   ClockCircleOutlined, ExclamationCircleOutlined, CheckCircleOutlined,
   WarningOutlined, CodeOutlined, DownloadOutlined
 } from '@ant-design/icons';
-import { getAuditLog, getSecurityAlerts } from '../api';
+import { getAuditLog, getSecurityAlerts, apiFetch } from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
@@ -78,13 +78,14 @@ export default function AuditLog() {
       const result = await getAuditLog(params);
       const items = Array.isArray(result) ? result : result.content ?? [];
       setLogs(items);
-      setTotal(Array.isArray(result) ? items.length : (result.totalElements ?? items.length));
-      // Update stats
+      const grandTotal = Array.isArray(result) ? items.length : (result.totalElements ?? items.length);
+      setTotal(grandTotal);
+      // Update stats — prefer server totals over page slice when available
       const today = new Date().toDateString();
       setStats({
-        total: items.length,
+        total: grandTotal,
         critical: items.filter((l: any) => l.severity === 'CRITICAL').length,
-        todayCount: items.filter((l: any) => new Date(l.createdAt).toDateString() === today).length,
+        todayCount: items.filter((l: any) => l.createdAt && new Date(l.createdAt).toDateString() === today).length,
         uniqueAdmins: new Set(items.map((l: any) => l.adminId).filter(Boolean)).size,
       });
     } catch (e: any) {
@@ -109,12 +110,33 @@ export default function AuditLog() {
       const params = new URLSearchParams();
       if (categoryFilter) params.set('category', categoryFilter);
       if (adminFilter) params.set('adminId', adminFilter);
-      const res = await fetch(`/api/admin/audit/export?${params.toString()}`, { headers: { Authorization: `Bearer ${localStorage.getItem('red_admin_token') || ''}` } });
-      if (!res.ok) throw new Error('فشل التصدير');
-      const blob = await res.blob();
+      // apiFetch carries the session token + refresh rotation (raw fetch with
+      // a hardcoded key always 401s) — response supports .blob().
+      const res = await apiFetch(`/api/admin/audit/export?${params.toString()}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `audit-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+        message.success('تم تصدير السجل');
+        return;
+      }
+      // مسار /export غير موجود في نسخة الخادم العاملة — توليد محلي من
+      // قائمة /api/admin/audit (تعمل) بدل الفشل.
+      const fallback = await getAuditLog({
+        page: 0, size: 1000,
+        ...(categoryFilter ? { category: categoryFilter } : {}),
+        ...(adminFilter ? { adminId: adminFilter } : {}),
+      });
+      const rows = Array.isArray(fallback) ? fallback : fallback.content ?? [];
+      const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [['action', 'category', 'severity', 'adminUsername', 'adminId', 'targetType', 'targetId', 'description', 'ipAddress', 'createdAt'].join(',')];
+      for (const r of rows as any[]) {
+        lines.push([r.action, r.category, r.severity, r.adminUsername, r.adminId, r.targetType, r.targetId, r.description, r.ipAddress, r.createdAt].map(cell).join(','));
+      }
+      const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `audit-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
-      message.success('تم تصدير السجل');
+      message.success(`تم تصدير السجل محليًا (${rows.length} صفًا — خادم هذه النسخة بلا تصدير)`);
     } catch (e: any) { message.error(e.message); }
   };
 

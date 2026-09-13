@@ -83,13 +83,16 @@ class IceServerControllerTest {
         }
     }
 
-    @Test fun `short secret is rejected`() {
+    // AUTO-FIX (call reliability): TURN غير المضبوط لم يعد يرمي 500 — بل يتدهور
+    // رشيقًا إلى قائمة STUN عامة حتى لا تنهار قائمة ICE كاملة عند العميل.
+    @Test fun `short secret degrades gracefully to public STUN`() {
         val badController = IceServerController("turn.example.com", 3478, 5349, 443, "short", 3600, false, "", "")
-        try {
-            badController.iceServers(auth("user-1"))
-            assertTrue(false) { "should have thrown" }
-        } catch (e: IllegalArgumentException) {
-            assertNotNull(e.message)
+        val result = badController.iceServers(auth("user-1"))
+        assertTrue(result.iceServers.isNotEmpty()) { "fallback STUN list must not be empty" }
+        assertTrue(result.iceServers.all { it.username == null && it.credential == null }) {
+            "public STUN fallback must not carry TURN credentials"
         }
+        assertTrue(result.iceServers.any { it.urls.firstOrNull()?.startsWith("stun:") == true })
+        assertEquals(0L, result.expiresAt)
     }
 }

@@ -3,12 +3,20 @@ package com.red.sovereign.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,9 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import com.red.sovereign.stories.STORY_REACTIONS
 import com.red.sovereign.stories.Story
 import com.red.sovereign.stories.StoryViewerState
 import com.red.sovereign.stories.StoryVideoPlayer
+import com.red.sovereign.stories.storyAgeLabel
 
 @Composable
 fun StoryFullscreen(
@@ -33,7 +43,25 @@ fun StoryFullscreen(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onReact: (Story, String) -> Unit,
-    onReply: (Story, String) -> Unit
+    onReply: (Story, String) -> Unit,
+    /** true عندما تكون الحالة المعروضة للمستخدم الحالي — يُظهر زر الحذف. */
+    isOwn: Boolean = false,
+    /** يحلّ معرف المشاهِد إلى اسم عرض (جهات الاتصال أولًا) — لقائمة المشاهِدين. */
+    nameResolver: (String) -> String = { it },
+    /** حذف الحالة (للمالك فقط) — يُغلق العارض عند النجاح عبر ViewModel. */
+    onDelete: ((Story) -> Unit)? = null,
+    /** قائمة المشاهِدين الحقيقية من الخادم (للمالك) — تُجلب عند فتح العين. */
+    viewers: List<com.red.sovereign.stories.StoryViewerDto> = emptyList(),
+    viewersLoading: Boolean = false,
+    /** يُستدعى عند فتح قائمة المشاهِدين لجلبها من الخادم. */
+    onOpenViewers: (Story) -> Unit = {},
+    /** رسالة خطأ آخر جلب للمشاهِدين — null تعني لا خطأ. */
+    viewersError: String? = null,
+    /** إعادة محاولة جلب المشاهِدين بعد خطأ. */
+    onRetryViewers: (Story) -> Unit = {},
+    /** كتم حالات هذا المالك (محلي) — زر السماعة في الترويسة لغير المالك. */
+    muted: Boolean = false,
+    onToggleMute: () -> Unit = {}
 ) {
     if (viewer is StoryViewerState.Closed) return
 
@@ -48,11 +76,19 @@ fun StoryFullscreen(
         else -> error("unreachable")
     }
 
-    var progress by remember { mutableFloatStateOf(0f) }
-    var isPaused by remember { mutableStateOf(false) }
-    LaunchedEffect(story.id, viewer, isPaused) {
+    // مفاتيح story.id: بلا مفتاح كان شريط التقدم ونص الرد يعيشان عبر
+    // الانتقال next/prev فيبقى رد القصة السابقة ويتجمد التقدم على قيمة قديمة.
+    var progress by remember(story.id) { mutableFloatStateOf(0f) }
+    var isPaused by remember(story.id) { mutableStateOf(false) }
+    var showViewers by remember(story.id) { mutableStateOf(false) }
+    var showDeleteConfirm by remember(story.id) { mutableStateOf(false) }
+    var replyText by remember(story.id) { mutableStateOf("") }
+    val isVideo = viewer is StoryViewerState.Video
+    LaunchedEffect(story.id, isPaused) {
         if (isPaused) return@LaunchedEffect
-        if (viewer is StoryViewerState.Image || viewer is StoryViewerState.Text || viewer is StoryViewerState.Unsupported || viewer is StoryViewerState.Error) {
+        // الفيديو يقود تقدمه بنفسه عبر onProgress أدناه — المؤقت هنا
+        // للصور/النص فقط. (كان الفيديو يجمّد الشريط عند 0f.)
+        if (!isVideo) {
             progress = 0f
             val duration = 5000L
             val interval = 50L
@@ -63,7 +99,7 @@ fun StoryFullscreen(
                 progress = i.toFloat() / steps
             }
             if (!isPaused) onNext()
-        } else if (viewer is StoryViewerState.Video) {
+        } else {
             progress = 0f
         }
     }
@@ -85,9 +121,19 @@ fun StoryFullscreen(
             when (viewer) {
                 is StoryViewerState.Loading -> CircularProgressIndicator(color = Color.White)
                 is StoryViewerState.Image -> Image(viewer.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                is StoryViewerState.Video -> StoryVideoPlayer(viewer.uri, Modifier.fillMaxSize())
+                is StoryViewerState.Video -> StoryVideoPlayer(
+                    uri = viewer.uri,
+                    modifier = Modifier.fillMaxSize(),
+                    autoPlay = true,
+                    onProgress = { positionMs, durationMs ->
+                        if (!isPaused && durationMs > 0L) {
+                            progress = (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+                        }
+                    },
+                    onEnded = onNext
+                )
                 is StoryViewerState.Text -> {
-                    val bg = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(story.backgroundColor ?: "#1565C0")) } catch (_: Exception) { Color(0xFF1565C0) }
+                    val bg = try { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(story.backgroundColor ?: "#0A7A5E")) } catch (_: Exception) { Color(0xFF0A7A5E) }
                     Box(Modifier.fillMaxSize().background(bg), contentAlignment = Alignment.Center) {
                         Text(story.caption ?: "", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(24.dp))
                     }
@@ -122,13 +168,49 @@ fun StoryFullscreen(
             }
             
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(Color.Gray), contentAlignment = Alignment.Center) {
-                    Text(story.ownerDisplayName.take(1), color = Color.White, fontWeight = FontWeight.Bold)
+                // عارض الوسائط ستارة سوداء معيارية (مثل يوتيوب) في الوضعين —
+                // الأبيض على الأسود 21:1، والأفاتار من colorScheme لا Gray مثبت.
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        story.ownerDisplayName.take(1),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = com.red.sovereign.ui.theme.PlexArabicFamily
+                    )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(story.ownerDisplayName, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                    Text("منذ قليل", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    Text(storyAgeLabel(story.createdAt), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                }
+                // قائمة المشاهِدين: العدد من الخادم (viewCount) والأسماء من endpoint المشاهِدين.
+                IconButton(onClick = { onOpenViewers(story); showViewers = true }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Visibility, "المشاهِدون", tint = Color.White)
+                        Text("${story.viewCount}", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+                if (isOwn && onDelete != null) {
+                    IconButton(onClick = { showDeleteConfirm = true }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            "حذف الحالة",
+                            tint = com.red.sovereign.ui.theme.YounesRose
+                        )
+                    }
+                }
+                if (!isOwn) {
+                    IconButton(onClick = onToggleMute) {
+                        Icon(
+                            if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                            if (muted) "إلغاء كتم حالاته" else "كتم حالاته",
+                            tint = Color.White
+                        )
+                    }
                 }
                 IconButton(onClick = onClose) {
                     Icon(Icons.Default.Close, "إغلاق", tint = Color.White)
@@ -144,13 +226,17 @@ fun StoryFullscreen(
                 )
             }
             
-            // Reactions + Reply box
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("❤️", "🔥", "😢", "👏").forEach { emoji ->
+            // Reactions + Reply box — نفس قائمة الخادم المسموحة STORY_REACTIONS
+            // (كانت 4 فقط هنا مقابل 7 في StoryModels.kt فيُرفض الباقي بـ400).
+            // replyText مرفوع لأعلى بمفتاح story.id (سطر ~82) — لا تعريف محلي هنا.
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                STORY_REACTIONS.forEach { emoji ->
                     AssistChip(onClick = { onReact(story, emoji) }, label = { Text(emoji) }, colors = AssistChipDefaults.assistChipColors(containerColor = Color.White.copy(alpha = 0.2f)))
                 }
             }
-            var replyText by remember { mutableStateOf("") }
             Row(Modifier.fillMaxWidth().padding(16.dp).padding(bottom = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = replyText, onValueChange = { replyText = it },
@@ -177,5 +263,61 @@ fun StoryFullscreen(
             }
         }
     }
+    }
+
+    if (showViewers) {
+        AlertDialog(
+            onDismissRequest = { showViewers = false },
+            title = { Text("المشاهِدون (${story.viewCount})") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (viewersError != null) {
+                        Text(viewersError, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { onRetryViewers(story) }) { Text("إعادة المحاولة") }
+                    }
+                    when {
+                        viewersLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("جارٍ التحميل...") }
+                        viewers.isEmpty() && viewersError == null -> Text("لا توجد مشاهدات مسجلة بعد — تظهر هنا أسماء من شاهد حالتك.")
+                        viewers.isNotEmpty() -> LazyColumn(Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(viewers, key = { it.redId }) { v ->
+                                val label = v.displayName.ifBlank { v.username.ifBlank { v.redId } }
+                                // remember(v.redId): بلا مفتاح كان حل الاسم يُعاد حسابه لكل صف
+                                // عند أي تغيير في القائمة (وميض أثناء التحميل).
+                                val resolved = remember(v.redId, label) { nameResolver(v.redId).ifBlank { label } }
+                                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    com.red.sovereign.ui.components.SovereignAvatarThemed(
+                                        text = resolved.take(1).ifBlank { "؟" },
+                                        size = 36.dp
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column {
+                                        Text(resolved, fontWeight = FontWeight.Medium)
+                                        Text(v.redId, fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+            },
+            confirmButton = { TextButton({ showViewers = false }) { Text("إغلاق") } }
+        )
+    }
+
+    if (showDeleteConfirm && isOwn && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("حذف الحالة؟") },
+            text = { Text("ستُحذف هذه الحالة نهائيًا ولن يتمكن أحد من مشاهدتها.") },
+            confirmButton = {
+                TextButton({
+                    showDeleteConfirm = false
+                    onDelete(story)
+                    onClose()
+                }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton({ showDeleteConfirm = false }) { Text("إلغاء") } }
+        )
     }
 }

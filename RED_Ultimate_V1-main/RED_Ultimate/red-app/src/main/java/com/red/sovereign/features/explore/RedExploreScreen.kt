@@ -15,11 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.LiveTv
@@ -52,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +68,7 @@ import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.calls.ConferenceService
 import com.red.sovereign.calls.LiveStreamService
+import com.red.sovereign.ui.rememberCallPermissionLauncher
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesMuted
 import kotlinx.coroutines.Job
@@ -88,7 +91,23 @@ data class ExploreLiveStream(
     val broadcasterRedId: String,
     val isPrivate: Boolean = false,
     val viewerCount: Int = 0,
-    val inviteLink: String = ""
+    val inviteLink: String = "",
+    // Legendary V2 — حقول جديدة بافتراضيات (الخادم القديم لا يرسلها)
+    val category: String = "عام",
+    val slowModeSec: Int = 0,
+    val recordingEnabled: Boolean = false,
+    val broadcasterAvatar: String? = null
+)
+
+@Serializable
+data class ExploreVod(
+    val streamId: String = "",
+    val title: String = "",
+    val broadcasterName: String = "",
+    val category: String = "عام",
+    val peakViewers: Int = 0,
+    val hlsUrl: String? = null,
+    val vodUrl: String? = null
 )
 
 @Serializable
@@ -104,7 +123,7 @@ data class ExploreSpace(
 )
 
 @Serializable
-private data class CreateStreamBody(val title: String, val isPrivate: Boolean = false, val password: String? = null)
+private data class CreateStreamBody(val title: String, val category: String = "عام", val isPrivate: Boolean = false, val password: String? = null)
 
 @Serializable
 private data class CreateSpaceBody(
@@ -121,24 +140,31 @@ private data class JoinBody(val password: String? = null)
 private class ExploreApi(private val client: AuthorizedApiClient) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
-    suspend fun streams(query: String): ApiResult<List<ExploreLiveStream>> = decodeList(
-        client.request("GET", "/api/livestream/public?query=${encode(query)}")
+    suspend fun streams(query: String, page: Int = 0, size: Int = 20, category: String? = null): ApiResult<List<ExploreLiveStream>> {
+        val cat = if (category.isNullOrBlank() || category == "الكل") "" else "&category=${encode(category)}"
+        return decodeList(
+            client.request("GET", "/api/livestream/public?query=${encode(query)}&page=$page&size=$size$cat")
+        )
+    }
+
+    suspend fun vods(limit: Int = 10): ApiResult<List<ExploreVod>> = decodeList(
+        client.request("GET", "/api/livestream/vods?limit=$limit")
     )
 
     suspend fun spaces(query: String): ApiResult<List<ExploreSpace>> = decodeList(
         client.request("GET", "/api/conference/public?isSpace=true&query=${encode(query)}")
     )
 
-    suspend fun createStream(title: String): ApiResult<ExploreLiveStream> = decode(
-        client.request("POST", "/api/livestream/create", json.encodeToString(CreateStreamBody(title.trim())))
+    suspend fun createStream(title: String, category: String = "عام", isPrivate: Boolean = false, password: String? = null): ApiResult<ExploreLiveStream> = decode(
+        client.request("POST", "/api/livestream/create", json.encodeToString(CreateStreamBody(title.trim(), category, isPrivate, password)))
     )
 
     suspend fun createSpace(title: String): ApiResult<ExploreSpace> = decode(
         client.request("POST", "/api/conference/create", json.encodeToString(CreateSpaceBody(title = title.trim())))
     )
 
-    suspend fun authorizeStream(streamId: String): ApiResult<String> = client.request(
-        "POST", "/api/livestream/$streamId/join", json.encodeToString(JoinBody())
+    suspend fun authorizeStream(streamId: String, password: String? = null): ApiResult<String> = client.request(
+        "POST", "/api/livestream/$streamId/join", json.encodeToString(JoinBody(password))
     )
 
     suspend fun authorizeSpace(roomId: String): ApiResult<String> = client.request(
@@ -159,11 +185,21 @@ private class ExploreApi(private val client: AuthorizedApiClient) {
 private data class ExploreState(
     val loading: Boolean = true,
     val query: String = "",
+    val category: String = "الكل",
     val streams: List<ExploreLiveStream> = emptyList(),
     val spaces: List<ExploreSpace> = emptyList(),
+    val vods: List<ExploreVod> = emptyList(),
+    val page: Int = 0,
+    val hasMore: Boolean = false,
+    val loadingMore: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null
-)
+) {
+    companion object {
+        // موحدة مع LIVE_CATEGORIES في الحوار (كانت 9 بلا طبخ/أعمال).
+        val CATEGORIES = listOf("الكل", "عام", "تقنية", "ألعاب", "موسيقى", "تعليم", "ترفيه", "رياضة", "ديني", "طبخ", "أعمال")
+    }
+}
 
 private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
     private val _state = MutableStateFlow(ExploreState())
@@ -173,7 +209,7 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
     init { refresh() }
 
     fun query(value: String) {
-        _state.update { it.copy(query = value) }
+        _state.update { it.copy(query = value, page = 0) }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(300)
@@ -181,11 +217,17 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
         }
     }
 
+    fun category(value: String) {
+        _state.update { it.copy(category = value, page = 0) }
+        refresh()
+    }
+
     fun refresh() = viewModelScope.launch {
-        _state.update { it.copy(loading = true, error = null) }
-        val query = _state.value.query
-        val streams = api.streams(query)
-        val spaces = api.spaces(query)
+        _state.update { it.copy(loading = true, error = null, page = 0) }
+        val s = _state.value
+        val streams = api.streams(s.query, 0, 20, s.category)
+        val spaces = api.spaces(s.query)
+        val vods = api.vods(10)
         if (streams is ApiResult.Error) {
             _state.update { it.copy(loading = false, error = streams.message) }
             return@launch
@@ -196,13 +238,36 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
         }
         val streamItems = (streams as ApiResult.Success).value
         val spaceItems = (spaces as ApiResult.Success).value
+        val vodItems = (vods as? ApiResult.Success)?.value ?: emptyList()
         _state.update {
             it.copy(
                 loading = false,
                 streams = streamItems,
                 spaces = spaceItems,
+                vods = vodItems,
+                page = 0,
+                hasMore = streamItems.size >= 20,
                 error = null
             )
+        }
+    }
+
+    fun loadMore() = viewModelScope.launch {
+        val s = _state.value
+        if (s.loadingMore || !s.hasMore) return@launch
+        _state.update { it.copy(loadingMore = true) }
+        when (val r = api.streams(s.query, s.page + 1, 20, s.category)) {
+            is ApiResult.Success -> {
+                _state.update {
+                    it.copy(
+                        streams = it.streams + r.value,
+                        page = it.page + 1,
+                        hasMore = r.value.size >= 20,
+                        loadingMore = false
+                    )
+                }
+            }
+            is ApiResult.Error -> _state.update { it.copy(loadingMore = false, error = r.message) }
         }
     }
 
@@ -220,8 +285,8 @@ private class ExploreViewModel(private val api: ExploreApi) : ViewModel() {
         }
     }
 
-    fun joinLive(streamId: String, joined: (String) -> Unit) = operation {
-        when (val result = api.authorizeStream(streamId)) {
+    fun joinLive(streamId: String, password: String? = null, joined: (String) -> Unit) = operation {
+        when (val result = api.authorizeStream(streamId, password)) {
             is ApiResult.Success -> joined(streamId)
             is ApiResult.Error -> fail(result.message)
         }
@@ -264,13 +329,30 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
     val state by vm.state.collectAsState()
     var createKind by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
+    var joinTarget by remember { mutableStateOf<ExploreLiveStream?>(null) }
+    var joinPassword by remember { mutableStateOf("") }
+    var pendingBroadcastId by remember { mutableStateOf<String?>(null) }
+    // بوابة الصلاحيات: بدء البث كمذيع يحتاج كاميرا+ميكروفون (إصلاح الشاشة السوداء)
+    val broadcastPermissionGate = rememberCallPermissionLauncher(
+        needCamera = true,
+        onGranted = {
+            pendingBroadcastId?.let { id ->
+                pendingBroadcastId = null
+                LiveStreamService.start(context, id, ownRedId, true)
+            }
+        },
+        onDenied = {
+            pendingBroadcastId = null
+            android.widget.Toast.makeText(context, "مطلوب إذن الكاميرا والميكروفون للبث — يمكنك المشاهدة بدونها", android.widget.Toast.LENGTH_LONG).show()
+        }
+    )
 
     Scaffold(
         containerColor = SovereignColors.Obsidian,
         topBar = {
             TopAppBar(
                 title = { Text("الاستكشاف والسيادة", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, "رجوع") } },
+                navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
                 actions = { IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "تحديث") } }
             )
         }
@@ -307,6 +389,23 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                 } else null,
                 singleLine = true
             )
+            // شرائح الفئات Legendary V2 — فلترة حقيقية عبر ?category=
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(ExploreState.CATEGORIES) { cat ->
+                    val sel = state.category == cat
+                    Button(
+                        onClick = { vm.category(cat) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (sel) SovereignColors.LiveAccent else SovereignColors.SurfaceNavy,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) { Text(cat, fontSize = 12.sp) }
+                }
+            }
             state.error?.let { error ->
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp)) {
                     Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -325,18 +424,86 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item { Text("📡 البث المباشر المحلي", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SovereignColors.Cyan) }
-                    if (state.streams.isEmpty()) item { ExploreEmpty("لا توجد بثوث عامة نشطة") }
+                    // بانر البطل — أعلى بث ترند (الخادم يرتب بالترند) — مُقتبس من شاشة الاكتشاف التجريبية ببيانات حية
+                    if (state.streams.isNotEmpty()) {
+                        item {
+                            val top = state.streams.first()
+                            HeroLiveBanner(
+                                title = top.title,
+                                host = top.broadcasterName.ifBlank { top.broadcasterRedId },
+                                viewers = top.viewerCount,
+                                category = top.category,
+                                recording = top.recordingEnabled,
+                                onClick = {
+                                    vm.joinLive(top.streamId, null) { id ->
+                                        LiveStreamService.start(context, id, ownRedId, false)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    if (state.streams.isEmpty()) item { ExploreEmpty("لا توجد بثوث عامة نشطة — كن أول من يبث 🔴") }
                     items(state.streams, key = { it.streamId }) { stream ->
                         ExploreCard(
                             title = stream.title,
                             host = stream.broadcasterName.ifBlank { stream.broadcasterRedId },
-                            count = "${stream.viewerCount} مشاهد",
+                            count = "${stream.viewerCount} مشاهد • ${stream.category}" +
+                                (if (stream.slowModeSec > 0) " • 🐢${stream.slowModeSec}ث" else "") +
+                                (if (stream.recordingEnabled) " • ●REC" else ""),
                             accent = SovereignColors.LiveAccent,
                             container = SovereignColors.LiveContainer,
                             action = "مشاهدة",
                             enabled = !state.busy
                         ) {
-                            vm.joinLive(stream.streamId) { id -> LiveStreamService.start(context, id, ownRedId, false) }
+                            // البث الخاص لا يظهر هنا أصلاً، لكن كلمة السر تُدعم للروابط المباشرة
+                            vm.joinLive(stream.streamId, null) { id ->
+                                LiveStreamService.start(context, id, ownRedId, false)
+                            }
+                        }
+                    }
+                    item {
+                        if (state.hasMore || state.loadingMore) {
+                            Button(
+                                onClick = vm::loadMore,
+                                enabled = !state.loadingMore && !state.busy,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = SovereignColors.SurfaceNavy)
+                            ) {
+                                if (state.loadingMore) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                else Text("عرض المزيد (${state.streams.size} معروضة)")
+                            }
+                        }
+                    }
+                    item {
+                        Text(
+                            "🕓 الإعادات VOD — تُحفظ تلقائياً عند تفعيل التسجيل من لوحة المذيع",
+                            fontSize = 13.sp,
+                            color = YounesMuted,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                    if (state.vods.isEmpty()) {
+                        item { ExploreEmpty("لا توجد إعادات بعد — فعّل ●REC أثناء البث لحفظ إعادة") }
+                    } else {
+                        items(state.vods, key = { it.streamId }) { vod ->
+                            ExploreCard(
+                                title = vod.title.ifBlank { "إعادة بث" },
+                                host = vod.broadcasterName.ifBlank { "مذيع" } + " • 👁 ذروة ${vod.peakViewers}",
+                                count = vod.category,
+                                accent = SovereignColors.Cyan,
+                                container = SovereignColors.SurfaceNavy,
+                                action = if (vod.vodUrl.isNullOrBlank() && vod.hlsUrl.isNullOrBlank()) "قريباً" else "تشغيل",
+                                enabled = !vod.vodUrl.isNullOrBlank() || !vod.hlsUrl.isNullOrBlank()
+                            ) {
+                                val url = vod.vodUrl ?: vod.hlsUrl ?: return@ExploreCard
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).apply {
+                                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                     item { Text("🎙️ الغرف الصوتية المفتوحة", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SovereignColors.Gold) }
@@ -379,7 +546,11 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
                     onClick = {
                         val clean = title.trim()
                         if (kind == "LIVE") {
-                            vm.createLive(clean) { id -> LiveStreamService.start(context, id, ownRedId, true) }
+                            // بوابة الصلاحيات قبل إنشاء البث — لا شاشة سوداء
+                            vm.createLive(clean) { id ->
+                                pendingBroadcastId = id
+                                broadcastPermissionGate()
+                            }
                         } else {
                             vm.createSpace(clean) { id -> ConferenceService.join(context, id, ownRedId, false) }
                         }
@@ -391,6 +562,89 @@ fun RedExploreScreen(tokens: TokenStore, ownRedId: String, onBack: () -> Unit) {
             dismissButton = { TextButton({ createKind = null; title = "" }) { Text("إلغاء") } }
         )
     }
+
+    // حوار كلمة السر للبث الخاص (روابط مباشرة younes://livestream)
+    joinTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { joinTarget = null; joinPassword = "" },
+            title = { Text("بث خاص 🔒") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("أدخل كلمة سر البث \"${target.title}\"", fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = joinPassword,
+                        onValueChange = { joinPassword = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("كلمة السر") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = joinPassword.length >= 4 && !state.busy,
+                    onClick = {
+                        val t = target
+                        val p = joinPassword
+                        joinTarget = null; joinPassword = ""
+                        vm.joinLive(t.streamId, p.ifBlank { null }) { id ->
+                            LiveStreamService.watch(context, id, ownRedId, p.ifBlank { null })
+                        }
+                    }
+                ) { Text("انضمام") }
+            },
+            dismissButton = { TextButton({ joinTarget = null; joinPassword = "" }) { Text("إلغاء") } }
+        )
+    }
+}
+
+@Composable
+private fun HeroLiveBanner(
+    title: String,
+    host: String,
+    viewers: Int,
+    category: String,
+    recording: Boolean,
+    onClick: () -> Unit
+) {
+    var pulse by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            pulse = !pulse
+        }
+    }
+    Box(
+        modifier = Modifier.fillMaxWidth().height(170.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.linearGradient(listOf(Color(0xFF1A0A2E), Color(0xFF0F172A)))
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            Modifier.fillMaxWidth().height(90.dp).align(Alignment.BottomCenter)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.9f))))
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(6.dp))
+                        .background(SovereignColors.LiveContainer.copy(alpha = if (pulse) 1f else 0.55f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) { Text("🔴 LIVE", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black) }
+                Text("👁 ${formatLiveViewers(viewers)} • $category" + if (recording) " • ●REC" else "", color = Color.White.copy(0.85f), fontSize = 12.sp)
+            }
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text("بواسطة $host — الأعلى ترنداً الآن", color = Color.LightGray, fontSize = 12.sp, maxLines = 1)
+        }
+    }
+}
+
+private fun formatLiveViewers(n: Int): String = when {
+    n >= 1_000_000 -> "%.1fم".format(n / 1_000_000.0)
+    n >= 1_000 -> "%.1fك".format(n / 1_000.0)
+    else -> "$n"
 }
 
 @Composable

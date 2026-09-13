@@ -7,14 +7,22 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.red.sovereign.ui.MESSAGE_SEARCH_DEBOUNCE_MS
+import com.red.sovereign.ui.MESSAGE_SEARCH_MIN_LENGTH
 import com.red.sovereign.ui.theme.SovereignColors
 
 /**
@@ -59,6 +67,27 @@ fun parseAdvancedQuery(raw: String): AdvancedFilters {
     return AdvancedFilters(from, type, before, after, hasMedia, hasLink, q.trim().replace(Regex("\\s+"), " "))
 }
 
+/**
+ * تطبيع عربي بسيط للبحث (P0-C 2026-09-12): إزالة تشكيل + توحيد أ إ آ ٱ ⇒ ا
+ * + ة ⇒ ه + ى ⇒ ي — يُستدعى قبل MATCH (FTS) وقبل LIKE معًا حتى يتطابق
+ * تمثيل الاستعلام مع تمثيل الفهرس (نفس قواعد `FtsSearchManager.normalizeArabic`).
+ *
+ * نسخة محلية مقصودة (لا تفويض مباشر فقط) حتى تبقى سياسة التطبيع مرئية
+ * عند نقطة الاستعلام وتُطبَّق على الطرفين صراحةً.
+ */
+private fun normalizeArabicQuery(raw: String): String {
+    var s = raw.replace(Regex("[\u064B-\u0652\u0670\u0640]"), "")
+    s = s.replace(Regex("[\u0622\u0623\u0625\u0671]"), "\u0627")
+    s = s.replace('\u0649', '\u064A').replace('\u0629', '\u0647')
+    return s
+}
+
+/** هل الكيان وسيط؟ — المصدر الوحيد: عمود `messageType` (مفهرس). */
+private fun isMediaType(messageType: String): Boolean =
+    messageType.equals("IMAGE", true) || messageType.equals("VIDEO", true) ||
+        messageType.equals("AUDIO", true) || messageType.equals("VOICE", true) ||
+        messageType.equals("FILE", true) || messageType.equals("STICKER", true)
+
 @Composable
 fun RedGlobalSearch(
     onBack: () -> Unit = {},
@@ -77,40 +106,78 @@ fun RedGlobalSearch(
         parsed.copy(type = selectedType ?: parsed.type, from = selectedFrom ?: parsed.from)
     }
 
-    LaunchedEffect(filters) {
-        val base = filters.baseQuery
-        if (base.length >= 2 || filters.from != null || filters.type != null || filters.hasMedia || filters.hasLink || filters.before != null || filters.after != null) {
-            isSearching = true
-            // بحث أساسي عبر LIKE (سيستخدم FTS5 تلقائياً إن كان متاحاً عبر repository)
-            val rawResults = if (base.length >= 2) repository.searchAll(base) else repository.searchAll("")
-            // تطبيق الفلاتر المحلية
-            results = rawResults.filter { entity ->
-                val decoded = runCatching { com.red.sovereign.core.RichMessage.decode(entity.encryptedPlaintext)?.text ?: entity.encryptedPlaintext.toString(Charsets.UTF_8) }.getOrDefault("")
-                val senderMatch = filters.from?.let { f -> entity.senderId.contains(f, true) || decoded.contains(f, true) } ?: true
-                val typeMatch = filters.type?.let { t ->
-                    when (t) {
-                        "image" -> decoded.contains("[image]", true) || entity.id.contains("image", true)
-                        "video" -> decoded.contains("[video]", true)
-                        "audio", "voice" -> decoded.contains("[voice]", true) || decoded.contains("[audio]", true)
-                        "file" -> decoded.contains("[file]", true)
-                        else -> true
-                    }
-                } ?: true
-                val beforeMatch = filters.before?.let { entity.createdAt <= it } ?: true
-                val afterMatch = filters.after?.let { entity.createdAt >= it } ?: true
-                val mediaMatch = if (filters.hasMedia) decoded.contains("[image]", true) || decoded.contains("[video]", true) || decoded.contains("[audio]", true) else true
-                val linkMatch = if (filters.hasLink) decoded.contains("http", true) || decoded.contains("www.", true) else true
-                senderMatch && typeMatch && beforeMatch && afterMatch && mediaMatch && linkMatch
-            }.sortedByDescending { it.createdAt }.take(100)
-            isSearching = false
-        } else {
+    // بحث مُوحَّد: snapshotFlow + debounce مشترك + distinctUntilChanged + حد أدنى موحد.
+    // السياسة واحدة مع حوار «البحث داخل المحادثة» (MESSAGE_SEARCH_* في DashboardSearch):
+    // collectLatest تُلغي البحث السابق تلقائياً عند كل حرف جديد (cancelPrevious) —
+    // لا استعلام Room ثقيل مع كل ضغطة ولا take(100) إلا على آخر مدخل مستقر.
+    // الاستعلام يُطبَّع عربيًا (FtsSearchManager.normalizeArabic) قبل LIKE حتى
+    // تطابق «ابراهيم» «إبراهيم» — نفس التطبيع المستعمل في فهرس FTS5.
+    LaunchedEffect(repository) {
+        snapshotFlow { Triple(searchQuery, selectedType, selectedFrom) }
+            .debounce(MESSAGE_SEARCH_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .map { (raw, type, from) ->
+                val parsed = parseAdvancedQuery(raw)
+                parsed.copy(type = type ?: parsed.type, from = from ?: parsed.from)
+            }
+            .filter { f ->
+                f.baseQuery.length >= MESSAGE_SEARCH_MIN_LENGTH || f.from != null || f.type != null ||
+                    f.hasMedia || f.hasLink || f.before != null || f.after != null
+            }
+            .collectLatest { f ->
+                isSearching = true
+                try {
+                    val base = f.baseQuery
+                    // تطبيع عربي قبل الطرفين (P0-C): MATCH وLIKE معًا — «ابراهيم»
+                    // تطابق «إبراهيم»، و«مكتبه» تطابق «مكتبة».
+                    val normalized = if (base.length >= MESSAGE_SEARCH_MIN_LENGTH) normalizeArabicQuery(base) else base
+                    // بحث أساسي عبر LIKE الموحد (repository.searchAll: تهريب + حد 100).
+                    val rawResults = if (base.length >= MESSAGE_SEARCH_MIN_LENGTH) repository.searchAll(normalized) else repository.searchAll("")
+                    // FTS أولًا عند توفر الفهرس: نتائج مرتبة بـ bm25 تُدمج فوق LIKE.
+                    // يُمرَّر المُطبَّع أيضًا (searchUnified يُطبّع داخليًا مجددًا — idempotent).
+                    val ftsIds = if (base.length >= MESSAGE_SEARCH_MIN_LENGTH) {
+                        runCatching { repository.searchUnified(context, normalized, 50).map { it.messageId }.toSet() }.getOrDefault(emptySet())
+                    } else emptySet()
+                    val ordered = if (ftsIds.isNotEmpty()) {
+                        rawResults.sortedWith(compareBy({ it.id !in ftsIds }, { -it.createdAt }))
+                    } else rawResults
+                    // تطبيق الفلاتر المحلية (على الترتيب المدمج FTS أولًا)
+                    // P0-C: الفلاتر من عمود `messageType` (مفهرس) — لا مسح نصي
+                    // contains("[image]") — كان يفشل مع RICH_TEXT/protobuf والمانيفست JSON.
+                    results = ordered.filter { entity ->
+                        val decoded = runCatching { com.red.sovereign.core.RichMessage.decode(entity.encryptedPlaintext)?.text ?: entity.encryptedPlaintext.toString(Charsets.UTF_8) }.getOrDefault("")
+                        val senderMatch = f.from?.let { from -> entity.senderId.contains(from, true) || decoded.contains(from, true) } ?: true
+                        val typeMatch = f.type?.let { t ->
+                            when (t) {
+                                "image" -> entity.messageType.equals("IMAGE", true)
+                                "video" -> entity.messageType.equals("VIDEO", true)
+                                "audio", "voice" -> entity.messageType.equals("AUDIO", true) || entity.messageType.equals("VOICE", true)
+                                "file" -> entity.messageType.equals("FILE", true)
+                                else -> true
+                            }
+                        } ?: true
+                        val beforeMatch = f.before?.let { entity.createdAt <= it } ?: true
+                        val afterMatch = f.after?.let { entity.createdAt >= it } ?: true
+                        val mediaMatch = if (f.hasMedia) isMediaType(entity.messageType) else true
+                        val linkMatch = if (f.hasLink) decoded.contains("http", true) || decoded.contains("www.", true) else true
+                        senderMatch && typeMatch && beforeMatch && afterMatch && mediaMatch && linkMatch
+                    }.sortedByDescending { it.createdAt }.take(100)
+                } finally {
+                    isSearching = false
+                }
+            }
+    }
+
+    // تصفير فوري عند مسح المدخل دون انتظار الـ debounce.
+    LaunchedEffect(searchQuery, selectedType, selectedFrom) {
+        if (parseAdvancedQuery(searchQuery).baseQuery.length < 2 && selectedType == null && selectedFrom == null) {
             results = emptyList()
         }
     }
     
     Column(modifier = Modifier.fillMaxSize().background(SovereignColors.Obsidian).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, null, tint = Color.White) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color.White) }
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -214,10 +281,10 @@ fun RedGlobalSearch(
                             )
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (filters.from != null) {
-                                    androidx.compose.material3.AssistChip(onClick = {}, label = { Text("from:${filters.from}", style = MaterialTheme.typography.labelSmall) }, modifier = Modifier.height(22.dp))
+                                    androidx.compose.material3.AssistChip(onClick = { selectedFrom = null; searchQuery = searchQuery.replace(Regex("""from:\s*[^\s]+"""), "").trim().replace(Regex("\\s+"), " ") }, label = { Text("from:${filters.from}", style = MaterialTheme.typography.labelSmall) }, trailingIcon = { Text("✕", style = MaterialTheme.typography.labelSmall) }, modifier = Modifier.height(22.dp))
                                 }
                                 if (filters.type != null) {
-                                    androidx.compose.material3.AssistChip(onClick = {}, label = { Text("type:${filters.type}", style = MaterialTheme.typography.labelSmall) }, modifier = Modifier.height(22.dp))
+                                    androidx.compose.material3.AssistChip(onClick = { selectedType = null; searchQuery = searchQuery.replace(Regex("""type:\s*[^\s]+"""), "").trim().replace(Regex("\\s+"), " ") }, label = { Text("type:${filters.type}", style = MaterialTheme.typography.labelSmall) }, trailingIcon = { Text("✕", style = MaterialTheme.typography.labelSmall) }, modifier = Modifier.height(22.dp))
                                 }
                                 Text(
                                     "${msg.senderId.take(12)} • ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(msg.createdAt))}",

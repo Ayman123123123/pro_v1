@@ -441,7 +441,7 @@ private fun BreakoutRoomCard(
                                 isAssigned = false,
                                 isHost = isHost,
                                 onMove = { onAssignMember(room.id, member.userId) },
-                                onRemove = {}
+                                onRemove = { onDeleteRoom(room.id) }
                             )
                         }
                     }

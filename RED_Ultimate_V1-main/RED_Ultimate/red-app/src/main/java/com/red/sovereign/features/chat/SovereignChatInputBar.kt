@@ -128,6 +128,7 @@ fun SovereignChatInputBar(
             isLocked = voiceMessages.isLocked,
             cancelProgress = voiceMessages.cancelProgress,
             hasPermission = hasRecordPermission,
+            previewPath = voiceMessages.previewPath,
             onPress = onVoicePress,
             onRelease = onVoiceRelease,
             onLockRequest = { voiceMessages.lockRecording() },
@@ -196,7 +197,7 @@ fun SovereignChatInputBar(
                                 text = placeholderText,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 fontSize = 15.sp,
-                                fontFamily = TajawalFamily
+                                fontFamily = PlexArabicFamily
                             )
                         }
                         BasicTextField(
@@ -206,7 +207,7 @@ fun SovereignChatInputBar(
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 15.sp,
-                                fontFamily = TajawalFamily
+                                fontFamily = PlexArabicFamily
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             maxLines = 5,
@@ -220,7 +221,6 @@ fun SovereignChatInputBar(
                             3600000L -> "1س"
                             86400000L -> "24س"
                             604800000L -> "7ي"
-                            7776000000L -> "90ي"
                             else -> "⏳"
                         }
                         AssistChip(

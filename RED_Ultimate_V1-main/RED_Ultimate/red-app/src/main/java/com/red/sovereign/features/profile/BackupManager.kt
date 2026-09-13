@@ -1,8 +1,13 @@
 package com.red.sovereign.features.profile
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.system.Os
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 import java.security.MessageDigest
@@ -21,7 +26,9 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import kotlin.system.exitProcess
 
 /**
  * 🔒 مدير النسخ الاحتياطي السيادي الحقيقي
@@ -33,6 +40,10 @@ import java.util.concurrent.TimeUnit
  * ليس وهميًا: كل زر ينشئ ملف حقيقي ويتحقق من سلامته.
  */
 class BackupManager(private val context: Context) {
+
+    companion object {
+        private const val TAG = "BackupManager"
+    }
 
     private val backupsDir: File by lazy {
         File(context.filesDir, "sovereign_backups").apply { mkdirs() }
@@ -85,6 +96,9 @@ class BackupManager(private val context: Context) {
             }
 
             // 5) كتابة metadata جانبية (JSON) غير مشفرة للتحقق السريع
+            // تتضمن dbSha256 (بصمة قاعدة البيانات الأصلية) ليقارنها restoreBackup
+            // مع الملف المستعاد قبل الاستبدال — مع checksum الملف المشفر للتحقق السريع.
+            val dbSha = sha256(dbFile)
             val meta = File(backupsDir, "${plainFileName}.meta.json")
             val metaContent = """
                 {
@@ -92,6 +106,7 @@ class BackupManager(private val context: Context) {
                     "plainName": "$plainFileName",
                     "createdAt": ${System.currentTimeMillis()},
                     "dbSize": ${dbFile.length()},
+                    "sha256": "$dbSha",
                     "appVersion": "${try { context.packageManager.getPackageInfo(context.packageName, 0).versionName } catch (_: Exception) { "unknown" }}"
                 }
             """.trimIndent()
@@ -127,8 +142,16 @@ class BackupManager(private val context: Context) {
     /**
      * استعادة نسخة احتياطية: تفك تشفير وتستبدل DB الحالية
      * يتطلب إغلاق RedDatabase instance وإعادة تشغيل التطبيق بعد الاستعادة
+     * (انظر [restartAppAfterRestore]).
+     *
+     * قبل renameTo: يتحقق من tempRestore عبر PRAGMA integrity_check ويقارن
+     * sha256/الحجم مع meta.json المجاور (إن وُجد) — أي فشل يلغي الاستعادة
+     * ويُبقي DB الحالية سليمة.
+     *
+     * @param autoRestart إن true يعيد تشغيل التطبيق تلقائياً بعد النجاح
+     * (ProcessPhoenix عبر reflection إن وُجد، وإلا AlarmManager + exitProcess).
      */
-    suspend fun restoreBackup(file: File): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun restoreBackup(file: File, autoRestart: Boolean = false): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (!file.exists()) return@withContext Result.failure(IllegalStateException("Backup file not found"))
 
@@ -146,10 +169,13 @@ class BackupManager(private val context: Context) {
             // إغلاق DB الحالية - محاولة
             try {
                 RedDatabase.getInstance(context).close()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.w(TAG, "تعذّر إغلاق قاعدة البيانات قبل الاستعادة (غير قاتل) — سيُعاد المحاولة عند الاستبدال", e)
+            }
 
             val dbFile = context.getDatabasePath("red_sovereign.db")
             val tempRestore = File(context.filesDir, "red_sovereign_restore.db")
+            if (tempRestore.exists()) tempRestore.delete()
 
             encryptedFile.openFileInput().use { input ->
                 tempRestore.outputStream().use { output ->
@@ -163,13 +189,145 @@ class BackupManager(private val context: Context) {
                 return@withContext Result.failure(IllegalStateException("Restored file is empty"))
             }
 
+            // C2-1: تحقق السلامة عبر PRAGMA integrity_check قبل اللمس الأصلي
+            if (!verifySqliteIntegrity(tempRestore)) {
+                tempRestore.delete()
+                return@withContext Result.failure(IllegalStateException("النسخة تالفة — integrity_check فشل، أُلغيت الاستعادة"))
+            }
+
+            // C2-2: مقارنة sha256/الحجم مع meta.json المجاور (إن وُجد)
+            val metaCheck = verifyAgainstMeta(file, tempRestore)
+            if (metaCheck.isFailure) {
+                tempRestore.delete()
+                return@withContext metaCheck
+            }
+
             // استبدال DB الأصلية
             // حذف wal/shm إن وجدت
             File("${dbFile.absolutePath}-wal").delete()
             File("${dbFile.absolutePath}-shm").delete()
             if (dbFile.exists()) dbFile.delete()
-            tempRestore.renameTo(dbFile)
+            val renamed = tempRestore.renameTo(dbFile)
+            if (!renamed) {
+                // fallback نسخ ثم حذف — renameTo يفشل عبر filesystems مختلفة
+                tempRestore.copyTo(dbFile, overwrite = true)
+                tempRestore.delete()
+            }
 
+            if (autoRestart) restartAppAfterRestore()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * فحص جاف (dry-run): يفك التشفير إلى ملف مؤقت ويتحقق من integrity + meta
+     * دون لمس DB الحالية. يُستخدم من زر "فحص النسخة" قبل الاستعادة الفعلية.
+     */
+    suspend fun restoreDryRun(file: File): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (!file.exists()) return@withContext Result.failure(IllegalStateException("Backup file not found"))
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            val encryptedFile = EncryptedFile.Builder(
+                context, file, masterKey,
+                EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
+            ).build()
+            val tmp = File.createTempFile("restore_dryrun", ".db", context.cacheDir)
+            try {
+                encryptedFile.openFileInput().use { input ->
+                    tmp.outputStream().use { output -> input.copyTo(output) }
+                }
+                if (tmp.length() == 0L) return@withContext Result.failure(IllegalStateException("Restored file is empty"))
+                if (!verifySqliteIntegrity(tmp)) {
+                    return@withContext Result.failure(IllegalStateException("النسخة تالفة — integrity_check فشل"))
+                }
+                val metaCheck = verifyAgainstMeta(file, tmp)
+                if (metaCheck.isFailure) return@withContext metaCheck
+                Result.success(Unit)
+            } finally {
+                tmp.delete()
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * إعادة تشغيل تلقائية بعد الاستعادة الناجحة — للربط بزر "إعادة التشغيل الآن".
+     * يستخدم ProcessPhoenix (عبر reflection — لا dependency صلبة) إن وُجد،
+     * وإلا يعيد الجدولة عبر AlarmManager ثم exitProcess.
+     */
+    fun restartAppAfterRestore() {
+        // ProcessPhoenix إن وُجد في classpath — reflection كي لا نكسر البناء بدونه
+        val phoenix = runCatching { Class.forName("com.jakewharton.processphoenix.ProcessPhoenix") }.getOrNull()
+        if (phoenix != null) {
+            runCatching {
+                val m = phoenix.getMethod("triggerRebirth", Context::class.java)
+                m.invoke(null, context.applicationContext)
+                return
+            }
+        }
+        // fallback: إعادة إطلاق عبر AlarmManager ثم إنهاء العملية
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return
+        val flags = PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        val pi = PendingIntent.getActivity(context.applicationContext, 0, launch, flags)
+        val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+        am?.set(AlarmManager.RTC, System.currentTimeMillis() + 500, pi)
+        exitProcess(0)
+    }
+
+    /** يفتح tempRestore للقراءة ويتحقق من PRAGMA integrity_check = ok. */
+    private fun verifySqliteIntegrity(dbFile: File): Boolean {
+        var db: SQLiteDatabase? = null
+        return try {
+            db = SQLiteDatabase.openDatabase(
+                dbFile.absolutePath, null,
+                SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS
+            )
+            db.rawQuery("PRAGMA integrity_check", null).use { c ->
+                c.moveToFirst() && c.getString(0).equals("ok", ignoreCase = true)
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            runCatching { db?.close() }
+        }
+    }
+
+    /**
+     * يقارن الملف المستعاد مع meta.json المجاور لملف النسخة المشفرة.
+     * - meta المتوقع: <plain>.meta.json بجانب <plain>.db.enc
+     * - يقارن dbSize (إن وُجد) مع حجم tempRestore، و sha256/checksum (إن وُجد)
+     *   مع sha256(tempRestore). غياب meta أو الحقول = تخطٍ متوافق رجعياً.
+     */
+    private fun verifyAgainstMeta(encFile: File, tempRestore: File): Result<Unit> {
+        return try {
+            val metaName = encFile.name.removeSuffix(".enc") + ".meta.json"
+            val metaFile = File(encFile.parent ?: backupsDir.absolutePath, metaName)
+            if (!metaFile.exists()) return Result.success(Unit) // نسخ قديمة بلا meta
+            val meta = JSONObject(metaFile.readText())
+            val expectedSize = if (meta.has("dbSize")) meta.optLong("dbSize", -1L) else -1L
+            if (expectedSize > 0 && tempRestore.length() != expectedSize) {
+                return Result.failure(
+                    IllegalStateException("حجم النسخة لا يطابق meta.json (متوقع $expectedSize، فعلي ${tempRestore.length()})")
+                )
+            }
+            val expectedSha = when {
+                meta.has("sha256") -> meta.optString("sha256")
+                meta.has("checksum") -> meta.optString("checksum")
+                else -> ""
+            }
+            if (expectedSha.isNotBlank()) {
+                val actual = sha256(tempRestore)
+                if (!actual.equals(expectedSha, ignoreCase = true)) {
+                    return Result.failure(IllegalStateException("بصمة sha256 لا تطابق meta.json — ملف مزور أو تالف؟"))
+                }
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

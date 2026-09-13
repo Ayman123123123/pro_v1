@@ -107,6 +107,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
     private var isHost = false
     private var isVideo = false
     private var stopping = false
+    @Volatile private var lastSignalReconnectMs = 0L
     private var cleanedUp = false
     private var ringTimeout: Job? = null
     private var incomingTimeout: Job? = null
@@ -131,7 +132,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             audioFocus = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT.let {
                 android.media.AudioFocusRequest.Builder(it).setAudioAttributes(attrs).setOnAudioFocusChangeListener {}.build()
             }
-            audio.requestAudioFocus(audioFocus!!)
+            audioFocus?.let { audio.requestAudioFocus(it) }
         } catch (_: Exception) {}
     }
 
@@ -272,6 +273,16 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
                 // لكن الخدمة لم تعالجه فبقي recordingManager ميتاً والزر بلا أثر.
                 // يعيد استخدام نفس محرّك التسجيل الموحّد (CallRecordingManager) الذي
                 // يعمل فعلاً في GroupCallService، بموافقة صريحة لا تُفترض.
+                // Hardened: Intent EXTRA_CONSENT وحده لا يكفي — يجب تأكيد واجهة
+                // المكالمة عبر RecordingConsentStore (يُمنح من حوار الموافقة المرئي فقط).
+                val intentConsent = intent.getBooleanExtra(YounesCallService.EXTRA_CONSENT, false)
+                val storeConsent = RecordingConsentStore.isGranted(meetingId)
+                if (!intentConsent || !storeConsent) {
+                    android.util.Log.w("ZoomService", "Recording consent bypass attempt meeting=$meetingId intentConsent=$intentConsent store=$storeConsent — requiring UI confirmation")
+                    RecordingConsentStore.requestConsent(meetingId)
+                    ZoomRuntime.isRecording = false
+                    return START_STICKY
+                }
                 if (recordingManager == null && meetingId.isNotBlank()) {
                     recordingManager = CallRecordingManager(this, meetingId)
                 }
@@ -355,19 +366,30 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             var sfuFailed=false
             if (meetingId.isNotBlank() && meetingId.length in 4..128) {
                 sfu = SfuMediaClient(this@ZoomGroupCallService, TokenStore(this@ZoomGroupCallService), this@ZoomGroupCallService)
-                if (attachSfuWithRetry(sfu!!, meetingId)) {
+                val sfuClient = sfu
+                if (sfuClient != null && attachSfuWithRetry(sfuClient, meetingId)) {
                     val kind = if(isVideo) CallMediaKind.VIDEO else CallMediaKind.VOICE
                     val published = sfu?.publish(kind)==true
                     ZoomRuntime.eglContext = sfu?.eglContext
                     ZoomRuntime.localVideo = sfu?.localVideo
                     val ok = published && (!isVideo || ZoomRuntime.localVideo!=null)
                     if (ok){ startRingbackForHost(); return@launch } else { sfu?.release(); sfu=null; sfuFailed=true }
-                } else { sfu?.release(); sfu=null; sfuFailed=true }
+                } else { android.util.Log.w("ZoomService", "SFU_UNAVAILABLE — fallback to MESH"); sfu?.release(); sfu=null; sfuFailed=true }
             } else sfuFailed=true
             val kind = if(isVideo) CallMediaKind.VIDEO else CallMediaKind.VOICE
             val meshOk = startMesh(kind)
             android.util.Log.d("ZoomService","mesh start $meshOk localVideo=${ZoomRuntime.localVideo!=null}")
-            if (sfuFailed && isHost) signaling.send(CallSignal(callId=meetingId, type=CallSignal.USE_MESH, groupCallId=meetingId))
+            // P0: إرسال USE_MESH لكل عضو على حدة (الخادم يرفض بلا targetUserId)
+            if (sfuFailed && isHost) {
+                val peers = when (val cur = ZoomRuntime.state) {
+                    is ZoomUiState.Ringing -> cur.members.map { it.userId }
+                    is ZoomUiState.Active -> cur.members.map { it.userId }
+                    else -> emptyList()
+                }.filter { it.isNotBlank() && it != myUserId }
+                peers.forEach { pid ->
+                    signaling.send(CallSignal(callId = meetingId, targetUserId = pid, type = CallSignal.USE_MESH, groupCallId = meetingId))
+                }
+            }
             if (!isHost && hostId.isNotBlank()){ mesh?.attachPeer(hostId); mesh?.offerTo(hostId) }
             startRingbackForHost()
         }
@@ -549,10 +571,33 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         track.setEnabled(true); scope.launch(Dispatchers.Main.immediate){ ZoomRuntime.remoteVideos = ZoomRuntime.remoteVideos + (peerId to track) }
     }
     override fun onNetworkStats(stats: NetworkStats){ ZoomRuntime.networkStats=stats }
-    override fun onCameraUnavailable(){ ZoomRuntime.isVideoEnabled=false; ZoomRuntime.localVideo=null }
-    override fun onConnectionState(state: PeerConnection.PeerConnectionState){ if(state==PeerConnection.PeerConnectionState.FAILED) { engine?.restartIce(); mesh?.restartIce() } }
-    override fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState){ if(state==PeerConnection.PeerConnectionState.DISCONNECTED||state==PeerConnection.PeerConnectionState.FAILED) scope.launch{ delay(1500); mesh?.offerTo(peerId)} }
-    override fun onDisconnected(){ if(!stopping) runCatching{ signaling.reconnect() } }
+    override fun onCameraUnavailable(){ ZoomRuntime.isVideoEnabled=false; ZoomRuntime.localVideo=null; updateNetworkNotification("تعذر فتح الكاميرا — الاجتماع صوتي • أعد المحاولة من زر الكاميرا") }
+    override fun onConnectionState(state: PeerConnection.PeerConnectionState){
+        if(state==PeerConnection.PeerConnectionState.FAILED) {
+            // إصلاح restartIce الصامت: إشعار فوري + Log قبل إعادة الضبط.
+            android.util.Log.w("ZoomService", "ICE FAILED meeting=$meetingId — restartIce")
+            updateNetworkNotification("انقطع المسار — جارٍ إعادة ضبط الاتصال…")
+            engine?.restartIce(); mesh?.restartIce()
+        }
+    }
+    override fun onConnectionState(peerId: String, state: PeerConnection.PeerConnectionState){
+        if(state==PeerConnection.PeerConnectionState.DISCONNECTED||state==PeerConnection.PeerConnectionState.FAILED) {
+            if (peerId.isNotBlank()) updateNetworkNotification("إعادة ضبط مسار عضو…")
+            scope.launch{ delay(1500); if (!stopping) runCatching { mesh?.offerTo(peerId) } }
+        }
+    }
+    override fun onDisconnected(){
+        // تهدئة الحلقة الساخنة: حد أدنى 2s + jitter (كان reconnect فورياً متكرراً).
+        val now = android.os.SystemClock.elapsedRealtime()
+        if(now - lastSignalReconnectMs < 2_000) return
+        lastSignalReconnectMs = now
+        if(!stopping) {
+            scope.launch{
+                kotlinx.coroutines.delay((Math.random() * 800).toLong())
+                if(!stopping) runCatching{ signaling.reconnect() }
+            }
+        }
+    }
     override fun onError(message: String){ if(message=="UNAUTHORIZED") stopZoom() }
 
     private fun updateMemberStatus(userId: String, status: ZoomMemberStatus){
@@ -583,7 +628,22 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         }
     }
     private fun ensureNetworkWatcher(){
-        if(networkWatcher==null) networkWatcher=NetworkChangeWatcher(this){ if(!stopping && ZoomRuntime.state is ZoomUiState.Active) mesh?.restartIce() }.also{ it.start()}
+        if(networkWatcher==null) networkWatcher=NetworkChangeWatcher(this){
+            if(!stopping && ZoomRuntime.state is ZoomUiState.Active) {
+                mesh?.restartIce()
+                android.util.Log.d("ZoomService", "تبديل الشبكة — إعادة ضبط المسار meeting=$meetingId")
+                updateNetworkNotification("تبديل الشبكة — إعادة ضبط المسار…")
+            }
+        }.also{ it.start()}
+    }
+    private fun updateNetworkNotification(text: String){
+        // تعميم نموذج YounesCallService: إشعار مرئي + Log عند تبديل الشبكة — كان restartIce صامتاً.
+        val label=if(isVideo) "اجتماع Zoom فيديو" else "اجتماع Zoom صوتي"
+        val intent=PendingIntent.getActivity(this,0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val endPi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9200, callId = meetingId, myUserId = myUserId, hostId = hostId, isVideo = isVideo)
+        val mutePi=CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_ZOOM, 9200, callId = meetingId, myUserId = myUserId, hostId = hostId, isVideo = isVideo)
+        val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText(text).setContentIntent(intent).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setSilent(true).addAction(0,"كتم",mutePi).addAction(0,"إنهاء",endPi).build()
+        runCatching { getSystemService(NotificationManager::class.java).notify(9200, notif) }
     }
     private fun stopNetworkWatcher(){ networkWatcher?.stop(); networkWatcher=null }
     private var networkWatcher: NetworkChangeWatcher? = null
@@ -620,7 +680,12 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         val notif=NotificationCompat.Builder(this,"red_calls").setSmallIcon(android.R.drawable.stat_sys_phone_call).setContentTitle(label).setContentText(body).setFullScreenIntent(fullScreenIntent,true).setCategory(NotificationCompat.CATEGORY_CALL).setPriority(NotificationCompat.PRIORITY_MAX).setColor(0xFF2AABEE.toInt()).setOngoing(true).setAutoCancel(false).addAction(NotificationCompat.Action.Builder(0,"رفض",declinePi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MUTE).build()).addAction(NotificationCompat.Action.Builder(0,"قبول",acceptPi).setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_CALL).build()).build()
         ServiceCompat.startForeground(this, 9201, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
-    override fun onDestroy(){ finishStop(); scope.cancel(); super.onDestroy() }
+    override fun onDestroy(){
+        // إلغاء كوروتينات: إلغاء مهلات الرنين قبل finishStop لمنع تسرب delay.
+        ringTimeout?.cancel(); ringTimeout = null
+        incomingTimeout?.cancel(); incomingTimeout = null
+        finishStop(); scope.cancel(); super.onDestroy()
+    }
     override fun onBind(intent: Intent?): IBinder?=null
 
     companion object {

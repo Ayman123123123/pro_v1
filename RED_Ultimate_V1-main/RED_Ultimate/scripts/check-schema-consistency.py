@@ -44,7 +44,7 @@ def db_columns(table: str) -> set[str]:
         #       ADD COLUMN IF NOT EXISTS b INT,
         #       ADD COLUMN IF NOT EXISTS c VARCHAR(20);
         # Matching only one ADD per ALTER (the previous behaviour) silently missed
-        # every column after the first, so the removed gateway columns
+        # every column after the first, so V34's pstn_port_index / pstn_number
         # looked absent from the schema and failed this gate for a correct DB.
         for stmt in re.finditer(
             r'ALTER TABLE (?:IF EXISTS )?' + re.escape(table) + r'\b(.*?);',

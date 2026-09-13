@@ -2,28 +2,29 @@ package com.red.sovereign.calls
 
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
-import com.red.sovereign.core.notifications.NotificationHelper
+import com.red.sovereign.auth.TokenStore
 
 /**
  * مدير تكامل خدمات المكالمات — Call Service Integration Manager
  *
  * يدير تفاعل الخدمات المختلفة (YounesCallService, GroupCallService,
  * ConferenceService, LiveStreamService) مع بعضها البعض ومع النظام.
+ *
+ * تصحيح شامل: كانت كل الدوال تبني Intents بأسماء ثوابت غير موجودة
+ * (EXTRA_CALL_ID/EXTRA_PEER/ACTION_DIAL…). الآن تمرّ كلها عبر مصانع
+ * الـ companion الحقيقية لكل خدمة، وهي المسار الذي تستخدمه بقية الواجهات.
  */
 object CallServiceIntegration {
 
     /**
      * بدء مكالمة فردية
+     *
+     * تصحيح: YounesCallService لا يقرأ callId من الـ Intent — يُولّده بنفسه
+     * (UUID) عند ACTION_START، وأسماء الحقول الحقيقية هي EXTRA_TARGET
+     * و EXTRA_MODE. لذا [callId] يبقى في التوقيع للتوافق لكنه غير مُستخدم.
      */
     fun startCall(context: Context, callId: String, peer: String, isVideo: Boolean) {
-        val intent = Intent(context, YounesCallService::class.java).apply {
-            action = YounesCallService.ACTION_START
-            putExtra(YounesCallService.EXTRA_CALL_ID, callId)
-            putExtra(YounesCallService.EXTRA_PEER, peer)
-            putExtra(YounesCallService.EXTRA_IS_VIDEO, isVideo)
-        }
-        ContextCompat.startForegroundService(context, intent)
+        YounesCallService.start(context, peer, isVideo)
     }
 
     /**
@@ -35,6 +36,11 @@ object CallServiceIntegration {
 
     /**
      * بدء مكالمة جماعية
+     *
+     * تصحيح: الإجراء الحقيقي هو ACTION_START_GROUP_CALL والمدعوون يُمرّرون
+     * في EXTRA_INVITEE_IDS (لا EXTRA_MEMBERS). الخدمة تحتاج أيضاً هويتي
+     * (EXTRA_MY_USER_ID) لتثبيت مسار الـ Mesh — مصدرها الحقيقي [TokenStore].
+     * أسماء العرض تُترك فارغة لأن الخدمة ترجع تلقائياً إلى المعرّف.
      */
     fun startGroupCall(
         context: Context,
@@ -43,14 +49,17 @@ object CallServiceIntegration {
         isVideo: Boolean,
         members: List<String>
     ) {
-        val intent = Intent(context, GroupCallService::class.java).apply {
-            action = GroupCallService.ACTION_START
-            putExtra(GroupCallService.EXTRA_GROUP_ID, groupId)
-            putExtra(GroupCallService.EXTRA_GROUP_NAME, groupName)
-            putExtra(GroupCallService.EXTRA_IS_VIDEO, isVideo)
-            putStringArrayListExtra(GroupCallService.EXTRA_MEMBERS, ArrayList(members))
-        }
-        ContextCompat.startForegroundService(context, intent)
+        val tokens = TokenStore(context)
+        GroupCallService.startGroupCall(
+            context = context,
+            myUserId = tokens.redId.orEmpty(),
+            inviteeIds = members,
+            inviteeNames = emptyList(),
+            isVideo = isVideo,
+            hostName = tokens.username.orEmpty(),
+            groupId = groupId,
+            groupName = groupName
+        )
     }
 
     /**
@@ -62,14 +71,20 @@ object CallServiceIntegration {
 
     /**
      * بدء مؤتمر
+     *
+     * تصحيح: ConferenceService لا يعرف ACTION_START — الانضمام يتم بـ
+     * ACTION_JOIN (عبر [ConferenceService.join])، والحقل الحقيقي للفيديو هو
+     * EXTRA_VIDEO. من يبدأ المؤتمر هو المضيف، لذا asHost = true حتى تُسجَّل
+     * الغرفة على الخادم قبل الانضمام.
      */
     fun startConference(context: Context, roomId: String, isVideo: Boolean) {
-        val intent = Intent(context, ConferenceService::class.java).apply {
-            action = ConferenceService.ACTION_START
-            putExtra(ConferenceService.EXTRA_ROOM_ID, roomId)
-            putExtra(ConferenceService.EXTRA_IS_VIDEO, isVideo)
-        }
-        ContextCompat.startForegroundService(context, intent)
+        ConferenceService.join(
+            context = context,
+            roomId = roomId,
+            userId = TokenStore(context).redId.orEmpty(),
+            video = isVideo,
+            asHost = true
+        )
     }
 
     /**
@@ -81,14 +96,21 @@ object CallServiceIntegration {
 
     /**
      * بدء بث مباشر
+     *
+     * تصحيح: معرّف البث الحقيقي هو EXTRA_STREAM_ID (لا EXTRA_ROOM_ID)، ولا
+     * يملك مسار البدء أي مفتاح صوت/فيديو إطلاقاً — المُبثّ يبدأ دائماً بـ
+     * CallMediaKind.LIVE. المفتاح الحقيقي الوحيد هو ACTION_TOGGLE_AUDIO_ONLY
+     * وهو يعمل على محرك موجود (يُنشأ لاحقاً في onConnected)، فإرساله هنا كان
+     * سيضبط علم الواجهة فقط والكاميرا تبقى مفتوحة — حالة كاذبة. لذلك
+     * [isVideo] بلا مسند حقيقي في البدء، والتبديل يبقى بيد الواجهة بعد الاتصال.
      */
     fun startLiveStream(context: Context, roomId: String, isVideo: Boolean) {
-        val intent = Intent(context, LiveStreamService::class.java).apply {
-            action = LiveStreamService.ACTION_START
-            putExtra(LiveStreamService.EXTRA_ROOM_ID, roomId)
-            putExtra(LiveStreamService.EXTRA_IS_VIDEO, isVideo)
-        }
-        ContextCompat.startForegroundService(context, intent)
+        LiveStreamService.start(
+            context = context,
+            streamId = roomId,
+            userId = TokenStore(context).redId.orEmpty(),
+            isBroadcaster = true
+        )
     }
 
     /**
@@ -99,12 +121,36 @@ object CallServiceIntegration {
     }
 
     /**
+     * بدء مكالمة PSTN
+     *
+     * تصحيح: PstnCallForegroundService لا يملك ACTION_DIAL — هو خدمة إبقاء
+     * العملية حيّة فقط (ACTION_START + extra باسم "number") عبر
+     * [PstnCallForegroundService.start]. الاتصال الفعلي بالبوابة يتم في
+     * PstnWebRtcManager (AuthViewModel.dialPstn) وليس هنا.
+     */
+    fun startPstnCall(context: Context, phoneNumber: String) {
+        PstnCallForegroundService.start(context, phoneNumber)
+    }
+
+    /**
+     * إنهاء مكالمة PSTN
+     *
+     * تصحيح: لا يوجد ACTION_HANGUP ولا action(...) في هذه الخدمة —
+     * الإيقاف الحقيقي هو [PstnCallForegroundService.stop] (يحرّر الـ WakeLock).
+     */
+    fun endPstnCall(context: Context) {
+        PstnCallForegroundService.stop(context)
+    }
+
+    /**
      * التحقق من وجود مكالمة نشطة
+     *
+     * تصحيح: لا خدمة من الخدمات تعرض دالة "هل نشطة" — الحالة الحقيقية تعيش في
+     * كائنات الـ Runtime (CallRuntime / GroupCallRuntime / ConferenceRuntime)
+     * ولا تحتاج Context. [context] يبقى في التوقيع للتوافق فقط.
      */
     fun hasActiveCall(context: Context): Boolean {
-        return YounesCallService.isCallActive(context) ||
-               GroupCallService.isGroupCallActive(context) ||
-               ConferenceService.isConferenceActive(context)
+        return isOneToOneActive() || isGroupActive() || isConferenceActive() || isPstnActive()
     }
 
     /**
@@ -112,19 +158,47 @@ object CallServiceIntegration {
      */
     fun getActiveCallType(context: Context): String? {
         return when {
-            YounesCallService.isCallActive(context) -> "1to1"
-            GroupCallService.isGroupCallActive(context) -> "group"
-            ConferenceService.isConferenceActive(context) -> "conference"
+            isOneToOneActive() -> "1to1"
+            isGroupActive() -> "group"
+            isConferenceActive() -> "conference"
+            isPstnActive() -> "pstn"
             else -> null
         }
     }
 
+    /** مكالمة فردية قائمة — أي حالة غير Idle وغير نهائية في [CallRuntime.state]. */
+    private fun isOneToOneActive(): Boolean =
+        CallRuntime.state !is CallUiState.Idle && !CallUiState.isTerminal(CallRuntime.state)
+
+    /** مكالمة جماعية قائمة — Ringing/IncomingGroup/Active في [GroupCallRuntime.state]. */
+    private fun isGroupActive(): Boolean = when (GroupCallRuntime.state) {
+        is GroupCallUiState.Idle, is GroupCallUiState.Ended -> false
+        else -> true
+    }
+
+    /** مؤتمر أو مساحة قائمة — Incoming/Connecting/Active في [ConferenceRuntime.state]. */
+    private fun isConferenceActive(): Boolean = when (ConferenceRuntime.state) {
+        is ConferenceUiState.Idle, is ConferenceUiState.Error -> false
+        else -> true
+    }
+
+    /** مكالمة بوابة قائمة — [CallRuntime.pstnStatus] هو مصدرها الوحيد. */
+    private fun isPstnActive(): Boolean = when (CallRuntime.pstnStatus) {
+        PstnCallStatus.IDLE, PstnCallStatus.ENDED, PstnCallStatus.ERROR -> false
+        else -> true
+    }
+
     /**
      * إرسال إجراء لجميع الخدمات النشطة
+     *
+     * تصحيح: كان المعامل يُسمّى `action` فيظلّل خاصية `Intent.action` داخل
+     * الـ apply (val cannot be reassigned)، وكانت القيمة الإضافية من نوع Any
+     * وهو نوع لا يقبله putExtra. الآن اسم المعامل [act] والقيمة String،
+     * والبثّ محصور بحزمة التطبيق حتى لا تصل الحقول لتطبيقات أخرى.
      */
-    fun broadcastAction(context: Context, action: String, extraKey: String? = null, extraValue: Any? = null) {
-        val intent = Intent("com.red.sovereign.calls.ACTION").apply {
-            action = action
+    fun broadcastAction(context: Context, act: String, extraKey: String? = null, extraValue: String? = null) {
+        val intent = Intent(act).apply {
+            setPackage(context.packageName)
             extraKey?.let { putExtra(it, extraValue ?: "") }
         }
         context.sendBroadcast(intent)

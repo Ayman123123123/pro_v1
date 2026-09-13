@@ -49,7 +49,8 @@ class ContentService(
         endsAt: Instant? = null,
         targetType: String = "GLOBAL",
         targetGroupId: UUID? = null,
-        targetUserId: UUID? = null
+        targetUserId: UUID? = null,
+        optionImages: List<String?> = emptyList()
     ): Poll {
         val poll = polls.save(Poll(
             creatorId = creatorId,
@@ -62,9 +63,16 @@ class ContentService(
             targetGroupId = targetGroupId,
             targetUserId = targetUserId
         ))
+        // صور الخيارات (نمط X): موازية للخيارات، null للنصي. العمود
+        // image_url موجود منذ V20 فلا هجرة جديدة مطلوبة.
+        val images = (optionImages + List(options.size) { null }).take(options.size)
+        if (images.any { !it.isNullOrBlank() }) {
+            require(options.size in 2..4) { "Image polls must contain 2-4 options" }
+        }
         options.forEachIndexed { idx, text ->
             pollOptions.save(PollOption(
-                pollId = poll.id, optionText = text, optionOrder = idx
+                pollId = poll.id, optionText = text, optionOrder = idx,
+                imageUrl = images.getOrNull(idx)?.takeIf { !it.isNullOrBlank() }?.take(500)
             ))
         }
         return poll
@@ -126,8 +134,14 @@ class ContentService(
             "poll" to poll,
             "options" to options.map { mapOf(
                 "id" to it.id,
+                "pollId" to it.pollId,
+                "optionText" to it.optionText,
+                // أسماء متوافقة مع PollOptionDto في التطبيق:
                 "text" to it.optionText,
+                "optionOrder" to it.optionOrder,
+                "voteCount" to it.voteCount,
                 "votes" to it.voteCount,
+                "imageUrl" to it.imageUrl,
                 "percentage" to if (poll.totalVotes > 0) (it.voteCount.toDouble() / poll.totalVotes * 100) else 0.0
             )}
         )

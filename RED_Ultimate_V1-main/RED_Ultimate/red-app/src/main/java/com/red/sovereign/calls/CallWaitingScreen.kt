@@ -19,13 +19,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.CallReceived
-import androidx.compose.material.icons.filled.Hold
-import androidx.compose.material.icons.filled.Resume
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.GroupWork
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,14 +57,17 @@ import kotlinx.coroutines.delay
 /**
  * شاشة انتظار المكالمة — Call Waiting Screen
  *
- * تظهر عندما يكون المستخدم في مكالمة نشطة ويستقبل مكالمة أخرى.
+ * تظهر عندما يكون المستخدم في مكالمة نشطة ويستقبل مكالمة أخرى (Call Waiting Overlay).
  * تتيح:
- * - عرض معلومات المكالمة الواردة
- * - قبول المكالمة الواردة (switch)
- * - رفض المكالمة الواردة
- * - وضع المكالمة الحالية على الانتظار (hold)
+ * - عرض معلومات المكالمة النشطة الحالية والمكالمة الواردة
+ * - قبول المكالمة الواردة (Accept) مع وضع الحالية على الانتظار
+ * - رفض المكالمة الواردة (Reject)
+ * - وضع المكالمة الحالية على الانتظار (Hold) أو استئنافها (Resume)
+ * - التبديل بين المكالمات (Swap Calls)
+ * - دمج المكالمات في مؤتمر (Conference Merge)
  * - عرض مؤقت للمكالمة الحالية
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallWaitingScreen(
     activeCall: ActiveCallInfo? = null,
@@ -71,6 +77,8 @@ fun CallWaitingScreen(
     onHoldActive: () -> Unit = {},
     onResumeActive: () -> Unit = {},
     onEndActive: () -> Unit = {},
+    onSwapCalls: () -> Unit = {},
+    onMergeCalls: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     var timerSeconds by remember { mutableStateOf(0L) }
@@ -85,7 +93,7 @@ fun CallWaitingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("مكالمة في الانتظار", color = Color.White) },
+                title = { Text("مكالمة في الانتظار وإدارة المكالمات", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = SovereignColors.SurfaceDark
                 ),
@@ -104,7 +112,7 @@ fun CallWaitingScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
             // Active call indicator
             if (activeCall != null) {
@@ -112,10 +120,10 @@ fun CallWaitingScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            // Incoming call card
+            // Incoming call card overlay
             if (incomingCall != null) {
                 IncomingCallCard(call = incomingCall)
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
             }
 
             // Timer
@@ -125,12 +133,12 @@ fun CallWaitingScreen(
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Light
             )
-            Spacer(Modifier.height(8.dp))
-            Text("مدة المكالمة الحالية", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+            Spacer(Modifier.height(4.dp))
+            Text("مدة المكالمة النشطة", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
 
-            // Action buttons
+            // Action buttons for active call (Hold/Resume, Swap, Merge, End)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -138,19 +146,35 @@ fun CallWaitingScreen(
                 if (activeCall != null) {
                     if (activeCall.isHeld) {
                         ActionButton(
-                            icon = Icons.Default.Resume,
+                            icon = Icons.Default.PlayArrow,
                             label = "استئناف",
                             color = YounesEmerald,
                             onClick = onResumeActive
                         )
                     } else {
                         ActionButton(
-                            icon = Icons.Default.Hold,
+                            icon = Icons.Default.Pause,
                             label = "انتظار",
                             color = AqyalGold,
                             onClick = onHoldActive
                         )
                     }
+
+                    if (incomingCall != null) {
+                        ActionButton(
+                            icon = Icons.Default.SwapHoriz,
+                            label = "تبديل",
+                            color = AqyalGold,
+                            onClick = onSwapCalls
+                        )
+                        ActionButton(
+                            icon = Icons.Default.GroupWork,
+                            label = "دمج مؤتمر",
+                            color = YounesEmerald,
+                            onClick = onMergeCalls
+                        )
+                    }
+
                     ActionButton(
                         icon = Icons.Default.CallEnd,
                         label = "إنهاء",
@@ -162,7 +186,7 @@ fun CallWaitingScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Incoming call actions
+            // Incoming call actions overlay
             if (incomingCall != null) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -170,14 +194,14 @@ fun CallWaitingScreen(
                 ) {
                     ActionButton(
                         icon = Icons.Default.CallReceived,
-                        label = "قبول",
+                        label = "قبول الواردة",
                         color = YounesEmerald,
                         onClick = onAcceptIncoming,
                         large = true
                     )
                     ActionButton(
                         icon = Icons.Default.CallEnd,
-                        label = "رفض",
+                        label = "رفض الواردة",
                         color = Color.Red,
                         onClick = onRejectIncoming,
                         large = true
@@ -234,7 +258,7 @@ fun ActiveCallCard(call: ActiveCallInfo, isHeld: Boolean) {
             Column {
                 Text(call.peer, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(
-                    if (isHeld) "في الانتظار" else "مكالمة نشطة",
+                    if (isHeld) "في الانتظار (On Hold)" else "مكالمة نشطة (Active)",
                     color = if (isHeld) AqyalGold else YounesEmerald,
                     fontSize = 12.sp
                 )
@@ -271,11 +295,11 @@ fun IncomingCallCard(call: IncomingCallInfo) {
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Text("مكالمة واردة", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+            Text("مكالمة ثانية في الانتظار (Call Waiting)", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
             Text(call.peer, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(4.dp))
             Text(
-                if (call.isVideo) "مكالمة فيديو" else "مكالمة صوتية",
+                if (call.isVideo) "مكالمة فيديو واردة" else "مكالمة صوتية واردة",
                 color = Color.White.copy(alpha = 0.5f),
                 fontSize = 12.sp
             )

@@ -12,31 +12,77 @@ import androidx.compose.ui.graphics.Color
  */
 
 object SovereignColors {
+    /*
+     * ── توحيد اللوحات: SovereignColors يعيد تصدير قيم Younes ──────────────
+     *
+     * كانت هناك 4 لوحات منفصلة (SovereignColors هنا + Younes في RedTheme.kt
+     * + متغيرات admin_dashboard + نيون المكوّنات) بقيم متقاربة لكن مختلفة:
+     * ذهبي F59E0B مقابل E0B551، زمرد 10B981 مقابل 14C79A، سماوي 38BDF8
+     * مقابل 4D9FE8 — فانحرف نفس الدور لونيًا بين الشاشات.
+     *
+     * القيم الأساسية الثلاث أدناه **مرادفات** لا نسخ: أي تعديل مستقبلي
+     * على Younes ينعكس هنا تلقائيًا. الأسماء القديمة كلها باقية (توافق
+     * رجعي)، والـneon يبقى متمايزًا لدور التوهج لا للسطح الأساسي.
+     * يحرسها `ColorContrastTest` (Gold/Cyan على SurfaceNavy ≥ 3:1).
+     */
     // ── الذهب الإمبراطوري والسيادة اليمنية ──────────────────────────────────
-    val Gold = Color(0xFFF59E0B)
-    val GoldLight = Color(0xFFFBBF24)
+    /** ذهب يونس الأساسي — مرادف [YounesAccent] (#E0B551). */
+    val Gold = YounesAccent
+    val GoldLight = YounesAccentSoft
     val GoldDark = Color(0xFFD97706)
     val GoldNeon = Color(0xFFFFD700)
+    val DinstarGold = Color(0xFFF4B400)
 
     // ── الزمرد السيبراني والأمان / التشفير التام E2EE ───────────────────────
-    val Emerald = Color(0xFF10B981)
+    /** زمرد يونس الأساسي — مرادف [YounesPrimary] (#14C79A). */
+    val Emerald = YounesPrimary
     val EmeraldDark = Color(0xFF059669)
     val EmeraldNeon = Color(0xFF00E676)
-    val Success = Color(0xFF10B981)
+    val Success = YounesPrimary
 
     // ── السماوي الكهربائي وإشارات WebRTC Mesh ───────────────────────────────
-    val Cyan = Color(0xFF38BDF8)
+    /** أزرق يونس الملكي — مرادف [YounesCobalt] (#4D9FE8). */
+    val Cyan = YounesCobalt
     val CyanDark = Color(0xFF0284C7)
     val CyanNeon = Color(0xFF00E5FF)
     val VoipBlue = Color(0xFF1E88E5)
 
+    // ── أسماء legacy للتوافق الرجعي: القيم السابقة قبل التوحيد ─────────────
+    /** @deprecated استعمل [Gold] (= YounesAccent). باقٍ للتوافق فقط. */
+    @Deprecated("موحّد إلى Gold=YounesAccent", ReplaceWith("SovereignColors.Gold"))
+    val GoldLegacyF59E0B = Color(0xFFF59E0B)
+    /** @deprecated استعمل [Emerald] (= YounesPrimary). باقٍ للتوافق فقط. */
+    @Deprecated("موحّد إلى Emerald=YounesPrimary", ReplaceWith("SovereignColors.Emerald"))
+    val EmeraldLegacy10B981 = Color(0xFF10B981)
+    /** @deprecated استعمل [Cyan] (= YounesCobalt). باقٍ للتوافق فقط. */
+    @Deprecated("موحّد إلى Cyan=YounesCobalt", ReplaceWith("SovereignColors.Cyan"))
+    val CyanLegacy38BDF8 = Color(0xFF38BDF8)
+
     // ── الأوبسيديان العميق والأسطح الأكريليكية ──────────────────────────────
-    val Obsidian = Color(0xFF030712)
-    val ObsidianDeep = Color(0xFF060A12)
+    // أسطح مرفوعة (lifted) لا ساحقة: 030712 يسحق التفاصيل على الشاشات
+    // الرخيصة ويبدو أرخص من واتساب. القاعدة ≥0A0F18 للخلفية.
+    val Obsidian = YounesVoid // مرفوع من 030712 — نفس الهوية، بلا سحق
+    val ObsidianDeep = Color(0xFF0E1522) // مرفوع من 060A12
     val Navy = Color(0xFF0F172A)
     val SurfaceNavy = Color(0xFF1E293B)
     val SurfaceCard = Color(0xFF151F32)
     val SurfaceDialog = Color(0xFF1A263D)
+
+    /*
+     * ── أسماء الأسطح الدلالية ───────────────────────────────────────────────
+     *
+     * الأسماء أعلاه تصف *اللون* (أوبسيديان، نيفي)، وهذه تصف *الدور*
+     * (شريط علوي، بطاقة). شاشات المكالمات كُتبت على الأسماء الدلالية وكانت
+     * غير معرَّفة إطلاقاً، فأسقطت ترجمة الوحدة كلها في 30 موضعاً.
+     *
+     * تُعرَّف كمرادفات لا كقيم جديدة: لونان لنفس الدور ينحرفان مع الوقت.
+     */
+
+    /** سطح الشريط العلوي وخلفية الشاشات الداكنة — مرادف [Navy]. */
+    val SurfaceDark = Navy
+
+    /** سطح البطاقات والحقول فوق [SurfaceDark] — مرادف [SurfaceNavy]. */
+    val SurfaceDarkVariant = SurfaceNavy
 
     // ── وهج الياقوت والتنبيهات / إنهاء المكالمة / البث المباشر ──────────────
     val Danger = Color(0xFFEF4444)
@@ -46,8 +92,13 @@ object SovereignColors {
     val Warning = Color(0xFFF59E0B)
 
     // ── بنفسج الفضاء ومؤتمرات SFU ───────────────────────────────────────────
-    val SpacePurple = Color(0xFF8E24AA)
+    // YounesPurple B07CE8 = 6.30:1 على الخلفية (AA). SpaceAccent للعلامات،
+    // SpaceContainer (أغمق) لحاويات الأزرار ذات النص الأبيض 7.04:1.
+    val SpacePurple = YounesPurple
     val PurpleNeon = Color(0xFFC084FC)
+    /** كوبالت ملكي 4D9FE8 = 6.80:1 على الخلفية (AA) — متمايز عن 2AABEE التلجرامي. */
+    val RoyalCobalt = YounesCobalt
+    val RoyalCobaltDeep = YounesCobaltDeep
 
     /*
      * ── ألوان مفصولة بالدور ────────────────────────────────────────────────
@@ -110,6 +161,9 @@ object SovereignGradients {
     val royal = Brush.horizontalGradient(
         listOf(SovereignColors.Navy, SovereignColors.CyanDark, SovereignColors.Cyan)
     )
+    val dinstar = Brush.horizontalGradient(
+        listOf(SovereignColors.GoldDark, SovereignColors.DinstarGold, SovereignColors.GoldLight)
+    )
     val live = Brush.horizontalGradient(
         listOf(Color(0xFFB71C1C), SovereignColors.LiveRed, SovereignColors.RubyNeon)
     )
@@ -167,5 +221,32 @@ object SovereignGradients {
             SovereignColors.Cyan.copy(alpha = 0.2f),
             SovereignColors.CyanNeon.copy(alpha = 0.8f)
         )
+    )
+
+    // ─── شبكية المحادثة والمكالمات — هالات ≤12% فوق أساس مرفوع ──────────
+    // تُركَّب فوق GradientBackground لا بدلًا منه، حتى يبقى تباين النص
+    // مقاسًا على الأساس المعتم لا على الهالة الشفافة.
+    val meshChat = Brush.radialGradient(
+        colors = listOf(
+            YounesPrimary.copy(alpha = 0.08f),
+            YounesCobalt.copy(alpha = 0.07f),
+            Color.Transparent
+        ),
+        radius = 1100f
+    )
+    val meshCall = Brush.radialGradient(
+        colors = listOf(
+            YounesCobalt.copy(alpha = 0.10f),
+            YounesPurple.copy(alpha = 0.07f),
+            Color.Transparent
+        ),
+        radius = 1200f
+    )
+    val meshLight = Brush.radialGradient(
+        colors = listOf(
+            YounesPrimary.copy(alpha = 0.05f),
+            Color.Transparent
+        ),
+        radius = 900f
     )
 }

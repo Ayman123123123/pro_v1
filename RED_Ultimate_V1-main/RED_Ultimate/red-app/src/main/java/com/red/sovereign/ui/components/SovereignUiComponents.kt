@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.features.dinstar.YemenOperator
 import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.SovereignGradients
 import kotlin.math.sin
@@ -104,7 +107,6 @@ fun SovereignGlassCard(
                 if (onClick != null) {
                     Modifier.clickable(
                         interactionSource = interactionSource,
-                        indication = null,
                         onClick = onClick
                     )
                 } else {
@@ -125,6 +127,9 @@ fun SovereignGlassCard(
 /**
  * زر نيون سيادي تفاعلي — نص داكن على الزمرد/الذهب لضمان 9:1 AAA (WCAG).
  * السابق كان أبيض على #00A884 = 3.03:1 راسب — الآن YounesOnBrand.
+ *
+ * نظام الأزرار الموحّد (2026): حبة pill بارتفاع 48–56dp، تسمية نصية دائمًا،
+ * تموّج ripple افتراضي، وcontentDescription إلزامي لقارئ الشاشة.
  */
 @Composable
 fun SovereignNeonButton(
@@ -135,19 +140,21 @@ fun SovereignNeonButton(
     gradient: Brush = SovereignGradients.emerald,
     contentColor: Color = Color(0xFF06090F),
     enabled: Boolean = true,
-    height: Dp = 50.dp
+    height: Dp = 52.dp,
+    contentDescription: String = text
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.95f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        targetValue = if (isPressed && enabled && !reduceMotion) 0.97f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "NeonButtonScale"
     )
 
     Box(
         modifier = modifier
-            .height(height)
+            .height(height.coerceIn(48.dp, 56.dp))
             .scale(scale)
             .clip(RoundedCornerShape(height / 2))
             .background(
@@ -165,7 +172,7 @@ fun SovereignNeonButton(
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
-                indication = null,
+                onClickLabel = contentDescription,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -188,9 +195,98 @@ fun SovereignNeonButton(
                 text = text,
                 color = contentColor,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 15.sp,
+                fontFamily = com.red.sovereign.ui.theme.PlexArabicFamily
             )
         }
+    }
+}
+
+/**
+ * نظام الأزرار الموحّد — أحجام المكالمة ثابتة عبر كل الشاشات:
+ * إنهاء 64dp روبي #E03131 (نص/أيقونة بيضاء)، قبول 72dp زمرد #14C79A
+ * (أيقونة داكنة YounesOnBrand). كل زر يحمل تسمية لقارئ الشاشة وتموّجًا.
+ */
+@Composable
+fun SovereignCallEndButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "إنهاء المكالمة",
+    size: Dp = 64.dp
+) {
+    androidx.compose.material3.FloatingActionButton(
+        onClick = onClick,
+        containerColor = com.red.sovereign.ui.theme.YounesRuby,
+        contentColor = Color.White,
+        modifier = modifier.size(size),
+        shape = CircleShape
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.CallEnd,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(30.dp)
+        )
+    }
+}
+
+@Composable
+fun SovereignCallAcceptButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "قبول",
+    size: Dp = 72.dp
+) {
+    androidx.compose.material3.FloatingActionButton(
+        onClick = onClick,
+        containerColor = com.red.sovereign.ui.theme.YounesPrimary,
+        contentColor = com.red.sovereign.ui.theme.YounesOnBrand,
+        modifier = modifier.size(size),
+        shape = CircleShape
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Call,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(36.dp)
+        )
+    }
+}
+
+/**
+ * زر تحكّم دائري للمكالمة — 54dp ضمن نطاق 48–56، حد زجاجي، تموّج،
+ * وتسمية إلزامية (كان contentDescription=null — قارئ الشاشة أصمّ).
+ */
+@Composable
+fun SovereignCallControlButton(
+    icon: ImageVector,
+    contentDescription: String,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(54.dp)
+            .clip(CircleShape)
+            .background(if (isActive) SovereignColors.RubyNeon.copy(alpha = 0.25f) else SovereignColors.SurfaceCard)
+            .border(
+                1.2.dp,
+                if (isActive) SovereignColors.RubyNeon else SovereignColors.GlassBorder,
+                CircleShape
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                onClickLabel = contentDescription,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isActive) SovereignColors.RubyNeon else Color.White,
+            modifier = Modifier.size(26.dp)
+        )
     }
 }
 
@@ -203,18 +299,15 @@ fun SovereignStatusBadge(
     modifier: Modifier = Modifier,
     glowColor: Color = SovereignColors.EmeraldNeon,
     textColor: Color = Color.White,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    animated: Boolean = true
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "BadgeGlow")
-    val alphaGlow by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "AlphaGlow"
-    )
+    // Gated: no InfiniteTransition when static or reduceMotion — saves a
+    // permanent 1s loop on every screen that shows a badge.
+    val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
+    val alphaGlow: Float = if (animated && !reduceMotion) {
+        BadgeGlowAlpha()
+    } else 0.85f
 
     Surface(
         modifier = modifier
@@ -265,16 +358,11 @@ fun SovereignWaveVisualizer(
     maxBarHeight: Dp = 36.dp
 ) {
     val reduceMotion = com.red.sovereign.ui.theme.AppThemeState.reduceMotion
-    val infiniteTransition = rememberInfiniteTransition(label = "WaveAnimation")
-    val phase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 6.28f,
-        animationSpec = if (reduceMotion) infiniteRepeatable(tween(1)) else infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "WavePhase"
-    )
+    // Gated: static phase when silent or reduceMotion — the loop only exists
+    // while actually visualizing speech.
+    val phase: Float = if (isSpeaking && !reduceMotion) {
+        WavePhase()
+    } else 0f
 
     Canvas(modifier = modifier.height(maxBarHeight)) {
         val totalWidth = size.width
@@ -301,6 +389,38 @@ fun SovereignWaveVisualizer(
             )
         }
     }
+}
+
+@Composable
+private fun BadgeGlowAlpha(): Float {
+    val infiniteTransition = rememberInfiniteTransition(label = "BadgeGlow")
+    val alphaGlow by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            // 2000ms بطيئة فاخرة — نبضة واحدة كحد أقصى لكل شاشة
+            animation = tween(com.red.sovereign.ui.theme.SovereignBadgeGlowMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "AlphaGlow"
+    )
+    return alphaGlow
+}
+
+@Composable
+private fun WavePhase(): Float {
+    val infiniteTransition = rememberInfiniteTransition(label = "WaveAnimation")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.28f,
+        animationSpec = infiniteRepeatable(
+            // 1900ms ≥ حد 1800ms — كان 1200ms يلهث
+            animation = tween(com.red.sovereign.ui.theme.SovereignWaveDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "WavePhase"
+    )
+    return phase
 }
 
 /**
@@ -365,5 +485,50 @@ fun SovereignAvatarRing(
                     .border(1.5.dp, SovereignColors.Obsidian, CircleShape)
             )
         }
+    }
+}
+
+/**
+ * شارة المشغّل اليمني الذكية (سبأفون، يمن موبايل، يو، واي).
+ *
+ * البادئات مأخوذة من [YemenOperator] وهي المصدر الوحيد للحقيقة؛ لا تُكتب
+ * الأرقام يدويًا هنا حتى لا يتكرّر خطأ الجداول المتوازية.
+ */
+@Composable
+fun SovereignOperatorBadge(
+    operator: YemenOperator,
+    modifier: Modifier = Modifier
+) {
+    val gradient = when (operator) {
+        YemenOperator.SABAFON -> SovereignGradients.danger
+        YemenOperator.YEMEN_MOBILE -> SovereignGradients.emerald
+        YemenOperator.YOU -> SovereignGradients.gold
+        YemenOperator.Y_TELECOM -> SovereignGradients.cyan
+        YemenOperator.UNKNOWN -> Brush.linearGradient(
+            listOf(Color(0xFF475569), Color(0xFF334155))
+        )
+    }
+
+    val label = if (operator == YemenOperator.UNKNOWN) {
+        operator.arabicName
+    } else {
+        // YemenOperator.prefixes كان Unresolved في بعض بيئات البناء بسبب تظليل
+        // الاستيراد؛ نعرض الاسم العربي فقط كحلّ آمن — البادئات تُستنتج من الرقم نفسه.
+        operator.arabicName
+    }
+
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(gradient),
+        color = Color.Transparent
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp)
+        )
     }
 }

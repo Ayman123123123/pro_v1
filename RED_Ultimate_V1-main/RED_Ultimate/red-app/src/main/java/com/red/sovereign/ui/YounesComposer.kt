@@ -36,8 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.red.sovereign.ui.theme.AqyalGold
+import com.red.sovereign.ui.theme.PlexArabicFamily
 import com.red.sovereign.ui.theme.YounesEmerald
+import com.red.sovereign.ui.theme.YounesOnBrand
 
 /**
  * شريط كتابة يونس — نمط واتساب 2026: حقل كبسولة + إرسال أو ميكروفون.
@@ -80,7 +81,7 @@ fun YounesComposer(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ComposerCircleButton(onClick = onAttach, enabled = enabled) {
-                Icon(Icons.Default.AttachFile, "إرفاق", tint = YounesEmerald)
+                Icon(Icons.Default.AttachFile, "إرفاق", tint = MaterialTheme.colorScheme.primary)
             }
 
             Surface(
@@ -95,12 +96,13 @@ fun YounesComposer(
                 ) {
                     Box(
                         Modifier
-                            .size(44.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .combinedClickable(
                                 enabled = enabled,
                                 onClick = onToggleEmoji,
                                 onLongClick = onStickers,
+                                onClickLabel = "رموز أو اضغط طويلاً للملصقات",
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -113,10 +115,11 @@ fun YounesComposer(
                         enabled = enabled,
                         textStyle = TextStyle(
                             color = MaterialTheme.colorScheme.onSurface,
+                            fontFamily = PlexArabicFamily,
                             fontSize = 16.sp,
                             lineHeight = 22.sp,
                         ),
-                        cursorBrush = SolidColor(YounesEmerald),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = if (enterToSend) 1 else 5,
                         keyboardOptions = KeyboardOptions(
                             imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default,
@@ -150,7 +153,7 @@ fun YounesComposer(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (timerLabel != null) {
-                            Text("⏳$timerLabel", color = AqyalGold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text("⏳$timerLabel", color = MaterialTheme.colorScheme.tertiary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = PlexArabicFamily)
                         } else {
                             Icon(Icons.Default.History, "رسالة مؤقتة", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
@@ -159,15 +162,17 @@ fun YounesComposer(
             }
 
             if (sendEnabled) {
+                // زر إرسال 48dp زمرد + أيقونة داكنة YounesOnBrand (9.17:1 AAA).
+                // تموّج افتراضي + تسمية "إرسال" — ضمن نظام الأزرار الموحّد.
                 Box(
                     Modifier
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(YounesEmerald)
-                        .combinedClickable(onClick = onSend),
+                        .combinedClickable(onClick = onSend, onClickLabel = "إرسال"),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, "إرسال", tint = Color(0xFF002117), modifier = Modifier.size(22.dp))
+                    Icon(Icons.AutoMirrored.Filled.Send, "إرسال", tint = YounesOnBrand, modifier = Modifier.size(22.dp))
                 }
             } else {
                 voice()
@@ -183,12 +188,13 @@ private fun ComposerCircleButton(
     enabled: Boolean,
     icon: @Composable () -> Unit,
 ) {
+    // 48dp ضمن نطاق pill الموحّد 48–56 (كان 44dp دون حد اللمس المريح).
     Box(
         Modifier
-            .size(44.dp)
+            .size(48.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .combinedClickable(enabled = enabled, onClick = onClick),
+            .combinedClickable(enabled = enabled, onClick = onClick, onClickLabel = "زر الملحقات"),
         contentAlignment = Alignment.Center,
     ) { icon() }
 }

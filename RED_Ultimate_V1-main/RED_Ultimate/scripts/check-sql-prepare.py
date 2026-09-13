@@ -9,8 +9,19 @@
 لماذا هذا الفاحص موجود
 =======================
 `check-schema-consistency.py` يقارن كيانات JPA بملفات الهجرة نصيًا، فلا يرى
-شيئًا من SQL المكتوب بـ`JdbcTemplate`. هذا الفاحص يلتقط أخطاء الجداول والأعمدة
-في الاستعلامات اليدوية قبل أن تظهر فقط عند تنفيذ مسار نادر.
+شيئًا من الـSQL المكتوب بـ`JdbcTemplate` — وهو معظم منطق DINSTAR. اسمٌ خاطئ في
+جملة كهذه لا يفشل عند الإقلاع بل عند مرور مسار التنفيذ فقط، وغالبًا داخل
+`catch` يُبتلَع فيه الاستثناء. عيوب حقيقية أمسكها هذا الفاحص:
+
+* عرضٌ يقرأ `c.duration` و`c.hangup_cause` من جدول يحمل `duration_seconds`
+  و`status` (هجرات DINSTAR).
+* `INSERT INTO dinstar_cdr ... ON CONFLICT (...) DO NOTHING` بلا إعادة شرط
+  الفهرس الجزئي `uq_dinstar_cdr_natural_key`: PostgreSQL يرفض فهرسًا جزئيًا
+  حَكَمًا للتعارض إلا إذا أعادت الجملة شرطَه حرفيًا، فكانت **كل** دورة ابتلاع
+  CDR تسقط بأكملها ويبقى الجدول فارغًا.
+* `SELECT nextval(''dinstar_sms_user_id_seq'')` باقتباس مُضعَّف: خطأ نحوي دائم
+  كان يُبتلَع في `runCatching` فيسقط التنفيذ إلى عدّاد ذاكرة يبدأ من 1 عند كل
+  إقلاع، فتتكرّر `user_id` وتُنسَب تقارير التسليم إلى رسائل خاطئة.
 
 `EXPLAIN (GENERIC_PLAN)` لا `PREPARE`
 ======================================
@@ -88,7 +99,7 @@ NAMED_PARAM = re.compile(r"(?<![:\w]):([a-zA-Z][a-zA-Z0-9_]*)")
 def is_jpql(sql: str) -> bool:
     for m in CAMEL_RELATION.finditer(sql):
         name = m.group(1)
-        # `SELECT ... FROM UserAccount` كيان؛ `FROM call_records` جدول.
+        # `SELECT ... FROM UserAccount` كيان؛ `FROM dinstar_cdr` جدول.
         if any(c.isupper() for c in name) and name.upper() != name:
             return True
     return False

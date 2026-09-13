@@ -28,7 +28,8 @@ class ChatComposerTest {
     fun `clamp snaps unknown durations instead of crashing send`() {
         assertEquals(3_600_000L, ChatComposer.clampDisappearingMs(1_000L))
         assertEquals(86_400_000L, ChatComposer.clampDisappearingMs(10_000_000L))
-        assertEquals(604_800_000L, ChatComposer.clampDisappearingMs(900_000_000L))
+        // 90 يوم مدعوم الآن: أي مدة فوق أسبوع تُثبّت على 90 يوم بدلا من 7 أيام
+        assertEquals(7_776_000_000L, ChatComposer.clampDisappearingMs(900_000_000L))
     }
 
     @Test

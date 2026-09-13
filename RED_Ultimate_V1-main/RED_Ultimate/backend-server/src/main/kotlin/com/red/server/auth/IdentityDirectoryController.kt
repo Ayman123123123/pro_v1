@@ -17,12 +17,21 @@ import java.util.UUID
 class IdentityDirectoryController(
     private val users: UserAccountRepository,
     private val devices: UserDeviceRepository,
-    private val oneTimePreKeys: OneTimePreKeyService
+    private val oneTimePreKeys: OneTimePreKeyService,
+    private val jdbc: org.springframework.jdbc.core.JdbcTemplate
 ) {
     /** Static directory lookup does not consume scarce keys and is safe for established sessions. */
     @GetMapping("/{redId}")
-    fun bundles(@PathVariable redId: String): IdentityDirectoryResponse {
-        val user = users.findByRedId(redId) ?: throw NoSuchElementException("RED identity not found")
+    fun bundles(@PathVariable redId: String, auth: org.springframework.security.core.Authentication): IdentityDirectoryResponse {
+        val viewerId = java.util.UUID.fromString(auth.name)
+        val user = users.findByRedId(redId.trim().uppercase())?.takeIf { it.status == com.red.server.auth.model.AccountStatus.APPROVED }
+            ?: throw NoSuchElementException("RED identity not found")
+        // LEGENDARY FIX P0-2: لا تسريب مفاتيح للمحظور بأي اتجاه (كان يكشف حزم المفاتيح للمحظور + استنزاف prekey)
+        val blocked = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)",
+            Int::class.java, viewerId, user.id, user.id, viewerId
+        ) ?: 0
+        if (blocked > 0) throw NoSuchElementException("RED identity not found") // توحيد الخطأ لمنع oracle
         return IdentityDirectoryResponse(
             user.redId,
             devices.findAllByUserIdAndStatus(user.id, DeviceStatus.APPROVED).map { it.toBundle() }
@@ -31,8 +40,15 @@ class IdentityDirectoryController(
 
     /** Called only when a sender lacks a session. The returned one-time pair is atomically consumed. */
     @GetMapping("/{redId}/{deviceId}/prekey")
-    fun consumeBundle(@PathVariable redId: String, @PathVariable deviceId: UUID): PreKeyBundleResponse {
-        val user = users.findByRedId(redId) ?: throw NoSuchElementException("RED identity not found")
+    fun consumeBundle(@PathVariable redId: String, @PathVariable deviceId: UUID, auth: org.springframework.security.core.Authentication): PreKeyBundleResponse {
+        val viewerId = java.util.UUID.fromString(auth.name)
+        val user = users.findByRedId(redId.trim().uppercase())?.takeIf { it.status == com.red.server.auth.model.AccountStatus.APPROVED }
+            ?: throw NoSuchElementException("RED identity not found")
+        val blocked = jdbc.queryForObject(
+            "SELECT COUNT(*) FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)",
+            Int::class.java, viewerId, user.id, user.id, viewerId
+        ) ?: 0
+        if (blocked > 0) throw NoSuchElementException("RED identity not found")
         val device = devices.findByIdAndUserId(deviceId, user.id)
             ?.takeIf { it.status == DeviceStatus.APPROVED }
             ?: throw NoSuchElementException("Approved RED device not found")

@@ -1,22 +1,18 @@
 package com.red.sovereign.calls
 
 import android.content.Context
+import android.util.Log
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import java.util.concurrent.TimeUnit
 
 /**
  * رسالة إشارات المؤتمر — تُرسل وتُستقبل عبر WebSocket مع media-sfu.
@@ -71,29 +67,69 @@ class ConferenceSignalingClient(
         fun onSignal(signal: ConferenceSignal)
         fun onError(message: String)
         fun onRoomState(participants: List<ConferenceParticipant>, selfRole: String = "LISTENER")
-        fun onSelfRole(role: String) {}
+        /** Self role change — impl must update role badge UI (ConferenceRuntime.selfRole) + permission gating (mute/unmute others). */
+        fun onSelfRole(role: String) {
+            Log.d(TAG, "onSelfRole default role=$role — override should update role badge + permission gating")
+        }
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context)
+    private val http: OkHttpClient = SecureOkHttpClient.buildWebSocketClient(context).newBuilder()
+        .pingInterval(20, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     private var socket: WebSocket? = null
+    private val pendingSignals = PendingCallSignalQueue()
+    private val epoch = SignalingSocketEpoch()
+
+    @Volatile
+    private var connected = false
+
+    @Volatile
+    private var activeRoomId: String = ""
+
+    val isConnected: Boolean get() = connected && socket != null
 
     fun reconnect(roomId: String) {
-        runCatching { socket?.cancel() }
+        Log.d(TAG, "reconnect() roomId=$roomId")
+        epoch.invalidate()
+        connected = false
+        val oldSocket = socket
         socket = null
+        runCatching { oldSocket?.cancel() }
         connect(roomId)
     }
 
     fun connect(roomId: String) {
-        if (socket != null) return
-        val token = tokens.accessToken ?: return listener.onError("UNAUTHORIZED")
-        // media-sfu يعمل على منفذ منفصل — نستخدم /ws/conference عبر الـ backend كـ proxy
+        if (socket != null && connected && activeRoomId == roomId) {
+            Log.d(TAG, "connect(): already connected to room $roomId")
+            return
+        }
+
+        activeRoomId = roomId
+        epoch.invalidate()
+        val currentEpoch = epoch.begin()
+
+        if (socket != null) {
+            val oldSocket = socket
+            socket = null
+            runCatching { oldSocket?.close(1000, "reconnect") }
+        }
+
+        val token = tokens.accessToken
+        if (token == null) {
+            listener.onError("UNAUTHORIZED")
+            return
+        }
+
         val baseUrl = ServerEndpoint.url()
             .replaceFirst("http://", "ws://")
             .replaceFirst("https://", "wss://")
         val url = "$baseUrl/ws/conference?roomId=$roomId"
+        Log.d(TAG, "connect(): connecting to $url")
+
         socket = http.newWebSocket(
             Request.Builder()
                 .url(url)
@@ -101,10 +137,17 @@ class ConferenceSignalingClient(
                 .build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = true
+                    Log.d(TAG, "onOpen: conference signaling connected, flushing queued signals")
+                    pendingSignals.flush { signalJson ->
+                        runCatching { webSocket.send(signalJson) }.getOrDefault(false)
+                    }
                     listener.onConnected()
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
                     runCatching {
                         val signal = json.decodeFromString<ConferenceSignal>(text)
                         when (signal.type) {
@@ -120,9 +163,6 @@ class ConferenceSignalingClient(
                                             hasAudio = signal.payload["${entry.value}_audio"] == "true",
                                             hasVideo = signal.payload["${entry.value}_video"] == "true",
                                             isHost = signal.payload["host"] == entry.value || role == "HOST",
-                                            // الكتم واليد المرفوعة يصلان الآن ضمن ROOM_STATE،
-                                            // فيرى المنضمّ الجديد الغرفة كما هي فعلًا: كان
-                                            // يفقد كل كتم سابق وكل طلب تحدّث معلّق.
                                             isMuted = signal.payload["${entry.value}_muted"] == "true",
                                             raisedHand = signal.payload["${entry.value}_hand"] == "true"
                                         )
@@ -147,16 +187,24 @@ class ConferenceSignalingClient(
                             }
                             else -> listener.onSignal(signal)
                         }
-                    }.onFailure { listener.onError("INVALID_CONFERENCE_SIGNAL: ${it.message}") }
+                    }.onFailure {
+                        Log.w(TAG, "onMessage: parse failed, ignoring frame: ${it.message}")
+                    }
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = false
                     socket = null
+                    Log.w(TAG, "onClosed code=$code reason=$reason")
                     listener.onDisconnected()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (!epoch.isCurrent(currentEpoch) || webSocket !== socket) return
+                    connected = false
                     socket = null
+                    Log.e(TAG, "onFailure ${t.javaClass.simpleName}: ${t.message}")
                     listener.onDisconnected()
                 }
             }
@@ -164,8 +212,24 @@ class ConferenceSignalingClient(
     }
 
     fun send(signal: ConferenceSignal) {
-        socket?.send(json.encodeToString(signal))
-            ?: listener.onError("CONFERENCE_NOT_CONNECTED")
+        val signalJson = runCatching { json.encodeToString(signal) }.getOrNull()
+        if (signalJson == null) {
+            Log.e(TAG, "send: serialization failed for type=${signal.type}")
+            return
+        }
+
+        val currentSocket = socket
+        val ok = if (connected && currentSocket != null) {
+            runCatching { currentSocket.send(signalJson) }.getOrDefault(false)
+        } else false
+
+        if (!ok) {
+            pendingSignals.enqueue(signalJson)
+            val targetRoom = signal.roomId.ifBlank { activeRoomId }
+            if (!connected && targetRoom.isNotBlank()) {
+                runCatching { connect(targetRoom) }
+            }
+        }
     }
 
     fun join(roomId: String, userId: String, hasVideo: Boolean, speaker: Boolean = hasVideo) = send(
@@ -222,16 +286,25 @@ class ConferenceSignalingClient(
         )
     )
 
-    /**
-     * رفع اليد أو خفضها. الخادم يحفظ الحالة ويبثّها للجميع — بما فيهم
-     * المرسِل — فتتطابق واجهة الطالب مع قائمة المضيف.
-     */
+    /** رفع اليد أو خفضها */
     fun raiseHand(roomId: String, userId: String, lowered: Boolean = false) = send(
         ConferenceSignal(
             type = "RAISE_HAND",
             roomId = roomId,
             userId = userId,
             payload = mapOf("lowered" to lowered.toString())
+        )
+    )
+
+    /** خفض اليد صراحة */
+    fun lowerHand(roomId: String, userId: String) = raiseHand(roomId, userId, lowered = true)
+
+    /** مسح كافة الأيدي المرفوعة (للمضيف) */
+    fun clearAllHands(roomId: String, userId: String) = send(
+        ConferenceSignal(
+            type = "CLEAR_ALL_HANDS",
+            roomId = roomId,
+            userId = userId
         )
     )
 
@@ -308,9 +381,16 @@ class ConferenceSignalingClient(
     )
 
     fun close() {
-        socket?.close(1000, "conference ended")
+        Log.d(TAG, "close()")
+        epoch.invalidate()
+        connected = false
+        val oldSocket = socket
         socket = null
+        runCatching { oldSocket?.close(1000, "conference ended") }
+        pendingSignals.clear()
     }
 
-    val isConnected: Boolean get() = socket != null
+    companion object {
+        private const val TAG = "ConferenceSignaling"
+    }
 }

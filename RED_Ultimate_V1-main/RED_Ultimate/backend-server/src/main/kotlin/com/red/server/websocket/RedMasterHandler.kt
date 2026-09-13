@@ -68,13 +68,13 @@ class RedMasterHandler(
         handleEnvelopeSafely(session, envelope)
     }
 
-    /** تحديث حضور فوري و last_seen — يُستدعى عند كل إطار للحفاظ على نافذة 5د حية */
+    /** تحديث حضور خفيف عند كل إطار: Redis فقط (ZSet + Set).
+     * أُزيلت كتابة DB من هنا — كانت UPDATE لكل إطار (حتى 120/دقيقة/مستخدم)
+     * تستنزف حوض Hikari. last_seen يُحدَّث عند الاتصال/الانقطاع فقط. */
     private fun touchPresence(session: WebSocketSession) {
         val redId = session.attributes["userId"] as? String ?: return
         val now = System.currentTimeMillis().toDouble()
         runCatching { redis.opsForZSet().add("red:presence:index", redId, now) }
-        // تحديث last_seen في DB بشكل خفيف (لا ننتظر النتيجة)
-        runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
         // أيضاً تحديث حالة ONLINE في UserStatusService للوحة والخصوصية
         runCatching { redis.opsForSet().add("users:online", redId) }
     }
@@ -90,6 +90,8 @@ class RedMasterHandler(
                 RedProtos.RedRED.SignalCase.SYNC_REQ -> sync(session, envelope.syncReq)
                 RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
                 RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> receiveRemoteWipeAck(session, envelope.remoteWipeAck)
+                RedProtos.RedRED.SignalCase.REACTION -> receiveReaction(session, envelope.reaction)
+                RedProtos.RedRED.SignalCase.CALL_SIGNAL -> receiveCallSignal(session, envelope.callSignal)
                 else -> Unit
             }
         } catch (e: Exception) {
@@ -102,6 +104,32 @@ class RedMasterHandler(
         // above, so it is a parseable UUID string here.
         val accountId = session.attributes["accountId"] as? String ?: return
         userIntelligence.markRemoteWipeAcknowledged(UUID.fromString(accountId), ack.commandId)
+    }
+
+    /**
+     * 😀 التفاعلات — تُحفظ في Mongo (خاصة/مجموعة/قناة + مرآة Postgres) ثم تُبث
+     * لكل المشاركين: جلسات المرسل الأخرى + المستلم/الأعضاء — لا صدى للمرسل وحده.
+     * remove=true هو REACTION_REMOVE: يحذف تفاعل المستخدم ثم يبث الحذف للجميع.
+     * أي فشل (رسالة مجهولة، غير مشارك، إيموجي غير صالح) يُسجَّل فقط ويبقى المقبس حياً.
+     */
+    private fun receiveReaction(session: WebSocketSession, reaction: RedProtos.ReactionRED) {
+        val reactor = userId(session)
+        val target = try {
+            messages.toggleReaction(reaction.targetMessageId, reactor, reaction.emoji, reaction.remove)
+        } catch (e: Exception) {
+            log.warn("Rejected reaction from {} on {}: {}", reactor, reaction.targetMessageId, e.message)
+            return
+        }
+        val envelope = RedProtos.RedRED.newBuilder().setReaction(reaction).build()
+        target.recipients.forEach { redId ->
+            if (redId == reactor) sendToUser(redId, envelope, exceptSessionId = session.id)
+            else sendToUser(redId, envelope)
+        }
+    }
+
+    private fun receiveCallSignal(session: WebSocketSession, callSignal: RedProtos.CallSignalRED) {
+        val sender = userId(session)
+        log.info("CallSignal {} ({}) received from {}", callSignal.callId, callSignal.type, sender)
     }
 
     private fun receiveMessage(session: WebSocketSession, incoming: RedProtos.ChatMessage) {
@@ -158,8 +186,10 @@ class RedMasterHandler(
     private fun receiveTyping(session: WebSocketSession, typing: RedProtos.TypingRED) {
         val sender = userId(session)
         require(typing.userId == sender) { "userId does not match authenticated RED ID" }
-        // احترام خصوصية typing — إن عطّل المرسل مؤشرات الكتابة لا تُبث (اختياري مستقبلاً)
-        // حالياً نحترم فقط عدم الإزعاج للمحظورين عبر requireDirectAllowed
+        // خصوصية مؤشر الكتابة للكاتب نفسه: NOBODY يسقط البث كله، CONTACTS يشترط جهة متبادلة.
+        // (كان البث يتم دائماً — الإعداد المحلي لا يمنع شيئاً على الخادم).
+        val typingScope = runCatching { presencePrivacy.getPrivacySettings(sender).typingIndicators }.getOrDefault("EVERYONE")
+        if (typingScope == "NOBODY") return
         // حفظ مؤقت + بث فوري + تنظيف تلقائي TTL 5s عبر RedisManager
         redisManager.setTyping(sender, typing.conversationId)
         // 📝 مؤشر الكتابة الجماعي: conversationId = معرف مجموعة (UUID > 32) — يُبث لكل الأعضاء
@@ -174,7 +204,9 @@ class RedMasterHandler(
         } else {
             require(typing.targetUserId.isNotBlank() && typing.targetUserId != sender) { "targetUserId is required" }
             messages.requireDirectAllowed(sender, typing.targetUserId)
-            // فحص خصوصية target إن كان حظر typing (مستقبلاً)
+            if (typingScope == "CONTACTS" &&
+                !runCatching { messages.isContact(sender, typing.targetUserId) }.getOrDefault(false)
+            ) return
             sendToUser(typing.targetUserId, RedProtos.RedRED.newBuilder().setTyping(typing).build())
             runCatching { redis.convertAndSend("red:typing", "${typing.conversationId}:$sender:${typing.isTyping}") }
         }
@@ -196,14 +228,20 @@ class RedMasterHandler(
     override fun afterConnectionEstablished(session: WebSocketSession) {
         val redId = userId(session)
         sessions.computeIfAbsent(redId) { ConcurrentHashMap() }[session.id] = session
+        // دفاع عمقي: المعترض يرفض /ws/master بلا جهاز أصلاً (401). إن وصلت جلسة
+        // بلا protocolDeviceId لسبب ما، إغلاق نظيف 1008 بدل رمي استثناء (كان ERROR
+        // متكرراً كل دقائق + حلقة reconnect تبدو كتعليق).
         val protocolDeviceId = session.attributes["protocolDeviceId"] as? Int
-            ?: throw IllegalStateException("Messaging requires an approved protocol device")
+        if (protocolDeviceId == null) {
+            log.warn("Closing master socket without protocol device for {}", redId)
+            runCatching { session.close(CloseStatus.POLICY_VIOLATION) }
+            return
+        }
         val now = System.currentTimeMillis().toDouble()
         redis.opsForZSet().add("red:presence:index", redId, now)
         redis.opsForSet().add("users:online", redId)
-        // تحديث last_seen فوري في قاعدة البيانات
+        // تحديث last_seen فوري في قاعدة البيانات (مرة واحدة — كانت مكررة بسطر ثانٍ زائد)
         runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
-        runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ? AND last_seen IS NULL", Instant.now(), Instant.now(), redId) }
         messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
         log.debug("Presence ONLINE for {} (sessions={})", redId, sessions[redId]?.size)
     }
@@ -237,6 +275,29 @@ class RedMasterHandler(
             val live = redis.opsForZSet().range("red:presence:index", 0, -1) ?: emptySet()
             val online = redis.opsForSet().members("users:online") ?: emptySet()
             (online - live).forEach { redis.opsForSet().remove("users:online", it) }
+        }
+    }
+
+    /**
+     * AUTO-FIX (message reliability): at-least-once redelivery pump.
+     * afterConnectionEstablished() replays pending messages only once per connect and
+     * MessageService.pendingFor() caps a single fetch, so a message whose ACK was lost - or a
+     * backlog larger than one page - stayed undelivered until the client reconnected. This pump
+     * re-sends still-`SENT` messages to currently connected devices until the client ACKs them.
+     * Duplicates are harmless: the client stores messages by id (REPLACE), so a repeat frame is a no-op.
+     */
+    @Scheduled(fixedDelay = 30_000)
+    fun redeliverPendingMessages() {
+        sessions.forEach { (redId, perUser) ->
+            perUser.values.filter { it.isOpen }.forEach deviceLoop@{ session ->
+                val deviceId = session.attributes["protocolDeviceId"] as? Int ?: return@deviceLoop
+                runCatching {
+                    val cutoff = Instant.now().minusSeconds(PENDING_REDELIVER_MIN_AGE_SECONDS)
+                    messages.pendingFor(redId, deviceId, PENDING_REDELIVER_LIMIT)
+                        .filter { it.createdAt.isBefore(cutoff) }
+                        .forEach { send(session, messageEnvelope(it)) }
+                }.onFailure { log.debug("redeliverPendingMessages failed for {}: {}", redId, it.message) }
+            }
         }
     }
 
@@ -317,4 +378,11 @@ class RedMasterHandler(
 
     private fun userId(session: WebSocketSession): String =
         session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
+
+    private companion object {
+        /** AUTO-FIX (message reliability): max pending messages re-sent per device per tick. */
+        private const val PENDING_REDELIVER_LIMIT = 50
+        /** AUTO-FIX: never race the live push - only re-send messages older than this. */
+        private const val PENDING_REDELIVER_MIN_AGE_SECONDS = 10L
+    }
 }

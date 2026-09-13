@@ -50,6 +50,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
@@ -58,7 +59,8 @@ import java.util.UUID
 
 class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Listener, SensorEventListener,
         CallPresenceMonitor.Listener, CallDeliveryEngine.Listener {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var signaling: CallSignalingClient
     private lateinit var telecom: TelecomBridge
     private lateinit var audio: AudioManager
@@ -87,12 +89,19 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private var ringStartedAt: Long = 0L
     /** هل انتهت مهلة الرنين الواردة دون رد — لتمييز MISSED عن REJECTED في السجل المحلي */
     private var ringTimedOut = false
+    private var connectTimeoutJob: kotlinx.coroutines.Job? = null
+    private var iceRestartDebounceJob: kotlinx.coroutines.Job? = null
+
+    private val sessionGuard = CallSessionGuard()
+    private val cleanupGuard = CallCleanupGuard()
+    @Volatile
+    private var offerStartedForCallId: String? = null
 
     // ── منظومة ضمان وصول المكالمة (Multi-Path Delivery) ─────────────────
     private lateinit var deliveryEngine: CallDeliveryEngine
     private lateinit var presenceMonitor: CallPresenceMonitor
 
-    override fun onCreate() {
+override fun onCreate() {
         super.onCreate(); createChannel()
         audio = getSystemService(AudioManager::class.java)
         telecom = TelecomBridge(this).also { runCatching(it::register) }
@@ -111,37 +120,112 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             },
             onFailure = { fail("انقطع اتصال الإشارة") }
         )
+        // Pre-warm WebRTC factory + ICE cache off the critical path
+        scope.launch { WebRtcBootstrap.ensure(this@YounesCallService); WebRtcBootstrap.prefetchIce(this@YounesCallService) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_LISTEN -> { promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false); signaling.connect() }
-            ACTION_START -> {
+ACTION_START -> {
+                sessionGuard.beginNewSession()
+                cleanupGuard.beginNewCall()
                 outgoingPending = true
-                target = intent.getStringExtra(EXTRA_TARGET).orEmpty(); mode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
-                // لا تقصف الخدمة إذا وصل intent بلا هدف (PendingIntent قديم/إشعار) — أظهر حالة خطأ بأمان
+                offerStartedForCallId = null
+                target = intent.getStringExtra(EXTRA_TARGET).orEmpty()
+                val isVideoExtra = intent.getBooleanExtra(EXTRA_IS_VIDEO, false)
+                mode = intent.getStringExtra(EXTRA_MODE) ?: (if (isVideoExtra) "VIDEO" else "VOICE")
                 if (target.isBlank()) {
                     CallRuntime.state = CallUiState.Error("معرّف المكالمة غير صالح")
                     updateNotification("تعذر بدء المكالمة: المعرّف غير صالح")
                     return START_STICKY
                 }
+                // AUTO-FIX (call audio): outgoing calls must verify RECORD_AUDIO before engine
+                // setup, mirroring the incoming-path permission check.
+                if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    CallRuntime.state = CallUiState.Error("MIC_PERMISSION_MISSING")
+                    updateNotification("Microphone permission missing - call cancelled")
+                    return START_STICKY
+                }
                 callId = UUID.randomUUID().toString()
-                // ضبط الحالة فوراً ليظهر الـ overlay والتبويب الصحيح بلا تأخير
                 CallRuntime.state = CallUiState.Connecting(callId ?: UUID.randomUUID().toString(), target, mode)
-                scope.launch { runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
-                promote(notification("جارٍ بدء المكالمة…", ongoing = true), media = true); prepareAudio(); startRingback(); armRingTimeout(outgoing = true); signaling.connect()
+                scope.launch {
+                    runCatching { telecom.addCall(target, false, mode == "VIDEO", onAnswer = {}, onDisconnect = { endCall(true) }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) }
+                        .onFailure { e ->
+                            android.util.Log.e("YounesCallService", "telecom.addCall OUTGOING failed target=$target mode=$mode call=$callId", e)
+                            val fbCallId = callId.orEmpty()
+                            val fbPeer = target
+                            val fbMode = mode
+                            runCatching { IncomingCallActivity.launch1to1(this@YounesCallService, fbCallId, fbPeer, fbMode, fbPeer) }
+                            updateNotification("تعذر ربط النظام — المكالمة مستمرة داخل التطبيق…")
+                        }
+                }
+                // Offload blocking setup to IO thread
+                scope.launch {
+                    prepareAudio()
+                    startRingback()
+                }
+                armRingTimeout(outgoing = true)
+                signaling.connect()
+
+                if (OutgoingOfferStartPolicy.shouldStart(outgoingPending, signaling.isConnected(), callId, offerStartedForCallId)) {
+                    offerStartedForCallId = callId
+                    scope.launch {
+                        val created = createEngine(mode == "VIDEO")
+                        if (created is ApiResult.Success) engine?.offer() else fail("تعذر إنشاء محرك WebRTC")
+                    }
+                }
+
+                // 15s connect timeout with Arabic Toast + CallFailed state
+                connectTimeoutJob?.cancel()
+                connectTimeoutJob = scope.launch {
+                    kotlinx.coroutines.delay(15_000)
+                    if (CallRuntime.state is CallUiState.Connecting) {
+                        android.util.Log.w("YounesCallService", "Connect timeout — call=$callId target=$target")
+                        mainScope.launch {
+                            runCatching {
+                                android.widget.Toast.makeText(
+                                    this@YounesCallService,
+                                    "انتهت مهلة الاتصال — تعذر الوصول إلى $target",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                        fail("انتهت مهلة الاتصال — تعذر الوصول إلى $target")
+                    }
+                }
             }
-            ACTION_ACCEPT -> acceptIncoming(
-                cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
-                micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
-            )
-            ACTION_ACCEPT_VIDEO -> acceptIncoming(
-                cameraOn = true,
-                micOn = intent.getBooleanExtra(EXTRA_ENABLED, true)
-            )
+ACTION_ACCEPT -> {
+                // P0: تجاهل قبول لمعرف غير الحالي (زر إشعار قديم)
+                val wantId = intent.getStringExtra(EXTRA_CALL_ID).orEmpty()
+                val currentId = incomingOffer?.callId ?: lastIncomingOffer?.callId ?: callId
+                if (wantId.isNotBlank() && currentId?.isNotBlank() == true && wantId != currentId) {
+                    android.util.Log.w("YounesCallService", "ACTION_ACCEPT لمعرف قديم — مُتجاهَل")
+                    return START_STICKY
+                }
+                val isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, false) || intent.getStringExtra(EXTRA_MODE) == "VIDEO"
+                acceptIncoming(
+                    cameraOn = intent.getBooleanExtra(EXTRA_CAMERA, true),
+                    micOn = intent.getBooleanExtra(EXTRA_ENABLED, true),
+                    isVideo = isVideo
+                )
+            }
+            ACTION_ACCEPT_VIDEO -> {
+                val isVideo = true
+                acceptIncoming(
+                    cameraOn = true,
+                    micOn = intent.getBooleanExtra(EXTRA_ENABLED, true),
+                    isVideo = isVideo
+                )
+            }
             ACTION_REJECT -> rejectIncoming()
             ACTION_END -> endCall(sendSignal = true)
-            ACTION_MIC -> engine?.setMicrophoneEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true))
+            ACTION_MIC -> {
+                // AUTO-FIX (call audio): remember the user's explicit mute choice so the audio-focus
+                // layer can restore exactly that state instead of forcing the mic on/off.
+                userMicEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true)
+                engine?.setMicrophoneEnabled(userMicEnabled)
+            }
             ACTION_CAMERA -> {
                 val enable = intent.getBooleanExtra(EXTRA_ENABLED, true)
                 if (enable && CallRuntime.localVideo == null) {
@@ -185,19 +269,25 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             }
             ACTION_QUICK_REPLY -> {
                 val text = intent?.getStringExtra("message").orEmpty().trim()
-                val callIdLocal = intent?.getStringExtra("call_id").orEmpty()
-                if (text.isNotEmpty() && callIdLocal.isNotEmpty()) {
+                // الطرف المتصل من الحالة الحية — الرد يُرسل له فعلاً عبر E2EE لا إشعار وهمي.
+                val peer = target.takeIf { it.isNotBlank() }
+                    ?: (incomingOffer ?: lastIncomingOffer)?.sourceUserId.orEmpty()
+                if (text.isNotEmpty() && peer.isNotBlank()) {
+                    val myId = runCatching { com.red.sovereign.auth.TokenStore(this).redId.orEmpty() }.getOrDefault("")
+                    val sent = runCatching {
+                        com.red.sovereign.core.RedConnectionService.sendText(this, peer, quickReplyConversationId(myId, peer), text)
+                    }.isSuccess
                     try {
                         getSystemService(NotificationManager::class.java)
-                            .notify(callIdLocal.hashCode(),
+                            .notify((callId ?: peer).hashCode(),
                                 NotificationCompat.Builder(this, "red_calls_incoming")
                                     .setSmallIcon(android.R.drawable.sym_action_chat)
-                                    .setContentTitle("تم إرسال ردّك")
+                                    .setContentTitle(if (sent) "تم إرسال ردّك" else "تعذّر إرسال الرد")
                                     .setContentText(text)
                                     .setAutoCancel(true)
                                     .build()
                             )
-                    } catch (_: Exception) { }
+                    } catch (e: Exception) { android.util.Log.w("YounesCallService", "quick reply notify op failed", e) }
                 }
                 rejectIncoming()
             }
@@ -220,13 +310,16 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         return if (intent?.action == ACTION_STOP) START_NOT_STICKY else START_STICKY
     }
 
-    override fun onConnected() {
+override fun onConnected() {
         reconnect?.stop()
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = null
         // مراقبة تبديل الشبكة (Wi-Fi ↔ بيانات) — عند التعافي نعيد IceRestart
         if (networkWatcher == null) {
             networkWatcher = NetworkChangeWatcher(this) {
                 if (CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming) {
-                    engine?.restartIce()
+                    scheduleIceRestart()
+                    android.util.Log.d("YounesCallService", "تبديل الشبكة — إعادة ضبط المسار call=$callId")
                     updateNotification("تبديل الشبكة — إعادة ضبط المسار…")
                 }
             }.also { it.start() }
@@ -241,16 +334,17 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             updateNotification("تم استعادة الاتصال — مكالمة يونس نشطة")
         }
         if (incomingOffer != null || !outgoingPending) {
-            // عند نجاح إعادة الاتصال بالشبكة والإشارة أثناء مكالمة قائمة، نقوم بإجراء ICE restart
-            // لإعادة استكشاف المسار التلقائي وتمرير الحزم عبر الشبكة الجديدة دون انقطاع الصوت أو الفيديو
             if (CallRuntime.state is CallUiState.Active || CallRuntime.state is CallUiState.ActiveWithIncoming) {
-                engine?.restartIce()
+                scheduleIceRestart()
             }
             return
         }
-        scope.launch {
-            val created = createEngine(mode == "VIDEO")
-            if (created is ApiResult.Success) engine?.offer() else fail("تعذر إنشاء محرك WebRTC")
+        if (OutgoingOfferStartPolicy.shouldStart(outgoingPending, signaling.isConnected(), callId, offerStartedForCallId)) {
+            offerStartedForCallId = callId
+            scope.launch {
+                val created = createEngine(mode == "VIDEO")
+                if (created is ApiResult.Success) engine?.offer() else fail("تعذر إنشاء محرك WebRTC")
+            }
         }
     }
 
@@ -266,6 +360,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     applyRemoteOffer(signal)
                     return
                 }
+                sessionGuard.beginNewSession()
+                cleanupGuard.beginNewCall()
                 val newIncoming = CallUiState.Incoming(
                     callId = signal.callId.orEmpty(),
                     peer = signal.sourceUserId.orEmpty(),
@@ -286,6 +382,15 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                 callId = newIncoming.callId
                 mode = newIncoming.mode
                 CallRuntime.state = newIncoming
+                // P0: تأكيد الرنين للمتصل فوراً — بدونه يظن DeliveryEngine أن العرض ضاع
+                // فينتظر FCM+webhook ~20s رغم أن الجهاز يرن فعلاً.
+                runCatching {
+                    signaling.send(CallSignal.createRinging(
+                        callId = signal.callId.orEmpty(),
+                        targetUserId = signal.sourceUserId.orEmpty(),
+                        mode = signal.mode ?: "VOICE"
+                    ))
+                }
                 if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) startRingtone()
                 armRingTimeout(outgoing = false)
                 runCatching {
@@ -297,7 +402,17 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                         inviter = newIncoming.peer
                     )
                 }
-                scope.launch { runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) } }
+                scope.launch {
+                    runCatching { telecom.addCall(target, true, mode == "VIDEO", onAnswer = { acceptIncoming() }, onDisconnect = { rejectIncoming() }, onActive = { runCatching { signaling.send(CallSignal(callId, target, type = "RESUME", mode = mode)) } }, onInactive = { runCatching { signaling.send(CallSignal(callId, target, type = "HOLD", mode = mode)) } }) }
+                        .onFailure { e ->
+                            android.util.Log.e("YounesCallService", "telecom.addCall INCOMING failed target=$target mode=$mode call=$callId", e)
+                            val fbCallId = callId.orEmpty()
+                            val fbPeer = target
+                            val fbMode = mode
+                            runCatching { IncomingCallActivity.launch1to1(this@YounesCallService, fbCallId, fbPeer, fbMode, fbPeer) }
+                            updateNotification("تعذر ربط النظام — عرض شاشة المكالمة الكاملة…")
+                        }
+                }
                 promote(
                     if (com.red.sovereign.settings.SettingsRuntime.current.callNotifications) incomingNotification(target, mode)
                     else incomingNotification(target, mode).let { builder ->
@@ -314,21 +429,44 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     media = false
                 )
             }
-            "RINGING" -> {
-                // المستلم بدأ يرن — أبلغ نظام التسليم والـ presenceMonitor
-                presenceMonitor.onSignalReceived(callId.orEmpty(), "RINGING", this)
+            "RINGING", "ACK", "RINGING_PUSH_SENT" -> {
+                // المستلم بدأ يرن — أبلغ نظام التسليم والـ presenceMonitor.
+                // P0: قبول ACK/RINGING_PUSH_SENT كإثبات وصول مبدئي (كان DeliveryEngine يفشل كاذباً).
+                val ackId = signal.callId.orEmpty()
+                if (ackId.isNotBlank() && (ackId == callId || callId.isNullOrBlank())) {
+                    runCatching { deliveryEngine.onDeliveryAckReceived(ackId) }
+                    presenceMonitor.onSignalReceived(callId.orEmpty(), "RINGING", this)
+                }
                 val cur = CallRuntime.state as? CallUiState.Connecting
-                if (cur != null) CallRuntime.state = cur.withPresence(CallPresenceMonitor.PresenceState.RINGING)
+                if (cur != null && signal.callId == callId) {
+                    CallRuntime.state = cur.withPresence(CallPresenceMonitor.PresenceState.RINGING)
+                }
             }
-            "ANSWER" -> signal.payload["sdp"]?.let { engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, it)) { remoteDescriptionSet = true; flushIce() } }
+            "ANSWER" -> {
+                val sdp = signal.payload["sdp"]
+                // P0: ANSWER بلا sdp أو لمكالمة أخرى كان يُسكت الفشل ويعلق ICE للأبد.
+                if (signal.callId != callId || sdp.isNullOrBlank()) {
+                    android.util.Log.w("YounesCallService", "ANSWER مرفوض callId=${signal.callId} sdpNull=${sdp == null}")
+                } else {
+                    engine?.setRemote(SessionDescription(SessionDescription.Type.ANSWER, sdp)) { remoteDescriptionSet = true; flushIce() }
+                }
+            }
             "ICE" -> {
-                val candidate = IceCandidate(signal.payload["sdpMid"], signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0, signal.payload["candidate"].orEmpty())
-                if (remoteDescriptionSet) engine?.addIce(candidate) else pendingIce += candidate
+                // P0: إسقاط ICE الغريب + سقف التخزين (كان يُحقن في المكالمة الخطأ بلا حد).
+                if (signal.callId != callId) return
+                val sdp = signal.payload["candidate"].orEmpty()
+                if (sdp.isBlank()) return
+                val candidate = IceCandidate(signal.payload["sdpMid"], signal.payload["sdpMLineIndex"]?.toIntOrNull() ?: 0, sdp)
+                if (remoteDescriptionSet) engine?.addIce(candidate)
+                else if (pendingIce.size < 100) pendingIce += candidate
             }
             "HOLD" -> { engine?.setMicrophoneEnabled(false); engine?.setCameraEnabled(false) }
-            "RESUME" -> { engine?.setMicrophoneEnabled(true); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
+            // P0: RESUME البعيد كان يفك كتم المستخدم قسراً — نستعيد اختياره بدل true.
+            "RESUME" -> { engine?.setMicrophoneEnabled(userMicEnabled); if (mode == "VIDEO") engine?.setCameraEnabled(true) }
             "CANCELLED" -> {
                 // Another device on this account answered or caller cancelled.
+                // P0: تجاهل ما لا يخص المكالمة الحالية (كان يقتل مكالمة أخرى).
+                if (signal.callId != callId && signal.callId != (incomingOffer?.callId ?: lastIncomingOffer?.callId)) return
                 incomingOffer = null
                 clearRingTimeout()
                 stopRingtone()
@@ -340,10 +478,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     scheduleCleanupAndReset()
                 }
             }
-            "END" -> handleCallEnded()
-            "REJECT" -> handleDeclined()
-            "BUSY" -> handleBusy()
-            "UNAVAILABLE" -> handleUnavailable()
+            // P0: END/REJECT/BUSY/UNAVAILABLE الغريبة كانت تُنهي المكالمة الحالية خطأً.
+            "END" -> { if (signal.callId == null || signal.callId == callId) handleCallEnded() }
+            "REJECT" -> { if (signal.callId == null || signal.callId == callId) handleDeclined() }
+            "BUSY" -> { if (signal.callId == null || signal.callId == callId) handleBusy() }
+            "UNAVAILABLE" -> { if (signal.callId == null || signal.callId == callId) handleUnavailable() }
             "GROUP_CALL_INVITE" -> {
                 // دعوة مكالمة جماعية (iMO/Zoom): اعرض الإشعار الوارد — سيقبل/يرفض عبر GroupCallService
                 val gId = signal.groupCallId ?: signal.callId.orEmpty()
@@ -414,7 +553,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         }
     }
 
-    private fun acceptIncoming(cameraOn: Boolean = true, micOn: Boolean = true) {
+private fun acceptIncoming(cameraOn: Boolean = true, micOn: Boolean = true, isVideo: Boolean = false) {
+        sessionGuard.beginNewSession()
+        cleanupGuard.beginNewCall()
         clearRingTimeout()
         stopRingtone()
         val offer = incomingOffer ?: return
@@ -426,10 +567,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         promote(notification("جارٍ قبول المكالمة…", true), media = true)
         prepareAudio(); signaling.connect()
+        val videoMode = isVideo || offer.mode == "VIDEO"
+        mode = if (videoMode) "VIDEO" else "VOICE"
         scope.launch {
-            if (createEngine(offer.mode == "VIDEO") is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
-            engine?.setMicrophoneEnabled(micOn)
-            if (offer.mode == "VIDEO") engine?.setCameraEnabled(cameraOn && cameraGranted)
+            if (createEngine(videoMode) is ApiResult.Error) return@launch fail("تعذر إنشاء محرك WebRTC")
+            val autoMuted = com.red.sovereign.settings.SettingsRuntime.current.autoMuteOnEntry
+            engine?.setMicrophoneEnabled(micOn && !autoMuted)
+            if (videoMode) engine?.setCameraEnabled(cameraOn && cameraGranted)
             val sdp = offer.payload["sdp"] ?: return@launch fail("عرض المكالمة غير صالح")
             engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, sdp)) { remoteDescriptionSet = true; flushIce(); engine?.answer() }
             CallRuntime.state = CallUiState.Connecting(callId.orEmpty(), target, mode)
@@ -452,6 +596,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         if (result is ApiResult.Success) {
             CallRuntime.localVideo = eng.localMedia?.videoTrack
             if (CallRuntime.localVideo != null) CallRuntime.cameraNotice = false
+            if (com.red.sovereign.settings.SettingsRuntime.current.autoMuteOnEntry) {
+                runCatching { eng.setMicrophoneEnabled(false) }
+            }
         }
         return result
     }
@@ -483,28 +630,58 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         // استخدم CallDeliveryEngine للـ Trickle ICE مع إعادة الإرسال عند ICE restart
         deliveryEngine.onLocalIceCandidate(callId.orEmpty(), candidate, target)
     }
-    override fun onRemoteVideo(track: VideoTrack) { CallRuntime.remoteVideo = track }
+    override fun onRemoteVideo(track: VideoTrack) {
+        runCatching { track.setEnabled(true) }
+        CallRuntime.remoteVideo = track
+        android.util.Log.i("YounesCallService", "remote VIDEO arrived call=$callId")
+    }
+    // LEGENDARY FIX: تفعيل الصوت البعيد فور الوصول + ضمان المسار (كان الصوت يصل مكتوماً في مسار SFU)
+    override fun onRemoteAudio(track: org.webrtc.AudioTrack) {
+        runCatching { track.setEnabled(true) }
+        android.util.Log.i("YounesCallService", "remote AUDIO arrived call=$callId — ensuring route")
+        // ضمان بقاء MODE_IN_COMMUNICATION والسماعة الصحيحة بعد وصول الصوت
+        runCatching {
+            if (audio.mode != AudioManager.MODE_IN_COMMUNICATION) audio.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
+    }
     override fun onNetworkStats(stats: NetworkStats) { CallRuntime.networkStats = stats; onStatsReceived(stats) }
-    override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
+override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
         when (state) {
             PeerConnection.PeerConnectionState.CONNECTED -> {
                 clearRingTimeout()
                 stopRingback()
                 stopRingtone()
+                // LEGENDARY: توجيه السماعة للفيديو + احترام اختيار الكتم (كان يفك الكتم قسراً).
+                runCatching {
+                    if (mode == "VIDEO") setSpeaker(true)
+                    engine?.setMicrophoneEnabled(userMicEnabled)
+                }
                 failedIceJob?.cancel()
-                CallRuntime.state = CallUiState.Active(callId.orEmpty(), target, mode, System.currentTimeMillis())
+                iceRestartDebounceJob?.cancel()
+                // P0: لا تسطّح ActiveWithIncoming ولا تصفّر المدة/التعليق عند إعادة الاتصال.
+                val prev = CallRuntime.state
+                val keepWaiting = (prev as? CallUiState.ActiveWithIncoming)?.waiting
+                val keepStarted = when (prev) {
+                    is CallUiState.Active -> prev.startedAt
+                    is CallUiState.ActiveWithIncoming -> prev.active.startedAt
+                    else -> System.currentTimeMillis()
+                }
+                val keepHeld = (prev as? CallUiState.Active)?.isHeld
+                    ?: (prev as? CallUiState.ActiveWithIncoming)?.active?.isHeld
+                    ?: false
+                val fresh = CallUiState.Active(callId.orEmpty(), target, mode, keepStarted, keepHeld)
+                CallRuntime.state = if (keepWaiting != null) CallUiState.ActiveWithIncoming(fresh, keepWaiting) else fresh
                 updateNotification("مكالمة يونس نشطة")
                 startStatsPolling()
             }
             PeerConnection.PeerConnectionState.FAILED -> {
-                // انقطاع مؤقت (تبديل شبكة، إغلاق مكتمل) — لا ننهي المكالمة فوراً:
-                // نحاول ICE restart، وننهي فقط إذا بقي الاتصال فاشلاً بعد المهلة.
                 if (CallRuntime.state !is CallUiState.Idle && CallRuntime.state !is CallUiState.Incoming) {
                     failedIceJob?.cancel()
-                    engine?.restartIce()
+                    android.util.Log.w("YounesCallService", "ICE FAILED — scheduling debounced restartIce call=$callId")
+                    updateNotification("انقطع المسار — جارٍ إعادة ضبط الاتصال…")
+                    scheduleIceRestart()
                     failedIceJob = scope.launch {
                         kotlinx.coroutines.delay(ICE_RESTART_GRACE_MS)
-                        // لم يتعافَ الاتصال خلال المهلة → ننهي المكالمة نهائياً
                         if (CallRuntime.state is CallUiState.Active ||
                             CallRuntime.state is CallUiState.ActiveWithIncoming ||
                             CallRuntime.state is CallUiState.Reconnecting
@@ -517,6 +694,13 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     endCall(sendSignal = false)
                 }
             }
+            PeerConnection.PeerConnectionState.DISCONNECTED -> {
+                if (CallRuntime.state !is CallUiState.Idle && CallRuntime.state !is CallUiState.Incoming) {
+                    android.util.Log.w("YounesCallService", "ICE DISCONNECTED — scheduling debounced restartIce call=$callId")
+                    updateNotification("إعادة ضبط المسار…")
+                    scheduleIceRestart()
+                }
+            }
             PeerConnection.PeerConnectionState.CLOSED -> endCall(sendSignal = false)
             else -> Unit
         }
@@ -524,14 +708,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private var statsJob: kotlinx.coroutines.Job? = null
     private var failedIceJob: kotlinx.coroutines.Job? = null
+    private var cleanupJob: kotlinx.coroutines.Job? = null
+    private var failJob: kotlinx.coroutines.Job? = null
     // مهلة أطول من نافذة إعادة الاتصال في CallReconnectManager (30 ثانية) —
     // حتى لا يُقتل ICE restart قبل أن تتعافى شبكة الهاتف من الانقطاع المؤقت.
     private val ICE_RESTART_GRACE_MS: Long = 45_000L
     private fun startStatsPolling() {
         statsJob?.cancel()
         statsJob = scope.launch {
-            while (true) {
-                engine?.pollStats()
+            // إلغاء كوروتينات: while(isActive) بدل while(true) حتى لا يتسرب
+            // الـ polling بعد endCall/onDestroy (كان يعمل للأبد في الخلفية).
+            while (isActive) {
+                runCatching { engine?.pollStats() }
                 kotlinx.coroutines.delay(2000)
             }
         }
@@ -547,6 +735,12 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         CallTelemetry.onNetworkStats(stats)
     }
     override fun onError(message: String) {
+        // AUTO-FIX (call audio): device-level failures (mic/speaker) are not network issues -
+        // reconnecting loops forever; surface the failure instead.
+        if (message.startsWith("AUDIO_RECORD") || message.startsWith("AUDIO_TRACK")) {
+            fail(message)
+            return
+        }
         if (isActiveCall()) {
             updateNotification("انقطع اتصال الإشارة — جارٍ إعادة الاتصال…")
             reconnect?.start()
@@ -583,6 +777,18 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun flushIce() { pendingIce.forEach { engine?.addIce(it) }; pendingIce.clear() }
+
+    /** Debounced ICE restart to avoid hammering on flaky networks */
+    private fun scheduleIceRestart() {
+        iceRestartDebounceJob?.cancel()
+        iceRestartDebounceJob = scope.launch {
+            kotlinx.coroutines.delay(1500)
+            if (isActive) {
+                engine?.restartIce()
+                android.util.Log.d("YounesCallService", "ICE restart executed call=$callId")
+            }
+        }
+    }
 
     // ── CallPresenceMonitor.Listener ─────────────────────────────────────
     override fun onPresenceState(callId: String, state: CallPresenceMonitor.PresenceState) {
@@ -775,6 +981,8 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
 
     private fun acceptSecondIncoming() {
         val state = CallRuntime.state as? CallUiState.ActiveWithIncoming ?: return
+        sessionGuard.beginNewSession()
+        cleanupGuard.beginNewCall()
         val waiting = state.waiting
         val previous = state.active
 
@@ -834,8 +1042,11 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         stopRingtone()
         CallRuntime.state = CallUiState.Error(message)
         updateNotification(message)
-        scope.launch {
+        failJob?.cancel()
+        val tokenAtSchedule = sessionGuard.captureToken()
+        failJob = scope.launch {
             kotlinx.coroutines.delay(3000)
+            if (!sessionGuard.isCurrent(tokenAtSchedule)) return@launch
             if (CallRuntime.state is CallUiState.Error) {
                 endCall(sendSignal = false)
                 promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false)
@@ -844,16 +1055,48 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         }
     }
 
-    private fun prepareAudio() {
+    private var userMicEnabled = true
+    private var micMutedByFocus = false
+
+private fun prepareAudio() {
         if (CallSystemSurfacePolicy.usesAndroidTelecom(mode)) {
             android.util.Log.d("YounesCallService", "prepareAudio skipped — Telecom manages audio for mode $mode")
             return
         }
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioFocus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
+        audioFocus = null
         val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
         audioFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attrs).setOnAudioFocusChangeListener { focusChange ->
-            if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                android.util.Log.w("YounesCallService", "AudioFocus lost: $focusChange")
+            when (focusChange) {
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    android.util.Log.w("YounesCallService", "AudioFocus LOSS — muting local audio call=$callId")
+                    // AUTO-FIX (call audio): focus LOSS must not mute the mic.
+                }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    android.util.Log.w("YounesCallService", "AudioFocus LOSS_TRANSIENT — pausing local audio call=$callId")
+                    engine?.setMicrophoneEnabled(false)
+                    micMutedByFocus = true
+                }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                    android.util.Log.d("YounesCallService", "AudioFocus DUCK — lowering volume call=$callId")
+                    runCatching {
+                        val max = audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+                        audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (max * 0.3f).toInt().coerceAtLeast(1), 0)
+                    }
+                }
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    android.util.Log.d("YounesCallService", "AudioFocus GAIN — restoring audio call=$callId")
+                    runCatching {
+                        val max = audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL)
+                        audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, (max * 0.8f).toInt().coerceAtLeast(1), 0)
+                    }
+                    // P0: الاستعادة تحترم اختيار المستخدم (كانت تفتح المايك المكتوم قسراً).
+                    if (micMutedByFocus) {
+                        micMutedByFocus = false
+                        engine?.setMicrophoneEnabled(userMicEnabled)
+                    }
+                }
             }
         }.build()
         val focusRequest = audioFocus ?: run {
@@ -864,10 +1107,45 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         if (focusResult != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             android.util.Log.w("YounesCallService", "AudioFocus not granted: $focusResult — audio may be muted")
         }
-        setSpeaker(mode == "VIDEO")
+        val prefs = com.red.sovereign.settings.SettingsRuntime.current
+        var routedBt = false
+        if (prefs.bluetoothPriority) routedBt = tryRouteBluetoothSilent()
+        if (!routedBt) setSpeaker(prefs.autoSpeaker || mode == "VIDEO")
+        applyAutoMuteOnEntry()
+    }
+
+    /** يوجّه لبلوتوث دون ضجيج عند بدء المكالمة — true إن وُجد جهاز ووُجّه فعلاً. */
+    private fun tryRouteBluetoothSilent(): Boolean {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return false
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= 31) {
+                val bt = audio.availableCommunicationDevices.firstOrNull {
+                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
+                } ?: return false
+                audio.setCommunicationDevice(bt)
+                true
+            } else {
+                @Suppress("DEPRECATION")
+                if (!audio.isBluetoothScoOn) audio.startBluetoothSco()
+                @Suppress("DEPRECATION")
+                audio.isBluetoothScoOn = true
+                @Suppress("DEPRECATION") audio.isBluetoothScoOn
+            }
+        }.getOrDefault(false)
+    }
+
+    /** كتم تلقائي عند الدخول — يُطبق على المحرك إن وُجد، ويُعاد تطبيقه بعد إنشائه. */
+    private fun applyAutoMuteOnEntry() {
+        if (!com.red.sovereign.settings.SettingsRuntime.current.autoMuteOnEntry) return
+        runCatching { engine?.setMicrophoneEnabled(false) }
     }
 
     private fun setSpeaker(enabled: Boolean) {
+        if (enabled) {
+            runCatching { proximityLock?.takeIf { it.isHeld }?.release() }
+            proximityLock = null
+        }
         if (Build.VERSION.SDK_INT >= 31) {
             val type = if (enabled) android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER else android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
             audio.availableCommunicationDevices.firstOrNull { it.type == type }?.let(audio::setCommunicationDevice)
@@ -975,8 +1253,14 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun scheduleCleanupAndReset(delayMs: Long = 3000) {
-        scope.launch {
+        // إلغاء كوروتينات: مهمة تنظيف واحدة فقط — إلغاء السابقة يمنع إنهاء
+        // مكالمة جديدة بدأت خلال نافذة 3-4 ثوانٍ لشاشة CallEnded.
+        cleanupJob?.cancel()
+        val tokenAtSchedule = sessionGuard.captureToken()
+        val genAtSchedule = cleanupGuard.currentGeneration()
+        cleanupJob = scope.launch {
             kotlinx.coroutines.delay(delayMs)
+            if (!sessionGuard.isCurrent(tokenAtSchedule) || !cleanupGuard.isCurrent(genAtSchedule)) return@launch
             endCallCore(sendSignal = false)
             CallRuntime.state = CallUiState.Idle
             updateNotification("جاهز لاستقبال مكالمات يونس")
@@ -987,15 +1271,35 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun endCallCore(sendSignal: Boolean) {
         statsJob?.cancel(); statsJob = null
         failedIceJob?.cancel(); failedIceJob = null
+        cleanupJob?.cancel(); cleanupJob = null
+        failJob?.cancel(); failJob = null
         networkWatcher?.stop(); networkWatcher = null
         clearRingTimeout()
         stopRingback()
+        offerStartedForCallId = null
         val endedPeer = target
         val endedCallId = callId
+        // LEGENDARY FIX: إلغاء الرنين من السجل الموحد عند الإنهاء (كان الشبح يبقى بعد END)
+        endedCallId?.let { runCatching { CallRingRegistry.cancel(this, it) } }
+        runCatching { PstnRingFallbackNotifier.cancel(this, endedCallId.orEmpty()) }
         val endedMode = mode
-        val durationMs = CallRuntime.state.let { (it as? CallUiState.Active)?.let { active -> System.currentTimeMillis() - active.startedAt } ?: 0L }
-        val startedAt = (CallRuntime.state as? CallUiState.Active)?.startedAt
-            ?: ringStartedAt.takeIf { it > 0L } ?: System.currentTimeMillis() - durationMs
+        // P0: لقطة الحالة/الاتجاه/المدة متزامنة قبل Idle (كانت تُقرأ داخل launch بعد القلب
+        // إلى Idle فتُسجَّل MISSED دائماً + اتجاه غير مضمون).
+        val snapState = CallRuntime.state
+        val snapIncoming = (incomingOffer ?: lastIncomingOffer) != null
+        val snapDuration = when (snapState) {
+            is CallUiState.Active -> System.currentTimeMillis() - snapState.startedAt
+            is CallUiState.ActiveWithIncoming -> System.currentTimeMillis() - snapState.active.startedAt
+            is CallUiState.Reconnecting -> System.currentTimeMillis() - snapState.startedAt
+            else -> 0L
+        }
+        val durationMs = snapDuration.coerceAtLeast(0L)
+        val startedAt = when (snapState) {
+            is CallUiState.Active -> snapState.startedAt
+            is CallUiState.ActiveWithIncoming -> snapState.active.startedAt
+            is CallUiState.Reconnecting -> snapState.startedAt.takeIf { it > 0L }
+            else -> null
+        } ?: ringStartedAt.takeIf { it > 0L } ?: System.currentTimeMillis() - durationMs
         if (durationMs > 0 && endedCallId != null) CallTelemetry.onCallEnded(endedCallId, endedMode, "RED", durationMs)
         CallTelemetry.flush(this)
         CallTelemetry.reset()
@@ -1009,7 +1313,9 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             mode = endedMode,
             startedAt = startedAt,
             durationMs = durationMs,
-            incoming = (incomingOffer ?: lastIncomingOffer) != null
+            incoming = snapIncoming,
+            finalState = snapState,
+            timedOut = ringTimedOut
         )
         if (sendSignal && target.isNotBlank()) runCatching { signaling.send(CallSignal(callId, target, type = "END", mode = mode)) }
         // أوقف تسجيل المكالمة إن كان يعمل — كان التسجيل يستمر في الخلفية بعد انتهاء المكالمة
@@ -1022,26 +1328,28 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         presenceMonitor.stop(callId.orEmpty())
         deliveryEngine.clearCandidates(callId.orEmpty())
         ringTimedOut = false
-        proximityLock?.takeIf { it.isHeld }?.release(); proximityLock = null
-        audioFocus?.let(audio::abandonAudioFocusRequest); audioFocus = null
+        runCatching { proximityLock?.takeIf { it.isHeld }?.release() }
+        proximityLock = null
+        audioFocus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
+        audioFocus = null
         if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice() else @Suppress("DEPRECATION") run { audio.isSpeakerphoneOn = false; audio.stopBluetoothSco() }
-        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.localVideo = null; CallRuntime.remoteVideo = null; CallRuntime.isRecording = false; CallRuntime.cameraNotice = false
+        audio.mode = AudioManager.MODE_NORMAL; target = ""; callId = null; CallRuntime.endCall()
     }
 
     /**
      * يكتب سجل المكالمة في قاعدة التطبيق المحلية (مشفّر) فور انتهاء المكالمة،
      * ليبقى السجل متاحاً حتى بدون اتصال بالخادم. البيانات تتزامن لاحقاً مع السيرفر.
      */
-    private fun saveCallLogLocally(callId: String, peer: String, mode: String, startedAt: Long, durationMs: Long, incoming: Boolean) {
+    private fun saveCallLogLocally(callId: String, peer: String, mode: String, startedAt: Long, durationMs: Long, incoming: Boolean, finalState: CallUiState, timedOut: Boolean) {
         scope.launch {
             runCatching {
-                // الحالة تُشتق من الحالة النهائية الفعلية للمكالمة
+                // الحالة تُشتق من اللقطة المتزامنة الفعلية للمكالمة (لا من Idle اللاحقة)
                 val status = when {
                     durationMs > 0 -> "ENDED"
-                    CallRuntime.state is CallUiState.Busy -> "FAILED"
-                    CallRuntime.state is CallUiState.Declined || (CallRuntime.state is CallUiState.Incoming && !ringTimedOut) -> "REJECTED"
-                    CallRuntime.state is CallUiState.Incoming && ringTimedOut -> "MISSED"
-                    CallRuntime.state is CallUiState.Error -> "FAILED"
+                    finalState is CallUiState.Busy -> "FAILED"
+                    finalState is CallUiState.Declined || (finalState is CallUiState.Incoming && !timedOut) -> "REJECTED"
+                    finalState is CallUiState.Incoming && timedOut -> "MISSED"
+                    finalState is CallUiState.Error -> "FAILED"
                     else -> "MISSED"
                 }
                 val cipher = CallLogCipher()
@@ -1099,16 +1407,27 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     }
 
     private fun startRingtone() {
-        startRingtone(RingtoneManager.TYPE_RINGTONE, longArrayOf(0, 800, 400, 800))
+        val prefs = com.red.sovereign.settings.SettingsRuntime.current
+        val stored = prefs.callRingtoneUri
+        val custom = stored.takeIf { it.isNotBlank() }?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+        if (custom != null) {
+            startRingtoneResolved(custom, prefs.callVibration, longArrayOf(0, 800, 400, 800))
+        } else {
+            startRingtone(RingtoneManager.TYPE_RINGTONE, longArrayOf(0, 800, 400, 800))
+        }
     }
 
     private fun startRingtone(type: Int, vibrationPattern: LongArray) {
         try {
-            val uri = RingtoneManager.getDefaultUri(type)
+            val prefs = com.red.sovereign.settings.SettingsRuntime.current
+            val stored = prefs.callRingtoneUri
+            val custom = stored.takeIf { it.isNotBlank() }?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+            val uri = custom ?: RingtoneManager.getDefaultUri(type)
             ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
                 isLooping = true
                 play()
             }
+            if (!prefs.callVibration) return
             vibrator = if (android.os.Build.VERSION.SDK_INT >= 31) {
                 (getSystemService(VibratorManager::class.java))?.defaultVibrator
             } else {
@@ -1121,13 +1440,40 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
                     @Suppress("DEPRECATION") vib.vibrate(vibrationPattern, 0)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("YounesCallService", "startRingtone op failed", e) }
+    }
+
+    /** رنين بـ Uri محلول مسبقاً (من RingtonePickerDialog) مع احترام مفتاح الاهتزاز. */
+    private fun startRingtoneResolved(uri: android.net.Uri, vibrate: Boolean, vibrationPattern: LongArray) {
+        try {
+            stopRingtone()
+            ringtone = RingtoneManager.getRingtone(this, uri)?.apply {
+                isLooping = true
+                play()
+            } ?: RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.apply {
+                isLooping = true
+                play()
+            }
+            if (!vibrate) return
+            vibrator = if (android.os.Build.VERSION.SDK_INT >= 31) {
+                (getSystemService(VibratorManager::class.java))?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            }
+            vibrator?.let { vib ->
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    vib.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0))
+                } else {
+                    @Suppress("DEPRECATION") vib.vibrate(vibrationPattern, 0)
+                }
+            }
+        } catch (e: Exception) { android.util.Log.w("YounesCallService", "startRingtoneResolved op failed", e) }
     }
 
     private fun stopRingtone() {
-        try { ringtone?.stop() } catch (_: Exception) {}
+        try { ringtone?.stop() } catch (e: Exception) { android.util.Log.w("YounesCallService", "stop ringtone op failed", e) }
         ringtone = null
-        try { vibrator?.cancel() } catch (_: Exception) {}
+        try { vibrator?.cancel() } catch (e: Exception) { android.util.Log.w("YounesCallService", "cancel vibrator op failed", e) }
         vibrator = null
     }
 
@@ -1135,14 +1481,23 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
         if (media) {
             type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            if (mode == "VIDEO") type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            if (mode == "VIDEO" && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
         }
         try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, value, type)
         } catch (e: SecurityException) {
             var fallbackType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (mode == "VIDEO") fallbackType = fallbackType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, value, fallbackType)
+            runCatching { ServiceCompat.startForeground(this, NOTIFICATION_ID, value, fallbackType) }
+        } catch (_: android.app.ForegroundServiceStartNotAllowedException) {
+            // Android 12+: بدء خلفي (مثل BOOT_COMPLETED) لا يجوز له الترقية بأنواع
+            // phoneCall/mic/camera — كان يقتل العملية بحلقة إقلاع. نكتفي بإشعار
+            // عادي وتبقى الخدمة خلفية حتى أول تفاعل أمامي.
+            runCatching {
+                getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, value)
+            }
         }
     }
 
@@ -1156,7 +1511,7 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         })
     }
-    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).addAction(0, getString(com.red.sovereign.R.string.notification_accept), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).build()
+    private fun notification(text: String, ongoing: Boolean) = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.sym_action_call).setContentTitle(getString(com.red.sovereign.R.string.notification_ongoing)).setContentText(text).setOngoing(ongoing).setContentIntent(appIntent()).addAction(0, getString(com.red.sovereign.R.string.notification_end), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_END, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).addAction(0, getString(com.red.sovereign.R.string.notification_mute), CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_TOGGLE_MIC, CallNotificationActionReceiver.CALL_TYPE_1TO1, NOTIFICATION_ID)).build()
     private fun incomingNotification(peer: String, callMode: String) =
         NotificationCompat.Builder(this, "red_calls_incoming")
             .setSmallIcon(if (callMode == "VIDEO") android.R.drawable.sym_call_incoming else android.R.drawable.sym_action_call)
@@ -1176,21 +1531,54 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
     private fun updateNotification(text: String) = getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, true))
     private fun appIntent() = PendingIntent.getActivity(this, 10, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     private fun incomingFullScreenIntent(peer: String, callMode: String): PendingIntent {
+        // مفاتيح IncomingCallActivity الحقيقية + النوع الصريح — كانت "callId" الحرفية
+        // بلا نوع فتفتح شاشة مؤتمر فارغة (الافتراضي conference) عند النقر من القفل.
+        // إصلاح NPE: callId nullable — نلتقط نسخة محلية ونحسب requestCode مستقراً
+        // حتى لا يتصادم PendingIntent بين مكالمتين متتاليتين.
+        val safeCallId = callId ?: target.ifBlank { peer }.ifBlank { "unknown" }
         val intent = Intent(this, IncomingCallActivity::class.java).apply {
-            putExtra("callId", callId)
-            putExtra("peer", peer)
-            putExtra("mode", callMode)
+            putExtra(IncomingCallActivity.EXTRA_CALL_TYPE, IncomingCallActivity.CALL_TYPE_1TO1)
+            putExtra(IncomingCallActivity.EXTRA_CALL_ID, safeCallId)
+            putExtra(IncomingCallActivity.EXTRA_PEER, peer)
+            putExtra(IncomingCallActivity.EXTRA_MODE, callMode)
+            putExtra(IncomingCallActivity.EXTRA_INVITER, peer)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        return PendingIntent.getActivity(this, callId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return PendingIntent.getActivity(this, safeCallId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
     private fun serviceIntent(action: String) = PendingIntent.getService(this, action.hashCode(), Intent(this, YounesCallService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    /**
+     * معرّف المحادثة القانوني للرد السريع — نفس خوارزمية `conversationId` في
+     * RedDashboard (مرتّب + SHA-256 + أول 32) حتى يسقط الرد في الخيط الصحيح.
+     */
+    private fun quickReplyConversationId(first: String, second: String): String {
+        if (first.isBlank() || second.isBlank()) return "pending-conversation"
+        val canonical = listOf(first, second).sorted().joinToString("|")
+        return java.security.MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray())
+            .joinToString("") { "%02x".format(it) }.take(32)
+    }
 
     override fun onDestroy() {
         getSystemService(SensorManager::class.java).unregisterListener(this)
         clearRingTimeout()
         stopRingback()
         stopRingtone()
+        // إلغاء كوروتينات: إلغاء كل المهام المعلقة قبل scope.cancel حتى لا
+        // يتسرب delay التنظيف/الإحصائيات بعد تدمير الخدمة.
+        statsJob?.cancel(); statsJob = null
+        failedIceJob?.cancel(); failedIceJob = null
+        cleanupJob?.cancel(); cleanupJob = null
+        failJob?.cancel(); failJob = null
+        networkWatcher?.stop(); networkWatcher = null
+        reconnect?.stop()
+        if (CallRuntime.state !is CallUiState.Idle) {
+            endCallCore(sendSignal = false)
+        }
+        runCatching { proximityLock?.takeIf { it.isHeld }?.release() }
+        proximityLock = null
+        audioFocus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
+        audioFocus = null
         scope.cancel()
         val engineToRelease = engine
         engine = null
@@ -1216,21 +1604,52 @@ class YounesCallService : Service(), WebRtcEngine.Events, CallSignalingClient.Li
         // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
+        const val EXTRA_IS_VIDEO = "extra_is_video"
+        // P0: مطابقة القبول مع العرض الوارد (كان زر قبول قديم يقبل مكالمة جديدة)
+        const val EXTRA_CALL_ID = "extra_call_id"
 
         private fun safeStartService(context: Context, intent: Intent) {
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
-                try { context.startService(intent) } catch (ex: Exception) { /* ignored */ }
+                android.util.Log.e("YounesCallService", "startForegroundService failed action=${intent.action}", e)
+                try { context.startService(intent) } catch (ex: Exception) {
+                    android.util.Log.e("YounesCallService", "startService fallback also failed action=${intent.action}", ex)
+                    runCatching { notifyStartFailed(context, intent.action.orEmpty()) }
+                }
             }
+        }
+
+        /** User-visible fallback when both start paths fail (e.g. FGS blocked on Android 12+). */
+        private fun notifyStartFailed(context: Context, action: String) {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            runCatching {
+                manager.createNotificationChannel(
+                    NotificationChannel("red_calls", "مكالمات يونس", NotificationManager.IMPORTANCE_HIGH)
+                )
+            }
+            val content = PendingIntent.getActivity(
+                context, 0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            val notif = NotificationCompat.Builder(context, "red_calls")
+                .setSmallIcon(android.R.drawable.sym_action_call)
+                .setContentTitle("تعذر بدء خدمة المكالمة")
+                .setContentText("فشل التشغيل ($action) — افتح التطبيق لإعادة المحاولة")
+                .setContentIntent(content)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+            manager.notify(7499, notif)
         }
 
         fun listen(context: Context) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
         fun start(context: Context, target: String, video: Boolean) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
-        fun accept(context: Context, cameraOn: Boolean = true, micOn: Boolean = true) = safeStartService(
+        fun accept(context: Context, cameraOn: Boolean = true, micOn: Boolean = true, isVideo: Boolean = false, callId: String = "") = safeStartService(
             context,
-            Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT).putExtra(EXTRA_CAMERA, cameraOn).putExtra(EXTRA_ENABLED, micOn)
+            Intent(context, YounesCallService::class.java).setAction(ACTION_ACCEPT).putExtra(EXTRA_CAMERA, cameraOn).putExtra(EXTRA_ENABLED, micOn).putExtra(EXTRA_IS_VIDEO, isVideo).putExtra(EXTRA_CALL_ID, callId)
         )
         fun action(context: Context, action: String, enabled: Boolean = true) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))

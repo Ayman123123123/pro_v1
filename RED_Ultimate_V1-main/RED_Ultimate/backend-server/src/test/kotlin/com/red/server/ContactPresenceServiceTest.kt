@@ -24,23 +24,21 @@ class ContactPresenceServiceTest {
     private val users = mock<UserAccountRepository>()
     private val redis = mock<RedisTemplate<String, String>>()
     private val zset = mock<ZSetOperations<String, String>>()
-    private val statusService = mock<UserStatusService>()
-    private val service = ContactService(jdbc, users, redis, statusService)
+    private val presence = mock<UserStatusService>()
+    private val service = ContactService(jdbc, users, redis, presence)
 
     @Test
     fun `presence excludes identities that are not established contacts`() {
         val owner = UUID.randomUUID()
-
-        // `ContactService.presence` تقرأ redId الطالب أولًا لتقييم خصوصية
-        // الظهور (NOBODY/CONTACTS تُقاس بالنسبة إليه). بلا هذا المزدوج تُعيد
-        // Mockito ‏`Optional.empty()` فتخرج الدالة بـ`emptyMap()` قبل أن تصل
-        // إلى منطق التصفية المقصود — أي أن الاختبار كان يفشل على أمرٍ لا
-        // يخصّ ما يزعم قياسه.
+        // هوية الطالب لازمة: `presence` تقرأ redId الخاص به لتقييم خصوصية
+        // online_status (NOBODY/CONTACTS تُخفى عن غير المخوّل). بلا هذا
+        // الـstub تعود الدالة بخريطة فارغة قبل أي فحص حضور — وهو سلوك
+        // صحيح للإنتاج (لا حضور بلا هوية طالب) وكان الاختبار وحده متأخّرًا.
         whenever(users.findById(owner)).thenReturn(
             Optional.of(
                 UserAccount(
                     id = owner,
-                    redId = "90001",
+                    redId = "90735",
                     username = "owner",
                     displayName = "Owner",
                     status = AccountStatus.APPROVED
@@ -53,10 +51,9 @@ class ContactPresenceServiceTest {
         whenever(zset.score("red:presence:index", "85248"))
             .thenReturn(System.currentTimeMillis().toDouble())
 
-        // 87203 مطلوب لكنه ليس جهةَ اتصال ⇒ يُستبعَد تمامًا من الرد،
-        // لا يُعاد بـ`false`: وجودُه بأي قيمة يُفصح بأن المعرّف قائم.
         val result = service.presence(owner, listOf("85248", "87203"))
 
+        // 87203 ليس في جهات الاتصال ⇒ لا يظهر في النتيجة إطلاقًا
         assertEquals(mapOf("85248" to true), result)
     }
 }

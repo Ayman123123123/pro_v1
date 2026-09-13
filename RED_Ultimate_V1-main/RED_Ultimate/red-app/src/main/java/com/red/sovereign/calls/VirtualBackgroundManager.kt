@@ -7,14 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
- * مدير الخلفية الافتراضية — Liquid Glass 2026 (ذكاء اصطناعي خفيف + Blur)
+ * Virtual Background Manager — Liquid Glass Sovereign 2026
  *
- * يوفّر تأثيرات حديثة دون الاعتماد على مكتبات ثقيلة:
- * - BLUR: ضبابية زجاجية عبر RenderEffect (أندرويد 12+)
- * - SOLID: لون ثابت مع شفافية
- * - IMAGE: صورة مخصصة (يُمرر uri للـ WebRTC إن توفر)
- *
- * التصميم أسطوري: واجهة بسيطة، حالة مراقبة بـ State، استهلاك بطارية منخفض.
+ * Provides lightweight background effects without heavy libraries:
+ * - BLUR: Glassy blur via RenderEffect (Android 12+)
+ * - BLUR_HEAVY: High intensity blur
+ * - SOLID: Solid color with transparency
+ * - IMAGE: Custom background image URI
  */
 enum class VirtualBgEffect { NONE, BLUR, BLUR_HEAVY, SOLID, IMAGE }
 
@@ -26,6 +25,8 @@ data class VirtualBgConfig(
 )
 
 object VirtualBackgroundManager {
+    private val lock = Any()
+
     var config by mutableStateOf(VirtualBgConfig())
         private set
 
@@ -41,28 +42,35 @@ object VirtualBackgroundManager {
     )
 
     fun setEffect(effect: VirtualBgEffect) {
-        config = config.copy(effect = effect)
+        synchronized(lock) {
+            config = config.copy(effect = effect)
+        }
     }
 
     fun setSolidColor(color: Color) {
-        config = config.copy(effect = VirtualBgEffect.SOLID, solidColor = color)
+        synchronized(lock) {
+            config = config.copy(effect = VirtualBgEffect.SOLID, solidColor = color)
+        }
     }
 
     fun setImage(uri: String) {
-        config = config.copy(effect = VirtualBgEffect.IMAGE, imageUri = uri)
+        synchronized(lock) {
+            config = config.copy(effect = VirtualBgEffect.IMAGE, imageUri = uri)
+        }
     }
 
     fun clear() {
-        config = VirtualBgConfig()
+        synchronized(lock) {
+            config = VirtualBgConfig()
+        }
     }
 
-    /** يحدد هل يجب تطبيق blur عبر RenderEffect في Compose */
     fun shouldApplyComposeBlur(): Boolean =
         isSupported && (config.effect == VirtualBgEffect.BLUR || config.effect == VirtualBgEffect.BLUR_HEAVY)
 
     fun blurRadiusForCompose(): Float = when (config.effect) {
-        VirtualBgEffect.BLUR_HEAVY -> 32f
-        VirtualBgEffect.BLUR -> 22f
+        VirtualBgEffect.BLUR_HEAVY -> 36f
+        VirtualBgEffect.BLUR -> 24f
         else -> 0f
     }
 }

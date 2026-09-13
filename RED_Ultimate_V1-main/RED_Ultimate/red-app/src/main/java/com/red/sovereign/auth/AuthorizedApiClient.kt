@@ -25,6 +25,9 @@ class AuthorizedApiClient(
 
     suspend fun requestBody(method: String, path: String, body: RequestBody? = null): ApiResult<String> = withContext(Dispatchers.IO) {
         val token = tokens.accessToken ?: return@withContext ApiResult.Error(401, "UNAUTHENTICATED")
+        // بلا أي شبكة (وضع طيران/انقطاع كامل): فشل فوري واضح بدل حرق المهلات —
+        // يعمل على كل الأنواع (WiFi/4G/هوائي/loopback المحلي دون إنترنت يبقى متصلاً).
+        if (!isNetworkAvailable(tokens.context)) return@withContext ApiResult.Error(null, "OFFLINE")
         fun build(access: String) = Request.Builder()
             .url(ServerEndpoint.url().trimEnd('/') + path)
             .header("Authorization", "Bearer $access")
@@ -35,6 +38,7 @@ class AuthorizedApiClient(
 
     suspend fun download(path: String, target: File): ApiResult<File> = withContext(Dispatchers.IO) {
         val token = tokens.accessToken ?: return@withContext ApiResult.Error(401, "UNAUTHENTICATED")
+        if (!isNetworkAvailable(tokens.context)) return@withContext ApiResult.Error(null, "OFFLINE")
         fun build(access: String) = Request.Builder()
             .url(ServerEndpoint.url().trimEnd('/') + path)
             .header("Authorization", "Bearer $access")
@@ -59,7 +63,15 @@ class AuthorizedApiClient(
             return when (result) {
                 is ApiResult.Error -> result
                 is ApiResult.Success -> result.value.use { response ->
-                    if (response.isSuccessful) ApiResult.Success(response.code, response.body?.string().orEmpty())
+                    if (response.isSuccessful) {
+                        // حارس البوابة الأسيرة: صفحة login HTML بكود 200 على مسار /api/
+                        // ليست رد خادم — بوابة فندق/مطار اختطفت الاتصال.
+                        val ctype = response.header("Content-Type").orEmpty().lowercase()
+                        if (ctype.contains("text/html")) {
+                            return ApiResult.Error(null, "NETWORK_ERROR")
+                        }
+                        ApiResult.Success(response.code, response.body?.string().orEmpty())
+                    }
                     else ApiResult.Error(response.code, response.body?.string().orEmpty())
                 }
             }
@@ -77,9 +89,30 @@ class AuthorizedApiClient(
      * آخر التوكن أثناء انتظارنا للقفل، نُعيد المحاولة بالتوكن الجديد دون تجديد.
      */
     private suspend fun executeResponseWithRefresh(originalToken: String, initial: Request, rebuild: (String) -> Request): ApiResult<okhttp3.Response> {
+        // Yemen-hardened: محاولة ثانية واحدة لطلبات القراءة عند فشل الشبكة
+        // (4G متذبذب) بتراجع 600ms+jitter — الكتابة تبقى محاولة واحدة (idempotency).
         val first = runCatching { client.newCall(initial).execute() }.getOrElse {
-            recoverReadAfterEndpointDiscovery(initial, originalToken, rebuild)
-                ?: return ApiResult.Error(null, "NETWORK_ERROR")
+            if (isSafeReadMethod(initial.method)) {
+                kotlinx.coroutines.delay((600 + (0..300).random()).toLong())
+                runCatching { client.newCall(initial).execute() }.getOrNull()
+                    ?: run {
+                        recoverReadAfterEndpointDiscovery(initial, originalToken, rebuild)
+                            ?: return ApiResult.Error(null, "NETWORK_ERROR")
+                    }
+            } else {
+                recoverReadAfterEndpointDiscovery(initial, originalToken, rebuild)
+                    ?: return ApiResult.Error(null, "NETWORK_ERROR")
+            }
+        }
+        // إعادة واحدة لأخطاء البوابة العابرة (502/503/504) لطلبات القراءة فقط.
+        if (first.code in setOf(502, 503, 504) && isSafeReadMethod(initial.method)) {
+            first.close()
+            kotlinx.coroutines.delay((1000 + (0..500).random()).toLong())
+            val retry = runCatching { client.newCall(rebuild(originalToken)).execute() }.getOrNull()
+            if (retry != null) {
+                if (retry.code != 401) return ApiResult.Success(retry.code, retry)
+                retry.close()
+            }
         }
         if (first.code != 401) return ApiResult.Success(first.code, first)
         first.close()
@@ -144,6 +177,19 @@ class AuthorizedApiClient(
         private val JSON = "application/json; charset=utf-8".toMediaType()
         /** حارس تحديث التوكن — مشترك عبر كل كائنات AuthorizedApiClient لتجنب السباق. */
         private val REFRESH_MUTEX = Mutex()
+
+        /** أي واجهة نشطة (WiFi/خلوي/إيثرنت/VPN/loopback) — بلا شبكة إطلاقاً = OFFLINE فوري. */
+        fun isNetworkAvailable(context: android.content.Context): Boolean = runCatching {
+            val cm = context.applicationContext.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val net = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(net) ?: return false
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) ||
+                caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+                caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+        }.getOrDefault(true)
 
         /**
          * إعادة المحاولة بعد إعادة اكتشاف العنوان آمنة للقراءة فقط.

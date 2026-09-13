@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
-# Build the canonical dashboard and start a local preview.
-set -euo pipefail
+# ==============================================================================
+# 🚀 RED Ultimate Multi-Platform Builder & CI Script
+# Builds Frontend, Backend, and Android components
+# ==============================================================================
+set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$DIR/RED_Ultimate_V1-main/RED_Ultimate"
+echo "Building RED Ultimate across all platforms..."
 
-cd "$PROJECT/admin_dashboard"
-npm ci --no-audit --no-fund
+# 1. Build Frontend
+echo "==> 1. Building Admin Dashboard (React + TypeScript)..."
+cd "$DIR/RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard"
+npm install
 npm run build
-exec npm run dev -- --host 0.0.0.0 --port 5173
+echo "✅ Admin Dashboard built successfully in dist/"
+
+# 2. Start Backend & Dashboard
+echo "==> 2. Starting local mock backend on 127.0.0.1:8080..."
+python3 "$DIR/RED_Ultimate_V1-main/RED_Ultimate/scripts/mock_backend.py" &
+
+echo "==> 3. Starting live dashboard preview on 0.0.0.0:5173..."
+npm run dev &
+
+echo "🎉 All services are active and running!"

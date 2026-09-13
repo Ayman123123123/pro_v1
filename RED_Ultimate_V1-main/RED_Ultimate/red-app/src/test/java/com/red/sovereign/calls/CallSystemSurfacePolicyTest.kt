@@ -11,4 +11,9 @@ class CallSystemSurfacePolicyTest {
         assertFalse(CallSystemSurfacePolicy.usesAndroidTelecom("VIDEO"))
     }
 
+    @Test
+    fun `PSTN gateway calls retain the Telecom surface`() {
+        assertTrue(CallSystemSurfacePolicy.usesAndroidTelecom("PSTN"))
+        assertTrue(CallSystemSurfacePolicy.usesAndroidTelecom("DINSTAR"))
+    }
 }

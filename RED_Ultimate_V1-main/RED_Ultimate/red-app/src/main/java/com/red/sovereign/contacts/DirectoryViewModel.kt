@@ -112,7 +112,7 @@ class DirectoryViewModel(application: Application) : AndroidViewModel(applicatio
             diff < 3_600_000 -> "آخر ظهور: ${diff / 60_000} دقيقة"
             diff < 86_400_000 -> "آخر ظهور: ${diff / 3_600_000} ساعة"
             diff < 604_800_000 -> "آخر ظهور: ${diff / 86_400_000} يوم"
-            else -> "آخر ظهور: " + java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US).format(java.util.Date(lastSeen))
+            else -> "آخر ظهور: " + java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("ar")).format(java.util.Date(lastSeen))
         }
     }
 

@@ -1,4 +1,4 @@
-﻿package com.red.sovereign.core
+package com.red.sovereign.core
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -10,6 +10,7 @@ import com.red.sovereign.auth.ApiResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -45,7 +46,7 @@ class LocalServerDiscovery(private val context: Context) {
         .followSslRedirects(false)
         .build()
 
-    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً â€” يعيد العنوان المقبول أو null. */
+    /** تحقق صريح من عنوان يُدخله المستخدم يدوياً — يعيد العنوان المقبول أو null. */
     suspend fun verifyExplicit(base: String): String? = withContext(Dispatchers.IO) {
         val normalized = base.trim().ifBlank { return@withContext null }
         val withScheme = if (normalized.contains("://")) normalized else "http://$normalized"
@@ -53,19 +54,34 @@ class LocalServerDiscovery(private val context: Context) {
     }
 
     suspend fun discover(mode: Mode = Mode.FAST): ApiResult<String> = withContext(Dispatchers.IO) {
-        // تحقق من WiFi أولاً
-        if (!isWifiConnected()) {
-            return@withContext ApiResult.Error(null, "WIFI_NOT_CONNECTED")
+        // كل الشبكات: جرّب العناوين الرخيصة أولاً (loopback يعمل حتى بلا إنترنت وبلا WiFi —
+        // خادم محلي على نفس الجهاز، هوتسبوت USB، أو عنوان محفوظ ما زال صالحاً).
+        // AUTO-FIX (discovery resilience): last known-good endpoint gets its own ~1s window
+        // before any scan, so a simple DHCP IP change resolves almost instantly.
+        quickProbeLastKnown()?.let { found ->
+            ServerEndpoint.update(context, found)
+            return@withContext ApiResult.Success(200, found)
         }
-        
         val known = knownBases()
-        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين â€” اكتشاف سريع ثم شامل لاحقاً.
+        // كان الشرط يمرر FAST_BUDGET_MS في الحالتين — اكتشاف سريع ثم شامل لاحقاً.
         firstVerified(known, FAST_BUDGET_MS)?.let { found ->
             ServerEndpoint.update(context, found)
             return@withContext ApiResult.Success(200, found)
         }
 
+        // مسح الشبكة المحلية يعمل على أي واجهة LAN (WiFi/إيثرنت/USB/VPN/مضيّف هوتسبوت) —
+        // حصرُه على WiFi كان يحرم USB-tethering والإيثرنت والـ VPN من الاكتشاف.
+        if (!hasAnyLanInterface()) {
+            return@withContext ApiResult.Error(null, "WIFI_NOT_CONNECTED")
+        }
+
         if (mode == Mode.FAST) {
+            // AUTO-FIX (discovery resilience): spend a short budget on CURRENT-network derived
+            // candidates before failing, covering the "server moved on the same LAN" case.
+            firstVerified(lanBases(), WIFI_BUDGET_MS)?.let { found ->
+                ServerEndpoint.update(context, found)
+                return@withContext ApiResult.Success(200, found)
+            }
             return@withContext ApiResult.Error(null, "YOUNES_SERVER_NOT_FOUND")
         }
 
@@ -111,7 +127,7 @@ class LocalServerDiscovery(private val context: Context) {
             val jobs = unique.map { target ->
                 async(Dispatchers.IO) {
                     gate.withPermit {
-                        if (done.isCompleted) return@async
+                        if (done.isCompleted || !isActive) return@async
                         val hit = verify(target) ?: return@async
                         done.complete(hit)
                     }
@@ -134,8 +150,11 @@ class LocalServerDiscovery(private val context: Context) {
             .filter { it.isNotBlank() }
         val seeds = buildList {
             add(ServerEndpoint.url())
+            add("http://127.0.0.1:8088")
+            add("http://[::1]:8088")
+            add("http://192.168.1.112:8088")
             addAll(candidates)
-            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) â€” عنوان تطوير قياسي وليس IP LAN حقيقي.
+            // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) — عنوان تطوير قياسي وليس IP LAN حقيقي.
             add("http://10.0.2.2:8088")
         }
         seeds.forEach { seed ->
@@ -173,7 +192,7 @@ class LocalServerDiscovery(private val context: Context) {
             }
         }
 
-        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف â€” مفيد عند وجود توجيه بين الشبكتين.
+        // مسح شبكة الخادم المعروفة (من BuildConfig) حتى لو اختلفت عن شبكة الهاتف — مفيد عند وجود توجيه بين الشبكتين.
         val knownHost = YounesServerSignature.hostOf(BuildConfig.RED_SERVER_URL)
         if (knownHost != null && knownHost != lastKnown) {
             val parts = knownHost.split('.').map { it.toIntOrNull() }
@@ -198,6 +217,11 @@ class LocalServerDiscovery(private val context: Context) {
         val latch = CountDownLatch(1)
         var discoveredHost: String? = null
         val preferred = preferredPort()
+        // قفل multicast أثناء الاكتشاف فقط — بدونه تُسقط النواة حزم mDNS صامتاً
+        // على أجهزة كثيرة (قبل أندرويد 13 إلزامي، وبعده ما زال أنصح).
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        val mlock = runCatching { wifi?.createMulticastLock("younes-mdns")?.apply { setReferenceCounted(true) } }.getOrNull()
+        runCatching { mlock?.acquire() }
 
         val listener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String?, errorCode: Int) { latch.countDown() }
@@ -213,7 +237,9 @@ class LocalServerDiscovery(private val context: Context) {
                     override fun onServiceResolved(resolvedInfo: NsdServiceInfo?) {
                         val host = resolvedInfo?.host?.hostAddress
                         val port = resolvedInfo?.port?.takeIf { it > 0 } ?: preferred
-                        if (!host.isNullOrBlank()) {
+                        // عناوين link-local بنطاق (%wlan0) يرفضها OkHttp — تُهمل هنا
+                        // ويُعتمد IPv4/ULA المكتشف معها بدلاً من الفشل الصامت.
+                        if (!host.isNullOrBlank() && '%' !in host) {
                             discoveredHost = verify(YounesServerSignature.baseUrl(host, port))
                         }
                         latch.countDown()
@@ -228,8 +254,17 @@ class LocalServerDiscovery(private val context: Context) {
 nsdManager.stopServiceDiscovery(listener)
         } catch (_: Exception) {
             runCatching { nsdManager.stopServiceDiscovery(listener) }
+        } finally {
+            runCatching { if (mlock?.isHeld == true) mlock.release() }
         }
         return discoveredHost
+    }
+
+    /** AUTO-FIX (discovery resilience): probe the last persisted endpoint first with a ~1s
+     *  /health check, so a plain server IP change on the same LAN needs no scan at all. */
+    private suspend fun quickProbeLastKnown(): String? {
+        val last = ServerEndpoint.url().takeIf { it.isNotBlank() } ?: return null
+        return withTimeoutOrNull(QUICK_PROBE_MS) { verify(last) }
     }
 
     private fun preferredPort(): Int = YounesServerSignature.portOf(ServerEndpoint.url(), 8080)
@@ -239,10 +274,16 @@ nsdManager.stopServiceDiscovery(listener)
         const val READ_MS = 600L
         const val WRITE_MS = 400L
         const val CALL_MS = 800L
+        // AUTO-FIX (discovery resilience): dedicated ~1s probe of the last known-good endpoint.
+        const val QUICK_PROBE_MS = 1_000L
+        // AUTO-FIX (discovery resilience): current-network derived candidates budget.
+        const val WIFI_BUDGET_MS = 2_500L
         const val FAST_BUDGET_MS = 1_800L
-        const val THOROUGH_BUDGET_MS = 6_000L
+        // مسح /24 كامل (254 عنوانًا × حتى 3 منافذ) يحتاج هامشًا حقيقيًا —
+        // العناوين العالية (.192) تأتي متأخرة في الترتيب التصاعدي.
+        const val THOROUGH_BUDGET_MS = 9_000L
         const val MDNS_BUDGET_MS = 1_200L
-        const val MAX_PARALLEL = 16
+        const val MAX_PARALLEL = 24
     }
 
     /** يتحقق من اتصال WiFi قبل البدء في المسح */
@@ -252,6 +293,36 @@ nsdManager.stopServiceDiscovery(listener)
         val network = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(network) ?: return false
         return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
+    /**
+     * أي واجهة LAN حقيقية (WiFi/إيثرنت/USB-tethering/VPN) — بوابة المسح الشامل.
+     * isWifiConnected وحده كان يحجب USB والإيثرنت والـ VPN رغم أن lanBases
+     * يعدد واجهاتها وجاهز لمسحها. HOTSPOT-host (مشاركة من هذا الجهاز) بلا
+     * activeNetwork تُكتشف عبر NetworkInterface مباشرة.
+     */
+    private fun hasAnyLanInterface(): Boolean {
+        if (isWifiConnected()) return true
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        cm?.activeNetwork?.let { net ->
+            runCatching { cm.getNetworkCapabilities(net) }.getOrNull()?.let { caps ->
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) return true
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true
+                if (android.os.Build.VERSION.SDK_INT >= 31 &&
+                    caps.hasTransport(8 /* TRANSPORT_USB */)) return true
+            }
+        }
+        // مضيّف هوتسبوت/USB: قد لا توجد activeNetwork لكن الواجهات up وتحمل عناوين خاصة
+        return runCatching {
+            java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().any { nif ->
+                runCatching { nif.isUp && !nif.isLoopback }.getOrDefault(false) &&
+                    nif.interfaceAddresses.any { binding ->
+                        val a = binding.address
+                        (a is java.net.Inet4Address && (a.isSiteLocalAddress || a.isLinkLocalAddress)) ||
+                            (a is java.net.Inet6Address && (a.isSiteLocalAddress || a.isLinkLocalAddress))
+                    }
+            }
+        }.getOrDefault(false)
     }
     /** يتحقق من إدخال المستخدم (host | host:port | رابط كامل) ويعيد الرابط الموثوق. */
     fun verifyUserInput(input: String): ApiResult<String> {

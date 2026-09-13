@@ -1,8 +1,6 @@
 package com.red.sovereign.calls
 
 import android.content.Context
-import android.os.Build
-import androidx.annotation.RequiresApi
 import com.red.sovereign.core.database.LocalRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,10 +20,17 @@ object CallManagerIntegration {
 
     /**
      * تهيئة جميع مديري المكالمات
+     *
+     * تصحيح: كان السطر الأول ينادي `CallQualityManager.clear()` وهي غير موجودة —
+     * ذلك المدير لا يعرض أي واجهة تصفير (`lastStats` بـ private set، والكاتب
+     * العام الوحيد هو `update(...)` لأن المُصنِّف داخله خاص بقصد). لذلك نُصفّر
+     * قياسه بأصفار عبر واجهته الحقيقية: تختفي أرقام المكالمة السابقة من
+     * الواجهة. ملاحظة سلوكية: قياس bitrate=0 يُصنَّف POOR (لا GOOD كالحالة
+     * الابتدائية)، وهو فرق يُصحّحه أول استقصاء فعلي فوراً (pollStats).
      */
     fun initialize(context: Context) {
         // تهيئة مدير جودة المكالمة
-        CallQualityManager.clear()
+        CallQualityManager.update(rttMs = 0, packetLoss = 0f, bitrateKbps = 0, fps = 30)
 
         // تهيئة مدير الأداء
         CallPerformanceManager.clearStats()
@@ -163,6 +168,12 @@ fun com.red.sovereign.core.database.CallLogEntity.toCallHistoryItem(): CallHisto
 
 /**
  * تحويل CallHistoryItem إلى CallLogEntity
+ *
+ * تصحيح: كانت الطوابع تُغلَّف بـ `java.sql.Timestamp(...)` بينما حقول
+ * [com.red.sovereign.core.database.CallLogEntity] هي `Long`/`Long?` (ميلي ثانية
+ * عن الحقبة، وهي وحدة كل من يكتب في نفس الجدول: YounesCallService و
+ * GroupCallService و ConferenceService). [parseCallTimestamp] يُعيد أصلاً ميلي
+ * ثانية، فالتغليف كان زائداً ومُخالفاً للنوع.
  */
 fun CallHistoryItem.toCallLogEntity(): com.red.sovereign.core.database.CallLogEntity {
     return com.red.sovereign.core.database.CallLogEntity(
@@ -173,8 +184,8 @@ fun CallHistoryItem.toCallLogEntity(): com.red.sovereign.core.database.CallLogEn
         direction = direction,
         route = route,
         status = status,
-        timestamp = java.sql.Timestamp(parseCallTimestamp(startedAt) ?: 0L),
-        answeredAt = parseCallTimestamp(answeredAt)?.let { java.sql.Timestamp(it) },
-        endedAt = parseCallTimestamp(endedAt)?.let { java.sql.Timestamp(it) }
+        timestamp = parseCallTimestamp(startedAt) ?: 0L,
+        answeredAt = parseCallTimestamp(answeredAt),
+        endedAt = parseCallTimestamp(endedAt)
     )
 }

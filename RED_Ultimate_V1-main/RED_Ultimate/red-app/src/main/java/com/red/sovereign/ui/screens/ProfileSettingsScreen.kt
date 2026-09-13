@@ -20,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import android.util.Log
+import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.ui.theme.*
 import com.red.sovereign.auth.TokenStore
 
@@ -36,17 +39,26 @@ fun ProfileSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var displayName by remember { mutableStateOf("مستخدم RED") }
-    var redId by remember { mutableStateOf("") }
+    val initialName = runCatching { TokenStore(context).username?.takeIf { it.isNotBlank() } }.getOrNull()
+    val initialRedId = runCatching { TokenStore(context).redId?.takeIf { it.isNotBlank() } }.getOrNull()
+    var displayName by remember { mutableStateOf(initialName ?: "مستخدم RED") }
+    var redId by remember { mutableStateOf(initialRedId?.let { "RED ID: $it" } ?: "") }
+    var loadTick by remember { mutableStateOf(0) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    // جودة: المفتاح context بدل Unit — يعيد التحميل عند تغيّر السياق لا مرة واحدة جامدة.
+    LaunchedEffect(context, loadTick) {
         try {
             val ts = TokenStore(context)
             val loadedName = ts.username
             val loadedRedId = ts.redId
             if (!loadedName.isNullOrBlank()) displayName = loadedName
             if (!loadedRedId.isNullOrBlank()) redId = "RED ID: $loadedRedId"
-        } catch (_: Exception) { }
+            loadError = null
+        } catch (e: Exception) {
+            Log.w("ProfileSettings", "TokenStore load failed", e)
+            loadError = e.message?.take(120) ?: "تعذر التحميل"
+        }
     }
 
     Scaffold(
@@ -59,7 +71,7 @@ fun ProfileSettingsScreen(
                         text = "الإعدادات السيادية",
                         color = YounesOnSurface,
                         fontSize = 20.sp,
-                        fontFamily = CairoFamily,
+                        fontFamily = PlexArabicFamily,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -116,7 +128,7 @@ fun ProfileSettingsScreen(
                             text = displayName,
                             color = YounesOnSurface,
                             fontSize = 20.sp,
-                            fontFamily = CairoFamily,
+                            fontFamily = PlexArabicFamily,
                             fontWeight = FontWeight.Bold
                         )
                         if (redId.isNotBlank()) {
@@ -124,7 +136,7 @@ fun ProfileSettingsScreen(
                                 text = redId,
                                 color = YounesMuted,
                                 fontSize = 14.sp,
-                                fontFamily = TajawalFamily
+                                fontFamily = PlexArabicFamily
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -135,6 +147,16 @@ fun ProfileSettingsScreen(
                             Text("حساب موثق ومؤمن", modifier = Modifier.padding(horizontal = 6.dp))
                         }
                     }
+                }
+            }
+
+            // Fallback عند فشل تحميل TokenStore — زر يعيد المحاولة عبر tick.
+            if (loadError != null) {
+                item {
+                    Button(
+                        onClick = { loadTick++ },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("تعذر التحميل - إعادة المحاولة") }
                 }
             }
 
@@ -162,15 +184,57 @@ fun ProfileSettingsScreen(
                 }
             }
 
-            // Theme
+            // Theme — مربوط بـ Theme-State حقيقي + حفظ في Prefs (لا Switch وهمي).
             item {
+                // الحفظ عبر SettingsViewModel (younes_user_preferences) + تطبيق فوري عبر AppThemeState
+                // (يُبدّل MaterialTheme فعلياً في YounesTheme/SovereignBackground ويُقرأ عند الإقلاع).
+                val settingsVm: SettingsViewModel = viewModel()
                 SettingsSection(title = "المظهر (Theme)") {
+                    // الحفظ يعمل: الحالتان تُشتقان من المحفوظ في Prefs (vm.state) لا من
+                    // الذاكرة فقط — فالـ Switch يعكس ما سيُقرأ عند الإقلاع فعلاً.
+                    // SYSTEM يتبع وضع النظام عبر AppThemeState اللحظي.
+                    val isDark = when (settingsVm.state.themeMode) {
+                        "LIGHT" -> false
+                        "DARK" -> true
+                        else -> AppThemeState.themeMode != AppThemeMode.LIGHT
+                    }
+                    val isOnyx = settingsVm.state.themePreset == AppThemePreset.OLED_BLACK.name
                     SettingsItem(
                         icon = Icons.Rounded.DarkMode,
                         title = "الوضع الملكي",
-                        subtitle = "Onyx Black (مفعل)",
+                        subtitle = if (isDark) "ليلي — مفعّل ومحفوظ" else "فاتح — مفعّل ومحفوظ",
                         action = {
-                            Switch(checked = true, onCheckedChange = {})
+                            Switch(
+                                checked = isDark,
+                                onCheckedChange = { dark ->
+                                    val mode = if (dark) AppThemeMode.DARK else AppThemeMode.LIGHT
+                                    AppThemeState.themeMode = mode
+                                    // حفظ فعلي: theme_mode + إبقاء preset (Onyx يبقى Onyx)
+                                    settingsVm.setThemeMode(mode.name)
+                                }
+                            )
+                        }
+                    )
+                    // Onyx Black الحقيقي: preset OLED_BLACK (سواد AMOLED تام) — يُبدّل الألوان ويُحفظ.
+                    SettingsItem(
+                        icon = Icons.Rounded.DarkMode,
+                        title = "أسود Onyx",
+                        subtitle = if (isOnyx) "AMOLED مفعّل — سواد تام موفّر للبطارية" else "اضغط لتفعيل سواد AMOLED التام",
+                        action = {
+                            Switch(
+                                checked = isOnyx,
+                                onCheckedChange = { onyx ->
+                                    if (onyx) {
+                                        AppThemeState.currentPreset = AppThemePreset.OLED_BLACK
+                                        AppThemeState.themeMode = AppThemeMode.DARK
+                                        settingsVm.setThemePreset(AppThemePreset.OLED_BLACK.name)
+                                        settingsVm.setThemeMode(AppThemeMode.DARK.name)
+                                    } else {
+                                        AppThemeState.currentPreset = AppThemePreset.SOVEREIGN
+                                        settingsVm.setThemePreset(AppThemePreset.SOVEREIGN.name)
+                                    }
+                                }
+                            )
                         }
                     )
                     SettingsItem(
@@ -221,7 +285,7 @@ fun SettingsSection(
             text = title,
             color = YounesPrimary,
             fontSize = 14.sp,
-            fontFamily = CairoFamily,
+            fontFamily = PlexArabicFamily,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
@@ -257,7 +321,7 @@ fun SettingsItem(
                 text = title,
                 color = titleColor,
                 fontSize = 16.sp,
-                fontFamily = TajawalFamily,
+                fontFamily = PlexArabicFamily,
                 fontWeight = FontWeight.Medium
             )
             if (subtitle != null) {
@@ -265,7 +329,7 @@ fun SettingsItem(
                     text = subtitle,
                     color = YounesMuted,
                     fontSize = 13.sp,
-                    fontFamily = TajawalFamily
+                    fontFamily = PlexArabicFamily
                 )
             }
         }

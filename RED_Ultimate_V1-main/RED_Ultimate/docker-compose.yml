@@ -2,7 +2,7 @@ name: red-sovereign
 
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Platform — Docker Compose
-# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Coturn
+# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Asterisk + Coturn
 # ══════════════════════════════════════════════════════════════════
 
 services:
@@ -40,6 +40,7 @@ services:
   # ━━━━━━━━━━━━ 1. الباك اند الرئيسي ━━━━━━━━━━━━
   # Listens on 8080 only inside red-net. Browsers must use Nginx on 8088.
   # Never publish 8080 to the host — that port is reserved for the optional
+  # Node/SQLite mock (`npm run dev:server`) and the two must not run together.
   backend:
     build:
       context: .
@@ -57,19 +58,77 @@ services:
           memory: 512M
     environment:
       - SPRING_PROFILES_ACTIVE=docker
+      # حرج: nginx يوجّه إلى backend:8080 وhealthcheck يفحص 8080 وEXPOSE يعلن 8080 —
+      # بينما application.yml يضبط 8088. هذا المتغير يوحّد الكل على 8080.
+      - SERVER_PORT=8080
       - YOUNES_RUNTIME=docker
       - SPRING_DATASOURCE_URL=jdbc:postgresql://db-postgres:5432/red_sovereign
       - SPRING_DATASOURCE_USERNAME=admin
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - SPRING_DATA_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
-      - SPRING_MONGODB_URI=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/red_sovereign?authSource=admin
+      # SPRING_MONGODB_URI removed (audit 2026-09-04): exact duplicate, Spring reads SPRING_DATA_MONGODB_URI.
       - MONGO_USER=red_user
       - MONGO_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      - ASTERISK_AMI_HOST=pstn-gateway
+      - ASTERISK_AMI_USER=red_admin
+      - ASTERISK_AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
+      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
+      - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
+      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.4}
+      # الأسطول كما يقرؤه `DinstarFleetService`. بدونه يبقى الخادم على بوابة
+      # البذرة وحدها، فيصبح الجهاز الثاني مسجَّلًا في القاعدة وغير مُستعلَم.
+      # أحادي canonical 2026-09-04: UC2000-VE @192.168.11.4 (8 ports).
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.4}}
+      - DINSTAR_PORT=${DINSTAR_PORT:-443}
+      - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
+      # ── تفعيل كامل: Number Learning + Discovery + Timeouts + OpenRelay ──
+      # كانت هذه القيم تُقرأ في application.yml لكن لا تُمرر من compose،
+      # فيعمل Backend دائماً بالافتراضي المعطل. الآن موصولة بـ .env.
+      - RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED=${RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED:-false}
+      - RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS=${RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS:-3}
+      - RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS=${RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS:-24}
+      - DINSTAR_DISCOVERY_ENABLED=${DINSTAR_DISCOVERY_ENABLED:-false}
+      - DINSTAR_DISCOVERY_SUBNETS=${DINSTAR_DISCOVERY_SUBNETS:-}
+      - DINSTAR_HEARTBEAT_MS=${DINSTAR_HEARTBEAT_MS:-30000}
+      - DINSTAR_CONNECT_TIMEOUT=${DINSTAR_CONNECT_TIMEOUT:-5}
+      - DINSTAR_READ_TIMEOUT=${DINSTAR_READ_TIMEOUT:-10}
+      - DINSTAR_PROBE_TIMEOUT=${DINSTAR_PROBE_TIMEOUT:-2}
+      - DINSTAR_CERT_SHA256_PINS=${DINSTAR_CERT_SHA256_PINS:-}
+      - OPENRELAY_ENABLED=${OPENRELAY_ENABLED:-false}
+      - OPENRELAY_USERNAME=${OPENRELAY_USERNAME:-openrelayproject}
+      - OPENRELAY_PASSWORD=${OPENRELAY_PASSWORD:-openrelayproject}
+      # نفس السر الذي يحمله dialplan في ترويسة X-Internal-Secret. الربط المرن
+      # في Spring يحوّله إلى الخاصية pstn.internal-secret التي يقرأها
+      # InternalPstnController. بدونه يتحقق الخادم من سرّه الافتراضي فتُرفض
+      # كل مكالمة واردة بـBAD_SECRET بينما البوابة ترسل السر الصحيح.
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
+      - PSTN_INTERNAL_ALLOWED_IPS=${PSTN_INTERNAL_ALLOWED_IPS:-}
+      # ── تمرير كامل 2026-09-04: كل ما يقرؤه application.yml وكان يُتجاهَل ──
+      # بدونه يعمل الباكند بافتراضات yml القديمة (localhost/127.0.0.1) رغم .env.
+      - ASTERISK_WSS_URL=${ASTERISK_WSS_URL:-wss://localhost:8089/ws}
+      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-secret-token}
+      - PSTN_TURN_URL=${PSTN_TURN_URL:-}
+      - PSTN_TURN_USERNAME=${PSTN_TURN_USERNAME:-}
+      - PSTN_TURN_PASSWORD=${PSTN_TURN_PASSWORD:-}
+      - PSTN_BRIDGE_SECRET_TTL_MINUTES=${PSTN_BRIDGE_SECRET_TTL_MINUTES:-60}
+      - DB_USER=${DB_USER:-admin}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-redadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-red-media}
+      - MINIO_BUCKET_MEDIA=${MINIO_BUCKET_MEDIA:-red-media}
+      - MINIO_BUCKET_AVATARS=${MINIO_BUCKET_AVATARS:-red-avatars}
+      - MINIO_BUCKET_STORIES=${MINIO_BUCKET_STORIES:-red-stories}
+      - RED_RETENTION_AUDIT_DAYS=${RED_RETENTION_AUDIT_DAYS:-365}
+      - RED_RETENTION_CDR_DAYS=${RED_RETENTION_CDR_DAYS:-365}
+      - RED_RETENTION_HEALTH_DAYS=${RED_RETENTION_HEALTH_DAYS:-90}
+      - RED_RETENTION_TELEMETRY_DAYS=${RED_RETENTION_TELEMETRY_DAYS:-90}
+      - RED_RETENTION_BATCH_SIZE=${RED_RETENTION_BATCH_SIZE:-10000}
       - MINIO_PASSWORD=${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1}
       - RED_IDENTITY_PRIVATE_KEY_PATH=/run/secrets/red_identity_private_key.pem
@@ -132,6 +191,11 @@ services:
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
       - MEDIASOUP_FORCE_LOCAL_BUILD=${MEDIASOUP_FORCE_LOCAL_BUILD:-}
+      # RTC range pinned to the published 40000-40100/udp mapping.
+      # server.js defaults match this range; override via .env only if you
+      # also extend the ports mapping + Dockerfile EXPOSE in lockstep.
+      - RTC_MIN_PORT=${RTC_MIN_PORT:-40000}
+      - RTC_MAX_PORT=${RTC_MAX_PORT:-40100}
     ports: ["4000:4000", "40000-40100:40000-40100/udp"]
     init: true
     security_opt:
@@ -163,6 +227,7 @@ services:
     environment:
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
+      - TURN_INTERNAL_IP=${TURN_INTERNAL_IP:-}
     command:
       - --no-cli
       - --log-file=stdout
@@ -172,11 +237,20 @@ services:
       - --realm=red.sovereign
       - --min-port=45000
       - --max-port=45050
-      - --external-ip=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-127.0.0.1}}/${TURN_INTERNAL_IP:-}
+      # Append /<internal> only when TURN_INTERNAL_IP is set; an empty
+      # "${VAR:-}" expansion previously left a trailing slash ("1.2.3.4/")
+      # which coturn rejects. Requires compose variable expansion with :+.
+      - --external-ip=${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-127.0.0.1}}${TURN_INTERNAL_IP:+/${TURN_INTERNAL_IP}}
     ports:
       - "3478:3478/tcp"
       - "3478:3478/udp"
+      # LEGENDARY FIX: TURNS + TCP (كانت الإعلانات 5349/443 كاذبة — العميل يجرب عناوين ميتة)
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "443:443/tcp"
+      - "80:80/tcp"
       - "45000-45050:45000-45050/udp"
+      - "45000-45050:45000-45050/tcp"
     healthcheck:
       # صورة coturn لا تحوي curl — نفحص منفذ TURN عبر bash /dev/tcp
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/3478' || exit 1"]
@@ -184,6 +258,51 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks: ["red-net"]
+
+# ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
+  pstn-gateway:
+    build: ./pstn-asterisk
+    image: red-pstn-gateway:local
+    container_name: red-pstn-gateway
+    restart: unless-stopped
+    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    environment:
+      - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
+      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.4}
+      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.4}}
+      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
+      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
+      - DINSTAR_PORT_ACCOUNTS=${DINSTAR_PORT_ACCOUNTS:-}
+      - DINSTAR_PORT_SIP_PORTS=${DINSTAR_PORT_SIP_PORTS:-}
+      - EXTERNAL_MEDIA_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
+      - EXTERNAL_SIGNALING_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
+      - ASTERISK_EXTERNAL_IP=${PSTN_EXTERNAL_IP:-${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}}
+      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-}
+      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
+      - TLS_SAN_IP=${TLS_SAN_IP:-192.168.11.10}
+      # Health check: Asterisk needs time to load modules on first boot
+      - ASTERISK_STARTUP_TIMEOUT=${ASTERISK_STARTUP_TIMEOUT:-60}
+    ports:
+      - "5060:5060/udp"
+      - "8089:8089"
+      - "8090:8090"
+      - "10000-10030:10000-10030/udp"
+    expose: ["5038"]
+    volumes:
+      - pstn-keys:/etc/asterisk/keys
+      - pstn-logs:/var/log/asterisk
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 5. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━
@@ -303,9 +422,11 @@ services:
     restart: "no"
     environment:
       - TLS_SAN_IP=${TLS_SAN_IP:-127.0.0.1}
+    # The tls-init image ships a legacy ENTRYPOINT ([/bin/sh, /init-certs.sh]
+    # with hardcoded SANs). This override forces the validated inline script
+    # below to run instead; the Dockerfile default was also demoted to CMD.
+    entrypoint: ["sh", "-ec"]
     command:
-      - "sh"
-      - "-ec"
       - |
         case "$$TLS_SAN_IP" in
           *[!0-9.]*|'') echo '[tls] TLS_SAN_IP must be an IPv4 address' >&2; exit 1 ;;
@@ -367,6 +488,7 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - red-certs:/etc/ssl/red:ro
       - certbot-www:/var/www/certbot:ro
+      - ./apk-output:/usr/share/nginx/updates:ro
     # Keep the private key volume read-only in the traffic-serving container.
     # Generation/repair belongs exclusively to certs-init; Nginx fails fast with
     # an explicit message instead of attempting an impossible write to a :ro mount.
@@ -426,6 +548,8 @@ volumes:
   identity-secrets:
   red-certs:
   certbot-www:
+  pstn-keys:
+  pstn-logs:
 
 networks:
   red-net:

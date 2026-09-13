@@ -1,4 +1,4 @@
-Set-Location "C:\Users\hpc01\Pictures\pro_new\RED_Ultimate_V1-main\RED_Ultimate"
+Set-Location $PSScriptRoot
 $env:_JAVA_OPTIONS="-Xmx512m"
 $env:GRADLE_OPTS="-Xmx1024m"
 $ErrorActionPreference = "Continue"

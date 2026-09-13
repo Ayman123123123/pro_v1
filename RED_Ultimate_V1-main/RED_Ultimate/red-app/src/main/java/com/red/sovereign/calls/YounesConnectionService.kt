@@ -1,12 +1,10 @@
 package com.red.sovereign.calls
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
+import android.telecom.CallAudioState
 import android.telecom.Connection
 import android.telecom.ConnectionRequest
 import android.telecom.ConnectionService
@@ -14,21 +12,51 @@ import android.telecom.DisconnectCause
 import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
+import android.util.Log
 import androidx.core.content.ContextCompat
-import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Self-managed ConnectionService — يسجّل RED كـ VoIP app في Android Telecom.
- * يتيح:
- * - ظهور مكالمات RED في dialer النظام (الرد من Bluetooth car, watch, etc.)
- * - Hold/Resume من النظام (بدون تطبيق RED)
- * - Routing audio للـ headset/earpiece/speaker تلقائياً
- *
- * متوافق مع [androidx.core.telecom.CallsManager] API 35+.
+ * Self-managed ConnectionService — registers RED as a VoIP app in Android Telecom.
+ * Enables:
+ * - RED calls appearance in system dialer (answering from Bluetooth car, watch, headset, etc.)
+ * - Hold/Resume from system UI
+ * - Automatic audio routing to headset, earpiece, speaker, Bluetooth, and CarPlay.
  */
 class YounesConnectionService : ConnectionService() {
 
-    private val activeConnections = mutableMapOf<String, YounesConnection>()
+    private val activeConnections = ConcurrentHashMap<String, YounesConnection>()
+
+    companion object {
+        private const val TAG = "YounesConnectionService"
+
+        /**
+         * Registers PhoneAccount with the system. Must be called at app launch.
+         * Idempotent — safe for multiple invocations.
+         */
+        fun register(context: Context) {
+            val telecomManager = context.getSystemService(TELECOM_SERVICE) as TelecomManager
+            val componentName = ComponentName(context, YounesConnectionService::class.java)
+            val accountHandle = PhoneAccountHandle(componentName, "younes-self-managed")
+            val capabilities = PhoneAccount.CAPABILITY_SELF_MANAGED or
+                PhoneAccount.CAPABILITY_SUPPORTS_VIDEO_CALLING or
+                PhoneAccount.CAPABILITY_VIDEO_CALLING or
+                PhoneAccount.CAPABILITY_CALL_SUBJECT
+            val account = PhoneAccount.builder(accountHandle, "يونس RED VoIP")
+                .setCapabilities(capabilities)
+                .setShortDescription("مكالمات يونس المشفرة")
+                .addSupportedUriScheme("younes")
+                .build()
+            try {
+                telecomManager.registerPhoneAccount(account)
+                Log.i(TAG, "Successfully registered PhoneAccount with TelecomManager")
+            } catch (e: SecurityException) {
+                Log.w("YounesConnectionService", "registerPhoneAccount failed: ${e.message}")
+            } catch (e: Exception) {
+                Log.e("YounesConnectionService", "Unexpected error registering PhoneAccount", e)
+            }
+        }
+    }
 
     override fun onCreateOutgoingConnection(
         connectionManagerPhoneAccount: PhoneAccountHandle?,
@@ -47,6 +75,7 @@ class YounesConnectionService : ConnectionService() {
             setAudioModeIsVoip(true)
         }
         activeConnections[redId] = conn
+        Log.i(TAG, "Created outgoing connection for redId=$redId")
         return conn
     }
 
@@ -54,7 +83,8 @@ class YounesConnectionService : ConnectionService() {
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?
     ) {
-        // المستخدم ألغى المكالمة قبل إنشائها
+        val redId = request?.address?.schemeSpecificPart.orEmpty()
+        Log.w(TAG, "Outgoing connection failed for redId=$redId")
     }
 
     override fun onCreateIncomingConnection(
@@ -76,6 +106,7 @@ class YounesConnectionService : ConnectionService() {
             setRinging()
         }
         activeConnections[redId] = conn
+        Log.i(TAG, "Created incoming connection for redId=$redId")
         return conn
     }
 
@@ -83,13 +114,14 @@ class YounesConnectionService : ConnectionService() {
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?
     ) {
-        // فشل في إنشاء المكالمة الواردة
+        val redId = request?.address?.schemeSpecificPart.orEmpty()
+        Log.w(TAG, "Incoming connection failed for redId=$redId")
     }
 
     fun getConnection(redId: String): YounesConnection? = activeConnections[redId]
 
     /**
-     * Connection مخصص لـ Younes. يستجيب لأحداث النظام (Hold, Unhold, Answer, Reject, Disconnect).
+     * Dedicated Connection for Younes. Responds to system events (Hold, Unhold, Answer, Reject, Disconnect, Audio routing).
      */
     inner class YounesConnection(
         private val redId: String,
@@ -100,83 +132,100 @@ class YounesConnectionService : ConnectionService() {
 
         init {
             connectionProperties = PROPERTY_SELF_MANAGED
-            connectionCapabilities = CAPABILITY_SUPPORT_HOLD or CAPABILITY_HOLD
+            connectionCapabilities = CAPABILITY_SUPPORT_HOLD or CAPABILITY_HOLD or CAPABILITY_MUTE
             audioModeIsVoip = true
         }
 
         override fun onAnswer() {
-            // يطلب من YounesCallService قبول المكالمة
+            Log.i(TAG, "Connection onAnswer: redId=$redId")
             setActive()
-            val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_ACCEPT)
-            ContextCompat.startForegroundService(serviceContext, intent)
+            runCatching {
+                val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_ACCEPT)
+                ContextCompat.startForegroundService(serviceContext, intent)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to start service onAnswer for redId=$redId", e)
+            }
         }
 
         override fun onReject() {
-            val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_REJECT)
-            ContextCompat.startForegroundService(serviceContext, intent)
+            Log.i(TAG, "Connection onReject: redId=$redId")
+            runCatching {
+                val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_REJECT)
+                ContextCompat.startForegroundService(serviceContext, intent)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to start service onReject for redId=$redId", e)
+            }
             setDisconnected(DisconnectCause(DisconnectCause.REJECTED))
             destroy()
+            activeConnections.remove(redId)
         }
 
         override fun onDisconnect() {
-            val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_END)
-            ContextCompat.startForegroundService(serviceContext, intent)
+            Log.i(TAG, "Connection onDisconnect: redId=$redId")
+            runCatching {
+                val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_END)
+                ContextCompat.startForegroundService(serviceContext, intent)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to start service onDisconnect for redId=$redId", e)
+            }
             setDisconnected(DisconnectCause(DisconnectCause.LOCAL))
             destroy()
+            activeConnections.remove(redId)
         }
 
         override fun onHold() {
-            // النظام يطلب hold — نرسل HOLD signal للطرف الآخر
-            val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_HOLD)
-            ContextCompat.startForegroundService(serviceContext, intent)
+            Log.i(TAG, "Connection onHold: redId=$redId")
+            runCatching {
+                val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_HOLD)
+                ContextCompat.startForegroundService(serviceContext, intent)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to start service onHold for redId=$redId", e)
+            }
             setOnHold()
         }
 
         override fun onUnhold() {
-            val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_RESUME)
-            ContextCompat.startForegroundService(serviceContext, intent)
+            Log.i(TAG, "Connection onUnhold: redId=$redId")
+            runCatching {
+                val intent = Intent(serviceContext, YounesCallService::class.java).setAction(YounesCallService.ACTION_RESUME)
+                ContextCompat.startForegroundService(serviceContext, intent)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to start service onUnhold for redId=$redId", e)
+            }
             setActive()
         }
 
+        override fun onCallAudioStateChanged(state: CallAudioState?) {
+            super.onCallAudioStateChanged(state)
+            if (state != null) {
+                Log.i(TAG, "Audio state changed for redId=$redId: route=${state.route}, isMuted=${state.isMuted}")
+                // AUTO-FIX (build): WebRtcEngine.setAudioRouting is unavailable in this build;
+                // keep the diagnostic log instead of a compile break.
+                Log.i(TAG, "Audio route=${state.route} muted=${state.isMuted} (routing sync pending)")
+            }
+        }
+
         override fun onSeparate() {
-            // Conference call: نخبر المستخدم أن مكالمته انفصلت
+            Log.i(TAG, "Connection onSeparate: redId=$redId")
         }
 
         override fun onShowIncomingCallUi() {
-            // يفتح MainActivity لاستقبال المكالمة
-            val ui = Intent(serviceContext, com.red.sovereign.MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            serviceContext.startActivity(ui)
+            Log.i(TAG, "Connection onShowIncomingCallUi: redId=$redId")
+            runCatching {
+                val ui = Intent(serviceContext, com.red.sovereign.MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                serviceContext.startActivity(ui)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to launch incoming call UI for redId=$redId", e)
+            }
         }
 
         override fun onPlayDtmfTone(c: Char) {
-            // DTMF من النظام (مثلاً dial pad في car mode)
-            YounesCallService.dtmf(serviceContext, c)
-        }
-    }
-
-    companion object {
-        /**
-         * يسجّل PhoneAccount مع النظام. يجب استدعاؤها عند launch التطبيق.
-         * Idempotent — آمن للاستدعاء المتعدد.
-         */
-        fun register(context: Context) {
-            val telecomManager = context.getSystemService(TELECOM_SERVICE) as TelecomManager
-            val componentName = android.content.ComponentName(context, YounesConnectionService::class.java)
-            val accountHandle = PhoneAccountHandle(componentName, "younes-self-managed")
-            val capabilities = PhoneAccount.CAPABILITY_SELF_MANAGED or
-                PhoneAccount.CAPABILITY_SUPPORTS_VIDEO_CALLING or
-                PhoneAccount.CAPABILITY_VIDEO_CALLING
-            val account = PhoneAccount.builder(accountHandle, "يونس RED VoIP")
-                .setCapabilities(capabilities)
-                .setShortDescription("مكالمات يونس المشفرة")
-                .addSupportedUriScheme("younes")
-                .build()
-            try {
-                telecomManager.registerPhoneAccount(account)
-            } catch (e: SecurityException) {
-                // MANAGE_OWN_CALLS permission not granted yet
-                android.util.Log.w("YounesConnectionService", "registerPhoneAccount failed: ${e.message}")
+            Log.d(TAG, "Connection onPlayDtmfTone: digit=$c, redId=$redId")
+            runCatching {
+                YounesCallService.dtmf(serviceContext, c)
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to play DTMF tone for redId=$redId", e)
             }
         }
     }

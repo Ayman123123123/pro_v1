@@ -66,7 +66,8 @@ class GroupMentionsTest {
     @Test
     fun `blank query lists members without the author`() {
         val found = GroupMentions.candidates("", listOf(ali, sara, me), friends, "18000")
-        assertEquals(2, found.size)
+        // 2 خاص (@all/@online) + 2 عضو بدون المؤلف
+        assertEquals(4, found.size)
         assertTrue(found.none { it.redId == "18000" })
     }
 }

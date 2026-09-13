@@ -42,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,8 +58,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.addLastModifiedToFileCacheKey
+import coil3.request.crossfade
 import com.red.sovereign.media.FileTypeUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,7 +114,9 @@ fun ImageViewerScreen(
             }
     ) {
         AsyncImage(
-            model = ImageRequest.Builder(context).data(file).crossfade(true).build(),
+            model = ImageRequest.Builder(context).data(file).crossfade(true)
+                .addLastModifiedToFileCacheKey(true)
+                .size(1600, 1600).build(),
             contentDescription = fileName,
             contentScale = ContentScale.Fit,
             modifier = Modifier
@@ -190,10 +195,12 @@ internal object CoroutineScopeHolder {
 }
 
 @Composable
-fun ThumbnailImage(file: File, modifier: Modifier = Modifier) {
+fun ThumbnailImage(file: File, modifier: Modifier = Modifier, fileName: String? = null) {
     AsyncImage(
-        model = ImageRequest.Builder(LocalContext.current).data(file).crossfade(true).build(),
-        contentDescription = null,
+        model = ImageRequest.Builder(LocalContext.current).data(file).crossfade(true)
+            .addLastModifiedToFileCacheKey(true)
+            .size(512, 512).build(),
+        contentDescription = "صورة مصغرة: ${fileName ?: file.name} (${file.extension.ifEmpty { "بدون امتداد" }})",
         contentScale = ContentScale.Crop,
         modifier = modifier
     )
@@ -201,18 +208,20 @@ fun ThumbnailImage(file: File, modifier: Modifier = Modifier) {
 
 @Composable
 fun ThumbnailVideo(file: File, modifier: Modifier = Modifier, durationMs: Long = 0L) {
-    val context = LocalContext.current
-    val bitmap = remember(file.absolutePath) {
-        kotlinx.coroutines.runBlocking {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val retriever = android.media.MediaMetadataRetriever()
-                    retriever.setDataSource(file.absolutePath)
-                    val frame = retriever.getFrameAtTime(1_000_000L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                    retriever.release()
-                    frame
-                }.getOrNull()
-            }
+    // G3: كان استخراج الفريم يتم عبر runBlocking داخل remember — يحظر خيط
+    // Compose الرئيسي ويسبب ANR مع ملفات الفيديو الكبيرة. الآن التحميل
+    // لاتزامني عبر produceState على IO مع مفتاح المسار + الحجم.
+    val path = file.absolutePath
+    val fileLen = runCatching { file.length() }.getOrDefault(0L)
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, path, fileLen) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val retriever = android.media.MediaMetadataRetriever()
+                retriever.setDataSource(path)
+                val frame = retriever.getFrameAtTime(1_000_000L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                retriever.release()
+                frame
+            }.getOrNull()
         }
     }
     Box(modifier.background(Color.Black)) {
@@ -226,8 +235,8 @@ fun ThumbnailVideo(file: File, modifier: Modifier = Modifier, durationMs: Long =
                 },
                 modifier = Modifier.fillMaxSize()
             )
-        } ?: Icon(Icons.Default.Videocam, null, tint = Color.White, modifier = Modifier.align(Alignment.Center).size(36.dp))
-        Icon(Icons.Default.PlayArrow, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.Center).size(40.dp))
+        } ?: Icon(Icons.Default.Videocam, "معاينة فيديو: ${file.name}", tint = Color.White, modifier = Modifier.align(Alignment.Center).size(36.dp))
+        Icon(Icons.Default.PlayArrow, "تشغيل الفيديو", tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.Center).size(40.dp))
         if (durationMs > 0) {
             Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(6.dp), modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp)) {
                 Text(formatMediaTime(durationMs), color = Color.White, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
@@ -239,7 +248,7 @@ fun ThumbnailVideo(file: File, modifier: Modifier = Modifier, durationMs: Long =
 @Composable
 fun ThumbnailAudio(modifier: Modifier = Modifier) {
     Box(modifier.background(MaterialTheme.colorScheme.primaryContainer)) {
-        Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.align(Alignment.Center).size(38.dp))
+        Icon(Icons.Default.MusicNote, "معاينة صوتية", tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.align(Alignment.Center).size(38.dp))
     }
 }
 
@@ -248,7 +257,7 @@ fun ThumbnailDocument(fileName: String, mimeType: String, modifier: Modifier = M
     val icon = FileTypeUtil.getFileIcon(mimeType, fileName)
     val color = FileTypeUtil.getFileColor(mimeType)
     Box(modifier.background(color.copy(alpha = 0.15f))) {
-        Icon(icon, null, tint = color, modifier = Modifier.align(Alignment.Center).size(38.dp))
+        Icon(icon, "مستند: $fileName", tint = color, modifier = Modifier.align(Alignment.Center).size(38.dp))
     }
 }
 
@@ -263,7 +272,7 @@ fun FileIconItem(fileName: String, mimeType: String, sizeBytes: Long, onClick: (
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+                Icon(icon, "ملف: $fileName", tint = color, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(fileName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)

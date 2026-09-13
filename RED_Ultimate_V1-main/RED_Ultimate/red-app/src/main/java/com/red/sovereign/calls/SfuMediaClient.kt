@@ -56,7 +56,14 @@ class SfuMediaClient(
         fun onRemoteVideo(peerId: String, track: VideoTrack)
         fun onPeerLeft(peerId: String)
         fun onError(message: String)
-        fun onNetworkStats(stats: NetworkStats) {}
+        /** Network stats — impl must update stats UI (GroupCallRuntime/ConferenceRuntime.networkStats + CallStatsScreen via CallTelemetry/CallQualityManager). */
+        fun onNetworkStats(stats: NetworkStats) {
+            android.util.Log.d("SfuMediaClient", "onNetworkStats default rtt=${stats.rttMs} loss=${stats.packetLossPercent} — override should update stats UI")
+        }
+        /** المتكلم الحالي من مراقب مستوى الصوت في SFU ("" = صمت). impl must update speaker highlight (speakingPeers). */
+        fun onActiveSpeaker(peerId: String) {
+            android.util.Log.d("SfuMediaClient", "onActiveSpeaker default peer=$peerId — override should update speaker highlight")
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,13 +78,27 @@ class SfuMediaClient(
     private var sendTransport: SfuTransportOptions? = null
     private var recvTransport: SfuTransportOptions? = null
     private var routerCaps: JSONObject? = null
+
+    @Volatile
     private var recvConnected = false
+
+    @Volatile
     private var canProduce = true
+
+    @Volatile
     private var attached = false
 
     /** المستهلكون المعلّقون/المتفاوض عليهم — الترتيب يحدد أرقام m-sections. */
     private val consumers = linkedMapOf<String, SfuConsumer>()
-    private val pendingVideoPeers = ArrayDeque<String>()
+
+    /**
+     * ربط حتمي consumerId→peerId لمستهلكي الفيديو بترتيب التفاوض (m-sections) —
+     * بديل FIFO القديم (pendingVideoPeers: ArrayDeque) الذي كان يفقد الربط عند
+     * وصول المسارات بترتيب مختلف أو إبقاء مداخل ميتة بعد producerClosed.
+     * كل تعديل/استهلاك يتم حصرياً تحت [mutex].
+     */
+    private val videoPeerByConsumer = linkedMapOf<String, String>()
+
     var eglContext: org.webrtc.EglBase.Context? = null
         private set
     var localVideo: VideoTrack? = null
@@ -104,15 +125,15 @@ class SfuMediaClient(
         val created = createEngine(kind)
         if (created !is ApiResult.Success) return@withContext false
         // 1) أول offer محلي لمعرفة الكوديكس و SSRCs
-        val offerSdp = waitLocalSdp() ?: return@withContext false
+        val offerSdp = waitLocalOffer(engine) ?: return@withContext false
         // 2) أقسام send-only من منظور الخادم: الخادم يستقبل منا = recvonly
         val sections = buildList {
             SfuSdpFactory.rtpParametersFromLocal(offerSdp, "audio")?.let {
-                add(SfuMediaKind("audio", "recvonly", it.codecs.map { c -> c.payloadType }, it.codecs, it.encodings.firstOrNull()?.ssrc, it.rtcp.cname))
+                add(SfuMediaKind("audio", "recvonly", it.codecs.map { c -> c.payloadType }, it.codecs, it.encodings.firstOrNull()?.ssrc, it.rtcp.cname, headerExtensions = it.headerExtensions))
             }
             if (kind.wantsVideo) {
                 SfuSdpFactory.rtpParametersFromLocal(offerSdp, "video")?.let {
-                    add(SfuMediaKind("video", "recvonly", it.codecs.map { c -> c.payloadType }, it.codecs, it.encodings.firstOrNull()?.ssrc, it.rtcp.cname))
+                    add(SfuMediaKind("video", "recvonly", it.codecs.map { c -> c.payloadType }, it.codecs, it.encodings.firstOrNull()?.ssrc, it.rtcp.cname, headerExtensions = it.headerExtensions))
                 }
             }
         }
@@ -122,7 +143,7 @@ class SfuMediaClient(
             transport.iceParameters, transport.iceCandidates, transport.dtlsParameters, sections
         )
         engine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, fakeOffer)) { engine?.answer() }
-        val answerSdp = waitLocalSdp() ?: return@withContext false
+        val answerSdp = waitLocalAnswer(engine) ?: return@withContext false
         val dtls = SfuSdpFactory.dtlsFromLocalSdp(answerSdp) ?: return@withContext false
         // 4) اربط الـ transport ببصمتنا ودورنا الفعليين
         val connected = connectTransport(transport.id, dtls)
@@ -134,6 +155,14 @@ class SfuMediaClient(
             SfuSdpFactory.rtpParametersFromLocal(answerSdp, "video")?.let { produce("video", transport.id, it) }
         }
         true
+    }
+
+    suspend fun publishScreenTrack(track: VideoTrack): Boolean = withContext(Dispatchers.IO) {
+        if (!attached || !canProduce) return@withContext false
+        val transport = sendTransport ?: return@withContext false
+        val sdp = engine?.lastLocalSdp ?: return@withContext false
+        val params = SfuSdpFactory.rtpParametersFromLocal(sdp, "video") ?: return@withContext false
+        produce("screen", transport.id, params)
     }
 
     fun setMicrophoneEnabled(enabled: Boolean) {
@@ -178,6 +207,31 @@ class SfuMediaClient(
         // الخادم يبث newProducer للمشاركين الآخرين تلقائياً بعد نجاح produce
         produce("video", transport.id, params)
     }
+
+    fun setConsumerPreferredLayers(consumerId: String, spatialLayer: Int, temporalLayer: Int) {
+        if (consumerId.isBlank()) return
+        scope.launch {
+            request(
+                JSONObject()
+                    .put("type", "setConsumerPreferredLayers")
+                    .put("consumerId", consumerId)
+                    .put("spatialLayer", spatialLayer)
+                    .put("temporalLayer", temporalLayer)
+            )
+        }
+    }
+
+    fun requestKeyFrame(consumerId: String) {
+        if (consumerId.isBlank()) return
+        scope.launch {
+            request(
+                JSONObject()
+                    .put("type", "requestKeyFrame")
+                    .put("consumerId", consumerId)
+            )
+        }
+    }
+
     fun pollStats() {
         engine?.pollStats()
         recvEngine?.pollStats()
@@ -195,7 +249,7 @@ class SfuMediaClient(
         localVideo = null
         producers.clear()
         consumers.clear()
-        pendingVideoPeers.clear()
+        videoPeerByConsumer.clear()
         recvConnected = false
         attached = false
         scope.cancel()
@@ -237,7 +291,7 @@ class SfuMediaClient(
                             scope.launch {
                                 mutex.withLock {
                                     consumers.entries.removeAll { it.value.peerId == peer }
-                                    pendingVideoPeers.removeAll { it == peer }
+                                    videoPeerByConsumer.entries.removeAll { it.value == peer }
                                 }
                                 events.onPeerLeft(peer)
                             }
@@ -246,32 +300,47 @@ class SfuMediaClient(
                             val producerId = body.optString("producerId")
                             scope.launch {
                                 val removed = mutex.withLock {
-                                    val any = consumers.entries.removeAll { it.value.producerId == producerId }
-                                    // نظّف أي تعيين فيديو معلّق أصبح بلا منتج (مسار ميّت في القائمة)
-                                    val videoPeers = consumers.values.filter { it.kind == "video" }.map { it.peerId }.toSet()
-                                    pendingVideoPeers.removeAll { it !in videoPeers }
+                                    val removedIds = consumers.entries
+                                        .filter { it.value.producerId == producerId }
+                                        .map { it.key }
+                                    var any = false
+                                    removedIds.forEach { id ->
+                                        if (consumers.remove(id) != null) any = true
+                                        videoPeerByConsumer.remove(id)
+                                    }
+                                    // كناسة دفاعية: أي مفتاح فيديو بلا مستهلك = مسار ميّت
+                                    videoPeerByConsumer.keys.removeAll { it !in consumers.keys }
                                     any
                                 }
                                 if (removed) negotiateRecv()
                             }
                         }
                         "producerPaused", "producerResumed", "networkDegraded" -> Unit
+                        "activeSpeaker" -> events.onActiveSpeaker(body.optString("peerId"))
                     }
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    socket = null
-                    if (!opened.isCompleted) opened.complete(false)
+                    handleSocketTerminated("SFU_SOCKET_CLOSED: $reason", opened)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    socket = null
-                    if (!opened.isCompleted) opened.complete(false)
-                    events.onError(t.message ?: "SFU_SOCKET_FAILED")
+                    handleSocketTerminated(t.message ?: "SFU_SOCKET_FAILED", opened)
                 }
             }
         )
-        return withTimeoutOrNull(4_000) { opened.await() } == true
+        // Yemen-hardened: مهلة 8s بدل 4s — مصافحة WS على 4G عالي RTT كانت تفشل كذباً.
+        return withTimeoutOrNull(8_000) { opened.await() } == true
+    }
+
+    private fun handleSocketTerminated(reason: String, opened: CompletableDeferred<Boolean>) {
+        socket = null
+        attached = false
+        recvConnected = false
+        if (!opened.isCompleted) opened.complete(false)
+        pending.values.forEach { it.cancel() }
+        pending.clear()
+        events.onError(reason)
     }
 
     private suspend fun createTransport(direction: String): SfuTransportOptions? {
@@ -345,7 +414,7 @@ class SfuMediaClient(
                     ?: return@launch
                 mutex.withLock {
                     consumers[consumerId] = SfuConsumer(peerId, producerId, kind, rtp, false)
-                    if (kind == "video") pendingVideoPeers.add(peerId)
+                    if (kind == "video") videoPeerByConsumer[consumerId] = peerId
                     negotiateRecvLocked()
                 }
             }
@@ -379,14 +448,16 @@ class SfuMediaClient(
                 payloadTypes = c.rtp.codecs.map { it.payloadType },
                 codecs = c.rtp.codecs,
                 ssrc = c.rtp.encodings.firstOrNull()?.ssrc,
-                cname = c.rtp.rtcp.cname
+                cname = c.rtp.rtcp.cname,
+                msid = c.producerId.ifBlank { c.peerId },
+                headerExtensions = c.rtp.headerExtensions
             )
         }
         val fakeOffer = SfuSdpFactory.remoteOffer(
             transport.iceParameters, transport.iceCandidates, transport.dtlsParameters, sections
         )
         recvEngine?.setRemote(SessionDescription(SessionDescription.Type.OFFER, fakeOffer)) { recvEngine?.answer() }
-        val answerSdp = waitRecvLocalSdp() ?: return
+        val answerSdp = waitLocalAnswer(recvEngine) ?: return
         if (!recvConnected) {
             val dtls = SfuSdpFactory.dtlsFromLocalSdp(answerSdp) ?: return
             val status = connectTransport(transport.id, dtls)
@@ -398,6 +469,65 @@ class SfuMediaClient(
                 consumers[consumerId] = c.copy(resumed = true)
             }
         }
+    }
+
+    /**
+     * يجب استدعاؤها تحت [mutex]. تستهلك مفتاح فيديو واحداً لمالك المسار القادم:
+     * 1) مطابقة trackId بـ consumerId/producerId (msid) إن أمكن،
+     * 2) وإلا أول مفتاح بترتيب التفاوض (m-sections).
+     */
+    private fun claimVideoPeerLocked(trackId: String): String? {
+        if (videoPeerByConsumer.isEmpty()) return null
+        if (trackId.isNotBlank()) {
+            val hit = videoPeerByConsumer.keys.firstOrNull { consumerId ->
+                trackId.contains(consumerId) ||
+                    consumers[consumerId]?.producerId?.takeIf { it.isNotBlank() }?.let { trackId.contains(it) } == true
+            }
+            if (hit != null) return videoPeerByConsumer.remove(hit)
+        }
+        val first = videoPeerByConsumer.entries.firstOrNull() ?: return null
+        return videoPeerByConsumer.remove(first.key)
+    }
+
+    /**
+     * إعادة ضبط ICE لكلا الناقلين (send/recv) عند تبديل الشبكة WiFi↔4G —
+     * يعيد استكشاف المسار عبر الشبكة الجديدة دون قطع المنتجين.
+     * إن بقيت الـ PeerConnections في FAILED (تغيّر IP جذري لا يصلحه العرض
+     * المحلي) استخدم [rejoin] كfallback كامل.
+     */
+    fun restartSfuIce() {
+        scope.launch {
+            sendTransport?.let { t -> request(JSONObject().put("type", "restartIce").put("transportId", t.id)) }
+            recvTransport?.let { t -> request(JSONObject().put("type", "restartIce").put("transportId", t.id)) }
+            runCatching { engine?.restartIce() }
+            runCatching { recvEngine?.restartIce() }
+            android.util.Log.d("SfuMediaClient", "restartSfuIce requested (send+recv)")
+        }
+    }
+
+    fun isSfuAttached(): Boolean = attached
+
+    /**
+     * Fallback كامل عند تعذّر الوصول للـ transport بعد تبديل الشبكة:
+     * مغادرة + إغلاق المقبس + attach جديد (تذكرة وناقلات جديدة) + publish.
+     */
+    suspend fun rejoin(roomId: String, kind: CallMediaKind): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            requestFireAndForget(JSONObject().put("type", "leave"))
+            runCatching { socket?.close(1000, "sfu rejoin") }
+            socket = null
+            recvConnected = false
+            attached = false
+            runCatching { recvEngine?.release() }
+            recvEngine = null
+            mutex.withLock {
+                consumers.clear()
+                videoPeerByConsumer.clear()
+            }
+            producers.clear()
+            if (!attach(roomId)) return@withContext false
+            publish(kind)
+        }.getOrDefault(false)
     }
 
     private fun toggleProducer(kind: String, enabled: Boolean) {
@@ -435,9 +565,13 @@ class SfuMediaClient(
             override fun onLocalDescription(description: SessionDescription) = Unit
             override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit
             override fun onRemoteVideo(track: VideoTrack) {
-                // تُربط المسارات القادمة بأصحابها حسب ترتيب m-sections المتفاوض عليها
-                val peer = pendingVideoPeers.removeFirstOrNull()
-                if (peer != null && !peer.isBlank()) events.onRemoteVideo(peer, track)
+                // الربط عبر videoPeerByConsumer تحت mutex: مطابقة msid/producerId أولاً ثم ترتيب m-sections
+                val trackId = runCatching { track.id() }.getOrNull().orEmpty()
+                scope.launch {
+                    val peer = mutex.withLock { claimVideoPeerLocked(trackId) }
+                    if (!peer.isNullOrBlank()) events.onRemoteVideo(peer, track)
+                    else android.util.Log.w("SfuMediaClient", "onRemoteVideo unmatched track=$trackId — dropped (no pending video consumer)")
+                }
             }
             override fun onConnectionState(state: PeerConnection.PeerConnectionState) = Unit
             override fun onNetworkStats(stats: NetworkStats) = events.onNetworkStats(stats)
@@ -447,20 +581,24 @@ class SfuMediaClient(
         return recv.createReceiverOnly(kind)
     }
 
-    private suspend fun waitLocalSdp(): String? {
-        repeat(20) {
-            engine?.lastLocalSdp?.takeIf { it.isNotBlank() }?.let { return it }
+    private suspend fun waitLocalOffer(eng: WebRtcEngine?): String? {
+        repeat(30) {
+            val sdp = eng?.lastLocalSdp
+            if (!sdp.isNullOrBlank()) return sdp
             delay(50)
         }
-        return engine?.lastLocalSdp
+        return eng?.lastLocalSdp
     }
 
-    private suspend fun waitRecvLocalSdp(): String? {
-        repeat(20) {
-            recvEngine?.lastLocalSdp?.takeIf { it.isNotBlank() }?.let { return it }
+    private suspend fun waitLocalAnswer(eng: WebRtcEngine?): String? {
+        repeat(40) {
+            val sdp = eng?.lastLocalSdp
+            if (!sdp.isNullOrBlank() && (sdp.contains("a=setup:active") || sdp.contains("a=setup:passive"))) {
+                return sdp
+            }
             delay(50)
         }
-        return recvEngine?.lastLocalSdp
+        return eng?.lastLocalSdp
     }
 
     private suspend fun request(body: JSONObject): JSONObject? {
@@ -472,7 +610,11 @@ class SfuMediaClient(
             pending.remove(id)
             return null
         }
-        return withTimeoutOrNull(5_000) { deferred.await() }
+        return try {
+            withTimeoutOrNull(5_000) { deferred.await() }
+        } finally {
+            pending.remove(id)
+        }
     }
 
     private fun requestFireAndForget(body: JSONObject) {

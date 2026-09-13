@@ -1,13 +1,13 @@
-﻿package com.red.sovereign.calls
+package com.red.sovereign.calls
 
 import kotlinx.serialization.Serializable
 import org.webrtc.IceCandidate
 
 /**
- * إشارة المكالمة الموحدة â€” متوافقة مع YounesCallService / GroupCallService / Backend.
+ * إشارة المكالمة الموحدة — متوافقة مع YounesCallService / GroupCallService / Backend.
  *
- * âš ï¸ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
- * وليس callType â€” يحميه CallSignalPositionalContractTest. البناء المسمّى
+ * ⚠️ عقد المواضع: الوسيط الثاني الموضعي هو دائماً targetUserId (هوية المستلم)
+ * وليس callType — يحميه CallSignalPositionalContractTest. البناء المسمّى
  * مفضَّل دائماً، لكن أي بناء موضعي قديم يسلك السلوك الصحيح الآن.
  */
 @Serializable
@@ -57,6 +57,8 @@ data class CallSignal(
         const val GROUP_CALL_STATUS = "GROUP_CALL_STATUS"
         const val GROUP_CALL_END = "GROUP_CALL_END"
         const val GROUP_CALL_MUTE_ALL = "GROUP_CALL_MUTE_ALL"
+        const val GROUP_SCREEN_SHARE_START = "GROUP_SCREEN_SHARE_START"
+        const val GROUP_SCREEN_SHARE_STOP = "GROUP_SCREEN_SHARE_STOP"
         const val CONFERENCE_INVITE = "CONFERENCE_INVITE"
         const val LIVE_INVITE = "LIVE_INVITE"
         const val CALL_REACTION = "CALL_REACTION"
@@ -88,5 +90,17 @@ data class CallSignal(
 
         fun createReject(callId: String, targetUserId: String, mode: String): CallSignal =
             CallSignal(callId = callId, targetUserId = targetUserId, type = REJECT, mode = mode)
+
+        fun createRinging(callId: String, targetUserId: String, mode: String): CallSignal =
+            CallSignal(callId = callId, targetUserId = targetUserId, type = RINGING, mode = mode)
+
+        fun createBusy(callId: String, targetUserId: String, mode: String): CallSignal =
+            CallSignal(callId = callId, targetUserId = targetUserId, type = BUSY, mode = mode)
+
+        fun createHold(callId: String, targetUserId: String, mode: String): CallSignal =
+            CallSignal(callId = callId, targetUserId = targetUserId, type = HOLD, mode = mode)
+
+        fun createResume(callId: String, targetUserId: String, mode: String): CallSignal =
+            CallSignal(callId = callId, targetUserId = targetUserId, type = RESUME, mode = mode)
     }
 }

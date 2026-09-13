@@ -1,10 +1,18 @@
 package com.red.sovereign.ui.screens
 
+import androidx.compose.foundation.lazy.LazyListState
+
 /**
  * سياسة التثبيت التلقائي لأسفل قائمة الرسائل أثناء تحميل التاريخ.
  *
  * الهدف: لا قفز إلى النهاية عند فتح محادثة قديمة، ومع ذلك يبقى القارئ
  * الملتصق بالأسفل متابعاً لأحدث رسالة.
+ *
+ * التوحيد (2026-09-10): كل شاشات الدردشة كانت تكرر
+ * `runCatching { listState.scrollToItem(lastIndex) }` مع مفتاح `size`
+ * (عاصفة LaunchedEffect عند الحذف الجماعي/التحديث). الآن التمرير موحد
+ * في [LazyListState.scrollOnce] والمفتاح هو معرف آخر رسالة (lastId)
+ * لا الحجم — لا منطق محذوف، فقط المفتاح والدالة.
  */
 object ChatScrollPolicy {
 
@@ -31,4 +39,22 @@ object ChatScrollPolicy {
 
     /** كم عنصراً من النهاية نعتبر «القارئ ملتصقاً بالأسفل». */
     const val NEAR_END_WINDOW = 2
+
+    /**
+     * مهلة منع العاصفة لحضور جهات الاتصال (حضور جماعي لا يستحق
+     * طلب شبكة لكل تغيّر حجم أثناء المزامنة الأولى).
+     */
+    const val PRESENCE_DEBOUNCE_MS = 2000L
+}
+
+/**
+ * تمرير آمن موحد لأسفل القائمة — scrollToItem + runCatching.
+ *
+ * كان `animateScrollToItem` يرمي IndexOutOfBounds عند تقلص القائمة
+ * أثناء الأنيميشن (حذف/تحديث سريع)، فكل الشاشات تستخدم هذه الدالة الآن.
+ * لا تعيد رمي أي استثناء — الفشل الصامت مقصود هنا (إطار لم يُخطط بعد).
+ */
+suspend fun LazyListState.scrollOnce(index: Int) {
+    if (index < 0) return
+    runCatching { scrollToItem(index) }
 }

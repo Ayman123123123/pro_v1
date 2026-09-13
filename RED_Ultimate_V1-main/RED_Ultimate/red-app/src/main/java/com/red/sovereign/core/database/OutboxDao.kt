@@ -16,7 +16,7 @@ interface OutboxDao {
     suspend fun insertAll(messages: List<OutboxMessageEntity>)
 
     @Query("SELECT * FROM outbox_messages WHERE status IN ('PENDING','FAILED') AND nextAttemptAt <= :now ORDER BY priority ASC, nextAttemptAt ASC LIMIT :limit")
-    suspend fun getPending(now: Long = System.currentTimeMillis(), limit: Int = 20): List<OutboxMessageEntity>
+    suspend fun getPending(now: Long, limit: Int): List<OutboxMessageEntity>
 
     @Query("SELECT * FROM outbox_messages WHERE status IN ('PENDING','FAILED') ORDER BY priority ASC, nextAttemptAt ASC")
     fun observePending(): Flow<List<OutboxMessageEntity>>
@@ -50,18 +50,22 @@ interface OutboxDao {
 
     // Dead Letter Queue queries
     @Query("SELECT * FROM outbox_messages WHERE status = 'DEAD_LETTER' ORDER BY createdAt DESC LIMIT :limit")
-    suspend fun getDeadLetterQueue(limit: Int = 50): List<OutboxMessageEntity>
+    suspend fun getDeadLetterQueue(limit: Int): List<OutboxMessageEntity>
 
     @Query("SELECT COUNT(*) FROM outbox_messages WHERE status = 'DEAD_LETTER'")
     suspend fun countDeadLetter(): Int
 
     // Priority-based queries
     @Query("SELECT * FROM outbox_messages WHERE status IN ('PENDING','FAILED') AND nextAttemptAt <= :now ORDER BY priority ASC, nextAttemptAt ASC LIMIT :limit")
-    suspend fun getPendingWithPriority(now: Long = System.currentTimeMillis(), limit: Int = 20): List<OutboxMessageEntity>
+    suspend fun getPendingWithPriority(now: Long, limit: Int): List<OutboxMessageEntity>
 
     // Circuit Breaker state
     @Query("SELECT COUNT(*) FROM outbox_messages WHERE status = 'SENDING' AND nextAttemptAt < :now")
-    suspend fun countStuckSending(now: Long = System.currentTimeMillis()): Int
+    suspend fun countStuckSending(now: Long): Int
+
+    /** إحياء العالق في SENDING (مات العامل أثناء الإرسال) — يُعاد للطابور بدل التراكم الأبدي. */
+    @Query("UPDATE outbox_messages SET status = 'PENDING', nextAttemptAt = :now WHERE status = 'SENDING'")
+    suspend fun resetStuckSending(now: Long): Int
 
     // Media cleanup
     @Query("DELETE FROM outbox_messages WHERE status = 'SENT' AND createdAt < :before AND (mediaType IS NOT NULL OR localMediaPath IS NOT NULL)")

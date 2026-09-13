@@ -1,32 +1,214 @@
-# استكشاف الأخطاء
+# 🔧 استكشاف الأخطاء وإصلاحها
 
-## فشل التشغيل
+## Docker Desktop توقف + اللوحة لا تجد السيرفر + صفحة المستخدمين تنهار
 
-```bash
-docker compose --env-file .env config --quiet
-docker compose --env-file .env ps
-docker compose --env-file .env logs --tail=200 backend
+هذه ثلاث مشاكل منفصلة كانت تُخلط معًا:
+
+| العَرَض | السبب الحقيقي | المصدر الصحيح |
+|---|---|---|
+| `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` | محرّك Docker Desktop انهار | أعد تشغيل Docker Desktop وانتظر الحوت الأخضر |
+| `/health` فاشل في المتصفح و«بقايا» جلسة قديمة | لا أحد يستمع على البروكسي | افتح **http://127.0.0.1:8088** لا 8080 |
+| `function lower(bytea) does not exist` عند «المستخدمون» | Hibernate كان يربط `:search` كـ `bytea` ثم يستدعي `LOWER()` | أُصلح بـ JPA Specification + `ILIKE` — أعد بناء صورة `backend` |
+
+### القاعدة الوحيدة بعد الإصلاح
+
+- **Docker = المصدر الإنتاجي:** Kotlin + PostgreSQL + Mongo + Redis + Nginx على المنفذ **8088**.
+- **Node + SQLite** (`npm run dev:server`) يحتل المنفذ **8080** على ويندوز وهو خادم تطوير فقط. لا تشغّله مع Docker.
+- الباك اند داخل الحاوية يسمع على 8080 *داخل الشبكة الافتراضية فقط*. المتصفح لا يصل إليه مباشرة.
+
+```powershell
+# من مجلد RED_Ultimate بعد أن يصبح Docker Desktop أخضر:
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
 ```
 
-تحقق من أن Docker يعمل، وأن الأسرار الأساسية موجودة في `.env`، وأن منافذ 8088 و8443 غير مستخدمة.
+بعد نجاح `/health` افتح اللوحة من `http://127.0.0.1:8088/` وامسح كاش المتصفح لتبويب الدخول القديم.
 
-## فشل الصحة
+حساب المسؤول يُقرأ من `.env` (`RED_ADMIN_USERNAME` / `RED_ADMIN_PASSWORD`). لا تعتمد كلمة مرور مكتوبة في محادثة سابقة بعد مسح القاعدة.
 
-```bash
-curl -v http://127.0.0.1:8088/health
-curl -v http://127.0.0.1:8088/sfu-health
-docker compose logs --tail=200 media-sfu
+`SovereignAdmin1` يخص خادم Node+SQLite التجريبي فقط. إن ظهرت في اللوحة «الخادم غير متصل» و«بيانات المسؤول غير صحيحة» معًا فالخادم متوقف أو استُخدمت كلمة المرور الوهمية. شغّل:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildBackend
 ```
 
-تحقق من صحة PostgreSQL وMongoDB وRedis وMinIO قبل تحليل backend.
+ثم ادخل بـ `RED_ADMIN_PASSWORD` من `.env` على **http://127.0.0.1:8088/**.
 
-## فشل Android
+## Mongo على `localhost:27017` بدل `db-mongo`
 
-- استخدم `-PRED_SERVER_URL=http://SERVER_IP:8088` عند البناء.
-- تأكد أن الهاتف يصل إلى عنوان الخادم من الشبكة نفسها.
-- لا تستخدم `localhost` من الهاتف للوصول إلى جهاز التطوير.
-- راجع logcat لعقد التسجيل وWebSocket وICE.
+داخل Docker، `localhost` هو الحاوية نفسها. Mongo اسمه `db-mongo` على شبكة `red-net` فقط.
 
-## فشل البناء
+- الباك اند في Compose يجب أن يطبع عند الإقلاع: `INFRA binding: runtime=DOCKER mongodb.host=db-mongo`
+- `/health` يعرض `bindings.mongodbHost`. إن ظهر `localhost` فأنت تشغّل JVM على ويندوز أو نسخت URI خاطئ.
+- لا تشغّل `bootRun` بجانب Compose إلا عبر `docker-compose.host-debug.yml` و`SPRING_PROFILES_ACTIVE=host`.
 
-شغّل `./scripts/check-all.sh`، ثم افحص Java 21 وGradle وNode.js. إذا لم يتوفر Java محليًا، استخدم بوابة Docker أو CI وسجّل الخطأ بدل إعلان نجاح غير متحقق.
+## DINSTAR جاهز على `192.168.11.1` — لا تغيّر الـ IP إلى Wi-Fi
+
+الجهاز بلا Wi-Fi. كرت Realtek ↔ `192.168.11.1` هو مسار الإدارة الصحيح. فكّ الكابل = انقطاع مهما كان العنوان.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
+```
+
+في واجهة الجهاز (`enFrame.htm` → SIP Server) ضع **عنوان ويندوز على 192.168.11.x** والمنفذ 5060. Asterisk يتعرّف على البوابة بالعنوان (`type=identify`).
+
+> **حقائق موثقة 2026-09-04:** العنوان المعتمد `192.168.11.10` (كل `.60/.50/.10` ثابتة).
+> `.20` و`.5` ميتان — تحقق بـ ping قبل الاعتماد على أي عنوان.
+> بعد Save يلزم Restart للجهاز. إن بقيت `enSysInfo_SIP.htm` تعرض `Unregistered`
+> فالـ SIP Server ميت أو المسار محجوب (VPN!). شغّل:
+> `.\scripts\verify-dinstar-lan.ps1 -DinstarIp 192.168.11.1 -ExpectedAsteriskIp 192.168.11.10`.
+
+---
+
+# 🔧 Docker Build DNS Issues
+
+## ❌ المشكلة
+
+```
+UnknownHostException: repo.maven.apache.org
+```
+
+الـ Docker container **لا يستطيع الوصول لـ Maven Central** بسبب:
+1. ❌ مشكلة DNS في الـ container (`8.8.8.8` غير قابل للوصول)
+2. ❌ Firewall يمنع الـ outbound traffic
+3. ❌ Slow / unstable internet connection
+
+---
+
+## ✅ الحل 1: استخدام DNS مختلفة
+
+### الخطوة 1: افتح `gradle.properties` وأضف:
+```properties
+# Use HTTPS-only Google Maven mirror (no DNS issues)
+systemProp.https.proxyHost=
+systemProp.https.proxyPort=
+
+# Add DNS overrides
+org.gradle.jvmargs=-Xmx12g -Dfile.encoding=UTF-8
+```
+
+### الخطوة 2: شغّل pre-warm script (قبل Docker build):
+
+**Windows (PowerShell):**
+```powershell
+cd C:\Users\hpc01\Pictures\pro\RED_Ultimate_V1-main\RED_Ultimate
+.\scripts\prewarm-gradle-cache.ps1
+```
+
+**Linux/Mac:**
+```bash
+cd /path/to/RED_Ultimate
+./gradlew dependencies --configuration runtimeClasspath
+```
+
+---
+
+## ✅ الحل 2: تخطي Docker build للـ backend مؤقتاً
+
+إذا استمرت المشكلة، يمكنك تشغيل الـ backend **مباشرة بدون Docker**:
+
+### الخيار A: تشغيل محلي
+```bash
+# تأكد من Java 21 + Gradle 8.12
+cd backend-server
+./gradlew bootRun
+# يعمل على http://localhost:8080
+```
+
+### الخيار B: تشغيل من IDE (IntelliJ IDEA)
+1. افتح المشروع
+2. اختر `RedSovereignApplication.kt`
+3. اضغط `Shift+F10` (Run)
+
+---
+
+## ✅ الحل 3: استخدام Gradle cache محلي
+
+الـ pre-warm script يقوم بـ:
+
+1. **ينزل كل الـ dependencies** على جهازك أولاً
+2. **يضعها في Docker volume** اسمه `gradle-cache`
+3. **Docker build يستخدم الـ cache** بدون الحاجة للإنترنت
+
+```powershell
+# Pre-warm
+.\scripts\prewarm-gradle-cache.ps1
+
+# Then build
+.\scripts\local-first-run.ps1 -ServerIp 192.168.137.19
+```
+
+---
+
+## ✅ الحل 4: تخطي الـ backend مؤقتاً
+
+إذا كنت تريد تشغيل باقي الـ services:
+
+```bash
+# شغّل فقط الـ services التي لا تحتاج Java
+docker compose up -d db-postgres db-mongo cache-redis minio pstn-gateway media-sfu admin-panel
+```
+
+---
+
+## 🐛 تشخيص المشكلة
+
+### اختبار DNS:
+```bash
+# في الـ PowerShell
+nslookup repo.maven.apache.org
+nslookup maven-central.storage-download.googleapis.com
+ping 8.8.8.8
+```
+
+### إذا فشل DNS:
+```powershell
+# شغّل Docker مع DNS يدوي
+docker run --dns 1.1.1.1 --dns 8.8.4.4 --rm alpine nslookup maven-central.storage-download.googleapis.com
+```
+
+---
+
+## 📊 جدول المصادر البديلة لـ Maven
+
+| Mirror | URL | السرعة |
+|--------|-----|--------|
+| **Google Cloud Storage** | `https://maven-central.storage-download.googleapis.com/maven2` | ⚡ سريع |
+| **Aliyun** (China-friendly) | `https://maven.aliyun.com/repository/public` | ⚡ سريع |
+| **Maven Central** | `https://repo.maven.apache.org/maven2` | 🐌 بطيء |
+| **JCenter** (deprecated) | `https://jcenter.bintray.com` | ❌ مغلق |
+
+**الـ settings.gradle.kts** الآن يستخدم Google Cloud Storage mirror أولاً!
+
+---
+
+## 🔍 اختبارات سريعة
+
+```bash
+# اختبار الـ Docker DNS
+docker run --rm alpine:3.20 sh -c "wget -qO- https://maven-central.storage-download.googleapis.com/maven2/ 2>&1 | head -5"
+
+# اختبار gradle مباشرة
+cd backend-server && ./gradlew --version
+cd backend-server && ./gradlew dependencies | head -20
+```
+
+---
+
+## 💡 نصيحة احترافية
+
+إذا كنت في شبكة Yemen أو China، استخدم **Aliyun mirror**:
+
+```kotlin
+maven {
+    url = uri("https://maven.aliyun.com/repository/public")
+}
+```
+
+---
+
+## 📞 إذا لم تنجح الحلول
+
+افتح issue على GitHub مع:
+- كامل الـ log
+- نتيجة `docker run --rm alpine nslookup maven-central.storage-download.googleapis.com`
+- محتوى `~/.gradle/init.d/`

@@ -78,7 +78,11 @@ data class PostMedia(
     val voiceWaveform: List<Int> = emptyList()
 )
 data class Poll(val options: List<PollOption>, val expiresAt: Instant?)
-data class PollOption(val id: String, val text: String, val votes: Long = 0)
+/**
+ * خيار استطلاع موجز (نمط X 2026): [imageUrl] مفتاح وسيط (`/api/media/...`)
+ * رُفع مسبقًا — فارغ للخيار النصي. حقل إضافي متوافق رجعيًا (Mongo بلا مخطط).
+ */
+data class PollOption(val id: String, val text: String, val votes: Long = 0, val imageUrl: String? = null)
 
 /**
  * LinkCard — Open Graph preview for URLs in posts
@@ -127,6 +131,13 @@ data class PostReaction(@Id val id: String, @Indexed val postId: String, @Indexe
  */
 data class PollVote(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, @Indexed val optionId: String, val createdAt: Instant = Instant.now())
 
+@Document("reposts")
+/**
+ * إعادة نشر: المعرّف المركّب `postId:userId` يجعل العملية idempotent —
+ * التكرار يُرجع الأصل دون مضاعفة `repostCount`.
+ */
+data class Repost(@Id val id: String, @Indexed val postId: String, @Indexed val userId: String, val createdAt: Instant = Instant.now())
+
 @Document("follows")
 data class FollowDocument(
     @Id val id: String,
@@ -145,12 +156,17 @@ data class MutedAuthor(@Id val id: String, @Indexed val userId: String, @Indexed
 data class PostReport(@Id val id: String, @Indexed val postId: String, @Indexed val reporterId: String, val reason: String, val status: String = "OPEN", val createdAt: Instant = Instant.now())
 
 data class CreatePostRequest(
-    val text: String,
+    @field:jakarta.validation.constraints.NotBlank val text: String,
     val visibility: PostVisibility = PostVisibility.PUBLIC,
     val parentId: String? = null,
     val quotePostId: String? = null,
     val pollOptions: List<String> = emptyList(),
     val pollDurationHours: Int? = null,
+    /**
+     * صور خيارات الاستطلاع موازيةً لـ[pollOptions] بنفس الترتيب
+     * (null = خيار نصي). تُقبل فقط مع 2..4 خيارات.
+     */
+    val pollOptionImages: List<String?> = emptyList(),
     val media: List<PostMedia> = emptyList(),
     val linkCard: LinkCard? = null,
     val voiceMetadata: VoiceMetadata? = null,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,7 +55,8 @@ private data class PrivacyPayload(
     val readReceipts: String? = null,
     val calls: String? = null,
     val groups: String? = null,
-    val liveLocation: String? = null
+    val liveLocation: String? = null,
+    val typingIndicators: String? = null
 )
 
 @Composable
@@ -98,6 +100,7 @@ fun PrivacySettingsScreen(
                 "calls" -> PrivacyPayload(calls = level.name)
                 "groups" -> PrivacyPayload(groups = level.name)
                 "liveLocation" -> PrivacyPayload(liveLocation = level.name)
+                "typingIndicators" -> PrivacyPayload(typingIndicators = level.name)
                 else -> PrivacyPayload()
             }
         )
@@ -119,7 +122,8 @@ fun PrivacySettingsScreen(
             "profilePhoto" -> serverSettings?.profilePhoto; "about" -> serverSettings?.about
             "status" -> serverSettings?.status; "readReceipts" -> serverSettings?.readReceipts
             "calls" -> serverSettings?.calls; "groups" -> serverSettings?.groups
-            "liveLocation" -> serverSettings?.liveLocation; else -> null
+            "liveLocation" -> serverSettings?.liveLocation; "typingIndicators" -> serverSettings?.typingIndicators
+            else -> null
         } } ?: when (key) {
             "status", "calls" -> PrivacyLevel.CONTACTS
             "liveLocation" -> PrivacyLevel.NOBODY
@@ -135,6 +139,7 @@ fun PrivacySettingsScreen(
         StatusPrivacyItem("readReceipts", levelOf("readReceipts"), Icons.Rounded.DoneAll, "إيصالات القراءة"),
         StatusPrivacyItem("calls", levelOf("calls"), Icons.Rounded.Call, "المكالمات الواردة"),
         StatusPrivacyItem("groups", levelOf("groups"), Icons.Rounded.Groups, "المجموعات"),
+        StatusPrivacyItem("typingIndicators", levelOf("typingIndicators"), Icons.Rounded.Edit, "مؤشر الكتابة"),
         StatusPrivacyItem("liveLocation", levelOf("liveLocation"), Icons.Rounded.LocationOn, "الموقع المباشر")
     )
 
@@ -142,7 +147,7 @@ fun PrivacySettingsScreen(
 
     Column(Modifier.fillMaxSize().background(SovereignColors.Obsidian).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, null, tint = Color.White) }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Color.White) }
             Text("الخصوصية والسيادة", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
         }
         Spacer(Modifier.height(16.dp))

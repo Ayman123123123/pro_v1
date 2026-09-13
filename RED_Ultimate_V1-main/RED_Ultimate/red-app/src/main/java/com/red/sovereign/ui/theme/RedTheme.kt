@@ -47,9 +47,12 @@ val PlexArabicFamily = FontFamily(
     Font(R.font.plex_arabic_bold, FontWeight.Black),
 )
 
-// أسماء مستعارة للتوافق مع 15 موضعًا يستعمل Cairo/Tajawal مباشرة
-// الآن كلاهما يشير لنفس العائلة الموحدة — لا تناقض بصري بعد اليوم
+// أسماء مستعارة للتوافق — كلها Plex Arabic فعليًا.
+// @deprecated استعمل PlexArabicFamily مباشرة؛ Cairo/Tajawal باقيان للتوافق فقط
+// حتى لا يظن قارئ الكود وجود عائلتين مختلفتين (no Cairo confusion).
+@Deprecated("استعمل PlexArabicFamily مباشرة", ReplaceWith("PlexArabicFamily"))
 val CairoFamily: FontFamily = PlexArabicFamily
+@Deprecated("استعمل PlexArabicFamily مباشرة", ReplaceWith("PlexArabicFamily"))
 val TajawalFamily: FontFamily = PlexArabicFamily
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -70,7 +73,7 @@ val TajawalFamily: FontFamily = PlexArabicFamily
 //   • نص أبيض على `#00A884` = 3.03:1 — دون AAA (7:1) ودون AA (4.5:1) أصلًا،
 //     أي أن نص كل زر أساسي كان غير مقروء فعليًا.
 //   • نص أبيض على `#2AABEE` = 2.57:1 — أسوأ.
-//   • `#E53935` على الخلفية = 4.30:1 — دون AA، وهو لون زر الإنهاء.
+//   • `#E53935` على الخلفية = 4.30:1 — دون AA، وهو لون سبأفون وزر الإنهاء.
 //   • النص الثانوي على الفقاعة الصادرة = 2.94:1 — الطابع الزمني و«✓✓» شبه
 //     غير مرئيين على كل رسالة صادرة.
 //
@@ -96,6 +99,10 @@ val YounesAccentSoft   = Color(0xFFF0D48C)
 val YounesCobalt       = Color(0xFF4D9FE8)
 /** بنفسجي المساحات الصوتية — 6.30:1 على الخلفية. */
 val YounesPurple       = Color(0xFFB07CE8)
+/** بنفسجي عميق لطرف التدرّج الشبكي — لا يُستعمل كنص، بل كهالة خلفية فقط. */
+val YounesVioletDeep   = Color(0xFF6D3FB5)
+/** كوبالت عميق لطرف التدرّج الشبكي — هالة خلفية فقط. */
+val YounesCobaltDeep   = Color(0xFF1E4E8A)
 /** أحمر تحذيري للبث والإنهاء — 5.90:1 على الخلفية (كان 4.30 دون AA). */
 val YounesRose         = Color(0xFFF25C5C)
 /** أحمر ياقوتي أغمق لزر إنهاء المكالمة — يحمل نصًا أبيض. */
@@ -171,10 +178,34 @@ val RedCrimsonGlow      = YounesRose
 val RedMutedText        = YounesMuted
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// تدرجات لونية احترافية
+// تدرجات لونية احترافية — شبكية خافتة (mesh) لا أسود مسطّح
+// القاعدة: الأسود المسطّح يسحق التفاصيل على شاشات رخيصة (OLED-crushing)
+// ويبدو أرخص من واتساب/تلجرام. كل خلفية هنا طبقة أساس مرفوعة
+// (0A0F18 لا 000000) + هالات ملوّنة ≤12% ألفا لا تُضعف تباين النص.
 // ═══════════════════════════════════════════════════════════════════════════════
+/** خلفية داكنة شبكية: زمرد 8% أعلى + كوبالت 10% أسفل + ذهب 4% — تباين النص محفوظ. */
 val GradientBackground  = Brush.verticalGradient(
-    listOf(YounesVoid, YounesMidnight) // Official: solid deep, no rainbow — professional, not clownish
+    listOf(Color(0xFF0D1622), YounesVoid, Color(0xFF0A1220))
+)
+val GradientMeshEmerald = Brush.radialGradient(
+    colors = listOf(YounesPrimary.copy(alpha = 0.10f), Color.Transparent),
+    radius = 900f
+)
+val GradientMeshCobalt = Brush.radialGradient(
+    colors = listOf(YounesCobalt.copy(alpha = 0.12f), Color.Transparent),
+    radius = 1000f
+)
+val GradientMeshViolet = Brush.radialGradient(
+    colors = listOf(YounesPurple.copy(alpha = 0.09f), Color.Transparent),
+    radius = 900f
+)
+val GradientMeshGold = Brush.radialGradient(
+    colors = listOf(YounesAccent.copy(alpha = 0.06f), Color.Transparent),
+    radius = 800f
+)
+/** خلفية فاتحة شبكية (لؤلؤي #F7F8FA + زمرد 5% + كوبالت 5%) — لا أبيض صارخ. */
+val GradientBackgroundLight = Brush.verticalGradient(
+    listOf(Color(0xFFF7F8FA), Color(0xFFEFF3F5), Color(0xFFE9EFF2))
 )
 val GradientPrimary     = Brush.linearGradient(
     listOf(YounesPrimary, YounesPrimary) // Official: solid emerald, no clownish glow
@@ -191,7 +222,12 @@ val GradientTopBar      = Brush.verticalGradient(
     listOf(YounesMidnight, YounesMidnight.copy(alpha = 0f))
 )
 val GradientCallScreen  = Brush.radialGradient(
-    listOf(YounesPrimary.copy(alpha = 0.15f), YounesVoid)
+    colors = listOf(
+        YounesPrimary.copy(alpha = 0.10f),
+        YounesCobalt.copy(alpha = 0.06f),
+        YounesVoid
+    ),
+    radius = 1100f
 )
 val GradientGold        = Brush.linearGradient(
     listOf(YounesAccent, YounesAccentSoft, YounesAccent)
@@ -519,7 +555,9 @@ private fun rememberScaledTypography(scale: Float): Typography {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// خلفية الشاشة الرئيسية — تدرج Liquid Glass (2026)
+// خلفية الشاشة الرئيسية — شبكية خافتة + Liquid Glass (2026)
+// طبقة أساس مرفوعة (لا 000000) + هالات زمرد/كوبالت/بنفسج ≤12%.
+// في الوضع الفاتح: لؤلؤي + هالات 5% — كل شاشة ذات ثيم كامل.
 // ═══════════════════════════════════════════════════════════════════════════════
 @Composable
 fun SovereignBackground(content: @Composable () -> Unit) {
@@ -529,22 +567,93 @@ fun SovereignBackground(content: @Composable () -> Unit) {
         AppThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
     val bgBrush = when (AppThemeState.currentPreset) {
-        AppThemePreset.OLED_BLACK    -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF0A0A0A))) else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFE6E8EB)))
-        AppThemePreset.WHATSAPP_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0B141A), Color(0xFF111B21), Color(0xFF0B141A))) else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
-        AppThemePreset.TELEGRAM_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0E1621), Color(0xFF17212B), Color(0xFF0E1621))) else Brush.verticalGradient(listOf(Color(0xFFF0F2F5), Color(0xFFFFFFFF)))
-        AppThemePreset.DYNAMIC       -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
-        AppThemePreset.CUSTOM        -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFFFFFFF)))
-        AppThemePreset.SOVEREIGN     -> if (isDark) GradientBackground else Brush.verticalGradient(listOf(Color(0xFFF7F8FA), Color(0xFFEAF0F2)))
+        AppThemePreset.OLED_BLACK    -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF000000), Color(0xFF0A0A0A))) else GradientBackgroundLight
+        AppThemePreset.WHATSAPP_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0B141A), Color(0xFF111B21), Color(0xFF0B141A))) else GradientBackgroundLight
+        AppThemePreset.TELEGRAM_DARK -> if (isDark) Brush.verticalGradient(listOf(Color(0xFF0E1621), Color(0xFF17212B), Color(0xFF0E1621))) else GradientBackgroundLight
+        AppThemePreset.DYNAMIC       -> if (isDark) GradientBackground else GradientBackgroundLight
+        AppThemePreset.CUSTOM        -> if (isDark) GradientBackground else GradientBackgroundLight
+        AppThemePreset.SOVEREIGN     -> if (isDark) GradientBackground else GradientBackgroundLight
     }
     Box(
         Modifier
             .fillMaxSize()
             .background(bgBrush)
-    ) { content() }
+    ) {
+        // هالات شبكية خافتة — فوق الأساس، تحت المحتوى. ألفا منخفض عمدًا
+        // حتى لا تُضعف تباين النص (النص يُقاس على الأساس لا على الهالة).
+        if (AppThemeState.currentPreset == AppThemePreset.SOVEREIGN) {
+            if (isDark) {
+                Box(Modifier.fillMaxSize().background(GradientMeshEmerald))
+                Box(Modifier.fillMaxSize().background(GradientMeshCobalt))
+                Box(Modifier.fillMaxSize().background(GradientMeshViolet))
+            } else {
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                YounesPrimary.copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            radius = 900f
+                        )
+                    )
+                )
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                YounesCobalt.copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            radius = 1000f
+                        )
+                    )
+                )
+            }
+        }
+        content()
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ثوابت الأنيميشن المشتركة
+// ثوابت الأنيميشن المشتركة — ذوق هادئ يتفوق على واتساب/تلجرام
+// القاعدة: نبضة واحدة كحد أقصى لكل شاشة، هالة بطيئة 1800ms+، كل
+// InfiniteTransition مغلق (gated) خلف isSpeaking/مكالمة/animated،
+// ومسار ثابت كامل عند reduceMotion (prefers-reduced-motion).
 // ═══════════════════════════════════════════════════════════════════════════════
 val SpringSnappy  = spring<Float>(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioMediumBouncy)
 val SpringSmooth  = spring<Float>(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioNoBouncy)
+
+/** مدة الهالة النابضة — 2000ms: بطيئة فاخرة، لا تلهث (واتساب ~1000ms). */
+const val SovereignPulseDurationMs = 2000
+/** مدة موج الصوت — 1900ms مع Reverse ناعم. */
+const val SovereignWaveDurationMs = 1900
+/** مدة توهج الشارة — 2000ms. */
+const val SovereignBadgeGlowMs = 2000
+/** أقصى نبض متزامن في الشاشة الواحدة = 1 (لا مهرجان نبض). */
+const val SovereignMaxPulsesPerScreen = 1
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Liquid Glass tiers — ضبابية 8/20/40 فقط على nav/sheets (2026)
+// القاعدة: البلور مكلف (GPU) فيُحصر في شريط التنقل والـ BottomSheet.
+// fallback معتم تلقائي عند تعطيل liquidGlass أو غياب Haze.
+// ═══════════════════════════════════════════════════════════════════════════════
+object SovereignGlassTier {
+    /** شريط علوي/سفلي — خفيف. */
+    val NavBar = 8.dp
+    /** بطاقات زجاجية — متوسط. */
+    val Card = 20.dp
+    /** حوارات و Sheets — عميق. */
+    val Sheet = 40.dp
+
+    /** لون احتياطي معتم لكل طبقة عند غياب البلور (isDark). */
+    @Composable
+    fun fallback(isDark: Boolean, tier: androidx.compose.ui.unit.Dp): Color {
+        val scheme = MaterialTheme.colorScheme
+        return when (tier) {
+            NavBar -> scheme.surface.copy(alpha = if (isDark) 0.85f else 0.88f)
+            Card -> scheme.surfaceContainerHigh.copy(alpha = if (isDark) 0.92f else 0.95f)
+            else -> scheme.surfaceContainerHighest.copy(alpha = 0.97f)
+        }
+    }
+}

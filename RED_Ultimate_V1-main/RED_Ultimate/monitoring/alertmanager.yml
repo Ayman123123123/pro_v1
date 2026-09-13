@@ -1,0 +1,92 @@
+# RED Sovereign — Alertmanager Configuration
+# Alert routing and notification configuration
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_HOST:-smtp.gmail.com:587}'
+  smtp_from: 'alerts@red-sovereign.local'
+  smtp_auth_username: '${SMTP_USER}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default'
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+    # VoiceBridge specific alerts
+    - match:
+        service: voicebridge
+      receiver: 'voicebridge-alerts'
+    # Asterisk/Kamailio/Janus alerts
+    - match:
+        service: asterisk
+      receiver: 'telephony-alerts'
+    - match:
+        service: kamailio
+      receiver: 'telephony-alerts'
+    - match:
+        service: janus
+      receiver: 'telephony-alerts'
+
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: '${ALERT_EMAIL_DEFAULT:-ops@red-sovereign.local}'
+        send_resolved: true
+        headers:
+          subject: '[RED Sovereign] {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#red-sovereign-alerts'
+        send_resolved: true
+        title: 'RED Sovereign Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_CRITICAL:-critical@red-sovereign.local}'
+        send_resolved: true
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#red-sovereign-critical'
+        send_resolved: true
+        title: '🚨 CRITICAL: RED Sovereign'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_KEY}'
+        severity: critical
+        details:
+          service: '{{ .Labels.service }}'
+          instance: '{{ .Labels.instance }}'
+
+  - name: 'voicebridge-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_VOICEBRIDGE:-voicebridge@red-sovereign.local}'
+        send_resolved: true
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#red-sovereign-voicebridge'
+        send_resolved: true
+
+  - name: 'telephony-alerts'
+    email_configs:
+      - to: '${ALERT_EMAIL_TELEPHONY:-telephony@red-sovereign.local}'
+        send_resolved: true
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#red-sovereign-telephony'
+        send_resolved: true
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']

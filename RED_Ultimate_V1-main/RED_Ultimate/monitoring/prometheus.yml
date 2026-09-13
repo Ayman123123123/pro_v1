@@ -1,0 +1,95 @@
+# RED Sovereign — Prometheus Metrics Configuration
+# Custom metrics for VoiceBridge, Asterisk, Kamailio, Janus
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'red-sovereign'
+    environment: '${ENVIRONMENT:-dev}'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # VoiceBridge Spring Boot application
+  - job_name: 'voicebridge'
+    metrics_path: '/voicebridge/actuator/prometheus'
+    static_configs:
+      - targets: ['voicebridge:8090']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+
+  # Asterisk (via exporter)
+  - job_name: 'asterisk'
+    static_configs:
+      - targets: ['asterisk-exporter:9494']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+
+  # Kamailio (via exporter)
+  - job_name: 'kamailio'
+    static_configs:
+      - targets: ['kamailio-exporter:9495']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+
+  # Janus Gateway (via exporter)
+  - job_name: 'janus'
+    static_configs:
+      - targets: ['janus-exporter:9496']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+
+  # coturn TURN server
+  - job_name: 'coturn'
+    static_configs:
+      - targets: ['coturn:3478']
+    metrics_path: '/metrics'
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Node Exporter (host metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+
+  # cAdvisor (container metrics)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

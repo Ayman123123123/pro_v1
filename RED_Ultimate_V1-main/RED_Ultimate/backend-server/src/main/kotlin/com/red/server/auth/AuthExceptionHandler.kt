@@ -8,6 +8,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import java.util.UUID
+import tools.jackson.core.JacksonException
+import tools.jackson.databind.exc.InvalidNullException
+import tools.jackson.databind.exc.MismatchedInputException
+// NOTE Jackson 3.1: MissingKotlinParameterException was removed from jackson-module-kotlin.
+// Missing constructor params now surface as MismatchedInputException with a path — handled below.
 
 /**
  * معالج أخطاء الـ API الموحّد.
@@ -60,13 +65,6 @@ class AuthExceptionHandler {
     fun badRequest(error: IllegalArgumentException): ResponseEntity<Map<String, String>> =
         apiError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", error)
 
-    /** جسم JSON مفقود/تالف — كان يسقط في معالج Spring الافتراضي برسالة خام. */
-    @ExceptionHandler(HttpMessageNotReadableException::class)
-    fun unreadableBody(error: HttpMessageNotReadableException): ResponseEntity<Map<String, String>> {
-        log.warn("Malformed request body: {}", error.message)
-        return ResponseEntity.badRequest().body(mapOf("error" to "MALFORMED_JSON"))
-    }
-
     /**
      * فشل Bean Validation (@Valid) — يعيد أول رسالة حقل.
      * رسائل `@Valid` يكتبها المطوّر في التعليق التوضيحي نفسه ولا تحمل حالة
@@ -117,6 +115,41 @@ class AuthExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(mapOf("error" to "INTERNAL_ERROR", "diagnosticId" to diagnosticId))
     }
+
+    /** Jackson 3: ملخص كامل لأخطاء JSON/deserialization مع اسم الحقل إن أمكن */
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun onNotReadable(ex: HttpMessageNotReadableException): ResponseEntity<Map<String, Any?>> {
+        val cause = generateSequence<Throwable>(ex.cause) { it.cause }.toList()
+        // Jackson 3.1 reports missing Kotlin constructor params as MismatchedInputException
+        // carrying a path — the last segment names the absent field.
+        val missingField = cause.filterIsInstance<MismatchedInputException>().firstOrNull()
+            ?.path?.lastOrNull()?.propertyName
+        if (missingField != null) {
+            return ResponseEntity.badRequest().body(mapOf(
+                "code" to "VALIDATION_ERROR",
+                "field" to missingField,
+                "message" to "missing required field: $missingField"
+            ))
+        }
+        val nullPrimitive = cause.filterIsInstance<InvalidNullException>().firstOrNull()
+            ?: cause.filterIsInstance<MismatchedInputException>().firstOrNull()
+        if (nullPrimitive != null) {
+            return ResponseEntity.badRequest().body(mapOf(
+                "code" to "MALFORMED_JSON",
+                "message" to (nullPrimitive.originalMessage ?: "invalid null for non-null field")
+            ))
+        }
+        val direct = cause.filterIsInstance<JacksonException>().firstOrNull()
+        if (direct != null) {
+            return ResponseEntity.badRequest().body(mapOf("code" to "MALFORMED_JSON", "message" to direct.message))
+        }
+        return ResponseEntity.badRequest().body(mapOf("code" to "MALFORMED_JSON", "message" to "unreadable body"))
+    }
+
+    /** JacksonException غير الملفوفة (كانت تضيع كـ 500 قبل Jackson 3) */
+    @ExceptionHandler(JacksonException::class)
+    fun onJackson(ex: JacksonException) =
+        ResponseEntity.badRequest().body(mapOf("code" to "MALFORMED_JSON", "message" to ex.message))
 
     /**
      * يبني جسم خطأ آمنًا: يمرّر رمز النطاق إن كان الاستثناء يحمل رمزًا ثابتًا،

@@ -127,4 +127,83 @@ class LiveStreamServiceTest {
 
         assertEquals(8 * 250, service.getViewerCount("stream-1"))
     }
+
+    @Test
+    fun `slow mode pin mute ban and words are broadcaster only`() {
+        service.startStream("stream-2", "96109")
+        assertEquals(5, service.setSlowMode("stream-2", "96109", 5))
+        assertEquals(5, service.getSlowMode("stream-2"))
+        assertTrue(service.setPinned("stream-2", "96109", "m1", "مثبت"))
+        assertTrue(service.muteUser("stream-2", "96109", "viewer-x", true))
+        assertTrue(service.isMuted("stream-2", "viewer-x"))
+        assertTrue(service.banUser("stream-2", "96109", "viewer-y", true))
+        assertTrue(service.isBanned("stream-2", "viewer-y"))
+        assertEquals(listOf("spam2"), service.updateBlockedWords("stream-2", "96109", listOf("spam2")))
+        org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            service.setSlowMode("stream-2", "intruder", 10)
+        }
+    }
+
+    @Test
+    fun `banned viewer cannot join and peak tracks maximum`() {
+        service.startStream("stream-3", "96109")
+        service.banUser("stream-3", "96109", "bad-guy", true)
+        assertEquals(-1, service.addViewer("stream-3", "bad-guy"))
+        service.addViewer("stream-3", "good-1")
+        service.addViewer("stream-3", "good-2")
+        service.removeViewer("stream-3", "good-1")
+        val analytics = service.getAnalytics("stream-3")
+        assertEquals(2, analytics["peakViewers"])
+        assertEquals(1, analytics["viewerCount"])
+    }
+
+    @Test
+    fun `cohosts capped at four and raised hands tracked`() {
+        service.startStream("stream-4", "96109")
+        service.addRaisedHand("stream-4", "u1", "الأول")
+        service.addRaisedHand("stream-4", "u2", "الثاني")
+        assertEquals(2, service.getRaisedHands("stream-4").size)
+        assertTrue(service.approveCoHost("stream-4", "96109", "u1"))
+        assertTrue(service.getCoHosts("stream-4").contains("u1"))
+        assertEquals(1, service.getRaisedHands("stream-4").size)
+        assertTrue(service.approveCoHost("stream-4", "96109", "u2"))
+        assertTrue(service.approveCoHost("stream-4", "96109", "u3"))
+        assertTrue(service.approveCoHost("stream-4", "96109", "u4"))
+        // الخامس مرفوض (الحد 4)
+        assertFalse(service.approveCoHost("stream-4", "96109", "u5"))
+        assertTrue(service.removeCoHost("stream-4", "96109", "u2"))
+        assertTrue(service.approveCoHost("stream-4", "96109", "u5"))
+    }
+
+    @Test
+    fun `chat history capped and deletable with pin cleanup`() {
+        service.startStream("stream-5", "96109")
+        repeat(205) { i -> service.saveChat("stream-5", "u", "مستخدم", "رسالة $i") }
+        // التخزين مقيد بـ 200 والاسترجاع بـ 100 لكل صفحة
+        assertEquals(100, service.getChatHistory("stream-5", 100).size)
+        val oldest = service.getChatHistory("stream-5", 100).first()
+        // أقدم رسالة بعد التجاوز هي "رسالة 105" (حُذفت أول 5)
+        assertTrue(oldest.text.contains("105"))
+        val first = service.saveChat("stream-5", "u", "مستخدم", "مهمة")
+        service.setPinned("stream-5", "96109", first.id, "مهمة")
+        assertTrue(service.deleteChat("stream-5", "96109", first.id))
+        assertTrue(service.getChatHistory("stream-5", 100).none { it.id == first.id })
+    }
+
+    @Test
+    fun `password rotation invalidates old password`() {
+        service.createStream(
+            streamId = "stream-6",
+            broadcasterId = "96109",
+            broadcasterName = "يونس",
+            broadcasterRedId = "96109",
+            title = "خاص",
+            isPrivate = true,
+            password = "قديمة-قوية",
+        )
+        assertTrue(service.verifyPassword("stream-6", "قديمة-قوية"))
+        assertTrue(service.rotatePassword("stream-6", "96109", "جديدة-قوية"))
+        assertFalse(service.verifyPassword("stream-6", "قديمة-قوية"))
+        assertTrue(service.verifyPassword("stream-6", "جديدة-قوية"))
+    }
 }

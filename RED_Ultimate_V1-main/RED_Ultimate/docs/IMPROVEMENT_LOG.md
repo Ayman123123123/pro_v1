@@ -29,6 +29,7 @@
   → أضفت IllegalStateException→409 (POLL_NOT_ACTIVE/ALREADY_VOTED) + ClassCastException→400
 - حارس التكامل: +٥ فحوصات backend (33 إجمالاً) — @Transactional + NPE + معالج الاستثناءات
 - ما تأكد سليماً: لا SQL injection · JWT لا يُسجّل · BCrypt password · SSRF لا ·
+  editMessage/deleteForEveryone يتحققان من الملكية · PstnCallService يتحقق من الصلاحية والحد ·
   CORS مضبوط بـ allowedOriginPatterns (لا *) · TTL مفعّل على refresh tokens
 - التوثيق: docs/DEEP_AUDIT_3_BACKEND_AR.md (حديثة + جميلة + مرئية)
 - **Backend**: Sticker entity + StickerRepository + UserStickerPack entity/repository (جداول V20 جاهزة)

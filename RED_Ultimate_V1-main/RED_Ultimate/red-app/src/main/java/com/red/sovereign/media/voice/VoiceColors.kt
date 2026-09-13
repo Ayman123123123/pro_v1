@@ -59,7 +59,7 @@ object VoiceColors {
     // Waveform colors
     val WaveformActive = Color(0xFF00E6A0)      // Active recording waveform
     val WaveformIncoming = Color(0xFF35CBE0)    // Incoming message waveform
-    val WaveformOutgoing = Color(0xFF00382A)    // Outgoing message waveform
+    val WaveformOutgoing = Color(0xFF002117)    // Outgoing message waveform — داكن ≈10:1 على الفقاعة (كان 00382A بـ2.4:1 راسب)
     val WaveformLocked = Color(0xFFFFB347)      // Locked waveform
 
     // Surface colors
@@ -100,17 +100,13 @@ fun VoiceWaveformCanvas(
         label = "waveform_alpha"
     )
 
-    // Continuous animation for active recording
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "waveform_pulse"
-    )
+    // Gated: the InfiniteTransition only exists while actively recording
+    // (isActive). Static playback/idle renders with a fixed 1f scale — no
+    // always-on loop on every chat bubble. showAnimation is an explicit
+    // opt-in that also enables the loop when isActive is false.
+    val pulse: Float = if (isActive || showAnimation) {
+        PulsingScale()
+    } else 1f
 
     Canvas(modifier = modifier) {
         val displaySamples = samples.takeLast(animatedSamples).ifEmpty {
@@ -247,7 +243,9 @@ private fun formatDurationSmart(seconds: Int, maxSeconds: Int): String {
 
 /**
  * 🔴 YOUNES Sovereign — Pulsing Recording Indicator
- * مؤشر احترافي يدور حول زر التسجيل
+ * مؤشر احترافي يدور حول زر التسجيل.
+ * Gated: حلقات InfiniteTransition تُبنى فقط أثناء التسجيل (isActive)،
+ * والحالة الخاملة ترسم دائرة ثابتة بلا أي loop.
  */
 @Composable
 fun PulsingRecordingIndicator(
@@ -256,68 +254,9 @@ fun PulsingRecordingIndicator(
     isActive: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "ring_pulse")
-
-    val scale1 by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring_scale1"
-    )
-    val scale2 by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing, delayMillis = 500),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring_scale2"
-    )
-    val alpha1 by infiniteTransition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring_alpha1"
-    )
-    val alpha2 by infiniteTransition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing, delayMillis = 500),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring_alpha2"
-    )
-
     Box(modifier = modifier.size(size * 2), contentAlignment = Alignment.Center) {
         if (isActive) {
-            // Outer rings
-            Box(
-                modifier = Modifier
-                    .size(size)
-                    .scale(scale1)
-                    .border(
-                        width = 2.dp,
-                        color = color.copy(alpha = alpha1),
-                        shape = CircleShape
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .size(size)
-                    .scale(scale2)
-                    .border(
-                        width = 2.dp,
-                        color = color.copy(alpha = alpha2),
-                        shape = CircleShape
-                    )
-            )
+            RecordingRings(color, size)
         }
         // Core circle
         Box(
@@ -335,6 +274,64 @@ fun PulsingRecordingIndicator(
                 )
         )
     }
+}
+
+@Composable
+private fun PulsingScale(): Float {
+    // Isolated so the InfiniteTransition is created only on the active path.
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "waveform_pulse"
+    )
+    return pulse
+}
+
+@Composable
+private fun RecordingRings(color: Color, size: Dp) {
+    // Isolated so the ring InfiniteTransition lives only while recording.
+    val infiniteTransition = rememberInfiniteTransition(label = "ring_pulse")
+    val scale1 by infiniteTransition.animateFloat(
+        initialValue = 0.6f, targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(animation = tween(1500, easing = LinearEasing), repeatMode = RepeatMode.Restart),
+        label = "ring_scale1"
+    )
+    val scale2 by infiniteTransition.animateFloat(
+        initialValue = 0.6f, targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(animation = tween(1500, easing = LinearEasing, delayMillis = 500), repeatMode = RepeatMode.Restart),
+        label = "ring_scale2"
+    )
+    val alpha1 by infiniteTransition.animateFloat(
+        initialValue = 0.7f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(animation = tween(1500, easing = LinearEasing), repeatMode = RepeatMode.Restart),
+        label = "ring_alpha1"
+    )
+    val alpha2 by infiniteTransition.animateFloat(
+        initialValue = 0.7f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(animation = tween(1500, easing = LinearEasing, delayMillis = 500), repeatMode = RepeatMode.Restart),
+        label = "ring_alpha2"
+    )
+    Box(
+        modifier = Modifier
+            .size(size)
+            .scale(scale1)
+            .border(width = 2.dp, color = color.copy(alpha = alpha1), shape = CircleShape)
+    )
+    Box(
+        modifier = Modifier
+            .size(size)
+            .scale(scale2)
+            .border(
+                width = 2.dp,
+                color = color.copy(alpha = alpha2),
+                shape = CircleShape
+            )
+    )
 }
 
 /**

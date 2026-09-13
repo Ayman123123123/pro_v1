@@ -41,7 +41,7 @@ class CallTelemetryTest {
 
     @Test fun `multiple call endings queue independently`() {
         CallTelemetry.onCallEnded("c1", "VOICE", "RED", 60_000L)
-        CallTelemetry.onCallEnded("c2", "VIDEO", "RED", 120_000L)
+        CallTelemetry.onCallEnded("c2", "VIDEO", "DINSTAR", 120_000L)
         CallTelemetry.onCallEnded("c3", "VOICE", "RED", 30_000L)
     }
 }

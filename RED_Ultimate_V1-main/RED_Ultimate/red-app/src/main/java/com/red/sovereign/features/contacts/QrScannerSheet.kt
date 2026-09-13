@@ -4,6 +4,7 @@ import com.red.sovereign.core.YounesId
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -14,6 +15,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -49,7 +53,9 @@ import java.util.concurrent.Executors
 @Composable
 fun QrScannerSheet(
     onDismiss: () -> Unit,
-    onScanned: (redId: String) -> Unit
+    onScanned: (redId: String) -> Unit,
+    // LEGENDARY: مسح دعوات المجموعات QR (كان RED-ID فقط — دعوة المجموعة تُرفض)
+    onGroupToken: ((token: String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -59,6 +65,8 @@ fun QrScannerSheet(
     }
     var manualRedId by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
+    var cameraRetryTrigger by remember { mutableIntStateOf(0) }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -97,6 +105,8 @@ fun QrScannerSheet(
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
                 val executor = remember { Executors.newSingleThreadExecutor() }
                 DisposableEffect(Unit) { onDispose { executor.shutdownNow() } }
+                // مفتاح إعادة المحاولة: يعيد إنشاء AndroidView عند الفشل.
+                androidx.compose.runtime.key(cameraRetryTrigger) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -110,34 +120,55 @@ fun QrScannerSheet(
                             val previewView = PreviewView(ctx)
                             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                             cameraProviderFuture.addListener({
-                                val cameraProvider = cameraProviderFuture.get()
-                                val preview = Preview.Builder().build().also {
-                                    it.setSurfaceProvider(previewView.surfaceProvider)
-                                }
-                                val analysis = ImageAnalysis.Builder()
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
-                                analysis.setAnalyzer(executor) { imageProxy ->
-                                    if (!scannedOnce) {
-                                        decodeQrFromImage(imageProxy)?.let { raw ->
-                                            val normalized = normalizeRedIdInput(raw)
-                                            if (isValidRedId(normalized)) {
-                                                scannedOnce = true
-                                                onScanned(normalized)
+                                try {
+                                    val cameraProvider = cameraProviderFuture.get()
+                                    val preview = Preview.Builder().build().also {
+                                        it.setSurfaceProvider(previewView.surfaceProvider)
+                                    }
+                                    val analysis = ImageAnalysis.Builder()
+                                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                        .build()
+                                    analysis.setAnalyzer(executor) { imageProxy ->
+                                        if (!scannedOnce) {
+                                            decodeQrFromImage(imageProxy)?.let { raw ->
+                                                // LEGENDARY: دعوة مجموعة أولاً (RED-GROUP:/red.ly/g) قبل RED-ID
+                                                val groupToken = runCatching {
+                                                    com.red.sovereign.groups.parseInviteTokenQrAware(raw)
+                                                }.getOrNull().orEmpty()
+                                                val looksGroup = raw.contains("red.ly/g", ignoreCase = true) ||
+                                                    raw.contains("RED-GROUP:", ignoreCase = true) ||
+                                                    raw.contains("red://join", ignoreCase = true)
+                                                if (looksGroup && groupToken.isNotBlank() && onGroupToken != null) {
+                                                    scannedOnce = true
+                                                    onGroupToken(groupToken)
+                                                } else {
+                                                    val normalized = normalizeRedIdInput(raw)
+                                                    if (isValidRedId(normalized)) {
+                                                        scannedOnce = true
+                                                        onScanned(normalized)
+                                                    }
+                                                }
                                             }
                                         }
+                                        imageProxy.close()
                                     }
-                                    imageProxy.close()
+                                    try {
+                                        cameraProvider.unbindAll()
+                                        cameraProvider.bindToLifecycle(
+                                            lifecycleOwner,
+                                            CameraSelector.DEFAULT_BACK_CAMERA,
+                                            preview,
+                                            analysis
+                                        )
+                                        cameraError = null
+                                    } catch (e: Exception) {
+                                        Log.e("QrScannerSheet", "فشل ربط الكاميرا (bindToLifecycle)", e)
+                                        cameraError = "تعذّر تشغيل الكاميرا: ${e.message ?: "خطأ غير معروف"}"
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("QrScannerSheet", "فشل تهيئة مزوّد الكاميرا", e)
+                                    cameraError = "تعذّر تهيئة الكاميرا: ${e.message ?: "خطأ غير معروف"}"
                                 }
-                                try {
-                                    cameraProvider.unbindAll()
-                                    cameraProvider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_BACK_CAMERA,
-                                        preview,
-                                        analysis
-                                    )
-                                } catch (_: Exception) { }
                             }, ContextCompat.getMainExecutor(ctx))
                             previewView
                         }
@@ -150,6 +181,30 @@ fun QrScannerSheet(
                             .border(2.dp, YounesEmerald, RoundedCornerShape(12.dp))
                     )
                 }
+                }
+                // حالة خطأ الكاميرا مع زر إعادة المحاولة
+                AnimatedVisibility(visible = cameraError != null, enter = fadeIn(), exit = fadeOut()) {
+                    cameraError?.let { msg ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ErrorOutline, "خطأ الكاميرا", tint = MaterialTheme.colorScheme.error)
+                                Spacer(Modifier.width(8.dp))
+                                Text(msg, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                TextButton(onClick = {
+                                    cameraError = null
+                                    scannedOnce = false
+                                    cameraRetryTrigger++
+                                }) { Text("إعادة المحاولة") }
+                            }
+                        }
+                    }
+                }
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -159,7 +214,7 @@ fun QrScannerSheet(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CameraAlt, null, tint = MaterialTheme.colorScheme.error)
+                        Icon(Icons.Default.CameraAlt, "إذن الكاميرا مطلوب", tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "يحتاج التطبيق إذن الكاميرا لمسح رموز QR",
@@ -190,7 +245,7 @@ fun QrScannerSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text(YounesId.PLACEHOLDER) },
-                leadingIcon = { Icon(Icons.Default.Tag, null) },
+                leadingIcon = { Icon(Icons.Default.Tag, "معرّف") },
                 singleLine = true,
                 isError = error != null,
                 supportingText = error?.let { { Text(it, color = MaterialTheme.colorScheme.error) } }
@@ -208,7 +263,7 @@ fun QrScannerSheet(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = manualRedId.isNotBlank()
             ) {
-                Icon(Icons.Default.Check, null)
+                Icon(Icons.Default.Check, "تحقق")
                 Spacer(Modifier.width(4.dp))
                 Text("تحقق وانتقل")
             }

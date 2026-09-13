@@ -1,5 +1,6 @@
 package com.red.server.social
 
+import jakarta.validation.Valid
 import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -24,7 +25,7 @@ class FeedController(private val feed: FeedService) {
              auth: Authentication) = feed.feed(UUID.fromString(auth.name), scope, before, limit)
 
     @PostMapping("/posts")
-    fun create(@RequestBody request: CreatePostRequest, auth: Authentication) = feed.create(UUID.fromString(auth.name), request)
+    fun create(@Valid @RequestBody request: CreatePostRequest, auth: Authentication) = feed.create(UUID.fromString(auth.name), request)
 
     @GetMapping("/posts/{postId}/thread")
     fun thread(@PathVariable postId: String) = feed.thread(postId)
@@ -36,6 +37,10 @@ class FeedController(private val feed: FeedService) {
     @PostMapping("/posts/{postId}/vote")
     fun vote(@PathVariable postId: String, @RequestBody request: PollVoteRequest, auth: Authentication) =
         feed.vote(UUID.fromString(auth.name), postId, request)
+
+    @PostMapping("/posts/{postId}/repost")
+    fun repost(@PathVariable postId: String, auth: Authentication) =
+        feed.repost(UUID.fromString(auth.name), postId)
 
     @PostMapping("/following/{redId}")
     fun follow(@PathVariable redId: String, auth: Authentication) = feed.follow(UUID.fromString(auth.name), redId)

@@ -1,12 +1,8 @@
-﻿package com.red.sovereign.media
+package com.red.sovereign.media
 
 import android.app.Application
-import android.Manifest
-import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Build
-import android.os.SystemClock
-import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,13 +13,11 @@ import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.UuidV7
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.async
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -38,7 +32,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * ðŸŽ™ï¸ YOUNES Sovereign Voice Message ViewModel â€” يدعم:
+ * 🎙️ YOUNES Sovereign Voice Message ViewModel — يدعم:
  *
  *  **التسجيل:**
  *  - MediaRecorder + AAC + 96kbps + 44.1kHz + M4A
@@ -65,12 +59,11 @@ import javax.crypto.spec.SecretKeySpec
  *  - Signal Protocol encryption
  */
 class VoiceMessageViewModel(application: Application) : AndroidViewModel(application) {
-    private val media = MediaApi(application, AuthorizedApiClient(TokenStore(application)))
+    private val tokenStore = TokenStore(application)
+    private val media = MediaApi(application, AuthorizedApiClient(tokenStore))
     private val random = SecureRandom()
     private var recorder: MediaRecorder? = null
     private var recordingFile: File? = null
-    /** MediaRecorder can exist after prepare() has failed; never treat that as a recording. */
-    private var recorderStarted = false
     private var ticker: Job? = null
     private var pendingTarget: Triple<String, String, String>? = null
     private var pendingGroup: com.red.sovereign.groups.Group? = null
@@ -120,35 +113,18 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun startRecorder() {
-        val app = getApplication<Application>()
-        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            state = VoiceMessageState.Error("MICROPHONE_PERMISSION_REQUIRED")
-            pendingTarget = null
-            pendingGroup = null
-            return
-        }
-        val file = File.createTempFile("voice-", ".m4a", getApplication<Application>().cacheDir)
-        val instance = runCatching {
-            createRecorder().apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(qualityMode.bitrate)
-                setAudioSamplingRate(qualityMode.sampleRate)
-                setOutputFile(file.absolutePath)
-                setMaxDuration(MAX_DURATION_SECONDS * 1000)
-                setOnInfoListener { _, what, _ -> if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) stopAndSendPendingTarget() }
-                prepare()
-                start()
-            }
-        }.getOrElse {
+        // ⚠️ لا تستخدم File.createTempFile؛ لأنها تنشئ ملفًا فارغًا قد يفشل MediaRecorder
+        // في الكتابة فوقه على بعض الأجهزة. ننشئ مسارًا فريدًا ونضمن وجود المجلد الأب.
+        val cacheDir = getApplication<Application>().cacheDir
+        cacheDir.mkdirs()
+        val file = File(cacheDir, "voice-${System.currentTimeMillis()}-${random.nextInt(9999)}.m4a")
+        val instance = runCatching { createConfiguredRecorder(file) }.getOrElse {
             file.delete(); pendingTarget = null; pendingGroup = null
             state = VoiceMessageState.Error("VOICE_RECORDER_START_FAILED: ${it.message.orEmpty()}")
             return
         }
         recordingFile = file
         recorder = instance
-        recorderStarted = true
         elapsedSeconds = 0
         waveform = emptyList()
         amplitudeHistory.clear()
@@ -157,7 +133,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         isLocked = false
         cancelProgress = 0f
         isSilent = false
-        startTimeMs = SystemClock.elapsedRealtime()
+        startTimeMs = System.currentTimeMillis()
         pausedDurationMs = 0L
         state = VoiceMessageState.Recording(paused = false)
         ticker = viewModelScope.launch {
@@ -166,10 +142,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 delay(250)
                 if (!recordingPaused) {
                     quarterSeconds++
-                    // A monotonic clock remains correct when the system time changes and
-                    // avoids reporting a zero-length recording after the first second.
-                    elapsedSeconds = ((SystemClock.elapsedRealtime() - startTimeMs - pausedDurationMs) / 1_000L)
-                        .toInt().coerceAtLeast(0)
+                    elapsedSeconds = quarterSeconds / 4
                     val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
                     val normalized = ((amplitude / 32767f) * 100).toInt().coerceIn(2, 100)
                     currentPeak = normalized
@@ -200,6 +173,50 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         @Suppress("DEPRECATION") MediaRecorder()
     }
 
+    /**
+     * يهيئ المسجل مع fallback حقيقي. بعض الأجهزة/الرومات ترفض مصدر
+     * VOICE_COMMUNICATION خارج المكالمة، وأخرى ترفض MIC عندما يكون مسار الصوت
+     * محجوزًا. نجرب MIC أولاً ثم المصدر البديل، مع تحرير كل محاولة فاشلة.
+     */
+    private fun createConfiguredRecorder(file: File): MediaRecorder {
+        val sources = buildList {
+            add(MediaRecorder.AudioSource.MIC)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                add(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+            }
+        }.distinct()
+        var lastError: Throwable? = null
+        for (source in sources) {
+            val candidate = createRecorder()
+            try {
+                file.delete()
+                candidate.apply {
+                    setAudioSource(source)
+                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                    setAudioEncodingBitRate(qualityMode.bitrate)
+                    setAudioSamplingRate(qualityMode.sampleRate)
+                    setOutputFile(file.absolutePath)
+                    setMaxDuration(MAX_DURATION_SECONDS * 1000)
+                    setOnInfoListener { _, what, _ ->
+                        if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
+                            stopAndSendPendingTarget()
+                        }
+                    }
+                    prepare()
+                    start()
+                }
+                return candidate
+            } catch (error: Throwable) {
+                lastError = error
+                runCatching { candidate.reset() }
+                runCatching { candidate.release() }
+                file.delete()
+            }
+        }
+        throw lastError ?: IllegalStateException("No supported audio source")
+    }
+
     fun togglePause() {
         val instance = recorder ?: return
         runCatching {
@@ -207,11 +224,11 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                 instance.resume()
                 // Add paused duration
                 if (lastPauseTimeMs > 0) {
-                    pausedDurationMs += SystemClock.elapsedRealtime() - lastPauseTimeMs
+                    pausedDurationMs += System.currentTimeMillis() - lastPauseTimeMs
                 }
             } else {
                 instance.pause()
-                lastPauseTimeMs = SystemClock.elapsedRealtime()
+                lastPauseTimeMs = System.currentTimeMillis()
             }
             recordingPaused = !recordingPaused
             state = VoiceMessageState.Recording(recordingPaused)
@@ -219,7 +236,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ”’ تفعيل القفل â€” يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
+     * 🔒 تفعيل القفل — يحوّل الـ Recording من "اضغط مطوّلاً" إلى "يد حرة"
      */
     fun lockRecording() {
         if (state is VoiceMessageState.Recording) {
@@ -230,7 +247,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ“¤ تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
+     * 📤 تحديث نسبة الإلغاء عند السحب (0 = لا إلغاء، 1 = إلغاء كامل)
      * إذا وصلت إلى CANCEL_THRESHOLD، يتم حذف التسجيل تلقائياً
      */
     fun updateCancelProgress(progress: Float) {
@@ -242,18 +259,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸ“¤ إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
+     * 📤 إيقاف التسجيل والدخول في وضع الـ preview قبل الإرسال
      * يحفظ الـ target و conversationId للإرسال اللاحق
      */
     fun stopAndPreview(targetRedId: String? = null, conversationId: String? = null) {
         val file = recordingFile ?: return
         val duration = elapsedSeconds
         val recordedWaveform = waveform.toList()
-        if (!releaseRecorder(deleteFile = false)) {
-            file.delete()
-            state = VoiceMessageState.Error("VOICE_RECORDER_STOP_FAILED")
-            return
-        }
+        releaseRecorder(deleteFile = false)
         if (duration < 1 || file.length() <= 0) {
             file.delete()
             state = VoiceMessageState.Error("VOICE_TOO_SHORT")
@@ -294,20 +307,14 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         val file: File
 
         if (state is VoiceMessageState.Preview && previewPath != null) {
-            file = File(previewPath)
+            file = File(previewPath!!)
             duration = previewDuration
             recordedWaveform = previewWaveform
         } else {
             file = recordingFile ?: return
             duration = elapsedSeconds
             recordedWaveform = waveform
-            if (!releaseRecorder(deleteFile = false)) {
-                file.delete()
-                state = VoiceMessageState.Error("VOICE_RECORDER_STOP_FAILED")
-                pendingTarget = null
-                pendingGroup = null
-                return
-            }
+            releaseRecorder(deleteFile = false)
         }
 
         if (duration < 1 || file.length() <= 0) {
@@ -319,8 +326,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             }
             return
         }
-        val grantTargets = if (group != null) group.members.map { it.redId } else target?.first?.let { listOf(it) } ?: emptyList()
-        if (grantTargets.isEmpty()) {
+        val grantTarget = target?.first ?: group?.id ?: run {
             file.delete()
             state = VoiceMessageState.Error("VOICE_NO_TARGET")
             viewModelScope.launch {
@@ -329,13 +335,16 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             }
             return
         }
-        viewModelScope.launch {
+        // LEGENDARY FIX: التشفير والرفع على IO (كان على Main فيسبب ANR لملف >5MB) + عدم حذف الملف عند الفشل للسماح بإعادة المحاولة
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             state = VoiceMessageState.Sending
-            when (val result = encryptUploadAndGrant(file, grantTargets, duration, recordedWaveform)) {
+            when (val result = encryptUploadAndGrant(file, grantTarget, duration, recordedWaveform)) {
                 is ApiResult.Error -> {
                     state = VoiceMessageState.Error(result.message)
+                    // لا نحذف الملف — يبقى للـretry اليدوي
                     kotlinx.coroutines.delay(3000)
                     if (state is VoiceMessageState.Error) state = VoiceMessageState.Idle
+                    return@launch
                 }
                 is ApiResult.Success -> {
                     if (group != null) {
@@ -343,30 +352,33 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
                             getApplication(),
                             group,
                             "VOICE",
-                            result.value.toByteArray(Charsets.UTF_8)
+                            result.value.toByteArray(Charsets.UTF_8),
+                            UuidV7.next()
                         )
                     } else {
                         target?.let {
                             RedConnectionService.sendPayload(
                                 getApplication(), it.first, it.second, it.third,
-                                result.value.toByteArray(Charsets.UTF_8)
+                                result.value.toByteArray(Charsets.UTF_8),
+                                UuidV7.next()
                             )
                         }
                     }
                     state = VoiceMessageState.Sent(duration)
                     kotlinx.coroutines.delay(2000)
                     if (state is VoiceMessageState.Sent) state = VoiceMessageState.Idle
+                    // نجاح فقط: حذف الأصل + تنظيف
+                    runCatching { file.delete() }
+                    previewPath = null
+                    pendingTarget = null
+                    pendingGroup = null
                 }
             }
-            file.delete()
-            previewPath = null
-            pendingTarget = null
-            pendingGroup = null
         }
     }
 
     /**
-     * ðŸ—‘ï¸ حذف الـ preview والعودة إلى Idle
+     * 🗑️ حذف الـ preview والعودة إلى Idle
      */
     fun discardPreview() {
         previewPath?.let { File(it).delete() }
@@ -404,7 +416,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
     }
 
     /**
-     * ðŸŽšï¸ Trim silence from start and end of waveform
+     * 🎚️ Trim silence from start and end of waveform
      * Removes low-amplitude samples from the edges
      */
     private fun trimSilence(samples: List<Int>): List<Int> {
@@ -422,7 +434,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         return samples.subList(start, end + 1)
     }
 
-    private suspend fun encryptUploadAndGrant(file: File, targetRedIds: List<String>, duration: Int, waveform: List<Int>): ApiResult<String> {
+    private suspend fun encryptUploadAndGrant(file: File, targetRedId: String, duration: Int, waveform: List<Int>): ApiResult<String> {
         val key = ByteArray(32).also(random::nextBytes)
         val nonce = ByteArray(12).also(random::nextBytes)
         val encrypted = File.createTempFile("voice-encrypted-", ".bin", getApplication<Application>().cacheDir)
@@ -442,35 +454,30 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
             } }
             when (val uploaded = media.uploadEncrypted(encrypted, "voice-note")) {
                 is ApiResult.Error -> uploaded
-                is ApiResult.Success -> {
-                    // منح الوصول لكل مستلم (فرد أو أعضاء المجموعة) — فشل عضو لا يمنع الإرسال
-                    val grantResults = coroutineScope {
-                        targetRedIds.filter { it.isNotBlank() }.map { grantee ->
-                            async { media.grant(uploaded.value.objectKey, grantee) }
-                        }.awaitAll()
+                is ApiResult.Success -> when (val grant = media.grant(uploaded.value.objectKey, targetRedId)) {
+                    is ApiResult.Error -> { media.delete(uploaded.value.url); grant }
+                    is ApiResult.Success -> {
+                        val senderRedId = tokenStore.redId
+                        if (!senderRedId.isNullOrBlank() && senderRedId != targetRedId) {
+                            runCatching { media.grant(uploaded.value.objectKey, senderRedId) }
+                        }
+                        ApiResult.Success(uploaded.code, Json { encodeDefaults = true }.encodeToString(
+                            VoiceManifest(
+                                objectKey = uploaded.value.objectKey,
+                                url = uploaded.value.url,
+                                name = "voice-${System.currentTimeMillis()}.m4a",
+                                size = file.length(),
+                                durationSeconds = duration,
+                                waveform = waveform.map { it.coerceIn(0, 100) }.take(96),
+                                sha256 = digest.digest().joinToString("") { "%02x".format(it) },
+                                key = Base64.getEncoder().encodeToString(key),
+                                nonce = Base64.getEncoder().encodeToString(nonce),
+                                codec = "AAC",
+                                sampleRate = qualityMode.sampleRate,
+                                bitrate = qualityMode.bitrate
+                            )
+                        ))
                     }
-                    val anyGranted = grantResults.any { it is ApiResult.Success }
-
-                    if (!anyGranted) {
-                        media.delete(uploaded.value.url)
-                        return ApiResult.Error(null, "VOICE_GRANT_FAILED")
-                    }
-                    ApiResult.Success(uploaded.code, Json.encodeToString(
-                        VoiceManifest(
-                            objectKey = uploaded.value.objectKey,
-                            url = uploaded.value.url,
-                            name = "voice-${System.currentTimeMillis()}.m4a",
-                            size = file.length(),
-                            durationSeconds = duration,
-                            waveform = waveform.map { it.coerceIn(0, 100) }.take(96),
-                            sha256 = digest.digest().joinToString("") { "%02x".format(it) },
-                            key = Base64.getEncoder().encodeToString(key),
-                            nonce = Base64.getEncoder().encodeToString(nonce),
-                            codec = "AAC",
-                            sampleRate = qualityMode.sampleRate,
-                            bitrate = qualityMode.bitrate
-                        )
-                    ))
                 }
             }
         } catch (error: Exception) {
@@ -480,23 +487,17 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    /**
-     * Stops and releases the recorder.  MediaRecorder.stop() throws when no audio
-     * frames were produced; returning that failure prevents uploading a corrupt M4A.
-     */
-    private fun releaseRecorder(deleteFile: Boolean): Boolean {
+    private fun releaseRecorder(deleteFile: Boolean) {
         ticker?.cancel(); ticker = null
-        val stopped = if (recorderStarted && recorder != null) runCatching { recorder?.stop() }.isSuccess else true
+        runCatching { recorder?.stop() }
         runCatching { recorder?.reset() }
         runCatching { recorder?.release() }
         recorder = null
-        recorderStarted = false
         if (deleteFile) recordingFile?.delete()
         recordingFile = null
         isLocked = false
         cancelProgress = 0f
         currentPeak = 0
-        return stopped
     }
 
     override fun onCleared() {
@@ -512,7 +513,7 @@ class VoiceMessageViewModel(application: Application) : AndroidViewModel(applica
 }
 
 /**
- * ðŸŽšï¸ Voice Quality Modes
+ * 🎚️ Voice Quality Modes
  * - STANDARD: 96kbps / 44.1kHz (افتراضي، توازن بين الحجم والجودة)
  * - HIGH: 128kbps / 44.1kHz (جودة عالية)
  * - ULTRA: 192kbps / 48kHz (جودة استوديو)
@@ -551,11 +552,3 @@ sealed interface VoiceMessageState {
     data class Sent(val durationSeconds: Int) : VoiceMessageState
     data class Error(val message: String) : VoiceMessageState
 }
-
-
-
-
-
-
-
-

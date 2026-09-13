@@ -11,6 +11,7 @@ import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.RedConnectionService
+import com.red.sovereign.core.UuidV7
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,24 +28,48 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
     fun getDownloadState(messageId: String): AttachmentState = downloadStates[messageId] ?: AttachmentState.Idle
 
     fun send(uri: Uri, targetRedId: String, conversationId: String) = viewModelScope.launch {
-        if (sendState is AttachmentState.Working) return@launch
-        sendState = AttachmentState.Working("جارٍ تشفير الملف ورفعه…")
-        when (val result = repository.prepare(uri, listOf(targetRedId))) {
-            is ApiResult.Error -> sendState = AttachmentState.Error(result.message)
-            is ApiResult.Success -> {
-                RedConnectionService.sendPayload(
-                    getApplication(), targetRedId, conversationId,
-                    when {
-                        result.value.mimeType.startsWith("image/") -> "IMAGE"
-                        result.value.mimeType.startsWith("video/") -> "VIDEO"
-                        result.value.mimeType.startsWith("audio/") -> "AUDIO"
-                        else -> "FILE"
-                    },
-                    result.value.manifestJson.toByteArray(Charsets.UTF_8)
-                )
-                sendState = AttachmentState.Sent(result.value.name)
+        if (sendState is AttachmentState.Working || sendState is AttachmentState.Queued) return@launch
+        sendState = AttachmentState.Working("جارٍ تجهيز الملف…")
+        // LEGENDARY: مرحلة مؤقتة + صف PENDING + عامل خلفي (كان رفعاً مباشراً يضيع بقتل العملية)
+        val staged = withContext(Dispatchers.IO) {
+            runCatching {
+                val app = getApplication<Application>()
+                val mime = app.contentResolver.getType(uri) ?: "application/octet-stream"
+                val ext = android.webkit.MimeTypeMap.getSingleton()
+                    .getExtensionFromMimeType(mime)?.takeIf { it.matches(Regex("^[a-z0-9]{2,5}$")) } ?: "bin"
+                val messageId = UuidV7.next()
+                val dir = File(app.cacheDir, "media-outbox").apply { mkdirs() }
+                val out = File(dir, "$messageId.$ext")
+                app.contentResolver.openInputStream(uri)?.use { ins ->
+                    out.outputStream().use { outs -> ins.copyTo(outs, 64 * 1024) }
+                } ?: error("UNABLE_TO_READ_SOURCE")
+                require(out.isFile && out.length() in 1..100L * 1024 * 1024) { "FILE_TOO_LARGE" }
+                Triple(messageId, out.absolutePath, mime)
             }
         }
+        val (messageId, stagedPath, mime) = staged.getOrElse {
+            sendState = AttachmentState.Error(it.message ?: "ATTACHMENT_STAGE_FAILED")
+            return@launch
+        }
+        val db = com.red.sovereign.core.database.RedDatabase.getInstance(getApplication())
+        runCatching {
+            db.mediaUploadDao().upsert(
+                com.red.sovereign.core.database.MediaUploadEntity(
+                    messageId = messageId,
+                    conversationId = conversationId,
+                    targetRedId = targetRedId,
+                    localPath = stagedPath,
+                    mimeType = mime,
+                    size = File(stagedPath).length(),
+                    status = "PENDING"
+                )
+            )
+        }.onFailure {
+            sendState = AttachmentState.Error("OUTBOX_WRITE_FAILED")
+            return@launch
+        }
+        com.red.sovereign.core.workers.MediaUploadWorker.enqueue(getApplication(), messageId)
+        sendState = AttachmentState.Queued("في قائمة الرفع — يُرسل في الخلفية حتى مع إغلاق التطبيق")
     }
 
     /** يرسل مرفقاً داخل مجموعة عبر مسار تشفير المجموعة (Sender Keys).
@@ -66,7 +91,8 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                     getApplication(),
                     group,
                     type,
-                    result.value.manifestJson.toByteArray(Charsets.UTF_8)
+                    result.value.manifestJson.toByteArray(Charsets.UTF_8),
+                    UuidV7.next()
                 )
                 sendState = AttachmentState.Sent(result.value.name)
             }
@@ -133,6 +159,8 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
 sealed interface AttachmentState {
     data object Idle : AttachmentState
     data class Working(val message: String) : AttachmentState
+    // LEGENDARY: في قائمة الرفع الخلفية — يبقى بعد قتل العملية (Worker يستأنف)
+    data class Queued(val message: String) : AttachmentState
     data class Sent(val name: String) : AttachmentState
     data class Downloaded(val path: String, val name: String) : AttachmentState
     data class Exported(val path: String, val name: String) : AttachmentState

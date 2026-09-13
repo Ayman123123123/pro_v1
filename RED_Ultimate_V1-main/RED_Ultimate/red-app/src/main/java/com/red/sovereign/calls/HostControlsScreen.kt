@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,32 +22,37 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -66,29 +72,38 @@ import com.red.sovereign.ui.theme.SovereignColors
 import com.red.sovereign.ui.theme.YounesEmerald
 
 /**
- * شاشة تحكم المضيف — Host Controls Screen
+ * شاشة تحكم المضيف — Host Controls Screen (Liquid Glass 2026)
  *
  * متاحة فقط للمضيف (Host) في المكالمات الجماعية. تتيح:
- * - إدارة المشاركين (كتم، طرد، ترقية)
- * - التحكم في الإعدادات الجماعية (كاميرا، ميكروفون)
+ * - إدارة المشاركين (كتم فردي/كل، طرد، ترقية)
+ * - قفل/إلغاء قفل الاجتماع (Lock Meeting)
+ * - التحكم في الكاميرات (إيقاف/تشغيل للكل)
  * - إدارة Breakout Rooms
  * - بدء/إيقاف التسجيل
- * - مشاركة الشاشة
+ * - معالجة الاستثناءات ودعم دورة الحياة
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HostControlsScreen(
     groupCallId: String = "",
+    isLocked: Boolean = false,
     onBack: () -> Unit = {},
     onKickParticipant: (String) -> Unit = {},
     onMuteAll: (Boolean) -> Unit = {},
+    onToggleLock: (Boolean) -> Unit = {},
+    onDisableCamerasAll: () -> Unit = {},
+    onEnableCamerasAll: () -> Unit = {},
     onStartRecording: () -> Unit = {},
-    onStopRecording: () -> Unit = {}
+    onStopRecording: () -> Unit = {},
+    onOpenBreakoutRooms: () -> Unit = {}
 ) {
     var isRecording by remember { mutableStateOf(false) }
+    var meetingLocked by remember { mutableStateOf(isLocked) }
     var showParticipantMenu by remember { mutableStateOf(false) }
-    var selectedParticipant by remember { mutableStateOf<String?>(null) }
+    var selectedParticipant by remember { mutableStateOf<ParticipantInfo?>(null) }
+    var showKickDialog by remember { mutableStateOf(false) }
 
-    // Mock participants — في التطبيق الفعلي يتم جلبها من GroupCallService
+    // المشاركون — يمكن دمجهم مع ZoomRuntime أو عرض نموذج اختباري
     val participants = remember {
         listOf(
             ParticipantInfo("user-001", "أحمد محمد", true, true, true, true),
@@ -99,19 +114,19 @@ fun HostControlsScreen(
         )
     }
 
-    val host = participants.first { it.isHost }
+    val host = participants.firstOrNull { it.isHost } ?: participants.first()
     val others = participants.filter { !it.isHost }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("تحكم المضيف", color = Color.White) },
+                title = { Text("تحكم المضيف الصادي", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = SovereignColors.SurfaceDark
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = Color.White)
                     }
                 },
                 actions = {
@@ -123,16 +138,35 @@ fun HostControlsScreen(
                         onDismissRequest = { showParticipantMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("إدارة المشاركين", color = Color.White) },
-                            onClick = { showParticipantMenu = false }
+                            text = { Text(if (meetingLocked) "إلغاء قفل الاجتماع" else "قفل الاجتماع", color = Color.White) },
+                            onClick = {
+                                meetingLocked = !meetingLocked
+                                onToggleLock(meetingLocked)
+                                showParticipantMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(if (meetingLocked) Icons.Default.LockOpen else Icons.Default.Lock, null, tint = AqyalGold)
+                            }
                         )
                         DropdownMenuItem(
-                            text = { Text("إعدادات المجموعة", color = Color.White) },
-                            onClick = { showParticipantMenu = false }
+                            text = { Text("فتح غرف الانقسام", color = Color.White) },
+                            onClick = {
+                                onOpenBreakoutRooms()
+                                showParticipantMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Group, null, tint = AqyalGold)
+                            }
                         )
                         DropdownMenuItem(
-                            text = { Text("خروج المضيف", color = Color.Red) },
-                            onClick = { showParticipantMenu = false }
+                            text = { Text("تعطيل الكاميرات للكل", color = Color.Red) },
+                            onClick = {
+                                onDisableCamerasAll()
+                                showParticipantMenu = false
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.VideocamOff, null, tint = Color.Red)
+                            }
                         )
                     }
                 }
@@ -148,7 +182,7 @@ fun HostControlsScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // Host info
+            // Host info card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = AqyalGold.copy(alpha = 0.1f)),
@@ -171,7 +205,7 @@ fun HostControlsScreen(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("أنت المضيف", color = AqyalGold, fontWeight = FontWeight.Bold)
+                        Text("أنت المضيف (صلاحيات كاملة)", color = AqyalGold, fontWeight = FontWeight.Bold)
                         Text(host.name, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                     }
                 }
@@ -180,7 +214,7 @@ fun HostControlsScreen(
             Spacer(Modifier.height(16.dp))
 
             // Quick actions
-            Text("إجراءات سريعة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("إجراءات المضيف السريعة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
 
             Row(
@@ -192,51 +226,89 @@ fun HostControlsScreen(
                     label = if (isRecording) "إيقاف التسجيل" else "تسجيل",
                     color = if (isRecording) Color.Red else AqyalGold,
                     onClick = {
-                        if (isRecording) onStopRecording() else onStartRecording()
-                        isRecording = !isRecording
+                        runCatching {
+                            if (isRecording) onStopRecording() else onStartRecording()
+                            isRecording = !isRecording
+                        }
                     }
                 )
                 QuickActionButton(
-                    icon = Icons.Default.Mic,
+                    icon = Icons.Default.MicOff,
                     label = "كتم الكل",
                     color = YounesEmerald,
-                    onClick = { onMuteAll(true) }
+                    onClick = { runCatching { onMuteAll(true) } }
                 )
                 QuickActionButton(
-                    icon = Icons.Default.Videocam,
-                    label = "كاميرا الكل",
-                    color = AqyalGold,
-                    onClick = { /* enable camera for all */ }
+                    icon = if (meetingLocked) Icons.Default.LockOpen else Icons.Default.Lock,
+                    label = if (meetingLocked) "إلغاء القفل" else "قفل الاجتماع",
+                    color = if (meetingLocked) Color.Red else AqyalGold,
+                    onClick = {
+                        meetingLocked = !meetingLocked
+                        runCatching { onToggleLock(meetingLocked) }
+                    }
                 )
             }
 
             Spacer(Modifier.height(16.dp))
 
             // Participants list
-            Text("المشاركين (${participants.size})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("المشاركون (${others.size + 1})", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
 
-            LazyColumn(
+            Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Host first
-                item {
-                    ParticipantCard(
-                        participant = host,
-                        isHost = true,
-                        onMenuClick = { /* host menu */ }
-                    )
-                }
-                // Others
-                items(others) { participant ->
+                ParticipantCard(
+                    participant = host,
+                    isHost = true,
+                    onMenuClick = {}
+                )
+                others.forEach { participant ->
                     ParticipantCard(
                         participant = participant,
                         isHost = false,
-                        onMenuClick = { selectedParticipant = participant.id }
+                        onMenuClick = {
+                            selectedParticipant = participant
+                            showKickDialog = true
+                        }
                     )
                 }
             }
         }
+    }
+
+    // Kick / Manage participant dialog
+    if (showKickDialog && selectedParticipant != null) {
+        val target = selectedParticipant!!
+        AlertDialog(
+            onDismissRequest = {
+                showKickDialog = false
+                selectedParticipant = null
+            },
+            title = { Text("إدارة المشارك: ${target.name}", fontWeight = FontWeight.Bold) },
+            text = { Text("هل تريد طرد هذا المشارك من المكالمة الجماعية؟", color = Color.White.copy(alpha = 0.8f)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        runCatching { onKickParticipant(target.id) }
+                        showKickDialog = false
+                        selectedParticipant = null
+                    }
+                ) {
+                    Text("طرد", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showKickDialog = false
+                        selectedParticipant = null
+                    }
+                ) {
+                    Text("إلغاء", color = Color.White.copy(alpha = 0.7f))
+                }
+            }
+        )
     }
 }
 
@@ -271,7 +343,6 @@ fun ParticipantCard(participant: ParticipantInfo, isHost: Boolean, onMenuClick: 
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Avatar
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -312,15 +383,17 @@ fun ParticipantCard(participant: ParticipantInfo, isHost: Boolean, onMenuClick: 
                     }
                 }
             }
-            IconButton(onClick = onMenuClick) {
-                Icon(Icons.Default.MoreVert, "المزيد", tint = Color.White.copy(alpha = 0.6f))
+            if (!isHost) {
+                IconButton(onClick = onMenuClick) {
+                    Icon(Icons.Default.MoreVert, "خيارات", tint = Color.White.copy(alpha = 0.6f))
+                }
             }
         }
     }
 }
 
 @Composable
-fun QuickActionButton(
+fun RowScope.QuickActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     color: Color,

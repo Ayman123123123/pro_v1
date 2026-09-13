@@ -47,6 +47,7 @@ class PersistentSignalProtocolStore(context: Context, private val keys: DeviceKe
         db.execSQL("CREATE TABLE sender_keys(name TEXT NOT NULL, device INTEGER NOT NULL, distribution TEXT NOT NULL, record BLOB NOT NULL, PRIMARY KEY(name,device,distribution))")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
     override fun getIdentityKeyPair(): IdentityKeyPair = keys.identityKeyPair()
     override fun getLocalRegistrationId(): Int = keys.registrationId()

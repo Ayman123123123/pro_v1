@@ -6,12 +6,17 @@ import androidx.work.WorkerParameters
 import com.red.sovereign.auth.ApiResult
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
+import com.red.sovereign.calls.CallHistoryItem
+import com.red.sovereign.calls.CallLogCipher
+import com.red.sovereign.calls.computedDurationSeconds
+import com.red.sovereign.calls.parseCallTimestamp
 import com.red.sovereign.core.database.CallLogEntity
 import com.red.sovereign.core.database.LocalRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlin.math.pow
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
@@ -92,7 +97,10 @@ class CallLogSyncWorker(
     private suspend fun fetchServerLogs(since: Long): List<CallLogEntity> {
         return when (val result = api.getHistory(since = since)) {
             is ApiResult.Success -> runCatching {
-                json.decodeFromString<List<CallLogEntity>>(result.value)
+                // AUTO-FIX (call log sync): the server returns CallHistoryItem JSON (startedAt is a
+                // string), not CallLogEntity - decoding it as an entity always failed, so these sync
+                // paths silently imported nothing. Decode the DTO, then map it.
+                json.decodeFromString<List<CallHistoryItem>>(result.value).map { it.toSyncedEntity() }
             }.getOrElse { emptyList() }
             is ApiResult.Error -> {
                 android.util.Log.w("CallLogSync", "Server fetch failed: ${result.message}")
@@ -173,7 +181,10 @@ class ManualCallLogSyncWorker(
         // 1. Full pull from server
         val serverLogs = when (val result = api.getHistory(since = 0)) {
             is ApiResult.Success -> runCatching {
-                json.decodeFromString<List<CallLogEntity>>(result.value)
+                // AUTO-FIX (call log sync): the server returns CallHistoryItem JSON (startedAt is a
+                // string), not CallLogEntity - decoding it as an entity always failed, so these sync
+                // paths silently imported nothing. Decode the DTO, then map it.
+                json.decodeFromString<List<CallHistoryItem>>(result.value).map { it.toSyncedEntity() }
             }.getOrElse { emptyList() }
             is ApiResult.Error -> emptyList()
         }
@@ -228,16 +239,50 @@ object CallLogSyncScheduler {
             .cancelUniqueWork(PERIODIC_WORK_NAME)
     }
 
+    /**
+     * حالة المزامنة الدورية الحالية.
+     *
+     * كانت تقرأ `getWorkInfosByTagLiveData(...).value` — وهذا خطأ مزدوج:
+     * يجرّ `runtime-livedata` كاعتماد كامل من أجل استدعاء واحد، و`value`
+     * على LiveData غير مُراقَب يكون `null` دائماً تقريباً فتُرجع الدالة
+     * `null` مهما كانت الحالة الحقيقية. `getWorkInfosByTag` المتزامنة
+     * تُرجع القيمة الفعلية.
+     *
+     * الوسم يُقرأ من [PERIODIC_WORK_NAME] لا من نص مكرر: النص الحرفي
+     * السابق `"call_log_periodic_sync"` كان ينفصل بصمت لو تغيّر الثابت.
+     */
     fun getSyncStatus(context: Context): androidx.work.WorkInfo.State? {
-        return androidx.work.WorkManager.getInstance(context)
-            .getWorkInfosByTagLiveData("call_log_periodic_sync")
-            .value?.firstOrNull()?.state
+        return runCatching {
+            androidx.work.WorkManager.getInstance(context)
+                .getWorkInfosByTag(PERIODIC_WORK_NAME)
+                .get()
+                .firstOrNull()
+                ?.state
+        }.getOrNull()
     }
 }
 
 /**
  * CallHistoryApi extensions for sync.
  */
+/** AUTO-FIX (call log sync): shared mapper used by both sync workers. */
+private val callLogSyncCipher = CallLogCipher()
+
+/** Maps a server DTO into the local Room entity, keeping the peer identity encrypted at rest. */
+private fun CallHistoryItem.toSyncedEntity(): CallLogEntity = CallLogEntity(
+    id = id,
+    peerId = callLogSyncCipher.encryptPeerId(peerId),
+    peerLabel = callLogSyncCipher.encryptLabel(peerLabel),
+    type = type,
+    direction = direction,
+    route = route,
+    status = status,
+    timestamp = parseCallTimestamp(startedAt) ?: System.currentTimeMillis(),
+    durationMs = computedDurationSeconds() * 1000L,
+    answeredAt = parseCallTimestamp(answeredAt),
+    endedAt = parseCallTimestamp(endedAt)
+)
+
 class CallHistoryApi(tokens: TokenStore) {
     private val client = AuthorizedApiClient(tokens)
     private val json = Json { ignoreUnknownKeys = true }
@@ -248,7 +293,25 @@ class CallHistoryApi(tokens: TokenStore) {
     }
 
     suspend fun push(log: CallLogEntity): ApiResult<Boolean> {
-        return when (val result = client.request("POST", "/api/calls/history/sync", "")) {
+        // AUTO-FIX (call log sync): the old body was an empty string, so offline-created call logs
+        // were never uploaded. Send the real record (peer identity decrypted on the wire; the
+        // server stores caller/callee ids in clear by design).
+        val cipher = CallLogCipher()
+        val payload = CallHistoryItem(
+            id = log.id,
+            peerId = cipher.decryptPeerId(log.peerId),
+            peerLabel = cipher.decryptLabel(log.peerLabel),
+            direction = log.direction,
+            type = log.type,
+            route = log.route,
+            status = log.status,
+            startedAt = log.timestamp.toString(),
+            answeredAt = log.answeredAt?.toString(),
+            endedAt = log.endedAt?.toString(),
+            durationSeconds = log.durationMs / 1000L
+        )
+        val body = json.encodeToString(ListSerializer(CallHistoryItem.serializer()), listOf(payload))
+        return when (val result = client.request("POST", "/api/calls/history/sync", body)) {
             is ApiResult.Success -> ApiResult.Success(result.code, true)
             is ApiResult.Error -> ApiResult.Error(result.code, result.message)
         }

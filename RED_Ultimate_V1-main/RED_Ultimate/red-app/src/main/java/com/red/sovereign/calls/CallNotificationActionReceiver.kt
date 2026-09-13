@@ -11,7 +11,7 @@ import androidx.core.app.RemoteInput
 import com.red.sovereign.R
 
 /**
- * مستقبل مركزي لجميع أزرار إشعارات المكالمات (1-to-1, Group, Conference, Zoom, Live).
+ * مستقبل مركزي لجميع أزرار إشعارات المكالمات (1-to-1, Group, Conference, Zoom, PSTN, Live).
  *
  * قبل إنشائه كانت Notification Actions تستخدم `PendingIntent.getService` مباشرة
  * نحو الخدمات، وهذا يخالف سياسات FGS في Android 14 ويستهلك بطارية بدون داعٍ.
@@ -44,10 +44,21 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             ACTION_ACCEPT_VIDEO -> dispatchAccept(context, callType, callId, myUserId, hostId, true)
             ACTION_ACCEPT_AUDIO -> dispatchAccept(context, callType, callId, myUserId, hostId, false)
             ACTION_REJECT, ACTION_DECLINE -> dispatchDecline(context, callType, callId)
-            ACTION_END -> dispatchEnd(context, callType)
-            ACTION_TOGGLE_MIC -> YounesCallService.action(context, YounesCallService.ACTION_MIC)
-            ACTION_TOGGLE_SPEAKER -> YounesCallService.action(context, YounesCallService.ACTION_SPEAKER)
-            ACTION_TOGGLE_VIDEO -> YounesCallService.action(context, YounesCallService.ACTION_CAMERA)
+            ACTION_END -> dispatchEndWithId(context, callType, callId)
+            // أزرار الإشعار كانت تُوجه دائماً لخدمة 1-1 — زر كتم المكالمة الجماعية
+            // كان يكتم مكالمة أخرى (أو لا شيء) بدل الجماعية. التوجيه حسب النوع.
+            ACTION_TOGGLE_MIC -> when (callType) {
+                CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_MIC)
+                else -> YounesCallService.action(context, YounesCallService.ACTION_MIC)
+            }
+            ACTION_TOGGLE_SPEAKER -> when (callType) {
+                CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_SPEAKER)
+                else -> YounesCallService.action(context, YounesCallService.ACTION_SPEAKER)
+            }
+            ACTION_TOGGLE_VIDEO -> when (callType) {
+                CALL_TYPE_GROUP -> GroupCallService.action(context, GroupCallService.ACTION_TOGGLE_VIDEO)
+                else -> YounesCallService.action(context, YounesCallService.ACTION_CAMERA)
+            }
             ACTION_HOLD -> YounesCallService.action(context, YounesCallService.ACTION_HOLD)
             ACTION_RESUME -> YounesCallService.action(context, YounesCallService.ACTION_RESUME)
             ACTION_SWITCH_CAMERA -> YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA)
@@ -74,8 +85,9 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             CALL_TYPE_ZOOM -> if (callId.isNotEmpty() && myUserId.isNotEmpty()) {
                 ZoomGroupCallService.accept(context, callId, myUserId, isVideo, hostId)
             }
-            CALL_TYPE_CONFERENCE -> ConferenceService.accept(context, callId, myUserId)
-            else -> YounesCallService.accept(context, cameraOn = isVideo, micOn = true)
+            CALL_TYPE_CONFERENCE -> ConferenceService.accept(context, callId, myUserId, isVideo)
+            // P0: تمرير المعرف للتحقق (كان يقبل أقدم عرض)
+            else -> YounesCallService.accept(context, cameraOn = isVideo, micOn = true, isVideo = isVideo, callId = callId)
         }
     }
 
@@ -83,16 +95,28 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
         when (callType) {
             CALL_TYPE_GROUP -> if (callId.isNotEmpty()) GroupCallService.decline(context, callId)
             CALL_TYPE_ZOOM -> if (callId.isNotEmpty()) ZoomGroupCallService.decline(context, callId)
-            else -> YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+            else -> {
+                YounesCallService.action(context, YounesCallService.ACTION_REJECT)
+                // P0: إلغاء الرنين الموحد عند الرفض من الإشعار
+                if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
+            }
         }
     }
 
     private fun dispatchEnd(context: Context, callType: String) {
+        // ملاحظة: يحتفظ بالتوقيع لتوافق الاستدعاءات؛ الإلغاء بالمعرف يتم عبر dispatchEnd(callType, callId)
+        dispatchEndWithId(context, callType, "")
+    }
+
+    private fun dispatchEndWithId(context: Context, callType: String, callId: String) {
         when (callType) {
             CALL_TYPE_GROUP -> GroupCallService.end(context)
             CALL_TYPE_CONFERENCE -> ConferenceService.leave(context)
             CALL_TYPE_ZOOM -> ZoomGroupCallService.end(context)
-            else -> YounesCallService.action(context, YounesCallService.ACTION_END)
+            else -> {
+                YounesCallService.action(context, YounesCallService.ACTION_END)
+                if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
+            }
         }
     }
 
@@ -146,6 +170,7 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
         const val CALL_TYPE_GROUP = "group"
         const val CALL_TYPE_CONFERENCE = "conference"
         const val CALL_TYPE_ZOOM = "zoom"
+        const val CALL_TYPE_PSTN = "pstn"
         const val CALL_TYPE_LIVESTREAM = "livestream"
 
         private fun buildIntent(

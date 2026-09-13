@@ -29,6 +29,10 @@ class DraftsStore(context: Context) {
     private val _hasDraft = MutableStateFlow(false)
     val hasDraft: StateFlow<Boolean> = _hasDraft.asStateFlow()
 
+    /** آخر فشل حفظ (قرص ممتلئ/تشفير) — تراقبه الواجهة لعرض "فشل حفظ المسودة". */
+    private val _saveFailed = MutableStateFlow(false)
+    val saveFailed: StateFlow<Boolean> = _saveFailed.asStateFlow()
+
     private fun key(scope: String?) = "draft:${scope ?: "default"}"
 
     /**
@@ -44,19 +48,32 @@ class DraftsStore(context: Context) {
             return
         }
         scope.launch {
-            mutex.withLock {
-                try {
-                    val payload = DraftPayload(
-                        text = text,
-                        savedAt = System.currentTimeMillis(),
-                        version = DRAFT_VERSION
-                    )
-                    val bytes = payload.toBytes()
-                    cache.put(key(draftScope), bytes)
-                    _hasDraft.value = true
-                } catch (e: Exception) {
-                    android.util.Log.w("DraftsStore", "save failed: ${e.message}")
-                }
+            _saveFailed.value = !saveAwait(text, draftScope)
+        }
+    }
+
+    /**
+     * حفظ متزامن يُرجع النجاح — للاختبار ولسلاسل حرجة (قبل الجدولة/النشر).
+     * @return true عند الحفظ، false عند الفشل (قرص ممتلئ/تشفير) مع Log.e.
+     */
+    suspend fun saveAwait(text: String, draftScope: String? = null): Boolean = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext true
+        mutex.withLock {
+            try {
+                val payload = DraftPayload(
+                    text = text,
+                    savedAt = System.currentTimeMillis(),
+                    version = DRAFT_VERSION
+                )
+                val bytes = payload.toBytes()
+                cache.put(key(draftScope), bytes)
+                _hasDraft.value = true
+                _saveFailed.value = false
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("DraftsStore", "save failed (disk/crypto?): ${e.message}", e)
+                _saveFailed.value = true
+                false
             }
         }
     }

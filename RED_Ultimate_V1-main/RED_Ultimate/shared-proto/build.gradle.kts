@@ -17,3 +17,6 @@ protobuf {
         artifact = "com.google.protobuf:protoc:3.25.1"
     }
 }
+
+// The protobuf plugin automatically creates tasks with protoc configured from the extension above
+// No additional task configuration needed

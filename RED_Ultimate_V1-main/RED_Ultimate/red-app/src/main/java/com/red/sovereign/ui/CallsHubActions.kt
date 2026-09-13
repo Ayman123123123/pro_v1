@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,7 @@ fun CallsHubLaunchers(
     onConference: () -> Unit,
     onSpace: () -> Unit,
     onLive: () -> Unit,
+    onPstn: () -> Unit,
     onExplore: () -> Unit,
     onScheduledCalls: () -> Unit
 ) {
@@ -98,7 +100,7 @@ fun CallsHubLaunchers(
             )
         }
 
-        // 3. المساحات الصوتية
+        // 3. المساحات الصوتية والهاتف اليمني (DINSTAR)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // المساحات الصوتية (Twitter X Spaces)
             CallBentoCard(
@@ -113,6 +115,18 @@ fun CallsHubLaunchers(
                 onClick = onSpace
             )
             
+            // الهاتف اليمني (DINSTAR GSM)
+            CallBentoCard(
+                modifier = Modifier.weight(1f).height(130.dp),
+                icon = Icons.Rounded.PhoneInTalk,
+                title = "الهاتف اليمني",
+                subtitle = "DINSTAR GSM\nاتصال بالشبكات المحلية",
+                accentColor = AqyalGold,
+                gradientStart = AqyalGold.copy(alpha = 0.20f),
+                gradientEnd = AqyalGold.copy(alpha = 0.04f),
+                cornerRadius = 20.dp,
+                onClick = onPstn
+            )
         }
 
         // 4. مكالمة جديدة E2EE، مكالمات مجدولة، واستكشاف البثوث
@@ -266,6 +280,8 @@ fun GroupCallPickerDialog(
 ) {
     val selected = remember { mutableStateListOf<String>() }
     var isVideo by remember { mutableStateOf(true) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // حد واتساب: 32 مشاركاً — كان الاختيار بلا سقف فيُرفض الفائض بصمت على الخادم.
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -324,7 +340,12 @@ fun GroupCallPickerDialog(
                         Row(
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                                 .background(bgColor).border(1.dp, borderColor, RoundedCornerShape(16.dp))
-                                .clickable { if (isSelected) selected.remove(contact.redId) else selected.add(contact.redId) }
+                                .clickable {
+                                    if (isSelected) selected.remove(contact.redId)
+                                    else if (selected.size >= 32) {
+                                        android.widget.Toast.makeText(context, "الحد الأقصى 32 مشاركاً", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else selected.add(contact.redId)
+                                }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -389,10 +410,11 @@ fun GroupCallPickerDialog(
 fun ConferenceHubDialog(
     onDismiss: () -> Unit,
     onCreateNew: () -> Unit,
-    onJoinExisting: (roomId: String) -> Unit
+    onJoinExisting: (roomId: String, password: String?) -> Unit
 ) {
     var isJoining by remember { mutableStateOf(false) }
     var roomIdInput by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -511,6 +533,22 @@ fun ConferenceHubDialog(
                                 unfocusedTextColor = Color.White
                             )
                         )
+                        // كلمة سر الغرف العامة المحمية (اختياري).
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = { if (!it.contains(' ')) passwordInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("كلمة السر (إن طُلبت)", color = Color.Gray) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFA78BFA),
+                                unfocusedBorderColor = Color.White.copy(0.2f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            )
+                        )
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
                                 onClick = { isJoining = false },
@@ -522,7 +560,7 @@ fun ConferenceHubDialog(
                             Button(
                                 onClick = {
                                     if (roomIdInput.isNotBlank()) {
-                                        onJoinExisting(roomIdInput.trim())
+                                        onJoinExisting(roomIdInput.trim(), passwordInput.takeIf { it.isNotBlank() })
                                         onDismiss()
                                     }
                                 },
@@ -548,14 +586,20 @@ fun ConferenceHubDialog(
 @Composable
 fun LiveStreamHubDialog(
     onDismiss: () -> Unit,
-    onStartBroadcasting: (title: String, isPrivate: Boolean, password: String) -> Unit,
-    onWatchStream: (streamId: String) -> Unit
+    onStartBroadcasting: (title: String, audience: String, password: String, friendIds: List<String>, category: String) -> Unit,
+    onWatchStream: (streamId: String, password: String?) -> Unit,
+    friends: List<PublicRedProfile> = emptyList()
 ) {
     var mode by remember { mutableStateOf<Int>(0) } // 0: choice, 1: create, 2: watch
     var streamTitle by remember { mutableStateOf("") }
-    var isPrivate by remember { mutableStateOf(false) }
+    // الفئة — جُلبت من شاشة GoLive التجريبية (كانت 8 فئات بلا إرسال للخادم).
+    var streamCategory by remember { mutableStateOf("عام") }
+    // الجمهور: PUBLIC عام / FRIENDS أصدقاء بدعوات / PRIVATE خاص بكلمة سر.
+    var audience by remember { mutableStateOf("PUBLIC") }
     var streamPassword by remember { mutableStateOf("") }
     var watchStreamId by remember { mutableStateOf("") }
+    var watchPassword by remember { mutableStateOf("") }
+    val selectedFriends = remember { mutableStateListOf<String>() }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -656,7 +700,7 @@ fun LiveStreamHubDialog(
                         }
                     }
                     1 -> {
-                        // Create Stream Form
+                        // Create Stream Form — الجمهور: عام / أصدقاء / خاص (مثل TikTok/YouTube).
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("عنوان البث:", color = Color.White.copy(0.8f), fontSize = 13.sp)
                             OutlinedTextField(
@@ -674,32 +718,90 @@ fun LiveStreamHubDialog(
                                 )
                             )
 
+                            Text("الجمهور:", color = Color.White.copy(0.8f), fontSize = 13.sp)
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(0.04f))
-                                    .clickable { isPrivate = !isPrivate }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("بث خاص بكلمة سر 🔒", color = Color.White, fontSize = 13.sp)
-                                Checkbox(
-                                    checked = isPrivate,
-                                    onCheckedChange = { isPrivate = it },
-                                    colors = CheckboxDefaults.colors(checkedColor = Color(0xFFF91850))
-                                )
+                                listOf("PUBLIC" to "🌍 عام", "FRIENDS" to "👥 أصدقاء", "PRIVATE" to "🔒 خاص").forEach { (value, label) ->
+                                    val active = audience == value
+                                    Box(
+                                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                                            .background(if (active) Color(0xFFF91850).copy(0.25f) else Color.White.copy(0.04f))
+                                            .border(1.dp, if (active) Color(0xFFF91850) else Color.White.copy(0.12f), RoundedCornerShape(10.dp))
+                                            .clickable { audience = value }
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(label, color = if (active) Color.White else Color.White.copy(0.6f), fontSize = 13.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
+                            }
+                            Text(
+                                when (audience) {
+                                    "FRIENDS" -> "يُدعى الأصدقاء المختارون فقط + كلمة سر تُشارك معهم."
+                                    "PRIVATE" -> "مخفي عن العامة — الدخول بكلمة السر فقط."
+                                    else -> "يظهر في الاستكشاف ويدخله أي شخص."
+                                },
+                                color = Color.White.copy(0.55f), fontSize = 11.sp
+                            )
+
+                            // الفئة — تُرسل للخادم وتظهر في الاستكشاف (كانت في شاشة GoLive بلا إرسال).
+                            Text("الفئة:", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(LIVE_CATEGORIES) { cat ->
+                                    val active = streamCategory == cat
+                                    Box(
+                                        modifier = Modifier.clip(RoundedCornerShape(16.dp))
+                                            .background(if (active) Color(0xFF25F4EE).copy(0.25f) else Color.White.copy(0.04f))
+                                            .border(1.dp, if (active) Color(0xFF25F4EE) else Color.White.copy(0.12f), RoundedCornerShape(16.dp))
+                                            .clickable { streamCategory = cat }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(cat, color = if (active) Color.White else Color.White.copy(0.6f), fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                                    }
+                                }
                             }
 
-                            if (isPrivate) {
+                            // اختيار الأصدقاء لبث الأصدقاء.
+                            if (audience == "FRIENDS") {
+                                if (friends.isEmpty()) {
+                                    Text("لا توجد جهات اتصال — أضف أصدقاء أولاً من تبويب الدردشات.", color = Color(0xFFFFB020), fontSize = 12.sp)
+                                } else {
+                                    LazyColumn(modifier = Modifier.heightIn(max = 180.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        items(friends, key = { it.redId }) { f ->
+                                            val checked = f.redId in selectedFriends
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                                    .background(if (checked) Color(0xFFF91850).copy(0.15f) else Color.White.copy(0.03f))
+                                                    .clickable {
+                                                        if (checked) selectedFriends.remove(f.redId) else selectedFriends.add(f.redId)
+                                                    }
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(f.displayName, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                                if (checked) Icon(Icons.Rounded.Check, null, tint = Color(0xFFF91850), modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // كلمة السر للأصدقاء والخاص (إجبارية).
+                            if (audience != "PUBLIC") {
                                 OutlinedTextField(
                                     value = streamPassword,
-                                    onValueChange = { streamPassword = it },
+                                    onValueChange = { if (!it.contains(' ')) streamPassword = it },
                                     modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("كلمة السر الخاصة بالبث", color = Color.Gray) },
+                                    placeholder = { Text("كلمة سر البث (4 أحرف فأكثر)", color = Color.Gray) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
+                                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = Color(0xFFF91850),
                                         unfocusedBorderColor = Color.White.copy(0.2f),
@@ -719,14 +821,18 @@ fun LiveStreamHubDialog(
                                 }
                                 Button(
                                     onClick = {
-                                        onStartBroadcasting(streamTitle.ifBlank { "بث مباشر يونس" }, isPrivate, streamPassword)
+                                        onStartBroadcasting(
+                                            streamTitle.ifBlank { "بث مباشر يونس" },
+                                            audience,
+                                            streamPassword,
+                                            selectedFriends.toList(),
+                                            streamCategory
+                                        )
                                         onDismiss()
                                     },
-                                    // بث خاص بلا كلمة سر ليس بثًا خاصًا. المنع عند
-                                    // الزر لا بعد الإرسال: الحوار يستدعي onDismiss()
-                                    // مباشرة بعد الاستدعاء، فأي تحقق لاحق يُغلق
-                                    // الحوار ويُفقد المستخدم ما كتبه.
-                                    enabled = !isPrivate || streamPassword.isNotBlank(),
+                                    // الخاص والأصدقاء بلا كلمة سر ليسا خاصين — المنع عند الزر.
+                                    // الأصدقاء بلا مختارين تنبيه لا منع (يمكن الدعوة لاحقاً من داخل البث).
+                                    enabled = audience == "PUBLIC" || streamPassword.length >= 4,
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF91850)),
                                     shape = RoundedCornerShape(12.dp)
@@ -737,7 +843,7 @@ fun LiveStreamHubDialog(
                         }
                     }
                     2 -> {
-                        // Watch Stream Form
+                        // Watch Stream Form — مع كلمة سر للبث الخاص (كانت تُطلب بلا حقل إدخال).
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text("أدخل معرّف البث المباشر:", color = Color.White.copy(0.8f), fontSize = 13.sp)
                             OutlinedTextField(
@@ -747,6 +853,21 @@ fun LiveStreamHubDialog(
                                 placeholder = { Text("مثال: stream-xyz أو رابط البث", color = Color.Gray) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF25F4EE),
+                                    unfocusedBorderColor = Color.White.copy(0.2f),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                            OutlinedTextField(
+                                value = watchPassword,
+                                onValueChange = { if (!it.contains(' ')) watchPassword = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("كلمة السر (للبث الخاص فقط)", color = Color.Gray) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF25F4EE),
                                     unfocusedBorderColor = Color.White.copy(0.2f),
@@ -766,7 +887,7 @@ fun LiveStreamHubDialog(
                                 Button(
                                     onClick = {
                                         if (watchStreamId.isNotBlank()) {
-                                            onWatchStream(watchStreamId.trim())
+                                            onWatchStream(watchStreamId.trim(), watchPassword.takeIf { it.isNotBlank() })
                                             onDismiss()
                                         }
                                     },
@@ -789,6 +910,9 @@ fun LiveStreamHubDialog(
 // ===============================================================
 // Permission Helper — طلب الصلاحية قبل المكالمة
 // ===============================================================
+
+/** قائمة فئات البث الموحدة (الحوار + الاكتشاف + الخادم يقبل أي نص ≤30). */
+val LIVE_CATEGORIES = listOf("عام", "تقنية", "ألعاب", "موسيقى", "تعليم", "ترفيه", "رياضة", "ديني", "طبخ", "أعمال")
 
 @Composable
 fun rememberCallPermissionLauncher(
@@ -815,6 +939,7 @@ fun rememberCallPermissionLauncher(
 // ===============================================================
 
 fun callTypeGlyph(type: String, route: String): Pair<ImageVector, Color> = when {
+    route == "DINSTAR"      -> Icons.Rounded.PhoneInTalk  to AqyalGold
     type  == "LIVE"         -> Icons.Rounded.LiveTv        to Color(0xFFE53935)
     type  == "SPACE"        -> Icons.Rounded.Headset       to Color(0xFFA78BFA)
     type  == "GROUP"        -> Icons.Rounded.Groups        to AqyalCyanGlow

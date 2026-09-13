@@ -36,7 +36,7 @@ object SdpMediaOptimizer {
         var out = preferAudioCodec(sdp, "opus")
         out = applyOpusFmtp(out, kind.opusBitrateBps, kind.stereoAudio)
         if (kind.wantsVideo) {
-            out = preferVideoCodec(out, kind.preferredVideoCodec)
+            out = preferVideoCodecWithFallback(out, kind.preferredVideoCodec)
             out = applyVideoFeedback(out)
         }
         return out
@@ -65,6 +65,22 @@ object SdpMediaOptimizer {
 
     fun preferVideoCodec(sdp: String, codec: String): String = preferCodecOnMedia(sdp, "video", codec)
 
+    /**
+     * Prefers video codec with fallback to alternative available video codecs if preferred codec is missing.
+     */
+    fun preferVideoCodecWithFallback(sdp: String, preferredCodec: String): String {
+        if (sdp.contains("a=rtpmap:.*${Regex.escape(preferredCodec)}/".toRegex(RegexOption.IGNORE_CASE))) {
+            return preferVideoCodec(sdp, preferredCodec)
+        }
+        // Fallback search order: VP9 -> H264 -> VP8 -> AV1
+        for (fallback in listOf("VP9", "H264", "VP8", "AV1")) {
+            if (sdp.contains("a=rtpmap:.*${Regex.escape(fallback)}/".toRegex(RegexOption.IGNORE_CASE))) {
+                return preferVideoCodec(sdp, fallback)
+            }
+        }
+        return sdp
+    }
+
     fun applyOpusFmtp(sdp: String, bitrateBps: Int, stereo: Boolean): String {
         val opus = Regex("a=rtpmap:(\\d+) opus/48000(?:/\\d+)?", RegexOption.IGNORE_CASE).find(sdp)
             ?: return sdp
@@ -82,9 +98,11 @@ object SdpMediaOptimizer {
      * Typical VoIP: MOS ≥ 4.0 excellent, 3.6 good, 3.1 fair, below that poor.
      */
     fun mos(rttMs: Long, lossPercent: Double): Double {
-        val delayMs = (rttMs / 2.0) + 20.0
+        val clampedRtt = rttMs.coerceAtLeast(0L)
+        val clampedLoss = lossPercent.coerceIn(0.0, 100.0)
+        val delayMs = (clampedRtt / 2.0) + 20.0
         val id = if (delayMs > 177.3) 0.024 * delayMs + 0.11 * (delayMs - 177.3) else 0.024 * delayMs
-        val ieEff = 10.0 + 40.0 * lossPercent / (lossPercent + 10.0)
+        val ieEff = 10.0 + 40.0 * clampedLoss / (clampedLoss + 10.0)
         val r = (93.2 - id - ieEff).coerceIn(0.0, 100.0)
         val mos = if (r < 0) 1.0
         else if (r > 100) 4.5

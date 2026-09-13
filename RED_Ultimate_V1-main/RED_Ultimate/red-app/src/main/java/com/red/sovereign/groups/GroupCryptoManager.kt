@@ -10,6 +10,7 @@ import com.red.sovereign.crypto.EncryptedEnvelope
 import com.red.sovereign.crypto.IdentityDirectoryApi
 import com.red.sovereign.crypto.PersistentSignalProtocolStore
 import com.red.sovereign.crypto.SignalSessionManager
+import com.red.sovereign.core.GroupSyncBus
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,7 +35,8 @@ class GroupCryptoManager(context: Context) {
         require(plaintext.isNotEmpty() && plaintext.size <= 256 * 1024)
         val ownRedId = tokens.redId ?: return ApiResult.Error(401, "LOCAL_IDENTITY_UNAVAILABLE")
         val local = SignalProtocolAddress(ownRedId, keys.protocolDeviceId())
-        val membershipHash = membershipHash(group)
+        val validMembers = group.members.filter { it.redId.isNotBlank() }
+        val membershipHash = GroupMembershipFingerprint.forMembers(validMembers)
         var distributionId = metadata.get("distribution:${group.id}")?.let { runCatching { UUID.fromString(it) }.getOrNull() }
         val requiresDistribution = distributionId == null || metadata.get("membership:${group.id}") != membershipHash
         if (requiresDistribution) distributionId = UUID.randomUUID()
@@ -45,7 +47,7 @@ class GroupCryptoManager(context: Context) {
             val distribution = GroupSessionBuilder(protocolStore).create(local, distributionId)
             val wire = json.encodeToString(SenderKeyWire(group.id, distributionId.toString(), Base64.getEncoder().encodeToString(distribution.serialize())))
                 .toByteArray(Charsets.UTF_8)
-            for (member in group.members.filter { it.redId != ownRedId }) {
+            for (member in validMembers.filter { it.redId != ownRedId }) {
                 when (val encrypted = pairwise.encrypt(member.redId, wire)) {
                     is ApiResult.Error -> return encrypted
                     is ApiResult.Success -> distributions += encrypted.value.map { GroupPairwisePayload(member.redId, it) }
@@ -57,7 +59,7 @@ class GroupCryptoManager(context: Context) {
 
         val message = GroupCipher(protocolStore, local).encrypt(distributionId, plaintext)
         val recipients = mutableListOf<GroupRecipient>()
-        for (member in group.members.filter { it.redId != ownRedId }) {
+        for (member in validMembers.filter { it.redId != ownRedId }) {
             when (val found = directory.get(member.redId)) {
                 is ApiResult.Error -> return found
                 is ApiResult.Success -> recipients += found.value.devices.map { GroupRecipient(member.redId, it.protocolDeviceId) }
@@ -67,24 +69,62 @@ class GroupCryptoManager(context: Context) {
     }
 
     fun processDistribution(senderRedId: String, senderDeviceId: Int, plaintext: ByteArray): String {
-        val wire = json.decodeFromString<SenderKeyWire>(plaintext.toString(Charsets.UTF_8))
-        val distributionId = UUID.fromString(wire.distributionId)
-        val message = SenderKeyDistributionMessage(Base64.getDecoder().decode(wire.serialized))
-        GroupSessionBuilder(protocolStore).process(SignalProtocolAddress(senderRedId, senderDeviceId), message)
+        val wire = runCatching {
+            json.decodeFromString<SenderKeyWire>(plaintext.toString(Charsets.UTF_8))
+        }.getOrElse {
+            android.util.Log.w("GroupCrypto", "INVALID_DISTRIBUTION_WIRE from $senderRedId")
+            throw IllegalArgumentException("INVALID_DISTRIBUTION_WIRE")
+        }
+        val distributionId = runCatching { UUID.fromString(wire.distributionId) }.getOrNull()
+        if (distributionId == null) {
+            android.util.Log.w("GroupCrypto", "INVALID_DISTRIBUTION_ID: ${wire.distributionId}")
+        }
+        val raw = runCatching { Base64.getDecoder().decode(wire.serialized) }.getOrElse {
+            android.util.Log.w("GroupCrypto", "INVALID_DISTRIBUTION_BASE64 from $senderRedId")
+            throw IllegalArgumentException("INVALID_DISTRIBUTION_BASE64")
+        }
+        val message = runCatching { SenderKeyDistributionMessage(raw) }.getOrElse {
+            android.util.Log.w("GroupCrypto", "INVALID_DISTRIBUTION_MESSAGE from $senderRedId")
+            throw IllegalArgumentException("INVALID_DISTRIBUTION_MESSAGE")
+        }
+        runCatching {
+            GroupSessionBuilder(protocolStore).process(SignalProtocolAddress(senderRedId, senderDeviceId), message)
+        }.onFailure {
+            android.util.Log.w("GroupCrypto", "DISTRIBUTION_PROCESS_FAILED from $senderRedId: ${it.message}")
+            GroupSyncBus.needRefresh(wire.groupId)
+            throw it
+        }
         return wire.groupId
     }
 
-    fun decrypt(senderRedId: String, senderDeviceId: Int, ciphertext: ByteArray): ByteArray =
+    fun decrypt(senderRedId: String, senderDeviceId: Int, ciphertext: ByteArray, groupId: String = ""): ByteArray = runCatching {
         GroupCipher(protocolStore, SignalProtocolAddress(senderRedId, senderDeviceId)).decrypt(ciphertext)
+    }.getOrElse {
+        android.util.Log.w("GroupCrypto", "GROUP_DECRYPT_FAILED from $senderRedId: ${it.message}")
+        if (groupId.isNotBlank()) GroupSyncBus.needRefresh(groupId)
+        throw it
+    }
 
     fun rotate(groupId: String) {
         metadata.remove("distribution:$groupId", "membership:$groupId")
     }
 
-    private fun membershipHash(group: Group): String {
-        val canonical = group.members.sortedWith(compareBy(GroupMember::redId, GroupMember::userId))
+}
+
+/**
+ * بصمة العضوية التي تحدد صلاحية Sender Key للمجموعة.
+ *
+ * يجب أن تتغير البصمة عند إضافة/إزالة عضو أو تغيير دوره، لكن لا يجوز أن
+ * تتغير لمجرد أن الخادم أعاد قائمة الأعضاء بترتيب مختلف. هذا الفصل يجعل
+ * قاعدة التدوير قابلة لاختبار وحدة مستقل.
+ */
+internal object GroupMembershipFingerprint {
+    fun forMembers(members: Iterable<GroupMember>): String {
+        val canonical = members.sortedWith(compareBy(GroupMember::redId, GroupMember::userId))
             .joinToString("|") { "${it.redId}:${it.userId}:${it.role}" }
-        return MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).joinToString("") { "%02x".format(it) }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(canonical.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 }
 

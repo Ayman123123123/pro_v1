@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
  * 2. مكالمة جماعية (GroupCallOverlay) — iMO/Zoom style
  * 3. مؤتمر/مساحة صوتية (YounesConferenceOverlay) — X Spaces style
  * 4. بث مباشر (YounesLiveStreamOverlay) — TikTok style
+ * 5. مكالمة الهاتف اليمني عبر DINSTAR (PstnCallOverlay) — ساق صوت WebRTC↔GSM
  *
  * Only ONE overlay shows at a time — prevents stacking at wrong times.
  */
@@ -20,11 +21,12 @@ fun UnifiedCallOverlays() {
     val confState  = ConferenceRuntime.state
     val liveState  = LiveStreamRuntime.state
     val zoomState  = ZoomRuntime.state
+    val pstnState  = PstnCallRuntime.state
 
     when {
         callState  !is CallUiState.Idle && !CallRuntime.isMinimized -> YounesCallOverlay()
-        // Zoom (اجتماعات مستقلة حتى 100 مشارك) — كان الـoverlay مكتملاً لكنه
-        // غير معروض في أي مكان فبقيت الميزة كلها كوداً ميتاً. يُعرض عند وجود
+        // Zoom (اجتماعات مستقلة حتى 100 مشارك) — كان الـoverlay مكتملاُ لكنه
+        // غير معروض في أي مكان فبقيت الميزة كلها كوداُ ميتاً. يُعرض عند وجود
         // اجتماع نشط/وارد وغير مُصغَّر، بنفس نمط «واجهة واحدة في كل لحظة».
         zoomState  !is ZoomUiState.Idle
             && zoomState !is ZoomUiState.Ended
@@ -34,6 +36,6 @@ fun UnifiedCallOverlays() {
             && groupState !is GroupCallUiState.Ended -> GroupCallOverlay()
         confState  !is ConferenceUiState.Idle    -> YounesConferenceOverlay()
         liveState  !is LiveStreamUiState.Idle    -> YounesLiveStreamOverlay()
+        pstnState  !is PstnCallState.Idle        -> PstnCallOverlay()
     }
 }
-

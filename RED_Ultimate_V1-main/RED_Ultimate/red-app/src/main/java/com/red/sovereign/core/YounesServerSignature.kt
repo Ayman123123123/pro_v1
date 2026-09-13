@@ -58,7 +58,9 @@ object YounesServerSignature {
             return URI(uri.scheme, null, host, resolved, null, null, null).toString().trimEnd('/')
         }
         val scheme = if (port == 443 || port == DEFAULT_HTTPS_PORT) "https" else "http"
-        return "$scheme://$raw:$port"
+        // IPv6 الخام يحتاج أقواسًا: ::1 → [::1] (بدونها URL غير صالح)
+        val host = raw.trim('[', ']').let { if (':' in it) "[$it]" else it }
+        return "$scheme://$host:$port"
     }
 
     fun ports(preferred: Int): List<Int> {
@@ -69,7 +71,8 @@ object YounesServerSignature {
     /** إنشاء URL كامل من IP/مضيف فقط */
     fun buildUrl(host: String, port: Int = DEFAULT_PORT): String {
         val scheme = if (port == 443 || port == DEFAULT_HTTPS_PORT) "https" else "http"
-        return "$scheme://$host:$port"
+        val h = host.trim().trim('[', ']').let { if (':' in it) "[$it]" else it }
+        return "$scheme://$h:$port"
     }
     
     /** استخراج IP/مضيف وبورت من URL للعرض */

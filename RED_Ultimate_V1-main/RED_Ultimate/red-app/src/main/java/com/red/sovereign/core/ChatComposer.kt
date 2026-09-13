@@ -12,19 +12,24 @@ import java.util.UUID
  */
 object ChatComposer {
 
-    val ALLOWED_DISAPPEARING_MS = setOf(0L, 3_600_000L, 86_400_000L, 604_800_000L)
+    val ALLOWED_DISAPPEARING_MS = setOf(0L, 3_600_000L, 86_400_000L, 604_800_000L, 7_776_000_000L)
 
     fun clampDisappearingMs(ms: Long?): Long? = when {
         ms == null || ms <= 0L -> null
         ms in ALLOWED_DISAPPEARING_MS -> ms
         ms < 3_600_000L -> 3_600_000L
         ms < 86_400_000L -> 86_400_000L
-        else -> 604_800_000L
+        ms < 604_800_000L -> 604_800_000L
+        else -> 7_776_000_000L
     }
 
-    fun newClientId(): String = "local-${UUID.randomUUID()}"
+    fun newClientId(): String = UuidV7.next()
 
-    fun isClientId(id: String): Boolean = id.startsWith("local-")
+    // توافق خلفي: يقبل معرفات "local-*" القديمة (UUIDv4) ومعرفات UUIDv7 الجديدة بدون prefix.
+    fun isClientId(id: String): Boolean {
+        if (id.startsWith("local-")) return true
+        return runCatching { UUID.fromString(id); true }.getOrDefault(false)
+    }
 
     fun buildText(
         action: String = "MESSAGE",
@@ -38,7 +43,7 @@ object ChatComposer {
     ): Result<RichMessage> = runCatching {
         val trimmed = text.trim()
         require(trimmed.isNotEmpty() || poll != null) { "EMPTY_TEXT" }
-        val safeAction = if (action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY")) action else "MESSAGE"
+        val safeAction = if (action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "LOCATION", "CONTACT")) action else "MESSAGE"
         val clamped = clampDisappearingMs(disappearingMs)
         RichMessage(
             action = safeAction,
@@ -51,6 +56,77 @@ object ChatComposer {
             disappearingMs = clamped,
             poll = poll,
         )
+    }
+
+    fun buildLocation(
+        latitude: Double,
+        longitude: Double,
+        name: String = "",
+        address: String = "",
+        disappearingMs: Long? = null
+    ): Result<RichMessage> = runCatching {
+        val clamped = clampDisappearingMs(disappearingMs)
+        RichMessage(
+            action = "LOCATION",
+            text = if (name.isNotBlank()) name else "موقع جغرافي",
+            location = LocationData(latitude, longitude, name, address),
+            expiresAt = clamped?.takeIf { it > 0L }?.let { System.currentTimeMillis() + it },
+            disappearingMs = clamped
+        )
+    }
+
+    fun buildContact(
+        name: String,
+        phoneNumber: String = "",
+        redId: String = "",
+        disappearingMs: Long? = null
+    ): Result<RichMessage> = runCatching {
+        val clamped = clampDisappearingMs(disappearingMs)
+        RichMessage(
+            action = "CONTACT",
+            text = "جهة اتصال: $name",
+            contact = ContactData(name, phoneNumber, redId),
+            expiresAt = clamped?.takeIf { it > 0L }?.let { System.currentTimeMillis() + it },
+            disappearingMs = clamped
+        )
+    }
+
+    fun buildEdit(
+        messageId: String,
+        newText: String,
+        disappearingMs: Long? = null
+    ): Result<RichMessage> = runCatching {
+        val trimmed = newText.trim()
+        require(trimmed.isNotEmpty()) { "EMPTY_TEXT" }
+        val clamped = clampDisappearingMs(disappearingMs)
+        RichMessage(
+            action = "EDIT",
+            text = trimmed.take(65_536),
+            editOf = messageId,
+            expiresAt = clamped?.takeIf { it > 0L }?.let { System.currentTimeMillis() + it },
+            disappearingMs = clamped
+        )
+    }
+
+    fun buildDelete(
+        messageId: String
+    ): Result<RichMessage> = runCatching {
+        RichMessage(
+            action = "DELETE",
+            text = "تم حذف هذه الرسالة",
+            deleteOf = messageId
+        )
+    }
+
+    fun buildReaction(
+        messageId: String,
+        emoji: String?
+    ): Result<RichMessage> = runCatching {
+        if (emoji == null) {
+            RichMessage(action = "REACTION_REMOVE", reactionOf = messageId)
+        } else {
+            RichMessage(action = "REACTION", reactionOf = messageId, emoji = emoji)
+        }
     }
 
     fun humanizeSendError(raw: String?): String {

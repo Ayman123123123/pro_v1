@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -27,14 +28,20 @@ class SecureStore(context: Context, name: String) {
     }
 
     fun get(name: String): String? {
+        // NOT_FOUND: المفتاح غير موجود أصلاً — حالة طبيعية، بلا لوج.
         val encoded = prefs.getString(name, null) ?: return null
-        return runCatching {
+        try {
             val data = Base64.decode(encoded, Base64.NO_WRAP)
             require(data.size > IV_SIZE)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data.copyOfRange(0, IV_SIZE)))
-            cipher.doFinal(data.copyOfRange(IV_SIZE, data.size)).toString(Charsets.UTF_8)
-        }.getOrNull()
+            return cipher.doFinal(data.copyOfRange(IV_SIZE, data.size)).toString(Charsets.UTF_8)
+        } catch (e: Exception) {
+            // DECRYPT_FAILED: القيمة موجودة لكن فك التشفير فشل (مفتاح مُدوَّر،
+            // بيانات تالفة، IV قصير) — ليست NOT_FOUND، وتستحق لوج تشخيصي.
+            Log.w(TAG, "SecureStore DECRYPT_FAILED key=$name: ${e.message}")
+            return null
+        }
     }
 
     fun remove(vararg names: String) {
@@ -54,5 +61,5 @@ class SecureStore(context: Context, name: String) {
         }
     }
 
-    private companion object { const val TRANSFORMATION = "AES/GCM/NoPadding"; const val IV_SIZE = 12 }
+    private companion object { const val TRANSFORMATION = "AES/GCM/NoPadding"; const val IV_SIZE = 12; const val TAG = "SecureStore" }
 }

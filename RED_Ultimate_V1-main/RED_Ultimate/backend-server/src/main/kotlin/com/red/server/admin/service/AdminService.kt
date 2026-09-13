@@ -82,15 +82,27 @@ class AdminService(
     fun getRecentAnalytics(): List<SystemAnalytics> = analytics.findTop30ByOrderByStatDateDesc()
 
     /**
-     * حساب الإحصائيات الحالية من الـ DB
+     * حساب الإحصائيات الحالية من الـ DB.
+     *
+     * ⚠️ كانت الأعداد تُحسب بتحميل **كل** الصفوف ثم `.size`:
+     *     users.findAllByStatusOrderByCreatedAtAsc(PENDING).size
+     *     users.findAll().count { it.createdAt.isAfter(...) }
+     * أي أربع استعلامات تجرّ كل جدول المستخدمين إلى الذاكرة (وتُهيّئ كائن
+     * JPA لكل صف) لتُرجع رقمًا واحدًا. على قاعدة حقيقية هذا يتحوّل إلى
+     * ثوانٍ وضغط ذاكرة على كل تحديث للوحة، بلا أي مقابل.
+     *
+     * الآن العدّ في قاعدة البيانات: `countByStatus` و`countCreatedAfter`
+     * موجودتان في المستودع أصلًا ولم تكونا مستخدمتين. وبذلك تعود القيم
+     * `Long` — وهو النوع المتوقّع في العقد أيضًا (كان `Int` من `.size`
+     * يخالف `totalUsers: Long` في الخريطة نفسها).
      */
-    @Transactional
+    @Transactional(readOnly = true)
     fun calculateCurrentAnalytics(): Map<String, Any> {
         val totalUsers = users.count()
         val pendingUsers = users.countByStatus(AccountStatus.PENDING)
         val bannedUsers = users.countByStatus(AccountStatus.BANNED)
         val approvedUsers = users.countByStatus(AccountStatus.APPROVED)
-        val newUsers24h = users.countByCreatedAtAfter(Instant.now().minusSeconds(86400))
+        val newUsers24h = users.countCreatedAfter(Instant.now().minusSeconds(86400))
 
         return mapOf(
             "totalUsers" to totalUsers,
@@ -291,6 +303,12 @@ class AdminService(
      * Docker-host backup is intentionally not executed by the web process.
      * Giving Backend the Docker socket would make one application RCE equal to
      * root on the host. Operators must use scripts/backup-platform.sh instead.
+     *
+     * الرسالة الموحدة مع الواجهة (Backups.tsx) و(AdminV2Controller):
+     * «النسخ والاستعادة عبر مشغل النظام فقط (Docker Host):
+     * scripts/backup-platform.sh وscripts/restore-platform.sh».
+     * الرموز الآلية ثابتة عمداً (BACKUP_/RESTORE_OPERATOR_WORKFLOW_REQUIRED)
+     * وتعتمد عليها الاختبارات والواجهة للتمييز — لا تغيّر نص الاستثناء.
      */
     fun startBackup(backupType: String, adminId: UUID, notes: String? = null): BackupHistory =
         throw UnsupportedOperationException("BACKUP_OPERATOR_WORKFLOW_REQUIRED")
@@ -308,16 +326,8 @@ class AdminService(
             backup?.let {
                 try {
                     val f = java.io.File(it.storageLocation)
-                    if (f.exists()) {
-                        if (!f.delete()) {
-                            org.slf4j.LoggerFactory.getLogger(AdminService::class.java)
-                                .warn("Failed to delete backup file: ${it.storageLocation}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    org.slf4j.LoggerFactory.getLogger(AdminService::class.java)
-                        .warn("Error deleting backup file ${it.storageLocation}: ${e.message}")
-                }
+                    if (f.exists()) f.delete()
+                } catch (_: Exception) {}
             }
             backups.deleteById(backupId); true
         } else false

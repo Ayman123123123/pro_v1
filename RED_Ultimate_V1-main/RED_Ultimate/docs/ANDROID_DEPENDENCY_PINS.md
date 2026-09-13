@@ -40,7 +40,7 @@
 | Accompanist | 0.37.3 | 0.28.0 قديم جداً أمام Compose 2026 |
 | libsignal | **0.86.5** | الوحيد المنشور + Kyber |
 
-## الشبكة / Windows
+## شبكة اليمن / Windows
 
 1. `dl.google.com` و`maven-central.storage-download.googleapis.com` و`maven.aliyun.com` أولاً.
 2. لا تعتمد `--offline` إلا بعد نجاح بناء واحد أونلاين (Google + Aliyun).

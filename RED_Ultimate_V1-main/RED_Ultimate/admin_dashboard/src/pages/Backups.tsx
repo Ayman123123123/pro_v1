@@ -43,6 +43,17 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+// رسالة المشغّل الموحدة مع الخادم (AdminService.kt / AdminV2Controller 501):
+// النسخ والاستعادة لا ينفذهما الـ Backend عمداً (Docker socket = root على المضيف).
+const OPERATOR_BACKUP_MESSAGE =
+  'النسخ والاستعادة عبر مشغل النظام فقط (Docker Host): scripts/backup-platform.sh وscripts/restore-platform.sh — تنفيذها داخل Backend يمنح التطبيق صلاحية root على الخادم.';
+
+function operatorErrorMessage(e: any, fallback: string): string {
+  const raw = String(e?.message ?? '');
+  if (/OPERATOR_WORKFLOW_REQUIRED|HTTP 501/.test(raw)) return OPERATOR_BACKUP_MESSAGE;
+  return `${fallback}: ${raw}`;
+}
+
 export default function Backups() {
   const [backups, setBackups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -89,7 +100,7 @@ export default function Backups() {
       load();
     } catch (e: any) {
       if (e.errorFields) return;
-      message.error('فشل: ' + (e.message ?? ''));
+      message.error(operatorErrorMessage(e, 'فشل'));
     }
   };
 
@@ -113,7 +124,7 @@ export default function Backups() {
       }
     } catch (e: any) {
       if (e.errorFields) return;
-      message.error('فشل: ' + (e.message ?? ''));
+      message.error(operatorErrorMessage(e, 'فشل'));
     }
   };
 
@@ -205,6 +216,8 @@ export default function Backups() {
                 type="primary"
                 size="small"
                 icon={<DownloadOutlined />}
+                disabled
+                title={OPERATOR_BACKUP_MESSAGE}
                 onClick={() => handleRestore(r)}
               >
                 استعادة
@@ -249,7 +262,7 @@ export default function Backups() {
             label: <Space><CloudUploadOutlined /> عبر الواجهة (API)</Space>,
             children: (
               <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                <Alert type="warning" showIcon message="لا تنفّذ لوحة الويب النسخ أو الاستعادة" description="هذه العملية تتطلب Docker Host وصلاحية للـ volumes؛ تنفيذها داخل Backend يمنح التطبيق صلاحية root على الخادم. استخدم scripts/backup-platform.sh وscripts/restore-platform.sh، ثم سجل الناتج بعد Restore Drill." />
+                <Alert type="warning" showIcon message="لا تنفّذ لوحة الويب النسخ أو الاستعادة" description={OPERATOR_BACKUP_MESSAGE} />
 
       {/* Stats */}
       <Row gutter={[16, 16]}>
@@ -298,7 +311,7 @@ export default function Backups() {
       {/* Actions */}
       <Card>
         <Space>
-          <Button type="primary" icon={<CloudUploadOutlined />} size="large" disabled>
+          <Button type="primary" icon={<CloudUploadOutlined />} size="large" disabled title={OPERATOR_BACKUP_MESSAGE}>
             النسخ يتم عبر مشغل النظام
           </Button>
           <Button icon={<ReloadOutlined />} onClick={load}>تحديث</Button>
@@ -363,6 +376,13 @@ export default function Backups() {
           type="warning"
           message="تحذير: استعادة البيانات"
           description="سيتم استبدال البيانات الحالية بمحتوى النسخة الاحتياطية. هذا الإجراء لا يمكن التراجع عنه."
+          showIcon
+        />
+        <Alert
+          type="info"
+          style={{ marginTop: 12 }}
+          message="تنفيذ الاستعادة"
+          description={OPERATOR_BACKUP_MESSAGE}
           showIcon
         />
         <div style={{ marginTop: 16 }}>

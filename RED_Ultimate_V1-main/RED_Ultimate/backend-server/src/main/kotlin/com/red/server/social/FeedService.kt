@@ -137,6 +137,22 @@ class FeedService(
         return requireNotNull(activePost(postId))
     }
 
+    /**
+     * إعادة نشر: تسجيل idempotent لكل مستخدم + زيادة `repostCount`
+     * مرة واحدة. التكرار يُرجع المنشور الحالي دون تغيير.
+     */
+    fun repost(userId: UUID, postId: String): PostDocument {
+        val post = requireNotNull(activePost(postId)) { "Post not found" }
+        require(post.parentId == null) { "Only top-level posts can be reposted" }
+        val repostId = "$postId:$userId"
+        if (!mongo.exists(Query(Criteria.where("id").`is`(repostId)), Repost::class.java)) {
+            mongo.save(Repost(repostId, postId, userId.toString()))
+            mongo.updateFirst(Query(Criteria.where("id").`is`(postId)),
+                Update().inc("repostCount", 1), PostDocument::class.java)
+        }
+        return requireNotNull(activePost(postId))
+    }
+
     fun follow(userId: UUID, targetRedId: String) {
         val target = users.findByRedId(targetRedId) ?: throw NoSuchElementException("RED identity not found")
         require(target.id != userId) { "A user cannot follow their own account" }
@@ -191,7 +207,19 @@ class FeedService(
         if (request.pollOptions.isEmpty()) return null
         val options = request.pollOptions.map(String::trim).filter(String::isNotEmpty)
         require(options.size in 2..6 && options.all { it.length <= 100 }) { "Poll must contain 2-6 valid options" }
+        // صور الخيارات (نمط X): مصفوفة موازية بنفس الترتيب، null للنصي.
+        // تُقبل فقط مع 2..4 خيارات، والقيم مفاتيح وسائط قصيرة.
+        val images = (request.pollOptionImages + List(options.size) { null }).take(options.size)
+        if (images.any { !it.isNullOrBlank() }) {
+            require(options.size in 2..4) { "Image polls must contain 2-4 options" }
+            require(images.filterNotNull().all { it.length <= 300 }) { "Poll option image reference is too long" }
+        }
         val expiry = request.pollDurationHours?.let { Instant.now().plus(it.coerceIn(1, 168).toLong(), ChronoUnit.HOURS) }
-        return Poll(options.map { PollOption(UuidV7.next(), it) }, expiry)
+        return Poll(
+            options.mapIndexed { index, text ->
+                PollOption(UuidV7.next(), text, imageUrl = images.getOrNull(index)?.takeIf { !it.isNullOrBlank() })
+            },
+            expiry
+        )
     }
 }

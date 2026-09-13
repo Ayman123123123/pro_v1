@@ -75,6 +75,30 @@ class OutboxRetryWorker(
     val workerFailedCount: Flow<Long> = _workerFailedCount
     val workerDeadLetterCount: Flow<Long> = _workerDeadLetterCount
 
+    // LEGENDARY FIX (نفس علة MediaUploadWorker على الجهاز): expedited يتطلب
+    // getForegroundInfo وإلا IllegalStateException عند التشغيل الفوري.
+    override suspend fun getForegroundInfo(): androidx.work.ForegroundInfo {
+        val channelId = "red_outbox"
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            val nm = applicationContext.getSystemService(android.app.NotificationManager::class.java)
+            if (nm?.getNotificationChannel(channelId) == null) {
+                nm?.createNotificationChannel(
+                    android.app.NotificationChannel(channelId, "مزامنة الرسائل", android.app.NotificationManager.IMPORTANCE_LOW)
+                )
+            }
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(applicationContext, channelId)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle("جارٍ مزامنة الرسائل…")
+            .setOngoing(true)
+            .build()
+        return if (android.os.Build.VERSION.SDK_INT >= 29) {
+            androidx.work.ForegroundInfo(2201, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            androidx.work.ForegroundInfo(2201, notif)
+        }
+    }
+
     override suspend fun doWork(): Result {
         // لا فائدة من المحاولة بلا جلسة — المستخدم لم يسجل دخول
         if (TokenStore(applicationContext).accessToken.isNullOrBlank()) {
@@ -91,6 +115,9 @@ class OutboxRetryWorker(
         }
 
         val now = System.currentTimeMillis()
+        // إحياء العالق في SENDING (موت العملية أثناء الإرسال) — كان يتراكم للأبد
+        // لأن النجاح لا يُسجَّل والاستعلام يجلب PENDING/FAILED فقط.
+        try { dao.resetStuckSending(now) } catch (e: Exception) { Log.w(TAG, "resetStuckSending failed", e) }
         val pending = try {
             // قراءة مرتبة بأولوية (HIGH أولاً) ثم وقت المحاولة
             dao.getPendingWithPriority(now = now, limit = 20)
@@ -102,7 +129,7 @@ class OutboxRetryWorker(
         if (pending.isEmpty()) {
             Log.d(TAG, "Outbox empty — nothing to retry")
             // تنظيف الرسائل المرسلة القديمة
-            try { dao.cleanupSent(now - 24 * 60 * 60 * 1000L) } catch (_: Exception) {}
+            try { dao.cleanupSent(now - 24 * 60 * 60 * 1000L) } catch (e: Exception) { Log.w(TAG, "cleanupSent failed", e) }
             return Result.success()
         }
 
@@ -121,7 +148,7 @@ class OutboxRetryWorker(
                 continue
             }
 
-            val sending = try { dao.markSending(msg.id) } catch (_: Exception) { 0 }
+            val sending = try { dao.markSending(msg.id) } catch (e: Exception) { Log.w(TAG, "markSending failed for ${msg.id}", e); 0 }
             if (sending == 0) continue // سبق أن أخذها عامل آخر — تخطي
 
             // إرسال عبر Intent إلى RedConnectionService
@@ -130,9 +157,13 @@ class OutboxRetryWorker(
                 anySuccess = true
                 repository.recordSuccess()
                 _workerSentCount.value++
+                // تسليم الخدمة = خروج من الطابور (الخدمة تملك pendingSends الخاص بها
+                // وتعيد المحاولة عند الاتصال) — كان يبقى SENDING للأبد ويتراكم.
+                try { dao.updateStatus(msg.id, OutboxMessageEntity.STATUS_SENT) } catch (e: Exception) { Log.w(TAG, "mark SENT failed for ${msg.id}", e) }
                 // حذف ملف الوسائط المؤقت بعد الإرسال الناجح
-                if (msg.localMediaPath != null) {
-                    try { deleteMediaFile(msg.localMediaPath!!) } catch (_: Exception) {}
+                val sentMediaPath = msg.localMediaPath
+                if (sentMediaPath != null) {
+                    try { deleteMediaFile(sentMediaPath) } catch (e: Exception) { Log.w(TAG, "deleteMediaFile failed for $sentMediaPath", e) }
                 }
                 // تنظيف بعد 24 ساعة — ستتم عبر cleanupSent
             } else {
@@ -141,7 +172,7 @@ class OutboxRetryWorker(
                 _workerFailedCount.value++
                 val nextDelay = repository.computeBackoff(msg.retryCount)
                 val nextAttempt = now + nextDelay
-                
+
                 if (msg.retryCount >= OutboxMessageEntity.DEAD_LETTER_THRESHOLD) {
                     // نقل إلى Dead Letter Queue
                     try {
@@ -179,18 +210,25 @@ class OutboxRetryWorker(
     }
 
     private suspend fun trySendViaService(msg: OutboxMessageEntity): Boolean {
-        // إرسال عبر Intent إلى RedConnectionService
-        // يتم إرساله كـ ACTION_SEND_PAYLOAD
+        // إرسال عبر Intent إلى RedConnectionService — الحقول تطابق ACTION_SEND_PAYLOAD
+        // (الهدف = Red ID المستلم، والحمولة ByteArray، والمعرف للربط ومنع التكرار).
+        // كان يُمرَّر idempotencyKey كهدف فيُرسل لعنوان خاطئ ويُسقط بصمت.
+        val target = msg.targetRedId?.takeIf { it.isNotBlank() } ?: return false
+        // ترجمة نوع الصندوق لنوع السلك الذي يقبله ACTION_SEND_PAYLOAD —
+        // الأنواع غير المدعومة هنا (GROUP/REACTION) تُترك للمسارات المخصصة
+        // بدل إسقاطها بهدف خاطئ (تذهب لـ DLQ بعد العتبة بدل الضياع الصامت).
+        val wireType = mapToWireType(msg) ?: return false
         return try {
             val intent = Intent(applicationContext, RedConnectionService::class.java)
                 .setAction("com.red.sovereign.SEND_PAYLOAD")
-                .putExtra("target", msg.idempotencyKey) // Use idempotencyKey as target for now
+                .putExtra("target", target)
                 .putExtra("conversation", msg.conversationId)
-                .putExtra("type", msg.type)
+                .putExtra("type", wireType)
                 .putExtra("payload", msg.payload)
-            
+                .putExtra("clientId", msg.id)
+
             applicationContext.startForegroundService(intent)
-            
+
             // ملاحظة: يتم إرسال الطلب للخدمة، والحالة تُحدَّث فعلياً من الخدمة نفسها
             // عبر callback عندما يتم الإرسال بنجاح. هنا نعيد المحاولة فقط إذا فشل الإرسال.
             // لا نُحدِّث إلى SENT هنا لتجنب إعلان الإرسال قبل التأكيد الفعلي.
@@ -201,10 +239,27 @@ class OutboxRetryWorker(
         }
     }
 
+    /**
+     * أنواع الصندوق (CHAT/MEDIA/group...) ← أنواع سلك ACTION_SEND_PAYLOAD
+     * (TEXT/RICH_TEXT/FILE/VOICE/IMAGE/VIDEO/AUDIO/STICKER). null = غير مدعوم
+     * هنا ويُترك للمسار المخصص (يُعاد لاحقاً ثم DLQ بدل الإسقاط بعنوان خاطئ).
+     */
+    private fun mapToWireType(msg: OutboxMessageEntity): String? = when (msg.type.uppercase()) {
+        "CHAT", "TEXT" -> "TEXT"
+        "RICH_TEXT" -> "RICH_TEXT"
+        "STICKER" -> "STICKER"
+        "VOICE", "MEDIA_VOICE" -> "VOICE"
+        "IMAGE", "MEDIA_IMAGE" -> "IMAGE"
+        "VIDEO", "MEDIA_VIDEO" -> "VIDEO"
+        "AUDIO", "MEDIA_AUDIO" -> "AUDIO"
+        "FILE", "MEDIA_FILE", "MEDIA" -> if (msg.mediaType?.uppercase() in setOf("IMAGE", "VIDEO", "AUDIO", "FILE", "VOICE")) msg.mediaType!!.uppercase() else "FILE"
+        else -> null
+    }
+
     private fun deleteMediaFile(path: String) {
         try {
             java.io.File(path).delete()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Log.w(TAG, "deleteMediaFile failed for $path", e) }
     }
 
     companion object {

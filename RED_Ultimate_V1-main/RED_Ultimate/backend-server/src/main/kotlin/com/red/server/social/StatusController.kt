@@ -1,5 +1,6 @@
 package com.red.server.social
 
+import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -42,7 +43,7 @@ class StatusController(
      */
     @PutMapping("/status")
     fun updateMyStatus(
-        @RequestBody request: UpdateStatusRequest,
+        @Valid @RequestBody request: UpdateStatusRequest,
         authentication: Authentication
     ): ResponseEntity<StatusResponse> {
         log.info("User {} updating status to {}", authentication.name, request.type)
@@ -99,7 +100,7 @@ data class StatusResponse(
 )
 
 data class UpdateStatusRequest(
-    val type: String, // ONLINE, OFFLINE, BUSY, AWAY, DO_NOT_DISTURB, INVISIBLE
+    @field:jakarta.validation.constraints.NotBlank val type: String, // ONLINE, OFFLINE, BUSY, AWAY, DO_NOT_DISTURB, INVISIBLE
     val customText: String? = null,
     val visibleTo: String = "EVERYONE" // EVERYONE, CONTACTS, NOBODY
 )

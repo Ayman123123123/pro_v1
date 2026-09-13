@@ -28,7 +28,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-COPY --chown=node:node server.js ./server.js
+COPY --chown=node:node server.js protocol.js ./
 RUN chown -R node:node /app
 
 USER node

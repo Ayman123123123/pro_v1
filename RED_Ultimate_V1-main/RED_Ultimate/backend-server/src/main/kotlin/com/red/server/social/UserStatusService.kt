@@ -128,7 +128,8 @@ class UserStatusService(
     fun getPrivacySettings(userId: String): PrivacySettingsResponse {
         val account = resolveAccount(userId) ?: return defaultPrivacySettings()
         return jdbc.query(
-            """SELECT last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location
+            """SELECT last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location,
+                COALESCE(typing_indicators, 'EVERYONE') AS typing_indicators
                FROM user_privacy_settings WHERE user_id = ?""",
             { rs, _ ->
                 PrivacySettingsResponse(
@@ -140,7 +141,8 @@ class UserStatusService(
                     readReceipts = rs.getString("read_receipts"),
                     calls = rs.getString("calls"),
                     groups = rs.getString("groups_add"),
-                    liveLocation = rs.getString("live_location")
+                    liveLocation = rs.getString("live_location"),
+                    typingIndicators = rs.getString("typing_indicators")
                 )
             },
             account.id
@@ -164,20 +166,21 @@ class UserStatusService(
             readReceipts = validated("readReceipts", request.readReceipts, current.readReceipts),
             calls = validated("calls", request.calls, current.calls),
             groups = validated("groups", request.groups, current.groups),
-            liveLocation = validated("liveLocation", request.liveLocation, current.liveLocation)
+            liveLocation = validated("liveLocation", request.liveLocation, current.liveLocation),
+            typingIndicators = validated("typingIndicators", request.typingIndicators, current.typingIndicators)
         )
 
         jdbc.update(
             """INSERT INTO user_privacy_settings
-               (user_id, last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               (user_id, last_seen, online_status, profile_photo, about, status, read_receipts, calls, groups_add, live_location, typing_indicators)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT (user_id) DO UPDATE SET
                  last_seen = EXCLUDED.last_seen, online_status = EXCLUDED.online_status,
                  profile_photo = EXCLUDED.profile_photo, about = EXCLUDED.about, status = EXCLUDED.status,
                  read_receipts = EXCLUDED.read_receipts, calls = EXCLUDED.calls, groups_add = EXCLUDED.groups_add,
-                 live_location = EXCLUDED.live_location""",
+                 live_location = EXCLUDED.live_location, typing_indicators = EXCLUDED.typing_indicators""",
             account.id, updated.lastSeen, updated.onlineStatus, updated.profilePhoto, updated.about, updated.status,
-            updated.readReceipts, updated.calls, updated.groups, updated.liveLocation
+            updated.readReceipts, updated.calls, updated.groups, updated.liveLocation, updated.typingIndicators
         )
 
         val key = PRIVACY_PREFIX + account.redId
@@ -191,6 +194,7 @@ class UserStatusService(
         ops.put(key, "calls", updated.calls)
         ops.put(key, "groups", updated.groups)
         ops.put(key, "liveLocation", updated.liveLocation)
+        ops.put(key, "typingIndicators", updated.typingIndicators)
 
         log.info("Privacy settings updated for {}", account.redId)
         return updated
@@ -198,7 +202,8 @@ class UserStatusService(
 
     private fun defaultPrivacySettings() = PrivacySettingsResponse(
         lastSeen = "EVERYONE", onlineStatus = "EVERYONE", profilePhoto = "EVERYONE", about = "EVERYONE",
-        status = "CONTACTS", readReceipts = "EVERYONE", calls = "CONTACTS", groups = "EVERYONE", liveLocation = "NOBODY"
+        status = "CONTACTS", readReceipts = "EVERYONE", calls = "CONTACTS", groups = "EVERYONE", liveLocation = "NOBODY",
+        typingIndicators = "EVERYONE"
     )
 
     // ─── جهات الاتصال المتصلة ───
@@ -254,7 +259,8 @@ data class PrivacySettingsResponse(
     val readReceipts: String,
     val calls: String,
     val groups: String,
-    val liveLocation: String
+    val liveLocation: String,
+    val typingIndicators: String = "EVERYONE"
 )
 
 data class PrivacySettingsRequest(
@@ -266,5 +272,6 @@ data class PrivacySettingsRequest(
     val readReceipts: String? = null,
     val calls: String? = null,
     val groups: String? = null,
-    val liveLocation: String? = null
+    val liveLocation: String? = null,
+    val typingIndicators: String? = null
 )

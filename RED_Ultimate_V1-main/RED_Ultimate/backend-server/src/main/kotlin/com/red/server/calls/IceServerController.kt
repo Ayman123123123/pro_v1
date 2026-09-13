@@ -44,8 +44,18 @@ class IceServerController(
 ) {
     @GetMapping("/ice-servers")
     fun iceServers(authentication: Authentication): IceConfiguration {
-        require(secret.length >= 32) { "TURN secret is not configured (must be >= 32 chars)" }
-        require(host.isNotBlank() && host != "0.0.0.0") { "TURN public host is not configured" }
+        // AUTO-FIX (call reliability): degrade gracefully to public STUN when TURN is not
+        // configured, instead of failing the entire ICE list with HTTP 500.
+        if (secret.length < 32 || host.isBlank() || host == "0.0.0.0") {
+            return IceConfiguration(
+                expiresAt = 0L,
+                iceServers = listOf(
+                    IceServerResponse(listOf("stun:stun.l.google.com:19302")),
+                    IceServerResponse(listOf("stun:stun1.l.google.com:19302")),
+                    IceServerResponse(listOf("stun:stun2.l.google.com:19302"))
+                )
+            )
+        }
         val expiresAt = Instant.now().plusSeconds(ttlSeconds).epochSecond
         val username = "$expiresAt:${authentication.name}"
         val mac = Mac.getInstance("HmacSHA1").apply { init(SecretKeySpec(secret.toByteArray(), "HmacSHA1")) }

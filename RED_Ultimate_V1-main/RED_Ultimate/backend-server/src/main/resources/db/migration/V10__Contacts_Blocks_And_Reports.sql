@@ -1,4 +1,4 @@
-CREATE TABLE contact_requests (
+﻿CREATE TABLE IF NOT EXISTS contact_requests (
     id UUID PRIMARY KEY,
     requester_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -8,9 +8,9 @@ CREATE TABLE contact_requests (
     CONSTRAINT contact_request_not_self CHECK (requester_id <> recipient_id),
     CONSTRAINT uq_contact_request_direction UNIQUE (requester_id, recipient_id)
 );
-CREATE INDEX idx_contact_requests_recipient_status ON contact_requests(recipient_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_contact_requests_recipient_status ON contact_requests(recipient_id, status, created_at);
 
-CREATE TABLE red_contacts (
+CREATE TABLE IF NOT EXISTS red_contacts (
     owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     contact_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -18,7 +18,7 @@ CREATE TABLE red_contacts (
     CONSTRAINT red_contact_not_self CHECK (owner_id <> contact_id)
 );
 
-CREATE TABLE user_blocks (
+CREATE TABLE IF NOT EXISTS user_blocks (
     blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -26,7 +26,7 @@ CREATE TABLE user_blocks (
     CONSTRAINT user_block_not_self CHECK (blocker_id <> blocked_id)
 );
 
-CREATE TABLE user_reports (
+CREATE TABLE IF NOT EXISTS user_reports (
     id UUID PRIMARY KEY,
     reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reported_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -37,4 +37,5 @@ CREATE TABLE user_reports (
     reviewed_at TIMESTAMP,
     reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL
 );
-CREATE INDEX idx_user_reports_status_created ON user_reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_reports_status_created ON user_reports(status, created_at DESC);
+

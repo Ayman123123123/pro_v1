@@ -24,6 +24,7 @@
     <string name="notification_end">إنهاء</string>
     <string name="notification_reject">رفض</string>
     <string name="notification_accept">فتح للقبول</string>
+    <string name="notification_mute">كتم الميكروفون</string>
     <string name="incoming_video_call">مكالمة فيديو واردة</string>
     <string name="incoming_voice_call">مكالمة صوتية واردة</string>
 
@@ -45,5 +46,164 @@
     <string name="status_group_encryption_failed">تعذر تشفير المجموعة: %1$s</string>
 
     <!-- قنوات إشعارات إضافية -->
+    <string name="channel_dinstar_name">بوابة دينستار</string>
     <string name="channel_system_name">نظام يونس</string>
+
+    <!-- تعريب الشاشات (2026-09-10): DeviceSettings / PstnConfig / DialPad -->
+    <string name="device_settings_title">إعدادات الجهاز</string>
+    <string name="section_account_identity">الحساب والهوية</string>
+    <string name="profile_identity">الملف والهوية</string>
+    <string name="profile_identity_sub">إدارة معرّف يونس واسم العرض والصورة</string>
+    <string name="device_identity">هوية الجهاز</string>
+    <string name="device_identity_sub">شهادات الجهاز والمفاتيح والإثبات</string>
+    <string name="active_sessions">الجلسات النشطة</string>
+    <string name="active_sessions_sub">عرض الجلسات النشطة وإلغاؤها</string>
+    <string name="pstn_dinstar_title">إعدادات الهاتف اليمني / دينستار</string>
+    <string name="pstn_configuration">إعدادات PSTN</string>
+    <string name="pstn_configuration_sub">بوابة دينستار وحالة الشرائح وربط المنافذ</string>
+    <string name="call_limits">حدود المكالمات والحصص</string>
+    <string name="call_limits_sub">حدود يومية/بالدقيقة وقيود لكل رقم</string>
+    <string name="call_recording">تسجيل المكالمات</string>
+    <string name="call_recording_sub">تسجيل تلقائي والتخزين وسياسة الاحتفاظ</string>
+    <string name="call_forwarding">تحويل المكالمات والبريد الصوتي</string>
+    <string name="call_forwarding_sub">تحويل مشروط وإعدادات البريد الصوتي</string>
+    <string name="sip_bridge_test">اختبار جسر SIP</string>
+    <string name="label_number">الرقم</string>
+    <string name="label_port">المنفذ</string>
+    <string name="action_test_bridge">اختبار الجسر</string>
+    <string name="dialer_title">لوحة الاتصال السيادية</string>
+    <string name="dial_enter_number">أدخل رقم الهاتف</string>
+    <string name="dial_yemeni_phone">هاتف يمني</string>
+    <string name="dial_red_call">مكالمة RED</string>
+    <string name="dial_clear">مسح</string>
+    <string name="dial_back">رجوع</string>
+    <string name="dial_delete">حذف</string>
+    <string name="status_connected">متصل</string>
+    <string name="status_disconnected">غير متصل</string>
+    <string name="status_connected_live">متصل — تحديث فوري</string>
+    <string name="status_disconnected_periodic">غير متصل — التحديث الدوري</string>
+
+    <string name="dial_error_empty">أدخل الرقم أولاً</string>
+    <string name="dial_error_pstn_required">يتطلب خطة PSTN</string>
+    <string name="dial_error_invalid_yemeni">رقم يمني غير صالح</string>
+    <string name="dial_error_daily_limit">تم بلوغ الحد اليومي (%1$d/%2$d)</string>
+    <string name="dial_used">الاستخدام: %1$d / %2$d</string>
+    <string name="dial_voip_cd">مكالمة إنترنت RED</string>
+    <string name="dial_pstn_cd">مكالمة هاتفية يمنية</string>
+
+    <!-- تعريب عام (2026-09-10): كتلة الشبكة + بانر دون اتصال + رجوع الإدارة + مسح التخزين -->
+    <string name="network_connectivity_title">الشبكة والاتصال</string>
+    <string name="server_endpoint_title">نقطة الخادم</string>
+    <string name="connection_mode_title">وضع الاتصال</string>
+    <string name="connection_mode_sub">تلقائي / واي فاي فقط / بيانات الهاتف / VPN فقط</string>
+    <string name="turn_stun_title">إعداد TURN/STUN</string>
+    <string name="turn_stun_sub">خوادم الترحيل لوسائط WebRTC (تُدار من الخادم)</string>
+    <string name="turn_managed_toast">TURN/STUN يُدار من الخادم — تُستخدم إعدادات المشغّل الحالية تلقائياً</string>
+    <string name="offline_queue_title">قائمة الانتظار دون اتصال</string>
+    <string name="offline_queue_sub">تخزين الرسائل والمكالمات عند انقطاع الشبكة</string>
+    <string name="offline_queue_rescheduled">قائمة الانتظار دون اتصال: %1$d رسالة معلّقة — أُعيدت الجدولة عبر عامل الإعادة</string>
+    <string name="offline_queue_rescheduled_plain">قائمة الانتظار دون اتصال: أُعيدت الجدولة عبر عامل الإعادة</string>
+    <string name="offline_banner_text">دون اتصال: %1$d رسالة في الانتظار — ستُرسل عند عودة الشبكة</string>
+    <string name="offline_retry_now">إعادة المحاولة الآن</string>
+    <string name="admin_back">رجوع</string>
+    <string name="settings_clear_cache">مسح التخزين المؤقت والوسائط المفكوكة المؤقتة</string>
+    <string name="recovery_hub_title">مركز الاستعادة</string>
+    <string name="recovery_hub_sub">ملف النسخة المشفرة + رموز الحساب الورقية في مكان واحد</string>
+
+    <!-- تعريب عام (2026-09-10): أقسام DeviceSettings — الأمان والوسائط والإشعارات والمظهر والمكالمات ومتقدم -->
+    <string name="coming_soon">قريباً</string>
+    <string name="sec_privacy_title">الأمان والخصوصية</string>
+    <string name="encryption_keys_title">مفاتيح التشفير</string>
+    <string name="encryption_keys_sub">إدارة مفاتيح تشفير الجهاز وتدويرها</string>
+    <string name="read_receipts_title">إيصالات القراءة والكتابة</string>
+    <string name="read_receipts_sub">التحكم في إيصالات القراءة ومؤشرات الكتابة</string>
+    <string name="link_previews_title">معاينات الروابط</string>
+    <string name="link_previews_sub">إنشاء معاينات الروابط في الدردشات</string>
+    <string name="screen_security_title">أمان الشاشة</string>
+    <string name="screen_security_sub">حظر لقطات الشاشة والإدخال الآمن ولوحة المفاتيح الخفية</string>
+    <string name="app_lock_title">قفل التطبيق</string>
+    <string name="app_lock_sub">قفل ببصمة أو رمز عند دخول التطبيق</string>
+    <string name="data_export_title">تصدير البيانات وحذفها</string>
+    <string name="data_export_sub">تصدير كل البيانات أو حذف الحساب</string>
+    <string name="media_storage_title">الوسائط والتخزين</string>
+    <string name="media_autodownload_title">التنزيل التلقائي للوسائط</string>
+    <string name="media_autodownload_sub">صور وفيديو ومستندات — واي فاي / بيانات / أبداً</string>
+    <string name="storage_usage_title">استخدام التخزين</string>
+    <string name="storage_usage_sub">التخزين المؤقت والوسائط وقاعدة البيانات — مسح التخزين المؤقت</string>
+    <string name="media_quality_title">جودة الوسائط</string>
+    <string name="media_quality_sub">جودة الصور والفيديو وإعدادات الضغط</string>
+    <string name="notifications_title">الإشعارات</string>
+    <string name="msg_notifications_title">إشعارات الرسائل</string>
+    <string name="msg_notifications_sub">الصوت والاهتزاز والأولوية والفئات</string>
+    <string name="call_notifications_title">إشعارات المكالمات</string>
+    <string name="call_notifications_sub">شاشة المكالمة الواردة والاهتزاز والنغمة</string>
+    <string name="group_notifications_title">إشعارات المجموعات والقنوات</string>
+    <string name="group_notifications_sub">الإشارات والردود وتنبيهات المشرفين</string>
+    <string name="dnd_title">عدم الإزعاج</string>
+    <string name="dnd_sub">جدولة واستثناءات والأولوية فقط</string>
+    <string name="appearance_title">المظهر</string>
+    <string name="theme_title">السمة</string>
+    <string name="theme_sub">النظام / فاتح / داكن / أسود / مخصص</string>
+    <string name="accent_color_title">لون التمييز</string>
+    <string name="accent_color_sub">اللون الأساسي لعناصر الواجهة</string>
+    <string name="font_style_title">حجم الخط ونمطه</string>
+    <string name="font_style_sub">التحجيم ونوع الخط والوزن</string>
+    <string name="chat_bubbles_title">فقاعات الدردشة</string>
+    <string name="chat_bubbles_sub">النمط والزوايا والذيل والضغط</string>
+    <string name="animations_title">الحركة والمؤثرات</string>
+    <string name="animations_sub">تقليل الحركة وسرعة الانتقال</string>
+    <string name="call_settings_title">إعدادات المكالمات</string>
+    <string name="ringtone_title">النغمة والاهتزاز</string>
+    <string name="ringtone_sub">نغمة المكالمة الواردة ونمط الاهتزاز</string>
+    <string name="speaker_audio_title">المكبر والصوت</string>
+    <string name="speaker_audio_sub">مكبر تلقائي وإلغاء ضوضاء وصوت عالي الجودة</string>
+    <string name="call_settings_recording_title">تسجيل المكالمات</string>
+    <string name="call_settings_recording_sub">تسجيل تلقائي والإعلان والصيغة</string>
+    <string name="call_history_title">سجل المكالمات</string>
+    <string name="call_history_sub">الاحتفاظ والتصدير والمزامنة</string>
+    <string name="sos_title">طوارئ SOS</string>
+    <string name="sos_sub">اتصال سريع ومشاركة الموقع وجهات الطوارئ</string>
+    <string name="advanced_title">متقدم</string>
+    <string name="debug_logging_title">سجلات التصحيح</string>
+    <string name="debug_logging_sub">تفعيل السجلات المفصلة وتصديرها</string>
+    <string name="network_diag_title">تشخيص الشبكة</string>
+    <string name="network_diag_sub">الفحص والتوجيه وDNS وإحصاءات WebRTC</string>
+    <string name="webrtc_debug_title">تصحيح WebRTC</string>
+    <string name="webrtc_debug_sub">المرشحات والجلسات والإحصاءات الداخلية</string>
+    <string name="feature_flags_title">الخصائص التجريبية</string>
+    <string name="feature_flags_sub">ميزات تجريبية واختبارات</string>
+    <string name="backup_restore_title">النسخ الاحتياطي والاستعادة</string>
+    <string name="backup_restore_sub">الإعدادات والمفاتيح والبيانات المحلية</string>
+    <string name="about_title">حول</string>
+    <string name="about_sub">الإصدار والبناء والتراخيص والقانون</string>
+
+    <!-- إفصاح الأذونات العامة وسلامة البيانات (2026-09-10): شاشة بارزة لمتطلبات الستور -->
+    <string name="perm_disclosure_title">الأذونات وسلامة البيانات</string>
+    <string name="perm_disclosure_sub">لماذا يطلب يونس هذه الأذونات وماذا يحدث لبياناتك</string>
+    <string name="perm_disclosure_intro">يعمل يونس محلياً أولاً: رسائلك مشفرة طرفاً لطرف وتبقى على جهازك. نطلب الحد الأدنى من الأذونات، وكل إذن يُستخدم للغرض الموضح فقط، ويمكنك رفض أي إذن اختياري من إعدادات النظام.</string>
+    <string name="perm_mic_title">الميكروفون</string>
+    <string name="perm_mic_sub">للمكالمات الصوتية والمرئية والرسائل الصوتية فقط — لا تسجيل في الخلفية.</string>
+    <string name="perm_camera_title">الكاميرا</string>
+    <string name="perm_camera_sub">لمكالمات الفيديو ومسح رموز الدعوة فقط — لا تعمل إلا أثناء استخدامك لها.</string>
+    <string name="perm_notif_title">الإشعارات</string>
+    <string name="perm_notif_sub">لتنبيهك بالرسائل والمكالمات الواردة — يمكن كتمها لكل محادثة.</string>
+    <string name="perm_bt_title">البلوتوث</string>
+    <string name="perm_bt_sub">لتوجيه صوت المكالمات إلى السماعات والأجهزة القريبة فقط.</string>
+    <string name="perm_phone_title">حالة الهاتف</string>
+    <string name="perm_phone_sub">لإدارة صوت المكالمات عند ورود مكالمة هاتفية عادية — لا نجمع أرقاماً ولا سجلات.</string>
+    <string name="perm_continue">فهمت — متابعة</string>
+    <string name="perm_open_settings">فتح إعدادات الأذونات</string>
+    <string name="data_safety_title">سلامة البيانات</string>
+    <string name="data_safety_body">• لا نجمع بيانات إعلانية ولا نبيع أي بيانات.\n• الرسائل مشفرة طرفاً لطرف ولا تُرفع نصوصها للخادم.\n• مفاتيح الهوية تبقى في مخزن مفاتيح الجهاز ولا تُصدَّر.\n• يمكنك مسح التخزين المؤقت وتصدير بياناتك أو حذف حسابك من الإعدادات.</string>
+
+    <!-- تعريب الوسائط والشارات (2026-09-10): أوصاف QR/E2EE ووحدات الحجم بالعربية -->
+    <string name="qr_code_desc">رمز الاستجابة السريعة لـ %1$s</string>
+    <string name="e2ee_badge_desc">تشفير طرفٍ لطرف</string>
+    <string name="file_size_mb">%1$.1f م.ب</string>
+    <string name="file_size_kb">%1$.1f ك.ب</string>
+    <!-- إجراءات منافذ PSTN (كانت SMS/USSD/Reset إنجليزية خام في PstnConfigScreen) -->
+    <string name="pstn_action_sms">رسائل</string>
+    <string name="pstn_action_ussd">ترميز</string>
+    <string name="pstn_action_reset">إعادة ضبط</string>
+    <string name="file_size_b">%1$d بايت</string>
 </resources>

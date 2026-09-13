@@ -43,7 +43,7 @@ class OutboxRepository(private val dao: OutboxDao) {
     val deadLetterCount: Flow<Long> = _deadLetterCount
     val circuitBreakerOpen: Flow<Boolean> = _circuitBreakerOpen
     val circuitBreakerOpenSnapshot: Boolean
-        get() = _circuitBreakerOpen.value
+        get() = synchronized(circuitBreakerLock) { _circuitBreakerOpen.value }
 
     // ─── Enqueue ─────────────────────────────────────────────────────────────
     suspend fun enqueue(message: OutboxMessageEntity) {
@@ -72,6 +72,7 @@ class OutboxRepository(private val dao: OutboxDao) {
     }
 
     // ─── Media-aware enqueue ─────────────────────────────────────────────────
+    // LEGENDARY FIX: توحيد الدالة المكررة + احترام idempotencyKey الممرر (كان يتجاهله ويولد عشوائياً فيسبب تكراراً عند retry)
     suspend fun enqueueMedia(
         conversationId: String,
         mediaType: String, // IMAGE, VIDEO, AUDIO, FILE, VOICE
@@ -82,8 +83,10 @@ class OutboxRepository(private val dao: OutboxDao) {
         priority: Int = PRIORITY_NORMAL,
         idempotencyKey: String
     ): OutboxMessageEntity {
+        // منع التكرار: إن وجد نفس المفتاح أرجعه (idempotent)
+        dao.getById(idempotencyKey)?.let { return it }
         val entity = OutboxMessageEntity(
-            id = UUID.randomUUID().toString(),
+            id = idempotencyKey,
             conversationId = conversationId,
             payload = payload,
             type = "MEDIA",
@@ -91,7 +94,7 @@ class OutboxRepository(private val dao: OutboxDao) {
             mediaType = mediaType,
             localMediaPath = localMediaPath,
             mediaEncryptionKey = mediaEncryptionKey,
-            idempotencyKey = UUID.randomUUID().toString()
+            idempotencyKey = idempotencyKey
         )
         dao.insert(entity)
         _enqueuedCount.value++
@@ -127,20 +130,17 @@ class OutboxRepository(private val dao: OutboxDao) {
         priority: Int = PRIORITY_NORMAL,
         idempotencyKey: String
     ): OutboxMessageEntity {
-        val entity = OutboxMessageEntity(
-            id = UUID.randomUUID().toString(),
+        // تفويض للموحدة أعلاه — إزالة التكرار الميت الذي كان يكسر idempotency
+        return enqueueMedia(
             conversationId = conversationId,
-            payload = payload,
-            type = "MEDIA",
-            priority = priority,
             mediaType = mediaType,
+            payload = payload,
             localMediaPath = localMediaPath,
             mediaEncryptionKey = mediaEncryptionKey,
-            idempotencyKey = UUID.randomUUID().toString()
+            type = "MEDIA",
+            priority = priority,
+            idempotencyKey = idempotencyKey
         )
-        dao.insert(entity)
-        _enqueuedCount.value++
-        return entity
     }
 
     suspend fun enqueueVoice(
@@ -220,15 +220,21 @@ class OutboxRepository(private val dao: OutboxDao) {
     }
 
     // ─── Basic queries ───────────────────────────────────────────────────────
-    suspend fun getPending(limit: Int = 20): List<OutboxMessageEntity> = dao.getPendingWithPriority(limit = limit)
+    suspend fun getPending(limit: Int = 20): List<OutboxMessageEntity> = dao.getPendingWithPriority(now = System.currentTimeMillis(), limit = limit)
 
     fun observePending(): Flow<List<OutboxMessageEntity>> = dao.observePending()
-        .map { it.sortedBy { it.priority }.sortedBy { it.nextAttemptAt } }
+        // LEGENDARY FIX: الفرز المزدوج sortedBy().sortedBy() كان يلغي الأول — دمج صحيح: أولوية ثم موعد المحاولة
+        .map { list -> list.sortedWith(compareBy<OutboxMessageEntity> { it.priority }.thenBy { it.nextAttemptAt }) }
 
     fun observePendingCount(): Flow<Int> = dao.observePendingCount()
 
     // ─── Circuit Breaker ─────────────────────────────────────────────────────
-    internal fun recordSuccess() {
+    // All check-then-act transitions are guarded by circuitBreakerLock so
+    // concurrent workers cannot interleave read-modify-write on
+    // consecutiveFailures / _circuitBreakerOpen / _lastFailureTime.
+    private val circuitBreakerLock = Any()
+
+    internal fun recordSuccess() = synchronized(circuitBreakerLock) {
         consecutiveFailures.value = 0
         if (_circuitBreakerOpen.value) {
             _circuitBreakerOpen.value = false
@@ -236,7 +242,7 @@ class OutboxRepository(private val dao: OutboxDao) {
         }
     }
 
-    internal fun recordFailure() {
+    internal fun recordFailure() = synchronized(circuitBreakerLock) {
         val count = consecutiveFailures.value + 1
         consecutiveFailures.value = count
         _lastFailureTime.value = System.currentTimeMillis()
@@ -246,11 +252,11 @@ class OutboxRepository(private val dao: OutboxDao) {
         }
     }
 
-    fun isCircuitBreakerOpen(): Boolean = _circuitBreakerOpen.value
+    fun isCircuitBreakerOpen(): Boolean = synchronized(circuitBreakerLock) { _circuitBreakerOpen.value }
 
-    internal fun tryResetCircuitBreaker() {
+    internal fun tryResetCircuitBreaker() = synchronized(circuitBreakerLock) {
         if (_circuitBreakerOpen.value) {
-            val lastFailure = _lastFailureTime.value ?: return
+            val lastFailure = _lastFailureTime.value ?: return@synchronized
             if (System.currentTimeMillis() - lastFailure > circuitBreakerResetTimeout) {
                 _circuitBreakerOpen.value = false
                 _lastFailureTime.value = null

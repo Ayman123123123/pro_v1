@@ -29,8 +29,9 @@ class PublicDirectoryControllerTest {
 
     @Test
     fun `exact username search returns only approved public profile fields`() {
-        whenever(users.findByUsernameIgnoreCase("alithefriend")).thenReturn(
-            UserAccount(redId = "28261", username = "alithefriend", displayName = "Ali Friend", status = AccountStatus.APPROVED)
+        // البحث بالاسم صار "يحتوي" (containing) لا تطابقًا تامًا — يُحاكى الـAPI الجديد.
+        whenever(users.findAllByUsernameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase("alithefriend", "alithefriend")).thenReturn(
+            listOf(UserAccount(redId = "28261", username = "alithefriend", displayName = "Ali Friend", status = AccountStatus.APPROVED))
         )
 
         val result = controller.search("alithefriend", auth())

@@ -85,8 +85,11 @@ class JwtService(
             .compact()
     }
 
+    // سماح انحراف الساعة 120s (LAN بلا NTP: هاتف/PC قد ينحرف دقائق بعد sleep) —
+    // بدونه أي انحراف >0 يرمي ExpiredJwtException ويُسقط الجلسة ظلماً.
     fun parse(token: String): Claims = Jwts.parser()
         .verifyWith(key)
+        .clockSkewSeconds(120)
         .build()
         .parseSignedClaims(token)
         .payload

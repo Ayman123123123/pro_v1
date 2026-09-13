@@ -77,9 +77,11 @@ if [ ! -f "$ENV_FILE" ]; then
     -e "s|replace_with_a_long_random_mongodb_password|$(rand_hex 32)|" \
     -e "s|replace_with_a_long_random_minio_password|$(rand_hex 32)|" \
     -e "s|replace_with_a_long_random_redis_password|$(rand_hex 32)|" \
+    -e "s|replace_with_a_long_random_asterisk_password|$(rand_hex 32)|" \
     -e "s|replace_with_a_long_random_turn_secret|$(rand_hex 32)|" \
     -e "s|replace_with_at_least_32_random_characters|$(rand_hex 48)|" \
     -e "s|replace_with_at_least_14_random_characters|$(rand_hex 20)|" \
+    -e "s|replace_with_the_gateway_password|$(rand_hex 24)|" \
     -e "s|192\.168\.1\.50|$SERVER_IP|g" \
     -e "s|192\.168\.0\.244|$SERVER_IP|g" \
     "$ROOT/.env.example" > "$ENV_FILE"
@@ -102,9 +104,10 @@ all_origins="$(printf '%s\n' "${existing_origins}${existing_origins:+,}${require
 ')"
 tmp_env="$ENV_FILE.tmp"
 trap 'rm -f "$tmp_env"' EXIT INT TERM
-grep -v -E '^(RED_HTTP_PORT|TLS_SAN_IP|ALLOWED_ORIGINS|CLIENT_LAN_IP)=' "$ENV_FILE" > "$tmp_env"
-printf 'RED_HTTP_PORT=%s\nTLS_SAN_IP=%s\nALLOWED_ORIGINS=%s\nCLIENT_LAN_IP=%s\n' \
-  "$HTTP_PORT" "$SERVER_IP" "$all_origins" "$SERVER_IP" >> "$tmp_env"
+DINSTAR_NIC_IP="$(ip -o -4 addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep '^192\.168\.11\.' | head -n1 || true)"
+grep -v -E '^(RED_HTTP_PORT|TLS_SAN_IP|ALLOWED_ORIGINS|CLIENT_LAN_IP|DINSTAR_NIC_IP|PSTN_EXTERNAL_IP)=' "$ENV_FILE" > "$tmp_env"
+printf 'RED_HTTP_PORT=%s\nTLS_SAN_IP=%s\nALLOWED_ORIGINS=%s\nCLIENT_LAN_IP=%s\nDINSTAR_NIC_IP=%s\nPSTN_EXTERNAL_IP=%s\n' \
+  "$HTTP_PORT" "$SERVER_IP" "$all_origins" "$SERVER_IP" "${DINSTAR_NIC_IP:-}" "${DINSTAR_NIC_IP:-}" >> "$tmp_env"
 mv "$tmp_env" "$ENV_FILE"
 trap - EXIT INT TERM
 chmod 600 "$ENV_FILE"
@@ -153,14 +156,18 @@ until curl -fsS "http://127.0.0.1:$HTTP_PORT/sfu-health" >/dev/null 2>&1; do
 done
 printf ' PASS\n'
 wait_container_ready red-admin-ui
+wait_container_ready red-pstn-gateway
 
 if [ "$BUILD_ANDROID" = "1" ]; then
   printf 'Building verified backend + Android artifact image (this downloads the Android SDK image)...\n'
   cd "$REPO_ROOT"
   mkdir -p "$REPO_ROOT/local-artifacts"
   TLS_PINS_VALUE="${RED_TLS_PINS:-$(sed -n 's/^RED_TLS_PINS=//p' "$ENV_FILE" | tail -n 1)}"
-  # Candidate endpoints for physical devices and local development.
-  CANDIDATES="http://$SERVER_IP:$HTTP_PORT,http://127.0.0.1:$HTTP_PORT"
+  # مرشّحات لاكتشاف تلقائي على كلا الواجهتين: واي فاي (العميل) + إيثرنت (NIC الخاص
+  # بـ Dinstar) + loopback.
+  CANDIDATES="http://$SERVER_IP:$HTTP_PORT"
+  [ -n "$DINSTAR_NIC_IP" ] && CANDIDATES="$CANDIDATES,http://$DINSTAR_NIC_IP:$HTTP_PORT"
+  CANDIDATES="$CANDIDATES,http://127.0.0.1:$HTTP_PORT"
   docker build --file Dockerfile --target android-artifact \
     --build-arg "RED_SERVER_URL=http://$SERVER_IP:$HTTP_PORT" \
     --build-arg "RED_TLS_PINS=$TLS_PINS_VALUE" \

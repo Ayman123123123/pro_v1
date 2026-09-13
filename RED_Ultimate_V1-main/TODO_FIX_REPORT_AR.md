@@ -163,16 +163,19 @@ fun RedGlobalSearch(
 
 ---
 
+## 🔧 TODO #7: PhoneStateReceiver — PSTN Integration
 
 **الملف:** `red-app/.../calls/PhoneStateReceiver.kt` (إعادة كتابة)
 
 ### Notification Channel
+- **Channel ID:** `red_pstn_reminder`
 - **Importance:** HIGH
 - **Vibration:** enabled
 - **Category:** CALL
 - **PendingIntent** → MainActivity
 
 ### Integration
+- `YounesCallService.silenceRinger()` عند ورود PSTN
 - `YounesCallService.holdActiveCall()` عند off-hook
 - `YounesCallService.resumeRinger()` عند IDLE
 

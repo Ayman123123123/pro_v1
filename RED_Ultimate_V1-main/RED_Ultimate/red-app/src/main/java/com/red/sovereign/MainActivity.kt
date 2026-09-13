@@ -11,6 +11,10 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +45,16 @@ class MainActivity : FragmentActivity() {
 
     /** منسق البداية — يدير تشغيل وإيقاف الخدمات بعيداً عن Activity. */
     private lateinit var startupCoordinator: AppStartupCoordinator
+
+    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN. */
+    private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onResume(owner: LifecycleOwner) {
+            if (authViewModel.state is AuthState.Authenticated) {
+                authViewModel.refreshPstnEntitlement()
+            }
+        }
+    }
+    private var pstnObserverRegistered = false
 
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         Log.i("Permissions", "Initial permissions granted: $grants")
@@ -107,6 +121,10 @@ class MainActivity : FragmentActivity() {
                             if (state is AuthState.Authenticated) {
                                 requestNecessaryPermissions()
                                 startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
+                                if (!pstnObserverRegistered) {
+                                    ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
+                                    pstnObserverRegistered = true
+                                }
                             } else if (state !is AuthState.Loading) {
                                 startupCoordinator.onLoggedOut(this@MainActivity)
                             }
@@ -129,6 +147,18 @@ class MainActivity : FragmentActivity() {
         if (notificationIntent == null) return
         notificationIntent.getStringExtra("conversation_id")?.let { deepLinkConversation = it }
         notificationIntent.getStringExtra("sender_red_id")?.let { deepLinkSender = it }
+        consumeDeepLink()
+    }
+
+    /** استهلاك الـ deep link مرة واحدة حتى لا يُعاد فتحه (تدوير/ onNewIntent مكرر). */
+    private fun consumeDeepLink() {
+        runCatching {
+            intent?.let {
+                it.data = null
+                it.removeExtra("conversation_id")
+                it.removeExtra("sender_red_id")
+            }
+        }
     }
 
     /** عند فتح التطبيق من إشعار بينما هو مفتوح (launchMode singleTask). */
@@ -141,6 +171,10 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         if (!isChangingConfigurations) {
             startupCoordinator.onDestroy()
+            if (pstnObserverRegistered) {
+                runCatching { ProcessLifecycleOwner.get().lifecycle.removeObserver(pstnLifecycleObserver) }
+                pstnObserverRegistered = false
+            }
         }
         super.onDestroy()
     }
@@ -161,6 +195,21 @@ class MainActivity : FragmentActivity() {
             }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.READ_PHONE_STATE)
+            }
+            // LEGENDARY FIX: أذونات الوسائط 13/14 (كانت غائبة فيسبب فشل اختيار صور/فيديو)
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_IMAGES)
+                }
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_VIDEO)
+                }
+                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    add(Manifest.permission.READ_MEDIA_AUDIO)
+                }
+            }
+            if (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
             }
         }
         if (needed.isNotEmpty()) {
@@ -184,15 +233,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // targetSdk 37 enforces this runtime permission before OkHttp/WebSocket
-        // can reach the sovereign LAN server. Request it before login/discovery.
-        if (Build.VERSION.SDK_INT >= 37 &&
-            !localNetworkPermissionRequested &&
-            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
-        ) {
-            localNetworkPermissionRequested = true
-            localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-        }
+        // NOTE: Manifest.permission.ACCESS_LOCAL_NETWORK does not exist in the
+        // Android SDK (no such runtime permission) — referencing it breaks
+        // compilation. LAN reachability needs no runtime permission; the
+        // INTERNET permission (manifest) suffices. Block removed 2026-09-05.
     }
 
     override fun onStop() {

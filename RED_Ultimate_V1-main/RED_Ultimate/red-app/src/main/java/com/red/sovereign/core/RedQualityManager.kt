@@ -1,4 +1,4 @@
-﻿package com.red.sovereign.core
+package com.red.sovereign.core
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -6,8 +6,8 @@ import android.net.NetworkCapabilities
 import com.red.sovereign.settings.SettingsRuntime
 
 /**
- * أقوى مبرمج â€” مدير الجودة الاحترافي الرسمي
- * يحدد جودة المكالمات والوسائط حسب الشبكة وإعدادات المستخدم â€” غير مهرج
+ * أقوى مبرمج — مدير الجودة الاحترافي الرسمي
+ * يحدد جودة المكالمات والوسائط حسب الشبكة وإعدادات المستخدم — غير مهرج
  */
 object RedQualityManager {
     /** تهيئة مبكرة آمنة — جودة تلقائية تُفعَّل لاحقاً عند توفر مقاييس. */

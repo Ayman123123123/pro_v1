@@ -79,6 +79,10 @@ suspend fun createSaveUri(context: Context, fileName: String, location: SaveLoca
         val values = android.content.ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
+            // LEGENDARY FIX: IS_PENDING لمنع ظهور فيديو ناقص في المعرض أثناء النسخ (Android 10+)
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
         }
         runCatching {
             when (location) {
@@ -98,6 +102,16 @@ suspend fun createSaveUri(context: Context, fileName: String, location: SaveLoca
             }
         }.getOrNull()
     }
+
+/** LEGENDARY: إتمام الحفظ — تصفير IS_PENDING ليظهر مكتملاً في المعرض */
+suspend fun finishSaveUri(context: Context, uri: Uri) = withContext(Dispatchers.IO) {
+    runCatching {
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val v = android.content.ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+            context.contentResolver.update(uri, v, null, null)
+        }
+    }
+}
 
 fun saveFileToDestination(source: File, destination: Uri, context: Context, callback: (Boolean, String) -> Unit) {
     CoroutineScope(Dispatchers.IO).launch {

@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -158,7 +159,7 @@ class PollsViewModel(private val api: PollsApi) : ViewModel() {
     fun showCreate() { _state.update { it.copy(showCreate = true) } }
     fun hideCreate() { _state.update { it.copy(showCreate = false) } }
 
-    fun createPoll(question: String, options: List<String>, pollType: String, isAnonymous: Boolean) {
+    fun createPoll(question: String, options: List<String>, pollType: String, isAnonymous: Boolean, optionImages: List<String?> = emptyList()) {
         if (question.isBlank() || options.size < 2) {
             _state.update { it.copy(error = "السؤال مطلوب وخياران على الأقل") }
             return
@@ -168,7 +169,8 @@ class PollsViewModel(private val api: PollsApi) : ViewModel() {
                 question = question.trim(),
                 options = options.map { it.trim() }.filter { it.isNotEmpty() },
                 pollType = pollType,
-                isAnonymous = isAnonymous
+                isAnonymous = isAnonymous,
+                optionImages = optionImages.take(options.size)
             )
             val result = api.create(req)
             when (result) {
@@ -235,7 +237,7 @@ fun PollsScreen(
                 title = { Text("استطلاعات الرأي", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "رجوع", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = Color.White)
                     }
                 },
                 actions = {
@@ -445,7 +447,9 @@ private fun PollDetailSheet(
     onClosePoll: (() -> Unit)?,
     onDelete: (() -> Unit)?
 ) {
-    var showActions by remember { mutableStateOf(false) }
+    // مفتاح poll.id: بلا مفتاح كانت قائمة الإجراءات تبقى مفتوحة عند التنقل
+    // بين استطلاع وآخر في نفس الـ Sheet (حالة عالقة).
+    var showActions by remember(detail.poll.id) { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -602,6 +606,17 @@ private fun PollOptionRow(
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // مصغّر صورة الخيار (X): روابط مباشرة أو وسائط مصدَّقة.
+            option.imageUrl?.let { img ->
+                if (img.isNotBlank()) {
+                com.red.sovereign.ui.AuthedMediaImage(
+                    pathOrKey = img,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+                Spacer(Modifier.width(12.dp))
+                }
+            }
             Icon(
                 imageVector = if (isSingleChoice) Icons.Default.RadioButtonUnchecked else Icons.Default.CheckBoxOutlineBlank,
                 contentDescription = null,
@@ -631,12 +646,47 @@ private fun PollOptionRow(
 @Composable
 private fun CreatePollDialog(
     onDismiss: () -> Unit,
-    onSubmit: (question: String, options: List<String>, pollType: String, isAnonymous: Boolean) -> Unit
+    onSubmit: (question: String, options: List<String>, pollType: String, isAnonymous: Boolean, optionImages: List<String?>) -> Unit
 ) {
     var question by remember { mutableStateOf("") }
     var options by remember { mutableStateOf(listOf("", "")) }
     var pollType by remember { mutableStateOf("SINGLE_CHOICE") }
     var isAnonymous by remember { mutableStateOf(false) }
+    // صور الخيارات (نمط X): objectKey لكل خيار، تُرفع فور الاختيار.
+    // متاحة فقط مع 4 خيارات أو أقل — نفس قاعدة استطلاعات الموجز.
+    var optionImages by remember { mutableStateOf(List<String?>(10) { null }) }
+    var uploadingImage by remember { mutableStateOf(false) }
+    var imageTarget by remember { mutableIntStateOf(-1) }
+    val dialogContext = LocalContext.current
+    val mediaApi = remember(dialogContext) {
+        MediaApi(
+            dialogContext.applicationContext,
+            com.red.sovereign.auth.AuthorizedApiClient(com.red.sovereign.auth.TokenStore(dialogContext.applicationContext))
+        )
+    }
+    val dialogScope = rememberCoroutineScope()
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val idx = imageTarget
+        imageTarget = -1
+        if (uri != null && idx in options.indices) {
+            uploadingImage = true
+            dialogScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val key = when (val up = mediaApi.upload(uri)) {
+                    is ApiResult.Success -> up.value.objectKey
+                    is ApiResult.Error -> null
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    optionImages = optionImages.toMutableList().also { if (idx in it.indices) it[idx] = key }
+                    uploadingImage = false
+                    if (key == null) {
+                        android.widget.Toast.makeText(dialogContext, "تعذر رفع صورة الخيار", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -666,7 +716,29 @@ private fun CreatePollDialog(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color.White,
                             unfocusedTextColor = Color.White
-                        )
+                        ),
+                        trailingIcon = {
+                            if (options.size <= 4) {
+                                val hasImage = optionImages.getOrNull(idx) != null
+                                IconButton(
+                                    onClick = {
+                                        if (hasImage) {
+                                            optionImages = optionImages.toMutableList().also { it[idx] = null }
+                                        } else {
+                                            imageTarget = idx
+                                            imagePicker.launch(arrayOf("image/*"))
+                                        }
+                                    },
+                                    enabled = !uploadingImage
+                                ) {
+                                    Icon(
+                                        if (hasImage) Icons.Default.CheckCircle else Icons.Default.AddPhotoAlternate,
+                                        if (hasImage) "إزالة صورة الخيار" else "إضافة صورة للخيار",
+                                        tint = if (hasImage) Primary else Color.White
+                                    )
+                                }
+                            }
+                        }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -702,9 +774,12 @@ private fun CreatePollDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                onSubmit(question, options, pollType, isAnonymous)
-            }) { Text("إنشاء", color = Primary, fontWeight = FontWeight.Bold) }
+            TextButton(
+                onClick = {
+                    onSubmit(question, options, pollType, isAnonymous, optionImages.take(options.size))
+                },
+                enabled = !uploadingImage
+            ) { Text("إنشاء", color = Primary, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("إلغاء") }

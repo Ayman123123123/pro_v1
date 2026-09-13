@@ -38,6 +38,34 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     val stories = mutableStateListOf<Story>()
     var state: StoryState by mutableStateOf(StoryState.Idle); private set
     var viewer: StoryViewerState by mutableStateOf(StoryViewerState.Closed); private set
+    /** قائمة المشاهِدين لآخر حالة فُتحت (للمالك فقط عبر الخادم). */
+    val storyViewers = mutableStateListOf<StoryViewerDto>()
+    var viewersLoading: Boolean by mutableStateOf(false); private set
+    var viewersError: String? by mutableStateOf(null); private set
+    /** مالكو الحالات المكتومة محلياً — يُحفظ عبر SharedPreferences. */
+    private val mutePrefs = getApplication<Application>().getSharedPreferences("younes_stories", android.content.Context.MODE_PRIVATE)
+    val mutedOwners = mutableStateListOf<String>().apply { addAll(mutePrefs.getStringSet("muted_owners", emptySet()).orEmpty()) }
+
+    fun isMuted(ownerRedId: String): Boolean = ownerRedId in mutedOwners
+
+    fun toggleMute(ownerRedId: String) {
+        if (ownerRedId.isBlank()) return
+        if (ownerRedId in mutedOwners) mutedOwners.remove(ownerRedId) else mutedOwners.add(ownerRedId)
+        mutePrefs.edit().putStringSet("muted_owners", mutedOwners.toSet()).apply()
+    }
+
+    fun loadViewers(story: Story) = viewModelScope.launch {
+        storyViewers.clear()
+        viewersLoading = true
+        viewersError = null
+        when (val result = client.request("GET", "/api/stories/${story.id}/viewers")) {
+            is ApiResult.Success -> runCatching { json.decodeFromString<List<StoryViewerDto>>(result.value) }
+                .onSuccess { storyViewers.addAll(it); viewersError = null }
+                .onFailure { e -> android.util.Log.w("StoryViewModel", "Invalid viewers response for ${story.id}", e); viewersError = "استجابة غير صالحة" }
+            is ApiResult.Error -> { android.util.Log.w("StoryViewModel", "Load viewers failed for ${story.id}: ${result.message}"); viewersError = result.message }
+        }
+        viewersLoading = false
+    }
 
     init {
         load()
@@ -67,14 +95,24 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun upload(uri: Uri, caption: String? = null, visibleTo: String = "CONTACTS", mediaType: String? = null) = viewModelScope.launch {
+    fun upload(
+        uri: Uri,
+        caption: String? = null,
+        visibleTo: String = "CONTACTS",
+        mediaType: String? = null,
+        allowedUserIds: List<String> = emptyList()
+    ) = viewModelScope.launch {
+        if (visibleTo == StoryVisibility.SELECTED && allowedUserIds.isEmpty()) {
+            state = StoryState.Error("اختر جهة اتصال واحدة على الأقل للجمهور المحدد")
+            return@launch
+        }
         state = StoryState.Uploading
         val compressed = if (mediaType == null) compressStoryImage(uri) else null
         when (val uploaded = if (compressed != null) media.uploadEncrypted(compressed, "story") else media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
             is ApiResult.Success -> {
                 val effectiveType = mediaType ?: if (compressed != null) "image/jpeg" else uploaded.value.mimeType
-                when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo, mediaType = effectiveType)))) {
+                when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, caption, visibleTo, allowedUserIds, mediaType = effectiveType)))) {
                     is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }
                         .onSuccess {
                             stories.add(0, it)
@@ -103,7 +141,8 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
             if (copied <= 0L) return@withContext null
             val result = MediaCompressor.compressImage(raw.absolutePath, compressed.absolutePath)
             if (result.isFile && result.length() in 1..100L * 1024 * 1024) result else null
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("StoryViewModel", "Story image compression failed, using original", e)
             null
         } finally {
             raw.delete()
@@ -111,11 +150,17 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    fun createTextStory(text: String, backgroundColor: String = "#1565C0", visibleTo: String = "CONTACTS") = viewModelScope.launch {
+    fun createTextStory(
+        text: String,
+        backgroundColor: String = "#1565C0",
+        visibleTo: String = "CONTACTS",
+        allowedUserIds: List<String> = emptyList()
+    ) = viewModelScope.launch {
         if (text.isBlank() || text.length > 500) { state = StoryState.Error("النص يجب أن يكون 1..500 حرف"); return@launch }
+        if (visibleTo == StoryVisibility.SELECTED && allowedUserIds.isEmpty()) { state = StoryState.Error("اختر جهة اتصال واحدة على الأقل للجمهور المحدد"); return@launch }
         state = StoryState.Uploading
         // Text stories don't need media upload — send text directly as caption with TEXT type
-        when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest("text://${text.hashCode()}", text, visibleTo, mediaType = "TEXT", backgroundColor = backgroundColor)))) {
+        when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest("text://${text.hashCode()}", text, visibleTo, allowedUserIds, mediaType = "TEXT", backgroundColor = backgroundColor)))) {
             is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess {
                 stories.add(0, it)
                 repository.saveStories(listOf(it.toCacheEntity()))
@@ -125,11 +170,18 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createVoiceStory(uri: Uri, durationMs: Long, waveform: List<Int>, visibleTo: String = "CONTACTS") = viewModelScope.launch {
+    fun createVoiceStory(
+        uri: Uri,
+        durationMs: Long,
+        waveform: List<Int>,
+        visibleTo: String = "CONTACTS",
+        allowedUserIds: List<String> = emptyList()
+    ) = viewModelScope.launch {
+        if (visibleTo == StoryVisibility.SELECTED && allowedUserIds.isEmpty()) { state = StoryState.Error("اختر جهة اتصال واحدة على الأقل للجمهور المحدد"); return@launch }
         state = StoryState.Uploading
         when (val uploaded = media.upload(uri)) {
             is ApiResult.Error -> state = StoryState.Error(uploaded.message)
-            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, null, visibleTo, mediaType = "VOICE", durationMs = durationMs)))) {
+            is ApiResult.Success -> when (val created = client.request("POST", "/api/stories", json.encodeToString(CreateStoryRequest(uploaded.value.objectKey, null, visibleTo, allowedUserIds, mediaType = "VOICE", durationMs = durationMs)))) {
                 is ApiResult.Success -> runCatching { json.decodeFromString<Story>(created.value) }.onSuccess {
                 stories.add(0, it)
                 repository.saveStories(listOf(it.toCacheEntity()))
@@ -155,9 +207,23 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
             story.mediaType.startsWith("image/", ignoreCase = true) -> when (val result = media.download(story.mediaUrl)) {
                 is ApiResult.Error -> viewer = StoryViewerState.Error(story, result.message)
                 is ApiResult.Success -> {
-                    val bitmap = BitmapFactory.decodeByteArray(result.value, 0, result.value.size)
+                    // فك الترميز على IO مع تقليص محسوب لحد أقصى 1024px —
+                    // النسخة السابقة فكّت الصورة كاملة على الخيط الرئيسي (OOM/ANR).
+                    // نفس نمط MessageContent.kt:457-465.
+                    val bitmap = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = result.value
+                            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                            var sample = 1
+                            val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+                            while (maxDim / (sample * 2) >= 1024 && sample < 8) sample *= 2
+                            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)?.asImageBitmap()
+                        }.getOrNull()
+                    }
                     viewer = if (bitmap == null) StoryViewerState.Error(story, "INVALID_IMAGE")
-                    else StoryViewerState.Image(story, bitmap.asImageBitmap())
+                    else StoryViewerState.Image(story, bitmap)
                 }
             }
             story.mediaType.equals("video/mp4", true) || story.mediaType.equals("video/webm", true) -> {
@@ -179,18 +245,37 @@ class StoryViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun react(story: Story, emoji: String) = viewModelScope.launch {
-        client.request("POST", "/api/stories/${story.id}/react", json.encodeToString(StoryReactionRequest(emoji)))
+        when (val result = client.request("POST", "/api/stories/${story.id}/react", json.encodeToString(StoryReactionRequest(emoji)))) {
+            is ApiResult.Success -> Unit
+            is ApiResult.Error -> android.util.Log.w("StoryViewModel", "React failed for ${story.id}: ${result.message}")
+        }
     }
 
     fun delete(story: Story) = viewModelScope.launch {
         when (val result = client.request("DELETE", "/api/stories/${story.id}")) {
-            is ApiResult.Success -> stories.remove(story)
+            is ApiResult.Success -> {
+                stories.remove(story)
+                // إن كانت المحذوفة معروضة أغلق العارض بدل إبقاء شاشة ميتة.
+                when (val current = viewer) {
+                    is StoryViewerState.Loading -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Image -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Video -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Text -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Voice -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Unsupported -> if (current.story.id == story.id) closeViewer()
+                    is StoryViewerState.Error -> if (current.story.id == story.id) closeViewer()
+                    StoryViewerState.Closed -> Unit
+                }
+            }
             is ApiResult.Error -> state = StoryState.Error(result.message)
         }
     }
 
     fun viewed(story: Story) = viewModelScope.launch {
-        client.request("POST", "/api/stories/${story.id}/view")
+        when (val result = client.request("POST", "/api/stories/${story.id}/view")) {
+            is ApiResult.Success -> Unit
+            is ApiResult.Error -> android.util.Log.w("StoryViewModel", "Viewed failed for ${story.id}: ${result.message}")
+        }
     }
 }
 

@@ -371,16 +371,41 @@ private fun MediaItemViewer(
     )
 }
 
+/** LEGENDARY FIX: كاش مصغرات LRU محدود (50) — كان يعيد فك كل صورة مع كل تمرير فينهار OOM */
+private val thumbCache = object : LinkedHashMap<String, androidx.compose.ui.graphics.ImageBitmap>(64, 0.75f, true) {
+    override fun removeEldestEntry(e: MutableMap.MutableEntry<String, androidx.compose.ui.graphics.ImageBitmap>): Boolean = size > 50
+}
+
 private fun decodePreview(path: String, video: Boolean) = runCatching {
-    if (video) {
-        val retriever = MediaMetadataRetriever()
-        retriever.setDataSource(path)
-        val frame = retriever.getFrameAtTime(0)
-        retriever.release()
-        frame?.asImageBitmap()
-    } else {
-        val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
-        BitmapFactory.decodeFile(path, opts)?.asImageBitmap()
+    synchronized(thumbCache) { thumbCache[path] } ?: run {
+        val bmp = if (video) {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(path)
+                val frame = retriever.getFrameAtTime(0)
+                // تصغير الفيديو لـ 256px (كان إطاراً كاملاً 4K يفجر الذاكرة)
+                frame?.let {
+                    val scale = (256f / maxOf(it.width, it.height).coerceAtLeast(1)).coerceAtMost(1f)
+                    if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(
+                        it, (it.width * scale).toInt().coerceAtLeast(1),
+                        (it.height * scale).toInt().coerceAtLeast(1), true
+                    ).also { _ -> runCatching { if (it != frame) frame.recycle() } } else it
+                }?.asImageBitmap()
+            } finally {
+                runCatching { retriever.release() }
+            }
+        } else {
+            // عينة ديناميكية لهدف 256px (كان inSampleSize=4 ثابتاً يفشل مع الصور الصغيرة/الضخمة)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+            while (maxDim / (sample * 2) >= 256 && sample < 16) sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            BitmapFactory.decodeFile(path, opts)?.asImageBitmap()
+        }
+        if (bmp != null) synchronized(thumbCache) { thumbCache[path] = bmp }
+        bmp
     }
 }.getOrNull()
 

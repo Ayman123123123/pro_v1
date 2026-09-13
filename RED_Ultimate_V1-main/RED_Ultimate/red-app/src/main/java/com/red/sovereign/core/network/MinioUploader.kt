@@ -20,7 +20,11 @@ class MinioUploader(private val client: OkHttpClient) {
             }
 
             override fun onResponse(call: Call, response: Response) {
-                callback(response.isSuccessful, if (response.isSuccessful) uploadUrl else null)
+                // Response must be closed to release the connection back to the pool —
+                // `use{}` guarantees close even if callback throws.
+                response.use {
+                    callback(it.isSuccessful, if (it.isSuccessful) uploadUrl else null)
+                }
             }
         })
     }

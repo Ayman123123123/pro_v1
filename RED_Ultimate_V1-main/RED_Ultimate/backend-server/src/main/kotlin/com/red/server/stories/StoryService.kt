@@ -66,12 +66,41 @@ class StoryService(
         return response(story, 0)
     }
 
-    fun active(viewerId: UUID): List<StoryResponse> {
+    // LEGENDARY FIX: pagination + تجميع العدادات دفعة واحدة (كان find-all + N+1 count + فلترة ذاكرة)
+    fun active(viewerId: UUID, limit: Int = 50, cursor: String? = null): List<StoryResponse> {
         val now = Instant.now()
-        return mongo.find(Query(Criteria.where("expiresAt").gt(now).and("deletedAt").`is`(null))
-            .with(Sort.by(Sort.Direction.DESC, "createdAt")), StoryDocument::class.java).filter { story -> canAccess(viewerId, story) }.map { story ->
-            response(story, mongo.count(Query(Criteria.where("storyId").`is`(story.id)), StoryView::class.java))
+        val lim = limit.coerceIn(1, 50)
+        val base = Criteria.where("expiresAt").gt(now).and("deletedAt").`is`(null)
+        if (cursor != null) runCatching {
+            val c = mongo.findOne(Query(Criteria.where("id").`is`(cursor)), StoryDocument::class.java)
+            if (c != null) base.and("createdAt").lt(c.createdAt)
         }
+        val page = mongo.find(Query(base).with(Sort.by(Sort.Direction.DESC, "createdAt")).limit(lim * 3),
+            StoryDocument::class.java)
+        val visible = page.filter { story -> canAccess(viewerId, story) }.take(lim)
+        if (visible.isEmpty()) return emptyList()
+        // عدادات دفعة واحدة بدل N+1
+        val ids = visible.map { it.id }
+        val counts: Map<String, Long> = runCatching {
+            val agg = mongo.aggregate(
+                org.springframework.data.mongodb.core.aggregation.Aggregation.newAggregation(
+                    org.springframework.data.mongodb.core.aggregation.Aggregation.match(Criteria.where("storyId").`in`(ids)),
+                    org.springframework.data.mongodb.core.aggregation.Aggregation.group("storyId").count().`as`("c")
+                ), "story_views", Map::class.java
+            ).mappedResults
+            agg.associate { (it["_id"] as? String ?: "") to ((it["c"] as? Number)?.toLong() ?: 0L) }
+        }.getOrDefault(emptyMap())
+        return visible.map { story -> response(story, counts[story.id] ?: 0L) }
+    }
+
+    fun active(viewerId: UUID): List<StoryResponse> = active(viewerId, 50, null)
+
+    /** LEGENDARY: رد مشفر على حالة — فحص وصول + إرجاع هدف التشفير (النص نفسه يُشفر E2EE عميلاً ولا يمر خاماً) */
+    fun replyTarget(viewerId: UUID, storyId: String): Map<String, String> {
+        val story = activeStory(storyId)
+        require(canAccess(viewerId, story)) { "Story is not visible to this account" }
+        require(story.ownerId != viewerId.toString()) { "Cannot reply to own story" }
+        return mapOf("ownerId" to story.ownerId, "ownerRedId" to story.ownerRedId, "storyId" to story.id)
     }
 
     fun viewed(viewerId: UUID, storyId: String): StoryResponse {
@@ -87,6 +116,20 @@ class StoryService(
         val emoji = request.emoji.trim()
         require(emoji in setOf("❤️", "🔥", "😢", "👏", "😍", "🎉", "👍")) { "Unsupported story reaction" }
         mongo.save(StoryReaction("$storyId:$userId", storyId, userId.toString(), emoji))
+    }
+
+    /** قائمة المشاهِدين — للمالك فقط (كان العداد وحده فيُعرض زر عين بلا بيانات). */
+    fun viewers(ownerId: UUID, storyId: String): List<StoryViewerResponse> {
+        val story = activeStory(storyId)
+        require(story.ownerId == ownerId.toString()) { "Only the owner can list viewers" }
+        return mongo.find(Query(Criteria.where("storyId").`is`(storyId)), StoryView::class.java)
+            .sortedByDescending { it.viewedAt }
+            .take(200)
+            .mapNotNull { view ->
+                val viewerUuid = runCatching { UUID.fromString(view.viewerId) }.getOrNull() ?: return@mapNotNull null
+                val account = runCatching { users.findById(viewerUuid).orElse(null) }.getOrNull() ?: return@mapNotNull null
+                StoryViewerResponse(account.redId, account.username, account.displayName, view.viewedAt)
+            }
     }
 
     fun delete(ownerId: UUID, storyId: String) {

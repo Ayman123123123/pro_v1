@@ -24,9 +24,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val tokens = TokenStore(application)
     private val keys = DeviceKeyManager(application)
+    private val pstn = PstnApi(tokens)
+    private val sms = com.red.sovereign.features.sms.SmsApi(tokens)
     private val discovery = LocalServerDiscovery(application)
 
     var serverState: ServerState by mutableStateOf(ServerState.Ready(ServerEndpoint.url()))
+        private set
+
+    var pstnState: PstnState by mutableStateOf(PstnState.Idle)
         private set
 
     var state: AuthState by mutableStateOf(AuthState.Loading)
@@ -110,6 +115,222 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** WebRTC-PSTN bridge: connect to Asterisk via WSS, dial through DINSTAR GSM */
+    private var pstnWebRtc: com.red.sovereign.calls.PstnWebRtcManager? = null
+    var incomingPstnCall: IncomingPstnCall? by mutableStateOf(null); private set
+
+    /**
+     * قناة أحداث الخادم الحيّة لمكالمة PSTN الصادرة عبر `/ws/pstn`.
+     *
+     * مسار SIP في `PstnWebRtcManager` يستشعر RINGING/ANSWERED من إشارة SIP
+     * المحلية، لكنه أعمى عن مراحل قناة GSM الفعلية على البوابة. الخادم صار
+     * يبثّ `PSTN_CALL_EVENT` (RINGING/BRIDGING/ACTIVE/ENDED) من أحداث
+     * Asterisk الحقيقية — وهي المصدر الموثوق لمرحلة الطرف البعيد. نستهلكها
+     * هنا لتصحيح حالة الواجهة حتى لو تأخّرت إشارة SIP أو غابت.
+     */
+    private var pstnEventSocket: com.red.sovereign.features.sms.PstnEventSocket? = null
+    @Volatile private var activePstnCallId: String? = null
+
+    private fun startPstnEventStream() {
+        if (pstnEventSocket != null) return
+        pstnEventSocket = com.red.sovereign.features.sms.PstnEventSocket(
+            tokens = tokens,
+            onEnvelope = ::onPstnServerEvent
+        ).also { it.connect() }
+    }
+
+    private fun stopPstnEventStream() {
+        pstnEventSocket?.disconnect()
+        pstnEventSocket = null
+        activePstnCallId = null
+    }
+
+    /** يحوّل أحداث الخادم إلى انتقالات حالة الواجهة للمكالمة الصادرة الجارية. */
+    private fun onPstnServerEvent(e: com.red.sovereign.features.sms.PstnWsEnvelope) {
+        if (e.type != "PSTN_CALL_EVENT") return
+        val callId = e.callId ?: return
+        // تجاهل أحداث مكالمة أخرى (مثلاً مكالمة سابقة انتهت متأخرة).
+        val current = activePstnCallId
+        if (current != null && callId != current) return
+        val prev = pstnState as? PstnState.Started
+        when (e.event) {
+            "RINGING" -> pstnState = PstnState.Ringing
+            "BRIDGING" -> pstnState = PstnState.Bridging
+            "ACTIVE" -> pstnState = PstnState.Started(
+                callId = callId,
+                usedToday = prev?.usedToday ?: 0,
+                dailyLimit = prev?.dailyLimit ?: 0,
+                answered = true
+            )
+            "ENDED" -> {
+                runCatching { pstnWebRtc?.release() }
+                pstnWebRtc = null
+                pstnState = PstnState.Idle
+                stopPstnForeground()
+                stopPstnEventStream()
+            }
+            else -> Unit
+        }
+    }
+
+    fun dialPstn(number: String) = viewModelScope.launch {
+        refreshPstnEntitlement()
+        pstnState = PstnState.Bridging
+        startPstnEventStream()
+        // ⚠️ Throwable لا Exception.
+        //
+        // مسار PSTN يعبر JNI: غياب libjingle_peerconnection_so أو فشل رمز فيه
+        // يرمي `UnsatisfiedLinkError`/`NoClassDefFoundError`، وكلاهما `Error`.
+        // `catch (t: Exception)` لا يلتقطهما فكان أول انهيار عند ضغط "اتصال"
+        // يخرج التطبيق كاملًا. هنا نلتقط كل شيء ونحوّله إلى حالة خطأ مرئية.
+        try {
+            // تحرير أي مدير سابق قبل إنشاء جديد — وإلا تسرّبت PeerConnection
+            // القديمة وانفجر native (libjingle SIGABRT) عند إعادة الاتصال.
+            runCatching { pstnWebRtc?.release() }
+            pstnWebRtc = null
+            val mgr = com.red.sovereign.calls.PstnWebRtcManager(getApplication())
+            pstnWebRtc = mgr
+            // خدمة المقدمة تبدأ قبل الاتصال لا بعده: بدونها يوقف النظام
+            // العملية عند خروج التطبيق للخلفية فتُقطع المكالمة الجارية.
+            // stopPstnForeground يُستدعى في كل مسارات الإنهاء أدناه.
+            runCatching {
+                com.red.sovereign.calls.PstnCallForegroundService.start(getApplication(), number)
+            }
+            mgr.call(number, object : com.red.sovereign.calls.PstnWebRtcManager.Events {
+            override fun onConnected() { pstnState = PstnState.Registering }
+            override fun onRinging() { pstnState = PstnState.Ringing }
+            /**
+             * 183 مع SDP: المزوّد يتكلّم الآن (رقم غير متاح / لا رصيد /
+             * بريد صوتي / قائمة IVR). نُعلن الحالة كي تعرض الواجهة شاشة
+             * المكالمة بلوحة الأرقام وزرّ الإنهاء بدل شاشة رنين صامتة.
+             */
+            override fun onEarlyMedia() { pstnState = PstnState.EarlyMedia }
+            override fun onAnswered(usedToday: Int, dailyLimit: Int) {
+                activePstnCallId = mgr.currentCallId
+                pstnState = PstnState.Started(mgr.currentCallId ?: "", usedToday, dailyLimit)
+            }
+            override fun onHangup(cause: String?) {
+                pstnState = PstnState.Idle
+                runCatching { pstnWebRtc?.release() }
+                pstnWebRtc = null
+                stopPstnForeground()
+                stopPstnEventStream()
+            }
+            override fun onIncoming(sdp: String, fromNumber: String) {
+                incomingPstnCall = IncomingPstnCall(sdp = sdp, fromNumber = fromNumber)
+                pstnState = PstnState.Incoming(fromNumber)
+            }
+            override fun onError(message: String) {
+                pstnState = PstnState.Error(localizePstn(message))
+                stopPstnForeground()
+                stopPstnEventStream()
+            }
+            })
+        } catch (t: Throwable) {
+            android.util.Log.e("AuthViewModel", "PSTN call setup failed", t)
+            runCatching { pstnWebRtc?.release() }
+            pstnWebRtc = null
+            pstnState = PstnState.Error(localizePstn(t.message ?: "PSTN_CALL_FAILED"))
+            stopPstnForeground()
+            stopPstnEventStream()
+        }
+    }
+
+    /** إيقاف خدمة المقدمة وتحرير WakeLock — يُستدعى في كل مسار إنهاء. */
+    private fun stopPstnForeground() {
+        runCatching {
+            com.red.sovereign.calls.PstnCallForegroundService.stop(getApplication())
+        }
+    }
+
+    fun acceptIncomingPstnCall() {
+        val incoming = incomingPstnCall ?: return
+        pstnWebRtc?.answerIncoming(incoming.sdp)
+        incomingPstnCall = null
+    }
+
+    fun rejectIncomingPstnCall() {
+        runCatching { pstnWebRtc?.rejectIncoming() }
+        runCatching { pstnWebRtc?.release() }
+        pstnWebRtc = null
+        incomingPstnCall = null
+        pstnState = PstnState.Idle
+        stopPstnForeground()
+        stopPstnEventStream()
+    }
+
+    fun hangupPstn() = viewModelScope.launch {
+        runCatching { pstnWebRtc?.hangup() }
+        runCatching { pstnWebRtc?.release() }
+        pstnWebRtc = null
+        pstnState = PstnState.Idle
+        stopPstnForeground()
+        stopPstnEventStream()
+    }
+
+    /** كتم/إلغاء كتم الميكروفون في مكالمة PSTN النشطة. */
+    fun togglePstnMute(mute: Boolean) {
+        pstnWebRtc?.isMuted = mute
+    }
+
+    /** تبديل مكبر الصوت في مكالمة PSTN النشطة. */
+    fun togglePstnSpeaker(speakerOn: Boolean) {
+        pstnWebRtc?.isSpeaker = speakerOn
+    }
+
+    /**
+     * يرسل نغمة DTMF إلى شبكة المزوّد أثناء المكالمة أو الوسائط المبكرة.
+     *
+     * هذا هو ما يجعل قوائم شركة الاتصالات قابلة للاستخدام من التطبيق:
+     * «اضغط 1 للرصيد»، إدخال رمز تعبئة، اختيار اللغة. النغمة تُرسَل كحدث
+     * RFC 4733 لا كصوت داخل المسار — والصوت داخل المسار تتلفه ترميزات GSM
+     * فلا يتعرّف عليه المزوّد.
+     *
+     * @return true إن قُبلت النغمة للإرسال.
+     */
+    fun sendPstnDtmf(digit: String): Boolean =
+        pstnWebRtc?.sendDtmf(digit) ?: false
+
+    fun clearPstnState() { pstnState = PstnState.Idle }
+
+    // 📨 SMS Methods
+    fun sendSms(recipient: String, text: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
+        val result = pstn.sendSms(recipient, text)
+        when (result) {
+            is ApiResult.Success -> onResult(true, "تم الإرسال")
+            is ApiResult.Error -> onResult(false, result.message ?: "فشل الإرسال")
+        }
+    }
+
+    @Deprecated(
+        "استخدم SmsViewModel (SmsApi.conversations + refresh) — صندوق الجهاز المتطاير لا يُقرأ مباشرة",
+        ReplaceWith("SmsViewModel", "com.red.sovereign.features.sms.SmsViewModel"),
+        level = DeprecationLevel.WARNING
+    )
+    fun loadSmsInbox(onResult: (List<SmsIncomingMessage>) -> Unit = { }) = viewModelScope.launch {
+        // المسار الدائم: refresh() يستطلع وارد الجهاز ثم conversations() من sms_messages.
+        // لا استدعاء لـ PstnApi.getInbox() المهمل هنا.
+        when (val refreshed = sms.refresh()) {
+            is ApiResult.Error -> { onResult(emptyList()); return@launch }
+            is ApiResult.Success -> Unit // conversations أدناه تحمل الأحدث
+        }
+        when (val result = sms.conversations()) {
+            is ApiResult.Success -> onResult(
+                result.value.map {
+                    SmsIncomingMessage(
+                        port = 0,
+                        sender = it.number,
+                        text = it.lastText,
+                        time = it.lastTime.toString(),
+                        coding = null,
+                        udh = null
+                    )
+                }
+            )
+            is ApiResult.Error -> onResult(emptyList())
+        }
+    }
+
     /** تحديث اسم المستخدم (username) على الخادم ثم محلياً. */
     fun updateUsername(newUsername: String, done: (Boolean, String) -> Unit = { _, _ -> }) = viewModelScope.launch {
         val trimmed = newUsername.trim()
@@ -156,7 +377,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (result) {
             is ApiResult.Success -> {
                 tokens.updateTokens(result.value)
-                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.isAdmin)
+                state = AuthState.Authenticated(tokens.redId.orEmpty(), tokens.username.orEmpty(), tokens.pstnEnabled, tokens.isAdmin)
             }
             is ApiResult.Error -> {
                 if (result.code == 401 || result.code == 403) tokens.clearSession()
@@ -193,7 +414,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "APPROVED" -> {
                 tokens.save(response)
                 pendingCredentials = null
-                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.role == "ADMIN")
+                state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.pstnEnabled, response.user.role == "ADMIN")
             }
             "PENDING" -> {
                 pendingCredentials = username to password
@@ -206,20 +427,58 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** يجلب حالة PSTN من الخادم (/api/auth/me) ويحدث الحالة المحلية.
+     * يستدعى عند: استئناف التطبيق، قبل الاتصال، ودورياً أثناء شاشة DINSTAR. */
+    fun refreshPstnEntitlement() = viewModelScope.launch {
+        val result = api.me()
+        if (result is ApiResult.Success) {
+            val user = result.value
+            tokens.savePstnEnabled(user.pstnEnabled)
+            // تحديث AuthState الحالي إن كان مصادقاً
+            state = when (val current = state) {
+                is AuthState.Authenticated -> current.copy(pstnEnabled = user.pstnEnabled)
+                else -> current
+            }
+        }
+    }
+
     private suspend fun <T> withServerDiscoveryRetry(request: suspend () -> ApiResult<T>): ApiResult<T> {
         val first = request()
         if (first !is ApiResult.Error || first.code != null) return first
         serverState = ServerState.Discovering
-        return when (val discovered = discovery.discover(LocalServerDiscovery.Mode.FAST)) {
-            is ApiResult.Success -> {
-                serverState = ServerState.Ready(discovered.value)
-                request()
-            }
-            is ApiResult.Error -> {
-                serverState = ServerState.Error(localize(discovered.message), ServerEndpoint.url())
-                first
-            }
+        // FAST أولاً (العنوان الحالي + المرشحات)، ثم مسح LAN الشامل —
+        // بدونه لا يجد الهاتف الحقيقي الخادم أبدًا (10.0.2.2 للمحاكي فقط).
+        val fast = discovery.discover(LocalServerDiscovery.Mode.FAST)
+        if (fast is ApiResult.Success) {
+            serverState = ServerState.Ready(fast.value)
+            return request()
         }
+        val thorough = discovery.discover(LocalServerDiscovery.Mode.THOROUGH)
+        if (thorough is ApiResult.Success) {
+            serverState = ServerState.Ready(thorough.value)
+            return request()
+        }
+        serverState = ServerState.Error(
+            localize((thorough as? ApiResult.Error)?.message ?: "YOUNES_SERVER_NOT_FOUND"),
+            ServerEndpoint.url()
+        )
+        return first
+    }
+
+    /**
+     * توطين أخطاء مسار الهاتف تحديدًا.
+     *
+     * `localize` العامة مبنية لرسائل المصادقة، فكانت رموز PSTN الخام
+     * (MIC_PERMISSION_REQUIRED, SIP_REGISTER_FAILED_ALL, …) تُعرض للمستخدم
+     * كما هي بالإنجليزية. [PstnErrorLocalizer] هو القاموس المخصص لها،
+     * وعند عدم التعرّف نعود إلى القاموس العام.
+     */
+    private fun localizePstn(raw: String?): String {
+        val code = raw?.trim().orEmpty()
+        if (code.isBlank()) return "فشل بدء المكالمة"
+        val mapped = com.red.sovereign.calls.PstnErrorLocalizer.arabic(code)
+        // arabic() تُعيد المدخل نفسه عند عدم التعرّف — حينها نجرب القاموس العام.
+        return if (mapped == code) localize(code) else mapped
     }
 
     private fun localize(value: String) = when {
@@ -227,6 +486,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             "اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التأكد من البيانات والمحاولة مجدداً."
         value.contains("NETWORK_ERROR", ignoreCase = true) || value.contains("Connection refused", ignoreCase = true) ->
             "تعذر الاتصال بخادم يونس. يرجى التأكد من الاتصال بالشبكة أو الخادم المحلي والمحاولة مجدداً."
+        value.contains("OFFLINE", ignoreCase = true) ->
+            "لا توجد شبكة إطلاقاً (وضع طيران؟). فعّل Wi-Fi أو البيانات أو اتصل بالشبكة المحلية ثم أعد المحاولة."
         value.contains("INVALID_RECOVERY_CODE", ignoreCase = true) ->
             "معرّف يونس أو رمز الاستعادة غير صحيح. أعد التأكد من الرموز المحفوظة."
         value.contains("RATE_LIMITED", ignoreCase = true) || value.contains("Too many attempts", ignoreCase = true) ->
@@ -277,7 +538,7 @@ sealed interface AuthState {
     data object RecoveryComplete : AuthState
     data object Submitting : AuthState
     data class Pending(val redId: String, val username: String, val recoveryCodes: List<String>) : AuthState
-    data class Authenticated(val redId: String, val username: String, val isAdmin: Boolean = false) : AuthState
+    data class Authenticated(val redId: String, val username: String, val pstnEnabled: Boolean, val isAdmin: Boolean = false) : AuthState
     data class Rejected(val reason: String?) : AuthState
     data object Suspended : AuthState
     data object Banned : AuthState
@@ -289,3 +550,30 @@ sealed interface ServerState {
     data class Ready(val url: String) : ServerState
     data class Error(val message: String, val fallbackUrl: String) : ServerState
 }
+
+sealed interface PstnState {
+    data object Idle : PstnState
+    data object Dialing : PstnState
+    data object Bridging : PstnState
+    data object Registering : PstnState
+    data object Ringing : PstnState
+    /**
+     * وسائط مبكرة: صوت شبكة المزوّد مسموع والمكالمة لم تُجَب.
+     *
+     * حالة قائمة بذاتها لا Ringing ولا Started: لا فاتورة ولا عدّاد يبدأ
+     * (لم يصل 200 OK)، لكن الصوت يتدفّق فعلًا ولوحة الأرقام يجب أن تعمل
+     * للتفاعل مع قوائم المزوّد.
+     */
+    data object EarlyMedia : PstnState
+    data class Incoming(val fromNumber: String) : PstnState
+    data class Started(
+        val callId: String,
+        val usedToday: Int,
+        val dailyLimit: Int,
+        val answered: Boolean = true,
+        val ringing: Boolean = false
+    ) : PstnState
+    data class Error(val message: String) : PstnState
+}
+
+data class IncomingPstnCall(val sdp: String, val fromNumber: String)

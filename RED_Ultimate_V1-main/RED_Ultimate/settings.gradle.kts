@@ -1,40 +1,8 @@
-// Must run BEFORE pluginManagement: AGP Isolated Projects reads prefs while
-// resolving the Android plugin. Gradle 9.4+ throws if ANDROID_PREFS_ROOT and
-// ANDROID_USER_HOME disagree (Docker .android_home vs Windows %USERPROFILE%\\.android).
-run {
-    val prefsRoot = System.getenv("ANDROID_PREFS_ROOT")
-    val userHome = System.getenv("ANDROID_USER_HOME")
-    val sdkHomeDeprecated = System.getenv("ANDROID_SDK_HOME")
-    val androidHome = System.getenv("ANDROID_HOME")
-    val sdkRoot = System.getenv("ANDROID_SDK_ROOT")
-    val fallback = userHome
-        ?: prefsRoot
-        ?: (System.getProperty("user.home") + "/.android")
-
-    fun unify(to: String, why: String) {
-        System.setProperty("android.prefs.root", to)
-        System.setProperty("android.user.home", to)
-        println("⚠️ $why — unifying Android prefs to $to")
-    }
-
-    when {
-        sdkHomeDeprecated != null && (sdkHomeDeprecated == androidHome || sdkHomeDeprecated == sdkRoot) ->
-            unify(fallback, "ANDROID_SDK_HOME is set to the SDK root (deprecated)")
-        prefsRoot != null && userHome != null && prefsRoot != userHome ->
-            unify(userHome, "ANDROID_PREFS_ROOT ($prefsRoot) conflicts with ANDROID_USER_HOME ($userHome)")
-        prefsRoot != null && userHome == null ->
-            unify(prefsRoot, "ANDROID_PREFS_ROOT is set but ANDROID_USER_HOME is not")
-        prefsRoot == null && userHome != null -> {
-            System.setProperty("android.prefs.root", userHome)
-            System.setProperty("android.user.home", userHome)
-        }
-        else -> {
-            System.setProperty("android.prefs.root", fallback)
-            System.setProperty("android.user.home", fallback)
-        }
-    }
-    println("✅ Android prefs resolved to: ${System.getProperty("android.prefs.root")} (Gradle 9.7 strict mode)")
-}
+val androidPrefsDir = System.getenv("ANDROID_USER_HOME")
+    ?: System.getenv("ANDROID_PREFS_ROOT")
+    ?: (System.getProperty("user.home") + "/.android")
+System.clearProperty("android.prefs.root")
+System.setProperty("android.user.home", androidPrefsDir)
 
 pluginManagement {
     repositories {
@@ -50,12 +18,19 @@ pluginManagement {
 
 rootProject.name = "RED-Ultimate"
 
+// backend-server مشروع Spring Boot مستقلّ ببناء منفصل — خارج build graph
+// الأندرويد عمدًا: له settings.gradle.kts وgradlew الخاصّان به، ويُبنى عبر
+// scripts/build-backend.sh (أو ./backend-server/gradlew مباشرةً) ويُشحَن
+// كحاوية Docker (backend-server/Dockerfile). لا تضِفه هنا بـ include
+// حتى لا يلوّث sync الأندرويد بإعدادات JVM/Spring ولا يكسر البناء.
+
 // Canonical RED Android product — the single source of truth for the app.
 //
 // Consolidated on 2026-08-19: the android/ and app-android/ extraction trees
 // were merged into red-app/ and deleted. They were parallel prototypes of the
 // same screens under different package roots (com.red.features, com.red.feature),
-// outside the build graph, and had already drifted from the canonical app.
+// outside the build graph, and had already drifted — android/ shipped a Yemeni
+// operator prefix table that contradicted both red-app/ and the backend.
 // Everything of value from them now lives here; see docs/UNIFICATION_2026-08-19.md.
 //
 // The legacy Signal fork remains in app/ as an extraction source only; it is
@@ -111,7 +86,7 @@ dependencyResolutionManagement {
             url = uri("https://repo1.maven.org/maven2")
             content { includeGroup("org.signal") }
         }
-        // Alibaba Maven mirror for non-signal dependencies.
+        // Alibaba Maven mirror — fast for users behind GFW (China, Yemen sometimes) — for non-signal deps
         maven {
             url = uri("https://maven.aliyun.com/repository/public")
         }

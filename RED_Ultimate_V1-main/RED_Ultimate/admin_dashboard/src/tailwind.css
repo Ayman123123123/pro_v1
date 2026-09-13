@@ -8,4 +8,9 @@
   --color-younes-navy: var(--yns-navy);
   --color-younes-dark: var(--yns-dark);
   --color-younes-surface: var(--yns-surface);
+  --color-younes-warning: var(--yns-warning);
+  --color-younes-error: var(--yns-error);
+  --color-younes-success: var(--yns-success);
+  --color-younes-muted: var(--yns-text-muted);
+  --color-younes-text: var(--yns-text);
 }

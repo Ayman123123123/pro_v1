@@ -5,16 +5,12 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// المنفذ الإلزامي في القيمة الافتراضية: بدونه يقصد OkHttp المنفذ 80 بينما الخادم
-// يستمع على 8088 (بوابة Nginx) â€” فيفشل كل طلب بـ NETWORK_ERROR بلا سبب ظاهر.
-// البناء الحقيقي يمرّر -PRED_SERVER_URL=http://SERVER_IP:PORT.
-// Default to the host Wi-Fi interface verified for physical Android clients.
-// CI/production may override this with -PRED_SERVER_URL=https://your-domain.
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.0.244:8088")
-// Comma-separated candidate server URLs tried first during LAN auto-discovery.
-// Falls back to the single RED_SERVER_URL when not provided.
+// The only safe generic default is the Android-emulator alias.  A private LAN
+// address from one developer's network makes every other installation fail
+// before discovery or the server settings screen can help.
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://10.0.2.2:8088")
 val redServerCandidates = providers.gradleProperty("RED_SERVER_CANDIDATES")
-    .orElse(redServerUrl)
+    .orElse("http://10.0.2.2:8088,http://127.0.0.1:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }
@@ -27,13 +23,19 @@ android {
         applicationId = "com.red.sovereign"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0-alpha01"
+        versionCode = 2
+        // بوابة الستور: الإصدار الحالي 1.0.0-alpha02 — الترقية القادمة للستور → 1.0.0 (stable).
+        // خطة الإنتاج المجمدة: versionName = "1.0.0" مع versionCode = 3 — لا تطبق الآن،
+        // ابقَ على alpha02 حتى اكتمال بوابة الستور (التوقيع الخاص + ملاحظات الإصدار العربية).
+        // لا ترفع alpha للستور؛ ارفع versionCode مع كل حزمة وجهّز ملاحظات الإصدار العربية.
+        versionName = "1.0.0-alpha02"
         buildConfigField("String", "RED_SERVER_URL", "\"${redServerUrl.get()}\"")
         val escapedCandidates = redServerCandidates.get().replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "RED_SERVER_CANDIDATES", "\"$escapedCandidates\"")
         val escapedPins = redTlsPins.get().replace("\\", "\\\\").replace("\"", "\\\"")
         buildConfigField("String", "RED_TLS_PINS", "\"$escapedPins\"")
+        // بوابة الستور: إخفاء الشارات المؤقتة في release عبر BuildConfig (الأصل true للـ debug فقط).
+        buildConfigField("boolean", "SHOW_PLACEHOLDERS", "true")
         ndk { abiFilters += redTargetAbi.get() }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,15 +56,25 @@ android {
         debug {
             manifestPlaceholders["usesCleartext"] = "true"
             signingConfig = signingConfigs.getByName("redLocalDebug")
+            buildConfigField("boolean", "SHOW_PLACEHOLDERS", "true")
         }
         release {
             isMinifyEnabled = true
+            // LEGENDARY FIX: تقليص الموارد + ABI واحد (كان APK ~259MB مستحيل التثبيت)
+            isShrinkResources = true
             manifestPlaceholders["usesCleartext"] = "false"
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // التوقيع الرسمي يُقرأ من متغيرات بيئة/خصائص (RED_KEYSTORE_*) â€” لا
-            // مفاتيح إنتاج مضمنة في المستودع. إن لم تُضبط تُستخدم هوية alpha
-            // المؤقتة (مفتاح debug عام) حتى يُكمل سير العمل المحلي.
+            // بوابة الستور: الشارات المؤقتة مخفية تمامًا في release.
+            buildConfigField("boolean", "SHOW_PLACEHOLDERS", "false")
+            // Release signing comes from env/props (RED_KEYSTORE_*) — never
+            // hardcode secrets in version control. بوابة الستور: يمنع منعًا باتًا
+            // التوقيع بمفتاح debug العلني في release — يجب توفير RED_KEYSTORE_*.
+            // 2026-09-10: فشل صريح بدون مفتاح خاص — ممنوع السقوط لمفتاح debug.
+            // (يُفحص فقط عند طلب مهام release حتى لا يكسر بناءات debug اليومية)
             val keystoreFile = providers.gradleProperty("RED_KEYSTORE_FILE").orElse("").get()
+            val wantsRelease = gradle.startParameter.taskNames.any {
+                it.contains("Release", ignoreCase = true) || it.contains("Bundle", ignoreCase = true)
+            }
             if (keystoreFile.isNotBlank()) {
                 signingConfig = signingConfigs.create("redRelease") {
                     storeFile = file(keystoreFile)
@@ -71,8 +83,8 @@ android {
                     keyPassword = providers.gradleProperty("RED_KEY_PASSWORD").orElse("").get()
                     storeType = "PKCS12"
                 }
-            } else {
-                signingConfig = signingConfigs.getByName("redLocalDebug")
+            } else if (wantsRelease) {
+                error("RED release signing requires private key: set RED_KEYSTORE_FILE/RED_KEYSTORE_PASSWORD/RED_KEY_ALIAS/RED_KEY_PASSWORD (see keystore.properties — never use red-debug.p12 for release)")
             }
         }
     }
@@ -119,8 +131,9 @@ dependencies {
 
     // Keep the Kotlin runtime and Compose artifacts on one coherent line.
     implementation(platform(libs.kotlin.bom))
-    // FCM — يعمل بلا google-services.json؛ التهيئة تتم يدوياً عند توفر الملف
-    implementation("com.google.firebase:firebase-messaging:24.1.0")
+    // FCM works without google-services.json; the token is read at runtime.
+    // Version from catalog (libs.firebase.messaging = 25.0.1), no hardcoded pin.
+    implementation(libs.firebase.messaging)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -142,9 +155,10 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.kotlinx.coroutines.core)
+    // await() لمهام Play-services (توكن FCM دون حجب في VoipPushRegistrar) — من الكتالوج (1.10.2).
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.square.okhttp3)
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation(libs.libsignal.android)
     implementation(libs.google.zxing.core)
     implementation(libs.androidx.media3.common)
@@ -165,27 +179,35 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // â”€â”€â”€â”€â”€ خطوط Google (Cairo + Tajawal) â”€â”€â”€â”€â”€
+    // ───── خطوط Google (Cairo + Tajawal) ─────
+    // النسخة من سطر BOM في الكتالوج (1.7.8) — لا تثبيت يدوي.
     implementation(libs.androidx.compose.ui.text.google.fonts)
 
-    // â”€â”€â”€â”€â”€ Coil â€” تحميل وعرض الصور والفيديو بكفاءة عالية â”€â”€â”€â”€â”€
-    implementation(libs.coil.compose)
-    implementation(libs.coil.video)
+    // ───── Coil 3.x — تحميل وعرض الصور والفيديو (3.6.0، يخلف 2.7.0 المجمّد) ─────
+    implementation(libs.coil3.compose)
+    implementation(libs.coil3.video)
+    implementation(libs.coil3.network.okhttp)
 
-    // â”€â”€â”€â”€â”€ Lottie â€” أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) â”€â”€â”€â”€â”€
+    // ───── Haze — ضبابية خلفية حقيقية للأشرطة الزجاجية ─────
+    implementation(libs.haze.compose)
+
+    // ───── Lottie — أنيميشن احترافي (مؤشر الكتابة، ردود الفعل) ─────
     implementation(libs.lottie.compose)
 
-    // â”€â”€â”€â”€â”€ emoji2-emojipicker â€” محدد الإيموجي الرسمي من Google â”€â”€â”€â”€â”€
+    // ───── Vosk — تفريغ صوتي دون اتصال (نماذج تُنزَّل عند الطلب) ─────
+    implementation(libs.vosk.android)
+
+    // ───── emoji2-emojipicker — محدد الإيموجي الرسمي من Google ─────
     implementation(libs.androidx.emoji2.emojipicker)
 
-    // â”€â”€â”€â”€â”€ Paging 3 â€” تحميل المحادثات والمنشورات بتكاسل â”€â”€â”€â”€â”€
+    // ───── Paging 3 — تحميل المحادثات والمنشورات بتكاسل ─────
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // â”€â”€â”€â”€â”€ WorkManager â€” مزامنة في الخلفية â”€â”€â”€â”€â”€
+    // ───── WorkManager — مزامنة في الخلفية ─────
     implementation(libs.androidx.work.runtime.ktx)
 
-    // â”€â”€â”€â”€â”€ Room â€” قاعدة بيانات محلية سيادية â”€â”€â”€â”€â”€
+    // ───── Room — قاعدة بيانات محلية سيادية ─────
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
     implementation(libs.androidx.room.runtime)
@@ -193,10 +215,10 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
-    // â”€â”€â”€â”€â”€ Accompanist â€” أذونات وتسهيلات Compose â”€â”€â”€â”€â”€
+    // ───── Accompanist — أذونات وتسهيلات Compose ─────
     implementation(libs.accompanist.permissions)
 
-    // â”€â”€â”€â”€â”€ Biometric â€” قفل التطبيق بالبصمة/الوجه â”€â”€â”€â”€â”€
+    // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
 

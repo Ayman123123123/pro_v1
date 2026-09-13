@@ -21,6 +21,7 @@ class SovereignNotificationRouter : Service() {
     companion object {
         const val CHANNEL_MESSAGES = "red_messages"
         const val CHANNEL_CALLS = "red_calls"
+        const val CHANNEL_DINSTAR = "red_dinstar"
         const val FOREGROUND_ID = 1001
         const val ACTION_CONNECT = "com.red.action.CONNECT"
     }
@@ -55,6 +56,7 @@ class SovereignNotificationRouter : Service() {
                 setBypassDnd(true)
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             })
+            nm.createNotificationChannel(NotificationChannel(CHANNEL_DINSTAR, getString(com.red.sovereign.R.string.channel_dinstar_name), NotificationManager.IMPORTANCE_LOW))
             nm.createNotificationChannel(NotificationChannel("red_system", getString(com.red.sovereign.R.string.channel_system_name), NotificationManager.IMPORTANCE_MIN))
         }
     }

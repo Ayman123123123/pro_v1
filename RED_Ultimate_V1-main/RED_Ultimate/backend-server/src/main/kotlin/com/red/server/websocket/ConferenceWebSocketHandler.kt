@@ -1,5 +1,6 @@
 package com.red.server.websocket
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
@@ -42,6 +43,9 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
      */
     private val roomMuted = ConcurrentHashMap<String, MutableSet<String>>()
 
+    /** حدّ التفاعلات: آخر إرسال لكل مستخدم (منع الإغراق — مستمع كان يرسل بلا حد). */
+    private val lastReactionAt = ConcurrentHashMap<String, Long>()
+
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
@@ -65,7 +69,18 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             }
             // التفاعل عابر فلا يُحفَظ، أما رفع اليد فحالة قائمة حتى
             // يبتّ فيها المضيف — تُحفَظ ليراها من ينضم لاحقًا.
-            "REACTION" -> relay(session, signal)
+            // حدّ الإغراق: تفاعل واحد كل 800ms لكل مستخدم (X Spaces يجمّع الإيموجي).
+            "REACTION" -> {
+                val now = System.currentTimeMillis()
+                val key = "${signal.roomId}:$userId"
+                val last = lastReactionAt[key] ?: 0L
+                if (now - last < 800) {
+                    sendError(session, signal.roomId, "RATE_LIMITED", "Slow down reactions")
+                } else {
+                    lastReactionAt[key] = now
+                    relay(session, signal)
+                }
+            }
             "RAISE_HAND" -> {
                 val lowered = signal.payload["lowered"]?.toString() == "true"
                 val hands = roomHands.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
@@ -81,6 +96,11 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
 
     private fun handleJoin(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
         val room = rooms.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
+        // حدّ السعة مُنفذ (كان يقبل عدداً غير محدود فيخنق الـ mesh): 100 مشارك كحد X العملي.
+        if (room.size >= MAX_PARTICIPANTS && room.none { (it.attributes["userId"] as? String) == userId }) {
+            sendError(session, signal.roomId, "ROOM_FULL", "Room is full (max $MAX_PARTICIPANTS)")
+            return
+        }
         val roles = roomRoles.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
         synchronized(room) { room.add(session) }
         sessionToRoom[session.id] = signal.roomId
@@ -182,6 +202,11 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
                 // الترقية تُسقط طلب الرفع: تُركت اليد مرفوعة بعد الموافقة
                 // فكان الطلب يظل معلّقًا في قائمة المضيف بلا معنى.
                 "APPROVE_SPEAKER" -> {
+                    val speakers = roles.count { it.value == "SPEAKER" || it.value == "CO_HOST" }
+                    if (speakers >= MAX_SPEAKERS) {
+                        sendError(session, roomId, "STAGE_FULL", "Stage is full (max $MAX_SPEAKERS speakers)")
+                        return
+                    }
                     roles[targetId] = "SPEAKER"
                     roomHands[roomId]?.remove(targetId)
                 }
@@ -190,7 +215,15 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
                     roomHands[roomId]?.remove(targetId)
                 }
                 "MUTE_USER" -> roomMuted.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }.add(targetId)
-                "GRANT_COHOST" -> roles[targetId] = "CO_HOST"
+                "GRANT_COHOST" -> {
+                    // حدّ X: مضيفان مشاركان فقط (كان بلا حد فيصعّد الامتياز بلا نهاية).
+                    val cohosts = roles.count { it.value == "CO_HOST" }
+                    if (cohosts >= MAX_COHOSTS) {
+                        sendError(session, roomId, "TOO_MANY_COHOSTS", "Max $MAX_COHOSTS co-hosts")
+                        return
+                    }
+                    roles[targetId] = "CO_HOST"
+                }
                 "REVOKE_COHOST" -> {
                     if (roles[targetId] == "CO_HOST") roles[targetId] = "SPEAKER"
                 }
@@ -294,6 +327,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             roomHosts.remove(signal.roomId)
             roomHands.remove(signal.roomId)
             roomMuted.remove(signal.roomId)
+            evictReactionKeys(signal.roomId)
         }
     }
 
@@ -328,17 +362,36 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
             roomHosts.remove(roomId)
             roomHands.remove(roomId)
             roomMuted.remove(roomId)
+            evictReactionKeys(roomId)
         }
     }
 
+    /** تنظيف مفاتيح حدّ التفاعلات عند موت الغرفة — وإلا تراكمت بلا حد في الذاكرة. */
+    private fun evictReactionKeys(roomId: String) {
+        val prefix = "$roomId:"
+        lastReactionAt.keys.removeIf { it.startsWith(prefix) }
+    }
+
     companion object {
-        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{8,128}$")
+        /** موحّد مع SFU (4..128) ومع SfuTicketController — كان 8..128 فيفشل القصير. */
+        private val ROOM_ID = Regex("^[A-Za-z0-9_-]{4,128}$")
 
         /** الأدوار المسموح لها بإرسال وسائط — ثابت لا حالة لكل نسخة. */
         private val PUBLISHERS = setOf("HOST", "CO_HOST", "SPEAKER")
+
+        /** حدود X Spaces العملية: 100 مشارك، 20 متحدثاً، مضيفان مشاركان. */
+        const val MAX_PARTICIPANTS = 100
+        const val MAX_SPEAKERS = 20
+        const val MAX_COHOSTS = 2
     }
 }
 
+/**
+ * إشارات التطبيق تتطور أسرع من العقد (التطبيق يرسل userId/deviceId زائدة) —
+ * تجاهل المجهول بدل قتل الجلسة (كان UnrecognizedPropertyException يغلق
+ * livestream/conference فور اتصال النسخ الحديثة).
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class IncomingConferenceSignal(
     val type: String,
     val roomId: String = "",

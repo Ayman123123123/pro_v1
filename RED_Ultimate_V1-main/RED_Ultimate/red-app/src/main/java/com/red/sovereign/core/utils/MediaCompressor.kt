@@ -9,9 +9,12 @@ import android.net.Uri
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
+import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Effects
+import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import com.red.sovereign.media.VoiceQuality
@@ -30,8 +33,30 @@ object MediaCompressor {
     /** Max image dimension after compression — larger gets downscaled by power-of-two (like WhatsApp). */
     const val DEFAULT_MAX_DIMENSION = 2048
 
+    /** مواصفات الجودة المحفوظة في younes_user_preferences (media_quality) — يستهلكها DeviceSettings. */
+    data class QualitySpec(val maxDimension: Int, val jpegQuality: Int)
+    fun specFor(quality: String): QualitySpec = when (quality) {
+        "BALANCED" -> QualitySpec(1280, 75)
+        "SAVER" -> QualitySpec(640, 60)
+        else -> QualitySpec(DEFAULT_MAX_DIMENSION, 85)
+    }
+
+    /**
+     * ضغط بجودة المستخدم المحفوظة فعلياً (HIGH/BALANCED/SAVER من شاشة جودة الوسائط).
+     * يقرأ Prefs مباشرة دون الاعتماد على SettingsRuntime لتفادي دور استيراد
+     * core.utils ← settings (settings يستهلك core في ServerEndpoint وغيره).
+     */
+    fun compressImageWithUserQuality(context: Context, inputPath: String, outputPath: String): File {
+        val quality = runCatching {
+            context.getSharedPreferences("younes_user_preferences", Context.MODE_PRIVATE)
+                .getString("media_quality", "HIGH") ?: "HIGH"
+        }.getOrElse { "HIGH" }
+        val spec = specFor(quality)
+        return compressImage(inputPath, outputPath, spec.maxDimension, spec.jpegQuality)
+    }
+
     /** JPEG 85% balances readability, quality, and encrypted upload size. */
-    fun compressImage(inputPath: String, outputPath: String, maxDimension: Int = DEFAULT_MAX_DIMENSION): File {
+    fun compressImage(inputPath: String, outputPath: String, maxDimension: Int = DEFAULT_MAX_DIMENSION, jpegQuality: Int = 85): File {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(inputPath, bounds)
         val width = bounds.outWidth; val height = bounds.outHeight
@@ -39,7 +64,9 @@ object MediaCompressor {
         var sample = 1
         while (maxOf(width, height) / (sample * 2) >= maxDimension) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        var bitmap = requireNotNull(BitmapFactory.decodeFile(inputPath, options)) { "IMAGE_DECODE_FAILED" }
+        val decodeFile = BitmapFactory.decodeFile(inputPath, options)
+        val bmp = decodeFile ?: error("IMAGE_DECODE_FAILED")
+        var bitmap = bmp
         // EXIF orientation — without it camera photos appear flipped/rotated after compression
         bitmap = runCatching {
             when (ExifInterface(inputPath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
@@ -62,7 +89,7 @@ object MediaCompressor {
         outputFile.parentFile?.mkdirs()
         try {
             FileOutputStream(outputFile).use { out ->
-                check(scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)) {
+                check(scaled.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(40, 100), out)) {
                     "IMAGE_COMPRESSION_FAILED"
                 }
             }
@@ -78,6 +105,7 @@ object MediaCompressor {
      * Media3 1.11 exports an EditedMediaItem; passing a raw MediaItem would keep
      * the original resolution and make the old "720p" claim ineffective.
      */
+    @UnstableApi
     fun compressVideo(context: Context, inputUri: Uri, outputPath: String, listener: Transformer.Listener) {
         File(outputPath).parentFile?.mkdirs()
         val videoEffects: List<Effect> = listOf(Presentation.createForHeight(720))
@@ -96,6 +124,7 @@ object MediaCompressor {
      * Uses Media3 Transformer for consistent cross-device encoding.
      * Returns the output file on success.
      */
+    @UnstableApi
     suspend fun compressAudio(
         context: Context,
         inputPath: String,
@@ -118,10 +147,10 @@ object MediaCompressor {
         val result = CompletableDeferred<java.io.File>()
         val transformer = Transformer.Builder(context)
             .addListener(object : Transformer.Listener {
-                override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: ExportResult) {
+                override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                     result.complete(java.io.File(outputPath))
                 }
-                override fun onError(composition: androidx.media3.transformer.Composition, exportResult: ExportResult, exportException: androidx.media3.transformer.ExportException) {
+                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                     result.completeExceptionally(exportException)
                 }
             })
@@ -134,6 +163,7 @@ object MediaCompressor {
     /**
      * Synchronous version for backward compatibility with Transformer.Listener callback.
      */
+    @UnstableApi
     fun compressAudio(
         context: Context,
         inputPath: String,
@@ -163,9 +193,10 @@ object MediaCompressor {
      * Creates a default Transformer.Listener that does nothing.
      * Useful when caller doesn't need callbacks.
      */
+    @UnstableApi
     fun defaultTransformerListener(): Transformer.Listener = object : Transformer.Listener {
-        override fun onCompleted(composition: androidx.media3.transformer.Composition, exportResult: ExportResult) {}
-        override fun onError(composition: androidx.media3.transformer.Composition, exportResult: ExportResult, exportException: androidx.media3.transformer.ExportException) {}
+        override fun onCompleted(composition: Composition, exportResult: ExportResult) {}
+        override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {}
     }
 
     private fun Bitmap.rotated(degrees: Float): Bitmap {

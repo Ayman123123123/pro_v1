@@ -1,0 +1,12 @@
+﻿spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/red_sovereign
+    username: admin
+    password: admin
+  mongodb:
+    uri: mongodb://127.0.0.1:27017/red_sovereign
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ""

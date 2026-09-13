@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -13,21 +14,23 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
@@ -38,6 +41,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,14 +54,129 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+/**
+ * شاشة واردة كاملة لكل أنواع المكالمات — من شاشة القفل.
+ */
+class IncomingCallActivity : ComponentActivity() {
+    private val viewModel: IncomingCallViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+        )
+        bindIntent(intent)
+        setContent {
+            IncomingCallScreen(viewModel = viewModel, onFinish = { finishToMainIfRoot() })
+        }
+        lifecycleScope.launch {
+            delay(CallRingPolicy.UNANSWERED_TIMEOUT_MS)
+            if (!viewModel.isHandled) {
+                viewModel.decline()
+                finishToMainIfRoot()
+            }
+        }
+    }
+
+    /** LEGENDARY FIX P0-5: بعد END كان يخرج للـ Launcher (المستخدم يظن الانهيار) — عودة دقيقة لـ Main عند جذر المهمة */
+    private fun finishToMainIfRoot() {
+        if (isTaskRoot) {
+            runCatching {
+                startActivity(Intent(this, com.red.sovereign.MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                })
+            }
+        }
+        finish()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        bindIntent(intent)
+    }
+
+    private fun bindIntent(intent: Intent?) {
+        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: CALL_TYPE_CONFERENCE
+        viewModel.callType = callType
+        when (callType) {
+            CALL_TYPE_PSTN -> {
+                viewModel.callId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
+                viewModel.peer = intent?.getStringExtra(EXTRA_PEER).orEmpty()
+                viewModel.mode = "PSTN"
+                viewModel.inviter = viewModel.peer
+            }
+            CALL_TYPE_1TO1 -> {
+                viewModel.callId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
+                viewModel.peer = intent?.getStringExtra(EXTRA_PEER).orEmpty()
+                viewModel.mode = intent?.getStringExtra(EXTRA_MODE) ?: "VOICE"
+                viewModel.inviter = intent?.getStringExtra(EXTRA_INVITER).orEmpty().ifBlank { viewModel.peer }
+            }
+            CALL_TYPE_GROUP -> {
+                viewModel.groupCallId = intent?.getStringExtra(GroupCallService.EXTRA_GROUP_CALL_ID).orEmpty()
+                viewModel.myUserId = intent?.getStringExtra(GroupCallService.EXTRA_MY_USER_ID).orEmpty()
+                viewModel.peer = intent?.getStringExtra(GroupCallService.EXTRA_HOST_NAME).orEmpty()
+                viewModel.mode = if (intent?.getBooleanExtra(GroupCallService.EXTRA_IS_VIDEO, false) == true) "VIDEO" else "VOICE"
+                viewModel.inviter = viewModel.peer
+            }
+            CALL_TYPE_LIVESTREAM -> {
+                viewModel.streamId = intent?.getStringExtra(LiveStreamService.EXTRA_STREAM_ID).orEmpty()
+                viewModel.userId = intent?.getStringExtra(LiveStreamService.EXTRA_USER_ID).orEmpty()
+                viewModel.peer = intent?.getStringExtra(LiveStreamService.EXTRA_BROADCASTER_NAME).orEmpty()
+                viewModel.mode = "VIDEO"
+                viewModel.inviter = viewModel.peer
+            }
+            else -> {
+                viewModel.roomId = intent?.getStringExtra(ConferenceService.EXTRA_ROOM_ID).orEmpty()
+                viewModel.userId = intent?.getStringExtra(ConferenceService.EXTRA_USER_ID).orEmpty()
+                viewModel.inviter = intent?.getStringExtra(ConferenceService.EXTRA_INVITER).orEmpty()
+                viewModel.video = intent?.getBooleanExtra(ConferenceService.EXTRA_VIDEO, false) ?: false
+                viewModel.mode = if (viewModel.video) "VIDEO" else "VOICE"
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_CALL_TYPE = "call_type"
+        const val CALL_TYPE_1TO1 = "1to1"
+        const val CALL_TYPE_PSTN = "pstn"
+        const val CALL_TYPE_GROUP = "group"
+        const val CALL_TYPE_CONFERENCE = "conference"
+        const val CALL_TYPE_LIVESTREAM = "livestream"
+        const val EXTRA_CALL_ID = "call_id"
+        const val EXTRA_PEER = "peer"
+        const val EXTRA_MODE = "mode"
+        const val EXTRA_INVITER = "inviter"
+
+        /** إطلاق شاشة رنين PSTN (مكالمة على شريحة المالك عبر DINSTAR). */
+        fun launchPstn(context: Context, callId: String, peer: String) {
+            context.startActivity(
+                Intent(context, IncomingCallActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(EXTRA_CALL_TYPE, CALL_TYPE_PSTN)
+                    putExtra(EXTRA_CALL_ID, callId)
+                    putExtra(EXTRA_PEER, peer)
+                    putExtra(EXTRA_MODE, "PSTN")
+                }
+            )
+        }
+
         fun launch1to1(context: Context, callId: String, peer: String, mode: String, inviter: String = peer) {
             context.startActivity(
                 Intent(context, IncomingCallActivity::class.java).apply {
@@ -120,13 +243,28 @@ class IncomingCallViewModel(application: android.app.Application) : AndroidViewM
     var userId = ""
     var video = false
     var streamId = ""
+    /** هل تم قبول مكالمة PSTN وينتظر انتقالها للحالة النشطة */
+    var pstnAccepting by androidx.compose.runtime.mutableStateOf(false)
 
     fun accept(withVideo: Boolean) {
         isHandled = true
         val app = getApplication<android.app.Application>()
         when (callType) {
+            // مكالمة PSTN واردة على شريحة المالك: القبول يمر عبر منسق /ws/pstn
+            // (PSTN_ACCEPT → AMI Redirect) ثم المستمع المسجَّل يجيب بـ 200 OK.
+            IncomingCallActivity.CALL_TYPE_PSTN -> {
+                pstnAccepting = true
+                val ok = PstnIncomingCallCoordinator.active?.acceptIncoming() ?: false
+                if (!ok) {
+                    // فشل إرسال PSTN_ACCEPT (WebSocket مقطوع) — أبلغ المستخدم
+                    android.util.Log.w("PstnIncoming", "PSTN_ACCEPT failed, coordinator not active")
+                    pstnAccepting = false
+                }
+                // لا ننهي الـ Activity هنا — ننتظر انتقال PstnWebRtcManager إلى ACTIVE
+                // عبر مراقبة الحالة في الـ Composable (LaunchedEffect)
+            }
             IncomingCallActivity.CALL_TYPE_1TO1 -> {
-                YounesCallService.accept(app, cameraOn = withVideo && mode == "VIDEO", micOn = true)
+                YounesCallService.accept(app, cameraOn = withVideo && mode == "VIDEO", micOn = true, isVideo = withVideo)
             }
             IncomingCallActivity.CALL_TYPE_GROUP -> {
                 val uid = myUserId.ifBlank { TokenStore(app).redId.orEmpty() }
@@ -147,6 +285,7 @@ class IncomingCallViewModel(application: android.app.Application) : AndroidViewM
         isHandled = true
         val app = getApplication<android.app.Application>()
         when (callType) {
+            IncomingCallActivity.CALL_TYPE_PSTN -> PstnIncomingCallCoordinator.active?.rejectIncoming()
             IncomingCallActivity.CALL_TYPE_1TO1 -> YounesCallService.action(app, YounesCallService.ACTION_REJECT)
             IncomingCallActivity.CALL_TYPE_GROUP -> GroupCallService.decline(app, groupCallId)
             IncomingCallActivity.CALL_TYPE_LIVESTREAM -> LiveStreamService.stop(app)
@@ -157,10 +296,50 @@ class IncomingCallViewModel(application: android.app.Application) : AndroidViewM
 
 @Composable
 fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
-    val inviterName = remember(viewModel.inviter) { viewModel.inviter.ifBlank { viewModel.peer }.take(12) }
+    // G3: معرف المتصل الكامل — الاسم + Red ID ظاهر (كان مقتطعاً take(12) بلا Red ID).
+    val inviterRaw = viewModel.inviter.ifBlank { viewModel.peer }
+    val inviterName = remember(inviterRaw) { inviterRaw.take(24).ifBlank { "مجهول" } }
+    val inviterRedId = remember(inviterRaw, viewModel.peer) {
+        // إن كان المعروض اسماً، اعرض peer كـ Red ID؛ وإلا اعرض الخام نفسه.
+        when {
+            inviterRaw.isBlank() -> ""
+            viewModel.peer.isNotBlank() && viewModel.peer != inviterRaw -> viewModel.peer
+            else -> inviterRaw
+        }
+    }
     var showVideoToggle by remember { mutableStateOf(viewModel.mode == "VIDEO" || viewModel.video) }
     val isVideoCapable = viewModel.mode == "VIDEO" || viewModel.video ||
         viewModel.callType == IncomingCallActivity.CALL_TYPE_LIVESTREAM
+    val isPstn = viewModel.callType == IncomingCallActivity.CALL_TYPE_PSTN
+
+    // لـ PSTN: راقب انتقال المكالمة إلى ACTIVE — عندها أغلق شاشة الرنين واعرض شاشة المكالمة النشطة
+    if (isPstn && viewModel.pstnAccepting) {
+        val pstnManager = remember { PstnWebRtcManager.incoming(viewModel.getApplication()) }
+        val pstnState by pstnManager.stateFlow.collectAsState()
+        LaunchedEffect(pstnState) {
+            if (pstnState == PstnWebRtcManager.PstnCallState.ACTIVE) {
+                viewModel.pstnAccepting = false
+                onFinish()
+            }
+        }
+    }
+
+    // شاشة انتظار بعد قبول PSTN (قبل انتقال الصوت)
+    if (isPstn && viewModel.pstnAccepting) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                androidx.compose.material3.CircularProgressIndicator(color = Color(0xFF00C98C))
+                Spacer(Modifier.height(16.dp))
+                Text("جاري توصيل المكالمة...", color = Color.White, fontSize = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(inviterName, color = Color.White.copy(0.6f), fontSize = 14.sp)
+            }
+        }
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF060D1A))) {
         Column(
@@ -184,6 +363,11 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(inviterName, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                // G3: Red ID الكامل تحت الاسم — معرف المتصل حيث كان ناقصاً.
+                if (inviterRedId.isNotBlank() && inviterRedId != inviterName) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(inviterRedId, color = Color.White.copy(0.55f), fontSize = 13.sp)
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = if (isVideoCapable) "فيديو" else "صوت",
@@ -233,6 +417,16 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                         )
                     }
                 }
+                // ── سلايدر السحب السريع (إضافة — الأزرار الأصلية باقية أدناه) ──
+                SwipeAnswerSlider(
+                    onAccept = {
+                        val isPstnCall = viewModel.callType == IncomingCallActivity.CALL_TYPE_PSTN
+                        viewModel.accept(withVideo = showVideoToggle && isVideoCapable)
+                        if (!isPstnCall) onFinish()
+                    },
+                    onDecline = { viewModel.decline(); onFinish() }
+                )
+                Spacer(Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(Color(0xFFE53935)), contentAlignment = Alignment.Center) {
@@ -252,8 +446,10 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             contentAlignment = Alignment.Center
                         ) {
                             IconButton(onClick = {
+                                val isPstn = viewModel.callType == IncomingCallActivity.CALL_TYPE_PSTN
                                 viewModel.accept(withVideo = showVideoToggle && isVideoCapable)
-                                onFinish()
+                                // لـ PSTN: لا نغلق الشاشة فوراً — ننتظر انتقال WebRTC إلى ACTIVE (يُظهر شاشة "جاري التوصيل")
+                                if (!isPstn) onFinish()
                             }) {
                                 Icon(
                                     if (showVideoToggle && isVideoCapable) Icons.Default.Videocam else Icons.Default.Call,
@@ -271,3 +467,83 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
         }
     }
 }
+/**
+ * سلايدر الرد بالسحب — إضافة اختيارية فوق أزرار القبول/الرفض الأصلية.
+ * اسحب المقبض يميناً للقبول، يساراً للرفض. يعود تلقائياً للوسط إن أُفلت مبكراً.
+ */
+@Composable
+private fun SwipeAnswerSlider(
+    onAccept: () -> Unit,
+    onDecline: () -> Unit
+) {
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+    ) {
+        val maxPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val threshold = maxPx * 0.30f
+        val offsetX = remember { Animatable(0f) }
+        val scope = rememberCoroutineScope()
+        var settled by remember { mutableStateOf(false) }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(76.dp)
+                .clip(RoundedCornerShape(40.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFFE53935).copy(alpha = 0.35f),
+                            Color(0xFF1B2635),
+                            Color(0xFF00C98C).copy(alpha = 0.35f)
+                        )
+                    )
+                )
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        if (!settled) scope.launch { offsetX.snapTo(offsetX.value + delta) }
+                    },
+                    onDragStopped = {
+                        if (settled) return@draggable
+                        when {
+                            offsetX.value > threshold -> {
+                                settled = true
+                                scope.launch { offsetX.animateTo(maxPx, tween(120)) }
+                                onAccept()
+                            }
+                            offsetX.value < -threshold -> {
+                                settled = true
+                                scope.launch { offsetX.animateTo(-maxPx, tween(120)) }
+                                onDecline()
+                            }
+                            else -> scope.launch { offsetX.animateTo(0f, tween(200)) }
+                        }
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.CallEnd, contentDescription = "اسحب للرفض", tint = Color(0xFFE53935), modifier = Modifier.size(26.dp))
+                Text("اسحب للرد", color = Color.White.copy(alpha = 0.55f), fontSize = 13.sp)
+                Icon(Icons.Default.Call, contentDescription = "اسحب للقبول", tint = Color(0xFF00C98C), modifier = Modifier.size(26.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(listOf(Color(0xFF00C98C), Color(0xFF00795A)))
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Call, contentDescription = "مقبض السحب", tint = Color.White, modifier = Modifier.size(28.dp))
+            }
+        }
+    }
+}
+

@@ -3,9 +3,11 @@ package com.red.sovereign.calls
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,36 +15,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Debug
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.HdrStrong
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.RadioButtonChecked
-import androidx.compose.material.icons.filled.Safe
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -54,34 +55,78 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.red.sovereign.settings.SettingsViewModel
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.SovereignColors
-import com.red.sovereign.ui.theme.YounesEmerald
+
+/** تسميتا منتقي الجودة — تقابلان قيمتي `dataSaverCalls` لا أكثر. */
+private const val QUALITY_SAVER = "توفير البيانات"
+private const val QUALITY_AUTO = "تلقائي"
 
 /**
  * شاشة إعدادات المكالمات — Call Settings Screen
  *
  * تتحكم في:
- * - جودة الفيديو (LOW/MEDIUM/HIGH/AUTO)
- * - كتم تلقائي عند الدخول لمكالمة
- * - حفظ سجل المكالمات مشفراً
- * - إعدادات الصوت (مكبر، بلوتوث)
- * - إعدادات الخصوصية (تسجيل المكالمات، الإشعارات)
- * - إعدادات المتصفح (debug, telemetry)
+ * - جودة الفيديو (توفير البيانات / تلقائي حسب الشبكة)
+ * - كتم تلقائي عند الدخول لمكالمة (دائم عبر YounesSettings.autoMuteOnEntry)
+ * - حفظ سجل المكالمات مشفراً (دائماً عبر CallLogCipher)
+ * - إعدادات الصوت: مكبر تلقائي + أولوية بلوتوث (دائمان عبر Prefs ويقرأهما
+ *   prepareAudio في YounesCallService و GroupCallService عند بدء كل مكالمة)
+ * - نغمة المكالمة + الاهتزاز (دائمان عبر call_ringtone_uri/call_vibration
+ *   ويقرأهما startRingtone في الخدمتين — اختيار عبر RingtonePickerDialog
+ *   بنظام RingtoneManager.ACTION_RINGTONE_PICKER مع معاينة)
+ * - طوارئ SOS (محرر SosEditorScreen عبر EmergencyCallManager + زر تجربة
+ *   triggerEmergencySos مع إذن CALL_PHONE)
+ * - إعدادات الخصوصية (إشعارات المكالمات الدائمة)
+ * - إعدادات التطوير (debug, telemetry — جلسة فقط)
+ *
+ * ## ما يُحفظ فعلاً
+ *
+ * كل ما يلي له حقل حقيقي في [com.red.sovereign.settings.YounesSettings]
+ * ويمرّ عبر [SettingsViewModel] فيُكتب في `SharedPreferences` ويُقرأ عبر
+ * `SettingsRuntime.current`:
+ *
+ * - **جودة الفيديو** ⇦ `dataSaverCalls` — يقرأها RedQualityManager.videoProfile.
+ * - **إشعارات المكالمات** ⇦ `callNotifications` — تقرأها الخدمات قبل الرنين.
+ * - **نغمة المكالمة** ⇦ `callRingtoneUri` — يقرأها startRingtone في الخدمتين.
+ * - **اهتزاز الرنين** ⇦ `callVibration` — يقرأها startRingtone قبل Vibrator.
+ * - **مكبر تلقائي** ⇦ `autoSpeaker` — يقرأه prepareAudio عند بدء المكالمة.
+ * - **أولوية بلوتوث** ⇦ `bluetoothPriority` — يقرأه prepareAudio قبل قرار المكبر.
+ * - **كتم تلقائي** ⇦ `autoMuteOnEntry` — يُطبق بعد إنشاء محرك WebRTC.
+ *
+ * «تشفير سجل المكالمات» ليس مفتاحاً: [CallLogCipher] يُطبَّق دائماً.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallSettingsScreen(
     onBack: () -> Unit = {}
 ) {
-    var videoQuality by remember { mutableStateOf("AUTO") }
-    var autoMute onEntry by remember { mutableStateOf(false) }
-    var encryptCallLog by remember { mutableStateOf(true) }
-    var enableTelemetry by remember { mutableStateOf(false) }
-    var enableRecording by remember { mutableStateOf(false) }
-    var enableNotifications by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val settings: SettingsViewModel = viewModel()
+    // مُخزَّنة فعلاً في YounesSettings (دائمة عبر SharedPreferences + SettingsRuntime)
+    val dataSaverCalls = settings.state.dataSaverCalls
+    val autoSpeaker = settings.state.autoSpeaker
+    val bluetoothPriority = settings.state.bluetoothPriority
+    val autoMuteOnEntry = settings.state.autoMuteOnEntry
+    // جلسة فقط: لا أثر لها على المكالمات بعد (telemetry/debug)
+    val persistentTelemetry = settings.state.devTelemetryEnabled
+    val persistentDebug = settings.state.devDebugMode
+    val persistentWebrtc = settings.state.devWebrtcLogging
+    // التسجيل التلقائي دائم عبر CALL_AUTO_RECORD — يُقرأ قبل CallRecordingManager.start
+    // (الحوار الفعلي RecordingConsentDialog يُفتح من شاشة المكالمة النشطة حيث callId حي).
+    var confirmClearHistory by remember { mutableStateOf(false) }
+    var showRingtoneDialog by remember { mutableStateOf(false) }
+    var showSosEditor by remember { mutableStateOf(false) }
+
+    if (showSosEditor) {
+        SosEditorScreen(onBack = { showSosEditor = false })
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -92,7 +137,7 @@ fun CallSettingsScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "رجوع", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع", tint = Color.White)
                     }
                 }
             )
@@ -117,7 +162,9 @@ fun CallSettingsScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    VideoQualitySelector(selected = videoQuality) { videoQuality = it }
+                    VideoQualitySelector(
+                        selected = if (dataSaverCalls) QUALITY_SAVER else QUALITY_AUTO
+                    ) { settings.setDataSaverCalls(it == QUALITY_SAVER) }
                     Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -129,7 +176,11 @@ fun CallSettingsScreen(
                             Spacer(Modifier.width(8.dp))
                             Text("جودة الفيديو", color = Color.White, fontSize = 14.sp)
                         }
-                        Text(videoQuality, color = AqyalGold, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (dataSaverCalls) "توفير البيانات" else "تلقائي حسب الشبكة",
+                            color = AqyalGold,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -143,24 +194,98 @@ fun CallSettingsScreen(
             SettingRow(
                 icon = Icons.Default.Speaker,
                 title = "مكبر الصوت التلقائي",
-                description = "تفعيل مكبر الصوت عند بدء المكالمة",
-                defaultValue = false
-            ) { /* toggle */ }
+                description = "تفعيل مكبر الصوت عند بدء المكالمة (يُحفظ دائماً ويطبقه prepareAudio)",
+                checked = autoSpeaker,
+                onCheckedChange = settings::setAutoSpeaker
+            )
 
             SettingRow(
                 icon = Icons.Default.Bluetooth,
                 title = "أولوية البلوتوث",
-                description = "توجيه الصوت إلى جهاز بلوتوث متصل عند توفره",
-                defaultValue = true
-            ) { /* toggle */ }
+                description = "توجيه الصوت لجهاز بلوتوث متصل عند توفره قبل قرار المكبر (يُحفظ دائماً)",
+                checked = bluetoothPriority,
+                onCheckedChange = settings::setBluetoothPriority
+            )
 
             SettingRow(
                 icon = Icons.Default.MicOff,
                 title = "كتم تلقائي عند الدخول",
-                description = "كتم الميكروفون تلقائياً عند دخول مكالمة",
-                checked = autoMute onEntry,
-                onCheckedChange = { autoMute onEntry = it }
+                description = "كتم الميكروفون تلقائياً عند دخول مكالمة (يُحفظ دائماً ويُطبق بعد إنشاء المحرك)",
+                checked = autoMuteOnEntry,
+                onCheckedChange = settings::setAutoMuteOnEntry
             )
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── قسم النغمة والاهتزاز ────────────────────────────────────
+            SettingsSectionTitle("نغمة المكالمة والاهتزاز")
+            Spacer(Modifier.height(8.dp))
+
+            CallRingtoneSettingRow(settings)
+
+            SettingRow(
+                icon = Icons.Default.Vibration,
+                title = "اهتزاز مع الرنين",
+                description = "اهتزاز Vibrator مع نغمة المكالمة الواردة (يقرأه startRingtone في الخدمتين)",
+                checked = settings.state.callVibration,
+                onCheckedChange = settings::setCallVibration
+            )
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { showRingtoneDialog = true },
+                colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.MusicNote, "حوار النغمة", tint = AqyalGold, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("حوار النغمة والمعاينة", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(
+                                "فتح RingtonePickerDialog مع المعاينة ومفتاح الاهتزاز",
+                                color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Text("فتح", color = AqyalGold, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── قسم الطوارئ SOS ─────────────────────────────────────────
+            SettingsSectionTitle("طوارئ SOS")
+            Spacer(Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { showSosEditor = true },
+                colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Emergency, "طوارئ SOS", tint = Color.Red, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("جهات طوارئ SOS", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(
+                                "عرض/إضافة/حذف عبر EmergencyCallManager + زر تجربة",
+                                color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp
+                            )
+                        }
+                    }
+                    Text("فتح", color = AqyalGold, fontWeight = FontWeight.Bold)
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
@@ -168,28 +293,30 @@ fun CallSettingsScreen(
             SettingsSectionTitle("الخصوصية والأمان")
             Spacer(Modifier.height(8.dp))
 
+            // بلا مبدّل: التشفير غير قابل للتعطيل — CallLogCipher يُطبَّق في كل
+            // مسار كتابة للسجل (YounesCallService/GroupCallService/ConferenceService/
+            // LiveStreamService)، فمبدّلٌ هنا كان سيوهم بإمكان إيقافه.
             SettingRow(
-                icon = Icons.Default.Safe,
+                icon = Icons.Default.Security,
                 title = "تشفير سجل المكالمات",
-                description = "تشفير بيانات المكالمات محلياً (CallLogCipher)",
-                checked = encryptCallLog,
-                onCheckedChange = { encryptCallLog = it }
+                description = "مُفعَّل دائماً — يُشفَّر كل سجل محلياً عبر CallLogCipher"
             )
 
             SettingRow(
                 icon = Icons.Default.Power,
                 title = "تسجيل المكالمات",
-                description = "السماح بتسجيل المكالمات صوتياً (يتطلب موافقة الطرفين)",
-                checked = enableRecording,
-                onCheckedChange = { enableRecording = it }
+                description = if (settings.state.callAutoRecord) "تسجيل تلقائي مفعّل دائماً — بموافقة الطرفين عبر RecordingConsentDialog"
+                else "السماح بتسجيل المكالمات صوتياً — يتطلب موافقة الطرفين",
+                checked = settings.state.callAutoRecord,
+                onCheckedChange = settings::setCallAutoRecord
             )
 
             SettingRow(
                 icon = Icons.Default.RadioButtonChecked,
                 title = "إشعارات المكالمات",
-                description = "عرض إشعارات المكالمات الواردة على شاشة القفل",
-                checked = enableNotifications,
-                onCheckedChange = { enableNotifications = it }
+                description = "رنين المكالمات الواردة وإشعارها على شاشة القفل",
+                checked = settings.state.callNotifications,
+                onCheckedChange = settings::setCallNotifications
             )
 
             Spacer(Modifier.height(16.dp))
@@ -199,27 +326,38 @@ fun CallSettingsScreen(
             Spacer(Modifier.height(8.dp))
 
             SettingRow(
-                icon = Icons.Default.Debug,
+                icon = Icons.Default.BugReport,
                 title = "تفعيل Telemetry",
-                description = "إرسال إحصائيات الأداء لجودة المكالمة (CallQualityManager)",
-                checked = enableTelemetry,
-                onCheckedChange = { enableTelemetry = it }
+                description = "إرسال إحصائيات الأداء لجودة المكالمة (CallQualityManager) — دائم عبر dev_telemetry_enabled",
+                checked = persistentTelemetry,
+                onCheckedChange = settings::setDevTelemetryEnabled
             )
 
             SettingRow(
                 icon = Icons.Default.Build,
                 title = "وضع التصحيح",
-                description = "عرض سجلات WebRTC مفصلة في Logcat",
-                defaultValue = false
-            ) { /* toggle */ }
+                description = "عرض سجلات WebRTC مفصلة في Logcat — دائم عبر dev_debug_mode",
+                checked = persistentDebug,
+                onCheckedChange = settings::setDevDebugMode
+            )
+
+            SettingRow(
+                icon = Icons.Default.Build,
+                title = "تسجيل WebRTC",
+                description = "تتبع ICE/SDP الموسع — دائم عبر dev_webrtc_logging",
+                checked = persistentWebrtc,
+                onCheckedChange = settings::setDevWebrtcLogging
+            )
 
             Spacer(Modifier.height(16.dp))
 
             // ── زر حذف السجل ─────────────────────────────────────────────
+            // يمسح جدول call_logs فعلياً عبر CallManagerIntegration.clearCallLogs،
+            // بتأكيد أولاً لأن الحذف غير قابل للتراجع.
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { /* clear history */ },
+                    .clickable { confirmClearHistory = true },
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A0A0A)),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -237,6 +375,27 @@ fun CallSettingsScreen(
             }
         }
     }
+
+    if (showRingtoneDialog) {
+        RingtonePickerDialog(settings = settings, onDismiss = { showRingtoneDialog = false })
+    }
+
+    if (confirmClearHistory) {
+        AlertDialog(
+            onDismissRequest = { confirmClearHistory = false },
+            title = { Text("حذف سجل المكالمات؟") },
+            text = { Text("سيُحذف كل سجل المكالمات المحفوظ على هذا الجهاز. لا يمكن التراجع.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearHistory = false
+                    CallManagerIntegration.clearCallLogs(context)
+                }) { Text("حذف", color = Color.Red) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearHistory = false }) { Text("إلغاء") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -250,9 +409,17 @@ fun SettingsSectionTitle(title: String) {
     )
 }
 
+/**
+ * منتقي جودة الفيديو — خيارَان فقط لأنهما وحدهما لهما أثر حقيقي.
+ *
+ * كانت القائمة `LOW/MEDIUM/HIGH/AUTO` بلا أي مخزّن، والجودة في التطبيق تُحسب
+ * في [com.red.sovereign.core.RedQualityManager.videoProfile] من مستوى الشبكة
+ * ومن `dataSaverCalls` وحده. فأربع درجات ثلاثٌ منها بلا مقابل كانت واجهة
+ * كاذبة؛ الخيارَان هنا يقابلان قيمتي ذلك الحقل تماماً.
+ */
 @Composable
 fun VideoQualitySelector(selected: String, onSelect: (String) -> Unit) {
-    val qualities = listOf("LOW", "MEDIUM", "HIGH", "AUTO")
+    val qualities = listOf(QUALITY_SAVER, QUALITY_AUTO)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -275,9 +442,10 @@ fun QualityChip(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(if (selected) AqyalGold else SovereignColors.SurfaceDark),
+                .defaultMinSize(minWidth = 96.dp, minHeight = 44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(if (selected) AqyalGold else SovereignColors.SurfaceDark)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(

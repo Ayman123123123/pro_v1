@@ -41,7 +41,9 @@ data class PollOptionDto(
     val optionText: String,
     val optionOrder: Int = 0,
     val voteCount: Int = 0,
-    val percentage: Double = 0.0
+    val percentage: Double = 0.0,
+    /** صورة الخيار (نمط X): رابط http(s) أو objectKey وسيط مصدَّق. */
+    val imageUrl: String? = null
 )
 
 @Serializable
@@ -59,7 +61,12 @@ data class CreatePollRequest(
     val pollType: String = "SINGLE_CHOICE",
     val isAnonymous: Boolean = false,
     val allowAddOptions: Boolean = false,
-    val endsAt: String? = null
+    val endsAt: String? = null,
+    /**
+     * صور الخيارات موازيةً لـ[options] (null = نصي). يقبلها
+     * ContentController.createPoll باسم `optionImages`.
+     */
+    val optionImages: List<String?> = emptyList()
 )
 
 @Serializable

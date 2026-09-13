@@ -20,8 +20,19 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(join(root, 'src/styles.css'), 'utf8');
 
 /** يستخرج متغيّرات --yns-* من كتلة :root في الملف الفعلي. */
-function readTokens(source) {
-  const block = source.slice(source.indexOf(':root {'), source.indexOf('/* Spacing System'));
+function readTokens(source, blockStart = ':root {') {
+  const block = source.slice(source.indexOf(blockStart), source.indexOf('/* Spacing System'));
+  const tokens = {};
+  for (const m of block.matchAll(/--(yns-[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)) tokens[m[1]] = m[2];
+  return tokens;
+}
+
+/** يستخرج متغيرات الوضع الفاتح [data-theme="light"] إن وُجدت. */
+function readLightTokens(source) {
+  const start = source.indexOf('[data-theme="light"] {');
+  if (start === -1) return {};
+  const end = source.indexOf('}', start);
+  const block = source.slice(start, end);
   const tokens = {};
   for (const m of block.matchAll(/--(yns-[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)) tokens[m[1]] = m[2];
   return tokens;
@@ -41,6 +52,7 @@ function ratio(a, b) {
 }
 
 const T = readTokens(css);
+const TL = readLightTokens(css);
 
 // الحد الأدنى: 4.5 للنص العادي، 3.0 للنص الكبير/العناصر الرسومية (WCAG 1.4.3 / 1.4.11)
 const PAIRS = [
@@ -85,6 +97,32 @@ if (failed > 0) {
   console.error(`\n❌ ${failed} زوجًا دون الحد المطلوب.`);
   console.error('   عدِّل القيمة في :root حتى تبلغ الحد — لا تُخفِّض الحد.\n');
   process.exit(1);
+}
+
+// ─── فحص الوضع الفاتح (إضافة 2026 — كان الحارس يفحص الداكن فقط) ───
+const LIGHT_PAIRS = [
+  ['الفاتح: النص على السطح', 'yns-text', 'yns-surface', 4.5],
+  ['الفاتح: الثانوي على السطح', 'yns-text-secondary', 'yns-surface', 4.5],
+  ['الفاتح: الأخضر على السطح', 'yns-green', 'yns-surface', 4.5],
+  ['الفاتح: الذهبي على السطح', 'yns-gold', 'yns-surface', 4.5],
+];
+if (Object.keys(TL).length) {
+  console.log('🌞 فحص الوضع الفاتح\n');
+  for (const [label, fg, bg, min] of LIGHT_PAIRS) {
+    if (!TL[fg] || !TL[bg]) { console.log(`  ⚠️ تخطٍّ ${label} (غير معرّف)`); continue; }
+    const r = ratio(TL[fg], TL[bg]);
+    const ok = r >= min;
+    if (!ok) failed++;
+    const grade = r >= 7 ? 'AAA' : r >= 4.5 ? 'AA' : r >= 3 ? 'كبير فقط' : 'راسب';
+    console.log(
+      `  ${ok ? '✅' : '❌'} ${label.padEnd(26)} ${r.toFixed(2).padStart(5)}:1  ` +
+      `(الحد ${min})  ${grade}  ${TL[fg]}/${TL[bg]}`,
+    );
+  }
+  if (failed > 0) {
+    console.error(`\n❌ فشل في الوضع الفاتح.`);
+    process.exit(1);
+  }
 }
 
 console.log(`\n✅ تباين سليم: ${PAIRS.length} زوجًا، كلها تبلغ الحد أو تتجاوزه.\n`);

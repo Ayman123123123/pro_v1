@@ -43,6 +43,8 @@ import androidx.room.PrimaryKey
 data class OutboxMessageEntity(
     @PrimaryKey val id: String,
     val conversationId: String,
+    /** المعرف المستهدف للمستلم (Red ID) */
+    val targetRedId: String? = null,
     /** الحمولة المشفرة الجاهزة للإرسال (Signal ciphertext) — لا يُعاد تشفيرها */
     val payload: ByteArray,
     val type: String = "CHAT", // CHAT, GROUP, REACTION, MEDIA_IMAGE, MEDIA_VIDEO, MEDIA_AUDIO, MEDIA_FILE, MEDIA_VOICE
@@ -87,6 +89,7 @@ data class OutboxMessageEntity(
             conversationId: String,
             payload: ByteArray,
             type: String = "CHAT",
+            targetRedId: String? = null,
             priority: Int = PRIORITY_NORMAL,
             mediaType: String? = null,
             localMediaPath: String? = null,
@@ -96,6 +99,7 @@ data class OutboxMessageEntity(
             return OutboxMessageEntity(
                 id = id,
                 conversationId = conversationId,
+                targetRedId = targetRedId,
                 payload = payload,
                 type = type,
                 priority = priority,

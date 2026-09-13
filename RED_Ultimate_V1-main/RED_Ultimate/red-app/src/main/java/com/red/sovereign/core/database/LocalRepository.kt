@@ -1,15 +1,55 @@
 package com.red.sovereign.core.database
 
 import android.content.Context
+import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 
 class LocalRepository(context: Context) {
+    private val appCtx = context.applicationContext
     private val dao = RedDatabase.getInstance(context).redDao()
 
     // --- Messages ---
     suspend fun saveMessage(message: MessageEntity) = dao.insertMessage(message)
-    suspend fun saveLocalHistory(history: LocalHistoryEntity) = dao.insertLocalHistory(history)
+    // P0-B: ملء أعمدة replyTo* عند الحفظ حتى يبقى الاقتباس بعد إعادة التشغيل.
+    // RichMessage.replyTo يحمل حالياً معرف الرسالة المقتبسة فقط (String?)،
+    // فننسخ المعرف ونستكمل النص/المرسل عبر lookup للرسالة الأصلية عند توفرها.
+    suspend fun saveLocalHistory(history: LocalHistoryEntity) {
+        val filled = runCatching {
+            val rich = com.red.sovereign.core.RichMessage.decode(history.encryptedPlaintext)
+            val replyId = history.replyToMessageId ?: rich?.replyTo
+            if (replyId != null && (history.replyToMessageText == null || history.replyToSenderId == null)) {
+                val quoted = runCatching { dao.getLocalHistoryEntry(replyId) }.getOrNull()
+                val quotedText = history.replyToMessageText ?: quoted?.let {
+                    runCatching {
+                        com.red.sovereign.core.RichMessage.decode(it.encryptedPlaintext)?.text
+                            ?.takeIf { t -> t.isNotBlank() }
+                            ?: it.encryptedPlaintext.toString(Charsets.UTF_8)
+                    }.getOrNull()?.take(500)
+                }
+                val quotedSender = history.replyToSenderId ?: quoted?.senderId
+                history.copy(
+                    replyToMessageId = replyId,
+                    replyToMessageText = quotedText,
+                    replyToSenderId = quotedSender
+                )
+            } else history
+        }.getOrDefault(history)
+        dao.insertLocalHistory(filled)
+        // LEGENDARY FIX: فهرسة FTS فور الحفظ (كانت TODO فيتسع الفارق ويبقى البحث مكسوراً)
+        runCatching {
+            val db = RedDatabase.getInstance(appCtx).openHelper.writableDatabase
+            FtsSearchManager(db).indexLocalHistory(filled)
+        }
+    }
     fun getLocalHistory(convId: String): Flow<List<LocalHistoryEntity>> = dao.getLocalHistory(convId)
+    /**
+     * Paging3 لسجل المحادثة (2026-09-10): صفحات 30 عنصرًا بدل تحميل
+     * `local_history` كاملًا في الذاكرة. يغذّي `ChatHistoryPagingColumn`
+     * في `ChatThreadScreen.kt` عبر `collectAsLazyPagingItems()` مع `loadState`.
+     * المسار القديم `getLocalHistory()` يبقى للتوافق (استعادة سريعة/بحث).
+     */
+    fun chatHistoryPager(conversationId: String, pageSize: Int = 30): Flow<PagingData<LocalHistoryEntity>> =
+        com.red.sovereign.core.database.chatHistoryPager(dao, conversationId, pageSize)
     suspend fun updateMessageStatus(id: String, status: String) = dao.updateMessageStatus(id, status)
     suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
@@ -75,13 +115,22 @@ class LocalRepository(context: Context) {
     // --- Groups ---
     suspend fun saveGroups(groups: List<GroupEntity>) = dao.insertGroups(groups)
     fun getGroups(): Flow<List<GroupEntity>> = dao.getGroups()
+    // Paging للمجموعات: صفحة LIMIT/OFFSET — للاستهلاك التدريجي عند نمو القوائم.
+    suspend fun getGroupsPage(limit: Int, offset: Int): List<GroupEntity> = dao.getGroupsPage(limit, offset)
+    suspend fun countGroups(): Int = runCatching { dao.countGroups() }.getOrDefault(0)
 
     // --- Call Logs ---
     suspend fun saveCallLog(log: CallLogEntity) = dao.insertCallLog(log)
     suspend fun saveCallLogs(logs: List<CallLogEntity>) = dao.insertCallLogs(logs)
     fun getCallLogs(): Flow<List<CallLogEntity>> = dao.getCallLogs()
+    // Paging لسجل المكالمات: صفحة LIMIT/OFFSET — يغذيها CallHistoryViewModel.loadMore().
+    suspend fun getCallLogsPage(limit: Int, offset: Int): List<CallLogEntity> = dao.getCallLogsPage(limit, offset)
+    suspend fun countCallLogs(): Int = runCatching { dao.countCallLogs() }.getOrDefault(0)
     suspend fun deleteCallLog(id: String) = dao.deleteCallLog(id)
+    suspend fun deleteCallLogs(ids: List<String>) = dao.deleteCallLogs(ids)
     suspend fun clearCallLogs() = dao.clearCallLogs()
+    /** حذف السجلات الأقدم من cutoff — يُعيد عدد المحذوف (سياسة CALL_HISTORY_RETENTION). */
+    suspend fun deleteCallLogsOlderThan(cutoff: Long): Int = dao.deleteCallLogsOlderThan(cutoff)
 
     // --- Stories ---
     suspend fun saveStories(stories: List<StoryEntity>) = dao.insertStories(stories)
@@ -145,11 +194,45 @@ class LocalRepository(context: Context) {
 
     /** تصفير عداد غير المقروء عند فتح المحادثة. */
 
+    // --- Starred Messages ---
+    suspend fun starMessage(messageId: String, conversationId: String, senderId: String, messageText: String, messageType: String) {
+        dao.upsertStarredMessage(StarredMessageEntity(messageId, conversationId, senderId, messageText, messageType))
+    }
+
+    suspend fun unstarMessage(messageId: String) = dao.unstarMessage(messageId)
+
+    suspend fun isMessageStarred(messageId: String): Boolean = dao.getStarredMessage(messageId) != null
+
+    fun getAllStarredMessages(): Flow<List<StarredMessageEntity>> = dao.getAllStarredMessages()
+
+    fun starredMessagesForConversation(convId: String): Flow<List<StarredMessageEntity>> = dao.starredMessagesForConversation(convId)
+
     /** جلب سجل واحد — للتحقق من ملكية التعديل/الحذف قبل تطبيقهما. */
     suspend fun getLocalHistoryEntry(id: String) = dao.getLocalHistoryEntry(id)
 
     /** يحذف رسالة من السجل المحلي (المفكوك) فقط — يُستخدم لحذف رسالة واحدة. */
     suspend fun deleteLocalMessage(messageId: String) = dao.deleteLocalHistory(messageId)
+
+    /** LEGENDARY: حذف للجميع بـ tombstone موحد (كان حذفاً فعلياً يتناقض مع MessageStore) + شارة "معدّلة" */
+    suspend fun deleteForEveryoneTombstone(messageId: String) {
+        // tombstone داخل النص المشفر: يحتفظ بالصف + الوقت + المرسل، يستبدل النص فقط
+        val tomb = "{\"deleted\":true,\"text\":\"تم حذف هذه الرسالة\"}".toByteArray(Charsets.UTF_8)
+        runCatching { dao.updateLocalHistoryText(messageId, tomb) }
+        runCatching {
+            val db = RedDatabase.getInstance(appCtx).openHelper.writableDatabase
+            db.execSQL("DELETE FROM messages_fts WHERE messageId = ?", arrayOf(messageId))
+        }
+    }
+
+    /** LEGENDARY: تعديل مع شارة + إعادة فهرسة (كان يعيد الفهرسة بـ conversationId فارغ) */
+    suspend fun editLocalMessage(messageId: String, newPlaintext: ByteArray) {
+        dao.updateLocalHistoryText(messageId, newPlaintext)
+        runCatching {
+            val entry = dao.getLocalHistoryEntry(messageId) ?: return
+            val db = RedDatabase.getInstance(appCtx).openHelper.writableDatabase
+            FtsSearchManager(db).indexLocalHistory(entry)
+        }
+    }
 
     /** يحذف كل بيانات محادثة: السجل المحلي + الرسائل + تفاعلاتها + صف المحادثة. */
     suspend fun deleteConversation(convId: String) {
@@ -160,9 +243,37 @@ class LocalRepository(context: Context) {
     }
 
     // --- Global Search ---
+    /**
+     * بحث شامل موحد (2026-09-10): نقطة الدخول الوحيدة للبحث النصي.
+     * `RedGlobalSearch` وحوار «البحث داخل المحادثة» يمران هنا بنفس
+     * السياسة: حد أدنى حرفين + تهريب محارف LIKE + حد 100 نتيجة.
+     * المسار المفضَّل طويل المدى هو `FtsSearchManager` (مفهرس + تطبيع
+     * عربي)؛ هذا LIKE يبقى fallback حين يتعذّر FTS.
+     */
     suspend fun searchAll(query: String): List<LocalHistoryEntity> {
-        if (query.isBlank()) return emptyList()
-        return dao.searchAllMessages("%${query.trim()}%")
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return emptyList()
+        val escaped = trimmed
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        // ملاحظة: searchAllMessages بلا ESCAPE صريح — `%` و`_` مهرَّبة هنا
+        // احترازًا، والتطبيع العربي الكامل عبر FtsSearchManager عند توفره.
+        return dao.searchAllMessages("%$escaped%").take(100)
+    }
+
+    /**
+     * بحث FTS أولًا ثم LIKE احتياطيًا (2026-09-10): يُستدعى من
+     * `RedGlobalSearch` عبر `RedDatabase.openHelper` — التطبيع العربي
+     * على الطرفين (فهرسة + استعلام) عبر `FtsSearchManager.normalizeArabic`.
+     */
+    suspend fun searchUnified(context: android.content.Context, query: String, limit: Int = 50): List<FtsResult> {
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return emptyList()
+        return runCatching {
+            val db = RedDatabase.getInstance(context).openHelper.readableDatabase
+            FtsSearchManager(db).search(trimmed, limit)
+        }.getOrDefault(emptyList())
     }
 
     /** وسائط محادثة (Flow) — لمعرض الوسائط. الصور/الفيديو/الملفات/الصوت. */

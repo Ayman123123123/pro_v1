@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-  Recover the YOUNES Docker stack after Docker Desktop crashes.
+  Recover the YOUNES Docker stack after Docker Desktop crashes or a port fight.
 
 .DESCRIPTION
   Production truth is Docker (Kotlin + Postgres + Nginx on 8088).
-
+  The Node + SQLite mock (`npm run dev:server`) binds host :8080 and must
+  NOT run at the same time. Backend 8080 exists only inside the compose
+  network; browsers talk to http://127.0.0.1:8088.
 
   Usage (from RED_Ultimate):
     powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1
@@ -35,6 +37,21 @@ Docker Desktop is not responding (npipe:////./pipe/dockerDesktopLinuxEngine).
 "@
 }
 
+function Stop-HostPort([int]$Port) {
+    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $conns) { return }
+    foreach ($procId in ($conns.OwningProcess | Select-Object -Unique)) {
+        if (-not $procId -or $procId -eq 0) { continue }
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        $name = if ($proc) { $proc.ProcessName } else { "pid $procId" }
+        Write-Host "Stopping host listener on :$Port ($name / $procId) so it cannot shadow Docker." -ForegroundColor Yellow
+        Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Host :8080 is the Node/SQLite mock. Host :8088 is Nginx. Never let the mock
+# answer /api/admin/users while the real stack is supposed to be in charge.
+Stop-HostPort 8080
 
 if (-not (Test-Path $EnvFile)) {
     throw "Missing $EnvFile — copy .env.example to .env and set the passwords first."
@@ -42,7 +59,13 @@ if (-not (Test-Path $EnvFile)) {
 
 Push-Location $Root
 try {
-    $composeArgs = @("--env-file", $EnvFile, "-f", "docker-compose.yml")
+    $envText = Get-Content $EnvFile -Raw
+    $dinstarOn = $envText -match '(?m)^DINSTAR_ENABLED=true\s*$'
+    $composeArgs = @('--env-file', $EnvFile, '-f', 'docker-compose.yml')
+    if ($dinstarOn) {
+        $composeArgs += @('-f', 'docker-compose.lan.yml')
+        Write-Host "DINSTAR_ENABLED=true — attaching docker-compose.lan.yml (keep 192.168.11.1)."
+    }
 
     docker compose @composeArgs config --quiet
     if ($LASTEXITCODE -ne 0) { throw "docker compose config failed" }
@@ -74,6 +97,7 @@ try {
     }
     Write-Host "PASS  http://127.0.0.1:8088/health" -ForegroundColor Green
     Write-Host "Admin panel: http://127.0.0.1:8088/"
+    Write-Host "Do not run npm run dev:server while this stack is up."
 } finally {
     Pop-Location
 }

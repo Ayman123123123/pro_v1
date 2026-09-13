@@ -30,7 +30,7 @@ data class SfuIceCandidate(
     val type: String = "host",
     val tcpType: String? = null
 ) {
-    val host: String get() = address?.ifBlank { ip } ?: ip
+    val host: String get() = address?.ifBlank { ip }?.ifBlank { "127.0.0.1" } ?: ip.ifBlank { "127.0.0.1" }
 }
 
 @Serializable
@@ -81,7 +81,11 @@ data class SfuRtpEncoding(
     val ssrc: Long? = null,
     val rid: String? = null,
     val dtx: Boolean? = null,
-    val maxBitrate: Int? = null
+    val maxBitrate: Int? = null,
+    val active: Boolean = true,
+    val maxFramerate: Int? = null,
+    val scaleResolutionDownBy: Double? = null,
+    val scalabilityMode: String? = null
 )
 
 @Serializable
@@ -103,4 +107,29 @@ data class SfuExistingProducer(
     val peerId: String,
     val producerId: String,
     val kind: String
+)
+
+@Serializable
+data class SfuSimulcastLayer(
+    val spatialLayer: Int = 2,
+    val temporalLayer: Int = 2
+)
+
+@Serializable
+data class SfuConsumerLayers(
+    val consumerId: String,
+    val spatialLayer: Int,
+    val temporalLayer: Int
+)
+
+@Serializable
+data class SfuKeyFrameRequest(
+    val consumerId: String? = null,
+    val producerId: String? = null
+)
+
+@Serializable
+data class SfuIceRestartDto(
+    val transportId: String,
+    val iceParameters: SfuIceParameters
 )

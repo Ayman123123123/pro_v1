@@ -11,6 +11,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,8 +29,8 @@ import com.red.sovereign.ui.theme.YounesEmerald
 /**
  * ════════════════════════════════════════════════════════════════════════
  *  FocusedSearchDialog — بحث كامل الشاشة في جهات الاتصال
- *  - مع فلترة realtime + نتائج فورية
- *  - البحث في: الاسم، username، RED ID
+ *  - فلترة مُنظَّمة: snapshotFlow + debounce 350ms + distinctUntilChanged
+ *  - البحث في: الاسم، username، RED ID (حرفان على الأقل)
  *  - ترتيب حسب: Online أولاً، ثم الأحدث
  * ════════════════════════════════════════════════════════════════════════
  */
@@ -34,10 +38,31 @@ import com.red.sovereign.ui.theme.YounesEmerald
 @Composable
 fun FocusedSearchDialog(
     initialQuery: String = "",
+    contacts: List<PublicRedProfile> = emptyList(),
+    isOnline: (String) -> Boolean = { false },
     onDismiss: () -> Unit,
     onResultClick: (PublicRedProfile) -> Unit
 ) {
-    var query by remember { mutableStateOf(initialQuery) }
+    // المفتاح initialQuery: تغيّر الاستعلام الأولي (إعادة فتح ببحث مختلف)
+    // يُعيد تهيئة الحقل بدل تجمّده على أول قيمة رُكّبت بها الشاشة.
+    // جودة: مفتاح صريح key1 حتى لا يتجمد الحقل عند إعادة الفتح باستعلام مختلف.
+    var query by remember(key1 = initialQuery) { mutableStateOf(initialQuery) }
+    // المدخل المُستقر بعد debounce — الفلترة تعمل عليه لا على كل حرف.
+    var debouncedQuery by remember(key1 = initialQuery) { mutableStateOf(initialQuery) }
+    var isFiltering by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        snapshotFlow { query }
+            .debounce(350)
+            .distinctUntilChanged()
+            .collectLatest { stable ->
+                isFiltering = true
+                try {
+                    debouncedQuery = stable
+                } finally {
+                    isFiltering = false
+                }
+            }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -73,15 +98,27 @@ fun FocusedSearchDialog(
                 }
                 HorizontalDivider()
 
-                // Results
-                val results = remember(query) { emptyList<PublicRedProfile>() }
-                if (query.isBlank()) {
+                // Results — فلترة حقيقية على المدخل المستقر (حرفان على الأقل)،
+                // مرتبة: المتصلون أولاً ثم الأحدث أبجدياً.
+                val results = remember(debouncedQuery, contacts) {
+                    val q = debouncedQuery.trim()
+                    if (q.length < 2) emptyList()
+                    else contacts.filter {
+                        it.displayName.contains(q, true) || it.username.contains(q, true) || it.redId.contains(q, true)
+                    }.sortedWith(compareByDescending<PublicRedProfile> { isOnline(it.redId) }.thenBy { it.displayName })
+                }
+                if (query.trim().length < 2) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.PersonSearch, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("اكتب للبحث", color = Color.Gray)
+                            Text("اكتب حرفين على الأقل للبحث", color = Color.Gray)
                         }
+                    }
+                } else if (isFiltering || (results.isEmpty() && debouncedQuery.trim() != query.trim())) {
+                    // انتظار استقرار المدخل بعد debounce — مؤشر بدل وميض «لا نتائج» كاذب.
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = YounesEmerald, modifier = Modifier.size(28.dp))
                     }
                 } else if (results.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
