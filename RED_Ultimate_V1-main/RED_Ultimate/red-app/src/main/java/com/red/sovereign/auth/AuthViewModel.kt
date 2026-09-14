@@ -291,6 +291,20 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun sendPstnDtmf(digit: String): Boolean =
         pstnWebRtc?.sendDtmf(digit) ?: false
 
+    fun togglePstnHold() {
+        pstnWebRtc?.let { mgr ->
+            if (pstnState is PstnState.Started) {
+                // Hold toggle via WebRTC manager - pause audio track
+                mgr.isOnHold = !(mgr.isOnHold)
+                pstnState = if (mgr.isOnHold) PstnState.Bridging else PstnState.Started(
+                    callId = (pstnState as PstnState.Started).callId,
+                    usedToday = (pstnState as PstnState.Started).usedToday,
+                    dailyLimit = (pstnState as PstnState.Started).dailyLimit
+                )
+            }
+        }
+    }
+
     fun clearPstnState() { pstnState = PstnState.Idle }
 
     // 📨 SMS Methods

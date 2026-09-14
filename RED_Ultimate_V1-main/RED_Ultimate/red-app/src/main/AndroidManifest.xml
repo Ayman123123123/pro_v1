@@ -41,6 +41,9 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- الرسائل المجدولة - منبه دقيق -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:name=".YounesApplication"
@@ -175,6 +178,8 @@
         <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
         <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
         <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
+        <!-- الرسائل المجدولة - كان غير معلن فالمنبه الدقيق لا يعمل -->
+        <receiver android:name=".features.chat.ScheduledMessageAlarmReceiver" android:exported="false" />
         <service
             android:name=".calls.PstnFcmListenerService"
             android:exported="false">

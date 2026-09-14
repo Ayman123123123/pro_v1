@@ -35,6 +35,7 @@ class PstnWebRtcManager(private val context: Context) {
     @Volatile var remoteNumber: String? = null; private set
     var isMuted: Boolean = false
     var isSpeaker: Boolean = false
+    @Volatile var isOnHold: Boolean = false
 
     fun ensureAudioSetup() {}
     fun sendDtmf(digits: String): Boolean = false

@@ -52,10 +52,8 @@ fun LuxuryChatBubble(
     fontFamily: FontFamily? = null,
     bubbleStyle: String = "LUXURY",
     isSelected: Boolean = false,
-    // P0-B: شارة التحويل — forwardOf != null تعني رسالة محوّلة.
-    // TODO: مرر forwardCount عبر RichMessage.forwardCount عند توفره
-    // (غير موجود حالياً — RichMessage يحمل forwardOf فقط)، لعرض
-    // "كثيرة التحويل" عندما forwardCount > 5.
+    // P0-B: شارة التحويل — forwardOf != null تعني رسالة محوّلة
+    // forwardCount من RichMessage.forwardCount يعرض "كثيرة التحويل" عند >5
     forwardOf: String? = null,
     forwardCount: Int = 0
 ) {
