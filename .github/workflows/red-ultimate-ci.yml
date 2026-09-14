@@ -37,6 +37,9 @@ jobs:
     name: Infrastructure and Docker
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
@@ -93,6 +96,18 @@ jobs:
           name: docker-build-log
           path: /tmp/docker-build.log
           if-no-files-found: warn
+      - name: Publish failure excerpt to check output
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name=="Infrastructure and Docker") | .check_run_url | split("/") | last')
+          EXCERPT=$(grep -iE "error|failed" /tmp/docker-build.log | grep -v "show-error" | head -n 25 || true)
+          [ -z "$EXCERPT" ] && EXCERPT=$(tail -n 30 /tmp/docker-build.log)
+          jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
+            '{output:{title:"Docker failure excerpt",summary:$s}}' > /tmp/out.json
+          gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
 
   backend:
     name: Backend tests (JDK 21)
