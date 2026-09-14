@@ -10,7 +10,7 @@ import androidx.compose.runtime.Composable
  * 2. مكالمة جماعية (GroupCallOverlay) — iMO/Zoom style
  * 3. مؤتمر/مساحة صوتية (YounesConferenceOverlay) — X Spaces style
  * 4. بث مباشر (YounesLiveStreamOverlay) — TikTok style
- * 5. مكالمة الهاتف اليمني عبر DINSTAR (PstnCallOverlay) — ساق صوت WebRTC↔GSM
+ * 5. مكالمة الهاتف اليمني عبر RED (PstnCallOverlay) — ساق صوت WebRTC↔GSM
  *
  * Only ONE overlay shows at a time — prevents stacking at wrong times.
  */

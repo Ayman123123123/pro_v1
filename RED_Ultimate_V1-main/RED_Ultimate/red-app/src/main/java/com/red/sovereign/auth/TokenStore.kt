@@ -3,6 +3,10 @@ package com.red.sovereign.auth
 import android.content.Context
 import com.red.sovereign.core.SecureStore
 
+/**
+ * TokenStore - نظيف بدون PSTN
+ * تم إلغاء كل ما يتعلق بالهاتف اليمني
+ */
 class TokenStore(val context: Context) {
     private val store = SecureStore(context, "red_session")
     val accessToken get() = store.get("access")
@@ -11,12 +15,6 @@ class TokenStore(val context: Context) {
     val fcmToken get() = store.get("fcm_token")
     val redId get() = store.get("red_id")
     val username get() = store.get("username")
-    val pstnEnabled get() = store.get("pstn_enabled") == "true"
-    /** رقم الشريحة المربوطة 1:1 — كامل غير مقنع، يراه صاحبه فقط في جهازه. */
-    val pstnNumber get() = store.get("pstn_number")
-    val pstnPortIndex get() = store.get("pstn_port_index")?.toIntOrNull()
-    val pstnGatewayId get() = store.get("pstn_gateway_id")
-    /** دور الحساب — "ADMIN" أو "USER". يُستخدم لإظهار/إخفاء أدوات الإدارة في التطبيق. */
     val role get() = store.get("role") ?: "USER"
     val isAdmin get() = role == "ADMIN"
 
@@ -24,17 +22,9 @@ class TokenStore(val context: Context) {
     fun saveFcmToken(value: String) = store.put("fcm_token", value)
     fun saveUsername(value: String) = store.put("username", value)
 
-    /** حفظ صلاحية PSTN بعد /api/auth/me — كان AuthViewModel يلمس store الخاص مباشرة. */
-    fun savePstnEnabled(value: Boolean) = store.put("pstn_enabled", value.toString())
-    /**
-     * كلمة مرور الدخول المؤقتة تُحفظ في الذاكرة فقط — لا تُكتب على القرص أبداً
-     * (EncryptedSharedPrefs/Keystore لا يعنيان أن الاحتفاظ بكلمة مرور مقبول).
-     * تُمسح فور نجاح [save] عبر [clearPendingLogin].
-     */
     @Volatile private var pendingPasswordMemory: String? = null
     fun rememberPendingLogin(username: String, password: String) {
         store.put("pending_username", username)
-        // هجرة: امسح أي بقايا قرصية من نسخ سابقة كانت تخزن pending_password.
         store.remove("pending_password")
         pendingPasswordMemory = password
     }
@@ -45,21 +35,23 @@ class TokenStore(val context: Context) {
         pendingPasswordMemory = null
     }
     fun save(response: AuthResponse) {
-        store.put("access", response.accessToken); store.put("refresh", response.refreshToken)
+        store.put("access", response.accessToken)
+        store.put("refresh", response.refreshToken)
         response.deviceId?.let(::rememberDevice)
-        store.put("red_id", response.user.redId); store.put("username", response.user.username)
-        store.put("pstn_enabled", response.user.pstnEnabled.toString())
-        store.put("pstn_number", response.user.pstnNumber ?: "")
-        store.put("pstn_port_index", response.user.pstnPortIndex?.toString() ?: "")
-        store.put("pstn_gateway_id", response.user.pstnGatewayId?.toString() ?: "")
+        store.put("red_id", response.user.redId)
+        store.put("username", response.user.username)
         store.put("role", response.user.role.toString())
         clearPendingLogin()
     }
-    fun updateTokens(response: RefreshResponse) { store.put("access", response.accessToken); store.put("refresh", response.refreshToken) }
+    fun updateTokens(response: RefreshResponse) {
+        store.put("access", response.accessToken)
+        store.put("refresh", response.refreshToken)
+    }
     fun clearSession() {
         pendingPasswordMemory = null
-        store.remove("access", "refresh", "red_id", "username", "role",
-            "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id",
-            "pending_username", "pending_password")
+        store.remove(
+            "access", "refresh", "red_id", "username", "role",
+            "pending_username", "pending_password"
+        )
     }
 }

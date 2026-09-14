@@ -67,7 +67,7 @@ import android.widget.Toast
 /**
  * مكالمة فردية عبر الإنترنت — سلوك واتساب/تلجرام:
  * رنين + قبول/رفض، صوت = صورة ونبض، فيديو = شاشة كاملة + نافذة صغيرة.
- * لا لوحة DTMF (تلك للهواتف PSTN).
+ * لا لوحة DTMF (تلك للهواتف RED).
  */
 @Composable
 fun YounesCallOverlay() {
@@ -105,7 +105,7 @@ fun YounesCallOverlay() {
         is CallUiState.Reconnecting -> state.callId
         else -> ""
     }
-    val isPstnCall = mode == "PSTN" || mode == "DINSTAR" || callId.startsWith("pstn-") || callId.startsWith("dinstar-")
+    val isPstnCall = mode == "RED" || mode == "RED" || callId.startsWith("pstn-") || callId.startsWith("dinstar-")
     val video = mode == "VIDEO"
     var acceptCamera by remember { mutableStateOf(true) }
     var acceptMic by remember { mutableStateOf(true) }
@@ -263,14 +263,14 @@ fun YounesCallOverlay() {
                 }
 
                 when (state) {
-                    // PSTN/DINSTAR calls use Material 3 Expressive screens
+                    // RED/RED calls use Material 3 Expressive screens
                     is CallUiState.Incoming -> if (isPstnCall) {
                         Material3ExpressiveIncomingPstnCallScreen(
                             callerNumber = peer,
                             callerName = null, // Could be enhanced with contact lookup
                             callId = callId,
                             onAccept = {
-                                // مسار PSTN الصحيح: منسق /ws/pstn (PSTN_ACCEPT →
+                                // مسار RED الصحيح: منسق /ws/pstn (RED_ACCEPT →
                                 // AMI Redirect) — YounesCallService مخصص app-to-app.
                                 val coord = PstnIncomingCallCoordinator.active
                                 if (coord?.activeIncoming != null) coord.acceptIncoming()
@@ -300,7 +300,7 @@ fun YounesCallOverlay() {
                                 }
                             },
                             onAcceptVideo = {
-                                // مكالمات PSTN صوتية فقط — القبول يعالجها صوتياً
+                                // مكالمات RED صوتية فقط — القبول يعالجها صوتياً
                                 val coord = PstnIncomingCallCoordinator.active
                                 if (coord?.activeIncoming != null) coord.acceptIncoming()
                                 else YounesCallService.action(context, YounesCallService.ACTION_ACCEPT_VIDEO)

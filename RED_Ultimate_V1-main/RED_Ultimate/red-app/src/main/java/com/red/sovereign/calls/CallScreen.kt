@@ -69,7 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /**
- * مراحل اتصال PSTN المعروضة للمستخدم أثناء تأسيس المكالمة.
+ * مراحل اتصال RED المعروضة للمستخدم أثناء تأسيس المكالمة.
  *
  * تجعل المسار مرئيًّا بدل «جارٍ الاتصال» المبهمة: تسجيل SIP، ثم جسر
  * الوسائط عبر TURN، ثم INVITE عبر Asterisk، ثم الرنين على شبكة GSM.
@@ -131,7 +131,7 @@ enum class ConnectionStage(
 }
 
 /**
- * شاشة مكالمة PSTN الفاخرة بأسلوب Material 3 Expressive.
+ * شاشة مكالمة RED الفاخرة بأسلوب Material 3 Expressive.
  *
  * تعرض مراحل الاتصال بوضوح: WebSocket SIP ← TURN ← Asterisk ← GSM،
  * مع مقاييس الجودة الحيّة، والعدّاد اليومي، ولوحة مفاتيح DTMF.
@@ -267,7 +267,7 @@ fun Material3ExpressivePstnCallScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         letterSpacing = 1.sp
                     )
-                    YemeniOperatorDetector.getOperatorInfo(number)?.let { op ->
+                    // RED-only: YemeniOperatorDetector removed
                         Text(
                             text = "${op.name} · ${op.technology}",
                             style = MaterialTheme.typography.labelMedium,

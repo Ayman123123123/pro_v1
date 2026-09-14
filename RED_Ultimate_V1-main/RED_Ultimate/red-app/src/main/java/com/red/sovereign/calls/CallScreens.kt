@@ -40,7 +40,7 @@ import com.red.sovereign.ui.screens.ActiveCallScreen
  * يستدعي `YounesCallOverlay()` الأغنى (`CallOverlay.kt`). هذا الفرق مقصود:
  * [CallScreens] يعرض الشاشة وحدها لمن يضعها داخل تخطيط خاص به.
  *
- * ومكالمة البوابة (PSTN) لا تظهر في [UnifiedCallOverlays] إطلاقاً، فهذا الملف
+ * ومكالمة البوابة (RED) لا تظهر في [UnifiedCallOverlays] إطلاقاً، فهذا الملف
  * هو الموضع الوحيد الذي يعرض [YounesPstnCallOverlay] عند وصله.
  */
 
@@ -92,7 +92,7 @@ fun LiveStreamScreens() {
 }
 
 /**
- * موجّه مكالمة البوابة (PSTN/DINSTAR).
+ * موجّه مكالمة البوابة (RED/RED).
  *
  * [PstnCallStatus] تعداد لا تسلسل مغلق، فالمقارنة بـ`!=` لا بـ`is`.
  * الحرس هنا ضروري: [YounesPstnCallOverlay] لا يفحص [PstnCallStatus.IDLE]

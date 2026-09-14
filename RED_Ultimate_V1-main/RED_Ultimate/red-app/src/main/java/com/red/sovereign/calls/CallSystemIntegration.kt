@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 /**
  * مدير تكامل نظام المكالمات — Call System Integration Manager
  *
- * يوحّد جميع مكونات نظام المكالمات (WebRTC, PSTN, Push Notifications, Telecom)
+ * يوحّد جميع مكونات نظام المكالمات (WebRTC, RED, Push Notifications, Telecom)
  * في واجهة واحدة مركزية. يتعامل مع:
  * - تهيئة محرك WebRTC
  * - تسجيل إشعارات FCM للمكالمات
@@ -58,9 +58,9 @@ object CallSystemIntegration {
             }
         )
 
-        // 4. بدء خدمةForeground للمكالمات PSTN
+        // 4. بدء خدمةForeground للمكالمات RED
         // تصحيح: PstnCallService غير موجود؛ الخدمة الحقيقية هي
-        // PstnCallForegroundService، ومصدر "هل PSTN متاح" هو صلاحية الحساب
+        // PstnCallForegroundService، ومصدر "هل RED متاح" هو صلاحية الحساب
         // المحفوظة في TokenStore.pstnEnabled (تُحدّث من /api/auth/me).
         // الخدمة تُشغَّل عبر مصنعها الحقيقي start(context, number) لأن
         // ACTION_START يتوقع extra باسم "number" لبناء الإشعار.

@@ -21,15 +21,39 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         MessageReactionEntity::class,
         OutboxMessageEntity::class,
         StarredMessageEntity::class,
-        MediaUploadEntity::class
+        MediaUploadEntity::class,
+        // V8 Ultimate - أقوى وأنسب وأحدث قواعد بيانات 2026 - كل الأنواع
+        MightyPollEntity::class,
+        PollVoteEntity::class,
+        SovereignStoryEntity::class,
+        PrivateNoteEntity::class,
+        ProfileCustomizationEntity::class,
+        SovereignGiftEntity::class,
+        LiveCommentEntity::class,
+        AISummaryEntity::class,
+        ScamAlertEntity::class,
+        LivePhotoEntity::class,
+        ScannedDocumentEntity::class,
+        KeyTransparencyEntity::class,
+        SafetyNumberEntity::class,
+        LinkedDeviceEntity::class,
+        CallQualityEntity::class,
+        NetworkStatsEntity::class,
+        FolderEntity::class,
+        PinEntity::class,
+        PersonalChatFolderEntity::class,
+        UserSettingsEntity::class,
+        NotificationEntity::class,
+        AppStatsEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
     abstract fun redDao(): RedDao
     abstract fun outboxDao(): OutboxDao
     abstract fun mediaUploadDao(): MediaUploadDao
+    abstract fun ultimateDao(): UltimateDao
 
     companion object {
         private const val TAG = "RedDatabase"
@@ -62,7 +86,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7, ULTIMATE_MIGRATION_7_8)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -137,7 +161,7 @@ abstract class RedDatabase : RoomDatabase() {
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7, ULTIMATE_MIGRATION_7_8)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -269,5 +293,382 @@ private val MEDIA_UPLOAD_MIGRATION_6_7 = object : androidx.room.migration.Migrat
         // فهارس الأداء الحاسمة للدردشة
         runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_created_desc` ON `local_history` (`conversationId`, `createdAt` DESC, `id` DESC)") }
         runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_status` ON `local_history` (`conversationId`, `status`)") }
+    }
+}
+
+/** ULTIMATE V8: كل أنواع قواعد البيانات - أقوى وأنسب وأحدث 2026 - 21 نوع جديد - كل شيء يريده */
+private val ULTIMATE_MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        // 1. استطلاعات قوية Mighty Polls
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `mighty_polls` (
+                `id` TEXT NOT NULL,
+                `question` TEXT NOT NULL,
+                `questionMediaUrl` TEXT,
+                `questionLocation` TEXT,
+                `description` TEXT,
+                `optionsJson` TEXT NOT NULL,
+                `allowSuggestOptions` INTEGER NOT NULL,
+                `showVoters` INTEGER NOT NULL,
+                `timeLimitSeconds` INTEGER,
+                `shuffledOptions` INTEGER NOT NULL,
+                `disableRevoting` INTEGER NOT NULL,
+                `hiddenResults` INTEGER NOT NULL,
+                `isClosed` INTEGER NOT NULL,
+                `createdBy` TEXT NOT NULL,
+                `groupId` TEXT,
+                `channelId` TEXT,
+                `timestamp` INTEGER NOT NULL,
+                `expiresAt` INTEGER,
+                `votersJson` TEXT NOT NULL,
+                `suggestedOptionsJson` TEXT NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_mighty_polls_groupId` ON `mighty_polls` (`groupId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_mighty_polls_channelId` ON `mighty_polls` (`channelId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_mighty_polls_createdBy` ON `mighty_polls` (`createdBy`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_mighty_polls_isClosed_expiresAt` ON `mighty_polls` (`isClosed`, `expiresAt`)")
+
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `poll_votes` (
+                `pollId` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `optionIndex` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`pollId`, `userId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_poll_votes_pollId` ON `poll_votes` (`pollId`)")
+
+        // 2. قصص محسنة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sovereign_stories` (
+                `id` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `username` TEXT NOT NULL,
+                `displayName` TEXT NOT NULL,
+                `mediaUrl` TEXT,
+                `mediaType` TEXT NOT NULL,
+                `text` TEXT,
+                `backgroundColor` TEXT,
+                `caption` TEXT,
+                `timestamp` INTEGER NOT NULL,
+                `expiresAt` INTEGER NOT NULL,
+                `views` INTEGER NOT NULL,
+                `viewersJson` TEXT NOT NULL,
+                `isMyStory` INTEGER NOT NULL,
+                `isPremium` INTEGER NOT NULL,
+                `playbackStyle` TEXT NOT NULL,
+                `musicUrl` TEXT,
+                `musicTitle` TEXT,
+                `linkUrl` TEXT,
+                `location` TEXT,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_stories_userId` ON `sovereign_stories` (`userId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_stories_expiresAt` ON `sovereign_stories` (`expiresAt`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_stories_isMyStory_timestamp` ON `sovereign_stories` (`isMyStory`, `timestamp`)")
+
+        // 3. ملاحظات خاصة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `private_notes` (
+                `contactId` TEXT NOT NULL,
+                `note` TEXT NOT NULL,
+                `howMet` TEXT,
+                `birthday` TEXT,
+                `customAvatar` TEXT,
+                `customName` TEXT,
+                `work` TEXT,
+                `favorite` TEXT,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`contactId`)
+            )"""
+        )
+
+        // 4. تخصيص ملف شخصي
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `profile_customizations` (
+                `userId` TEXT NOT NULL,
+                `color` TEXT NOT NULL,
+                `background` TEXT,
+                `giftBackdrop` TEXT,
+                `giftSymbol` TEXT,
+                `animatedReplyStyle` TEXT,
+                `linkStyle` TEXT,
+                `isPremium` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`userId`)
+            )"""
+        )
+
+        // 5. هدايا سيادية
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `sovereign_gifts` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL,
+                `fromUserId` TEXT NOT NULL,
+                `toUserId` TEXT NOT NULL,
+                `backdrop` TEXT NOT NULL,
+                `symbol` TEXT NOT NULL,
+                `isBlockchain` INTEGER NOT NULL,
+                `fragmentVerified` INTEGER NOT NULL,
+                `price` INTEGER NOT NULL,
+                `signature` TEXT,
+                `customMessage` TEXT,
+                `timestamp` INTEGER NOT NULL,
+                `canRemoveSignature` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_gifts_toUserId` ON `sovereign_gifts` (`toUserId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_gifts_fromUserId` ON `sovereign_gifts` (`fromUserId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_sovereign_gifts_isBlockchain` ON `sovereign_gifts` (`isBlockchain`)")
+
+        // 6. تعليقات مباشرة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `live_comments` (
+                `id` TEXT NOT NULL,
+                `callId` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `username` TEXT NOT NULL,
+                `text` TEXT,
+                `emoji` TEXT,
+                `isAnimatedReaction` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_live_comments_callId` ON `live_comments` (`callId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_live_comments_callId_timestamp` ON `live_comments` (`callId`, `timestamp`)")
+
+        // 7. ملخصات AI
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `ai_summaries` (
+                `id` TEXT NOT NULL,
+                `originalText` TEXT NOT NULL,
+                `summary` TEXT NOT NULL,
+                `sourceType` TEXT NOT NULL,
+                `sourceId` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                `isEncrypted` INTEGER NOT NULL,
+                `cocoonVerified` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_ai_summaries_sourceId` ON `ai_summaries` (`sourceId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_ai_summaries_sourceType` ON `ai_summaries` (`sourceType`)")
+
+        // 8. كشف احتيال
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `scam_alerts` (
+                `messageId` TEXT NOT NULL,
+                `isScam` INTEGER NOT NULL,
+                `reason` TEXT,
+                `domain` TEXT,
+                `riskLevel` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`messageId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_scam_alerts_isScam_riskLevel` ON `scam_alerts` (`isScam`, `riskLevel`)")
+
+        // 9. صور مباشرة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `live_photos` (
+                `id` TEXT NOT NULL,
+                `imageUrl` TEXT NOT NULL,
+                `videoUrl` TEXT NOT NULL,
+                `playbackStyle` TEXT NOT NULL,
+                `durationMs` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+
+        // 10. مستندات ممسوحة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `scanned_documents` (
+                `id` TEXT NOT NULL,
+                `imagesJson` TEXT NOT NULL,
+                `pdfUrl` TEXT,
+                `text` TEXT,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+
+        // 11. شفافية مفاتيح
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `key_transparency` (
+                `userId` TEXT NOT NULL,
+                `publicKey` TEXT NOT NULL,
+                `verified` INTEGER NOT NULL,
+                `verificationMethod` TEXT NOT NULL,
+                `cloudflareVerified` INTEGER NOT NULL,
+                `trailOfBitsVerified` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                `lastVerifiedAt` INTEGER,
+                PRIMARY KEY(`userId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_key_transparency_verified` ON `key_transparency` (`verified`)")
+
+        // 12. أرقام أمان
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `safety_numbers` (
+                `userId` TEXT NOT NULL,
+                `safetyNumber` TEXT NOT NULL,
+                `qrCode` TEXT,
+                `verified` INTEGER NOT NULL,
+                `verifiedAt` INTEGER,
+                `fingerprint` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`userId`)
+            )"""
+        )
+
+        // 13. أجهزة مرتبطة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `linked_devices` (
+                `deviceId` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `deviceName` TEXT NOT NULL,
+                `deviceType` TEXT NOT NULL,
+                `lastSeen` INTEGER NOT NULL,
+                `isCurrent` INTEGER NOT NULL,
+                `isTrusted` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                PRIMARY KEY(`deviceId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_linked_devices_userId` ON `linked_devices` (`userId`)")
+
+        // 14. جودة مكالمات
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `call_quality` (
+                `id` TEXT NOT NULL,
+                `callId` TEXT NOT NULL,
+                `rttMs` INTEGER NOT NULL,
+                `packetLossPercent` REAL NOT NULL,
+                `availableBitrateKbps` INTEGER NOT NULL,
+                `bandwidthKbps` INTEGER NOT NULL,
+                `framesPerSecond` INTEGER NOT NULL,
+                `codec` TEXT NOT NULL,
+                `resolution` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_call_quality_callId` ON `call_quality` (`callId`)")
+
+        // 15. إحصائيات شبكة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `network_stats` (
+                `id` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `quality` TEXT NOT NULL,
+                `rttMs` INTEGER NOT NULL,
+                `packetLoss` REAL NOT NULL,
+                `bandwidthKbps` INTEGER NOT NULL,
+                `isLan` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+
+        // 16. مجلدات
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `folders` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `peerIdsJson` TEXT NOT NULL,
+                `locked` INTEGER NOT NULL,
+                `color` TEXT,
+                `icon` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+
+        // 17. رسائل مثبتة
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `pins` (
+                `messageId` TEXT NOT NULL,
+                `groupId` TEXT NOT NULL,
+                `pinnedBy` TEXT NOT NULL,
+                `expiresAt` INTEGER,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`messageId`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_pins_groupId` ON `pins` (`groupId`)")
+
+        // 18. مجلدات دردشات شخصية
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `personal_chat_folders` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `peerIdsJson` TEXT NOT NULL,
+                `locked` INTEGER NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+
+        // 19. إعدادات مستخدم
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `user_settings` (
+                `userId` TEXT NOT NULL,
+                `themePreset` TEXT NOT NULL,
+                `themeMode` TEXT NOT NULL,
+                `highContrast` INTEGER NOT NULL,
+                `liquidGlassEnabled` INTEGER NOT NULL,
+                `reduceMotion` INTEGER NOT NULL,
+                `fontScale` REAL NOT NULL,
+                `customPrimary` TEXT,
+                `typingIndicators` INTEGER NOT NULL,
+                `readReceipts` INTEGER NOT NULL,
+                `callNotifications` INTEGER NOT NULL,
+                `language` TEXT NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`userId`)
+            )"""
+        )
+
+        // 20. إشعارات
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `notifications` (
+                `id` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `body` TEXT NOT NULL,
+                `dataJson` TEXT,
+                `isRead` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_notifications_userId` ON `notifications` (`userId`)")
+        database.execSQL("CREATE INDEX IF NOT EXISTS `index_notifications_isRead_timestamp` ON `notifications` (`isRead`, `timestamp`)")
+
+        // 21. إحصائيات تطبيق
+        database.execSQL(
+            """CREATE TABLE IF NOT EXISTS `app_stats` (
+                `id` TEXT NOT NULL,
+                `messagesCount` INTEGER NOT NULL,
+                `groupsCount` INTEGER NOT NULL,
+                `callsCount` INTEGER NOT NULL,
+                `storiesCount` INTEGER NOT NULL,
+                `pollsCount` INTEGER NOT NULL,
+                `giftsCount` INTEGER NOT NULL,
+                `timestamp` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )"""
+        )
     }
 }

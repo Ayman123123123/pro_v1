@@ -1,98 +1,17 @@
 package com.red.sovereign.calls
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.app.NotificationCompat
-import android.telephony.TelephonyManager
-import com.red.sovereign.MainActivity
 
 /**
- * يستقبل أحداث PSTN النظامية (مكالمة واردة على خط الهاتف).
- * لا يمكن لـ RED VoIP الرد عليها مباشرة، لكن نستفيد من:
- * 1. تذكير المستخدم بوجود خط PSTN إذا كان في مكالمة RED نشطة
- * 2. الهدوء التلقائي للـ ringer عند ورود PSTN
+ * RED-only - لا RED نهائياً
+ * كل المكالمات عبر WebRTC داخل التطبيق فقط
+ * هذا المستقبل كان للـ RED وتم تعطيله نهائياً
  */
 class PhoneStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
-        val subId = intent.getIntExtra("subscription", -1)
-            .let { if (it != -1) it else intent.getIntExtra(android.telephony.SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, -1) }
-
-        when (state) {
-            TelephonyManager.EXTRA_STATE_RINGING -> {
-                val incomingNumber = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
-                if (CallRuntime.state is CallUiState.Active) {
-                    showPstnReminderNotification(context, incomingNumber, subId)
-                }
-                // Silence current RED ringer to avoid acoustic conflict
-                YounesCallService.silenceRinger(context)
-            }
-            TelephonyManager.EXTRA_STATE_OFFHOOK -> {
-                // User picked up PSTN — pause any media, but don't auto-end RED
-                if (CallRuntime.state is CallUiState.Active) {
-                    YounesCallService.holdActiveCall(context)
-                }
-            }
-            TelephonyManager.EXTRA_STATE_IDLE -> {
-                // PSTN ended — resume RED ringer/UI if a RED call is incoming
-                YounesCallService.resumeRinger(context)
-            }
-        }
-    }
-
-    private fun showPstnReminderNotification(context: Context, number: String?, subId: Int) {
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        // Ensure channel exists
-        if (manager.getNotificationChannel(PSTN_CHANNEL) == null) {
-            val channel = NotificationChannel(
-                PSTN_CHANNEL,
-                "مكالمة PSTN واردة",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "تذكير عند ورود مكالمة هاتف عادي أثناء استخدام RED"
-                enableVibration(true)
-            }
-            manager.createNotificationChannel(channel)
-        }
-
-        val displayNumber = number?.let { maskPhoneNumber(it) } ?: "رقم مخفي"
-        val simInfo = if (subId != -1) " [SIM $subId]" else ""
-        val openAppIntent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, PSTN_CHANNEL)
-            .setSmallIcon(com.red.sovereign.R.drawable.ic_stat_call)
-            .setContentTitle("مكالمة هاتفية واردة$simInfo")
-            .setContentText("PSTN: $displayNumber — رُد من تطبيق الهاتف")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setContentIntent(openAppIntent)
-            .setAutoCancel(true)
-            .setOngoing(false)
-            .build()
-
-        manager.notify(PSTN_NOTIFICATION_ID, notification)
-        android.util.Log.i("PhoneStateReceiver", "PSTN notification shown for: $displayNumber (subId=$subId)")
-    }
-
-    /** Mask phone number: +9677XXXXXXX → +967••••XXX */
-    private fun maskPhoneNumber(number: String): String {
-        if (number.length < 6) return number
-        val prefix = number.take(4)
-        val suffix = number.takeLast(2)
-        return "$prefix••••$suffix"
-    }
-
-    companion object {
-        private const val PSTN_CHANNEL = "red_pstn_reminder"
-        private const val PSTN_NOTIFICATION_ID = 8001
+        // RED-only - لا تعامل مع RED
+        android.util.Log.d("PhoneStateReceiver", "RED-only mode - ignoring telephony state")
     }
 }

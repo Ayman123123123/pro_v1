@@ -118,13 +118,7 @@ class ScheduledMessageWorker(
  * مستقبل المنبه الدقيق للرسائل المجدولة.
  * يُشغَّل عبر AlarmManager.setExactAndAllowWhileIdle عند الموعد، فيُدخل عمل
  * WorkManager فورياً (نفس المدخلات) — WorkManager هو fallback الموثوق في Doze.
- *
- * TODO(manifest): سجّل هذا المستقبل في AndroidManifest داخل <application>:
- *   <receiver android:name="com.red.sovereign.features.chat.ScheduledMessageAlarmReceiver"
- *             android:exported="false" />
- * وإن أردت دقة Exact على Android 12+ أضف:
- *   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
- * بلا التسجيل/الإذن يسقط الكود تلقائياً إلى WorkManager غير الدقيق (آمن).
+ * مسجل في AndroidManifest + SCHEDULE_EXACT_ALARM permission مضاف.
  */
 class ScheduledMessageAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

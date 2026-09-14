@@ -260,11 +260,11 @@ ACTION_ACCEPT -> {
             }
             ACTION_START_RECORDING -> startRecording(consentGranted = intent.getBooleanExtra(EXTRA_CONSENT, false))
             ACTION_STOP_RECORDING -> stopRecording()
-            // PSTN interop: silence/hold/resume RED call from PhoneStateReceiver
+            // RED interop: silence/hold/resume RED call from PhoneStateReceiver
             ACTION_SILENCE_RINGER -> stopRingtone()
             ACTION_HOLD_ACTIVE -> holdCall()
             ACTION_RESUME_RINGER -> {
-                // أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء PSTN
+                // أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء RED
                 if (CallRuntime.state is CallUiState.Incoming) startRingtone()
             }
             ACTION_QUICK_REPLY -> {
@@ -1601,7 +1601,7 @@ private fun prepareAudio() {
         const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
         const val ACTION_QUICK_REPLY = "com.red.sovereign.call.QUICK_REPLY"
         const val EXTRA_CONSENT = "consent"
-        // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
+        // RED interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
         const val EXTRA_IS_VIDEO = "extra_is_video"
@@ -1653,7 +1653,7 @@ private fun prepareAudio() {
         )
         fun action(context: Context, action: String, enabled: Boolean = true) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
-        // PSTN interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
+        // RED interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
         // startForegroundService هنا يرمي ForegroundServiceStartNotAllowedException على Android 12+.
         fun silenceRinger(context: Context) = runCatching { context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_SILENCE_RINGER)) }
         fun holdActiveCall(context: Context) = runCatching { context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_HOLD_ACTIVE)) }

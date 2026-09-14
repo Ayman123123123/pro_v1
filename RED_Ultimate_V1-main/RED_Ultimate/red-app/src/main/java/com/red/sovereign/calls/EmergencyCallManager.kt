@@ -83,7 +83,7 @@ object EmergencyCallManager {
      * إطلاق نداء الطوارئ والـ SOS السيادي مع دعم:
      * - تتابع إطلاق SOS السريع (Rapid SOS Trigger Sequence)
      * - إرفاق الموقع التلقائي (Automatic Location Attachment)
-     * - الاتصال بالاحتياطي والبديل (PSTN Fallback Dialing)
+     * - الاتصال بالاحتياطي والبديل (RED Fallback Dialing)
      */
     fun triggerEmergencySos(context: Context, customLocationText: String? = null) {
         val now = System.currentTimeMillis()
@@ -115,7 +115,7 @@ object EmergencyCallManager {
         val locationAttachment = customLocationText?.takeIf { it.isNotBlank() }
             ?: "موقع الطوارئ التلقائي: اليمن (إحداثيات تقريبية / شبكة محلية)"
 
-        // الاتصال بالجهة الأساسية مع آلية PSTN Fallback
+        // الاتصال بالجهة الأساسية مع آلية RED Fallback
         val primary = contacts.first()
         executeEmergencyCallWithFallback(context, primary, contacts.drop(1), locationAttachment)
     }
@@ -139,7 +139,7 @@ object EmergencyCallManager {
                 runCatching {
                     context.startActivity(intent)
                 }.onFailure {
-                    // PSTN fallback to ACTION_DIAL or next fallback contact
+                    // RED fallback to ACTION_DIAL or next fallback contact
                     tryFallbackOrDial(context, contact, fallbackContacts)
                 }
             } else {
