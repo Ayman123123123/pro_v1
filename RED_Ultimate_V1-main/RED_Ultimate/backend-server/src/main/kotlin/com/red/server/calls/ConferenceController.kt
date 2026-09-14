@@ -637,7 +637,7 @@ class ConferenceController(
         authentication: Authentication
     ): ResponseEntity<JoinRoomResponse> {
         val resolved = roomService.resolveCallLink(token)
-            ?: return ResponseEntity.status(404).body(JoinRoomResponse(authorized = false, errorMessage = "الرابط منتهٍ أو ملغى"))
+            ?: return ResponseEntity.status(404).body(JoinRoomResponse(authorized = false, roomId = "", errorMessage = "الرابط منتهٍ أو ملغى"))
         val (link, record) = resolved
         if (roomService.isRoomFull(record.roomId) && !roomService.isLobbyCleared(record.roomId, authentication.name)) {
             return ResponseEntity.status(429).body(JoinRoomResponse(
@@ -647,7 +647,7 @@ class ConferenceController(
             ))
         }
         if (!roomService.redeemCallLink(token)) {
-            return ResponseEntity.status(410).body(JoinRoomResponse(authorized = false, errorMessage = "استُنفد عدد استخدامات الرابط"))
+            return ResponseEntity.status(410).body(JoinRoomResponse(authorized = false, roomId = record.roomId, errorMessage = "استُنفد عدد استخدامات الرابط"))
         }
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
