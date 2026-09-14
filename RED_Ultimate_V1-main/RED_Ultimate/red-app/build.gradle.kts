@@ -215,7 +215,12 @@ dependencies {
 
     // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.security.crypto)
+    // Tink alignment (CI-proven): security-crypto drags an ANCIENT tink-android
+    // (1.8.0 bundles core classes) while the graph resolves tink core 1.23.0 —
+    // :checkDebugDuplicateClasses fails. Pinning modern tink-android wins newest-wins
+    // resolution; current AARs no longer bundle core, so duplicates disappear.
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
 
     testImplementation("junit:junit:4.13.2")
 }

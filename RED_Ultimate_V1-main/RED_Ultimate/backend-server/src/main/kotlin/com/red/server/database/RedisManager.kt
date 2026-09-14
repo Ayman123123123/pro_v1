@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
  * القنوات: red:messages:{redId} للإيصال الفوري، red:typing لإشارات الكتابة.
  * ملاحظة P9: حُذفت المكررات الميتة (red:seq، red:presence:{u}، red:status،
  * red:otp، red:device:cert) — التسلسل في Mongo conversation_sequences حصرًا.
- * (ملاحظة: لا تكتب /* هنا أبدًا — Kotlin يعشّش التعليقات الكتلية فيبتلع الملف.)
+ * (ملاحظة: لا تكتب شارحة-نجمة هنا أبدًا — Kotlin يعشّش التعليقات الكتلية فيبتلع الملف.)
  */
 @Component
 class RedisManager(private val redis: StringRedisTemplate) {
