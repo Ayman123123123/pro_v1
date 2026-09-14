@@ -210,10 +210,17 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // NOTE: Manifest.permission.ACCESS_LOCAL_NETWORK does not exist in the
-        // Android SDK (no such runtime permission) — referencing it breaks
-        // compilation. LAN reachability needs no runtime permission; the
-        // INTERNET permission (manifest) suffices. Block removed 2026-09-05.
+        // Android 17 (API 37+, إلزامي لمن يستهدف SDK 37): الوصول للشبكة المحلية
+        // (mDNS/NSD وraw TCP للخادم المحلي) خلف ACCESS_LOCAL_NETWORK. بدونه يفشل
+        // الاتصال بصمت تام — لا رسالة، لا سجل. الملاحظة القديمة (2026-09-05)
+        // بطلت باستقرار SDK 37. (إنقاذ من PR #55 — arena/01a0a0cf — 2026-09-15.)
+        if (!localNetworkPermissionRequested &&
+            Build.VERSION.SDK_INT >= 37 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
+        ) {
+            localNetworkPermissionRequested = true
+            localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }
     }
 
     override fun onStop() {
