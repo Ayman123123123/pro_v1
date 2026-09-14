@@ -6,13 +6,11 @@ import org.json.JSONObject
 /**
  * تحويل JSON ⟷ خرائط/قوائم Kotlin عبر `org.json` المضمَّن في أندرويد.
  *
- * سبب الوجود: كان `features/dinstar/DinstarViewModel.kt` و
- * `features/admin/AdminViewModel.kt` يجرّان Jackson كاملاً
+ * سبب الوجود: كان `features/admin/AdminViewModel.kt` يجرّ Jackson كاملاً
  * (`jackson-databind` + `jackson-module-kotlin`) لتحليل بضع خرائط صغيرة،
  * وكانت النسخة مثبَّتة يدوياً 2.15.2 في كتلة `dependencies` ثانية تخالف
  * 2.19.2 في كتالوج النسخ — أي إصداران للمكتبة نفسها في بناء واحد.
  * `org.json` جزء من إطار أندرويد (صفر بايت في APK) ويكفي لهذه الحاجة،
- * وهو أصلاً ما يستخدمه `DinstarWebSocketBridge` في الحزمة نفسها.
  *
  * `JSONObject.NULL` يُحوَّل إلى `null` حقيقي: لو مرّ كما هو لصار
  * `as? Number` يفشل بصمت على قيمة «موجودة لكنها فارغة».

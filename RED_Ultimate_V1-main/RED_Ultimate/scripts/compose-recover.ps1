@@ -60,12 +60,6 @@ if (-not (Test-Path $EnvFile)) {
 Push-Location $Root
 try {
     $envText = Get-Content $EnvFile -Raw
-    $dinstarOn = $envText -match '(?m)^DINSTAR_ENABLED=true\s*$'
-    $composeArgs = @('--env-file', $EnvFile, '-f', 'docker-compose.yml')
-    if ($dinstarOn) {
-        $composeArgs += @('-f', 'docker-compose.lan.yml')
-        Write-Host "DINSTAR_ENABLED=true — attaching docker-compose.lan.yml (keep 192.168.11.1)."
-    }
 
     docker compose @composeArgs config --quiet
     if ($LASTEXITCODE -ne 0) { throw "docker compose config failed" }

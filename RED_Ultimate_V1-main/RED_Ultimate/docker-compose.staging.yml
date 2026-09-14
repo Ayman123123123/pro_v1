@@ -2,22 +2,6 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 
 services:
-  voicebridge:
-    environment:
-      - SPRING_PROFILES_ACTIVE=staging
-      - VOICEBRIDGE_MAX_CALLS=50
-      - VOICEBRIDGE_RTP_POOL=25
-    mem_limit: 1g
-    cpus: '1.0'
-
-  kamailio:
-    mem_limit: 256m
-    cpus: '0.5'
-
-  janus:
-    mem_limit: 512m
-    cpus: '1.0'
-
   prometheus:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

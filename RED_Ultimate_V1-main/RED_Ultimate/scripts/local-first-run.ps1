@@ -1,6 +1,5 @@
 param(
     [string]$ServerIp,
-    [string]$DinstarNicIp,
     [ValidateRange(1024, 65535)][int]$HttpPort = 8088,
     [switch]$BuildAndroid
 )
@@ -10,7 +9,7 @@ $RepoRoot = Split-Path -Parent $Root
 $EnvFile = Join-Path $Root ".env"
 $DetectScript = Join-Path $PSScriptRoot "detect-lan-ips.ps1"
 
-# Dual-interface auto-detection: Wi-Fi IP for clients, Ethernet 192.168.11.x for Dinstar.
+# Auto-detection: Wi-Fi IP for clients.
 $Detected = $null
 if (Test-Path $DetectScript) {
     $Detected = & $DetectScript -Json | ConvertFrom-Json
@@ -18,10 +17,6 @@ if (Test-Path $DetectScript) {
 if (-not $ServerIp -and $Detected -and $Detected.clientLanIp) {
     $ServerIp = $Detected.clientLanIp
     Write-Host "Auto-detected client LAN IP (Wi-Fi): $ServerIp" -ForegroundColor Cyan
-}
-if (-not $DinstarNicIp -and $Detected -and $Detected.dinstarNicIp) {
-    $DinstarNicIp = $Detected.dinstarNicIp
-    Write-Host "Auto-detected Dinstar NIC IP (Ethernet): $DinstarNicIp" -ForegroundColor Cyan
 }
 if (-not $ServerIp) {
     $ServerIp = Read-Host "Enter the server's client-facing LAN IPv4 (Wi-Fi) for Nginx/TURN/SFU"
@@ -89,13 +84,10 @@ if (-not (Test-Path $EnvFile)) {
         "replace_with_a_long_random_mongodb_password" = (New-Hex 32)
         "replace_with_a_long_random_minio_password" = (New-Hex 32)
         "replace_with_a_long_random_redis_password" = (New-Hex 32)
-        "replace_with_a_long_random_asterisk_password" = (New-Hex 32)
         "replace_with_a_long_random_turn_secret" = (New-Hex 32)
         "replace_with_at_least_32_random_characters" = (New-Hex 48)
         "replace_with_at_least_14_random_characters" = (New-Hex 20)
-        "replace_with_the_gateway_password" = (New-Hex 24)
         "192.168.0.244" = $ServerIp
-        "192.168.11.20" = $(if ($DinstarNicIp) { $DinstarNicIp } else { "192.168.11.20" })
     }
     foreach ($entry in $replacements.GetEnumerator()) { $text = $text.Replace($entry.Key, $entry.Value) }
     [IO.File]::WriteAllText($EnvFile, $text, [Text.UTF8Encoding]::new($false))
@@ -107,10 +99,8 @@ if (-not (Test-Path $EnvFile)) {
 # Port 80 is commonly reserved by HTTP.sys/IIS on Windows. Keep the internal Nginx port at 80,
 # but expose a configurable unprivileged host port and ensure browser CORS includes that origin.
 $envText = Get-Content $EnvFile -Raw
-# Re-map any legacy client IP placeholders (192.168.1.50 / 192.168.0.244) and the
-# Dinstar NIC placeholder to the freshly detected dual-interface addresses.
+# Re-map any legacy client IP placeholders (192.168.1.50 / 192.168.0.244).
 $envText = $envText.Replace('192.168.1.50', $ServerIp).Replace('192.168.0.244', $ServerIp)
-if ($DinstarNicIp) { $envText = $envText.Replace('192.168.11.20', $DinstarNicIp) }
 if ($envText -match '(?m)^RED_HTTP_PORT=.*$') {
     $envText = [regex]::Replace($envText, '(?m)^RED_HTTP_PORT=.*$', "RED_HTTP_PORT=$HttpPort")
 } else {
@@ -193,7 +183,6 @@ try {
     }
     Write-Host " PASS"
     Wait-ContainerReady "red-admin-ui"
-    Wait-ContainerReady "red-pstn-gateway"
 } finally { Pop-Location }
 
 # إعلان mDNS اختياري (best-effort) على واجهة العميل كي تكتشف الهواتف السيرفر
@@ -222,10 +211,8 @@ if ($BuildAndroid) {
         New-Item -ItemType Directory -Force $Artifacts | Out-Null
         $tlsPinsMatch = [regex]::Match((Get-Content $EnvFile -Raw), '(?m)^RED_TLS_PINS=(.*)$')
         $tlsPins = if ($tlsPinsMatch.Success) { $tlsPinsMatch.Groups[1].Value.Trim() } else { '' }
-        # مرشّحات لاكتشاف تلقائي على كلا الواجهتين: واي فاي (العميل) + إيثرنت (NIC الخاص
-        # بـ Dinstar) + loopback. يضمن اتصال الجهاز فوراً دون مسح شبكة.
+        # مرشّحات لاكتشاف تلقائي: واي فاي (العميل) + loopback. يضمن اتصال الجهاز فوراً دون مسح شبكة.
         $candidates = @("http://${ServerIp}:$HttpPort")
-        if ($DinstarNicIp) { $candidates += "http://${DinstarNicIp}:$HttpPort" }
         $candidates += "http://127.0.0.1:$HttpPort"
         $candidateArg = $candidates -join ','
         & docker build --file Dockerfile --target android-artifact --build-arg "RED_SERVER_URL=http://${ServerIp}:$HttpPort" --build-arg "RED_TLS_PINS=$tlsPins" --build-arg "RED_SERVER_CANDIDATES=$candidateArg" --output "type=local,dest=$Artifacts" .

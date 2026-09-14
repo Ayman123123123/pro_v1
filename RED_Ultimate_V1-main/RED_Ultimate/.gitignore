@@ -8,18 +8,12 @@ local.properties
 .idea/
 .env
 secrets/
-# Dinstar/API session cookies must never be committed (audit 2026-09-04)
+# API session cookies must never be committed (audit 2026-09-04)
 cookies.txt
-dinstar_cookies.txt
 *_cookies.txt
-# Dinstar gateway session jars (login cookie exports) — local debug secrets, never commit
-dinstar_jar.txt
-dinstar_jar*.txt
-# Dinstar/legacy HTML dumps (*.htm snapshots: cdr/boxcdr/sipcfg/portlist/ussd/...)
 # Local gateway debug only — real file google-services.json already ignored below;
 # template lives in red-app/google-services.json.example. No committed secrets are
-# renamed or deleted here — ignore-only, plus a Write-Warning in
-# scripts/dinstar-web-login.ps1.
+# renamed or deleted here — ignore-only.
 *.htm
 # Firebase: the real per-environment file must never be committed (see red-app/google-services.json.example)
 google-services.json

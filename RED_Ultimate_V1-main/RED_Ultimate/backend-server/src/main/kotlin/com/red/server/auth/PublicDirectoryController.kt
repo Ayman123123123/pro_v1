@@ -103,16 +103,11 @@ class PublicDirectoryController(
     }
 
     /**
-     * 📞 بحث عكسي مدمج — نفس مصادر CallerDirectoryController.lookup لكن
-     * داخل /api/directory/search: شريحة مربوطة بحساب معتمد أولًا، ثم الدليل
-     * المجتمعي. best-effort: أي عطل في JDBC يعيد قائمة فارغة ولا يكسر البحث.
+     * 📞 بحث عكسي مدمج — الدليل المجتمعي داخل /api/directory/search.
+     * best-effort: أي عطل في JDBC يعيد قائمة فارغة ولا يكسر البحث.
      */
     private fun phoneReverseLookup(term: String): List<PublicRedProfile> = runCatching {
         val phone = CallerDirectoryController.normalizePhone(term) ?: return emptyList()
-        val bound = users.findByPstnNumber(phone) ?: users.findByPstnNumber(phone.trimStart('+'))
-        if (bound != null && bound.status == AccountStatus.APPROVED) {
-            return listOf(PublicRedProfile(bound.redId, bound.username, bound.displayName, bound.avatarUrl, phone, 0))
-        }
         val hit = jdbc?.query(
             "SELECT display_name, spam_score FROM caller_directory WHERE phone=?",
             { rs, _ -> PublicRedProfile("", phone, rs.getString("display_name"), null, phone, rs.getInt("spam_score")) },

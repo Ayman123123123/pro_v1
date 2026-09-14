@@ -46,10 +46,9 @@
     <string name="status_group_encryption_failed">تعذر تشفير المجموعة: %1$s</string>
 
     <!-- قنوات إشعارات إضافية -->
-    <string name="channel_dinstar_name">بوابة دينستار</string>
     <string name="channel_system_name">نظام يونس</string>
 
-    <!-- تعريب الشاشات (2026-09-10): DeviceSettings / PstnConfig / DialPad -->
+    <!-- تعريب الشاشات (2026-09-10): DeviceSettings / DialPad -->
     <string name="device_settings_title">إعدادات الجهاز</string>
     <string name="section_account_identity">الحساب والهوية</string>
     <string name="profile_identity">الملف والهوية</string>
@@ -58,9 +57,6 @@
     <string name="device_identity_sub">شهادات الجهاز والمفاتيح والإثبات</string>
     <string name="active_sessions">الجلسات النشطة</string>
     <string name="active_sessions_sub">عرض الجلسات النشطة وإلغاؤها</string>
-    <string name="pstn_dinstar_title">إعدادات الهاتف اليمني / دينستار</string>
-    <string name="pstn_configuration">إعدادات PSTN</string>
-    <string name="pstn_configuration_sub">بوابة دينستار وحالة الشرائح وربط المنافذ</string>
     <string name="call_limits">حدود المكالمات والحصص</string>
     <string name="call_limits_sub">حدود يومية/بالدقيقة وقيود لكل رقم</string>
     <string name="call_recording">تسجيل المكالمات</string>
@@ -84,12 +80,9 @@
     <string name="status_disconnected_periodic">غير متصل — التحديث الدوري</string>
 
     <string name="dial_error_empty">أدخل الرقم أولاً</string>
-    <string name="dial_error_pstn_required">يتطلب خطة PSTN</string>
-    <string name="dial_error_invalid_yemeni">رقم يمني غير صالح</string>
     <string name="dial_error_daily_limit">تم بلوغ الحد اليومي (%1$d/%2$d)</string>
     <string name="dial_used">الاستخدام: %1$d / %2$d</string>
     <string name="dial_voip_cd">مكالمة إنترنت RED</string>
-    <string name="dial_pstn_cd">مكالمة هاتفية يمنية</string>
 
     <!-- تعريب عام (2026-09-10): كتلة الشبكة + بانر دون اتصال + رجوع الإدارة + مسح التخزين -->
     <string name="network_connectivity_title">الشبكة والاتصال</string>
@@ -201,9 +194,5 @@
     <string name="e2ee_badge_desc">تشفير طرفٍ لطرف</string>
     <string name="file_size_mb">%1$.1f م.ب</string>
     <string name="file_size_kb">%1$.1f ك.ب</string>
-    <!-- إجراءات منافذ PSTN (كانت SMS/USSD/Reset إنجليزية خام في PstnConfigScreen) -->
-    <string name="pstn_action_sms">رسائل</string>
-    <string name="pstn_action_ussd">ترميز</string>
-    <string name="pstn_action_reset">إعادة ضبط</string>
     <string name="file_size_b">%1$d بايت</string>
 </resources>

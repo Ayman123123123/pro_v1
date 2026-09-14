@@ -3,137 +3,6 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 services:
-  # VoiceBridge AI Service
-  voicebridge:
-    build:
-      context: ./voicebridge
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: red-voicebridge
-    restart: unless-stopped
-    mem_limit: 2g
-    cpus: '2.0'
-    environment:
-      - SPRING_PROFILES_ACTIVE=prod
-      - DATABASE_URL=jdbc:postgresql://postgres:5432/voicebridge
-      - DATABASE_USER=${DATABASE_USER}
-      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
-      - ARI_HOST=asterisk
-      - ARI_PORT=8088
-      - ARI_USER=voicebridge
-      - ARI_PASSWORD=${ARI_PASSWORD}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - VOICEBRIDGE_STASIS_APP=voicebridge
-      - VOICEBRIDGE_MAX_CALLS=200
-      - VOICEBRIDGE_RTP_POOL=100
-    volumes:
-      - voicebridge-recordings:/var/spool/asterisk/recordings
-      - voicebridge-logs:/var/log/voicebridge
-    ports:
-      - "8090:8090"
-      - "12100-13100:12100-13100/udp"
-    networks:
-      - red-net
-    depends_on:
-      postgres:
-        condition: service_healthy
-      asterisk:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/voicebridge/actuator/health/liveness"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "10"
-
-  # Kamailio SBC
-  kamailio:
-    build:
-      context: ./kamailio
-      dockerfile: Dockerfile
-    container_name: red-kamailio
-    restart: unless-stopped
-    mem_limit: 512m
-    cpus: '1.0'
-    environment:
-      - KAMAILIO_PUBLIC_IP=${KAMAILIO_PUBLIC_IP}
-      - KAMAILIO_PRIVATE_IP=${KAMAILIO_PRIVATE_IP}
-      - ASTERISK_PRIVATE_IP=${ASTERISK_PRIVATE_IP}
-      - DINSTAR_IPS=${DINSTAR_IPS}
-      - KAMAILIO_SIP_DOMAIN=${KAMAILIO_SIP_DOMAIN}
-      - KAMAILIO_ADMIN_USER=kamailio
-      - KAMAILIO_ADMIN_PASSWORD=${KAMAILIO_ADMIN_PASSWORD}
-    ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "5061:5061/tcp"
-    networks:
-      - red-net
-    depends_on:
-      - asterisk
-    healthcheck:
-      test: ["CMD", "kamctl", "ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-
-  # Janus Gateway
-  janus:
-    build:
-      context: ./janus
-      dockerfile: Dockerfile
-    container_name: red-janus
-    restart: unless-stopped
-    mem_limit: 1g
-    cpus: '1.5'
-    environment:
-      - JANUS_PUBLIC_IP=${JANUS_PUBLIC_IP}
-      - JANUS_PRIVATE_IP=${JANUS_PRIVATE_IP}
-      - KAMAILIO_PRIVATE_IP=${KAMAILIO_PRIVATE_IP}
-      - SIP_REALM=${SIP_REALM}
-      - SIP_USERNAME=janus-edge
-      - SIP_PASSWORD=${JANUS_SIP_PASSWORD}
-      - JANUS_ADMIN_SECRET=${JANUS_ADMIN_SECRET}
-      - TURN_SERVER=${TURN_PUBLIC_HOST}
-      - TURN_USER=${TURN_USERNAME}
-      - TURN_PASSWORD=${TURN_PASSWORD}
-      - STUN_SERVER=stun.l.google.com
-      - STUN_PORT=19302
-    ports:
-      - "8188:8188/tcp"
-      - "8189:8189/tcp"
-      - "8088:8088/tcp"
-      - "5060:5060/udp"
-      - "5061:5061/tcp"
-      - "20000-40000:20000-40000/udp"
-    networks:
-      - red-net
-    depends_on:
-      - kamailio
-      - coturn
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8088/admin"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "10"
-
   # coturn TURN/STUN
   coturn:
     image: coturn/coturn:4.6.2-r10
@@ -274,67 +143,19 @@ services:
       - red-net
 
   # Exporters
-  asterisk-exporter:
-    image: voipfuture/asterisk-prometheus-exporter:latest
-    container_name: red-asterisk-exporter
-    restart: unless-stopped
-    mem_limit: 128m
-    environment:
-      - ASTERISK_HOST=asterisk
-      - ASTERISK_PORT=5038
-      - ASTERISK_USER=red_admin
-      - ASTERISK_PASSWORD=${AMI_PASSWORD}
-    ports:
-      - "9494:9494"
-    networks:
-      - red-net
-    depends_on:
-      - asterisk
-
-  kamailio-exporter:
-    image: voipfuture/kamailio-prometheus-exporter:latest
-    container_name: red-kamailio-exporter
-    restart: unless-stopped
-    mem_limit: 128m
-    environment:
-      - KAMAILIO_HOST=kamailio
-      - KAMAILIO_PORT=5060
-    ports:
-      - "9495:9495"
-    networks:
-      - red-net
-    depends_on:
-      - kamailio
-
-  janus-exporter:
-    image: voipfuture/janus-prometheus-exporter:latest
-    container_name: red-janus-exporter
-    restart: unless-stopped
-    mem_limit: 128m
-    environment:
-      - JANUS_HOST=janus
-      - JANUS_PORT=8088
-      - JANUS_ADMIN_SECRET=${JANUS_ADMIN_SECRET}
-    ports:
-      - "9496:9496"
-    networks:
-      - red-net
-    depends_on:
-      - janus
-
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: red-postgres-exporter
     restart: unless-stopped
     mem_limit: 128m
     environment:
-      - DATA_SOURCE_NAME=postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/voicebridge?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://admin:${DB_PASSWORD}@db-postgres:5432/red_sovereign?sslmode=disable
     ports:
       - "9187:9187"
     networks:
       - red-net
     depends_on:
-      - postgres
+      - db-postgres
 
   redis-exporter:
     image: oliver006/redis_exporter:v1.58.0
@@ -342,14 +163,14 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     environment:
-      - REDIS_ADDR=redis:6379
+      - REDIS_ADDR=cache-redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "9121:9121"
     networks:
       - red-net
     depends_on:
-      - redis
+      - cache-redis
 
   nginx-exporter:
     image: nginx/nginx-prometheus-exporter:1.4.0
@@ -366,10 +187,6 @@ services:
       - nginx
 
 volumes:
-  voicebridge-recordings:
-    driver: local
-  voicebridge-logs:
-    driver: local
   prometheus-data:
     driver: local
   alertmanager-data:

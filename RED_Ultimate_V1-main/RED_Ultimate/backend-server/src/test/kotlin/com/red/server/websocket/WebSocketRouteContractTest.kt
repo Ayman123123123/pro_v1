@@ -12,12 +12,8 @@ import org.junit.jupiter.api.Test
  * - `/ws/conference` ConferenceSignalingClient
  * - `/ws/livestream` LiveStreamSignalingClient
  * - `/ws/typing`     قناة Redis pub/sub للكتابة (TypingHandler)
- * - `/ws/dinstar`    DinstarWebSocketBridge (حالة المنافذ + CDR + SMS)
- * - `/ws/pstn`       PstnEventSocket (مراحل المكالمة الصادرة + الوارد + SMS)
  * - `/ws/admin/logs` LogStreamerTab في لوحة الإدارة
  *
- * `/ws/pstn` كان ناقصًا من هذا العقد رغم أنه مسجَّل في الخادم ويستهلكه
- * التطبيق فعلًا (PstnEventSocket) — وهو حامل أحداث RINGING/ACTIVE/ENDED.
  */
 class WebSocketRouteContractTest {
     @Test
@@ -29,9 +25,7 @@ class WebSocketRouteContractTest {
                 "/ws/conference",
                 "/ws/livestream",
                 "/ws/typing",
-                "/ws/admin/logs",
-                "/ws/dinstar",
-                "/ws/pstn"
+                "/ws/admin/logs"
             ),
             WebSocketConfig.ROUTES
         )

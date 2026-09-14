@@ -1,20 +1,12 @@
 Hello! I need your help configuring Cloudflare Tunnel for my project.
 
-## Project: RED Sovereign (VoIP/PSTN Calling App)
+## Project: RED Sovereign (WebRTC Calling App)
 
-RED Sovereign is an encrypted messaging and calling app for Yemen. It has two critical calling routes:
+RED Sovereign is an encrypted messaging and calling app for Yemen. Calls are RED-to-RED over WebRTC:
 
-### 1. RED-to-RED Calls (App ↔ App)
-- WebRTC signaling over WebSocket (`/ws/calls`)
+- WebRTC signaling over WebSocket (`/ws/master`, `/ws/calls`)
 - Audio/Video via mediasoup SFU (`red-media-sfu`)
-- This works peer-to-peer via the media server
-
-### 2. PSTN Calls (App ↔ Real Phone Numbers) ← **This is why I need Cloudflare Tunnel**
-- The app needs to call real Yemeni mobile numbers (e.g., +967777123456)
-- Architecture: Android App → **Asterisk (WebRTC/SIP via WSS)** → DINSTAR GSM Gateway → Yemeni Mobile Network
-- The app connects to Asterisk via **WebSocket Secure (WSS)** on port 8089
-- Asterisk bridges the call to a DINSTAR UC2000 GSM gateway on the local LAN
-- **This is the critical path that must work over the internet**
+- NAT traversal via coturn TURN (`coturn`)
 
 ## The Problem
 
@@ -23,7 +15,7 @@ My server is behind **CGNAT** in Sanaa, Yemen (ISP: AS30873). I cannot:
 - Get a public static IP
 - Use a VPS (no budget for one)
 
-The Android app MUST connect to Asterisk via WSS from anywhere in the world — this is non-negotiable for PSTN calling to work.
+The Android app MUST reach the API and signaling WebSockets from anywhere in the world — this is non-negotiable for calling to work.
 
 ## Current Docker Services
 
@@ -31,7 +23,6 @@ The Android app MUST connect to Asterisk via WSS from anywhere in the world — 
 services:
   nginx:        # Reverse proxy — exposes port 8088 (HTTP) / 8443 (HTTPS)
   backend:      # Spring Boot API — internal port 8080
-  pstn-gateway: # Asterisk — SIP/UDP:5060, WSS:8089
   media-sfu:    # mediasoup SFU — for RED-to-RED calls
   db-postgres:  # PostgreSQL
   db-mongo:     # MongoDB
@@ -56,11 +47,11 @@ I need two routes:
 | Hostname | Protocol | Target | Purpose |
 |----------|----------|--------|---------|
 | `my-domain.com` | HTTP | `http://nginx:80` | Backend API + Admin Dashboard |
-| `my-domain.com/ws/sip` | WebSocket | `ws://pstn-gateway:8089` | **Critical: Asterisk WSS for PSTN calls** |
+| `my-domain.com/ws/*` | WebSocket | `http://nginx:80` | **Critical: signaling WebSockets (proxied to backend)** |
 
 ### 3. Questions
-- Does Cloudflare Tunnel support WebSocket proxying for the `/ws/sip` route? (Asterisk uses WSS for SIP signaling)
-- Do I need to configure anything special for long-lived WebSocket connections (SIP REGISTER keeps a persistent connection)?
+- Does Cloudflare Tunnel support WebSocket proxying for the `/ws/*` signaling routes?
+- Do I need to configure anything special for long-lived WebSocket connections (signaling keeps a persistent connection)?
 - Will the SSL certificate be auto-provisioned by Cloudflare for my domain?
 
 ## My docker-compose.yml snippet (what I have so far)

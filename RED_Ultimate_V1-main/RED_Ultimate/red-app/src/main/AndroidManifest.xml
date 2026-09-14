@@ -36,11 +36,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
         android:name=".YounesApplication"
@@ -74,10 +69,6 @@
             android:name=".calls.ZoomGroupCallService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|mediaProjection" />
-        <service
-            android:name=".calls.PstnCallForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="microphone|phoneCall" />
         <!-- LEGENDARY FIX (مكتشف على الجهاز): خدمة WorkManager الأمامية بنوع dataSync —
              بدونه ينهار أي Worker مُستعجل بـ IllegalArgumentException على Android 14+.
              (الرفع/المزامنة عبر Workers تُجدول من YounesApplication — لا خدمات مخصصة.) -->
@@ -112,14 +103,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".calls.PhoneStateReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.PHONE_STATE" />
-            </intent-filter>
-        </receiver>
         <service
             android:name=".core.network.SovereignNotificationRouter"
             android:exported="false"
@@ -158,21 +141,11 @@
             android:turnScreenOn="true"
             android:showWhenLocked="true" />
 
-        <receiver
-            android:name=".calls.SmsReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter android:priority="999">
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".calls.ScheduledCallReceiver"
             android:enabled="true"
             android:exported="false" />
-        <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
         <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
         <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
         <!-- Sovereign push: UnifiedPush receiver (self-hosted distributor, no Google push). -->

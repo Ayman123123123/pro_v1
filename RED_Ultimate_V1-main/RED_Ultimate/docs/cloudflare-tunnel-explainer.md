@@ -40,7 +40,7 @@ Cloudflare Tunnel هو خدمة مجانية تسمح لخادمنا بـ **نش
 | الخدمة | البروتوكول | الوصف |
 |--------|-----------|-------|
 | **Nginx (HTTP)** | HTTP/HTTPS | الباك اند الرئيسي + API |
-| **Asterisk (WSS)** | WebSocket Secure | اتصال WebRTC للتطبيق |
+| **Backend (WS)** | WebSocket | إشارات WebRTC عبر nginx |
 | **Nginx (API)** | HTTP | واجهة برمجية للتطبيق |
 
 ### تكوين DNS المطلوب:
@@ -49,8 +49,8 @@ Cloudflare Tunnel هو خدمة مجانية تسمح لخادمنا بـ **نش
 # السيرفر الرئيسي
 your-domain.com          → http://nginx:80        (HTTP)
 
-# WebSocket للـ SIP (Asterisk)
-your-domain.com/ws/sip   → ws://pstn-gateway:8089 (WebSocket)
+# WebSocket للإشارات (عبر nginx → backend)
+your-domain.com/ws/*     → http://nginx:80 (WebSocket)
 ```
 
 ## الخطوات المطلوبة منك:
@@ -81,7 +81,7 @@ CLOUDFLARE_TUNNEL_TOKEN=your-token-here
 ### 5. تكوين Public Hostnames
 - أضف Public Hostnames في Cloudflare Dashboard:
   - `your-domain.com` → `http://nginx:80`
-  - `your-domain.com/ws/sip` → `ws://pstn-gateway:8089`
+  - `your-domain.com/ws/*` → `http://nginx:80`
 
 ### 6. تشغيل النفق
 ```bash
@@ -95,7 +95,7 @@ docker compose --profile tunnel up -d cloudflared
 ```
 # التطبيق يتصل بـ:
 https://your-domain.com          → الباك اند (API + UI)
-wss://your-domain.com/ws/sip     → Asterisk (WebRTC/SIP)
+wss://your-domain.com/ws/*       → nginx → backend (signaling)
 ```
 
 **التطبيق يعمل من أي مكان في العالم!**

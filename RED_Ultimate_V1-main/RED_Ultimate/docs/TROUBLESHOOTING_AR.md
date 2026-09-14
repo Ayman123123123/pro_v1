@@ -41,23 +41,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\compose-recover.ps1 -RebuildB
 - `/health` يعرض `bindings.mongodbHost`. إن ظهر `localhost` فأنت تشغّل JVM على ويندوز أو نسخت URI خاطئ.
 - لا تشغّل `bootRun` بجانب Compose إلا عبر `docker-compose.host-debug.yml` و`SPRING_PROFILES_ACTIVE=host`.
 
-## DINSTAR جاهز على `192.168.11.1` — لا تغيّر الـ IP إلى Wi-Fi
-
-الجهاز بلا Wi-Fi. كرت Realtek ↔ `192.168.11.1` هو مسار الإدارة الصحيح. فكّ الكابل = انقطاع مهما كان العنوان.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-dinstar-ready.ps1
-```
-
-في واجهة الجهاز (`enFrame.htm` → SIP Server) ضع **عنوان ويندوز على 192.168.11.x** والمنفذ 5060. Asterisk يتعرّف على البوابة بالعنوان (`type=identify`).
-
-> **حقائق موثقة 2026-09-04:** العنوان المعتمد `192.168.11.10` (كل `.60/.50/.10` ثابتة).
-> `.20` و`.5` ميتان — تحقق بـ ping قبل الاعتماد على أي عنوان.
-> بعد Save يلزم Restart للجهاز. إن بقيت `enSysInfo_SIP.htm` تعرض `Unregistered`
-> فالـ SIP Server ميت أو المسار محجوب (VPN!). شغّل:
-> `.\scripts\verify-dinstar-lan.ps1 -DinstarIp 192.168.11.1 -ExpectedAsteriskIp 192.168.11.10`.
-
----
 
 # 🔧 Docker Build DNS Issues
 
@@ -145,7 +128,7 @@ cd backend-server
 
 ```bash
 # شغّل فقط الـ services التي لا تحتاج Java
-docker compose up -d db-postgres db-mongo cache-redis minio pstn-gateway media-sfu admin-panel
+docker compose up -d db-postgres db-mongo cache-redis minio media-sfu admin-panel
 ```
 
 ---

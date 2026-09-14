@@ -597,7 +597,6 @@ function seedIfEmpty() {
   const insFlag = db.prepare('INSERT INTO feature_flags (id,flag_name,description,enabled,rollout_percentage,updated_at) VALUES (?,?,?,?,?,?)');
   [
     ['GROUP_E2EE_SENDER_KEYS', 'توزيع وتدوير مفاتيح المجموعات', 0, 0],
-    ['PSTN_DINSTAR_ROUTING', 'توجيه المكالمات عبر بوابة DINSTAR', 1, 100],
     ['STORIES_MEDIA', 'الحالات والوسائط المؤقتة', 1, 100],
     ['LIVE_STREAMING', 'البث المباشر عبر SFU', 0, 25],
     ['LOCAL_FTS_SEARCH', 'بحث محلي مشفر FTS5', 0, 10],
@@ -704,11 +703,8 @@ function seedIfEmpty() {
       voiceMessages: 320 + i * 9, mediaUploads: 210 + i * 6,
       mediaBytesUploaded: (18 + i) * 1073741824,
       callsTotal: 260 + i * 7, callsAudio: 180 + i * 4, callsVideo: 55 + i * 2,
-      callsConference: 15 + (i % 4), callsLive: 4, callsPstn: 40 + (i % 9),
+      callsConference: 15 + (i % 4), callsLive: 4,
       callsDurationSeconds: (3600 + i * 90) * 6, callsFailed: 6, callsMissed: 14,
-      dinstarActivePorts: 7, dinstarTotalCalls: 40 + (i % 9),
-      dinstarTotalDurationSeconds: 5400 + i * 120,
-      dinstarBalanceRemaining: 24500 - i * 180,
       groupsCreated: 3 + (i % 3),
       storageUsedBytes: (240 + i * 2) * 1073741824,
     }));
@@ -773,26 +769,6 @@ function seedIfEmpty() {
         answered ? new Date(Date.parse(started) + 180000).toISOString() : null);
     });
   }
-
-  // ── أسطول بوابات DINSTAR ──
-  // جهازان لإثبات أن اللوحة والتوجيه يتعاملان مع أكثر من بوابة:
-  // ‎-8G يعمل بـ GSM و‎-8T بـ LTE/VoLTE، وثالث معطّل لاختبار الاستبعاد.
-  const insGw = db.prepare(`INSERT INTO telecom_gateways
-    (id,name,vendor,model,host,scheme,api_port,port_count,enabled,health_state,
-     routing_priority,pjsip_endpoint,site_label,serial_number,firmware_version,
-     mac_address,discovery_method,last_seen_at,created_at)
-    VALUES (?,?,'DINSTAR',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-  // عناوين MAC ضمن نطاق Dinstar المسجّل F8:A0:3D (سجل IEEE).
-  // الجهاز الثالث بلا MAC عمدًا: يثبت أن غيابه يخفض درجة الثقة دون
-  // أن يمنع التعرّف — جهاز خلف NAT قد لا يُفصح عنه.
-  [
-    ['UC2000-VE-8G', '192.168.11.1', 8, 1, 'ONLINE', 0, 'dinstar-gw-192-168-11-1', 'صنعاء — المقر', 'DS8G2401001', 'v2.10.3.7', 'F8:A0:3D:1C:44:A1', 'CONFIG_SEED'],
-    ['UC2000-VE-8T', '192.168.11.2', 8, 1, 'ONLINE', 10, 'dinstar-gw-192-168-11-2', 'صنعاء — المقر', 'DS8T2401044', 'v2.11.0.2', 'F8:A0:3D:2E:07:B9', 'SUBNET_SCAN'],
-    ['UC2000-VE-4G', '192.168.11.3', 4, 0, 'OFFLINE', 50, 'dinstar-gw-192-168-11-3', 'عدن — الفرع', 'DS4G2312017', 'v2.9.8.1', null, 'MANUAL'],
-  ].forEach(([model, host, ports, enabled, health, priority, pjsip, site, sn, fw, mac, method]) => {
-    insGw.run(uuid(), `DINSTAR ${model} @ ${host}`, model, host, 'https', 443, ports,
-      enabled, health, priority, pjsip, site, sn, fw, mac, method, nowIso(), nowIso());
-  });
 
   return true;
 }

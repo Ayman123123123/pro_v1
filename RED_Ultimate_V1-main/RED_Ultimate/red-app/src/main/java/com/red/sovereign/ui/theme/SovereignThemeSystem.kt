@@ -31,7 +31,6 @@ object SovereignColors {
     val GoldLight = YounesAccentSoft
     val GoldDark = Color(0xFFD97706)
     val GoldNeon = Color(0xFFFFD700)
-    val DinstarGold = Color(0xFFF4B400)
 
     // ── الزمرد السيبراني والأمان / التشفير التام E2EE ───────────────────────
     /** زمرد يونس الأساسي — مرادف [YounesPrimary] (#14C79A). */
@@ -160,9 +159,6 @@ object SovereignGradients {
     )
     val royal = Brush.horizontalGradient(
         listOf(SovereignColors.Navy, SovereignColors.CyanDark, SovereignColors.Cyan)
-    )
-    val dinstar = Brush.horizontalGradient(
-        listOf(SovereignColors.GoldDark, SovereignColors.DinstarGold, SovereignColors.GoldLight)
     )
     val live = Brush.horizontalGradient(
         listOf(Color(0xFFB71C1C), SovereignColors.LiveRed, SovereignColors.RubyNeon)

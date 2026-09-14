@@ -4,7 +4,7 @@
 
 ## الوظيفة
 
-التطبيق الذي ينتج APK: حساب username، موافقة الإدارة، هوية جهاز محلية، libsignal PQXDH/Double Ratchet، WebSocket، feed/groups/stories وسجل المكالمات وهاتف DINSTAR المنفصل. الميزات غير المكتملة معطلة بصريًا.
+التطبيق الذي ينتج APK: حساب username، موافقة الإدارة، هوية جهاز محلية، libsignal PQXDH/Double Ratchet، WebSocket، feed/groups/stories وسجل المكالمات الموحد. الميزات غير المكتملة معطلة بصريًا.
 
 ## المحتوى
 

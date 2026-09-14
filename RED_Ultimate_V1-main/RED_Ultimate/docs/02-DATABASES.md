@@ -4,9 +4,9 @@
 
 | النظام | البيانات | المبدأ |
 |---|---|---|
-| PostgreSQL 16 | الحسابات، الأجهزة، refresh sessions، recovery، صلاحيات PSTN، audit، public pre-keys | بيانات علائقية وقيود/معاملات |
+| PostgreSQL 16 | الحسابات، الأجهزة، refresh sessions، recovery، audit، public pre-keys | بيانات علائقية وقيود/معاملات |
 | MongoDB 8 | ciphertext messages، sequences، posts، groups، stories، call history | مستندات وتصفح زمني |
-| Redis 7 | rate limits، عدادات PSTN اليومية، حالة قصيرة العمر | لا يُعامل كمصدر دائم وحيد |
+| Redis 7 | rate limits، حالة قصيرة العمر | لا يُعامل كمصدر دائم وحيد |
 | MinIO | صور/فيديو/مرفقات | object storage محلي مصادق |
 | Android SQLite | sessions/pre-keys/sender keys/ciphertext metadata | السجلات التشفيرية مشفرة عبر Keystore |
 
@@ -17,10 +17,10 @@
 | Migration | الغرض |
 |---|---|
 | V1 | schema الأولي للمستخدمين والبنية الأساسية |
-| V2 | إعدادات DINSTAR القديمة/الرئيسية |
+| V2 | إعدادات تاريخية (مسار ملغي) |
 | V3 | username وRED ID وحالات الموافقة دون هاتف |
 | V4 | الأجهزة وشهادات الهوية وrefresh sessions |
-| V5 | `pstn_enabled` والحد اليومي |
+| V5 | أعمدة توافق تاريخية (غير مستخدمة) |
 | V6 | recovery codes أحادية الاستخدام ومجزأة |
 | V7 | audit trail دائم |
 | V8 | registration/protocol IDs وpublic signed/Kyber metadata؛ إلغاء الأجهزة القديمة غير الآمنة |
@@ -53,10 +53,9 @@ Android يجدد المخزون إلى هدف 50 زوجًا عندما ينخف�
 المفاتيح قصيرة العمر تشمل:
 
 - registration/login/recovery rate limits.
-- عداد يومي PSTN وفق توقيت `Asia/Aden`.
 - حالات تشغيلية مؤقتة.
 
-Compose يشغل Redis مع password وAOF. تجاوز حد PSTN يعيد الحجز ولا يستدعي Asterisk. يمنع استخدام `KEYS` في مسارات الإنتاج؛ استخدم عمليات محددة أو SCAN عند الحاجة الإدارية.
+Compose يشغل Redis مع password وAOF. يمنع استخدام `KEYS` في مسارات الإنتاج؛ استخدم عمليات محددة أو SCAN عند الحاجة الإدارية.
 
 ## MinIO
 

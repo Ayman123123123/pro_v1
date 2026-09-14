@@ -231,7 +231,7 @@ fun CallStatsScreen(
                 }
             }
 
-            // توزيع أنواع المكالمات (فيديو، صوت، DINSTAR GSM)
+            // توزيع أنواع المكالمات (فيديو، صوت)
             item {
                 Text(
                     text = "توزيع القنوات والمسارات",
@@ -261,13 +261,6 @@ fun CallStatsScreen(
                         label = "صوتية",
                         count = stats.voiceCallsCount,
                         color = SovereignColors.EmeraldNeon
-                    )
-                    ChannelMiniCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Rounded.CellTower,
-                        label = "DINSTAR",
-                        count = stats.dinstarCallsCount,
-                        color = SovereignColors.GoldNeon
                     )
                 }
             }
@@ -335,7 +328,7 @@ fun CallStatsScreen(
                 SovereignNeonButton(
                     text = "مشاركة وتصدير التقرير الكامل (CSV)",
                     icon = Icons.Rounded.FileDownload,
-                    gradient = SovereignGradients.dinstar,
+                    gradient = SovereignGradients.gold,
                     onClick = { shareCsv() },
                     modifier = Modifier.fillMaxWidth()
                 )

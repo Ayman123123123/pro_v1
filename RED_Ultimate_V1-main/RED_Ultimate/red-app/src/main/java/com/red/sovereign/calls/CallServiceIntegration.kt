@@ -121,28 +121,6 @@ object CallServiceIntegration {
     }
 
     /**
-     * بدء مكالمة PSTN
-     *
-     * تصحيح: PstnCallForegroundService لا يملك ACTION_DIAL — هو خدمة إبقاء
-     * العملية حيّة فقط (ACTION_START + extra باسم "number") عبر
-     * [PstnCallForegroundService.start]. الاتصال الفعلي بالبوابة يتم في
-     * PstnWebRtcManager (AuthViewModel.dialPstn) وليس هنا.
-     */
-    fun startPstnCall(context: Context, phoneNumber: String) {
-        PstnCallForegroundService.start(context, phoneNumber)
-    }
-
-    /**
-     * إنهاء مكالمة PSTN
-     *
-     * تصحيح: لا يوجد ACTION_HANGUP ولا action(...) في هذه الخدمة —
-     * الإيقاف الحقيقي هو [PstnCallForegroundService.stop] (يحرّر الـ WakeLock).
-     */
-    fun endPstnCall(context: Context) {
-        PstnCallForegroundService.stop(context)
-    }
-
-    /**
      * التحقق من وجود مكالمة نشطة
      *
      * تصحيح: لا خدمة من الخدمات تعرض دالة "هل نشطة" — الحالة الحقيقية تعيش في
@@ -150,7 +128,7 @@ object CallServiceIntegration {
      * ولا تحتاج Context. [context] يبقى في التوقيع للتوافق فقط.
      */
     fun hasActiveCall(context: Context): Boolean {
-        return isOneToOneActive() || isGroupActive() || isConferenceActive() || isPstnActive()
+        return isOneToOneActive() || isGroupActive() || isConferenceActive()
     }
 
     /**
@@ -161,7 +139,6 @@ object CallServiceIntegration {
             isOneToOneActive() -> "1to1"
             isGroupActive() -> "group"
             isConferenceActive() -> "conference"
-            isPstnActive() -> "pstn"
             else -> null
         }
     }
@@ -179,12 +156,6 @@ object CallServiceIntegration {
     /** مؤتمر أو مساحة قائمة — Incoming/Connecting/Active في [ConferenceRuntime.state]. */
     private fun isConferenceActive(): Boolean = when (ConferenceRuntime.state) {
         is ConferenceUiState.Idle, is ConferenceUiState.Error -> false
-        else -> true
-    }
-
-    /** مكالمة بوابة قائمة — [CallRuntime.pstnStatus] هو مصدرها الوحيد. */
-    private fun isPstnActive(): Boolean = when (CallRuntime.pstnStatus) {
-        PstnCallStatus.IDLE, PstnCallStatus.ENDED, PstnCallStatus.ERROR -> false
         else -> true
     }
 

@@ -17,7 +17,7 @@ RED_Ultimate_V1-main/RED_Ultimate
 - `red-app/`: تطبيق Android الوحيد (`:app`).
 - `backend-server/`: خادم Spring/Kotlin.
 - `admin_dashboard/`: لوحة الإدارة React.
-- `media-sfu/` و`pstn-asterisk/`: وسائط ومكالمات PSTN.
+- `media-sfu/`: وسائط ومكالمات الإنترنت.
 - `docker-compose.yml`: نقطة تشغيل الخدمات الواحدة.
 
 `app/` و`android/` و`core/` و`lib/` و`feature/` مصادر تاريخية؛ لا تضفها إلى

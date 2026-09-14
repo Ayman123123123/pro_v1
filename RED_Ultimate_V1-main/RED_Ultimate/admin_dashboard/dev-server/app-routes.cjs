@@ -122,8 +122,6 @@ const userResponse = (u) => ({
   status: u.status,
   role: u.role,
   rejectionReason: u.rejection_reason,
-  pstnEnabled: !!u.pstn_enabled,
-  pstnDailyLimit: u.pstn_daily_limit,
   devices: all('SELECT * FROM devices WHERE user_id = ? ORDER BY created_at', u.id).map(deviceDto),
 });
 
@@ -793,17 +791,6 @@ module.exports = function registerAppRoutes(on) {
     return ok({ eventId: p.eventId, checkedIn: true, at: nowIso() });
   });
 
-  /** إرسال SMS عبر بوابة DINSTAR — مسار PSTN منفصل يتحكم به المسؤول. */
-  on('POST', '/api/admin/dinstar/sms/send', (_p, _q, b, ctx) => {
-    const me = currentUser(ctx);
-    if (!me) return unauthorized();
-    if (!me.pstn_enabled) return { status: 403, data: { error: 'PSTN_NOT_AUTHORIZED' } };
-    const id = uuid();
-    recordAudit({ adminId: me.id, adminUsername: me.username, action: 'DINSTAR_SMS_SENT',
-      category: 'SYSTEM', targetId: id, description: `${me.red_id} → ${b?.number || '—'}` });
-    return ok({ messageId: id, status: 'QUEUED', port: b?.port ?? 0 });
-  });
-
   // ═══ التغذية الاجتماعية (ليست E2EE — محتوى عام) ═══
   on('GET', '/api/feed', (_p, q, _b, ctx) => {
     const me = currentUser(ctx);
@@ -1181,18 +1168,6 @@ module.exports = function registerAppRoutes(on) {
     ],
   }));
   on('POST', '/api/calls/telemetry', () => noContent());
-
-  // ═══ PSTN (مسار منفصل يتحكم به المسؤول) ═══
-  on('POST', '/api/pstn/calls', (_p, _q, b, ctx) => {
-    const me = currentUser(ctx);
-    if (!me) return unauthorized();
-    if (!me.pstn_enabled) return { status: 403, data: { error: 'PSTN_NOT_AUTHORIZED' } };
-    const id = uuid();
-    recordAudit({ adminId: me.id, adminUsername: me.username, action: 'PSTN_CALL_STARTED',
-      category: 'CALLS', targetId: id, description: `${me.red_id} → ${b?.destination || '—'}` });
-    return ok({ callId: id, status: 'DIALING', port: 3, destination: b?.destination });
-  });
-  on('POST', '/api/pstn/calls/:callId/hangup', () => noContent());
 
   // ═══ الوسائط والقصص والمجتمعات ═══
   on('POST', '/api/media', (_p, _q, _b, ctx) => {

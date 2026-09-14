@@ -17,7 +17,6 @@ data class SystemStats(
     val usersCount: Int = 0,
     val activeCalls: Int = 0,
     val activeStreams: Int = 0,
-    val dinstarPortsOnline: Int = 0
 )
 
 data class PendingUser(
@@ -129,7 +128,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                             usersCount = (map["usersCount"] as? Number)?.toInt() ?: 0,
                             activeCalls = (map["activeCalls"] as? Number)?.toInt() ?: 0,
                             activeStreams = (map["activeStreams"] as? Number)?.toInt() ?: 0,
-                            dinstarPortsOnline = (map["dinstarPortsOnline"] as? Number)?.toInt() ?: 0
                         )
                     }
                 }
@@ -171,12 +169,4 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun rebootDinstar() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val body = mapOf("action" to "REBOOT")
-            client.request("POST", "/api/master/admin/hardware/dinstar/action", jsonBodyOf(body))
-            _isLoading.value = false
-        }
-    }
 }

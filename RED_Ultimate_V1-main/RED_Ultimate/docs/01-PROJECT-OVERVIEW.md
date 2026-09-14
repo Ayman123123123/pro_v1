@@ -15,23 +15,16 @@ RED منصة محلية أولًا للمراسلة الاجتماعية وال�
 | Protocol | `shared-proto/src/main/proto/red_protocol.proto` | المصدر الموحد |
 | Admin | `admin_dashboard/` | React/Vite/Ant Design |
 | SFU | `media-sfu/` | Node/mediasoup |
-| PSTN | `pstn-asterisk/` | Asterisk/DINSTAR صوت فقط |
 | Runtime | `docker-compose.yml` + `nginx.conf` | تشغيل محلي متعدد الخدمات |
 
 `app/` وبقية وحدات Signal القديمة مصادر استخراج فقط وخارج graph الحالي. (`android/` و`app-android/` دُمجا في `red-app/` وحُذفا في 2026-08-19 — انظر `UNIFICATION_2026-08-19.md`.) المرجع الحاسم هو `settings.gradle.kts`.
 
-## الفصل بين مساري المكالمات
+## مسار المكالمات
 
 ```text
 RED صوت/فيديو:
 RED ID ↔ WebRTC ↔ backend signaling/SFU/TURN ↔ WebRTC ↔ RED ID
-لا SIM، لا DINSTAR، ولا Asterisk.
-
-DINSTAR صوت يمني:
-Android ↔ backend authorization/limits ↔ AMI/Asterisk ↔ DINSTAR ↔ SIM ↔ الشبكة اليمنية
 ```
-
-Asterisk لا يحتوي عميل RED WebRTC، ومنفذ AMI غير منشور للمضيف في Compose. الاتصال الوارد غير المربوط يُرفض بدل تحويله إلى وجهة وهمية.
 
 ## تدفق الحساب والهوية
 
@@ -71,7 +64,6 @@ Android sender
 2. المحادثات والمجموعات.
 3. إنشاء مركزي.
 4. سجل مكالمات موحد.
-5. هاتف DINSTAR ذهبي منفصل.
 
 الوظائف التي لا تملك engine فعليًا تبقى معطلة وموضحة بـ«قيد الربط»؛ لا توجد نجاحات وهمية مقصودة.
 
@@ -84,16 +76,15 @@ Nginx هو المدخل على المنفذ 80:
 - `/sfu` و`/sfu-health` → mediasoup.
 - `/` → لوحة الإدارة.
 
-الخدمات المحلية: PostgreSQL وMongoDB وRedis وMinIO وbackend وadmin وSFU وTURN وAsterisk وNginx. راجع `LOCAL_FIRST_RUN_AR.md`.
+الخدمات المحلية: PostgreSQL وMongoDB وRedis وMinIO وbackend وadmin وSFU وTURN وNginx. راجع `LOCAL_FIRST_RUN_AR.md`.
 
 ## بوابات التحقق
 
-بوابة CI الحالية تبني/تختبر backend، تبني Android مع dependency verification صارم، تبني لوحة الإدارة، تثبت SFU وتفحص JavaScript، وتولد إعداد Asterisk الآمن. هذه لا تستبدل:
+بوابة CI الحالية تبني/تختبر backend، تبني Android مع dependency verification صارم، تبني لوحة الإدارة، تثبت SFU وتفحص JavaScript. هذه لا تستبدل:
 
 - تشغيل Compose على جهاز حقيقي.
 - اختبار هاتفين لـ E2EE/WebRTC.
 - اختبار TURN بين شبكتين.
-- اختبار DINSTAR/Yemen Mobile/Sabafon/YOU على العتاد.
 - نسخ احتياطي واستعادة وضغط وأمن وRelease signing.
 
 ## وثائق مرتبطة

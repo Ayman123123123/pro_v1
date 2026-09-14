@@ -32,15 +32,14 @@
 | Service Type | `HTTP` |
 | URL | `nginx:80` |
 
-### Route 2 — Asterisk WSS للمكالمات:
+### Route 2 — WebSockets للإشارات (عبر nginx نفسه):
 | Field | Value |
 |-------|-------|
 | Subdomain | `api` (نفس الأول) |
 | Domain | `your-domain.com` |
-| Path | `/ws/sip` |
-| Service Type | `HTTPS` |
-| URL | `pstn-gateway:8089` |
-| No TLS Verify | ✅ مفعّل (Asterisk يستخدم شهادة ذاتية) |
+| Path | `/ws/*` |
+| Service Type | `HTTP` |
+| URL | `nginx:80` |
 
 ## الخطوة 5: تفعيل WebSockets
 في Cloudflare Dashboard:
@@ -72,11 +71,11 @@ docker logs red-cloudflared
 من أي جهاز متصل بالإنترنت:
 ```bash
 # اختبار API
-curl https://your-domain.com/api/pstn/status
+curl https://your-domain.com/health
 
-# اختبار WebSocket (Asterisk WSS)
+# اختبار WebSocket (إشارات المكالمات)
 # استخدم wscat أو متصفح:
-# wscat -c wss://your-domain.com/ws/sip
+# wscat -c wss://your-domain.com/ws/calls
 ```
 
 ## ملاحظات مهمة
@@ -100,7 +99,7 @@ Cloudflare Tunnel **لا يدعم UDP** — فقط HTTP/HTTPS/WebSocket这意味
 بمجرد الإعداد:
 ```
 https://your-domain.com          → الباك اند (API + UI)
-wss://your-domain.com/ws/sip     → Asterisk (WebRTC/SIP)
+wss://your-domain.com/ws/*       → nginx → backend (signaling)
 ```
 
 **التطبيق يعمل من أي مكان في العالم!**

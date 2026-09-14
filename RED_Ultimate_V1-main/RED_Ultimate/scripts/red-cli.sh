@@ -54,7 +54,6 @@ usage() {
   echo "  ssl:generate         Generate high-security ECC/RSA certificates with SAN"
   echo "  ssl:production       Setup Let's Encrypt SSL with automated cron renewal"
   echo "  ssl:verify           Audit certificate validity & cryptographic modulus match"
-  echo "  dinstar:check        Test connection to DINSTAR VoIP Gateway (192.168.11.1)"
   echo "  logs [service]       Stream real-time logs (e.g. backend, nginx, media-sfu)"
   echo "  up                   Start all platform containers via Docker Compose"
   echo "  down                 Stop all platform containers"
@@ -111,16 +110,6 @@ case "$CMD" in
         -v "$SCRIPT_DIR/verify-ssl-certs.sh:/usr/local/bin/verify-red-tls:ro" \
         --entrypoint sh certs-init -ec \
         'bash /usr/local/bin/verify-red-tls'
-    fi
-    ;;
-
-  dinstar:check)
-    echo -e "${CYAN}🔍 Checking DINSTAR Gateway connectivity at 192.168.11.1:443...${NC}"
-    if curl -k -s --connect-timeout 3 https://192.168.11.1/ >/dev/null 2>&1; then
-      echo -e "${GREEN}✅ DINSTAR Gateway is REACHABLE and responding!${NC}"
-    else
-      echo -e "${RED}❌ Cannot reach 192.168.11.1.${NC}"
-      echo -e "${YELLOW}💡 Tip: Ensure your NIC has secondary IP 192.168.11.X assigned.${NC}"
     fi
     ;;
 

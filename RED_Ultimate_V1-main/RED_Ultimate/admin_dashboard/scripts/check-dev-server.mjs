@@ -378,16 +378,6 @@ await check('حظر الهاشتاق يُحفظ ثم يُرفع', async () => {
 });
 
 console.log('\n── الأمان والجلسات ──');
-await check('صلاحية PSTN تُحفظ على المستخدم', async () => {
-  const user = (await api('GET', '/api/admin/users?status=APPROVED&size=10')).data.content
-    .find((u) => u.role !== 'ADMIN');
-  await api('PUT', '/api/admin/users/pstn', { userId: user.id, enabled: !user.pstnEnabled, dailyLimit: 42 });
-  const after = (await api('GET', `/api/admin/users/${user.id}`)).data;
-  assert(after.pstnEnabled === !user.pstnEnabled, 'لم تتغير');
-  assert(after.pstnDailyLimit === 42, `الحد ${after.pstnDailyLimit}`);
-  return `${user.redId} → ${after.pstnEnabled ? 'مفعّل' : 'موقوف'} / 42`;
-});
-
 await check('المسح عن بُعد يلغي كل أجهزة المستخدم', async () => {
   const user = (await api('GET', '/api/admin/users?status=APPROVED&size=10')).data.content
     .find((u) => u.role !== 'ADMIN' && u.devices?.some((dv) => dv.status !== 'REVOKED'));

@@ -2,7 +2,7 @@ name: red-sovereign
 
 # ══════════════════════════════════════════════════════════════════
 # 🏛️ YOUNES Sovereign Platform — Docker Compose
-# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Asterisk + Coturn
+# PostgreSQL 16 + MongoDB 8 + Redis 7 + MinIO + Spring Boot + Nginx + MediaSFU + Coturn
 # ══════════════════════════════════════════════════════════════════
 
 services:
@@ -71,52 +71,12 @@ services:
       - MONGO_PASSWORD=${MONGO_PASSWORD:?MONGO_PASSWORD is required}
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
-      - ASTERISK_AMI_HOST=pstn-gateway
-      - ASTERISK_AMI_USER=red_admin
-      - ASTERISK_AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
-      - DINSTAR_ENABLED=${DINSTAR_ENABLED:-false}
-      - DINSTAR_USERNAME=${DINSTAR_USERNAME:?DINSTAR_USERNAME is required}
-      - DINSTAR_PASSWORD=${DINSTAR_PASSWORD:?DINSTAR_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.4}
-      # الأسطول كما يقرؤه `DinstarFleetService`. بدونه يبقى الخادم على بوابة
-      # البذرة وحدها، فيصبح الجهاز الثاني مسجَّلًا في القاعدة وغير مُستعلَم.
-      # أحادي canonical 2026-09-04: UC2000-VE @192.168.11.4 (8 ports).
-      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.4}}
-      - DINSTAR_PORT=${DINSTAR_PORT:-443}
-      - DINSTAR_SCHEME=${DINSTAR_SCHEME:-https}
-      # ── تفعيل كامل: Number Learning + Discovery + Timeouts + OpenRelay ──
-      # كانت هذه القيم تُقرأ في application.yml لكن لا تُمرر من compose،
-      # فيعمل Backend دائماً بالافتراضي المعطل. الآن موصولة بـ .env.
-      - RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED=${RED_DINSTAR_NUMBER_LEARNING_AUTO_ENABLED:-false}
-      - RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS=${RED_DINSTAR_NUMBER_LEARNING_MAX_ATTEMPTS:-3}
-      - RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS=${RED_DINSTAR_NUMBER_LEARNING_COOLDOWN_HOURS:-24}
-      - DINSTAR_DISCOVERY_ENABLED=${DINSTAR_DISCOVERY_ENABLED:-false}
-      - DINSTAR_DISCOVERY_SUBNETS=${DINSTAR_DISCOVERY_SUBNETS:-}
-      - DINSTAR_HEARTBEAT_MS=${DINSTAR_HEARTBEAT_MS:-30000}
-      - DINSTAR_CONNECT_TIMEOUT=${DINSTAR_CONNECT_TIMEOUT:-5}
-      - DINSTAR_READ_TIMEOUT=${DINSTAR_READ_TIMEOUT:-10}
-      - DINSTAR_PROBE_TIMEOUT=${DINSTAR_PROBE_TIMEOUT:-2}
-      - DINSTAR_CERT_SHA256_PINS=${DINSTAR_CERT_SHA256_PINS:-}
       - OPENRELAY_ENABLED=${OPENRELAY_ENABLED:-false}
       - OPENRELAY_USERNAME=${OPENRELAY_USERNAME:-openrelayproject}
       - OPENRELAY_PASSWORD=${OPENRELAY_PASSWORD:-openrelayproject}
-      # نفس السر الذي يحمله dialplan في ترويسة X-Internal-Secret. الربط المرن
-      # في Spring يحوّله إلى الخاصية pstn.internal-secret التي يقرأها
-      # InternalPstnController. بدونه يتحقق الخادم من سرّه الافتراضي فتُرفض
-      # كل مكالمة واردة بـBAD_SECRET بينما البوابة ترسل السر الصحيح.
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
-      - PSTN_INTERNAL_ALLOWED_IPS=${PSTN_INTERNAL_ALLOWED_IPS:-}
-      # ── تمرير كامل 2026-09-04: كل ما يقرؤه application.yml وكان يُتجاهَل ──
-      # بدونه يعمل الباكند بافتراضات yml القديمة (localhost/127.0.0.1) رغم .env.
-      - ASTERISK_WSS_URL=${ASTERISK_WSS_URL:-wss://localhost:8089/ws}
-      - WEBRTC_SIP_SECRET=${WEBRTC_SIP_SECRET:-red-secret-token}
-      - PSTN_TURN_URL=${PSTN_TURN_URL:-}
-      - PSTN_TURN_USERNAME=${PSTN_TURN_USERNAME:-}
-      - PSTN_TURN_PASSWORD=${PSTN_TURN_PASSWORD:-}
-      - PSTN_BRIDGE_SECRET_TTL_MINUTES=${PSTN_BRIDGE_SECRET_TTL_MINUTES:-60}
       - DB_USER=${DB_USER:-admin}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-redadmin}
@@ -263,52 +223,7 @@ services:
       start_period: 10s
     networks: ["red-net"]
 
-# ━━━━━━━━━━━━ 4. PSTN Gateway: Asterisk PBX ━━━━━━━━━━━━
-  pstn-gateway:
-    build: ./pstn-asterisk
-    image: red-pstn-gateway:local
-    container_name: red-pstn-gateway
-    restart: unless-stopped
-    mem_limit: 512m
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-    environment:
-      - AMI_PASSWORD=${AMI_PASSWORD:?AMI_PASSWORD is required}
-      - DINSTAR_IP=${DINSTAR_IP:-192.168.11.4}
-      - DINSTAR_IPS=${DINSTAR_IPS:-${DINSTAR_IP:-192.168.11.4}}
-      - DINSTAR_SIP_USER=${DINSTAR_SIP_USER:?DINSTAR_SIP_USER is required}
-      - DINSTAR_SIP_PASSWORD=${DINSTAR_SIP_PASSWORD:?DINSTAR_SIP_PASSWORD is required}
-      - DINSTAR_PORT_ACCOUNTS=${DINSTAR_PORT_ACCOUNTS:-}
-      - DINSTAR_PORT_SIP_PORTS=${DINSTAR_PORT_SIP_PORTS:-}
-      - EXTERNAL_MEDIA_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
-      - EXTERNAL_SIGNALING_ADDRESS=${PSTN_EXTERNAL_IP:-${MEDIASOUP_ANNOUNCED_IP:-${TURN_PUBLIC_HOST:-}}}
-      - ASTERISK_EXTERNAL_IP=${PSTN_EXTERNAL_IP:-${TURN_EXTERNAL_IP:-${TURN_PUBLIC_HOST:-}}}
-      - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-}
-      - PSTN_INTERNAL_SECRET=${PSTN_INTERNAL_SECRET:-}
-      - TLS_SAN_IP=${TLS_SAN_IP:-192.168.11.10}
-      # Health check: Asterisk needs time to load modules on first boot
-      - ASTERISK_STARTUP_TIMEOUT=${ASTERISK_STARTUP_TIMEOUT:-60}
-    ports:
-      - "5060:5060/udp"
-      - "8089:8089"
-      - "8090:8090"
-      - "10000-10030:10000-10030/udp"
-    expose: ["5038"]
-    volumes:
-      - pstn-keys:/etc/asterisk/keys
-      - pstn-logs:/var/log/asterisk
-    healthcheck:
-      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' 2>/dev/null || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    networks: ["red-net"]
-
-  # ━━━━━━━━━━━━ 5. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 4. PostgreSQL 16 — pinned with memory limits + pg_trgm note ━━━━━━━━━━━━
   # pg_trgm extension requires superuser on managed Postgres. The migration V* that
   # creates CREATE EXTENSION IF NOT EXISTS pg_trgm should run only on self-hosted
   # postgres where admin is superuser (as here). For managed DB, pre-create extension manually.
@@ -337,7 +252,7 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 6. MongoDB 8 ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 5. MongoDB 8 ━━━━━━━━━━━━
   db-mongo:
     image: mongo:8.0.13-noble
     container_name: red-db-nosql
@@ -363,7 +278,7 @@ services:
       start_period: 40s
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 7. Redis 7 — volatile-lru to avoid evicting active sessions ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 6. Redis 7 — volatile-lru to avoid evicting active sessions ━━━━━━━━━━━━
   cache-redis:
     image: redis:7.4.5-bookworm
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru", "--save", "900 1", "--save", "300 10"]
@@ -385,7 +300,7 @@ services:
       retries: 5
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 8. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 7. MinIO (S3-compatible) — pinned + memory limit ━━━━━━━━━━━━
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     container_name: red-storage
@@ -475,7 +390,7 @@ services:
       - red-certs:/etc/ssl/red
       - certbot-www:/var/www/certbot
 
-  # ━━━━━━━━━━━━ 9. Nginx Proxy + Admin UI — pinned + mem limits ━━━━━━━━━━━━
+  # ━━━━━━━━━━━━ 8. Nginx Proxy + Admin UI — pinned + mem limits ━━━━━━━━━━━━
   nginx:
     image: nginx:1.28.0-alpine
     container_name: red-proxy
@@ -538,7 +453,7 @@ services:
       retries: 3
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 10. ntfy — self-hosted UnifiedPush distributor (sovereign push, no Google push)
+  # ━━━━━━━━━━━━ 9. ntfy — self-hosted UnifiedPush distributor (sovereign push, no Google push)
   # Devices point their distributor app (ntfy) at NTFY_BASE_URL — plain HTTP on the
   # LAN, TLS-fronted URL in production. The backend POSTs wake payloads to the
   # per-device endpoint the distributor issued; no account, no cloud, no Google.
@@ -572,7 +487,7 @@ services:
       retries: 3
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 11. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
+  # ━━━━━━━━━━━━ 10. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
   # Host must run chrony/ntpd. Backend health can verify clock skew via /health.
   # so NTP sync is expected at host level, not container runtime download.
 
@@ -585,8 +500,6 @@ volumes:
   identity-secrets:
   red-certs:
   certbot-www:
-  pstn-keys:
-  pstn-logs:
   ntfy-cache:
 
 networks:

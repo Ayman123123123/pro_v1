@@ -121,7 +121,7 @@ await check('الدخول يعيد UserResponse كاملًا بحقل redId', as
   assert(res.status === 200, `HTTP ${res.status}`);
   const u = res.data.user;
   // red-app/auth/AuthModels.kt يعرّف هذه الحقول، وredId غير قابل للإغفال
-  for (const field of ['id', 'redId', 'username', 'displayName', 'status', 'role', 'pstnEnabled', 'pstnDailyLimit', 'devices']) {
+  for (const field of ['id', 'redId', 'username', 'displayName', 'status', 'role', 'devices']) {
     assert(field in u, `الحقل ${field} مفقود — سيفشل فك الترميز في التطبيق`);
   }
   assert(/^[1-9][0-9]{4}$/.test(u.redId), `صيغة معرّف يونس غير صحيحة: ${u.redId}`);
@@ -307,182 +307,6 @@ await check('سلطة التوقيع تكشف المفتاح العام فقط',
   return res.curve;
 });
 
-console.log('\n── بوابات DINSTAR: الأسطول وتفسير الإشارة ──');
-
-await check('تفسير الإشارة يطابق 3GPP TS 27.007 في الخادم والواجهة', async () => {
-  const { readFileSync } = await import('node:fs');
-  const root = new URL('../', import.meta.url).pathname;
-
-  // القراءة 99 تعني «غير قابلة للكشف». أي شيفرة تقصرها على 31 تُنتج
-  // إشارة 100% لشريحة ميتة، وهو ما كان يجعل الموزّع يختارها أولًا.
-  const kotlin = readFileSync(`${root}../backend-server/src/main/kotlin/com/red/server/services/DinstarSignal.kt`, 'utf8');
-  assert(kotlin.includes('UNKNOWN_BASIC = 99'), 'الخادم لا يعرّف القراءة 99 كانعدام إشارة');
-  assert(kotlin.includes('2 * raw - 113'), 'معادلة dBm المعيارية غائبة عن الخادم');
-
-  // نفحص الشيفرة التنفيذية فقط: التعليق الذي يشرح الخلل يذكر الصيغة
-  // القديمة عمدًا، ومطابقته تجعل الفحص يفشل على توثيقه هو.
-  const hardware = readFileSync(`${root}../backend-server/src/main/kotlin/com/red/server/services/DinstarHardwareService.kt`, 'utf8');
-  const executable = hardware.split('\n')
-    .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
-    .join('\n');
-  assert(!/coerceIn\(0,\s*31\)/.test(executable), 'ما زال الخادم يقصر قراءة الإشارة على 31 — الخلل الأصلي');
-  assert(hardware.includes('DinstarSignal.interpret'), 'الخادم لا يستدعي المفسّر المعياري');
-
-  const dev = readFileSync(`${root}dev-server/server.cjs`, 'utf8');
-  assert(dev.includes('interpretSignal'), 'خادم التطوير لا يفسّر الإشارة كالخادم الحقيقي');
-  assert(/raw === 99/.test(dev), 'خادم التطوير لا يعامل 99 كانعدام إشارة');
-  return 'الخادم وخادم التطوير على المعادلة نفسها';
-});
-
-await check('الأسطول يضم عدة أجهزة بطرازات وأعداد منافذ مختلفة', async () => {
-  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
-  assert(Array.isArray(fleet) && fleet.length >= 2, `عدد البوابات ${fleet.length} — يُتوقع جهازان على الأقل`);
-  const models = new Set(fleet.map((g) => g.model));
-  assert(models.has('UC2000-VE-8G') && models.has('UC2000-VE-8T'),
-    `الطرازان المعتمدان غير مسجّلين: ${[...models].join(', ')}`);
-  // عدد المنافذ يجب أن يتبع الطراز لا أن يكون 8 دائمًا
-  for (const g of fleet) {
-    const expected = g.model.includes('-4') ? 4 : 8;
-    assert(g.portCount === expected, `${g.model} يبلّغ ${g.portCount} منفذًا بدل ${expected}`);
-  }
-  return `${fleet.length} أجهزة — ${[...models].join('، ')}`;
-});
-
-await check('شريحة مسجّلة بلا إشارة قابلة للقياس لا تُحسب جاهزة', async () => {
-  const d = (await api('GET', '/api/admin/dinstar/fleet/ports')).data;
-  const flat = d.gateways.flatMap((g) => g.ports);
-
-  const dead = flat.filter((p) => p.status === 'REGISTERED' && p.signalRaw === 99);
-  assert(dead.length > 0, 'لا توجد حالة اختبار للقراءة 99');
-  for (const p of dead) {
-    // هذا بالضبط ما كان مكسورًا: 99 ⇒ 31 ⇒ 100%
-    assert(p.signal === null, `القراءة 99 أنتجت نسبة ${p.signal} بدل null`);
-    assert(p.signalUsable === false, 'شريحة بلا قياس صُنّفت جاهزة');
-    assert(p.signalLabel === 'NO_SIGNAL', `تصنيف غير متوقع: ${p.signalLabel}`);
-  }
-  assert(d.totals.usable < d.totals.registered,
-    'المجاميع لا تفرّق بين المسجّل والجاهز');
-  return `${d.totals.registered} مسجّلة منها ${d.totals.usable} جاهزة — ${dead.length} مستبعدة بالقراءة 99`;
-});
-
-await check('التوجيه يستبعد المنافذ الميتة ويفضّل نفس المشغل', async () => {
-  // 77 = يمن موبايل. يجب أن يقع الاختيار على شريحة يمن موبايل إن توفرت.
-  const res = (await api('POST', '/api/admin/dinstar/fleet/routing/select', { number: '771234567' })).data;
-  assert(res.selected, 'لم يُختر أي منفذ');
-  assert(res.targetOperator === 'YemenMobile', `تصنيف المشغل خاطئ: ${res.targetOperator}`);
-  assert(res.selected.onNet === true, 'لم يفضّل التوجيه شريحة المشغل نفسه رغم توفرها');
-  assert(res.selected.signalDbm <= -1, 'قوة الإشارة يجب أن تكون بالسالب (dBm)');
-
-  const noSignal = res.rejected.filter((r) => r.why === 'REJECTED_NO_SIGNAL');
-  assert(noSignal.length > 0, 'لم يُستبعد أي منفذ لانعدام الإشارة');
-  assert(noSignal.some((r) => r.signalRaw === 99), 'المنفذ ذو القراءة 99 لم يُستبعد');
-  return `اختير ${res.selected.gatewayHost}#${res.selected.portIndex} (${res.selected.signalDbm} dBm، نفس الشبكة) واستُبعد ${res.rejected.length}`;
-});
-
-await check('البوابة المعطّلة تخرج من التوجيه ومن استعلام المنافذ', async () => {
-  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
-  const disabled = fleet.filter((g) => !g.enabled);
-  assert(disabled.length > 0, 'لا توجد بوابة معطّلة للاختبار');
-  const ports = (await api('GET', '/api/admin/dinstar/fleet/ports')).data;
-  const hosts = ports.gateways.map((g) => g.gateway.host);
-  for (const g of disabled) {
-    assert(!hosts.includes(g.host), `البوابة المعطّلة ${g.host} ما زالت تُستعلم`);
-  }
-  return `${disabled.length} معطّلة — مستبعدة من ${ports.totals.gateways} مفعّلة`;
-});
-
-await check('تسجيل بوابة يرفض العنوان العام والطراز غير المدعوم', async () => {
-  // الفحص والاتصال مقصوران على شبكة إدارة خاصة — لا يجوز أن يقبل
-  // الخادم توجيه مكالمات عبر عنوان على الإنترنت العام.
-  // عناوين عامة متعددة حتى لا يعتمد الفحص على عنوان بعينه
-  for (const host of ['8.8.8.8', '1.1.1.1', '203.0.113.7']) {
-    const res = await api('POST', '/api/admin/dinstar/fleet', { host, model: 'UC2000-VE-8G' });
-    assert(res.status === 400 && res.data.error === 'PRIVATE_ADDRESS_REQUIRED',
-      `العنوان العام ${host} أعاد ${res.status} ${res.data.error || ''}`);
-  }
-
-  // عنوان خاص فريد حتى لا يصطدم الفحص ببوابة سجّلها تشغيل سابق
-  const freeHost = `192.168.11.${160 + Math.floor(Math.random() * 40)}`;
-  const badModel = await api('POST', '/api/admin/dinstar/fleet', { host: freeHost, model: 'DWG2000-16G' });
-  assert(badModel.status === 400 && badModel.data.error === 'UNSUPPORTED_MODEL',
-    `طراز غير مدعوم أعاد ${badModel.status} ${badModel.data.error || ''}`);
-  return 'العنوان العام والطراز المجهول مرفوضان';
-});
-
-await check('دورة حياة بوابة: تسجيل ← تعطيل ← حذف', async () => {
-  const host = `192.168.11.${100 + Math.floor(Math.random() * 50)}`;
-  const created = await api('POST', '/api/admin/dinstar/fleet',
-    { host, model: 'UC2000-VE-4T', pjsipEndpoint: 'dinstar-test', siteLabel: 'فحص آلي' });
-  assert(created.status === 201, `التسجيل أعاد ${created.status}`);
-  const id = created.data.id;
-
-  const listed = (await api('GET', '/api/admin/dinstar/fleet')).data.find((g) => g.id === id);
-  assert(listed, 'البوابة الجديدة لا تظهر في القائمة');
-  assert(listed.portCount === 4, `الطراز الرباعي سُجّل بـ ${listed.portCount} منافذ`);
-
-  const dup = await api('POST', '/api/admin/dinstar/fleet', { host, model: 'UC2000-VE-4T' });
-  assert(dup.status === 400, 'قُبل تسجيل مكرر لنفس العنوان');
-
-  const off = await api('POST', `/api/admin/dinstar/fleet/${id}/enabled`, { enabled: false });
-  assert(off.status === 200 && off.data.enabled === false, 'التعطيل لم ينجح');
-
-  const del = await api('DELETE', `/api/admin/dinstar/fleet/${id}`);
-  assert(del.status === 200, `الحذف أعاد ${del.status}`);
-  const gone = (await api('GET', '/api/admin/dinstar/fleet')).data.find((g) => g.id === id);
-  assert(!gone, 'البوابة ما زالت موجودة بعد الحذف');
-  return 'تسجيل ورفض تكرار وتعطيل وحذف — كلها فعلية';
-});
-
-await check('قرارات التوجيه تُسجَّل بلا كشف رقم الوجهة كاملًا', async () => {
-  await api('POST', '/api/admin/dinstar/fleet/routing/select', { number: '967771234567' });
-  const decisions = (await api('GET', '/api/admin/dinstar/fleet/routing/decisions')).data;
-  assert(decisions.length > 0, 'لم يُسجَّل أي قرار توجيه');
-  const body = JSON.stringify(decisions);
-  // البادئة تكفي للتحليل؛ الرقم الكامل في سجل يقرأه المسؤول تتبّع لا مبرر له
-  assert(!body.includes('771234567'), 'رقم الوجهة الكامل مكشوف في سجل التوجيه');
-  assert(decisions[0].destinationPrefix?.length <= 2, 'البادئة المخزّنة أطول من رقمين');
-  return `${decisions.length} قرارًا — البادئة فقط`;
-});
-
-
-await check('التعرّف على الجهاز يجمع إشارات مستقلة لا ردًّا واحدًا', async () => {
-  // جهاز بعنوان MAC ضمن نطاق Dinstar المسجّل ⇒ ثقة كاملة
-  const withMac = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.1' })).data;
-  assert(withMac.reachable === true, 'البوابة المعروفة يجب أن تكون قابلة للوصول');
-  assert(withMac.confidence === 100, `ثقة متوقعة 100 لا ${withMac.confidence}`);
-  assert(withMac.signals.length >= 4, 'يجب رصد أربع إشارات على الأقل');
-  assert(withMac.signals.some((x) => x.includes('F8:A0:3D')),
-    'لم تُرصد بادئة OUI المسجّلة لـ Dinstar');
-  assert(withMac.adoptable === true, 'جهاز بثقة كاملة يجب أن يكون قابلًا للضم');
-
-  // جهاز بلا MAC: الثقة تنخفض لكنه يبقى قابلًا للضم — غياب MAC
-  // وارد خلف NAT ولا يصح أن يمنع التعرّف
-  const noMac = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.3' })).data;
-  assert(noMac.confidence === 80, `ثقة متوقعة 80 بلا MAC لا ${noMac.confidence}`);
-  assert(noMac.adoptable === true, 'غياب MAC وحده يجب ألا يمنع الضم');
-  assert(!noMac.signals.some((x) => x.includes('MAC')), 'لا يصح رصد إشارة MAC وهو غائب');
-
-  // عنوان لا جهاز عليه
-  const absent = (await api('POST', '/api/admin/dinstar/fleet/probe', { host: '192.168.11.99' })).data;
-  assert(absent.reachable === false, 'عنوان بلا جهاز يجب ألا يكون قابلًا للوصول');
-  assert(absent.confidence === 0, 'عنوان بلا جهاز يجب أن تكون ثقته صفرًا');
-
-  return `100 مع MAC · 80 بدونه · 0 لعنوان فارغ`;
-});
-
-await check('الرقم التسلسلي هو هوية البوابة لا عنوانها الشبكي', async () => {
-  const fleet = (await api('GET', '/api/admin/dinstar/fleet')).data;
-  assert(fleet.length >= 2, 'يلزم جهازان على الأقل');
-  const serials = fleet.map((g) => g.serialNumber).filter(Boolean);
-  assert(serials.length >= 2, 'البوابات يجب أن تُفصح عن أرقام تسلسلية');
-  assert(new Set(serials).size === serials.length, 'الأرقام التسلسلية ليست فريدة');
-  // العنوان يتبدّل مع DHCP؛ التسلسلي ثابت مدى حياة الجهاز
-  const macs = fleet.map((g) => g.macAddress).filter(Boolean);
-  assert(macs.every((m) => /^F8:A0:3D:/i.test(m)),
-    'عنوان MAC خارج نطاق Dinstar المسجّل');
-  return `${serials.length} رقمًا تسلسليًا فريدًا · ${macs.length} عنوان MAC ضمن نطاق Dinstar`;
-});
-
 await check('معرّف يونس خمسة أرقام في كل مسار يعيده الخادم', async () => {
   // مصدر الحقيقة: RedIdGenerator.PATTERN و YounesId.PATTERN — أي انحراف
   // هنا يعني أن التطبيق سيرفض المعرّف ويعطّل أزرار الاتصال والإضافة.
@@ -537,44 +361,6 @@ await check('البحث في الدليل محكوم بحدّ معدل يمنع 
   assert(limited.data.error === 'DIRECTORY_RATE_LIMITED', `رمز غير متوقع: ${limited.data.error}`);
   assert(limited.data.retryAfterSeconds > 0, 'يجب إبلاغ العميل بمدة الانتظار');
   return `429 DIRECTORY_RATE_LIMITED بعد الحدّ · retryAfter=${limited.data.retryAfterSeconds}s`;
-});
-
-await check('حدود SMS تطابق وثيقة Dinstar الرسمية لا أرقامًا مخترعة', async () => {
-  // 128 مستلمًا و1500 بايت لـ send_sms. الرقم 32 يخصّ query_sms_result
-  // وحده، والخلط بينهما كان يقطع الإرسال الجماعي عند 32 بلا سبب.
-  const okRes = await api('POST', '/api/admin/dinstar/sms/send', {
-    text: 'رسالة اختبار', param: [{ number: '777123456', user_id: 1 }], encoding: 'gsm-7bit',
-  }, adminToken);
-  assert(okRes.status === 200, `الإرسال السليم فشل: ${okRes.status}`);
-  // 202 = قُبلت للتنفيذ لاحقًا وهي نجاح؛ اعتبارها فشلًا كان يسجّل كل
-  // إرسال ناجح كخطأ في السجل.
-  assert(okRes.data.error_code === 202, `يُتوقع 202 لا ${okRes.data.error_code}`);
-
-  const many = await api('POST', '/api/admin/dinstar/sms/send', {
-    text: 'hi', param: Array.from({ length: 129 }, (_, i) => ({ number: `7771${i}`, user_id: i })),
-  }, adminToken);
-  assert(many.status === 400, '129 مستلمًا يجب أن تُرفض');
-
-  // القياس بالبايت لا بالحرف: 800 حرف عربي = 1600 بايت.
-  const long = await api('POST', '/api/admin/dinstar/sms/send', {
-    text: 'م'.repeat(800), param: [{ number: '777123456', user_id: 1 }],
-  }, adminToken);
-  assert(long.status === 400, '1600 بايت يجب أن تُرفض رغم أن الأحرف 800 فقط');
-  assert(/1600/.test(JSON.stringify(long.data)), 'رسالة الخطأ يجب أن تذكر البايتات الفعلية');
-
-  return '202 للقبول · رفض 129 مستلمًا · رفض 1600 بايت';
-});
-
-await check('الرسائل الواردة من GSM تصل إلى اللوحة', async () => {
-  const inbox = (await api('GET', '/api/admin/dinstar/sms/incoming', undefined, adminToken)).data;
-  const rows = inbox.sms || [];
-  assert(rows.length > 0, 'لا رسائل واردة');
-  for (const m of rows) {
-    assert(typeof m.text === 'string' && m.text.length > 0, 'رسالة بلا نص');
-    assert(typeof m.number === 'string', 'رسالة بلا رقم مُرسِل');
-    assert(Number.isInteger(m.port), 'رسالة بلا منفذ مصدر');
-  }
-  return `${rows.length} رسالة واردة بنصّها ومنفذها`;
 });
 
 await check('عقد الإشراف يطابق ModerationController لا صفحة البلاغات', async () => {
@@ -633,33 +419,6 @@ await check('حزم المفاتيح ومخزون prekey لا تُكشف بلا 
   assert(!body.includes('privatekey'), 'تسرّب مفتاح خاص في حزمة prekey');
 
   return '401 للمجهول على المسارين · 200 للمصادَق · بلا مفاتيح خاصة';
-});
-
-await check('إرسال SMS يختار بوابة من الأسطول ويرفض العناوين الخارجية', async () => {
-  // كان `postJson` يثبّت البوابة النشطة، فكل SMS يخرج من جهاز واحد
-  // مهما بلغ عدد المسجَّلين — تُهدَر شرائح البقية ويُحتسب الإرسال
-  // كله خارج الشبكة على مشغّل واحد.
-  const fleet = (await api('GET', '/api/admin/dinstar/fleet', undefined, adminToken)).data;
-  const host = fleet[0]?.host;
-  assert(host, 'لا بوابة مسجّلة');
-
-  const payload = (extra) => ({ text: 'فحص', param: [{ number: '777123456', user_id: 1 }], ...extra });
-
-  const viaFleet = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: host }), adminToken);
-  assert(viaFleet.status === 200, `الإرسال عبر بوابة مسجّلة فشل: ${viaFleet.status}`);
-
-  // العنوان يصل من طلب HTTP: بلا فحص يطلب الخادم أي وجهة يختارها المرسِل.
-  for (const evil of ['8.8.8.8', '169.254.169.254']) {
-    const r = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: evil }), adminToken);
-    assert(r.status === 400, `${evil} يجب أن يُرفض (SSRF)، عاد ${r.status}`);
-    assert(r.data.error === 'PRIVATE_ADDRESS_REQUIRED', `رمز غير متوقع: ${r.data.error}`);
-  }
-
-  // عنوان خاص لكنه ليس بوابة مسجّلة
-  const unknown = await api('POST', '/api/admin/dinstar/sms/send', payload({ gatewayHost: '10.0.0.99' }), adminToken);
-  assert(unknown.status === 404, `بوابة غير مسجّلة يجب أن تعيد 404، عادت ${unknown.status}`);
-
-  return `الإرسال عبر ${host} · رفض العنوان العام وعنوان البيانات الوصفية · 404 لغير المسجّل`;
 });
 
 await check('مستخدم عادي يصوّت ويؤكّد حضوره، ولا يبلغ المسارات الإدارية', async () => {

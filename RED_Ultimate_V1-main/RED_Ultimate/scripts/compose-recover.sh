@@ -40,10 +40,6 @@ free_port 8080
 
 cd "$ROOT"
 COMPOSE=(--env-file "$ENV_FILE" -f docker-compose.yml)
-if grep -q '^DINSTAR_ENABLED=true' "$ENV_FILE"; then
-  COMPOSE+=(-f docker-compose.lan.yml)
-  echo "DINSTAR_ENABLED=true — attaching docker-compose.lan.yml"
-fi
 docker compose "${COMPOSE[@]}" config --quiet
 
 if [ "$REBUILD" = "--rebuild" ] || [ "$REBUILD" = "-RebuildBackend" ]; then

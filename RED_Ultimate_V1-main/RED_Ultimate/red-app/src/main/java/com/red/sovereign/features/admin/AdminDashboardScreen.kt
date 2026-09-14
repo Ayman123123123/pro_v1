@@ -69,23 +69,6 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     StatCard("البثوث المباشرة", "${stats.activeStreams}", Icons.Default.LiveTv, Modifier.weight(1f))
-                    StatCard("منافذ Dinstar", "${stats.dinstarPortsOnline}", Icons.Default.Router, Modifier.weight(1f))
-                }
-            }
-
-            // Hardware Actions
-            item {
-                Divider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 12.dp))
-                Text("التحكم بالهاردوير 🔧", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { viewModel.rebootDinstar() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53935)),
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
-                ) {
-                    Icon(Icons.Default.RestartAlt, null, tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("إعادة تشغيل البوابات (Dinstar Reboot)", color = Color.White, fontSize = 16.sp)
                 }
             }
 

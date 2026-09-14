@@ -21,20 +21,6 @@ route:
         severity: critical
       receiver: 'critical-alerts'
       continue: true
-    # VoiceBridge specific alerts
-    - match:
-        service: voicebridge
-      receiver: 'voicebridge-alerts'
-    # Asterisk/Kamailio/Janus alerts
-    - match:
-        service: asterisk
-      receiver: 'telephony-alerts'
-    - match:
-        service: kamailio
-      receiver: 'telephony-alerts'
-    - match:
-        service: janus
-      receiver: 'telephony-alerts'
 
 receivers:
   - name: 'default'
@@ -65,24 +51,6 @@ receivers:
         details:
           service: '{{ .Labels.service }}'
           instance: '{{ .Labels.instance }}'
-
-  - name: 'voicebridge-alerts'
-    email_configs:
-      - to: '${ALERT_EMAIL_VOICEBRIDGE:-voicebridge@red-sovereign.local}'
-        send_resolved: true
-    slack_configs:
-      - api_url: '${SLACK_WEBHOOK_URL}'
-        channel: '#red-sovereign-voicebridge'
-        send_resolved: true
-
-  - name: 'telephony-alerts'
-    email_configs:
-      - to: '${ALERT_EMAIL_TELEPHONY:-telephony@red-sovereign.local}'
-        send_resolved: true
-    slack_configs:
-      - api_url: '${SLACK_WEBHOOK_URL}'
-        channel: '#red-sovereign-telephony'
-        send_resolved: true
 
 inhibit_rules:
   - source_match:

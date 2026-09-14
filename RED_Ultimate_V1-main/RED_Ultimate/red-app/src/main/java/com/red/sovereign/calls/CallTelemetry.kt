@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong
 data class CallTelemetryEvent(
     val callId: String,
     val type: String, // VOICE, VIDEO
-    val route: String, // RED, DINSTAR
+    val route: String, // RED
     val durationMs: Long,
     val avgRttMs: Long,
     val maxPacketLoss: Double,

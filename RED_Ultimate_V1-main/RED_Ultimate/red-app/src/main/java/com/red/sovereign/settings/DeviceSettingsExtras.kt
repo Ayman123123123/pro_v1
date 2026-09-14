@@ -135,22 +135,13 @@ object ConnectionModePolicy {
     }
 }
 
-/** حدود المكالمات: حد يومي PSTN + حد مدة — تُقرأ من SettingsRuntime (مصدر الحقيقة الوحيد). */
+/** حد مدة المكالمة — يُقرأ من SettingsRuntime (مصدر الحقيقة الوحيد). */
 object CallLimitsPolicy {
-    /** 0 تعني بلا حد محلي — الحد الخادمي (dailyLimit من bridge) يبقى هو الفيصل في DialPadScreen. */
-    fun effectiveDailyLimit(): Int = SettingsRuntime.current.pstnDailyLimit
-
     fun maxDurationMs(): Long = SettingsRuntime.current.maxCallDurationSeconds.coerceIn(60, 7200) * 1000L
 
     fun maxDurationLabelAr(): String {
         val s = SettingsRuntime.current.maxCallDurationSeconds.coerceIn(60, 7200)
         return if (s % 3600 == 0) "${s / 3600} ساعة" else "${s / 60} دقيقة"
-    }
-
-    /** هل يُسمح باتصال PSTN جديد؟ usedToday فعلي (خادم أو عدّ محلي) مقابل الحد الفعّال. */
-    fun isDialAllowed(usedToday: Int, dailyLimit: Int = effectiveDailyLimit()): Boolean {
-        if (dailyLimit <= 0) return true
-        return usedToday < dailyLimit
     }
 
     /** هل تجاوزت المكالمة حد المدة؟ يُستدعى دورياً من شاشة المكالمة النشطة. */

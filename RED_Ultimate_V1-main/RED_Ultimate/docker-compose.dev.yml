@@ -2,45 +2,6 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 services:
-  voicebridge:
-    build:
-      context: ./voicebridge
-      dockerfile: Dockerfile.dev
-    container_name: red-voicebridge-dev
-    environment:
-      - SPRING_PROFILES_ACTIVE=dev
-      - VOICEBRIDGE_MAX_CALLS=10
-      - VOICEBRIDGE_RTP_POOL=10
-    volumes:
-      - ./voicebridge/src:/app/src:ro
-      - ./voicebridge/pom.xml:/app/pom.xml:ro
-      - voicebridge-maven-cache:/root/.m2
-    ports:
-      - "8090:8090"
-      - "5005:5005"  # Debug port
-      - "12100-13100:12100-13100/udp"
-    command: >
-      sh -c "mvn spring-boot:run -Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005'"
-
-  kamailio:
-    build:
-      context: ./kamailio
-      dockerfile: Dockerfile.dev
-    container_name: red-kamailio-dev
-    volumes:
-      - ./kamailio/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
-    command: kamailio -f /etc/kamailio/kamailio.cfg -DD -E -e
-
-  janus:
-    build:
-      context: ./janus
-      dockerfile: Dockerfile.dev
-    container_name: red-janus-dev
-    volumes:
-      - ./janus/janus.cfg:/etc/janus/janus.cfg:ro
-      - ./janus/janus.jcfg:/etc/janus/janus.jcfg:ro
-    command: janus -F /etc/janus -L /var/log/janus -D -D
-
   prometheus:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -91,7 +52,5 @@ services:
       start_period: 30s
 
 volumes:
-  voicebridge-maven-cache:
-    driver: local
   pgadmin-data:
     driver: local
