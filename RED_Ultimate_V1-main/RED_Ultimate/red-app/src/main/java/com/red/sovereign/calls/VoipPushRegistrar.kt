@@ -116,7 +116,7 @@ object VoipPushRegistrar {
         }
     }
 
-    internal fun uploadEndpoint(tokens: TokenStore, endpoint: String) {
+    internal suspend fun uploadEndpoint(tokens: TokenStore, endpoint: String) {
         val body = JSONObject()
             .put("token", endpoint)
             .put("platform", "ANDROID")

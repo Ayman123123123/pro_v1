@@ -1403,7 +1403,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         const val ACTION_STOP_RECORDING = "com.red.sovereign.livestream.STOP_RECORDING"
         const val ACTION_SEND_CHAT = "com.red.sovereign.livestream.SEND_CHAT"
         const val ACTION_SEND_REACTION = "com.red.sovereign.livestream.SEND_REACTION"
-        /** محفوظ للتوافق فقط — الهدايا معطلة وتُحوَّل لتفاعل مجاني (انظر sendGift). */
+        /** محفوظ للتوافق فقط — الهدايا معطلة وتُحوَّل لتفاعل مجاني (انظر sendReaction). */
         const val ACTION_SEND_GIFT = "com.red.sovereign.livestream.SEND_GIFT"
         const val ACTION_RAISE_HAND = "com.red.sovereign.livestream.RAISE_HAND"
         const val ACTION_LOWER_HAND = "com.red.sovereign.livestream.LOWER_HAND"
@@ -1461,14 +1461,6 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 putExtra(EXTRA_REACTION_EMOJI, emoji)
             }
             ContextCompat.startForegroundService(context, intent)
-        }
-
-        /**
-         * الهدايا معطلة بقرار المنتج ("بدون هدايا"): يُحفظ التوقيع للتوافق،
-         * لكن الاستدعاء يرسل تفاعلًا مجانيًا بدل حدث GIFT — بلا عملات.
-         */
-        fun sendGift(context: Context, gift: SovereignGift, senderName: String) {
-            sendReaction(context, gift.emoji.ifBlank { "❤️" })
         }
 
         /** تثبيت تعليق (يستخدمها المذيع عادة) — يُبث PIN_MESSAGE للجميع. */

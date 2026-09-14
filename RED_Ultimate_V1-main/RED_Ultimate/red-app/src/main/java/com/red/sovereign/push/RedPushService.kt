@@ -3,7 +3,7 @@ package com.red.sovereign.push
 import android.content.Context
 import android.util.Log
 import com.red.sovereign.auth.TokenStore
-import com.red.sovereign.calls.CallNotificationManager
+import com.red.sovereign.calls.CallRingRegistry
 import com.red.sovereign.calls.IncomingCallActivity
 import com.red.sovereign.calls.VoipPushRegistrar
 import com.red.sovereign.calls.YounesCallService
@@ -68,7 +68,7 @@ class RedPushService : PushService() {
                 "MESSAGE" -> runCatching { RedConnectionService.start(context) }
                 "CANCEL" -> {
                     val callId = json.optString("callId")
-                    if (callId.isNotBlank()) runCatching { CallNotificationManager.cancel(context, callId) }
+                    if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
                 }
                 else -> Log.i(TAG, "unknown push type ignored")
             }
@@ -85,7 +85,7 @@ class RedPushService : PushService() {
             // Ring instantly from the push (works from a dead process); showIncoming
             // dedups against the socket OFFER arriving a moment later — no double ring.
             runCatching {
-                CallNotificationManager.showIncoming(context, callId, peer, mode == "VIDEO", callType, myId)
+                CallRingRegistry.showIncoming(context, callId, peer, mode == "VIDEO", callType, myId)
             }.onFailure { Log.w(TAG, "showIncoming failed for $callId", it) }
             // Connect signaling so the full OFFER/session arrives over our socket.
             runCatching {
