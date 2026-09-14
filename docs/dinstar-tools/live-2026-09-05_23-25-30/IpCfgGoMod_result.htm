@@ -1,0 +1,130 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>IpCfgMod</title>
+<link href="css/main.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" type="text/JavaScript" src="common/func.js"></script>
+<script language="JavaScript" type="text/JavaScript">
+function MM_callJS()
+{
+	mouse_click();
+}
+
+function mouse_click()
+{
+}
+
+function form_reset()
+{
+	document.getElementById("ModIpCfgDomain").value = "";
+	document.getElementById("ModIpCfgPort").value = "";
+	document.getElementById("ModIpCfgDesc").value = "";
+	document.getElementById("KeepAliveModEnable").checked = false;
+}
+
+
+function form_check()
+{	
+	var permit = 1;
+	var pattern=/^[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+\.?$/;
+
+	if(permit == 0)
+	{
+		window.alert("You have no permission.\n Please visit the Access Control page.");
+		return false;
+	}
+	var license = 1;
+	if(license == 0)
+	{
+		window.alert("You are not authorized.\n");
+		return false;
+	}
+	
+	if(!is_ipaddr(document.forms[0].AddIpCfgDomain.value)
+	   && !pattern.test(document.forms[0].AddIpCfgDomain.value, 1))
+	{
+		alert("IP address is incorrect, please enter another one(e.g. 192.168.0.100) !");	
+		document.forms[0].ModIpCfgDomain.select();
+		return false;
+	}
+	if(!is_number(document.forms[0].ModIpCfgPort.value,0,65535))
+	{
+		alert("'Port' is incorrect, please enter a number between 0 and 65535!");			
+		document.forms[0].ModIpCfgPort.select();
+		return false;
+	}	
+    if (document.forms[0].ModIpCfgDesc.value.length == 0 
+		|| document.forms[0].ModIpCfgDesc.value.length > 23)
+	{
+	   alert("'Description' is incorrect, input length must be less than 23!");	
+	   document.forms[0].ModIpCfgDesc.select();
+	   return false;			
+	}	
+	return true;	
+}
+</script>
+</head>     
+<body onLoad="MM_callJS();">    
+<form action="/goform/IpCfgModify" method="post" name="IpCfgModify" id="IpCfgModify">
+ <table width="600px" border=0 align="center" cellpadding=0 cellspacing=0>
+ <tr class="title">
+  <td width="1%"><img src="image/subarc_l.gif" alt="subarc_left" align="left"></td>
+  <td>SIP Trunk Modify</td>
+  <td width="1%"><img src="image/subarc_r.gif" alt="subarc_right" align="right"></td>
+ </tr>
+</table>
+<table width="600px" align="center" class="TB" cellpadding=0 cellspacing=0>
+ <tr>
+  <td class="swidth">&nbsp;</td>
+  <td>
+    <table width="100%" cellpadding=1 cellspacing=0>
+	  <tr>
+		 <td width="50%">&nbsp;</td>
+		 <td width="50%">&nbsp;</td>
+	  </tr>
+	  <tr>
+	    <td>Index</td>
+	    <td><input class="atext" id="ModIpCfgIndex" name="ModIpCfgIndex" style="width:75%;" size="20" value="31" readonly>         
+         </td>
+	    </tr>      
+	  <tr>
+	    <td>IP</td>
+	    <td><input class="atext" id="ModIpCfgDomain" name="ModIpCfgDomain" style="width:75%;" maxlength="31" size="20" value="192.168.11.5" onClick="mouse_click();"></td>
+	    </tr>                        
+	  <tr>
+	    <td>Port</td>
+	    <td><input class="atext" id="ModIpCfgPort" name="ModIpCfgPort" style="width:75%;" maxlength="5" size="20" value="5060" onClick="mouse_click();"></td>
+	    </tr>        
+	  <tr>
+	    <td>Description</td>
+	    <td><input class="atext" id="ModIpCfgDesc" name="ModIpCfgDesc" style="width:75%;" maxlength="23" size="20" value="Asterisk" onClick="mouse_click();"></td>
+	    </tr>
+	  
+        <tr>
+          <td>KeepAlive Enable</td>
+          <td>
+            <input id="KeepAliveModEnable" name="KeepAliveModEnable" type="checkbox" checked>
+          </td>
+        </tr>       
+	  <tr>
+		 <td>&nbsp;</td>
+		 <td>&nbsp;</td>
+	  </tr>    
+	</table>
+  </td>
+  <td class="swidth">&nbsp;</td>
+ </tr>
+ </table>
+
+<p align="center">
+<input name="Ok"  class="button" type="submit" id="Ok" value="OK" onClick="return form_check();">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Reset"  class="button" type="button" id="Reset" value="Reset" onClick="form_reset();">
+&nbsp;&nbsp;&nbsp;&nbsp;
+<input name="Cancel"  class="button" type="button" id="Cancel" value="Cancel" onClick="javascript:window.history.go(-1);">
+</p>
+</form>
+</body>
+</html>
