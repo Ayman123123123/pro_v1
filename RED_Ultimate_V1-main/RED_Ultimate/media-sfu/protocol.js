@@ -21,6 +21,11 @@ const UNAUTHORIZED_MESSAGES = new Set([
   'Produce not permitted by ticket'
 ]);
 
+/** مصرّح لكن غير مسموح — النشر بلا صلاحية (بوابة sfuCanProduce). لا يُعاد المحاولة. */
+const FORBIDDEN_MESSAGES = new Set([
+  'Produce not permitted by ticket'
+]);
+
 /** أخطاء طلب غير صالح — العميل أخطأ في الترتيب أو المعرّف أو تجاوز حدًّا. */
 const INVALID_REQUEST_MESSAGES = new Set([
   'Join a room first',
@@ -41,6 +46,7 @@ const MAX_PRODUCERS_PATTERN = /^Max \d+ producers per kind$/;
 function clientErrorCode(error) {
   const message = String(error?.message || '');
   if (UNAUTHORIZED_MESSAGES.has(message)) return 'UNAUTHORIZED';
+  if (FORBIDDEN_MESSAGES.has(message)) return 'FORBIDDEN';
   if (INVALID_REQUEST_MESSAGES.has(message) || MAX_PRODUCERS_PATTERN.test(message)) return 'INVALID_REQUEST';
   return 'REQUEST_FAILED';
 }

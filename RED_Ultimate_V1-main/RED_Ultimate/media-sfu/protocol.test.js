@@ -10,8 +10,10 @@ test('maps known protocol failures to stable client codes', () => {
   assert.equal(clientErrorCode(new Error('Unauthorized')), 'UNAUTHORIZED');
   assert.equal(clientErrorCode(new Error('Expired or invalid token')), 'UNAUTHORIZED');
   assert.equal(clientErrorCode(new Error('Ticket not bound to this room')), 'UNAUTHORIZED');
+  assert.equal(clientErrorCode(new Error('Produce not permitted by ticket')), 'FORBIDDEN');
   assert.equal(clientErrorCode(new Error('Invalid roomId')), 'INVALID_REQUEST');
   assert.equal(clientErrorCode(new Error('Transport not found')), 'INVALID_REQUEST');
+  assert.equal(clientErrorCode(new Error('Cannot consume producer')), 'INVALID_REQUEST');
   assert.equal(clientErrorCode(new Error('Producer not found')), 'INVALID_REQUEST');
   assert.equal(clientErrorCode(new Error('Too many transports')), 'INVALID_REQUEST');
   assert.equal(clientErrorCode(new Error('Max 3 producers per kind')), 'INVALID_REQUEST');
