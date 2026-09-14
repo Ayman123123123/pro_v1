@@ -16,7 +16,9 @@ captures/
 
 pro/RED_Ultimate_V1-main/app/src/screenshotTest*/
 RED_Ultimate_V1-main/RED_Ultimate/.gradle_user_home/
+RED_Ultimate_V1-main/RED_Ultimate/.gradle-user-home/
 .gradle_user_home/
+.gradle-user-home/
 pro-backup-before-sync/
 
 # Local-only build/session artifacts
@@ -33,6 +35,7 @@ cookies.txt
 **/.android_home/
 **/.gradle_home/
 **/.gradle_user_home/
+**/.gradle-user-home/
 **/app.jar
 **/cookies.txt
 **/local-maven/
