@@ -4,7 +4,6 @@ import com.red.server.audit.AuditService
 import com.red.server.services.AdminUserIntelligenceService
 import com.red.server.services.TemporaryPasswordRequest
 import com.red.server.services.RedSecurityService
-import com.red.server.websocket.RedMasterHandler
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
@@ -20,8 +19,7 @@ import java.util.UUID
 class AdminUserIntelligenceController(
     private val intelligence: AdminUserIntelligenceService,
     private val security: RedSecurityService,
-    private val audit: AuditService,
-    private val messaging: RedMasterHandler
+    private val audit: AuditService
 ) {
     @GetMapping("/{userId}/overview")
     fun overview(@PathVariable userId: UUID) = intelligence.overview(userId)
@@ -41,10 +39,8 @@ class AdminUserIntelligenceController(
     @PostMapping("/{userId}/remote-app-wipe")
     fun remoteAppWipe(@PathVariable userId: UUID, authentication: Authentication): ResponseEntity<Any> {
         val actor = UUID.fromString(authentication.name)
-        val user = intelligence.requestRemoteAppWipe(userId, actor)
-        val commandId = UUID.randomUUID().toString()
-        messaging.sendRemoteWipe(user.redId, commandId, "ADMIN_REQUESTED_REMOTE_APP_WIPE")
-        audit.record(actor, "REMOTE_APP_WIPE_REQUESTED", userId.toString(), mapOf("commandId" to commandId, "managedDeviceWipeAllowed" to user.managedDeviceWipeAllowed))
-        return ResponseEntity.accepted().body(security.sendWipeSignal(userId.toString()) + mapOf("commandId" to commandId))
+        val result = security.sendWipeSignal(userId.toString(), actor)
+        audit.record(actor, "REMOTE_APP_WIPE_REQUESTED", userId.toString(), mapOf("commandId" to result["commandId"]))
+        return ResponseEntity.accepted().body(result)
     }
 }
