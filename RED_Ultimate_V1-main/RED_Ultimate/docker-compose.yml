@@ -136,7 +136,10 @@ services:
       - RED_DEVICE_CERTIFICATE_VALID_DAYS=${RED_DEVICE_CERTIFICATE_VALID_DAYS:-90}
       - REFRESH_EXPIRATION_DAYS=${REFRESH_EXPIRATION_DAYS:-30}
       - TURN_SECRET=${TURN_SECRET:?TURN_SECRET is required}
-      - YOUNES_FCM_SERVER_KEY=${YOUNES_FCM_SERVER_KEY:-}
+      # Sovereign push (UnifiedPush): POST wake payloads to per-device distributor endpoints.
+      - PUSH_ALLOW_HTTP_ENDPOINTS=${PUSH_ALLOW_HTTP_ENDPOINTS:-true}
+      - PUSH_CONNECT_TIMEOUT_MS=${PUSH_CONNECT_TIMEOUT_MS:-5000}
+      - PUSH_READ_TIMEOUT_MS=${PUSH_READ_TIMEOUT_MS:-5000}
       - TURN_PUBLIC_HOST=${TURN_PUBLIC_HOST:-127.0.0.1}
       - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
       - TURN_PORT=3478
@@ -535,7 +538,41 @@ services:
       retries: 3
     networks: ["red-net"]
 
-  # ━━━━━━━━━━━━ 10. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
+  # ━━━━━━━━━━━━ 10. ntfy — self-hosted UnifiedPush distributor (sovereign push, no Google push)
+  # Devices point their distributor app (ntfy) at NTFY_BASE_URL — plain HTTP on the
+  # LAN, TLS-fronted URL in production. The backend POSTs wake payloads to the
+  # per-device endpoint the distributor issued; no account, no cloud, no Google.
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    container_name: red-ntfy
+    command: serve
+    restart: unless-stopped
+    mem_limit: 256m
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    environment:
+      - NTFY_BASE_URL=${NTFY_BASE_URL:-http://127.0.0.1:2586}
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_ATTACHMENT_CACHE_DIR=/var/cache/ntfy/attachments
+      - NTFY_LOG_LEVEL=${NTFY_LOG_LEVEL:-info}
+    ports:
+      - "${NTFY_PORT:-2586}:80"
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/v1/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: ["red-net"]
+
+  # ━━━━━━━━━━━━ 11. NTP Note — time-sensitive JWT/DTLS requires host NTP sync
   # Host must run chrony/ntpd. Backend health can verify clock skew via /health.
   # so NTP sync is expected at host level, not container runtime download.
 
@@ -550,6 +587,7 @@ volumes:
   certbot-www:
   pstn-keys:
   pstn-logs:
+  ntfy-cache:
 
 networks:
   red-net:

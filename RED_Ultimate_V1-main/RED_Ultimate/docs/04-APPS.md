@@ -16,7 +16,7 @@ project(":app").projectDir = file("red-app")
 | المسار | الدور الحالي | يدخل البناء؟ | الاستخدام الصحيح |
 |---|---|---:|---|
 | `red-app/` | تطبيق RED القانوني | نعم، `:app` | التطوير والاختبار والإصدار |
-| `app/` | فورك Signal تاريخي كبير | لا | Gold mine لتقنيات منتقاة ومراجعة الترخيص |
+| `app/` | ~~فورك Signal~~ حُذف في المرحلة 11 (2026-09-14) | — | الفرز اكتمل: كل الكود stubs/متفوَّق عليه/ملغي النطاق؛ نُقلت 5 نغمات فقط |
 
 ## `red-app/`
 
@@ -47,14 +47,13 @@ project(":app").projectDir = file("red-app")
 
 `RED_SERVER_URL` يحقن وقت البناء. Debug يسمح HTTP داخل LAN؛ release يمنع cleartext ويتطلب HTTPS. foreground WebSocket يعوض cloud push في local-first deployment.
 
-## `app/` — Signal Gold Mine
+## `app/` — حُذف في المرحلة 11 (2026-09-14)
 
-هذا ليس التطبيق الرئيسي الآن. الاحتفاظ به يتيح دراسة تطبيقات Signal الأصلية، لكنه يحمل افتراضات وبنية واعتماديات ضخمة لا تناسب الخادم المحلي تلقائيًا. يمنع:
-
-- اعتباره دليلًا أن ميزة ما مفعلة.
-- استعادة endpoints سحابية.
-- إعادة الحزم/الخدمات المكررة إلى graph.
-- نسخ كود دون مراجعة AGPL/التراخيص والأمان.
+فُرزت الشجرة ملفاً ملفاً (~7000 ملف): النماذج الأولية الـ55 تحت `com.red.sovereign` كانت stubs تطبع `println`
+أو تحيل لأصناف وهمية (`MediasoupClient`/`CallResult`/`VoipState`/protos)، وكل ما له نظير في `red-app/` كان
+متفوَّقاً عليه (SfuMediaClient ‏632 سطراً، NetworkChangeWatcher، SafetyViewModel…)؛ نطاق PSTN/Yemen ملغي
+بقرار المستخدم. الاستخراج الوحيد: 5 أصوات تقدُّم مكالمات إلى `red-app/src/main/res/raw/` (ترخيص GPL-3.0
+متوافق مع AGPL عبر §13 — الإسناد في `red-app/README.md`). لا تستعد شيئاً من Git history دون مراجعة الترخيص.
 
 ## `android/` و`app-android/` — أُزيلا في 2026-08-19
 

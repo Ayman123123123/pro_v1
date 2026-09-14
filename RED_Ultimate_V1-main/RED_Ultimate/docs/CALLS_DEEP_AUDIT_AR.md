@@ -57,7 +57,7 @@
 ## فجوات ما زالت قائمة (لم تُغلق بالكامل)
 
 ### إشعارات
-- `sendVoipPushNotification` يكتب إشعاراً داخل التطبيق، ويُرسل FCM إن وُجد `YOUNES_FCM_SERVER_KEY`.
+- `sendVoipPushNotification` يكتب إشعاراً داخل التطبيق، ويPOST حمولة CALL إلى نقاط UnifiedPush المخزنة (لا مفاتيح خارجية — الإرسال مباشر للموزّع الذاتي).
 - توكن الجهاز يُسجَّل عبر `POST /api/devices/push-token` في Mongo (`device_push_tokens`) بدل الاعتماد على متغير بيئة لكل مستخدم.
 - دعوة المؤتمر/البث غير المتصلة تُحفظ 60 ثانية وتُرسل معها دفعة VoIP.
 
