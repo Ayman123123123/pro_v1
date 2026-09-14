@@ -121,8 +121,12 @@ class MessageService(
             mongo.findOne(Query(Criteria.where("uuid").`is`(message.id)), MessageDocument::class.java)
                 ?: mongo.save(stored.copy(sequenceNumber = nextSequence(message.conversationId)))
         }
-        redis.opsForZSet().add("red:presence:index", message.senderId, System.currentTimeMillis().toDouble())
-        redis.convertAndSend("red:messages:${message.receiverId}", saved.uuid)
+        // P9: النشر بعد الحفظ best-effort — عطل Redis يجب ألا يُفشل رسالة محفوظة
+        // (الرمي هنا يحوّل إرسالًا ناجحًا إلى 500 وإعادة محاولة مكررة).
+        runCatching {
+            redis.opsForZSet().add("red:presence:index", message.senderId, System.currentTimeMillis().toDouble())
+            redis.convertAndSend("red:messages:${message.receiverId}", saved.uuid)
+        }.onFailure { e -> log.warn("Post-save fan-out failed for {}: {}", saved.uuid, e.message) }
         return saved
     }
 

@@ -126,6 +126,11 @@ java {
     }
 }
 
+configurations.all {
+    // Drop the standalone core jar — its classes live inside tink-android (see above).
+    exclude(group = "com.google.crypto.tink", module = "tink")
+}
+
 dependencies {
     coreLibraryDesugaring(libs.android.tools.desugar)
 
@@ -216,11 +221,10 @@ dependencies {
     // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.security.crypto)
-    // Tink alignment (CI-proven): security-crypto drags an ANCIENT tink-android
-    // (1.8.0 bundles core classes) while the graph resolves tink core 1.23.0 —
-    // :checkDebugDuplicateClasses fails. Pinning modern tink-android wins newest-wins
-    // resolution; current AARs no longer bundle core, so duplicates disappear.
-    implementation("com.google.crypto.tink:tink-android:1.23.0")
+    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
+    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
+    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
 
     testImplementation("junit:junit:4.13.2")
 }
