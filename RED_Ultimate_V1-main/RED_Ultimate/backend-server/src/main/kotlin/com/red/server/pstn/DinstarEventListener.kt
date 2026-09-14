@@ -68,9 +68,9 @@ class DinstarEventListener(
     }
 
     /**
-     * منفّذ مخصص لمعالجة أحداث AMI الثقيلة (Mongo/JDBC/Redis/FCM).
+     * منفّذ مخصص لمعالجة أحداث AMI الثقيلة (Mongo/JDBC/Redis/UnifiedPush).
      * خيط واحد يحافظ على ترتيب الأحداث نفسه، لكنه يفصل المعالجة عن خيط
-     * قارئ asterisk-java حتى لا يعطّل FCM المتزامن كل أحداث المكالمات.
+     * قارئ asterisk-java حتى لا يعطّل الدفع المتزامن كل أحداث المكالمات.
      */
     private val amiExecutor: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "dinstar-ami-events").apply { isDaemon = true }
@@ -539,7 +539,7 @@ class DinstarEventListener(
 
     /**
      * جسم معالجة المكالمة الواردة المشترك (UserEvent + HTTP الداخلي):
-     * سجل التاريخ ← مفاتيح Redis للقناة/callId ← دفع WS + FCM للمالك.
+     * سجل التاريخ ← مفاتيح Redis للقناة/callId ← دفع WS + سيادي للمالك.
      */
     private fun processIncoming(
         callerNumber: String,

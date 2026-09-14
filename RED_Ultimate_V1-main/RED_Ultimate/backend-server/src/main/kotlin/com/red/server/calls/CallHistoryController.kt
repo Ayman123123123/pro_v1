@@ -55,7 +55,7 @@ class CallHistoryController(
         return ResponseEntity.ok(mapOf("status" to "synced", "received" to rows.size, "stored" to stored))
     }
 
-    /** FCM wake endpoint — يخزن العرض للسحب لاحقاً عند اتصال المستلم (Path 2 of Multi-Path Delivery). */
+    /** Sovereign wake endpoint — يخزن العرض للسحب لاحقاً عند اتصال المستلم (Path 2 of Multi-Path Delivery). */
     @PostMapping("/push-notify")
     fun pushNotify(@RequestBody request: PushNotifyRequest, auth: Authentication): ResponseEntity<Any> {
         val authenticated = users.findById(UUID.fromString(auth.name)).orElseThrow { NoSuchElementException("User not found") }
@@ -83,7 +83,7 @@ class CallHistoryController(
             ttlSeconds = ttlSeconds,
             createdAt = now
         )
-        // أرسل إشعار FCM إذا كان الجهاز متصلاً (NotificationService يتعامل مع التوكنات).
+        // أرسل إشعار إيقاظ سيادياً (NotificationService يتعامل مع نقاط النهاية).
         scope.launch {
             notificationService.sendVoipPushNotification(
                 request.targetRedId,

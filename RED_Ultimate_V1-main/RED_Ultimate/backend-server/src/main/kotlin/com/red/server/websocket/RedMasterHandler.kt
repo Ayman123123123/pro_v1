@@ -138,7 +138,7 @@ class RedMasterHandler(
         val stored = messages.processIncoming(incoming)
         send(session, ack(stored, "SENT"))
         sendToDevice(stored.receiverId, stored.receiverDeviceId, messageEnvelope(stored))
-        // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول FCM اختياري
+        // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول الدفع السيادي
         // كي لا تُفوَّت الرسالة حتى لو لم يفتح التطبيق (البريد المعلق يغطي إعادة الاتصال فقط).
         val receiverHasLiveSession = sessions[stored.receiverId]?.values?.any { it.isOpen } == true
         if (!receiverHasLiveSession) {

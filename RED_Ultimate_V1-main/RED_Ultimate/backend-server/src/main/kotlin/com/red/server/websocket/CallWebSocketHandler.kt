@@ -59,6 +59,12 @@ class CallWebSocketHandler(
             "GROUP_CALL_ACCEPT", "GROUP_CALL_DECLINE" -> {
                 val groupCallId = requireCallId(signal)
                 val room = groupRooms[groupCallId]
+                // Kicked members rejoining (stale invite / message tap): bounce them out cleanly.
+                if (type == "GROUP_CALL_ACCEPT" && room != null && room.kicked.any { it.equals(source, ignoreCase = true) }) {
+                    val bounce = OutgoingCallSignal(groupCallId, room.host, source, "GROUP_CALL_END", signal.mode.uppercase(), mapOf("reason" to "kicked"))
+                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(bounce)))
+                    return
+                }
                 // وجهة صريحة إن أرسلها العميل، وإلا المضيف، وإلا المصدر نفسه.
                 val hostId = signal.targetUserId.takeIf { it.isNotBlank() } ?: room?.host ?: source
                 val outbound = OutgoingCallSignal(groupCallId, source, hostId, type, signal.mode.uppercase(), signal.payload + ("memberStatus" to signal.memberStatus.orEmpty()))
@@ -146,6 +152,46 @@ class CallWebSocketHandler(
                         if (memberTargets.isEmpty()) enqueue(memberId, outbound)
                         else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
                     }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                return
+            }
+            // طرد عضو — المضيف فقط: يُحذف من الغرفة + يُمنع من العودة + يُبث للجميع.
+            "GROUP_CALL_KICK" -> {
+                val groupCallId = requireCallId(signal)
+                val room = groupRooms[groupCallId]
+                val victim = (signal.payload["memberId"] as? String).orEmpty()
+                if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
+                    || victim.equals(source, ignoreCase = true)
+                ) {
+                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                    return
+                }
+                room.members.removeIf { it.equals(victim, ignoreCase = true) }
+                room.kicked.add(victim)
+                ((room.members + room.host + victim).filter { it.isNotBlank() }.distinct()).forEach { memberId ->
+                    val outbound = OutgoingCallSignal(groupCallId, source, memberId, type, signal.mode.uppercase(), signal.payload)
+                    val memberTargets = liveSessions(memberId)
+                    if (memberTargets.isEmpty()) enqueue(memberId, outbound)
+                    else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
+                }
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                return
+            }
+            // كتم عضو واحد — المضيف فقط: يُوجَّه للعضو نفسه (+ المضيف يعرف ضمنياً).
+            "GROUP_CALL_MUTE_MEMBER" -> {
+                val groupCallId = requireCallId(signal)
+                val room = groupRooms[groupCallId]
+                val victim = (signal.payload["memberId"] as? String).orEmpty()
+                if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
+                    || victim.equals(source, ignoreCase = true)
+                ) {
+                    session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
+                    return
+                }
+                val outbound = OutgoingCallSignal(groupCallId, source, victim, type, signal.mode.uppercase(), signal.payload)
+                val memberTargets = liveSessions(victim)
+                if (memberTargets.isEmpty()) enqueue(victim, outbound)
+                else memberTargets.forEach { t -> runCatching { t.sendMessage(TextMessage(objectMapper.writeValueAsString(outbound))) } }
                 session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                 return
             }
@@ -408,7 +454,8 @@ private data class PendingCallSignal(
 /** غرفة مكالمة جماعية — يوجّه السيرفر بها ردود الأعضاء إلى المضيف والإنهاء للجميع. */
 private data class GroupCallRoom(
     val host: String,
-    val members: MutableList<String> = mutableListOf()
+    val members: MutableList<String> = mutableListOf(),
+    val kicked: MutableSet<String> = mutableSetOf()
 )
 
 /**

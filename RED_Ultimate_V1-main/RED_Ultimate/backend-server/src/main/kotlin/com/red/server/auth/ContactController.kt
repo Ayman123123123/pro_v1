@@ -34,7 +34,7 @@ class ContactController(
     }
     @GetMapping("/requests") fun requests(auth: Authentication) = contacts.incoming(userId(auth))
     @GetMapping("/requests/outgoing") fun outgoing(auth: Authentication) = contacts.outgoing(userId(auth))
-    // LEGENDARY FIX P0: حد السبام (كانت بلا أي حد فيسبب إغراق طلبات + تضخيم DB + إغراق FCM)
+    // LEGENDARY FIX P0: حد السبام (كانت بلا أي حد فيسبب إغراق طلبات + تضخيم DB + إغراق الدفع)
     @PostMapping("/requests/{redId}") fun request(@PathVariable redId: String, auth: Authentication): Any {
         rateLimit.check("contacts-request", auth.name, 30L, java.time.Duration.ofMinutes(10))
         return contacts.request(userId(auth), redId)

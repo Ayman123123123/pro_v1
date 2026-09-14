@@ -31,6 +31,11 @@ class DevicePushTokenService(private val mongo: MongoTemplate) {
         return if (existing == null) mongo.insert(doc) else mongo.save(doc)
     }
 
+    fun remove(redId: String, token: String) {
+        if (redId.isBlank() || token.isBlank()) return
+        mongo.remove(Query(Criteria.where("id").`is`("${redId.trim()}:${token.trim().hashCode()}")), DevicePushTokenDocument::class.java)
+    }
+
     fun tokensFor(redId: String): List<String> {
         if (redId.isBlank()) return emptyList()
         val query = Query(Criteria.where("redId").`is`(redId.trim()))

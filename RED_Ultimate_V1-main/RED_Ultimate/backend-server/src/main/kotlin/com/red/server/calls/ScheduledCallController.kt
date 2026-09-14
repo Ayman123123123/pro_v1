@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
  *   يبقى offline-first عبر AlarmManager. الترقية لـ Mongo/JPA لاحقاً دون كسر العقد.
  * - التسجيل الخادمي موجود مسبقاً: POST /api/recordings في CallRecordingController
  *   (metadata في Mongo `call_recordings` + بوابة consent في العميل).
- * - تذكير FCM: controller فقط + TODO أدناه (لا Scheduler فعلي في هذه الخطوة).
+ * - تذكير الدفع السيادي: controller فقط + TODO أدناه (لا Scheduler فعلي في هذه الخطوة).
  */
 @RestController
 @RequestMapping("/api/calls/scheduled")
@@ -72,7 +72,7 @@ class ScheduledCallController(
         store[id] = record
         log.info("scheduled.call created id={} room={} owner={} at={}", id, record.roomId, user.redId, record.timeMillis)
 
-        // TODO FCM تذكير: مجدول خادمي (Scheduler/Quartz) يفحص المستحق خلال 5 دقائق
+        // TODO تذكير سيادي: مجدول خادمي (Scheduler/Quartz) يفحص المستحق خلال 5 دقائق
         // ويرسل NotificationService.sendVoipPushNotification لكل مدعو + المالك.
         // عمداً لا إرسال فوري هنا — الدعوة تُرسل عند الاستحقاق فقط لتفادي إزعاج مبكر.
         // مثال عند التفعيل:
@@ -83,7 +83,7 @@ class ScheduledCallController(
         //       }
         //     }
         //   }
-        scheduleFcmReminder(record)
+        schedulePushReminder(record)
 
         return ResponseEntity.ok(record.toResponse())
     }
@@ -115,13 +115,13 @@ class ScheduledCallController(
      * خطاف التذكير — حالياً توثيق/لوج فقط.
      * TODO: اربطه بـ @Scheduled + NotificationService.sendVoipPushNotification عند الاستحقاق.
      */
-    private fun scheduleFcmReminder(record: ScheduledCallRecord) {
+    private fun schedulePushReminder(record: ScheduledCallRecord) {
         log.info(
-            "scheduled.call reminder TODO id={} at={} invitees={} (wire to Scheduler + FCM)",
+            "scheduled.call reminder TODO id={} at={} invitees={} (wire to Scheduler + UnifiedPush)",
             record.id, record.timeMillis, record.invitees.size
         )
         @Suppress("unused")
-        val fcmHook: NotificationService = notifications
+        val pushHook: NotificationService = notifications
     }
 }
 

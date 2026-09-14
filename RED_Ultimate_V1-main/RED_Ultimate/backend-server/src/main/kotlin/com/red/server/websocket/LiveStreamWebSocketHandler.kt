@@ -256,6 +256,19 @@ class LiveStreamWebSocketHandler(
                     allForCount.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(countMsg)) } }
                 }
             }
+            "VIEWER_NEEDS_MESH" -> {
+                // LEGENDARY Phase 6: viewer without SFU asks the broadcaster for a mesh fallback.
+                val broadcaster = broadcasters[signal.roomId] ?: return
+                if (broadcaster.isOpen) {
+                    val outbound = objectMapper.writeValueAsString(mapOf(
+                        "type" to "VIEWER_NEEDS_MESH",
+                        "roomId" to signal.roomId,
+                        "userId" to userId,
+                        "payload" to signal.payload
+                    ))
+                    runCatching { broadcaster.sendMessage(TextMessage(outbound)) }
+                }
+            }
             "OFFER" -> {
                 val role = sessionRole[session.id] ?: return
                 if (role == Role.BROADCASTER) {
