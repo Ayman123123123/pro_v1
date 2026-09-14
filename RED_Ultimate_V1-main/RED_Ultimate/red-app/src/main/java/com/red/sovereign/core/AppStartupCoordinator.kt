@@ -45,6 +45,11 @@ class AppStartupCoordinator(private val application: Application) {
         // 4. تفعيل مراقبة الجودة والاتصال الذكي
         RedQualityManager.initialize(context)
 
+        // 5. مزامنة سجل المكالمات المشفر E2EE مع الخادم — (2026-09-15) كانت تُجدول
+        // فقط من CallSystemIntegration.completeInitialization التي لم يكن يستدعيها
+        // أحد أصلاً، فكانت المزامنة الدورية ميتة بصمت. الآن تُجدول عند كل دخول.
+        runCatching { com.red.sovereign.core.sync.CallLogSyncScheduler.schedulePeriodicSync(context) }
+
     }
 
     /**

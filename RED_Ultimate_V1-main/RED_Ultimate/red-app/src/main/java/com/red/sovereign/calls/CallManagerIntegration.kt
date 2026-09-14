@@ -35,12 +35,14 @@ object CallManagerIntegration {
         // تهيئة مدير الأداء
         CallPerformanceManager.clearStats()
 
-        // تهيئة مدير الانتظار
-        CallWaitingManager.clearAll()
+    // تهيئة مدير الانتظار
+    CallWaitingManager.clearAll()
 
-        // تهيئة مدير التحويل
-        CallTransferManager.clearState()
-    }
+    // (2026-09-15) حُذف CallTransferManager.clearState() — المدير كان وهمياً
+    // (Math.random() للنجاح بلا إشارة نقل حقيقية) فأُرشف في
+    // الأرشيف/dead-code-2026-09-15/ مع شاشته. التحويل الحقيقي يتطلب
+    // إشارة TRANSFER عبر /ws/calls + endpoint على الخادم — يُبنى كاملاً أم لا يُعرض.
+}
 
     /**
      * تحديث جودة المكالمة
@@ -99,23 +101,9 @@ object CallManagerIntegration {
         CallWaitingManager.rejectWaitingCall()
     }
 
-    /**
-     * بدء تحويل المكالمة
-     */
-    fun initiateTransfer(callId: String, targetId: String, isAttended: Boolean = false) {
-        CallTransferManager.initiateTransfer(
-            callId = callId,
-            targetId = targetId,
-            type = if (isAttended) CallTransferManager.TransferType.ATTENDED else CallTransferManager.TransferType.BLIND
-        )
-    }
-
-    /**
-     * إلغاء تحويل المكالمة
-     */
-    fun cancelTransfer() {
-        CallTransferManager.cancelTransfer()
-    }
+    // (2026-09-15) حُذفت initiateTransfer/cancelTransfer مع أرشفة CallTransferManager
+    // — كانا وهميين (نجاح عشوائي بلا إشارة نقل حقيقية). التحويل الحقيقي يتطلب
+    // إشارة TRANSFER عبر /ws/calls + endpoint على الخادم — يُبنى كاملاً أم لا يُعرض.
 
     /**
      * حفظ سجل المكالمات محلياً

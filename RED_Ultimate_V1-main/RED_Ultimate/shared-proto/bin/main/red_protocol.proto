@@ -16,7 +16,9 @@ message RedRED {
         RemoteWipe remote_wipe = 6;
         RemoteWipeAck remote_wipe_ack = 7;
         ReactionRED reaction = 8;
-        CallSignalRED call_signal = 9;
+        // (2026-09-15) حُذف `CallSignalRED call_signal = 9;` — مسار ميت (لا عميل يرسله
+        // والخادم كان يسجّله فقط). إشارات المكالمات الحية تمر عبر /ws/calls (JSON).
+        // رقم الحقل 9 لا يُعاد استخدامه؛ عملاء قدامى يرسلونه فيُتجاهل كحقل مجهول.
     }
 }
 
@@ -56,11 +58,8 @@ message ReactionRED {
     bool remove = 3;
 }
 
-message CallSignalRED {
-    string call_id = 1;
-    string type = 2; // OFFER, ANSWER, ICE, BYE
-    string sdp = 3;
-}
+// (2026-09-15) حُذفت رسالة CallSignalRED مع حقل call_signal=9 أعلاه — مسار ميت
+// (لا عميل يرسله والخادم كان يسجّله فقط). إشارات المكالمات الحية عبر /ws/calls.
 
 message MessageAck {
     string message_id = 1;

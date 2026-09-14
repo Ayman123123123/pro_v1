@@ -27,11 +27,11 @@ object CallNotificationManager {
 
     /**
      * تصحيح: كانت القناة `red_call_channel` وهي قناة لا يُنشئها أحد فعلياً —
-     * الدالة [createNotificationChannel] تُستدعى فقط من
-     * [CallSystemIntegration.initialize] وهي بدورها غير مُستدعاة من أي مكان في
-     * التطبيق، فكل إشعار هنا كان يُرفَض بصمت على Android 8+. القناتان أدناه هما
-     * القناتان الحقيقيتان المُنشأتان دائماً في
-     * `YounesApplication.createNotificationChannels` وتستخدمهما [YounesCallService].
+     * [createNotificationChannel] كانت تُستدعى فقط من `CallSystemIntegration.initialize`
+     * التي لم يكن يستدعيها أحد (أُرشفت في الأرشيف/dead-code-2026-09-15/)، فكل إشعار
+     * هنا كان يُرفَض بصمت على Android 8+. القناتان أدناه هما القناتان الحقيقيتان
+     * المُنشأتان دائماً في `YounesApplication.createNotificationChannels`
+     * وتستخدمهما [YounesCallService].
      */
     const val CHANNEL_ID = "red_calls"
     const val CHANNEL_ID_INCOMING = "red_calls_incoming"
