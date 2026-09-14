@@ -84,6 +84,24 @@ class RefreshTokenService(
         }
     }
 
+    /**
+     * P9: إبطال كل الجلسات ما عدا جهاز الطلب الحالي.
+     * التصفية في الخدمة (لا Derived Query) لأن device_id قابل للـ NULL — جلسات بلا جهاز
+     * تُبطل أيضًا (لا تُستثنى بصمت كما يفعل `<>` في SQL مع NULL).
+     * @return عدد الجلسات المُبطلة
+     */
+    @Transactional
+    fun revokeOthers(userId: java.util.UUID, currentDeviceId: java.util.UUID?): Int {
+        val now = Instant.now()
+        return sessions.findAllByUserIdAndRevokedAtIsNull(userId)
+            .filter { it.device?.id != currentDeviceId }
+            .onEach {
+                it.revokedAt = now
+                sessions.save(it)
+            }
+            .size
+    }
+
     private fun hash(token: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(token.toByteArray(Charsets.UTF_8))

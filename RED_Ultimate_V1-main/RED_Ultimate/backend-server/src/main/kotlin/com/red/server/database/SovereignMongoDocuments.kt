@@ -399,18 +399,8 @@ data class ChannelDocument(
     var updatedAt: Instant = Instant.now()
 )
 
-@Document("channel_members")
-@CompoundIndex(name = "channel_user", def = "{'channelId': 1, 'userId': 1}")
-data class ChannelMemberDocument(
-    @Id val id: String,
-    @Indexed val channelId: String,
-    @Indexed val userId: String,
-    val role: String = "SUBSCRIBER", // OWNER, ADMIN, MODERATOR, SUBSCRIBER
-    val isMuted: Boolean = false,
-    val isBanned: Boolean = false,
-    val joinedAt: Instant = Instant.now(),
-    var lastReadMessageId: String? = null
-)
+// P9: حُذف ChannelMemberDocument — عضوية القنوات في PostgreSQL حصرًا
+// (channel_members)؛ المستند لم يملك أي كاتب وكان يُستخدم خطأً في فحص الصلاحيات.
 
 @Document("channel_messages")
 @CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': -1}")

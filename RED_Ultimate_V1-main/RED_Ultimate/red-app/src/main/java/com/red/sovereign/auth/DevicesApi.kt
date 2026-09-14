@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
  * عميل أجهزة المستخدم — يطابق DeviceController في الخادم:
  *   GET    /api/devices            → قائمة جلسات الأجهزة الحقيقية للحساب
  *   DELETE /api/devices/{deviceId} → إلغاء جهاز (يبطل توكنات التحديث الخاصة به)
+ *   POST   /api/devices/revoke-others → إبطال كل الجلسات ما عدا الجهاز الحالي (P9)
  */
 @Serializable
 data class RemoteDevice(
@@ -38,4 +39,20 @@ class DevicesApi(tokens: TokenStore) {
             is ApiResult.Error -> result.let { ApiResult.Error(it.code, it.message) }
         }
     }
+
+    /** P9: إبطال كل الجلسات ما عدا الحالية — يرجع عدد الجلسات المُبطلة. */
+    suspend fun revokeOthers(): ApiResult<Int> {
+        return when (val result = client.request("POST", "/api/devices/revoke-others")) {
+            is ApiResult.Success -> runCatching {
+                ApiResult.Success(result.code, json.decodeFromString<RevokeOthersResponse>(result.value).revoked)
+            }.getOrElse { ApiResult.Error(result.code, "INVALID_SERVER_RESPONSE") }
+            is ApiResult.Error -> result.let { ApiResult.Error(it.code, it.message) }
+        }
+    }
 }
+
+@Serializable
+data class RevokeOthersResponse(
+    val revoked: Int,
+    val currentDeviceKept: String? = null
+)

@@ -38,17 +38,25 @@ class MessageService(
 ) {
     @PostConstruct
     fun indexes() {
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
-        // V26: فهارس إضافية للميزات الجديدة
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
-        mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
+        // P9: كل إنشاء فهرس محمي — تعارض خيارات فهرس قديم (unique/non-unique على نفس
+        // المفاتيح) أو بيانات قديمة مكررة يجب ألا يُسقط الإقلاع؛ المخصّص الذري يمنع التكرار أصلًا.
+        runCatching {
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            // P9: فرادة (المحادثة، التسلسل) — شبكة أمان تحت المخصّص الذري findAndModify
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // V26: فهارس إضافية للميزات الجديدة
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
+            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
+        }.onFailure { e -> log.warn("Failed to create message indexes: {}", e.message) }
         // فهارس المجموعات والقنوات
         try {
             mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
-            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
+            // P9: فرادة (المجموعة، التسلسل)
+            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
+            // P9: فرادة (القناة، التسلسل)
+            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
             mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
         } catch (e: Exception) {
             log.warn("Failed to create group/channel indexes: {}", e.message)
@@ -107,9 +115,11 @@ class MessageService(
             disappearAt = disappearSecs?.let { Instant.now().plusSeconds(it.toLong()) },
             voiceMetadata = if (message.type == "VOICE") extractVoiceMetadata(message.payload.toByteArray()) else null
         )
+        // P9: حلّ تعارض Sequence — إعادة الإرسال بنفس UUID تُرجع الموجود (idempotent)،
+        // والتعارض الحقيقي على (conversationId, sequenceNumber) يُعاد تخصيصه ويُحفظ مرة واحدة.
         val saved = try { mongo.save(stored) } catch (_: DuplicateKeyException) {
             mongo.findOne(Query(Criteria.where("uuid").`is`(message.id)), MessageDocument::class.java)
-                ?: throw IllegalStateException("Message deduplication failed")
+                ?: mongo.save(stored.copy(sequenceNumber = nextSequence(message.conversationId)))
         }
         redis.opsForZSet().add("red:presence:index", message.senderId, System.currentTimeMillis().toDouble())
         redis.convertAndSend("red:messages:${message.receiverId}", saved.uuid)
@@ -381,7 +391,11 @@ class MessageService(
                 disappearAfterSeconds = disappearSecs,
                 disappearAt = disappearSecs?.let { Instant.now().plusSeconds(it.toLong()) }
             )
-            val saved = mongo.save(copy)
+            // P9: نفس سياسة حلّ التعارض لمسار المجموعات
+            val saved = try { mongo.save(copy) } catch (_: DuplicateKeyException) {
+                mongo.findOne(Query(Criteria.where("uuid").`is`(copy.uuid)), GroupMessageDocument::class.java)
+                    ?: mongo.save(copy.copy(sequenceNumber = nextSequence("group:$targetConversationId")))
+            }
             incrementSourceForwardCount(source)
             ForwardedMessage(saved.uuid, "GROUP", targetConversationId, source.scopeId, saved.sequenceNumber)
         } else {
@@ -464,7 +478,11 @@ class MessageService(
             disappearAfterSeconds = disappearSecs,
             disappearAt = disappearSecs?.let { Instant.now().plusSeconds(it.toLong()) }
         )
-        val saved = mongo.save(copy)
+        // P9: نفس سياسة حلّ التعارض لمسار التحويل الخاص
+        val saved = try { mongo.save(copy) } catch (_: DuplicateKeyException) {
+            mongo.findOne(Query(Criteria.where("uuid").`is`(copy.uuid)), MessageDocument::class.java)
+                ?: mongo.save(copy.copy(sequenceNumber = nextSequence(targetConversationId)))
+        }
         incrementSourceForwardCount(source)
         return ForwardedMessage(saved.uuid, "PRIVATE", targetConversationId, source.scopeId, saved.sequenceNumber)
     }

@@ -125,6 +125,17 @@ fun DevicesScreen(
             IconButton(onClick = { /* إعادة الجلب */ reloadTrigger++ }) {
                 Icon(Icons.Rounded.Refresh, "تحديث", tint = SovereignColors.Cyan)
             }
+            // 🚪 P9: تسجيل الخروج من كل الأجهزة الأخرى (يبقي الجهاز الحالي)
+            IconButton(onClick = {
+                scope.launch {
+                    when (api.revokeOthers()) {
+                        is ApiResult.Success -> { loadError = null; reloadTrigger++ }
+                        is ApiResult.Error -> loadError = "تعذّر إبطال الجلسات الأخرى"
+                    }
+                }
+            }) {
+                Icon(Icons.Rounded.Logout, "خروج من الأجهزة الأخرى", tint = SovereignColors.Danger)
+            }
         }
 
         HorizontalDivider(color = Color.Gray.copy(alpha = 0.1f))

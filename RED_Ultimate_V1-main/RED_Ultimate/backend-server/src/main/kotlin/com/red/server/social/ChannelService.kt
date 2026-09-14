@@ -2,7 +2,6 @@ package com.red.server.social
 
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.database.ChannelDocument
-import com.red.server.database.ChannelMemberDocument
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
 import org.springframework.data.mongodb.core.query.Query
