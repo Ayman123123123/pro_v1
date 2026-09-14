@@ -462,6 +462,9 @@ wss.on('connection', (ws, _req, claims) => {
 
       // ── produce ─────────────────────────────────────────────────
       if (type === 'produce') {
+        // LEGENDARY Phase 7: listeners/viewers hold consume-only tickets — a modified
+        // client must not be able to publish. All tickets carry sfuCanProduce (10-min TTL).
+        if (claims.sfuCanProduce !== true) throw new Error('Produce not permitted by ticket');
         const transport = peer.transports.get(message.transportId);
         if (!transport) throw new Error('Transport not found');
 
@@ -583,6 +586,35 @@ wss.on('connection', (ws, _req, claims) => {
           peerId: context.peerId
         });
         return send(ws, requestId, { status: 'producerResumed', producerId: producer.id });
+      }
+
+      // ── setConsumerPreferredLayers ──────────────────────────────
+      // LEGENDARY Phase 6: viewer quality ladder (360p/480p/720p/1080p) picks
+      // a real simulcast layer instead of being dropped as unknown.
+      if (type === 'setConsumerPreferredLayers') {
+        const consumer = peer.consumers.get(message.consumerId);
+        if (!consumer) throw new Error('Consumer not found');
+        await consumer.setPreferredLayers({
+          spatialLayer: message.spatialLayer ?? 2,
+          temporalLayer: message.temporalLayer ?? 2
+        });
+        return send(ws, requestId, { status: 'preferredLayersSet', consumerId: consumer.id });
+      }
+
+      // ── requestKeyFrame ─────────────────────────────────────────
+      if (type === 'requestKeyFrame') {
+        const consumer = peer.consumers.get(message.consumerId);
+        if (!consumer) throw new Error('Consumer not found');
+        await consumer.requestKeyFrame();
+        return send(ws, requestId, { status: 'keyFrameRequested', consumerId: consumer.id });
+      }
+
+      // ── restartIce ──────────────────────────────────────────────
+      if (type === 'restartIce') {
+        const transport = peer.transports.get(message.transportId);
+        if (!transport) throw new Error('Transport not found');
+        const iceParameters = await transport.restartIce();
+        return send(ws, requestId, { status: 'iceRestarted', iceParameters });
       }
 
       // ── leave ───────────────────────────────────────────────────
