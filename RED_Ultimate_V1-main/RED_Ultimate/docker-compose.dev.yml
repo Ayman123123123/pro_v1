@@ -1,18 +1,69 @@
 # RED Sovereign — Docker Compose Development Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Phase 10 (2026-09-15): one override per env. Merged into this file:
+# - docker-compose.fix.yml      -> backend.environment (Flyway off, ddl-auto update)
+# - docker-compose.host-debug.yml -> loopback ports on the data stores
+# The old prometheus/grafana override stanzas were dangling (no such services
+# in base, so base+dev failed to render) — dev now defines its own lightweight
+# pair (1d retention, loopback-only UIs). Originals in الأرشيف/compose-2026-09-15/.
 
 services:
+  # Fast local iteration: no Flyway gate, Hibernate keeps the schema.
+  backend:
+    environment:
+      SPRING_FLYWAY_ENABLED: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+  # Loopback data-store ports so a host JVM can attach (base publishes none).
+  db-postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  db-mongo:
+    ports:
+      - "127.0.0.1:27017:27017"
+  cache-redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  # Lightweight dev observability (1d retention, loopback-only UIs).
   prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: red-prometheus-dev
+    restart: unless-stopped
+    mem_limit: 512m
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=1d'
       - '--web.enable-lifecycle'
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - red-net
 
   grafana:
+    image: grafana/grafana:10.4.0
+    container_name: red-grafana-dev
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - red-net
+    depends_on:
+      - prometheus
 
   # Additional dev tools
   mailhog:
@@ -53,4 +104,8 @@ services:
 
 volumes:
   pgadmin-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
     driver: local
