@@ -53,6 +53,14 @@ class SfuTicketController(
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         if (conferenceRoom != null) {
             require(conferenceRooms.canJoin(roomId, authentication.name, user.redId)) { "Not authorized for this meeting" }
+            // تذكرة الوسائط للمُذنَّن به فقط: من يقف في غرفة الانتظار لا يُطعِم الـ SFU صوتًا
+            // ولا صورة، وإلا بقي الطابور واجهةً للرفض بينما الوسائط تمرّ من بابه الخلفي.
+            if (conferenceRooms.isLobbyEnabled(roomId) &&
+                !conferenceRooms.isLobbyCleared(roomId, authentication.name) &&
+                !conferenceRooms.bypassesLobby(roomId, authentication.name, user.redId)
+            ) {
+                throw IllegalArgumentException("WAITING_ROOM: the host has not admitted you yet")
+            }
         }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }

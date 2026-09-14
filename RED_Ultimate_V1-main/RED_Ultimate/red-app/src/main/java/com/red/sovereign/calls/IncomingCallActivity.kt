@@ -65,7 +65,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.lifecycleScope
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * شاشة واردة كاملة لكل أنواع المكالمات — من شاشة القفل.

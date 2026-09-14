@@ -62,7 +62,6 @@ import com.red.sovereign.ui.theme.SovereignColors
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.text.SimpleDateFormat

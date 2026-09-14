@@ -63,7 +63,7 @@ fun VoiceNotePlayer(
     var totalDurationMs by remember(uri) { mutableStateOf(durationSeconds * 1000L) }
     var currentSpeed by remember(uri) { mutableStateOf(preferredSpeed) }
     var showSpeedMenu by remember(uri) { mutableStateOf(false) }
-    // ?? ÇáÊİÑíÛ ÇáÕæÊí Ïæä ÇÊÕÇá ??
+    // ?? Ø§Ù„ØªÙØ±ÙŠØº Ø§Ù„ØµÙˆØªÙŠ Ø¯ÙˆÙ† Ø§ØªØµØ§Ù„ ??
     var transcriptState by remember(uri) { mutableStateOf<VoskTranscriber.TranscribeState>(VoskTranscriber.TranscribeState.Idle) }
     val transcribeScope = rememberCoroutineScope()
 
@@ -74,11 +74,11 @@ fun VoiceNotePlayer(
     val surfaceColor = if (isOutgoing) VoiceColors.BubbleOutgoing else VoiceColors.BubbleIncoming
     val primaryColor = waveformColor
 
-    // Audio Manager - DECLARED ONCE (remember áÊŞáíá getSystemService æÅÚÇÏÉ ÇáÊÑßíÈ)
+    // Audio Manager - DECLARED ONCE (remember Ù„ØªÙ‚Ù„ÙŠÙ„ getSystemService ÙˆØ¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªØ±ÙƒÙŠØ¨)
     val audioManager = remember(appContext) { appContext.getSystemService(android.content.Context.AUDIO_SERVICE) as AudioManager }
 
     // Player - created FIRST so it can be referenced in AudioFocusRequest
-    // G3: ÓíÇŞ ÇáÊØÈíŞ íãäÚ ÊÓÑÈ Activity ÚäÏ ÈŞÇÁ ÇáãÔÛá ÈÚÏ ÊÏæíÑ ÇáÔÇÔÉ.
+    // G3: Ø³ÙŠØ§Ù‚ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ ÙŠÙ…Ù†Ø¹ ØªØ³Ø±Ø¨ Activity Ø¹Ù†Ø¯ Ø¨Ù‚Ø§Ø¡ Ø§Ù„Ù…Ø´ØºÙ„ Ø¨Ø¹Ø¯ ØªØ¯ÙˆÙŠØ± Ø§Ù„Ø´Ø§Ø´Ø©.
     val player = remember(uri) {
         val exo = ExoPlayer.Builder(appContext).build().apply {
             setAudioAttributes(
@@ -134,7 +134,7 @@ fun VoiceNotePlayer(
     }
 
     // Request/abandon audio focus based on playback state
-    // LEGENDARY FIX: ÅáÛÇÁ ÍáŞÉ ÇáÊÍÏíË ÚäÏ ÇáÊæŞİ/ÇáÊÍÑíÑ (ßÇäÊ while(isPlaying) ÈáÇ ensureActive ÊÓÊãÑ ÈÚÏ release æÊÑãí IllegalStateException)
+    // LEGENDARY FIX: Ø¥Ù„ØºØ§Ø¡ Ø­Ù„Ù‚Ø© Ø§Ù„ØªØ­Ø¯ÙŠØ« Ø¹Ù†Ø¯ Ø§Ù„ØªÙˆÙ‚Ù/Ø§Ù„ØªØ­Ø±ÙŠØ± (ÙƒØ§Ù†Øª while(isPlaying) Ø¨Ù„Ø§ ensureActive ØªØ³ØªÙ…Ø± Ø¨Ø¹Ø¯ release ÙˆØªØ±Ù…ÙŠ IllegalStateException)
     LaunchedEffect(isPlaying) {
         if (isPlaying) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && audioFocusRequest != null) {
@@ -146,8 +146,8 @@ fun VoiceNotePlayer(
             }
         }
         while (isPlaying && kotlinx.coroutines.currentCoroutineContext().isActive) {
-            // G3: ÍãÇíÉ ãä ŞÑÇÁÉ ãÔÛá ãÍÑÑ ÈÚÏ dispose (IllegalStateException)
-            // ßÇäÊ ÊÓŞØ ÇáÊØÈíŞ ÚäÏ ÇáÎÑæÌ ÇáÓÑíÚ ãä ÇáãÍÇÏËÉ ÃËäÇÁ ÇáÊÔÛíá.
+            // G3: Ø­Ù…Ø§ÙŠØ© Ù…Ù† Ù‚Ø±Ø§Ø¡Ø© Ù…Ø´ØºÙ„ Ù…Ø­Ø±Ø± Ø¨Ø¹Ø¯ dispose (IllegalStateException)
+            // ÙƒØ§Ù†Øª ØªØ³Ù‚Ø· Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¹Ù†Ø¯ Ø§Ù„Ø®Ø±ÙˆØ¬ Ø§Ù„Ø³Ø±ÙŠØ¹ Ù…Ù† Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„ØªØ´ØºÙŠÙ„.
             val stillPlaying = runCatching {
                 currentPositionMs = player.currentPosition
                 totalDurationMs = if (player.duration > 0) player.duration else totalDurationMs
@@ -236,7 +236,7 @@ fun VoiceNotePlayer(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "ÑÓÇáÉ ÕæÊíÉ",
+                    text = "Ø±Ø³Ø§Ù„Ø© ØµÙˆØªÙŠØ©",
                     color = onColor,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -269,7 +269,7 @@ fun VoiceNotePlayer(
                     )
                 ) {
                     Text(
-                        text = "${currentSpeed}×",
+                        text = "${currentSpeed}Ã—",
                         color = onColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -279,14 +279,14 @@ fun VoiceNotePlayer(
                     expanded = showSpeedMenu,
                     onDismissRequest = { showSpeedMenu = false }
                 ) {
-                    // LEGENDARY: ÊæÍíÏ ÇáÓÑÚÇÊ ÇáÓÊ + ÍİÙåÇ áÊÈŞì ÈÚÏ ÅÚÇÏÉ ÇáÊÔÛíá (ßÇäÊ ÊõäÓì áßá ÑÓÇáÉ)
+                    // LEGENDARY: ØªÙˆØ­ÙŠØ¯ Ø§Ù„Ø³Ø±Ø¹Ø§Øª Ø§Ù„Ø³Øª + Ø­ÙØ¸Ù‡Ø§ Ù„ØªØ¨Ù‚Ù‰ Ø¨Ø¹Ø¯ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ (ÙƒØ§Ù†Øª ØªÙÙ†Ø³Ù‰ Ù„ÙƒÙ„ Ø±Ø³Ø§Ù„Ø©)
                     listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f).forEach { speed ->
                         DropdownMenuItem(
-                            text = { Text("${speed}×") },
+                            text = { Text("${speed}Ã—") },
                             onClick = {
                                 currentSpeed = speed
                                 player.setPlaybackSpeed(speed)
-                                // ÍİÙ ÏÇÆã İí äİÓ ãİÊÇÍ ÇáÅÚÏÇÏÇÊ
+                                // Ø­ÙØ¸ Ø¯Ø§Ø¦Ù… ÙÙŠ Ù†ÙØ³ Ù…ÙØªØ§Ø­ Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª
                                 runCatching {
                                     context.getSharedPreferences("younes_user_preferences", android.content.Context.MODE_PRIVATE)
                                         .edit().putFloat("playback_speed", speed).apply()
@@ -305,7 +305,7 @@ fun VoiceNotePlayer(
         Spacer(Modifier.height(10.dp))
 
         // Waveform with seek capability
-        // LEGENDARY FIX: ÏãÌ Drag+Tap İí pointerInput æÇÍÏ (ßÇäÇ ÇËäíä ÈäİÓ ÇáãİÊÇÍ Unit İíáÛí ÇáËÇäí ÇáÃæá æíßÓÑ ÇáÜseek)
+        // LEGENDARY FIX: Ø¯Ù…Ø¬ Drag+Tap ÙÙŠ pointerInput ÙˆØ§Ø­Ø¯ (ÙƒØ§Ù†Ø§ Ø§Ø«Ù†ÙŠÙ† Ø¨Ù†ÙØ³ Ø§Ù„Ù…ÙØªØ§Ø­ Unit ÙÙŠÙ„ØºÙŠ Ø§Ù„Ø«Ø§Ù†ÙŠ Ø§Ù„Ø£ÙˆÙ„ ÙˆÙŠÙƒØ³Ø± Ø§Ù„Ù€seek)
         if (waveform.isNotEmpty()) {
             VoiceWaveformCanvas(
                 samples = waveform,
@@ -361,7 +361,7 @@ fun VoiceNotePlayer(
             )
         }
 
-        // ?? ÒÑ ÇáÊİÑíÛ ÇáÕæÊí + ÇáäÊíÌÉ ??
+        // ?? Ø²Ø± Ø§Ù„ØªÙØ±ÙŠØº Ø§Ù„ØµÙˆØªÙŠ + Ø§Ù„Ù†ØªÙŠØ¬Ø© ??
         Spacer(Modifier.height(6.dp))
         when (val ts = transcriptState) {
             is VoskTranscriber.TranscribeState.Idle -> {
@@ -373,21 +373,21 @@ fun VoiceNotePlayer(
                     },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                 ) {
-                    Text("ÊİÑíÛ ÕæÊí", color = onColor.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("ØªÙØ±ÙŠØº ØµÙˆØªÙŠ", color = onColor.copy(alpha = 0.8f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
             is VoskTranscriber.TranscribeState.Downloading -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = onColor, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
-                    Text("ÊäÒíá äãæĞÌ ÇáÊİÑíÛ ${ts.percent}% (ãÑÉ æÇÍÏÉ¡ Wi-Fi)", color = onColor.copy(alpha = 0.7f), fontSize = 11.sp)
+                    Text("ØªÙ†Ø²ÙŠÙ„ Ù†Ù…ÙˆØ°Ø¬ Ø§Ù„ØªÙØ±ÙŠØº ${ts.percent}% (Ù…Ø±Ø© ÙˆØ§Ø­Ø¯É¡ Wi-Fi)", color = onColor.copy(alpha = 0.7f), fontSize = 11.sp)
                 }
             }
             is VoskTranscriber.TranscribeState.Transcribing -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = onColor, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(6.dp))
-                    Text("ÌÇÑò ÇáÊİÑíÛ Úáì ÌåÇÒß...", color = onColor.copy(alpha = 0.7f), fontSize = 11.sp)
+                    Text("Ø¬Ø§Ø±Ù Ø§Ù„ØªÙØ±ÙŠØº Ø¹Ù„Ù‰ Ø¬Ù‡Ø§Ø²Ùƒ...", color = onColor.copy(alpha = 0.7f), fontSize = 11.sp)
                 }
             }
             is VoskTranscriber.TranscribeState.Done -> {
@@ -402,7 +402,7 @@ fun VoiceNotePlayer(
                             VoskTranscriber.transcribeUri(context, uri) { transcriptState = it }
                         }
                     }) {
-                        Text("ÅÚÇÏÉ ÇáãÍÇæáÉ", color = onColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©", color = onColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -435,7 +435,7 @@ private fun PlayPauseCircle(
     ) {
         Icon(
             imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-            contentDescription = if (isPlaying) "ÅíŞÇİ" else "ÊÔÛíá",
+            contentDescription = if (isPlaying) "Ø¥ÙŠÙ‚Ø§Ù" else "ØªØ´ØºÙŠÙ„",
             tint = iconColor,
             modifier = Modifier.size(28.dp)
         )

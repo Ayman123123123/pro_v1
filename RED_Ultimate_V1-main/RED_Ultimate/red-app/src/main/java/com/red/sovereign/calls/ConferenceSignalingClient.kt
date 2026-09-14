@@ -17,7 +17,7 @@ import okhttp3.WebSocketListener
 /**
  * رسالة إشارات المؤتمر — تُرسل وتُستقبل عبر WebSocket مع media-sfu.
  * النوع "JOIN", "PRODUCE", "CONSUME", "ICE", "LEAVE", "ROOM_STATE", "PARTICIPANT_LEFT",
- * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP"
+ * "PRODUCER_READY", "CONSUMER_READY", "LIVE_START", "LIVE_STOP", "LOBBY"
  */
 @Serializable
 data class ConferenceSignal(
@@ -73,6 +73,14 @@ class ConferenceSignalingClient(
         }
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
+        /**
+         * غرفة الانتظار: `state` = waiting | admitted | denied | queue | list،
+         * و`waiting` عدد الواقفين في الطابور (يراه المضيف فقط).
+         * افتراضية فارغة حتى لا تُجبَر كل المستمعين القائمة على تجاوزها.
+         */
+        fun onLobbyState(state: String, waiting: Int) {
+            Log.d(TAG, "onLobbyState default — state=$state waiting=$waiting")
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -170,6 +178,12 @@ class ConferenceSignalingClient(
                                 val selfRole = signal.payload["self_role"] ?: "LISTENER"
                                 listener.onRoomState(participants, selfRole)
                                 listener.onSelfRole(selfRole)
+                            }
+                            "LOBBY" -> {
+                                val lobbyState = signal.payload["state"].orEmpty()
+                                listener.onLobbyState(lobbyState, signal.payload["waiting"]?.toIntOrNull() ?: 0)
+                                // الإطار يُمرَّر أيضًا كما كان: بعض الواجهات تقرأ onSignal مباشرة.
+                                listener.onSignal(signal)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }

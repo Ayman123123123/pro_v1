@@ -15,6 +15,13 @@ import java.util.UUID
 interface UserAccountRepository : JpaRepository<UserAccount, UUID>, JpaSpecificationExecutor<UserAccount> {
     fun findByUsernameIgnoreCase(username: String): UserAccount?
     fun findByRedId(redId: String): UserAccount?
+
+    /** بحث عكسي لدليل المتصليناتٌ والبحث العام بالاسم. */
+    fun findByPstnNumber(pstnNumber: String): UserAccount?
+    fun findAllByUsernameContainingIgnoreCaseOrDisplayNameContainingIgnoreCase(
+        username: String,
+        displayName: String
+    ): List<UserAccount>
     fun existsByUsernameIgnoreCase(username: String): Boolean
     fun existsByRedId(redId: String): Boolean
     fun countByStatus(status: AccountStatus): Long

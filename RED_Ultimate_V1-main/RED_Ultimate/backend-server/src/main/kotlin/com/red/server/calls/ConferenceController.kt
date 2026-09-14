@@ -37,6 +37,19 @@ data class ConferenceRoomRecord(
     val maxCoHosts: Int = 2
 ) {
     var participantCount: Int = 0
+
+    /**
+     * غرفة الانتظار: من يدخل بالرابط أو من العامة لا يُقبل وسائطه قبل إذن المضيف أو
+     * المشارك المضيف. الدعوة الصريحة وكلمة المرور الصحيحة تجاوزان الطابور — نفس
+     * المنطق الذي يعفي المدعو من كلمة السر أعلاه.
+     */
+    var waitingRoomEnabled: Boolean = false
+
+    /** مكتوم عند الدخول — سلوك الاجتماعات الكبيرة؛ واتساب لا يملكه أصلًا. */
+    var mutedByDefault: Boolean = false
+
+    /** بوابة مشاركة الشاشة: إيقافها يمنع نشر الشاشة فقط، لا الكاميرا والصوت. */
+    var allowScreenShare: Boolean = true
 }
 
 @Service
@@ -52,12 +65,28 @@ class ConferenceRoomService(
         const val MAX_COHOSTS = 2
         /** الغرف العامة تُخفى بعد 12 ساعة من الإنشاء (تنظيف منطقي بدون كسر in-memory). */
         const val PUBLIC_ROOM_TTL_HOURS = 12L
+
+        /** عمر الرابط الأقصى 24 ساعة و1000 استخدام: رابط للأبد في مجموعة عامة ثغرة، لا راحة. */
+        const val MAX_LINK_TTL_MINUTES = 24L * 60L
+        const val MAX_LINK_USES = 1000
+        /** 18 بايت = 24 رمز base64url: مساحة كافية لئلا يُخمَّن التوكن بالمسح. */
+        const val LINK_TOKEN_BYTES = 18
     }
 
     private val roomParticipants = ConcurrentHashMap<String, MutableSet<String>>()
     private val activeRooms = ConcurrentHashMap<String, ConferenceRoomRecord>()
     /** قائمة دعوة الجلسات الخاصة؛ تبقى مستقلة عن الحضور الفعلي. */
     private val roomInvitees = ConcurrentHashMap<String, MutableSet<String>>()
+
+    /** token → رابط. الروابط حالة غرفة لا وثيقة: عمرها أقصر من عمر إعادة التشغيل. */
+    private val callLinks = ConcurrentHashMap<String, CallLink>()
+    /** roomId → (accountId → طلب) — طابور واحد لكل غرفة، مرتّب بالوصول. */
+    private val roomLobby = ConcurrentHashMap<String, ConcurrentHashMap<String, LobbyRequest>>()
+    /** من أُذن لهم في هذه الغرفة: يعبرون الطابور عند إعادة الاتصال. */
+    private val lobbyCleared = ConcurrentHashMap<String, MutableSet<String>>()
+    /** من طُرد من الطابور مع خيار المنع: لا يعود مهما كرر الرابط. */
+    private val lobbyBlocked = ConcurrentHashMap<String, MutableSet<String>>()
+    private val linkRandom = java.security.SecureRandom()
 
     fun createRoom(
         roomId: String,
@@ -174,8 +203,180 @@ class ConferenceRoomService(
         val removed = roomParticipants.remove(roomId) != null
         roomInvitees.remove(roomId)
         activeRooms.remove(roomId)
+        roomLobby.remove(roomId)
+        lobbyCleared.remove(roomId)
+        lobbyBlocked.remove(roomId)
+        // روابط ميتة تبقى في الذاكرة = بوابة دخول لغرفة لم تعد موجودة.
+        callLinks.keys.filter { callLinks[it]?.roomId == roomId }.forEach { callLinks.remove(it) }
         if (removed) log.info("Conference room {} closed", roomId)
         return removed
+    }
+
+    // ── روابط الدعوة (call links) ───────────────────────────────────────────────
+    /**
+     * رابط انضمام قصير العمر لمكالمة جماعية أو مساحة صوتية. الرابط لا يحمل كلمة سر
+     * ولا صلاحية المنصة: يعطي حق الحضور فقط، والطابور — إن كان مفتوحًا — يبقى سيّد القرار.
+     */
+    data class CallLink(
+        val token: String,
+        val roomId: String,
+        val createdAt: Instant,
+        val expiresAt: Instant?,
+        val maxUses: Int?,
+        var uses: Int = 0,
+        var revoked: Boolean = false
+    ) {
+        fun liveAt(now: Instant): Boolean = !revoked &&
+            (expiresAt == null || now.isBefore(expiresAt)) &&
+            (maxUses == null || uses < maxUses)
+    }
+
+    /** طالب انضمام محبوس في الطابور حتى يبتّ فيه صاحب الصلاحية. */
+    data class LobbyRequest(
+        val accountId: String,
+        val redId: String,
+        val displayName: String,
+        val requestedAt: Instant,
+        val viaLink: Boolean
+    )
+
+    fun createCallLink(roomId: String, ttlMinutes: Long = 0, maxUses: Int = 0): CallLink {
+        val record = activeRooms[roomId] ?: error("ROOM_NOT_OPEN")
+        require(ttlMinutes in 0..MAX_LINK_TTL_MINUTES) { "LINK_TTL_OUT_OF_RANGE" }
+        require(maxUses in 0..MAX_LINK_USES) { "LINK_USES_OUT_OF_RANGE" }
+        val link = CallLink(
+            token = newLinkToken(),
+            roomId = record.roomId,
+            createdAt = Instant.now(),
+            expiresAt = if (ttlMinutes > 0) Instant.now().plusSeconds(ttlMinutes * 60) else null,
+            maxUses = if (maxUses > 0) maxUses else null
+        )
+        callLinks[link.token] = link
+        log.info("Call link created for room {} (ttl={}min, uses={})", roomId, ttlMinutes, maxUses)
+        return link
+    }
+
+    /** إلغاء كل روابط الغرفة دفعة واحدة — الرابط المسرّب في مجموعة لا يُتتبَّع فرديًا. */
+    fun revokeCallLinks(roomId: String): Int {
+        var revoked = 0
+        callLinks.values.forEach { if (it.roomId == roomId && !it.revoked) { it.revoked = true; revoked++ } }
+        return revoked
+    }
+
+    fun linkFor(roomId: String): CallLink? =
+        callLinks.values.lastOrNull { it.roomId == roomId && it.liveAt(Instant.now()) }
+
+    /** معاينة لا تستهلك استخدامًا: مشاركة الرابط في دردشة يجب ألا تستنفده. */
+    fun resolveCallLink(token: String): Pair<CallLink, ConferenceRoomRecord>? {
+        val link = callLinks[token] ?: return null
+        if (!link.liveAt(Instant.now())) return null
+        val record = activeRooms[link.roomId] ?: run { link.revoked = true; return null }
+        return link to record
+    }
+
+    /** الاستهلاك عند الدخول فعلًا، لا عند الفتح. */
+    fun redeemCallLink(token: String): Boolean {
+        val link = callLinks[token] ?: return false
+        if (!link.liveAt(Instant.now())) return false
+        link.uses += 1
+        return true
+    }
+
+    private fun newLinkToken(): String =
+        java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(LINK_TOKEN_BYTES).also { linkRandom.nextBytes(it) })
+
+    // ── غرفة الانتظار (lobby) ───────────────────────────────────────────────────
+    fun isLobbyEnabled(roomId: String): Boolean = activeRooms[roomId]?.waitingRoomEnabled == true
+
+    /** من أُذن له يبقى مسموحًا به في الجلسة نفسها: إعادة الاتصال بعد انقطاع الشبكة
+     *  يجب أن لا يعيده إلى الطابور فيُحرم نصف الحديث من سماعه. */
+    fun isLobbyCleared(roomId: String, accountId: String): Boolean = lobbyCleared[roomId]?.contains(accountId) == true
+
+    fun isLobbyBlocked(roomId: String, accountId: String): Boolean = lobbyBlocked[roomId]?.contains(accountId) == true
+
+    /** المضيف والمدعو صراحةً لا يمران بالطابور: الدعوة نفسها اعتماد. */
+    fun bypassesLobby(roomId: String, accountId: String, redId: String): Boolean {
+        val room = activeRooms[roomId] ?: return true
+        return room.hostId == accountId || roomInvitees[roomId]?.contains(redId) == true
+    }
+
+    /**
+     * @return الطلب المُصفّى في الطابور، أو null عندما يُقبل الدخول مباشرة
+     * (لوبّي مغلق، أو صاحب تجاوز، أو محجوبًا سابقًا — فيُرفض بصمت بلا صف).
+     */
+    fun enterLobby(roomId: String, accountId: String, redId: String, displayName: String, viaLink: Boolean): LobbyRequest? {
+        if (!isLobbyEnabled(roomId)) return null
+        if (isLobbyBlocked(roomId, accountId) || isLobbyCleared(roomId, accountId) || bypassesLobby(roomId, accountId, redId)) return null
+        val entry = LobbyRequest(accountId, redId, displayName.take(64), Instant.now(), viaLink)
+        roomLobby.computeIfAbsent(roomId) { ConcurrentHashMap() }[accountId] = entry
+        return entry
+    }
+
+    fun lobbyQueue(roomId: String): List<LobbyRequest> =
+        roomLobby[roomId]?.values?.sortedBy { it.requestedAt } ?: emptyList()
+
+    fun lobbyCount(roomId: String): Int = roomLobby[roomId]?.size ?: 0
+
+    fun leaveLobby(roomId: String, accountId: String): Boolean = roomLobby[roomId]?.remove(accountId) != null
+
+    /**
+     * إدخال طالب أو أكثر بالترتيب. الإضافة إلى الحاضرين تحدث هنا لا في النداء التالي،
+     * وإلا فاز من يفتح الرابط أولًا بالسباق على مقاعد الغرفة الممتلئة.
+     * @return من دُخِّلوا فعلًا (يتوقف الطابور عند اكتمال الغرفة لا عند أول رفض).
+     */
+    fun admitFromLobby(roomId: String, accountIds: Collection<String>): List<String> {
+        val queue = roomLobby[roomId] ?: return emptyList()
+        val cleared = lobbyCleared.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+        val admitted = ArrayList<String>(accountIds.size)
+        for (accountId in accountIds) {
+            if (!queue.containsKey(accountId)) continue
+            if (addParticipant(roomId, accountId) < 0) break
+            queue.remove(accountId)
+            cleared.add(accountId)
+            admitted += accountId
+        }
+        if (admitted.isNotEmpty()) log.info("Room {} admitted {} from lobby", roomId, admitted.size)
+        return admitted
+    }
+
+    /** طرد من الطابور؛ والحجب يمنع عودته بنفس الجلسة (زر «امنع» عند المضيف). */
+    fun denyFromLobby(roomId: String, accountIds: Collection<String>, block: Boolean = false): List<String> {
+        val queue = roomLobby[roomId] ?: return emptyList()
+        val denied = ArrayList<String>(accountIds.size)
+        for (accountId in accountIds) {
+            if (queue.remove(accountId) != null) denied += accountId
+        }
+        if (block) {
+            val blocked = lobbyBlocked.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+            denied.forEach { blocked.add(it) }
+        }
+        return denied
+    }
+
+    /**
+     * تعديل سياسة الغرفةlive. إغلاق اللوبي لا يترك من في الطابور معلقًا في غرفة مفتوحة:
+     * يُدخَلون بالترتيب حتى تمتلئ.
+     */
+    fun updateRoomFlags(
+        roomId: String,
+        waitingRoom: Boolean? = null,
+        mutedByDefault: Boolean? = null,
+        allowScreenShare: Boolean? = null
+    ): ConferenceRoomRecord? {
+        val record = activeRooms[roomId] ?: return null
+        waitingRoom?.let { record.waitingRoomEnabled = it }
+        mutedByDefault?.let { record.mutedByDefault = it }
+        allowScreenShare?.let { record.allowScreenShare = it }
+        if (waitingRoom == false) {
+            val queued = roomLobby.remove(roomId)
+            if (queued != null) {
+                val cleared = lobbyCleared.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+                queued.keys.sortedBy { queued[it]?.requestedAt }.forEach { accountId ->
+                    if (addParticipant(roomId, accountId) >= 0) cleared.add(accountId)
+                }
+            }
+        }
+        return record
     }
 }
 
@@ -186,7 +387,8 @@ class ConferenceController(
     private val users: UserAccountRepository,
     private val notifications: NotificationService,
     private val history: CallHistoryService,
-    private val callSignaling: com.red.server.websocket.CallWebSocketHandler
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler,
+    private val signaling: com.red.server.websocket.ConferenceWebSocketHandler
 ) {
 
     @PostMapping("/create")
@@ -290,6 +492,28 @@ class ConferenceController(
                 errorMessage = "الغرفة ممتلئة (حتى ${ConferenceRoomService.MAX_PARTICIPANTS} مشارك)"
             ))
         }
+        // بوابة الطابور قبل الإضافة: من لم يُذن له لا يحجز مقعدًا ولا يحصل على تذكرة SFU.
+        val pending = roomService.enterLobby(
+            roomId = roomId,
+            accountId = authentication.name,
+            redId = user.redId,
+            displayName = user.displayName,
+            viaLink = false
+        )
+        if (pending != null) {
+            signaling.notifyLobbyWaiting(roomId)
+            return ResponseEntity.accepted().body(JoinRoomResponse(
+                authorized = false,
+                waiting = true,
+                roomId = record.roomId,
+                title = record.title,
+                description = record.description,
+                isSpace = record.isSpace,
+                hostName = record.hostName,
+                lobbyPosition = roomService.lobbyQueue(roomId).indexOfFirst { it.accountId == authentication.name }.let { if (it < 0) 1 else it + 1 },
+                errorMessage = "بانتظار إذن المضيف"
+            ))
+        }
         roomService.addParticipant(roomId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
@@ -297,7 +521,9 @@ class ConferenceController(
             title = record.title,
             description = record.description,
             isSpace = record.isSpace,
-            hostName = record.hostName
+            hostName = record.hostName,
+            mutedByDefault = record.mutedByDefault,
+            allowScreenShare = record.allowScreenShare
         ))
     }
 
@@ -350,6 +576,210 @@ class ConferenceController(
         }
         return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.memberIds.size, "roomId" to roomId))
     }
+    // ── روابط الدعوة ───────────────────────────────────────────────────────────
+
+    /**
+     * إنشاء رابط لمكالمة. المضيف وحده (المشارك المضيف صلاحية منصّة لا صلاحية غرفة،
+     * فالدعوة إلى المكالمة قرار المضيف). `ttlMinutes=0` = لا انتهاء زمني، و`maxUses=0`
+     * = بلا حد استخدام — والقيدان معًا افتراضيًا في حدود الغرفة.
+     */
+    @PostMapping("/{roomId}/link")
+    fun createLink(
+        @PathVariable roomId: String,
+        @RequestBody(required = false) request: CreateLinkRequest?,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        val link = roomService.createCallLink(
+            roomId = record.roomId,
+            ttlMinutes = request?.ttlMinutes ?: 0L,
+            maxUses = request?.maxUses ?: 0
+        )
+        return ResponseEntity.ok(linkPayload(link))
+    }
+
+    /** إلغاء روابط الغرفة كلها — الكافي عند تسرّب رابط إلى مجموعة عامة. */
+    @DeleteMapping("/{roomId}/link")
+    fun revokeLinks(
+        @PathVariable roomId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        return ResponseEntity.ok(mapOf(
+            "roomId" to record.roomId,
+            "revoked" to roomService.revokeCallLinks(record.roomId)
+        ))
+    }
+
+    /** معاينة الرابط قبل الدخول: اسم الغرفة ومضيفها وعددها، بلا أسماء الحاضرين. */
+    @GetMapping("/link/{token}")
+    fun previewLink(@PathVariable token: String): ResponseEntity<Map<String, Any?>> {
+        val resolved = roomService.resolveCallLink(token)
+            ?: return ResponseEntity.status(404).body(mapOf("error" to "LINK_EXPIRED_OR_REVOKED"))
+        val (link, record) = resolved
+        return ResponseEntity.ok(mapOf(
+            "roomId" to record.roomId,
+            "title" to record.title,
+            "hostName" to record.hostName,
+            "isSpace" to record.isSpace,
+            "participantCount" to roomService.getParticipantCount(record.roomId),
+            "waitingRoomEnabled" to record.waitingRoomEnabled,
+            "full" to roomService.isRoomFull(record.roomId),
+            "expiresAt" to link.expiresAt?.toString(),
+            "usesLeft" to link.maxUses?.minus(link.uses)
+        ))
+    }
+
+    /** الدخول بالرابط: لا كلمة سر — الرابط نفسه اعتماد مؤقت، والطابور سيّد القرار إن كان مفتوحًا. */
+    @PostMapping("/link/{token}/join")
+    fun joinByLink(
+        @PathVariable token: String,
+        authentication: Authentication
+    ): ResponseEntity<JoinRoomResponse> {
+        val resolved = roomService.resolveCallLink(token)
+            ?: return ResponseEntity.status(404).body(JoinRoomResponse(authorized = false, roomId = "", errorMessage = "الرابط منتهٍ أو ملغى"))
+        val (link, record) = resolved
+        if (roomService.isRoomFull(record.roomId) && !roomService.isLobbyCleared(record.roomId, authentication.name)) {
+            return ResponseEntity.status(429).body(JoinRoomResponse(
+                authorized = false,
+                roomId = record.roomId,
+                errorMessage = "المكالمة ممتلئة (حتى " + ConferenceRoomService.MAX_PARTICIPANTS + " مشارك)"
+            ))
+        }
+        if (!roomService.redeemCallLink(token)) {
+            return ResponseEntity.status(410).body(JoinRoomResponse(authorized = false, roomId = record.roomId, errorMessage = "استُنفد عدد استخدامات الرابط"))
+        }
+        val accountId = UUID.fromString(authentication.name)
+        val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
+        val pending = roomService.enterLobby(
+            roomId = record.roomId,
+            accountId = authentication.name,
+            redId = user.redId,
+            displayName = user.displayName,
+            viaLink = true
+        )
+        if (pending != null) {
+            signaling.notifyLobbyWaiting(record.roomId)
+            return ResponseEntity.accepted().body(JoinRoomResponse(
+                authorized = false,
+                waiting = true,
+                roomId = record.roomId,
+                title = record.title,
+                hostName = record.hostName,
+                isSpace = record.isSpace,
+                errorMessage = "بانتظار إذن المضيف",
+                mutedByDefault = record.mutedByDefault,
+                allowScreenShare = record.allowScreenShare
+            ))
+        }
+        roomService.addParticipant(record.roomId, authentication.name)
+        return ResponseEntity.ok(JoinRoomResponse(
+            authorized = true,
+            roomId = record.roomId,
+            title = record.title,
+            hostName = record.hostName,
+            isSpace = record.isSpace,
+            mutedByDefault = record.mutedByDefault,
+            allowScreenShare = record.allowScreenShare
+        ))
+    }
+
+    // ── غرفة الانتظار ──────────────────────────────────────────────────────────
+
+    @GetMapping("/{roomId}/lobby")
+    fun lobbyQueue(
+        @PathVariable roomId: String,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        val queue = roomService.lobbyQueue(record.roomId)
+        return ResponseEntity.ok(mapOf(
+            "roomId" to record.roomId,
+            "waitingRoomEnabled" to record.waitingRoomEnabled,
+            "pending" to queue.map {
+                mapOf(
+                    "accountId" to it.accountId,
+                    "redId" to it.redId,
+                    "displayName" to it.displayName,
+                    "requestedAt" to it.requestedAt.toString(),
+                    "viaLink" to it.viaLink
+                )
+            }
+        ))
+    }
+
+    @PostMapping("/{roomId}/lobby/admit")
+    fun admitLobby(
+        @PathVariable roomId: String,
+        @RequestBody request: LobbyActionRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        val targets = request.accountIds.ifEmpty { roomService.lobbyQueue(record.roomId).map { it.accountId } }
+        val admitted = roomService.admitFromLobby(record.roomId, targets)
+        if (admitted.isNotEmpty()) signaling.notifyLobbyAdmitted(record.roomId, admitted)
+        return ResponseEntity.ok(mapOf(
+            "roomId" to record.roomId,
+            "admitted" to admitted,
+            "stillWaiting" to roomService.lobbyCount(record.roomId)
+        ))
+    }
+
+    @PostMapping("/{roomId}/lobby/deny")
+    fun denyLobby(
+        @PathVariable roomId: String,
+        @RequestBody request: LobbyActionRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        val denied = roomService.denyFromLobby(record.roomId, request.accountIds, block = request.block)
+        if (denied.isNotEmpty()) signaling.notifyLobbyDenied(record.roomId, denied)
+        return ResponseEntity.ok(mapOf(
+            "roomId" to record.roomId,
+            "denied" to denied,
+            "blocked" to request.block,
+            "stillWaiting" to roomService.lobbyCount(record.roomId)
+        ))
+    }
+
+    /** سياسة الغرفة live: اللوبي، الكتم الافتراضي، مشاركة الشاشة. */
+    @PatchMapping("/{roomId}/settings")
+    fun updateRoomSettings(
+        @PathVariable roomId: String,
+        @RequestBody request: RoomPolicyRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any?>> {
+        val record = hostOnly(roomId, authentication.name)
+        val updated = roomService.updateRoomFlags(
+            roomId = record.roomId,
+            waitingRoom = request.waitingRoomEnabled,
+            mutedByDefault = request.mutedByDefault,
+            allowScreenShare = request.allowScreenShare
+        ) ?: return ResponseEntity.status(404).body(mapOf("error" to "ROOM_NOT_OPEN"))
+        return ResponseEntity.ok(mapOf(
+            "roomId" to updated.roomId,
+            "waitingRoomEnabled" to updated.waitingRoomEnabled,
+            "mutedByDefault" to updated.mutedByDefault,
+            "allowScreenShare" to updated.allowScreenShare,
+            "stillWaiting" to roomService.lobbyCount(updated.roomId)
+        ))
+    }
+
+    private fun hostOnly(roomId: String, accountId: String): ConferenceRoomRecord {
+        val record = roomService.getRoom(roomId) ?: throw NoSuchElementException("Conference room not found")
+        require(record.hostId == accountId) { "ONLY_HOST" }
+        return record
+    }
+
+    private fun linkPayload(link: ConferenceRoomService.CallLink): Map<String, Any?> = mapOf(
+        "token" to link.token,
+        "roomId" to link.roomId,
+        "url" to "younes://join/" + link.token,
+        "createdAt" to link.createdAt.toString(),
+        "expiresAt" to link.expiresAt?.toString(),
+        "maxUses" to link.maxUses,
+        "uses" to link.uses
+    )
 }
 
 data class CreateRoomRequest(
@@ -387,7 +817,32 @@ data class JoinRoomResponse(
     val description: String = "",
     val isSpace: Boolean = false,
     val hostName: String = "",
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** true = في غرفة الانتظار؛ أعِد المحاولة أو انتظر رسالة LOBBY على سوكت الإشارة. */
+    val waiting: Boolean = false,
+    val lobbyPosition: Int = 0,
+    /** سياسة الغرفة تُبلَّغ مع القبول حتى لا تسأل الواجهة مرتين. */
+    val mutedByDefault: Boolean = false,
+    val allowScreenShare: Boolean = true
+)
+
+/** `ttlMinutes = 0` بلا انتهاء، و`maxUses = 0` بلا حد استخدام. */
+data class CreateLinkRequest(
+    val ttlMinutes: Long = 0,
+    val maxUses: Int = 0
+)
+
+/** قائمة فارغة في `admit` = أدخل الطابور كله بالترتيب. */
+data class LobbyActionRequest(
+    val accountIds: List<String> = emptyList(),
+    /** مع `deny` فقط: امنع العودة بهذه الجلسة. */
+    val block: Boolean = false
+)
+
+data class RoomPolicyRequest(
+    val waitingRoomEnabled: Boolean? = null,
+    val mutedByDefault: Boolean? = null,
+    val allowScreenShare: Boolean? = null
 )
 
 data class InviteMembersRequest(
