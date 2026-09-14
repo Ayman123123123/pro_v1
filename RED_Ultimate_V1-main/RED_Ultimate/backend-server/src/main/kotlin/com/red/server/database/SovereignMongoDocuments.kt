@@ -298,6 +298,7 @@ data class GroupMessageDocument(
     @Indexed var status: String = "SENT",
     val attachments: List<MessageAttachment> = emptyList(),
     val replyToMessageUuid: String? = null,
+    val forwardedFromConversationId: String? = null,
     var forwardCount: Int = 0,
     val reactions: List<MessageReaction> = emptyList(),
     @Indexed var isPinned: Boolean = false,
