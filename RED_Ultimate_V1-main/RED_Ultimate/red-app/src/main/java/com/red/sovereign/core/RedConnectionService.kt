@@ -102,6 +102,26 @@ class RedConnectionService : Service() {
                     .onSuccess { if (it > 0) android.util.Log.i("RedConnectionService", "purged $it expired messages") }
             }
         }, 0, 1, TimeUnit.HOURS)
+        // Phase-2 reliability: re-drive 1:1 rows stuck in SENDING (process death /
+        // offline kill before drainSends). Same UUID is reused so the server
+        // dedups on its uuid unique index — at-least-once, never lost.
+        // Group rows are skipped (re-drive needs group JSON, not stored).
+        scope.launch {
+            val stuck = runCatching { repository.getUnsentOutgoing() }.getOrDefault(emptyList())
+            if (stuck.isEmpty()) return@launch
+            var redriven = 0
+            for (row in stuck) {
+                if (isGroupConversation(row.conversationId)) continue
+                val target = runCatching { repository.getConversation(row.conversationId)?.peerId }
+                    .getOrNull()?.takeUnless { it.isBlank() } ?: row.conversationId
+                pendingSends.add(PendingSend(target, row.conversationId, row.messageType, row.encryptedPlaintext, row.id))
+                redriven++
+            }
+            if (redriven > 0) {
+                android.util.Log.i("RedConnectionService", "re-driving $redriven unsent 1:1 message(s)")
+                if (connected) drainSends() else socket.connect()
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -211,7 +231,12 @@ class RedConnectionService : Service() {
      */
     private fun persistOptimistic(id: String, conversation: String, senderId: String, payload: ByteArray, type: String, peerId: String?) {
         scope.launch {
-            runCatching { repository.saveLocalHistory(LocalHistoryEntity(id, conversation, senderId, payload, type, System.currentTimeMillis(), true)) }
+            // Phase-2 reliability: 1:1 rows (peerId != null) start as SENDING so a
+            // process death before drain leaves a re-drivable marker; group rows
+            // keep SENT (group re-drive needs group JSON, not stored — future work).
+            // UI already renders SENDING ticks (LuxuryChatBubble).
+            val initialStatus = if (peerId != null) "SENDING" else "SENT"
+            runCatching { repository.saveLocalHistory(LocalHistoryEntity(id, conversation, senderId, payload, type, System.currentTimeMillis(), true, status = initialStatus)) }
                 .onFailure { e -> android.util.Log.w("RedConnectionService", "optimistic save failed for $id", e) }
             DecryptedMessageBus.publish(DecryptedMessage(id, conversation, senderId, payload, System.currentTimeMillis(), 0, type = type, outgoing = true))
             if (peerId != null) {
@@ -333,6 +358,9 @@ class RedConnectionService : Service() {
                         // عرض متفائل مسبق (clientId) → يُكتفى بتحديث صف المحادثة.
                         if (pending.clientId != null) {
                             val timestamp = System.currentTimeMillis()
+                            // Phase-2 reliability: optimistic row was SENDING — confirm SENT now
+                            // that bytes hit the socket (ACK/READ still advance it further).
+                            runCatching { repository.updateMessageStatus(pending.clientId, "SENT") }
                             runCatching { repository.onMessageStored(pending.conversation, pending.target, decodeMessagePreview(pending.payload).orEmpty(), timestamp, isIncoming = false) }
                             return@launch
                         }

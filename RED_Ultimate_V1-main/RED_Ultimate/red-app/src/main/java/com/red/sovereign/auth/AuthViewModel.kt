@@ -174,6 +174,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dialPstn(number: String) = viewModelScope.launch {
+        // Phase-2 safety: PSTN gateway stack is stubbed (no-op) since 060149a —
+        // PstnWebRtcManager.call() never invokes callbacks, so a real dial would
+        // stick the UI on Bridging forever. Fail loud with a clear message until
+        // the gateway returns (then delete this guard; rest of the flow is intact).
+        // Internet VoIP (YounesCallService) is unaffected — use the call button.
+        pstnState = PstnState.Error("بوابة الاتصالات الخارجية (PSTN) معطلة حالياً — استخدم الاتصال الصوتي عبر الإنترنت")
+        return@launch
         refreshPstnEntitlement()
         pstnState = PstnState.Bridging
         startPstnEventStream()

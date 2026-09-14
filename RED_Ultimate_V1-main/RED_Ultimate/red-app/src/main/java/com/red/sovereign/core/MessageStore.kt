@@ -332,19 +332,10 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         try { writableDatabase.execSQL("DELETE FROM messages_fts WHERE conversationId=?", arrayOf(conversationId)) } catch (e: Exception) { Log.w(TAG, "FTS delete failed for conversation $conversationId (best-effort)", e) }
     }
 
-    /** ✅ إضافة: إضافة رد على رسالة */
-    fun saveReply(messageId: String, replyToId: String, replyToText: String?, replyToSender: String?) {
-        writableDatabase.update("messages", ContentValues().apply {
-            put("reply_to_message_id", replyToId)
-            put("reply_to_message_text", replyToText)
-            put("reply_to_sender_id", replyToSender)
-        }, "id = ?", arrayOf(messageId))
-        writableDatabase.update("local_history", ContentValues().apply {
-            put("reply_to_message_id", replyToId)
-            put("reply_to_message_text", replyToText)
-            put("reply_to_sender_id", replyToSender)
-        }, "id = ?", arrayOf(messageId))
-    }
+    // NOTE (Phase-2): legacy saveReply removed — zero callers, and it wrote
+    // reply_to_* columns that exist in neither table (SQLiteException on call).
+    // Replies persist via Room LocalHistoryEntity.replyTo* (LocalRepository
+    // backfills preview at save). See RedDao.updateReplyPreview.
 
     fun messages(conversationId: String, limit: Int = 100): List<StoredMessage> {
         val result = mutableListOf<StoredMessage>()

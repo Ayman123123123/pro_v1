@@ -222,6 +222,14 @@ interface RedDao {
     @Query("SELECT * FROM local_history WHERE id = :id LIMIT 1")
     suspend fun getLocalHistoryEntry(id: String): LocalHistoryEntity?
 
+    /**
+     * Phase-2 reliability: outgoing 1:1 rows stuck in SENDING (process death /
+     * offline kill before drain). Re-driven at service start. Capped so a huge
+     * backlog can't stall startup; oldest first.
+     */
+    @Query("SELECT * FROM local_history WHERE outgoing = 1 AND status = 'SENDING' ORDER BY createdAt ASC LIMIT 100")
+    suspend fun getUnsentOutgoing(): List<LocalHistoryEntity>
+
     // --- Delete ---
     @Query("DELETE FROM local_history WHERE id = :messageId")
     suspend fun deleteLocalHistory(messageId: String)

@@ -51,6 +51,8 @@ class LocalRepository(context: Context) {
     fun chatHistoryPager(conversationId: String, pageSize: Int = 30): Flow<PagingData<LocalHistoryEntity>> =
         com.red.sovereign.core.database.chatHistoryPager(dao, conversationId, pageSize)
     suspend fun updateMessageStatus(id: String, status: String) = dao.updateMessageStatus(id, status)
+    /** Phase-2 reliability: rows awaiting (re-)send after process death. */
+    suspend fun getUnsentOutgoing() = dao.getUnsentOutgoing()
     suspend fun updateLocalHistoryText(id: String, plaintext: ByteArray) = dao.updateLocalHistoryText(id, plaintext)
 
     suspend fun saveIncomingMessage(message: com.red.sovereign.proto.RedProtos.ChatMessage, outgoing: Boolean = false) {
