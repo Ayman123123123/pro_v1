@@ -4,9 +4,7 @@ import com.red.server.auth.RedApprovalService
 import com.red.server.auth.UserAccountResponse
 import com.red.server.auth.model.AccountRole
 import com.red.server.auth.model.AccountStatus
-import com.red.server.infrastructure.dinstar.DinstarMasterClient
 import com.red.server.services.CoreService
-import com.red.server.services.DinstarHardwareService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -23,14 +21,12 @@ import java.util.UUID
 class AdminMasterControllerTest {
 
     private lateinit var controller: AdminMasterController
-    private val mockDinstar = mock(DinstarMasterClient::class.java)
     private val mockApproval = mock(RedApprovalService::class.java)
     private val mockCore = mock(CoreService::class.java)
-    private val mockHardware = mock(DinstarHardwareService::class.java)
 
     @BeforeEach
     fun setup() {
-        controller = AdminMasterController(mockDinstar, mockApproval, mockCore, mockHardware)
+        controller = AdminMasterController(mockApproval, mockCore)
     }
 
     private fun auth(redId: String): Authentication =
@@ -45,9 +41,7 @@ class AdminMasterControllerTest {
         role = AccountRole.USER,
         createdAt = Instant.now(),
         updatedAt = Instant.now(),
-        rejectionReason = null,
-        pstnEnabled = false,
-        pstnDailyLimit = 0
+        rejectionReason = null
     )
 
     @Test
@@ -59,30 +53,6 @@ class AdminMasterControllerTest {
         assertEquals(200, result.statusCode.value())
         assertEquals(stats, result.body)
         verify(mockCore).getAggregatedStats()
-    }
-
-    @Test
-    fun `getDinstarSlots delegates to dinstar getPortsRealtimeStatus`() {
-        val ports = listOf(mapOf<String, Any?>("index" to 0, "status" to "REGISTERED"))
-        `when`(mockDinstar.getPortsRealtimeStatus()).thenReturn(ports)
-
-        val result = controller.getDinstarSlots() as ResponseEntity<*>
-        assertEquals(200, result.statusCode.value())
-        assertEquals(ports, result.body)
-        verify(mockDinstar).getPortsRealtimeStatus()
-    }
-
-    @Test
-    fun `executeDinstarAction DISCOVER calls hardware discoverGateway`() {
-        val discoverResult = mapOf("model" to "UC2000-VE-8G", "gatewayIp" to "192.168.1.100")
-        `when`(mockHardware.discoverGateway()).thenReturn(discoverResult)
-
-        val req = DinstarActionRequest(action = "DISCOVER")
-        val result = controller.executeDinstarAction(req) as ResponseEntity<*>
-
-        assertEquals(200, result.statusCode.value())
-        assertEquals(discoverResult, result.body)
-        verify(mockHardware).discoverGateway()
     }
 
     @Test

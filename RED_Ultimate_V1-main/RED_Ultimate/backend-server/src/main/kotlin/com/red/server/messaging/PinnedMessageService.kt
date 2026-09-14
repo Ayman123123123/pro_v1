@@ -2,7 +2,6 @@ package com.red.server.messaging
 
 import com.red.server.database.MessageDocument
 import com.red.server.database.GroupMessageDocument
-import com.red.server.database.ChannelMemberDocument
 import com.red.server.database.ChannelMessageDocument
 import com.red.server.groups.GroupMember
 import org.springframework.data.mongodb.core.MongoTemplate
@@ -180,11 +179,13 @@ class PinnedMessageService(
                     Query(Criteria.where("uuid").`is`(messageUuid).and("channelId").`is`(channelId)),
                     ChannelMessageDocument::class.java
                 ) ?: throw NoSuchElementException("الرسالة غير موجودة في هذه القناة")
-                val membership = mongo.findOne(
-                    Query(Criteria.where("channelId").`is`(channelId).and("userId").`is`(actor)),
-                    ChannelMemberDocument::class.java
+                // P9: عضوية القنوات في PostgreSQL حصرًا (channel_members) — مستند Mongo
+                // ChannelMemberDocument بلا كاتب وكان يُفشل كل تثبيت في القنوات.
+                val role = jdbc.queryForObject(
+                    "SELECT role FROM channel_members WHERE channel_id=? AND user_id=?",
+                    String::class.java, UUID.fromString(channelId), actor
                 ) ?: throw IllegalArgumentException("أنت لست عضوًا في هذه القناة")
-                require(membership.role in setOf("OWNER", "ADMIN")) { "فقط مالك القناة أو مشرفها يستطيع تثبيت الرسائل" }
+                require(role in setOf("OWNER", "ADMIN")) { "فقط مالك القناة أو مشرفها يستطيع تثبيت الرسائل" }
             }
         }
     }

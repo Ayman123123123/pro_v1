@@ -61,6 +61,7 @@ fun resolveCallRingtoneUri(context: Context, stored: String): Uri {
 /** Returns human-readable title for the ringtone URI. */
 fun callRingtoneTitle(context: Context, uri: Uri?): String {
     if (uri == null) return "الافتراضية"
+    RedBundledTones.bundledTitle(uri.toString(), context)?.let { return it }
     return runCatching { RingtoneManager.getRingtone(context, uri)?.getTitle(context) }
         .getOrNull()?.takeIf { it.isNotBlank() } ?: "نغمة مخصصة"
 }
@@ -168,6 +169,73 @@ fun CallRingtoneSettingRow(settings: SettingsViewModel) {
 }
 
 /**
+ * Bundled RED ringtone option (no system files needed — works on bare ROMs).
+ * Stores an android.resource:// URI; startRingtoneResolved plays it looped.
+ */
+@Composable
+fun BundledRingtoneRow(settings: SettingsViewModel) {
+    val context = LocalContext.current
+    val bundledUri = remember { RedBundledTones.incomingClassicUri(context).toString() }
+    val selected = settings.state.callRingtoneUri == bundledUri
+    var preview: Ringtone? by remember { mutableStateOf(null) }
+    var playing by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose { runCatching { preview?.stop() }; preview = null }
+    }
+
+    fun togglePreview() {
+        if (playing) {
+            runCatching { preview?.stop() }
+            preview = null
+            playing = false
+        } else {
+            runCatching { preview?.stop() }
+            preview = RingtoneManager.getRingtone(context, Uri.parse(bundledUri))?.also { it.play() }
+            playing = preview != null
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = {
+                runCatching { preview?.stop() }
+                preview = null
+                playing = false
+                settings.setCallRingtoneUri(bundledUri)
+            }),
+        colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MusicNote, "نغمة مضمنة", tint = AqyalGold, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(RedBundledTones.TITLE_INCOMING_CLASSIC, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        if (selected) "محددة حالياً ✓" else "نغمة RED تعمل دون ملفات النظام",
+                        color = AqyalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            IconButton(onClick = ::togglePreview) {
+                Icon(
+                    if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    if (playing) "إيقاف المعاينة" else "معاينة النغمة",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
+/**
  * Ringtone Picker Dialog wrapper providing ringtone selection and vibration toggle.
  */
 @Composable
@@ -178,6 +246,8 @@ fun RingtonePickerDialog(settings: SettingsViewModel, onDismiss: () -> Unit) {
         text = {
             Column {
                 CallRingtoneSettingRow(settings)
+                Spacer(Modifier.height(8.dp))
+                BundledRingtoneRow(settings)
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),

@@ -858,6 +858,9 @@ export async function createPoll(data: {
   isAnonymous?: boolean;
   allowAddOptions?: boolean;
   endsAt?: string;
+  // صور الخيارات (نمط X) — عناصر نصية أو null موازيةً للخيارات؛ يدعمها
+  // ContentController.createPoll في الباك-إند (body["optionImages"]).
+  optionImages?: (string | null)[];
 }) {
   return writeJson(await apiFetch('/api/admin/content/polls', {
     method: 'POST',

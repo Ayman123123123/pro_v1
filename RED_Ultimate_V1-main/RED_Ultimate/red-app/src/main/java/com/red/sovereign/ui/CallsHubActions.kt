@@ -47,7 +47,6 @@ fun CallsHubLaunchers(
     onConference: () -> Unit,
     onSpace: () -> Unit,
     onLive: () -> Unit,
-    onPstn: () -> Unit,
     onExplore: () -> Unit,
     onScheduledCalls: () -> Unit
 ) {
@@ -100,7 +99,7 @@ fun CallsHubLaunchers(
             )
         }
 
-        // 3. المساحات الصوتية والهاتف اليمني (DINSTAR)
+        // 3. المساحات الصوتية
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // المساحات الصوتية (Twitter X Spaces)
             CallBentoCard(
@@ -113,19 +112,6 @@ fun CallsHubLaunchers(
                 gradientEnd = Color(0xFF00C98C).copy(alpha = 0.03f),
                 cornerRadius = 20.dp,
                 onClick = onSpace
-            )
-            
-            // الهاتف اليمني (DINSTAR GSM)
-            CallBentoCard(
-                modifier = Modifier.weight(1f).height(130.dp),
-                icon = Icons.Rounded.PhoneInTalk,
-                title = "الهاتف اليمني",
-                subtitle = "DINSTAR GSM\nاتصال بالشبكات المحلية",
-                accentColor = AqyalGold,
-                gradientStart = AqyalGold.copy(alpha = 0.20f),
-                gradientEnd = AqyalGold.copy(alpha = 0.04f),
-                cornerRadius = 20.dp,
-                onClick = onPstn
             )
         }
 
@@ -939,7 +925,6 @@ fun rememberCallPermissionLauncher(
 // ===============================================================
 
 fun callTypeGlyph(type: String, route: String): Pair<ImageVector, Color> = when {
-    route == "DINSTAR"      -> Icons.Rounded.PhoneInTalk  to AqyalGold
     type  == "LIVE"         -> Icons.Rounded.LiveTv        to Color(0xFFE53935)
     type  == "SPACE"        -> Icons.Rounded.Headset       to Color(0xFFA78BFA)
     type  == "GROUP"        -> Icons.Rounded.Groups        to AqyalCyanGlow

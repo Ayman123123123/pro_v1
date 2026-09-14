@@ -58,6 +58,8 @@ class ConferenceRoomService(
     private val activeRooms = ConcurrentHashMap<String, ConferenceRoomRecord>()
     /** قائمة دعوة الجلسات الخاصة؛ تبقى مستقلة عن الحضور الفعلي. */
     private val roomInvitees = ConcurrentHashMap<String, MutableSet<String>>()
+    /** الغرف المقفلة: لا انضمام جديد إلا للمضيف/المدعوين الموجودين أصلاً. */
+    private val lockedRooms = ConcurrentHashMap.newKeySet<String>()
 
     fun createRoom(
         roomId: String,
@@ -170,10 +172,22 @@ class ConferenceRoomService(
 
     fun getParticipantCount(roomId: String): Int = roomParticipants[roomId]?.size ?: 0
 
+    fun setLocked(roomId: String, locked: Boolean): Boolean {
+        if (!activeRooms.containsKey(roomId)) return false
+        if (locked) lockedRooms.add(roomId) else lockedRooms.remove(roomId)
+        return true
+    }
+
+    fun isLocked(roomId: String): Boolean = lockedRooms.contains(roomId)
+
+    fun isParticipant(roomId: String, userId: String): Boolean =
+        roomParticipants[roomId]?.contains(userId) == true
+
     fun closeRoom(roomId: String): Boolean {
         val removed = roomParticipants.remove(roomId) != null
         roomInvitees.remove(roomId)
         activeRooms.remove(roomId)
+        lockedRooms.remove(roomId)
         if (removed) log.info("Conference room {} closed", roomId)
         return removed
     }
@@ -283,6 +297,17 @@ class ConferenceController(
                 errorMessage = "لا تملك صلاحية الانضمام إلى هذه المكالمة"
             ))
         }
+        // الغرفة المقفلة: المضيف والمدعوون والحاضرون فقط — الغرباء يُرفضون برسالة واضحة.
+        val hostBypass = record.hostId == authentication.name
+        val alreadyIn = roomService.getParticipantCount(roomId) > 0 &&
+            roomService.isParticipant(roomId, authentication.name)
+        if (roomService.isLocked(roomId) && !hostBypass && !member && !alreadyIn) {
+            return ResponseEntity.status(423).body(JoinRoomResponse(
+                authorized = false,
+                roomId = roomId,
+                errorMessage = "الغرفة مقفلة من المضيف — اطلب منه فتحها أو دعوتك"
+            ))
+        }
         if (roomService.isRoomFull(roomId)) {
             return ResponseEntity.status(429).body(JoinRoomResponse(
                 authorized = false,
@@ -308,6 +333,18 @@ class ConferenceController(
     ): ResponseEntity<Map<String, Any>> {
         roomService.removeParticipant(roomId, authentication.name)
         return ResponseEntity.ok(mapOf("roomId" to roomId, "participantCount" to roomService.getParticipantCount(roomId)))
+    }
+
+    @PostMapping("/{roomId}/lock")
+    fun lockRoom(
+        @PathVariable roomId: String,
+        @RequestBody request: LockRoomRequest,
+        authentication: Authentication
+    ): ResponseEntity<Map<String, Any>> {
+        val record = roomService.getRoom(roomId) ?: throw NoSuchElementException("Room not found")
+        require(record.hostId == authentication.name) { "ONLY_HOST_CAN_LOCK" }
+        roomService.setLocked(roomId, request.locked)
+        return ResponseEntity.ok(mapOf("roomId" to roomId, "locked" to request.locked))
     }
 
     @PostMapping("/{roomId}/close")
@@ -378,6 +415,10 @@ data class ConferenceRoomResponse(
 
 data class JoinRoomRequest(
     val password: String? = null
+)
+
+data class LockRoomRequest(
+    val locked: Boolean = true
 )
 
 data class JoinRoomResponse(

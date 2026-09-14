@@ -1,34 +1,57 @@
 # RED Sovereign — Docker Compose Staging Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+#
+# Phase 10 (2026-09-15): the old prometheus/grafana stanzas were dangling
+# (command/env-only overrides of services that exist only in prod, so
+# base+staging failed to render) — staging now defines its own pair with
+# 7d retention. No published ports: staging sits behind nginx like prod.
 
 services:
-  voicebridge:
-    environment:
-      - SPRING_PROFILES_ACTIVE=staging
-      - VOICEBRIDGE_MAX_CALLS=50
-      - VOICEBRIDGE_RTP_POOL=25
-    mem_limit: 1g
-    cpus: '1.0'
-
-  kamailio:
-    mem_limit: 256m
-    cpus: '0.5'
-
-  janus:
-    mem_limit: 512m
-    cpus: '1.0'
-
   prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: red-prometheus-staging
+    restart: unless-stopped
+    mem_limit: 1g
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - red-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   grafana:
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    image: grafana/grafana:10.4.0
+    container_name: red-grafana-staging
+    restart: unless-stopped
     mem_limit: 256m
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - red-net
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   prometheus-data:
+    driver: local
+  grafana-data:
     driver: local

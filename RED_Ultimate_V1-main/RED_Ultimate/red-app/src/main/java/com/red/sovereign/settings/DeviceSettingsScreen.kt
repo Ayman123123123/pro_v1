@@ -133,7 +133,7 @@ import kotlinx.coroutines.launch
  * - ربط YounesSettingsSheet عبر callbacks (تُمرَّر من RedDashboard):
  *   Profile→ACCOUNT، Device/Sessions→DEVICES، Keys/Receipts/Link/Screen/AppLock→PRIVACY،
  *   Theme/Accent/Font/Animation→APPEARANCE، Notifications/CallNotif/Group/DND→NOTIFICATIONS،
- *   AutoDownload/Bubbles→CHATS، Storage/Export→DATA، Ringtone/Speaker/Recording/SOS→CALLS،
+ *   AutoDownload/Bubbles→CHATS، Storage/Export→DATA، Ringtone/Speaker/Recording→CALLS،
  *   NetworkDiag→NETWORK_DIAG، Debug/WebRTC/Flags→DEVELOPER، About→ABOUT،
  *   Backup→RecoveryHubScreen، Server→SmartServerSettings، OfflineQueue→OfflineQueueScreen.
  *   بلا callback يبقى البند شارة «قريباً» غير قابلة للضغط (لا إخفاء، لا Snackbar كاذب)
@@ -155,7 +155,7 @@ private object DeviceSettingsFlags {
 
 /** الحوارات العاملة — واحد لكل بند مفعّل (الثمانية الأصلية + الأربعة الجديدة للمكالمات). */
 private enum class DeviceDialog {
-    THEME, APP_LOCK, NOTIFICATIONS, AUTO_DOWNLOAD, STORAGE, MEDIA_QUALITY, CONNECTION, OFFLINE_QUEUE, PSTN_INFO,
+    THEME, APP_LOCK, NOTIFICATIONS, AUTO_DOWNLOAD, STORAGE, MEDIA_QUALITY, CONNECTION, OFFLINE_QUEUE,
     CALL_HISTORY, CALL_LIMITS, CALL_RECORDING, CALL_FORWARDING
 }
 
@@ -169,7 +169,6 @@ fun DeviceSettingsScreen(
     onBack: () -> Unit,
     tokenStore: TokenStore,
     snackbarHostState: SnackbarHostState,
-    onPstnConfigClick: (() -> Unit)? = null,
     // وجهات حقيقية «إن وُجدت» — التنفيذ الحيّ اليوم في YounesSettingsSheet
     // (APPEARANCE/NOTIFICATIONS/pages + AppLock). بلا callback يبقى البند
     // شارة «قريباً» غير قابلة للضغط بدل Snackbar كاذب.
@@ -192,7 +191,7 @@ fun DeviceSettingsScreen(
     onServerEditClick: (() -> Unit)? = null,
     onOfflineQueueClick: (() -> Unit)? = null,
     // ربط الستور الكامل (35 بند بلا Snackbar قريباً): كل بند ميت سابقاً يفتح صفحته
-    // الحية في YounesSettingsSheet — CALLS للنغمات/السماعة/SOS، NOTIFICATIONS لـ DND،
+    // الحية في YounesSettingsSheet — CALLS للنغمات/السماعة، NOTIFICATIONS لـ DND،
     // NETWORK_DIAG للتشخيص، DEVELOPER للسجلات/الأعلام، ABOUT لحول يونس.
     onCallsClick: (() -> Unit)? = null,
     onNetworkDiagClick: (() -> Unit)? = null,
@@ -219,7 +218,7 @@ fun DeviceSettingsScreen(
                 title = { Text(stringResource(R.string.device_settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.dial_back))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.admin_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -273,24 +272,9 @@ fun DeviceSettingsScreen(
                 onClick = { onDevicesClick?.invoke() }
             )
 
-            // PSTN / DINSTAR
-            SettingsSectionItem(
-                title = stringResource(R.string.pstn_dinstar_title),
-                icon = Icons.Filled.Call,
-                color = YounesEmerald
-            )
-            SettingsItem(
-                title = stringResource(R.string.pstn_configuration),
-                subtitle = stringResource(R.string.pstn_configuration_sub),
-                icon = Icons.Filled.NetworkCell,
-                onClick = {
-                    if (onPstnConfigClick != null) onPstnConfigClick.invoke()
-                    else activeDialog = DeviceDialog.PSTN_INFO
-                }
-            )
             SettingsItem(
                 title = stringResource(R.string.call_limits),
-                subtitle = "اليومي ${settingsVm.state.pstnDailyLimit} · المدة ${com.red.sovereign.settings.CallLimitsPolicy.maxDurationLabelAr()}",
+                subtitle = "المدة ${com.red.sovereign.settings.CallLimitsPolicy.maxDurationLabelAr()}",
                 icon = Icons.Filled.Call,
                 isComingSoon = false,
                 onClick = { activeDialog = DeviceDialog.CALL_LIMITS }
@@ -569,15 +553,6 @@ fun DeviceSettingsScreen(
                 isComingSoon = false,
                 onClick = { activeDialog = DeviceDialog.CALL_HISTORY }
             )
-            SettingsItem(
-                title = stringResource(R.string.sos_title),
-                subtitle = stringResource(R.string.sos_sub),
-                icon = Icons.Filled.Emergency,
-                isDestructive = true,
-                // الطوارئ SOS محررها الحي SosEditorScreen — الدخول عبر CALLS ثم المحرر.
-                isComingSoon = onCallsClick == null,
-                onClick = { onCallsClick?.invoke() }
-            )
 
             // Advanced / Developer
             SettingsSectionItem(
@@ -793,7 +768,7 @@ private fun themeLabelAr(mode: String, preset: String): String {
     }
 }
 
-// ─── موزّع الحوارات (الثمانية الأصلية + PSTN + الأربعة الجديدة للمكالمات) ────
+// ─── موزّع الحوارات (الثمانية الأصلية + الأربعة الجديدة للمكالمات) ────
 @Composable
 private fun DeviceSettingsDialogs(
     active: DeviceDialog?,
@@ -811,10 +786,9 @@ private fun DeviceSettingsDialogs(
         DeviceDialog.MEDIA_QUALITY -> MediaQualityDialog(settingsVm, onDismiss)
         DeviceDialog.CONNECTION -> ConnectionDialog(settingsVm, onDismiss, snackbarHostState)
         DeviceDialog.OFFLINE_QUEUE -> OfflineQueueDialog(onDismiss, snackbarHostState)
-        DeviceDialog.PSTN_INFO -> PstnInfoDialog(tokenStore, onDismiss)
         // ── البنود الأربعة الجديدة: سجل/حدود/تسجيل/تحويل — كلها عاملة وحافظة ──
         DeviceDialog.CALL_HISTORY -> com.red.sovereign.calls.CallHistorySettingsDialog(onDismiss, settingsVm)
-        DeviceDialog.CALL_LIMITS -> com.red.sovereign.calls.CallLimitsDialog(onDismiss, settingsVm)
+        DeviceDialog.CALL_LIMITS -> CallLimitsDialog(onDismiss, settingsVm)
         DeviceDialog.CALL_RECORDING -> CallRecordingEntryDialog(settingsVm, onDismiss)
         DeviceDialog.CALL_FORWARDING -> com.red.sovereign.calls.CallForwardingDialog(onDismiss)
         null -> Unit
@@ -1200,18 +1174,22 @@ private fun OfflineQueueDialog(onDismiss: () -> Unit, snackbar: SnackbarHostStat
     }
 }
 
-// PSTN fallback الحقيقي — يعرض صلاحية الحساب من TokenStore بدل Snackbar «قريباً».
+// Phase 8: حوار حد مدة المكالمة فقط (الحد اليومي PSTN وحصة الخادم محذوفة).
 @Composable
-private fun PstnInfoDialog(tokenStore: TokenStore, onDismiss: () -> Unit) {
-    DialogShell("الهاتف اليمني / دينستار", onDismiss) {
-        val enabled = remember { runCatching { tokenStore.pstnEnabled }.getOrElse { false } }
-        // try/catch مباشر: pstnNumber String? وResult لا يقبل محمولاً nullable (كان يكسر البناء).
-        val number = remember { try { tokenStore.pstnNumber } catch (_: Exception) { null } }
-        Text(if (enabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعّل لهذا الحساب", fontWeight = FontWeight.Bold, color = if (enabled) YounesEmerald else MaterialTheme.colorScheme.error)
-        if (!number.isNullOrBlank()) Text("الرقم المربوط: $number", style = MaterialTheme.typography.bodyMedium)
-        Text(
-            "الإعداد الكامل (البوابة والشرائح والمنافذ) في شاشة PstnConfig — مرّر onPstnConfigClick للانتقال إليها.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+private fun CallLimitsDialog(
+    onDismiss: () -> Unit,
+    settingsVm: SettingsViewModel
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("حد مدة المكالمة", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val maxDuration = settingsVm.state.maxCallDurationSeconds
+                Text("حد المدة: ${com.red.sovereign.settings.CallLimitsPolicy.maxDurationLabelAr()}", fontWeight = FontWeight.Medium)
+                Slider(value = maxDuration.toFloat(), onValueChange = { settingsVm.setMaxCallDuration(it.toInt()) }, valueRange = 60f..7200f)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("تم") } }
+    )
 }

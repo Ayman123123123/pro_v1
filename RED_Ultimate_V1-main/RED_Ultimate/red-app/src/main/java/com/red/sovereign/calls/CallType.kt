@@ -27,10 +27,7 @@ enum class CallType(
     AUDIO_SPACE("مساحة صوتية", "headset", 10_000, Architecture.SFU_SPEAKERS_MIXED_LISTENERS, false, true, true, true, false),
 
     LIVE_STREAM_VIDEO("بث مباشر فيديو", "live_tv", 100_000, Architecture.SFU_BROADCAST_HLS, true, true, true, true, false),
-    LIVE_STREAM_AUDIO("بث مباشر صوتي", "mic", 100_000, Architecture.SFU_BROADCAST_HLS, false, true, true, true, false),
-
-    PSTN_GSM("مكالمة هاتفية GSM", "phone", 1, Architecture.PSTN_LEGACY, false, false, true, false, false),
-    PSTN_WEBRTC("مكالمة هاتفية WebRTC", "phone", 1, Architecture.PSTN_WEBRTC_SIP, true, false, true, false, false);
+    LIVE_STREAM_AUDIO("بث مباشر صوتي", "mic", 100_000, Architecture.SFU_BROADCAST_HLS, false, true, true, true, false);
 
     enum class Architecture(
         val label: String,
@@ -41,9 +38,7 @@ enum class CallType(
         P2P_MESH_SFU_FALLBACK("Mesh + SFU Fallback", "Mesh للـ 2-4 ثم SFU", "مجموعات الدردشة"),
         SFU("SFU", "Selective Forwarding Unit", "جماعية 5+ ومؤتمرات"),
         SFU_SPEAKERS_MIXED_LISTENERS("SFU + Mixed Listeners", "متحدثون SFU ومستمعون بتدفق مختلط", "X Spaces"),
-        SFU_BROADCAST_HLS("SFU Broadcast + HLS", "1-to-many + HLS للأعداد الكبيرة", "YouTube/TikTok Live"),
-        PSTN_LEGACY("PSTN Legacy", "AMI → Asterisk → DINSTAR", "هاتف GSM"),
-        PSTN_WEBRTC_SIP("PSTN WebRTC-SIP", "WebRTC-SIP → Asterisk WSS → DINSTAR", "هاتف WebRTC")
+        SFU_BROADCAST_HLS("SFU Broadcast + HLS", "1-to-many + HLS للأعداد الكبيرة", "YouTube/TikTok Live")
     }
 
     companion object {
@@ -54,6 +49,5 @@ enum class CallType(
         fun groupCallHubTypes() = entries.filter { it.name.startsWith("GROUP_CALL_") }
         fun conferenceTypes() = entries.filter { it == CONFERENCE_VIDEO || it == AUDIO_SPACE }
         fun liveStreamTypes() = entries.filter { it.name.startsWith("LIVE_STREAM") }
-        fun pstnTypes() = entries.filter { it.name.startsWith("PSTN") }
     }
 }

@@ -46,6 +46,13 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     /** حدّ التفاعلات: آخر إرسال لكل مستخدم (منع الإغراق — مستمع كان يرسل بلا حد). */
     private val lastReactionAt = ConcurrentHashMap<String, Long>()
 
+    /** LEGENDARY Phase 7: دور مشارك (للتذاكر الواعية بالدور) — الأدوار مفتاحها redId. */
+    fun getRole(roomId: String, vararg ids: String): String {
+        val roles = roomRoles[roomId] ?: return "LISTENER"
+        for (id in ids) { val r = roles[id]; if (r != null) return r }
+        return "LISTENER"
+    }
+
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
@@ -88,7 +95,15 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
                 relayIncludingSender(signal, userId)
             }
             "APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST",
-            "KICK_USER", "MUTE_USER", "PIN_MESSAGE" -> handleStageManagement(session, userId, signal)
+            "KICK_USER", "MUTE_USER", "MUTE_ALL", "PIN_MESSAGE" -> handleStageManagement(session, userId, signal)
+            // مشاركة الشاشة إعلان عابر (تسمية البلاطة) — يقتصر على أصحاب المنصة كالنشر.
+            "SCREEN_SHARE_START", "SCREEN_SHARE_STOP" -> {
+                val role = roomRoles[signal.roomId]?.get(userId) ?: "LISTENER"
+                if (role in PUBLISHERS) relayIncludingSender(signal, userId) else sendError(
+                    session, signal.roomId, "NOT_ON_STAGE",
+                    "Only host, co-host or speaker may share screen"
+                )
+            }
             "LEAVE" -> handleLeave(session, signal)
             else -> throw IllegalArgumentException("Unsupported conference signal type: ${signal.type}")
         }
@@ -182,7 +197,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
         val type = signal.type.uppercase()
 
         // Only HOST/CO_HOST can do management actions except RAISE_HAND/REACTION already routed
-        if (type in setOf("APPROVE_SPEAKER","DEMOTE_LISTENER","GRANT_COHOST","REVOKE_COHOST","KICK_USER","MUTE_USER","PIN_MESSAGE")) {
+        if (type in setOf("APPROVE_SPEAKER","DEMOTE_LISTENER","GRANT_COHOST","REVOKE_COHOST","KICK_USER","MUTE_USER","MUTE_ALL","PIN_MESSAGE")) {
             if (!isPrivileged) {
                 // silently reject but inform sender
                 val err = objectMapper.writeValueAsString(mapOf(
@@ -215,6 +230,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
                     roomHands[roomId]?.remove(targetId)
                 }
                 "MUTE_USER" -> roomMuted.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }.add(targetId)
+                // MUTE_ALL بلا target — تُطبَّق بعد كتلة targetId (انظر أدناه).
                 "GRANT_COHOST" -> {
                     // حدّ X: مضيفان مشاركان فقط (كان بلا حد فيصعّد الامتياز بلا نهاية).
                     val cohosts = roles.count { it.value == "CO_HOST" }
@@ -233,6 +249,12 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
                     roomMuted[roomId]?.remove(targetId)
                 }
             }
+        }
+
+        // LEGENDARY Phase 7: كتم الكل — كل الأدوار ما عدا المرسل (المضيف يكتم نفسه زرّه الخاص).
+        if (type == "MUTE_ALL") {
+            val muted = roomMuted.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+            roles.keys.forEach { if (it != userId) muted.add(it) }
         }
 
         // Relay to whole room (including sender for UI sync), or exclude kicker for KICK

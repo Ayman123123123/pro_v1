@@ -143,7 +143,7 @@ object ScheduledCallScheduler {
  * مزامنة خادمية للمكالمات المجدولة (P1-F) — لا تغيّر المسار المحلي.
  *
  * - المحلي (AlarmManager) يبقى المصدر الفوري offline-first.
- * - الخادم (`POST /api/calls/scheduled`) للنسخ متعدد الأجهزة + تذكير FCM.
+ * - الخادم (`POST /api/calls/scheduled`) للنسخ متعدد الأجهزة + تذكير الدفع السيادي.
  * - كل الدوال آمنة offline: الفشل الشبكي يُرجع false/empty دون رمي.
  */
 object ScheduledCallServerSync {

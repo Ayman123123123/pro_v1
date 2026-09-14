@@ -483,6 +483,16 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         factory.createVideoTrack("screenshare-engine", src)
     } catch (_: Exception) { null }
 
+    /**
+     * Swaps the outbound video content on the live sender (camera <-> screen).
+     * Same sender/SSRC — no renegotiation, no re-produce: the far end just sees
+     * the content switch (standard mobile screen-share behavior).
+     */
+    fun replaceVideoTrack(track: VideoTrack?): Boolean = try {
+        val sender = videoSender ?: return false
+        sender.setTrack(track, true)
+    } catch (_: Exception) { false }
+
     fun stopScreenShare(): VideoTrack? = try {
         runCatching { screenCapturer?.stopCapture() }
         screenCapturer?.dispose(); screenCapturer = null

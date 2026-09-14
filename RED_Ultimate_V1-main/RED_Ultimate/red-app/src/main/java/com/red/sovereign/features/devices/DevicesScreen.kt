@@ -36,10 +36,7 @@ data class DeviceSession(
     val platform: String,
     val lastActiveAt: String,
     val ipAddress: String,
-    val isCurrentDevice: Boolean = false,
-    val isDinstar: Boolean = false,
-    val signalPercent: Int? = null,
-    val portCount: Int? = null
+    val isCurrentDevice: Boolean = false
 )
 
 enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val color: Color) {
@@ -47,7 +44,6 @@ enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.
     IOS("iOS", Icons.Rounded.PhoneIphone, Color(0xFF007AFF)),
     WEB("ويب", Icons.Rounded.Language, SovereignColors.Cyan),
     DESKTOP("سطح المكتب", Icons.Rounded.Computer, Color(0xFF7C4DFF)),
-    DINSTAR("DINSTAR", Icons.Rounded.Router, SovereignColors.DinstarGold),
     UNKNOWN("غير معروف", Icons.Rounded.Devices, Color.Gray)
 }
 
@@ -55,7 +51,6 @@ enum class DeviceType(val label: String, val icon: androidx.compose.ui.graphics.
 fun DevicesScreen(
     onBack: () -> Unit = {},
     onLogoutDevice: (String) -> Unit = {},
-    onNavigateToDinstar: (() -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -129,6 +124,17 @@ fun DevicesScreen(
             // 🔄 زر تحديث يدوي
             IconButton(onClick = { /* إعادة الجلب */ reloadTrigger++ }) {
                 Icon(Icons.Rounded.Refresh, "تحديث", tint = SovereignColors.Cyan)
+            }
+            // 🚪 P9: تسجيل الخروج من كل الأجهزة الأخرى (يبقي الجهاز الحالي)
+            IconButton(onClick = {
+                scope.launch {
+                    when (api.revokeOthers()) {
+                        is ApiResult.Success -> { loadError = null; reloadTrigger++ }
+                        is ApiResult.Error -> loadError = "تعذّر إبطال الجلسات الأخرى"
+                    }
+                }
+            }) {
+                Icon(Icons.Rounded.Logout, "خروج من الأجهزة الأخرى", tint = SovereignColors.Danger)
             }
         }
 
@@ -238,7 +244,6 @@ fun DevicesScreen(
                             }
                         }
                     },
-                    onNavigateToDinstar = onNavigateToDinstar
                 )
             }
 
@@ -264,7 +269,7 @@ fun DevicesScreen(
 }
 
 @Composable
-private fun DeviceCard(device: DeviceSession, onLogout: () -> Unit, onNavigateToDinstar: (() -> Unit)?) {
+private fun DeviceCard(device: DeviceSession, onLogout: () -> Unit) {
     val typeColor = device.deviceType.color
     Card(
         shape = RoundedCornerShape(14.dp),

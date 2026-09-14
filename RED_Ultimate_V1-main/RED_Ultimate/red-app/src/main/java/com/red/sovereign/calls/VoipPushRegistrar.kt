@@ -1,66 +1,127 @@
 package com.red.sovereign.calls
 
 import android.content.Context
-import com.google.firebase.FirebaseApp
-import com.google.firebase.messaging.FirebaseMessaging
+import android.util.Log
 import com.red.sovereign.auth.AuthorizedApiClient
 import com.red.sovereign.auth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
+import org.unifiedpush.android.connector.UnifiedPush
 
 /**
- * Registers an FCM / VoIP wake token with the sovereign backend.
- * Firebase is optional — if the app was built without google-services.json
- * (no FirebaseApp) we keep any token already stored and still POST it when present.
+ * Sovereign push registration — UnifiedPush with a self-hosted distributor (ntfy).
  *
- * The token enables HIGH-priority DATA messages (server: NotificationService
- * android.priority=HIGH + data type=VOIP) which wake the process via
- * [PstnFcmListenerService.onMessageReceived] even when the app is killed —
- * notification-payload messages would be throttled in Doze instead.
+ * No Google push SDK of any kind: the distributor app holds the single
+ * persistent connection and wakes this app via [com.red.sovereign.push.RedPushService]
+ * even when the process is dead. The server POSTs wake payloads straight to the
+ * endpoint URL the distributor issued (stored server-side per device).
+ *
+ * Callers ([com.red.sovereign.core.CallBootReceiver],
+ * [com.red.sovereign.core.CallSystemIntegration],
+ * [com.red.sovereign.core.AppStartupCoordinator]) just invoke [register]; distributor
+ * choice persists via [UnifiedPush.saveDistributor] and re-registration is idempotent.
  */
 object VoipPushRegistrar {
+    private const val TAG = "VoipPushRegistrar"
+
+    /** Shown by the distributor UI to identify this registration. */
+    const val DISTRIBUTOR_MESSAGE = "RED calls & messages"
+
+    /** Preferred distributors when several are installed (self-hosted ntfy first). */
+    private val PREFERRED_DISTRIBUTORS = setOf("io.heckel.ntfy", "io.heckel.ntfy.debug")
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun rememberToken(context: Context, token: String) {
-        if (token.isBlank()) return
-        TokenStore(context).saveFcmToken(token)
-        register(context)
-    }
-
+    /**
+     * Ensures a distributor is saved, (re-)registers, and re-uploads the last
+     * known endpoint. Safe to call on every app start and on BOOT_COMPLETED.
+     */
     fun register(context: Context) {
         scope.launch {
-            val tokens = TokenStore(context)
-            val stored = tokens.fcmToken?.takeIf { it.isNotBlank() }
-            val cached = readCachedListenerToken(context)
-            val token = stored ?: cached ?: discoverFirebaseToken(context) ?: return@launch
-            tokens.saveFcmToken(token)
-            if (tokens.accessToken.isNullOrBlank()) return@launch
-            val body = JSONObject()
-                .put("token", token)
-                .put("platform", "ANDROID")
-                .toString()
-            runCatching { AuthorizedApiClient(tokens).request("POST", "/api/devices/push-token", body) }
+            val app = context.applicationContext
+            try {
+                if (UnifiedPush.getAckDistributor(app).isNullOrBlank()) {
+                    val all = runCatching { UnifiedPush.getDistributors(app) }.getOrDefault(emptyList())
+                    if (all.isEmpty()) {
+                        Log.i(TAG, "no UnifiedPush distributor installed — push wake unavailable until one is")
+                        return@launch
+                    }
+                    val pick = all.firstOrNull { it in PREFERRED_DISTRIBUTORS } ?: all.first()
+                    UnifiedPush.saveDistributor(app, pick)
+                    Log.i(TAG, "UnifiedPush distributor saved: $pick")
+                }
+                UnifiedPush.register(app, messageForDistributor = DISTRIBUTOR_MESSAGE)
+                // Re-upload the last endpoint: the server may have restarted or pruned tokens.
+                val tokens = TokenStore(app)
+                val endpoint = tokens.pushEndpoint
+                if (!endpoint.isNullOrBlank() && !tokens.accessToken.isNullOrBlank()) {
+                    uploadEndpoint(tokens, endpoint)
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "UnifiedPush register failed", t)
+            }
         }
     }
 
-    /** توكن خزّنه PstnFcmListenerService.onNewToken أثناء موت التطبيق (prefs) قبل أي إطلاق لاحق. */
-    private fun readCachedListenerToken(context: Context): String? = runCatching {
-        context.getSharedPreferences("pstn_fcm", Context.MODE_PRIVATE)
-            .getString("last_token", null)
-    }.getOrNull()?.takeIf { !it.isNullOrBlank() }
+    /** Uploads a fresh endpoint URL from [com.red.sovereign.push.RedPushService.onNewEndpoint]. */
+    fun uploadEndpointNow(context: Context, endpoint: String) {
+        if (endpoint.isBlank()) return
+        scope.launch {
+            val tokens = TokenStore(context.applicationContext)
+            tokens.savePushEndpoint(endpoint)
+            if (tokens.accessToken.isNullOrBlank()) return@launch
+            uploadEndpoint(tokens, endpoint)
+        }
+    }
+
+    /** Distributor packages installed on the device (for the settings picker). */
+    fun availableDistributors(context: Context): List<String> =
+        runCatching { UnifiedPush.getDistributors(context.applicationContext) }.getOrDefault(emptyList())
+
+    /** Currently saved distributor package, or null when none. */
+    fun currentDistributor(context: Context): String? =
+        runCatching { UnifiedPush.getAckDistributor(context.applicationContext) }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    /** Last endpoint URL issued by the distributor, or null. */
+    fun currentEndpoint(context: Context): String? =
+        TokenStore(context.applicationContext).pushEndpoint?.takeIf { it.isNotBlank() }
 
     /**
-     * جلب توكن FCM دون حجب: FirebaseMessaging.getInstance().token.await()
-     * (kotlinx-coroutines-play-services) بدل getResult() التزامني الذي كان
-     * يرمي IllegalStateException قبل اكتمال الـ Task فيعيد null دائماً —
-     * فلا يُسجَّل أي توكن ولا تصل رسائل DATA عالية الأولوية أبداً.
+     * Switches to [pkg] (must be installed) and re-registers.
+     * @return false when [pkg] is not an installed distributor.
      */
-    private suspend fun discoverFirebaseToken(context: Context): String? = runCatching {
-        if (FirebaseApp.getApps(context).isEmpty()) return null
-        FirebaseMessaging.getInstance().token.await()
-    }.getOrNull()?.takeIf { !it.isNullOrBlank() }
+    fun useDistributor(context: Context, pkg: String): Boolean {
+        val app = context.applicationContext
+        if (pkg.isBlank() || pkg !in availableDistributors(app)) return false
+        try {
+            UnifiedPush.saveDistributor(app, pkg)
+        } catch (t: Throwable) {
+            Log.w(TAG, "saveDistributor($pkg) failed", t)
+            return false
+        }
+        register(app)
+        return true
+    }
+
+    /** Unregisters from the distributor and drops the local endpoint (logout path). */
+    fun unregister(context: Context) {
+        scope.launch {
+            val app = context.applicationContext
+            runCatching { UnifiedPush.unregister(app) }
+                .onFailure { Log.w(TAG, "UnifiedPush unregister failed", it) }
+            TokenStore(app).clearPushEndpoint()
+        }
+    }
+
+    internal suspend fun uploadEndpoint(tokens: TokenStore, endpoint: String) {
+        val body = JSONObject()
+            .put("token", endpoint)
+            .put("platform", "ANDROID")
+            .toString()
+        runCatching { AuthorizedApiClient(tokens).request("POST", "/api/devices/push-token", body) }
+            .onFailure { Log.w(TAG, "push-token upload failed", it) }
+    }
 }

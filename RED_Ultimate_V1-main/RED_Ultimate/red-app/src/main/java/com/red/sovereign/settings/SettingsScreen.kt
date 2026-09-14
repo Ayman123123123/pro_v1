@@ -156,7 +156,7 @@ private fun SettingsRoot(account: AuthState.Authenticated, cacheBytes: Long, onP
         SettingDestination(SettingsPage.CHATS, Icons.AutoMirrored.Filled.Chat, "الدردشات والوسائط", "التنزيل وسرعة الصوت وسلوك المحادثة", Color(0xFF5CC8FF)),
         SettingDestination(SettingsPage.NOTIFICATIONS, Icons.Default.Notifications, "الإشعارات", "الرسائل والمكالمات ومعاينة المحتوى", Color(0xFFFFB65C)),
         SettingDestination(SettingsPage.DATA, Icons.Default.Storage, "البيانات والتخزين", "${formatBytes(cacheBytes)} مستخدمة في ذاكرة مؤقتة", Color(0xFF8BC34A)),
-        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت وDINSTAR المنفصل", AqyalGold),
+        SettingDestination(SettingsPage.CALLS, Icons.Default.Call, "المكالمات", "توفير البيانات والصوت", AqyalGold),
         SettingDestination(SettingsPage.DEVICES, Icons.Default.Devices, "الأجهزة والشهادات", "الأجهزة المعتمدة وتنبيهات المفاتيح", Color(0xFFEC7FA9)),
         SettingDestination(SettingsPage.SERVER, Icons.Default.Wifi, "الخادم والشبكة", "منصة سيادية وWireGuard وحالة نقطة الاتصال", Color(0xFF4DD0E1)),
         SettingDestination(SettingsPage.FOLDERS, Icons.Default.Folder, "مجلدات الدردشة", "تنظيم محلي مثل تلجرام — على الجهاز فقط", Color(0xFF81C784)),
@@ -207,7 +207,6 @@ private fun DestinationRow(row: SettingDestination, click: () -> Unit) = Card(
                 }
             }
         }
-        item { InfoCard("حالة PSTN", if (account.pstnEnabled) "مصرح بالاتصال اليمني عبر DINSTAR" else "غير مفعل لهذا الحساب", Icons.Default.Call) }
         item {
             Text("اسم المستخدم", fontWeight = FontWeight.SemiBold)
             OutlinedTextField(username, { username = it.take(20) }, Modifier.fillMaxWidth(), singleLine = true)
@@ -483,7 +482,7 @@ private fun WallpaperSettings() {
     item { ToggleSetting("إشعارات المكالمات", "رنين وارد عبر خدمة المكالمات الأمامية", vm.state.callNotifications, vm::setCallNotifications) }
     item { ToggleSetting("إظهار محتوى الرسالة", "غير موصى به على شاشة القفل", vm.state.notificationPreview, vm::setNotificationPreview) }
     item { DndEntry(onOpen = { showDnd = true }) }
-    item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس، مكالمات يونس، DINSTAR.", Icons.Default.Notifications) }
+    item { InfoCard("قنوات Android", "الصوت والاهتزاز من إعدادات النظام: رسائل يونس، مكالمات يونس.", Icons.Default.Notifications) }
     }
     if (showDnd) DndScheduleDialog(viewModel = vm, onDismiss = { showDnd = false })
 }
@@ -498,7 +497,6 @@ private fun WallpaperSettings() {
 @Composable private fun CallSettings(vm: SettingsViewModel) = SettingsList {
     item { ToggleSetting("توفير بيانات المكالمات", "يخفض bitrate ويُفضّل الطبقات الأخف على الشبكات الضعيفة", vm.state.dataSaverCalls, vm::setDataSaverCalls) }
     item { InfoCard("مكالمات يونس", "WebRTC / TURN / mediasoup — لا تستخدم SIM", Icons.Default.Call) }
-    item { InfoCard("الهاتف اليمني", "DINSTAR منفصل ويستهلك رصيد الشريحة", Icons.Default.Call) }
 }
 
 @Composable private fun DevicesSettings(vm: DeviceSettingsViewModel) = SettingsList {

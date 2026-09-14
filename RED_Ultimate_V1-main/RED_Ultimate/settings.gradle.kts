@@ -33,10 +33,9 @@ rootProject.name = "RED-Ultimate"
 // operator prefix table that contradicted both red-app/ and the backend.
 // Everything of value from them now lives here; see docs/UNIFICATION_2026-08-19.md.
 //
-// The legacy Signal fork remains in app/ as an extraction source only; it is
-// deliberately outside the build graph. Note that app/ is overwhelmingly
-// upstream Signal (org.thoughtcrime.securesms); the RED-authored files under
-// com.red.sovereign there are superseded by their red-app/ counterparts.
+// Phase 11 (2026-09-14): the legacy Signal fork app/ was triaged and deleted
+// (~7000 files, all stubs/superseded/cancelled-scope; 5 call-progress sounds
+// extracted to red-app/src/main/res/raw/). red-app/ is the single Android app.
 include(":app")
 project(":app").projectDir = file("red-app")
 

@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -324,13 +326,15 @@ private fun WhatsAppVoiceGrid(state: GroupCallUiState.Active) {
             )
         }
         items(joined, key = { it.userId }) { member ->
-            WhatsAppAvatarTile(
-                label = member.displayName,
-                initial = member.displayName.take(2).uppercase(),
-                isMuted = member.isMuted,
-                isSpeaking = member.userId == speakerId,
-                isSelf = false
-            )
+            HostMemberMenu(member.userId, member.displayName) {
+                WhatsAppAvatarTile(
+                    label = member.displayName,
+                    initial = member.displayName.take(2).uppercase(),
+                    isMuted = member.isMuted,
+                    isSpeaking = member.userId == speakerId,
+                    isSelf = false
+                )
+            }
         }
     }
 }
@@ -413,7 +417,9 @@ private fun WhatsAppVideoGrid(
                     }
                     joined.filter { it.userId != speaker.userId }.take(3).forEach { m ->
                         Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(12.dp))) {
-                            GroupCallVideoTile(m.displayName, remoteVideos[m.userId], m.isMuted, false, GroupCallRuntime.eglContext, true)
+                            HostMemberMenu(m.userId, m.displayName) {
+                                GroupCallVideoTile(m.displayName, remoteVideos[m.userId], m.isMuted, false, GroupCallRuntime.eglContext, true)
+                            }
                         }
                     }
                 }
@@ -436,7 +442,9 @@ private fun WhatsAppVideoGrid(
                     GroupCallVideoTile("أنت", localVideo, GroupCallRuntime.isMuted, true, GroupCallRuntime.eglContext, false)
                 }
                 items(joined, key = { it.userId }) { m ->
-                    GroupCallVideoTile(m.displayName, remoteVideos[m.userId], m.isMuted, false, GroupCallRuntime.eglContext, false)
+                    HostMemberMenu(m.userId, m.displayName) {
+                        GroupCallVideoTile(m.displayName, remoteVideos[m.userId], m.isMuted, false, GroupCallRuntime.eglContext, false)
+                    }
                 }
             }
         }
@@ -713,6 +721,40 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
             Icon(Icons.Default.CallEnd, null, tint = Color.White, modifier = Modifier.size(28.dp))
         }
         Text("إلغاء", color = Color.White.copy(0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+/**
+ * Host-only long-press menu on a remote tile: mute / kick (WhatsApp parity).
+ * Non-hosts get the tile unwrapped (no-op long-press).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HostMemberMenu(memberId: String, displayName: String, tile: @Composable () -> Unit) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    if (!GroupCallRuntime.isHost) {
+        tile()
+        return
+    }
+    Box {
+        Box(Modifier.combinedClickable(onClick = {}, onLongClick = { expanded = true })) { tile() }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("🔇 كتم $displayName") },
+                onClick = {
+                    expanded = false
+                    runCatching { GroupCallService.muteMember(context, memberId) }
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("⛔ طرد $displayName") },
+                onClick = {
+                    expanded = false
+                    runCatching { GroupCallService.kickMember(context, memberId) }
+                }
+            )
+        }
     }
 }
 

@@ -92,8 +92,7 @@ private object Keys {
     // سجل المكالمات: مدة الاحتفاظ بالأيام + المزامنة التلقائية مع الخادم.
     const val CALL_HISTORY_RETENTION = "call_history_retention"
     const val CALL_HISTORY_SYNC = "call_history_sync"
-    // حدود المكالمات: الحد اليومي لـ PSTN + الحد الأقصى لمدة المكالمة بالثواني.
-    const val PSTN_DAILY_LIMIT = "pstn_daily_limit"
+    // حد المدة الأقصى للمكالمة بالثواني (حد PSTN اليومي حُذف في المرحلة 8).
     const val MAX_CALL_DURATION = "max_call_duration"
     // التسجيل التلقائي للمكالمات — دائم (يُقرأ عند بدء التسجيل مع موافقة الطرفين).
     const val CALL_AUTO_RECORD = "call_auto_record"
@@ -183,7 +182,6 @@ internal fun SharedPreferences.readSettings(): YounesSettings {
         devVerboseSignaling = getBoolean(Keys.DEV_VERBOSE_SIGNALING, defaults.devVerboseSignaling),
         callHistoryRetentionDays = getInt(Keys.CALL_HISTORY_RETENTION, defaults.callHistoryRetentionDays),
         callHistorySync = getBoolean(Keys.CALL_HISTORY_SYNC, defaults.callHistorySync),
-        pstnDailyLimit = getInt(Keys.PSTN_DAILY_LIMIT, defaults.pstnDailyLimit),
         maxCallDurationSeconds = getInt(Keys.MAX_CALL_DURATION, defaults.maxCallDurationSeconds),
         callAutoRecord = getBoolean(Keys.CALL_AUTO_RECORD, defaults.callAutoRecord)
     )
@@ -247,7 +245,6 @@ internal fun SharedPreferences.writeSettings(value: YounesSettings) {
         .putBoolean(Keys.DEV_VERBOSE_SIGNALING, value.devVerboseSignaling)
         .putInt(Keys.CALL_HISTORY_RETENTION, value.callHistoryRetentionDays)
         .putBoolean(Keys.CALL_HISTORY_SYNC, value.callHistorySync)
-        .putInt(Keys.PSTN_DAILY_LIMIT, value.pstnDailyLimit)
         .putInt(Keys.MAX_CALL_DURATION, value.maxCallDurationSeconds)
         .putBoolean(Keys.CALL_AUTO_RECORD, value.callAutoRecord)
         .apply()
@@ -318,9 +315,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setCallHistoryRetention(value: Int) =
         update(state.copy(callHistoryRetentionDays = value.coerceIn(1, 365)))
     fun setCallHistorySync(value: Boolean) = update(state.copy(callHistorySync = value))
-    // ─── حدود المكالمات: حد يومي PSTN (0 = بلا حد) + حد مدة بالثواني — تُحفظ فوراً ───
-    fun setPstnDailyLimit(value: Int) =
-        update(state.copy(pstnDailyLimit = value.coerceIn(0, 100)))
+    // ─── حد مدة المكالمة بالثواني — يُحفظ فوراً ───
     fun setMaxCallDuration(value: Int) =
         update(state.copy(maxCallDurationSeconds = value.coerceIn(60, 7200)))
     // ─── التسجيل التلقائي — دائم عبر CALL_AUTO_RECORD ويُقرأ قبل CallRecordingManager.start ───
@@ -461,9 +456,7 @@ data class YounesSettings(
     // + مزامنة تلقائية مع GET /api/calls/history عند فتح السجل.
     val callHistoryRetentionDays: Int = 30,
     val callHistorySync: Boolean = true,
-    // حدود المكالمات: حد يومي PSTN (0 = بلا حد، يُعرض في DialPadScreen عبر dial_used)
-    // + حد مدة المكالمة بالثواني (يُقرأ عبر CallLimitsPolicy قبل بدء/أثناء المكالمة).
-    val pstnDailyLimit: Int = 20,
+    // حد مدة المكالمة بالثواني (يُقرأ عبر CallLimitsPolicy أثناء المكالمة).
     val maxCallDurationSeconds: Int = 1800,
     // التسجيل التلقائي الدائم — يُقرأ في RecordingConsentDialog وقبل CallRecordingManager.start.
     val callAutoRecord: Boolean = false

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.HdrStrong
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MusicNote
@@ -80,8 +79,6 @@ private const val QUALITY_AUTO = "تلقائي"
  * - نغمة المكالمة + الاهتزاز (دائمان عبر call_ringtone_uri/call_vibration
  *   ويقرأهما startRingtone في الخدمتين — اختيار عبر RingtonePickerDialog
  *   بنظام RingtoneManager.ACTION_RINGTONE_PICKER مع معاينة)
- * - طوارئ SOS (محرر SosEditorScreen عبر EmergencyCallManager + زر تجربة
- *   triggerEmergencySos مع إذن CALL_PHONE)
  * - إعدادات الخصوصية (إشعارات المكالمات الدائمة)
  * - إعدادات التطوير (debug, telemetry — جلسة فقط)
  *
@@ -121,13 +118,6 @@ fun CallSettingsScreen(
     // (الحوار الفعلي RecordingConsentDialog يُفتح من شاشة المكالمة النشطة حيث callId حي).
     var confirmClearHistory by remember { mutableStateOf(false) }
     var showRingtoneDialog by remember { mutableStateOf(false) }
-    var showSosEditor by remember { mutableStateOf(false) }
-
-    if (showSosEditor) {
-        SosEditorScreen(onBack = { showSosEditor = false })
-        return
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -248,37 +238,6 @@ fun CallSettingsScreen(
                             Text("حوار النغمة والمعاينة", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(
                                 "فتح RingtonePickerDialog مع المعاينة ومفتاح الاهتزاز",
-                                color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp
-                            )
-                        }
-                    }
-                    Text("فتح", color = AqyalGold, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── قسم الطوارئ SOS ─────────────────────────────────────────
-            SettingsSectionTitle("طوارئ SOS")
-            Spacer(Modifier.height(8.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { showSosEditor = true },
-                colors = CardDefaults.cardColors(containerColor = SovereignColors.SurfaceDarkVariant),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Emergency, "طوارئ SOS", tint = Color.Red, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text("جهات طوارئ SOS", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(
-                                "عرض/إضافة/حذف عبر EmergencyCallManager + زر تجربة",
                                 color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp
                             )
                         }

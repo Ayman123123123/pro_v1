@@ -4,10 +4,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- P2-LAN: مكالمات نفس الواي فاي — NSD/mDNS يتطلب MulticastLock (تثبيت فقط، بلا runtime) -->
+    <!-- P2-LAN: مكالمات نفس الواي فاي — NSD/mDNS يتطلب MulticastLock (على API 37+ يلزم أيضًا ACCESS_LOCAL_NETWORK وقت التشغيل — انظر أدناه) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <!-- LAN discovery uses INTERNET only, no runtime permission needed -->
+    <!-- Android 17 (API 37): الوصول إلى الشبكة المحلية لم يعد ضمنيًا مع INTERNET
+         لمن يستهدف SDK 37+. بدونه يُحجب اكتشاف الخادم المحلي والاتصال به بصمت تام.
+         (إنقاذ من PR #55 — arena/01a0a0cf — 2026-09-15) -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- يُطلب وقت التشغيل في MainActivity.onStart (SDK 37+ فقط) عبر localNetworkPermission. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -36,11 +40,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <application
         android:name=".YounesApplication"
@@ -74,10 +73,6 @@
             android:name=".calls.ZoomGroupCallService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|mediaProjection" />
-        <service
-            android:name=".calls.PstnCallForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="microphone|phoneCall" />
         <!-- LEGENDARY FIX (مكتشف على الجهاز): خدمة WorkManager الأمامية بنوع dataSync —
              بدونه ينهار أي Worker مُستعجل بـ IllegalArgumentException على Android 14+.
              (الرفع/المزامنة عبر Workers تُجدول من YounesApplication — لا خدمات مخصصة.) -->
@@ -112,14 +107,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver
-            android:name=".calls.PhoneStateReceiver"
-            android:enabled="true"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.PHONE_STATE" />
-            </intent-filter>
-        </receiver>
         <service
             android:name=".core.network.SovereignNotificationRouter"
             android:exported="false"
@@ -158,28 +145,19 @@
             android:turnScreenOn="true"
             android:showWhenLocked="true" />
 
-        <receiver
-            android:name=".calls.SmsReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter android:priority="999">
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".calls.ScheduledCallReceiver"
             android:enabled="true"
             android:exported="false" />
-        <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
         <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
         <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
+        <!-- Sovereign push: UnifiedPush receiver (self-hosted distributor, no Google push). -->
         <service
-            android:name=".calls.PstnFcmListenerService"
+            android:name=".push.RedPushService"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
 </application>

@@ -53,6 +53,8 @@ data class SpaceReaction(
 )
 
 object ConferenceRuntime {
+    /** DoD (المرحلة 7): سقف بلاطات الفيديو — 12 بدل 25 (تبذير نطاق/ذاكرة على الجوال). */
+    const val MAX_VIDEO_TILES = 12
     var state: ConferenceUiState by mutableStateOf(ConferenceUiState.Idle)
     var participants by mutableStateOf(emptyList<ConferenceParticipant>())
     var localVideo: VideoTrack? by mutableStateOf(null)
@@ -64,6 +66,8 @@ object ConferenceRuntime {
     var selfRole by mutableStateOf("LISTENER")
     var mediaPath by mutableStateOf("MESH")
     var isRecording by mutableStateOf(false)
+    /** قفل الغرفة (المضيف): لا انضمام جديد — يُزامَن مع الخادم عبر ACTION_TOGGLE_LOCK. */
+    var isRoomLocked by mutableStateOf(false)
     var pinnedMessage by mutableStateOf("")
     var networkStats: NetworkStats by mutableStateOf(NetworkStats())
     var reactions: List<SpaceReaction> by mutableStateOf(emptyList())
@@ -222,18 +226,29 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             ACTION_START_SCREEN_SHARE -> {
                 val projectionData = intent.getParcelableExtra<Intent>(EXTRA_MEDIA_PROJECTION_DATA)
-                if (projectionData != null) {
-                    ConferenceRuntime.isScreenSharing = true
-                    // AUTO-FIX (build): SfuMediaClient/MeshRtcSession screen-share entry points are
-                    // not implemented in this build - state flag only, no compile break.
-                    // sfu?.startScreenShare(projectionData)
-                    // mesh?.startScreenShare(projectionData)
+                if (projectionData != null && !ConferenceRuntime.isScreenSharing) {
+                    scope.launch {
+                        val ok = runCatching {
+                            sfu?.startScreenShare(projectionData)
+                                ?: mesh?.startScreenShare(projectionData)?.let { true }
+                                ?: false
+                        }.getOrDefault(false)
+                        if (ok) {
+                            ConferenceRuntime.isScreenSharing = true
+                            runCatching { signaling.sendScreenShare(roomId, userId, true) }
+                        }
+                    }
                 }
             }
             ACTION_STOP_SCREEN_SHARE -> {
-                ConferenceRuntime.isScreenSharing = false
-                // sfu?.stopScreenShare()
-                // mesh?.stopScreenShare()
+                if (ConferenceRuntime.isScreenSharing) {
+                    ConferenceRuntime.isScreenSharing = false
+                    scope.launch {
+                        runCatching { sfu?.stopScreenShare() }
+                        runCatching { mesh?.stopScreenShare() }
+                        runCatching { signaling.sendScreenShare(roomId, userId, false) }
+                    }
+                }
             }
             ACTION_PIN_PARTICIPANT -> {
                 val targetId = intent.getStringExtra(EXTRA_PINNED_PARTICIPANT)
@@ -275,6 +290,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
                 if (target.isNotBlank()) signaling.muteUser(roomId, userId, target)
             }
+            ACTION_MUTE_ALL -> signaling.muteAll(roomId, userId)
             ACTION_SET_QUALITY -> {
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
                 if (quality == "AUDIO") {
@@ -295,6 +311,19 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             ACTION_STOP_RECORDING -> {
                 scope.launch { recordingManager?.stop(); recordingManager = null }
                 ConferenceRuntime.isRecording = false
+            }
+            ACTION_TOGGLE_LOCK -> {
+                if (roomId.isBlank()) return START_STICKY
+                scope.launch {
+                    val target = !ConferenceRuntime.isRoomLocked
+                    val ok = runCatching {
+                        val api = AuthorizedApiClient(TokenStore(this@ConferenceService))
+                        val res = api.request("POST", "/api/conference/$roomId/lock",
+                            org.json.JSONObject().put("locked", target).toString())
+                        res is com.red.sovereign.auth.ApiResult.Success
+                    }.getOrDefault(false)
+                    if (ok) ConferenceRuntime.isRoomLocked = target
+                }
             }
         }
         return START_STICKY
@@ -410,6 +439,21 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     ConferenceRuntime.selfRole = "SPEAKER"
                     ConferenceRuntime.isMuted = false
                     mesh?.setMicrophoneEnabled(true)
+                    if (sfu != null) {
+                        // LEGENDARY Phase 7: ترقية على SFU — عميل جديد بتذكرة SPEAKER (حق نشر)
+                        // ثم نشر صوتي (SPACE بلا كاميرا — المستمع انضم بلا فيديو أصلاً).
+                        scope.launch {
+                            val fresh = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
+                            runCatching { sfu?.release() }
+                            sfu = fresh
+                            ConferenceRuntime.eglContext = fresh.eglContext
+                            val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
+                            if (attachSfuWithRetry(fresh, roomId) && fresh.publish(kind)) {
+                                ConferenceRuntime.localVideo = fresh.localVideo
+                                fresh.setMicrophoneEnabled(true)
+                            }
+                        }
+                    }
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "SPEAKER", raisedHand = false) else p
@@ -423,6 +467,23 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     ConferenceRuntime.selfRole = "LISTENER"
                     ConferenceRuntime.isMuted = true
                     mesh?.setMicrophoneEnabled(false)
+                    if (sfu != null) {
+                        // LEGENDARY Phase 7: إسقاط النشر — عميل جديد بتذكرة مستمع (استهلاك فقط)؛
+                        // فشل SFU ← mesh مستمع + إعادة إعلان (ROOM_STATE يستدر العروض بقاعدة ثابتة).
+                        scope.launch {
+                            val fresh = SfuMediaClient(this@ConferenceService, TokenStore(this@ConferenceService), this@ConferenceService)
+                            runCatching { sfu?.release() }
+                            sfu = fresh
+                            ConferenceRuntime.eglContext = fresh.eglContext
+                            ConferenceRuntime.localVideo = null
+                            if (!attachSfuWithRetry(fresh, roomId)) {
+                                sfu = null
+                                val kind = if (ConferenceRuntime.isVideoEnabled) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
+                                startMesh(kind)
+                                signaling.join(roomId, userId, ConferenceRuntime.isVideoEnabled, false)
+                            }
+                        }
+                    }
                 }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "LISTENER", raisedHand = false) else p
@@ -431,6 +492,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             "GRANT_COHOST" -> {
                 val target = signal.payload["targetUserId"].orEmpty()
+                // LEGENDARY Phase 7: كان الدور الذاتي لا يتحدث — أدوات المضيف (قفل/كتم الكل) لا تظهر.
+                if (target == userId) {
+                    ConferenceRuntime.selfRole = "CO_HOST"
+                    ConferenceRuntime.isSpeaker = true
+                }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "CO_HOST") else p
                 }
@@ -438,6 +504,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             "REVOKE_COHOST" -> {
                 val target = signal.payload["targetUserId"].orEmpty()
+                // LEGENDARY Phase 7 (مرآة GRANT_COHOST): إسقاط الدور الذاتي للمضيف المشارك.
+                if (target == userId && ConferenceRuntime.selfRole == "CO_HOST") {
+                    ConferenceRuntime.selfRole = "SPEAKER"
+                }
                 val participantList = ConferenceRuntime.participants.map { p ->
                     if (p.userId == target) p.copy(role = "SPEAKER") else p
                 }
@@ -458,6 +528,16 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (target == userId) {
                     ConferenceRuntime.isMuted = true
                     mesh?.setMicrophoneEnabled(false)
+                    // LEGENDARY Phase 7: كان المتكلم على SFU يبقى حياً بعد كتم المضيف.
+                    sfu?.setMicrophoneEnabled(false)
+                }
+            }
+            "MUTE_ALL" -> {
+                // الخادم يستثني المرسل من roomMuted لكن يبثّ للجميع بمن فيهم هو.
+                if (ConferenceRuntime.selfRole != "HOST") {
+                    ConferenceRuntime.isMuted = true
+                    mesh?.setMicrophoneEnabled(false)
+                    sfu?.setMicrophoneEnabled(false)
                 }
             }
             "REACTION" -> {
@@ -467,6 +547,16 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             "PIN_MESSAGE" -> {
                 ConferenceRuntime.pinnedMessage = signal.payload["text"].orEmpty()
+            }
+            "SCREEN_SHARE_START" -> {
+                if (signal.userId.isNotBlank() && signal.userId != userId) {
+                    ConferenceRuntime.remoteScreenSharePeerId = signal.userId
+                }
+            }
+            "SCREEN_SHARE_STOP" -> {
+                if (ConferenceRuntime.remoteScreenSharePeerId == signal.userId) {
+                    ConferenceRuntime.remoteScreenSharePeerId = ""
+                }
             }
             "ERROR", "ROOM_STATE" -> Unit
         }
@@ -871,10 +961,12 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         const val ACTION_REVOKE_COHOST = "com.red.sovereign.conference.REVOKE_COHOST"
         const val ACTION_KICK_USER = "com.red.sovereign.conference.KICK_USER"
         const val ACTION_MUTE_USER = "com.red.sovereign.conference.MUTE_USER"
+        const val ACTION_MUTE_ALL = "com.red.sovereign.conference.MUTE_ALL"
         const val ACTION_SEND_REACTION = "com.red.sovereign.conference.SEND_REACTION"
         const val ACTION_PIN_MESSAGE = "com.red.sovereign.conference.PIN_MESSAGE"
         const val ACTION_START_RECORDING = "com.red.sovereign.conference.START_RECORDING"
         const val ACTION_STOP_RECORDING = "com.red.sovereign.conference.STOP_RECORDING"
+        const val ACTION_TOGGLE_LOCK = "com.red.sovereign.conference.TOGGLE_LOCK"
 
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"
@@ -918,6 +1010,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             ContextCompat.startForegroundService(context, intent)
         }
 
+        fun muteAll(context: Context) {
+            val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_MUTE_ALL)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
         fun pinParticipant(context: Context, participantId: String?) {
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_PIN_PARTICIPANT
@@ -936,6 +1033,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
 
         fun stopScreenShare(context: Context) {
             val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_STOP_SCREEN_SHARE)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun toggleLock(context: Context) {
+            val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_TOGGLE_LOCK)
             ContextCompat.startForegroundService(context, intent)
         }
 

@@ -89,6 +89,8 @@ import androidx.compose.ui.unit.sp
 import com.red.sovereign.core.GroupMentions
 import com.red.sovereign.core.RedQualityManager
 import com.red.sovereign.core.RichMessage
+import com.red.sovereign.core.isPendingDecryptPlaceholder
+import com.red.sovereign.core.pendingDecryptDisplayText
 import com.red.sovereign.core.YounesId
 import com.red.sovereign.core.database.MessageReactionEntity
 import com.red.sovereign.crypto.DecryptedMessage
@@ -142,8 +144,11 @@ internal fun shouldMergeWithPrevious(
     return (current.timestamp - previous.timestamp) in 0..mergeWindowMs
 }
 
-internal fun messageDisplayText(message: DecryptedMessage): String =
-    if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext)?.text.orEmpty() else message.plaintext.toString(Charsets.UTF_8)
+internal fun messageDisplayText(message: DecryptedMessage): String {
+    // Phase-1 (2026-09-14): العنصر النائب يعرض نصاً ثابتاً (يخفي الوسم الداخلي).
+    if (isPendingDecryptPlaceholder(message.plaintext)) return pendingDecryptDisplayText()
+    return if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext)?.text.orEmpty() else message.plaintext.toString(Charsets.UTF_8)
+}
 
 /**
  * فقاعة موحدة (2026-09-10): تدمج `LuxuryChatBubble` (نص) مع عارضات
@@ -268,6 +273,16 @@ internal fun RichTextMessage(
         }
     }
     Text(annotated, color = if (message.outgoing) Color(0xFF001B14) else MaterialTheme.colorScheme.onSurface, fontFamily = ChatFontPolicy.familyFor(SettingsRuntime.current.fontFamily))
+    // CALL_STARTED: بطاقة انضمام موحدة (واتساب) — تعمل للدعوة الفائتة والانضمام المتأخر معاً.
+    if (rich.action == "CALL_STARTED" && !rich.callId.isNullOrBlank() && !message.outgoing && myRedId != null) {
+        val joinContext = LocalContext.current
+        Spacer(Modifier.height(6.dp))
+        Button(onClick = {
+            runCatching {
+                com.red.sovereign.calls.GroupCallService.accept(joinContext, rich.callId!!, myRedId, rich.callIsVideo)
+            }
+        }) { Text(if (rich.callIsVideo) "📹 انضم للفيديو" else "📞 انضم للمكالمة") }
+    }
     rich.poll?.let { poll ->
         InlinePollCard(poll, isOutgoing = message.outgoing, myRedId = myRedId, onVote = onPollVote)
     }

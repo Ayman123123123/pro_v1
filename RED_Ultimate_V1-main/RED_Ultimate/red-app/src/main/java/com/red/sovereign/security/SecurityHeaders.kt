@@ -64,7 +64,7 @@ class SecurityHeadersInterceptor : Interceptor {
  * 2. **تسريب المحتوى والأسرار**: كان يسجّل جسم الاستجابة كاملًا (رسائل E2EE
  *    مفكوكة، مرفقات) و`request.url` كاملًا بما فيه معاملات الاستعلام التي قد
  *    تحمل رموز جلسة. الآن: الجسم محجوب، الاستعلام مُزال، والترويسات الحساسة
- *    مُقنَّعة بقائمة موسّعة (تشمل رموز الأجهزة وFCM وAPI).
+ *    مُقنَّعة بقائمة موسّعة (تشمل رموز الأجهزة والدفع وAPI).
  *
  * `logger` قابل للحقن حتى يتمكن الاختبار من إثبات أن الأسرار لا تُسجَّل.
  */
@@ -107,7 +107,7 @@ class LoggingInterceptor(
         const val TAG = "LoggingInterceptor"
         val SENSITIVE_HEADERS = setOf(
             "authorization", "proxy-authorization", "cookie", "set-cookie",
-            "x-access-token", "x-device-token", "x-fcm-token", "x-api-key"
+            "x-access-token", "x-device-token", "x-push-endpoint", "x-api-key"
         )
     }
 }

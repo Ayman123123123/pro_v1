@@ -1,6 +1,9 @@
 package com.red.sovereign.calls
 
+import android.app.Activity
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -22,6 +25,8 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -150,6 +155,26 @@ fun YounesConferenceOverlay() {
                                     contentDescription = "تبديل وضع العرض (شبكة / تركيز)",
                                     tint = if (isSpeakerFocusMode) scheme.primary else scheme.onBackground
                                 )
+                            }
+                            if (ConferenceRuntime.selfRole == "HOST") {
+                                IconButton(
+                                    onClick = { ConferenceService.toggleLock(context) }
+                                ) {
+                                    Icon(
+                                        if (ConferenceRuntime.isRoomLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                        contentDescription = if (ConferenceRuntime.isRoomLocked) "فتح الغرفة" else "قفل الغرفة",
+                                        tint = if (ConferenceRuntime.isRoomLocked) Color(0xFFE54343) else scheme.onBackground
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { ConferenceService.muteAll(context) }
+                                ) {
+                                    Icon(
+                                        Icons.Default.MicOff,
+                                        contentDescription = "كتم الجميع",
+                                        tint = scheme.onBackground
+                                    )
+                                }
                             }
                             IconButton(
                                 onClick = {
@@ -457,8 +482,13 @@ fun YounesConferenceOverlay() {
                                     }
                                 }
 
-                                items(participants.filter { it.userId.isNotBlank() }, key = { it.userId }) { participant ->
+                                // DoD: سقف البلاطات 12 — الفائض عدّاد (+N) بدل renderers بلا حد.
+                                val allTiles = participants.filter { it.userId.isNotBlank() }
+                                val visibleTiles = allTiles.take(ConferenceRuntime.MAX_VIDEO_TILES)
+                                val overflowTiles = allTiles.size - visibleTiles.size
+                                items(visibleTiles, key = { it.userId }) { participant ->
                                     val track = remoteVideos[participant.userId]
+                                    val isPresenting = participant.userId == ConferenceRuntime.remoteScreenSharePeerId && ConferenceRuntime.remoteScreenSharePeerId.isNotBlank()
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -472,6 +502,35 @@ fun YounesConferenceOverlay() {
                                                 ConferenceVideoRenderer(track = track, mirror = false, modifier = Modifier.fillMaxSize())
                                             } else {
                                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(participant.userId.take(8), color = scheme.onSurface) }
+                                            }
+                                            if (isPresenting) {
+                                                Text(
+                                                    "🖥 يشارك الشاشة",
+                                                    color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.align(Alignment.TopStart)
+                                                        .padding(6.dp)
+                                                        .background(Color(0xFF00C98C).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                // DoD: عدّاد الفائض فوق سقف البلاطات.
+                                if (overflowTiles > 0) {
+                                    item {
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(1f)
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            colors = CardDefaults.cardColors(containerColor = scheme.surfaceVariant)
+                                        ) {
+                                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    "+$overflowTiles",
+                                                    color = scheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold
+                                                )
                                             }
                                         }
                                     }
@@ -565,21 +624,21 @@ fun YounesConferenceOverlay() {
                         }
 
                         // Screen Share Toggle Button
+                        val screenShareLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.StartActivityForResult()
+                        ) { result ->
+                            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+                                ConferenceService.startScreenShare(context, result.data!!)
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 if (ConferenceRuntime.isScreenSharing) {
                                     ConferenceService.stopScreenShare(context)
                                 } else {
-                                    // Launch MediaProjection screen capture intent or trigger screen share
                                     val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? android.media.projection.MediaProjectionManager
                                     if (projectionManager != null) {
-                                        // We trigger action start screen share if intent data is captured, or request permission
-                                        val activity = context as? android.app.Activity
-                                        if (activity != null) {
-                                            runCatching {
-                                                activity.startActivityForResult(projectionManager.createScreenCaptureIntent(), 7403)
-                                            }
-                                        }
+                                        runCatching { screenShareLauncher.launch(projectionManager.createScreenCaptureIntent()) }
                                     }
                                 }
                             },

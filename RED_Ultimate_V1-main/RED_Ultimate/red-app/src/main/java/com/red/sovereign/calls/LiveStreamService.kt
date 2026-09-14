@@ -123,13 +123,15 @@ object LiveStreamRuntime {
     var isCoHost by mutableStateOf(false)
 }
 
-class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, LiveStreamSignalingClient.Listener {
+class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, LiveStreamSignalingClient.Listener, SfuMediaClient.Events {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var reconnectAttempt = 0
     private var reconnectJob: kotlinx.coroutines.Job? = null
     private lateinit var signaling: LiveStreamSignalingClient
     private var engine: WebRtcEngine? = null
     private var mesh: MeshRtcSession? = null
+    private var sfu: SfuMediaClient? = null
+    @Volatile private var sfuLive = false
     private var recordingManager: CallRecordingManager? = null
     private var streamId = ""
     private var userId = ""
@@ -209,12 +211,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 scope.launch {
                     runCatching {
                         if (isBroadcaster) {
-                            if (mesh == null) {
-                                mesh = MeshRtcSession(this@LiveStreamService, userId, this@LiveStreamService)
-                                LiveStreamRuntime.eglContext = mesh?.eglContext
-                                val started = mesh?.start(CallMediaKind.LIVE)
-                                LiveStreamRuntime.localVideo = mesh?.localVideo
-                                if (started is ApiResult.Success) flushPendingViewerOffers()
+                            if (sfu == null && mesh == null) {
+                                startBroadcasterMedia()
                             } else {
                                 val ok = mesh?.retryCamera() == true
                                 if (ok) LiveStreamRuntime.localVideo = mesh?.localVideo
@@ -233,7 +231,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                                 mesh?.setCameraEnabled(false)
                             }
                         } else {
-                            if (engine == null) {
+                            if (sfu == null && engine == null) {
                                 engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
                                 LiveStreamRuntime.eglContext = engine?.eglContext
                                 engine?.createReceiverOnly(CallMediaKind.VIDEO)
@@ -251,6 +249,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 val micOn = !LiveStreamRuntime.isMuted
                 engine?.setMicrophoneEnabled(micOn)
                 mesh?.setMicrophoneEnabled(micOn)
+                sfu?.setMicrophoneEnabled(micOn)
             }
             ACTION_TOGGLE_VIDEO -> {
                 val isVideoOn = LiveStreamRuntime.localVideo?.enabled() == true
@@ -269,6 +268,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 } else {
                     engine?.setCameraEnabled(!isVideoOn)
                     mesh?.setCameraEnabled(!isVideoOn)
+                    sfu?.setCameraEnabled(!isVideoOn)
                 }
             }
             ACTION_SWITCH_CAMERA -> {
@@ -280,6 +280,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 val cameraOn = !LiveStreamRuntime.isAudioOnly
                 engine?.setCameraEnabled(cameraOn)
                 mesh?.setCameraEnabled(cameraOn)
+                sfu?.setCameraEnabled(cameraOn)
             }
             ACTION_START_RECORDING -> {
                 // موافقة صريحة من واجهة المستخدم — لا تُفترض أبداً (خصوصية الطرفين)
@@ -416,6 +417,19 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                     engine?.setCameraEnabled(false)
                     mesh?.setCameraEnabled(false)
                 }
+                // LEGENDARY Phase 6: اختيار طبقة simulcast حقيقي على SFU (لا-أثر بلا simulcast).
+                sfu?.setAllVideoLayers(
+                    when (parsed) {
+                        LiveQuality.AUDIO_ONLY, LiveQuality.Q360 -> 0
+                        LiveQuality.Q480 -> 1
+                        else -> 2
+                    },
+                    when (parsed) {
+                        LiveQuality.AUDIO_ONLY -> 0
+                        LiveQuality.Q360, LiveQuality.Q480 -> 1
+                        else -> 2
+                    }
+                )
                 signaling.setQuality(streamId, userId, parsed.name)
             }
             ACTION_TOGGLE_STATS -> {
@@ -451,29 +465,82 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
     }
 
+    private suspend fun attachSfuWithRetry(client: SfuMediaClient): Boolean {
+        // LEGENDARY Phase 6: SFU-first — التذكرة تتطلب REST join مسبقاً (يتم قبل signaling.connect)،
+        // والتراجع الأسّي يمتصّ أي سباق تسجيل على شبكة بطيئة.
+        val ticketPath = "/api/sfu/groups/live/$streamId/ticket"
+        val backoffMs = longArrayOf(400, 800, 1_600, 3_200)
+        for (attempt in 0..backoffMs.size) {
+            if (client.attach(streamId, ticketPath)) return true
+            if (attempt < backoffMs.size) {
+                android.util.Log.w("LiveStreamService", "SFU attach failed attempt ${attempt + 1}/${backoffMs.size + 1} stream=$streamId — retry in ${backoffMs[attempt]}ms")
+                kotlinx.coroutines.delay(backoffMs[attempt])
+            }
+        }
+        return false
+    }
+
+    private suspend fun startBroadcasterMedia() {
+        // LEGENDARY Phase 6: المذيع يرفع مرة واحدة للـ SFU (O(1)) بدل اتصال mesh لكل مشاهد (O(N)).
+        val client = SfuMediaClient(this, TokenStore(this), this)
+        sfu = client
+        LiveStreamRuntime.eglContext = client.eglContext
+        if (attachSfuWithRetry(client) && client.publish(CallMediaKind.LIVE)) {
+            sfuLive = true
+            LiveStreamRuntime.localVideo = client.localVideo
+            return
+        }
+        // Fallback: شبكة mesh القديمة 1-ن (تخدم أيضاً عملاء قدامى بلا SFU).
+        runCatching { client.release() }
+        sfu = null
+        mesh = MeshRtcSession(this@LiveStreamService, userId, this@LiveStreamService)
+        LiveStreamRuntime.eglContext = mesh?.eglContext
+        // Live streaming needs HD + simulcast for adaptive quality to viewers
+        val started = mesh?.start(CallMediaKind.LIVE)
+        LiveStreamRuntime.localVideo = mesh?.localVideo
+        if (started is ApiResult.Success) flushPendingViewerOffers()
+    }
+
+    private suspend fun startViewerMedia() {
+        // LEGENDARY Phase 6: المشاهد يستهلك من الـ SFU (صفر uplink) بدل PC كامل مع المذيع.
+        val client = SfuMediaClient(this, TokenStore(this), this)
+        sfu = client
+        LiveStreamRuntime.eglContext = client.eglContext
+        if (attachSfuWithRetry(client)) {
+            sfuLive = true
+            return
+        }
+        // Fallback: مسار الاستقبال القديم + طلب خدمة mesh من المذيع.
+        runCatching { client.release() }
+        sfu = null
+        engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
+        LiveStreamRuntime.eglContext = engine?.eglContext
+        // المشاهد: استقبال فقط — لا تُفتح كاميرته ولا ميكروفونه
+        // (خصوصية وبطارية؛ النشر فقط عند الترقية لمضيف مشارك).
+        engine?.createReceiverOnly(CallMediaKind.VIDEO)
+        signaling.sendViewerNeedsMesh(streamId, userId)
+    }
+
+    private suspend fun serveViewerOverMesh(viewerId: String) {
+        // مشاهد واحد بلا SFU — mesh احتياطي له وحده (صوت فقط إن كانت الكاميرا محجوزة لنشر SFU).
+        var session = mesh
+        if (session == null) {
+            val created = MeshRtcSession(this@LiveStreamService, userId, this@LiveStreamService)
+            if (created.start(CallMediaKind.LIVE) !is ApiResult.Success) return
+            mesh = created
+            session = created
+        }
+        runCatching { session.attachPeer(viewerId); session.offerTo(viewerId) }
+    }
+
     override fun onConnected() {
         reconnectAttempt = 0
         reconnectJob?.cancel()
         reconnectJob = null
         scope.launch {
             // إعادة الاتصال بالإشارة لا تعيد بناء الوسائط — الجلسات قائمة.
-            if (mesh == null && engine == null) {
-                if (isBroadcaster) {
-                    // المذيع: شبكة mesh للبث 1-ن (كان المحرك يُنشأ بلا إرسال
-                    // وmesh فارغة، فلا يصل أي إطار لأي مشاهد).
-                    mesh = MeshRtcSession(this@LiveStreamService, userId, this@LiveStreamService)
-                    LiveStreamRuntime.eglContext = mesh?.eglContext
-                    // Live streaming needs HD + simulcast for adaptive quality to viewers
-                    val started = mesh?.start(CallMediaKind.LIVE)
-                    LiveStreamRuntime.localVideo = mesh?.localVideo
-                    if (started is ApiResult.Success) flushPendingViewerOffers()
-                } else {
-                    engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
-                    LiveStreamRuntime.eglContext = engine?.eglContext
-                    // المشاهد: استقبال فقط — لا تُفتح كاميرته ولا ميكروفونه
-                    // (خصوصية وبطارية؛ النشر فقط عند الترقية لمضيف مشارك).
-                    engine?.createReceiverOnly(CallMediaKind.VIDEO)
-                }
+            if (sfu == null && mesh == null && engine == null) {
+                if (isBroadcaster) startBroadcasterMedia() else startViewerMedia()
             }
             if (isBroadcaster) {
                 LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, true, System.currentTimeMillis())
@@ -619,7 +686,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 if (LiveStreamRuntime.viewerCount > LiveStreamRuntime.peakViewers) {
                     LiveStreamRuntime.peakViewers = LiveStreamRuntime.viewerCount
                 }
-                if (isBroadcaster && viewerId.isNotBlank()) {
+                // LEGENDARY Phase 6: لا عروض mesh والمذيع على SFU — الخادم يوزّع على المشاهدين.
+                if (isBroadcaster && viewerId.isNotBlank() && !sfuLive) {
                     // AUTO-FIX (livestream race): queue offers arriving before the mesh is ready
                     // (ICE config still loading) and flush them right after mesh.start succeeds.
                     val session = mesh
@@ -629,6 +697,13 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                         session.attachPeer(viewerId)
                         session.offerTo(viewerId)
                     }
+                }
+            }
+            "VIEWER_NEEDS_MESH" -> {
+                // مشاهد تعذّر عليه SFU — اخدمه وحده عبر mesh احتياطي.
+                if (isBroadcaster) {
+                    val viewerId = signal.userId.ifBlank { signal.payload["userId"].orEmpty() }
+                    if (viewerId.isNotBlank()) scope.launch { serveViewerOverMesh(viewerId) }
                 }
             }
             "VIEWER_COUNT_UPDATED" -> {
@@ -718,6 +793,23 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 }
                 if ((signal.payload["targetUserId"] == userId || signal.userId == userId) && !isBroadcaster) {
                     LiveStreamRuntime.isCoHost = false
+                    if (sfu != null) {
+                        // LEGENDARY Phase 6: إسقاط النشر — عميل جديد بتذكرة مشاهد (بلا إنتاج) + استهلاك فقط.
+                        scope.launch {
+                            val fresh = SfuMediaClient(this@LiveStreamService, TokenStore(this@LiveStreamService), this@LiveStreamService)
+                            runCatching { sfu?.release() }
+                            sfu = fresh
+                            LiveStreamRuntime.eglContext = fresh.eglContext
+                            LiveStreamRuntime.localVideo = null
+                            if (!attachSfuWithRetry(fresh)) {
+                                sfu = null
+                                engine = WebRtcEngine(this@LiveStreamService, this@LiveStreamService)
+                                LiveStreamRuntime.eglContext = engine?.eglContext
+                                engine?.createReceiverOnly(CallMediaKind.VIDEO)
+                                signaling.sendViewerNeedsMesh(streamId, userId)
+                            }
+                        }
+                    }
                 }
             }
             "SLOW_MODE_SET" -> {
@@ -804,6 +896,32 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                     // المضيف المشارك ينشر صوته وصورته للمذيع عبر إعادة تفاوض
                     // (كان علماً فقط بلا أي نشر — لا يُرى ولا يُسمع).
                     scope.launch {
+                        if (sfu != null) {
+                            // LEGENDARY Phase 6: عميل جديد بتذكرة COHOST (صلاحية نشر) ثم نشر للـ SFU —
+                            // يراه المذيع وبقية المشاهدين معاً (كان mesh للمذيع وحده).
+                            val fresh = SfuMediaClient(this@LiveStreamService, TokenStore(this@LiveStreamService), this@LiveStreamService)
+                            runCatching { sfu?.release() }
+                            sfu = fresh
+                            LiveStreamRuntime.eglContext = fresh.eglContext
+                            val published = attachSfuWithRetry(fresh) && fresh.publish(CallMediaKind.LIVE)
+                            if (published) {
+                                LiveStreamRuntime.localVideo = fresh.localVideo
+                                LiveStreamRuntime.cameraError = null
+                                LiveStreamRuntime.audioError = null
+                            } else {
+                                LiveStreamRuntime.isCoHost = false
+                                withContext(Dispatchers.Main.immediate) {
+                                    runCatching {
+                                        android.widget.Toast.makeText(
+                                            this@LiveStreamService,
+                                            "تعذر بدء النشر كمضيف مشارك",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
                         val wantVideo = hasCameraPermission()
                         val published = engine?.startPublishing(video = wantVideo) == true
                         if (published) {
@@ -841,6 +959,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
     }
     override fun onCameraUnavailable() {
+        // LEGENDARY Phase 6: الكاميرا مملوكة لنشر SFU — تجاهل إنذار mesh الاحتياطي (صوت فقط).
+        if (sfuLive) return
         // بدل الشاشة السوداء الصامتة: سجل خطأً قابلاً للعرض + تدهور صوتي + تنبيه واحد
         LiveStreamRuntime.cameraError = if (!hasCameraPermission()) "PERMISSION" else "UNAVAILABLE"
         LiveStreamRuntime.isAudioOnly = true
@@ -974,6 +1094,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     }
 
     override fun onRemoteVideo(peerId: String, track: VideoTrack) {
+        // LEGENDARY Phase 6: late EGL pickup — recv engine may appear after attach (producer joined later).
+        if (LiveStreamRuntime.eglContext == null) LiveStreamRuntime.eglContext = sfu?.eglContext
         if (!isBroadcaster) LiveStreamRuntime.remoteVideo = track
         else {
             // شبكة مضيفين حتى 4 — الأحدث أولاً، الأقدم يُستبدل عند الامتلاء
@@ -984,6 +1106,17 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             }
             LiveStreamRuntime.coHostVideos = current
             LiveStreamRuntime.coHostVideo = track
+        }
+    }
+
+    override fun onPeerLeft(peerId: String) {
+        // SFU: ناشر غادر (مذيع/مضيف) — المشاهد يعتمد على STREAM_ENDED؛ المذيع ينظّف بلاطة المضيف.
+        if (isBroadcaster) {
+            val current = LiveStreamRuntime.coHostVideos.toMutableMap()
+            if (current.remove(peerId) != null) {
+                LiveStreamRuntime.coHostVideos = current
+                LiveStreamRuntime.coHostVideo = current.values.lastOrNull()
+            }
         }
     }
 
@@ -1157,6 +1290,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         engine = null
         mesh?.release()
         mesh = null
+        runCatching { sfu?.release() }
+        sfu = null
+        sfuLive = false
         broadcasterUserId = ""
         approvedCohostIds.clear()
         LiveStreamRuntime.state = LiveStreamUiState.Idle
@@ -1267,7 +1403,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         const val ACTION_STOP_RECORDING = "com.red.sovereign.livestream.STOP_RECORDING"
         const val ACTION_SEND_CHAT = "com.red.sovereign.livestream.SEND_CHAT"
         const val ACTION_SEND_REACTION = "com.red.sovereign.livestream.SEND_REACTION"
-        /** محفوظ للتوافق فقط — الهدايا معطلة وتُحوَّل لتفاعل مجاني (انظر sendGift). */
+        /** محفوظ للتوافق فقط — الهدايا معطلة وتُحوَّل لتفاعل مجاني (انظر sendReaction). */
         const val ACTION_SEND_GIFT = "com.red.sovereign.livestream.SEND_GIFT"
         const val ACTION_RAISE_HAND = "com.red.sovereign.livestream.RAISE_HAND"
         const val ACTION_LOWER_HAND = "com.red.sovereign.livestream.LOWER_HAND"
@@ -1325,14 +1461,6 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 putExtra(EXTRA_REACTION_EMOJI, emoji)
             }
             ContextCompat.startForegroundService(context, intent)
-        }
-
-        /**
-         * الهدايا معطلة بقرار المنتج ("بدون هدايا"): يُحفظ التوقيع للتوافق،
-         * لكن الاستدعاء يرسل تفاعلًا مجانيًا بدل حدث GIFT — بلا عملات.
-         */
-        fun sendGift(context: Context, gift: SovereignGift, senderName: String) {
-            sendReaction(context, gift.emoji.ifBlank { "❤️" })
         }
 
         /** تثبيت تعليق (يستخدمها المذيع عادة) — يُبث PIN_MESSAGE للجميع. */

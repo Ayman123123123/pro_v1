@@ -15,7 +15,7 @@
 | Social | `/api/feed/**` وواجهات follow/post/reaction بحسب controllers |
 | Groups | `/api/groups/**` |
 | Media/stories | `/api/media/**`, `/api/stories/**` |
-| Calls/PSTN | call history وPSTN authorization/dial controllers |
+| Calls | call history وsignaling controllers |
 | Messaging WS | `/ws/master` |
 | Call signaling WS | `/ws/calls` |
 
@@ -40,7 +40,6 @@
 - login وتجديد access token.
 - قائمة الحسابات المعلقة والموافقة/الرفض.
 - عرض بصمات الأجهزة.
-- PSTN enable/disable والحد اليومي.
 - metrics/health حقيقية بدل أرقام demo.
 - audit log وإجراءات أمان وبنية/SFU tabs.
 
@@ -101,20 +100,6 @@ Android ContentResolver streaming
 ```
 
 عرض الصور/الفيديو النهائي، thumbnails وencrypted cache ما تزال بوابات مستقلة.
-
-## تدفق DINSTAR
-
-```text
-Android gold phone
- → backend validates approved user + pstn_enabled + Yemen number
- → Redis atomic daily reservation
- → AMI Originate with UUID ActionID
- → Local/<number>@from-red-backend
- → restricted Asterisk dialplan
- → PJSIP DINSTAR gateway
-```
-
-فشل AMI يعيد عداد Redis. AMI داخل شبكة Compose فقط. لا تدّعي نتيجة GSM النهائية قبل أحداث AMI واختبار العتاد.
 
 ## Nginx وSFU
 

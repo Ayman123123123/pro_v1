@@ -260,11 +260,11 @@ ACTION_ACCEPT -> {
             }
             ACTION_START_RECORDING -> startRecording(consentGranted = intent.getBooleanExtra(EXTRA_CONSENT, false))
             ACTION_STOP_RECORDING -> stopRecording()
-            // PSTN interop: silence/hold/resume RED call from PhoneStateReceiver
+            // silence/hold/resume RED call from notification actions
             ACTION_SILENCE_RINGER -> stopRingtone()
             ACTION_HOLD_ACTIVE -> holdCall()
             ACTION_RESUME_RINGER -> {
-                // أعد رنة RED إن كانت مكالمة RED واردة عند انتهاء PSTN
+                // أعد رنة RED إن كانت مكالمة RED واردة
                 if (CallRuntime.state is CallUiState.Incoming) startRingtone()
             }
             ACTION_QUICK_REPLY -> {
@@ -383,7 +383,7 @@ override fun onConnected() {
                 mode = newIncoming.mode
                 CallRuntime.state = newIncoming
                 // P0: تأكيد الرنين للمتصل فوراً — بدونه يظن DeliveryEngine أن العرض ضاع
-                // فينتظر FCM+webhook ~20s رغم أن الجهاز يرن فعلاً.
+                // فينتظر الدفع+webhook ~20s رغم أن الجهاز يرن فعلاً.
                 runCatching {
                     signaling.send(CallSignal.createRinging(
                         callId = signal.callId.orEmpty(),
@@ -671,6 +671,10 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
                     ?: false
                 val fresh = CallUiState.Active(callId.orEmpty(), target, mode, keepStarted, keepHeld)
                 CallRuntime.state = if (keepWaiting != null) CallUiState.ActiveWithIncoming(fresh, keepWaiting) else fresh
+                // Connected earcon on fresh connects only — ICE-restart reconnects stay silent.
+                if (prev !is CallUiState.Active && prev !is CallUiState.ActiveWithIncoming && prev !is CallUiState.Reconnecting) {
+                    runCatching { RedBundledTones.playOneShot(this, RedBundledTones.RAW_CONNECTED) }
+                }
                 updateNotification("مكالمة يونس نشطة")
                 startStatsPolling()
             }
@@ -809,7 +813,7 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
     override fun onDeliveryProgress(callId: String, path: CallDeliveryEngine.DeliveryPath, attempt: Int) {
         val label = when (path) {
             CallDeliveryEngine.DeliveryPath.WEBSOCKET -> "جارٍ الاتصال عبر القناة المباشرة…"
-            CallDeliveryEngine.DeliveryPath.FCM_PUSH -> "جارٍ إيقاظ جهاز المستلم…"
+            CallDeliveryEngine.DeliveryPath.SOVEREIGN_PUSH -> "جارٍ إيقاظ جهاز المستلم…"
             CallDeliveryEngine.DeliveryPath.HTTP_WEBHOOK -> "جارٍ محاولة الوصول عبر قناة احتياطية ($attempt)…"
             CallDeliveryEngine.DeliveryPath.UNKNOWN -> "جارٍ الاتصال…"
         }
@@ -1059,10 +1063,6 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
     private var micMutedByFocus = false
 
 private fun prepareAudio() {
-        if (CallSystemSurfacePolicy.usesAndroidTelecom(mode)) {
-            android.util.Log.d("YounesCallService", "prepareAudio skipped — Telecom manages audio for mode $mode")
-            return
-        }
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         audioFocus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
         audioFocus = null
@@ -1239,6 +1239,7 @@ private fun prepareAudio() {
             return
         }
         CallRuntime.state = CallUiState.CallEnded(endedPeer, endedMode, durationMs, endedCallId)
+        runCatching { RedBundledTones.playOneShot(this, RedBundledTones.RAW_ENDED) }
         updateNotification("انتهت المكالمة")
         scheduleCleanupAndReset(4000) // Keep the CallEnded screen for 4 seconds
     }
@@ -1281,7 +1282,6 @@ private fun prepareAudio() {
         val endedCallId = callId
         // LEGENDARY FIX: إلغاء الرنين من السجل الموحد عند الإنهاء (كان الشبح يبقى بعد END)
         endedCallId?.let { runCatching { CallRingRegistry.cancel(this, it) } }
-        runCatching { PstnRingFallbackNotifier.cancel(this, endedCallId.orEmpty()) }
         val endedMode = mode
         // P0: لقطة الحالة/الاتجاه/المدة متزامنة قبل Idle (كانت تُقرأ داخل launch بعد القلب
         // إلى Idle فتُسجَّل MISSED دائماً + اتجاه غير مضمون).
@@ -1601,7 +1601,7 @@ private fun prepareAudio() {
         const val ACTION_START_RECORDING = "com.red.sovereign.call.START_RECORDING"; const val ACTION_STOP_RECORDING = "com.red.sovereign.call.STOP_RECORDING"
         const val ACTION_QUICK_REPLY = "com.red.sovereign.call.QUICK_REPLY"
         const val EXTRA_CONSENT = "consent"
-        // PSTN interop actions — تُرسل من PhoneStateReceiver عند ورود/انتهاء مكالمة هاتفية
+        // silence/hold/resume actions — تُرسل من أزرار الإشعارات
         const val ACTION_SILENCE_RINGER = "com.red.sovereign.call.SILENCE_RINGER"; const val ACTION_HOLD_ACTIVE = "com.red.sovereign.call.HOLD_ACTIVE"; const val ACTION_RESUME_RINGER = "com.red.sovereign.call.RESUME_RINGER"
         const val EXTRA_TARGET = "target"; const val EXTRA_MODE = "mode"; const val EXTRA_ENABLED = "enabled"; const val EXTRA_DTMF = "dtmf"; const val EXTRA_CAMERA = "camera"
         const val EXTRA_IS_VIDEO = "extra_is_video"
@@ -1653,7 +1653,7 @@ private fun prepareAudio() {
         )
         fun action(context: Context, action: String, enabled: Boolean = true) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(action).putExtra(EXTRA_ENABLED, enabled))
         fun dtmf(context: Context, digit: Char) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_DTMF).putExtra(EXTRA_DTMF, digit.toString()))
-        // PSTN interop: تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
+        // تُرسل كـ startService (لا foreground) لأن الخدمة تعمل مسبقًا أثناء المكالمة.
         // startForegroundService هنا يرمي ForegroundServiceStartNotAllowedException على Android 12+.
         fun silenceRinger(context: Context) = runCatching { context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_SILENCE_RINGER)) }
         fun holdActiveCall(context: Context) = runCatching { context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_HOLD_ACTIVE)) }

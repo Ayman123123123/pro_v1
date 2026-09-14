@@ -13,7 +13,6 @@
 | **1-1 صوت/فيديو** | RED (WebRTC P2P) | DTLS-SRTP + Identity Pinned | 2 أشخاص | محادثات خاصة |
 | **مؤتمر (Conference)** | RED (WebRTC mesh/SFU) | DTLS-SRTP | 2-4 (mesh) / 5+ (SFU) | اجتماعات مجموعات |
 | **بث مباشر (Live)** | RED (WebRTC 1-to-N) | DTLS-SRTP | 1 مذيع + N مشاهدين | بث عام/خاص |
-| **DINSTAR PSTN** | DINSTAR gateway | GSM/CDMA المشفّر | 1 يونس ↔ شبكة يمنية | هاتف ثابت يمني |
 
 ## المعمارية
 

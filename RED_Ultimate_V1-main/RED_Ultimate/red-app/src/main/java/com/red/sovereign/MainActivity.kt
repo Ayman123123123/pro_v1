@@ -11,10 +11,7 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -46,15 +43,6 @@ class MainActivity : FragmentActivity() {
     /** منسق البداية — يدير تشغيل وإيقاف الخدمات بعيداً عن Activity. */
     private lateinit var startupCoordinator: AppStartupCoordinator
 
-    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN. */
-    private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
-        override fun onResume(owner: LifecycleOwner) {
-            if (authViewModel.state is AuthState.Authenticated) {
-                authViewModel.refreshPstnEntitlement()
-            }
-        }
-    }
-    private var pstnObserverRegistered = false
 
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         Log.i("Permissions", "Initial permissions granted: $grants")
@@ -121,10 +109,6 @@ class MainActivity : FragmentActivity() {
                             if (state is AuthState.Authenticated) {
                                 requestNecessaryPermissions()
                                 startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
-                                if (!pstnObserverRegistered) {
-                                    ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
-                                    pstnObserverRegistered = true
-                                }
                             } else if (state !is AuthState.Loading) {
                                 startupCoordinator.onLoggedOut(this@MainActivity)
                             }
@@ -171,10 +155,6 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         if (!isChangingConfigurations) {
             startupCoordinator.onDestroy()
-            if (pstnObserverRegistered) {
-                runCatching { ProcessLifecycleOwner.get().lifecycle.removeObserver(pstnLifecycleObserver) }
-                pstnObserverRegistered = false
-            }
         }
         super.onDestroy()
     }
@@ -192,9 +172,6 @@ class MainActivity : FragmentActivity() {
             }
             if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-                add(Manifest.permission.READ_PHONE_STATE)
             }
             // LEGENDARY FIX: أذونات الوسائط 13/14 (كانت غائبة فيسبب فشل اختيار صور/فيديو)
             if (Build.VERSION.SDK_INT >= 33) {
@@ -233,10 +210,17 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // NOTE: Manifest.permission.ACCESS_LOCAL_NETWORK does not exist in the
-        // Android SDK (no such runtime permission) — referencing it breaks
-        // compilation. LAN reachability needs no runtime permission; the
-        // INTERNET permission (manifest) suffices. Block removed 2026-09-05.
+        // Android 17 (API 37+, إلزامي لمن يستهدف SDK 37): الوصول للشبكة المحلية
+        // (mDNS/NSD وraw TCP للخادم المحلي) خلف ACCESS_LOCAL_NETWORK. بدونه يفشل
+        // الاتصال بصمت تام — لا رسالة، لا سجل. الملاحظة القديمة (2026-09-05)
+        // بطلت باستقرار SDK 37. (إنقاذ من PR #55 — arena/01a0a0cf — 2026-09-15.)
+        if (!localNetworkPermissionRequested &&
+            Build.VERSION.SDK_INT >= 37 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_LOCAL_NETWORK) != PackageManager.PERMISSION_GRANTED
+        ) {
+            localNetworkPermissionRequested = true
+            localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        }
     }
 
     override fun onStop() {

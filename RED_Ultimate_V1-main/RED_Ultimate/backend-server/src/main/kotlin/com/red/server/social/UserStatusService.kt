@@ -30,7 +30,7 @@ class UserStatusService(
     companion object {
         private const val STATUS_PREFIX = "user:status:"
         private const val PRIVACY_PREFIX = "user:privacy:"
-        private const val ONLINE_SET = "users:online"
+        private const val ONLINE_SET = "red:online"
         private const val CONTACTS_SET_PREFIX = "contacts:"
         private const val STATUS_TTL_HOURS = 24L
     }

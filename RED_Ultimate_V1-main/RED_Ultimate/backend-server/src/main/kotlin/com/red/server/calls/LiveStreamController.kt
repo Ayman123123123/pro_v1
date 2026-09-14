@@ -180,7 +180,7 @@ class LiveStreamController(
             ?: throw NoSuchElementException("Live stream not found or ended")
         val accountId = UUID.fromString(authentication.name)
         val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        // حد أمان: 32 دعوة كحد أقصى لكل طلب (منع السبام/إغراق FCM) + عداد حقيقي
+        // حد أمان: 32 دعوة كحد أقصى لكل طلب (منع السبام/إغراق الدفع) + عداد حقيقي
         val targets = request.friendIds.filter { it.isNotBlank() && it != inviter.redId }.distinct().take(32)
         targets.forEach { friendId ->
             notifications.sendVoipPushNotification(friendId, inviter.redId, streamId, "LIVESTREAM")

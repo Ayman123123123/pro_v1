@@ -66,8 +66,7 @@
 -keep class net.zetetic.database.** { *; }
 -dontwarn net.zetetic.database.**
 
-# ─── Google Fonts / emoji2 ──────────────────────────────────────────
--dontwarn androidx.compose.ui.text.google.**
+# ─── emoji2 ─────────────────────────────────────────────────────────
 -dontwarn androidx.text.**
 
 # ─── خرائط الجذر الآمنة ─────────────────────────────────────────────

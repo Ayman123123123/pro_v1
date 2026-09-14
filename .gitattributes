@@ -1,3 +1,18 @@
 *.psd filter=lfs diff=lfs merge=lfs -text
 # *.jpg removed from LFS — small images (<200KB) should be normal git objects
 # Large backgrounds previously tracked as LFS pointers will be migrated on next real push
+# RED Ultimate — إكمال أسطوري 2026-09-15
+# عمدًا في الحد الأدنى: المستودع يمزج CRLF/LF تاريخيًا (تطوير Windows) وفرض
+# التطبيع الآن سيُحدث ضجيج فراغات في مئات الملفات. هذه القواعد تمنع التجدد
+# دون لمس الموجود. المسارات العربية (الأرشيف/...) تُحفظ UTF-8.
+scripts/check-sovereign-dod.sh text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.jar binary
+*.apk binary

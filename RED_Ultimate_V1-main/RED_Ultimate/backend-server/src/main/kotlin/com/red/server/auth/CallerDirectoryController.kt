@@ -1,7 +1,5 @@
 package com.red.server.auth
 
-import com.red.server.auth.model.AccountStatus
-import com.red.server.auth.repository.UserAccountRepository
 import org.springframework.http.ResponseEntity
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.security.core.Authentication
@@ -11,11 +9,10 @@ import java.util.UUID
 
 /**
  * 📞 دليل المتصلين — V50
- * بحث عكسي عن أرقام GSM (يكمّل الـ passthrough الخام في DinstarEventListener
- * الذي يمرّر رقم المتصل بلا اسم أو درجة إزعاج).
+ * بحث عكسي عن أرقام الهواتف في الدليل المجتمعي (caller_directory).
  *
- * - GET /api/directory/phone/{phone} — بحث عكسي: شريحة مربوطة (users.pstn_number)
- *   أولًا، ثم caller_directory المجتمعي. 404 PHONE_NOT_FOUND عند الغياب.
+ * - GET /api/directory/phone/{phone} — بحث عكسي مجتمعي.
+ *   404 PHONE_NOT_FOUND عند الغياب.
  * - PUT /api/directory/phone/{phone} {displayName} — اقتراح/تحديث اسم مجتمعي.
  * - POST /api/directory/phone/report {phone, reason} — بلاغ إزعاج (يرفع spam_score).
  *
@@ -26,7 +23,6 @@ import java.util.UUID
 @RequestMapping("/api/directory/phone")
 class CallerDirectoryController(
     private val jdbc: JdbcTemplate,
-    private val users: UserAccountRepository,
     private val rateLimiter: RateLimitService
 ) {
 
@@ -38,23 +34,7 @@ class CallerDirectoryController(
         checkRateLimit(authentication)
         val normalized = normalizePhone(phone) ?: throw IllegalArgumentException("INVALID_PHONE")
 
-        // 1) شريحة مربوطة بحساب معتمد — مصدر الحقيقة الأول
-        val bound = users.findByPstnNumber(normalized)
-            ?: users.findByPstnNumber(normalized.trimStart('+'))
-        if (bound != null && bound.status == AccountStatus.APPROVED) {
-            return ResponseEntity.ok(
-                mapOf(
-                    "phone" to normalized,
-                    "source" to "USER",
-                    "displayName" to bound.displayName,
-                    "username" to bound.username,
-                    "redId" to bound.redId,
-                    "spamScore" to 0
-                )
-            )
-        }
-
-        // 2) الدليل المجتمعي
+        // الدليل المجتمعي
         val row = jdbc.query(
             "SELECT phone, display_name, spam_score FROM caller_directory WHERE phone=?",
             { rs, _ ->

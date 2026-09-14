@@ -20,7 +20,7 @@ docker compose down 2>&1 || true
 
 # Remove old images
 echo "[2/5] Removing old images..."
-for img in red-sovereign-backend red-sovereign-admin-panel red-sovereign-pstn-gateway red-sovereign-media-sfu; do
+for img in red-sovereign-backend red-sovereign-admin-panel red-sovereign-media-sfu; do
     if docker images -q "$img" 2>/dev/null; then
         docker rmi -f "$img" 2>&1 || true
     fi

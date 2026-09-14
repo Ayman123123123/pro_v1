@@ -76,6 +76,7 @@ import com.red.sovereign.stories.StoryState
 import com.red.sovereign.stories.StoryViewerState
 import com.red.sovereign.stories.StoryViewModel
 import com.red.sovereign.ui.StoryFullscreen
+import com.red.sovereign.ui.conversationId // Phase-1 (2026-09-14): كان يُحل من ChatsScreen الميت (نفس الحزمة) — الآن من DashboardIdentifiers بعد أرشفته
 import com.red.sovereign.ui.theme.AqyalCyanGlow
 import com.red.sovereign.ui.theme.AqyalGold
 import com.red.sovereign.ui.theme.AqyalRoyalBlue

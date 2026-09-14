@@ -3,6 +3,7 @@ package com.red.server.auth
 import com.red.server.auth.model.DeviceStatus
 import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.repository.UserDeviceRepository
+import com.red.server.auth.security.JwtService
 import com.red.server.notification.DevicePushTokenService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -24,7 +25,8 @@ class DeviceController(
     private val users: UserAccountRepository,
     private val refreshTokens: RefreshTokenService,
     private val pushTokens: DevicePushTokenService,
-    private val preKeys: OneTimePreKeyService
+    private val preKeys: OneTimePreKeyService,
+    private val jwt: JwtService
 ) {
     @GetMapping
     fun list(authentication: Authentication) =
@@ -68,7 +70,7 @@ class DeviceController(
     }
 
     /**
-     * يسجّل رمز FCM/VoIP للجهاز — يُستدعى من التطبيق عند كل إطلاق
+     * يسجّل نقطة نهاية الدفع السيادي (UnifiedPush) للجهاز — يُستدعى من التطبيق عند كل إطلاق
      * حتى تصل إشعارات المكالمات الواردة إلى الجهاز حتى لو أُغلق التطبيق.
      */
     @PostMapping("/push-token")
@@ -95,6 +97,26 @@ class DeviceController(
         devices.save(device)
         refreshTokens.revokeDevice(device.id)
         return ResponseEntity.noContent().build()
+    }
+
+    /**
+     * P9: "تسجيل الخروج من كل الأجهزة الأخرى" — يُبطل كل جلسات Refresh ما عدا جلسات
+     * جهاز الطلب الحالي (يُستخرج من deviceId في الـ Access Token الذي يضعه
+     * JwtAuthenticationFilter في authentication.credentials).
+     * بلا deviceId (رمز أدمن بلا جهاز) تُبطل الكل — موثّق في العقد.
+     */
+    @PostMapping("/revoke-others")
+    fun revokeOthers(authentication: Authentication): ResponseEntity<Any> {
+        val userId = UUID.fromString(authentication.name)
+        val currentDevice = (authentication.credentials as? String)
+            ?.let { runCatching { jwt.deviceId(it) }.getOrNull() }
+        val revoked = refreshTokens.revokeOthers(userId, currentDevice)
+        return ResponseEntity.ok(
+            mapOf(
+                "revoked" to revoked,
+                "currentDeviceKept" to currentDevice?.toString()
+            )
+        )
     }
 }
 

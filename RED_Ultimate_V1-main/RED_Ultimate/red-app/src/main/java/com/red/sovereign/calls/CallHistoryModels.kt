@@ -10,7 +10,7 @@ data class CallHistoryItem(
     val peerLabel: String,
     val direction: String,        // OUTGOING / INCOMING
     val type: String,             // VOICE / VIDEO / GROUP / CONFERENCE / LIVE / SPACE
-    val route: String,            // RED / DINSTAR
+    val route: String,            // RED (P2P relay path)
     val status: String,           // ANSWERED / MISSED / REJECTED / FAILED
     val startedAt: String,
     val answeredAt: String? = null,

@@ -27,7 +27,6 @@ Write-Host "[2/6] Removing stale images..." -ForegroundColor Yellow
 $images = @(
     "red-sovereign-backend",
     "red-sovereign-admin-panel",
-    "red-sovereign-pstn-gateway",
     "red-sovereign-media-sfu"
 )
 foreach ($img in $images) {

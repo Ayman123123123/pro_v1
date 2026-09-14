@@ -93,15 +93,36 @@ class CallHistoryService(
         return stale.size
     }
 
-    fun history(redId: String, limit: Int): List<CallHistoryItem> {
-        val query = Query(Criteria().orOperator(Criteria.where("initiatorId").`is`(redId), Criteria.where("targetId").`is`(redId)))
-            .with(Sort.by(Sort.Direction.DESC, "startedAt")).limit(limit.coerceIn(1, 100))
+    /**
+     * Paged call history (newest first). [offset]/[since] are honoured by the Mongo
+     * query itself so "load more" returns real older pages; [resolveName] upgrades
+     * the stored peer label to the live display name when available.
+     */
+    fun history(
+        redId: String,
+        limit: Int,
+        offset: Int = 0,
+        since: Instant? = null,
+        resolveName: (String) -> String? = { null }
+    ): List<CallHistoryItem> {
+        val party = Criteria().orOperator(
+            Criteria.where("initiatorId").`is`(redId),
+            Criteria.where("targetId").`is`(redId)
+        )
+        val criteria = if (since != null) {
+            Criteria().andOperator(party, Criteria.where("startedAt").lt(since))
+        } else party
+        val query = Query(criteria)
+            .with(Sort.by(Sort.Direction.DESC, "startedAt"))
+            .skip(offset.coerceAtLeast(0).toLong())
+            .limit(limit.coerceIn(1, 100))
         return mongo.find(query, CallHistoryDocument::class.java).map { call ->
             val outgoing = call.initiatorId == redId
+            val peerId = if (outgoing) call.targetId else call.initiatorId
             CallHistoryItem(
                 id = call.id,
-                peerId = if (outgoing) call.targetId else call.initiatorId,
-                peerLabel = if (outgoing) call.targetLabel else call.initiatorId,
+                peerId = peerId,
+                peerLabel = resolveName(peerId) ?: if (outgoing) call.targetLabel else call.initiatorId,
                 direction = if (outgoing) "OUTGOING" else "INCOMING",
                 type = call.type,
                 route = call.route,
@@ -120,6 +141,55 @@ class CallHistoryService(
                 wasRecorded = call.wasRecorded
             )
         }
+    }
+
+    /**
+     * Syncs client-side call rows created while offline into the call_history
+     * collection (upsert by id). Returns the number of rows stored. One malformed
+     * row never fails the batch; rows for other users are skipped.
+     */
+    fun upsertFromSync(redId: String, rows: List<Map<String, Any?>>): Int {
+        var stored = 0
+        for (row in rows) {
+            try {
+                val id = (row["id"] as? String)?.takeIf { it.isNotBlank() } ?: continue
+                val peer = (row["peerId"] as? String)?.takeIf { it.isNotBlank() } ?: continue
+                val outgoing = (row["direction"] as? String)?.equals("OUTGOING", ignoreCase = true) ?: true
+                val type = runCatching { CallType.valueOf(row["type"] as? String ?: "") }
+                    .getOrDefault(CallType.AUDIO_1V1)
+                val status = runCatching { CallStatus.valueOf(row["status"] as? String ?: "") }
+                    .getOrDefault(CallStatus.ENDED)
+                val startedAt = (row["startedAt"] as? Number)?.toLong()
+                    ?.let { Instant.ofEpochMilli(it) } ?: Instant.now()
+                val existing = mongo.findById(id, CallHistoryDocument::class.java)
+                if (existing != null) {
+                    if (existing.initiatorId != redId && existing.targetId != redId) continue
+                    existing.status = status
+                    existing.endedAt = (row["endedAt"] as? Number)?.toLong()
+                        ?.let { Instant.ofEpochMilli(it) } ?: existing.endedAt
+                    existing.durationSeconds = (row["durationSeconds"] as? Number)?.toLong()
+                        ?: existing.durationSeconds
+                    mongo.save(existing)
+                } else {
+                    mongo.save(
+                        CallHistoryDocument(
+                            id = id,
+                            initiatorId = if (outgoing) redId else peer,
+                            targetId = if (outgoing) peer else redId,
+                            targetLabel = (row["peerLabel"] as? String) ?: peer,
+                            type = type,
+                            route = CallRoute.RED,
+                            status = status,
+                            startedAt = startedAt
+                        )
+                    )
+                }
+                stored++
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return stored
     }
 
     private fun update(id: String, action: (CallHistoryDocument) -> Unit): CallHistoryDocument {

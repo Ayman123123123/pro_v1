@@ -1,5 +1,5 @@
 # RED Sovereign — Prometheus Metrics Configuration
-# Custom metrics for VoiceBridge, Asterisk, Kamailio, Janus
+# Custom metrics for RED Sovereign services
 
 global:
   scrape_interval: 15s
@@ -21,47 +21,6 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
-
-  # VoiceBridge Spring Boot application
-  - job_name: 'voicebridge'
-    metrics_path: '/voicebridge/actuator/prometheus'
-    static_configs:
-      - targets: ['voicebridge:8090']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        regex: '([^:]+):.*'
-        replacement: '${1}'
-
-  # Asterisk (via exporter)
-  - job_name: 'asterisk'
-    static_configs:
-      - targets: ['asterisk-exporter:9494']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        regex: '([^:]+):.*'
-        replacement: '${1}'
-
-  # Kamailio (via exporter)
-  - job_name: 'kamailio'
-    static_configs:
-      - targets: ['kamailio-exporter:9495']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        regex: '([^:]+):.*'
-        replacement: '${1}'
-
-  # Janus Gateway (via exporter)
-  - job_name: 'janus'
-    static_configs:
-      - targets: ['janus-exporter:9496']
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        regex: '([^:]+):.*'
-        replacement: '${1}'
 
   # coturn TURN server
   - job_name: 'coturn'

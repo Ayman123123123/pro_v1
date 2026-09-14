@@ -44,8 +44,14 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     // Kotlin
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+    // fasterxml Jackson 2.x pinned explicitly (2.19.2 = catalog choice): Boot 4 BOM
+    // manages Jackson 3 only, so unversioned fasterxml never resolves.
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.2")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.19.2")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.19.2")
+    // Jackson 3 (tools.jackson) for Boot 4 MVC — version from Boot 4 BOM.
+    // The module brings databind transitively; both are needed by JacksonConfig.
+    implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 

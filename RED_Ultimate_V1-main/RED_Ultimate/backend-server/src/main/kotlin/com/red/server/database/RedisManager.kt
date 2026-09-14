@@ -11,27 +11,27 @@ import java.util.concurrent.TimeUnit
  * 🗄️ YOUNES Sovereign Redis Manager
  * الكاش والمؤقتات — البيانات السريعة الزوالة
  *
- * أنماط المفاتيح:
- * ┌─────────────────────────────────┬──────────────────────────────────────┐
- * │ النمط                           │ الوصف                                 │
- * ├─────────────────────────────────┼──────────────────────────────────────┤
- * │ red:seq:{conversationId}        │ التسلسل الرقمي للمحادثة              │
- * │ red:presence:{userId}           │ حالة الاتصال (ONLINE/OFFLINE/BUSY)   │
- * │ red:status:{userId}             │ الحالة التفصيلية (JSON)              │
- * │ red:typing:{conversationId}     │ "يكتب الآن" (set مع TTL)             │
- * │ red:online                      │ Set: المستخدمون المتصلون              │
- * │ red:ratelimit:{scope}:{key}     │ عداد Rate Limit                       │
- * │ red:session:{tokenHash}         │ جلسة Refresh Token                    │
- * │ red:otp:{userId}                │ رمز التحقق OTP                       │
- * │ red:device:cert:{deviceId}      │ شهادة الجهاز المؤقتة                  │
- * │ red:notify:unread:{userId}      │ عداد الإشعارات غير المقروءة          │
- * │ red:notify:queue:{userId}       │ قائمة إشعارات مؤقتة                   │
- * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة                  │
- * │ red:media:grant:{objectKey}     │ صلاحية وسائط مؤقتة                    │
- * │ red:search:recent:{userId}      │ عمليات البحث الأخيرة (list)           │
- * │ red:backup:progress:{userId}    │ تقدم النسخ الاحتياطي                  │
- * │ red:metrics:realtime            │ مقاييس حية (hash)                     │
- * └─────────────────────────────────┴──────────────────────────────────────┘
+ * P9 — عقد مفاتيح Redis (كل مفتاح له TTL صريح ما لم تُذكر دورة حياة بديلة):
+ * ┌─────────────────────────────────┬────────────────────────────┬─────────┐
+ * │ النمط                           │ الوصف                      │ TTL     │
+ * ├─────────────────────────────────┼────────────────────────────┼─────────┤
+ * │ red:presence:index              │ ZSET حضور حي redId←ms      │ 40d+purge│
+ * │ red:online                      │ Set المتصلين (حياة=سوكت)   │ بلا (سوكت)│
+ * │ red:typing:{conv}:{user}        │ "يكتب الآن"                │ 5s      │
+ * │ red:ratelimit:{scope}:{key}     │ عداد Rate Limit (Lua ذري)  │ نافذة   │
+ * │ red:session:{tokenHash}         │ كاش جلسة Refresh (احتياطي) │ =انتهاء │
+ * │ red:notify:unread:{userId}      │ عداد غير المقروءة          │ 30d منزلق│
+ * │ red:notify:queue:{userId}       │ إشعارات مؤقتة (≤100)       │ 30d     │
+ * │ red:call:signaling:{callId}     │ إشارات WebRTC مؤقتة        │ 30m     │
+ * │ red:media:grant:{key}:{grantee} │ صلاحية وسائط مؤقتة         │ 1h      │
+ * │ red:search:recent:{userId}      │ آخر 20 بحثًا               │ 30d     │
+ * │ red:metrics:realtime            │ مقاييس حية (hash)          │ 48h منزلق│
+ * └─────────────────────────────────┴────────────────────────────┴─────────┘
+ * حضور ZSET/Set يُدار مباشرة عبر StringRedisTemplate (نمط معتمد في 8 ملفات).
+ * القنوات: red:messages:{redId} للإيصال الفوري، red:typing لإشارات الكتابة.
+ * ملاحظة P9: حُذفت المكررات الميتة (red:seq، red:presence:{u}، red:status،
+ * red:otp، red:device:cert) — التسلسل في Mongo conversation_sequences حصرًا.
+ * (ملاحظة: لا تكتب شارحة-نجمة هنا أبدًا — Kotlin يعشّش التعليقات الكتلية فيبتلع الملف.)
  */
 @Component
 class RedisManager(private val redis: StringRedisTemplate) {
@@ -71,79 +71,6 @@ class RedisManager(private val redis: StringRedisTemplate) {
                 .warn("Redis SCAN failed for pattern '$pattern': ${e.message}")
             emptySet()
         }
-    }
-
-    // ══════════════════════════════════════════
-    // 📊 التسلسل الرقمي (ACID-like counter)
-    // ══════════════════════════════════════════
-
-    fun incrementSequence(conversationId: String): Long {
-        return redis.opsForValue().increment("red:seq:$conversationId") ?: 1L
-    }
-
-    fun incrementGroupSequence(groupId: String): Long {
-        return redis.opsForValue().increment("red:seq:group:$groupId") ?: 1L
-    }
-
-    // ══════════════════════════════════════════
-    // 🟢 حالة الاتصال (Presence)
-    // ══════════════════════════════════════════
-
-    fun setPresence(userId: String, status: String = "ONLINE") {
-        redis.opsForValue().set("red:presence:$userId", status, 5, TimeUnit.MINUTES)
-        if (status == "ONLINE") {
-            redis.opsForSet().add("red:online", userId)
-        } else {
-            redis.opsForSet().remove("red:online", userId)
-        }
-    }
-
-    fun getPresence(userId: String): String? {
-        return redis.opsForValue().get("red:presence:$userId")
-    }
-
-    fun removePresence(userId: String) {
-        redis.delete("red:presence:$userId")
-        redis.opsForSet().remove("red:online", userId)
-    }
-
-    fun deleteKey(key: String) {
-        redis.delete(key)
-    }
-
-    fun getOnlineUsers(): Set<String> {
-        val members = redis.opsForSet().members("red:online") ?: return emptySet()
-        if (members.isEmpty()) return emptySet()
-        // نظافة ذاتية: أي عضو انتهت صلاحية presence الخاص به (خدمة ماتت دون go-offline) يُزاح تلقائياً
-        val live = members.filter { redis.hasKey("red:presence:$it") }.toSet()
-        if (live.size != members.size) {
-            val stale = members - live
-            if (stale.isNotEmpty()) redis.opsForSet().remove("red:online", *stale.toTypedArray())
-        }
-        return live
-    }
-
-    fun isUserOnline(userId: String): Boolean {
-        return redis.opsForSet().isMember("red:online", userId) == true
-    }
-
-    // ══════════════════════════════════════════
-    // 🔴 الحالة التفصيلية (Status)
-    // ══════════════════════════════════════════
-
-    fun setUserStatus(userId: String, type: String, customText: String?, visibleTo: String) {
-        val key = "red:status:$userId"
-        redis.opsForHash<String, String>().apply {
-            put(key, "type", type)
-            put(key, "customText", customText ?: "")
-            put(key, "visibleTo", visibleTo)
-            put(key, "updatedAt", System.currentTimeMillis().toString())
-        }
-        redis.expire(key, 24, TimeUnit.HOURS)
-    }
-
-    fun getUserStatus(userId: String): Map<String, String> {
-        return redis.opsForHash<String, String>().entries("red:status:$userId")
     }
 
     // ═══════════════════════5═══════════════════
@@ -201,25 +128,15 @@ class RedisManager(private val redis: StringRedisTemplate) {
         redis.delete("red:session:$tokenHash")
     }
 
-    fun storeOtp(userId: String, code: String, expiresInSeconds: Long = 300) {
-        redis.opsForValue().set("red:otp:$userId", code, expiresInSeconds, TimeUnit.SECONDS)
-    }
-
-    fun verifyOtp(userId: String, code: String): Boolean {
-        val stored = redis.opsForValue().get("red:otp:$userId")
-        if (stored == code) {
-            redis.delete("red:otp:$userId")
-            return true
-        }
-        return false
-    }
-
     // ══════════════════════════════════════════
     // 🔔 الإشعارات المؤقتة
     // ══════════════════════════════════════════
 
     fun incrementUnreadNotifications(userId: String): Long {
-        return redis.opsForValue().increment("red:notify:unread:$userId") ?: 1L
+        val key = "red:notify:unread:$userId"
+        val v = redis.opsForValue().increment(key) ?: 1L
+        redis.expire(key, 30, TimeUnit.DAYS) // P9: TTL منزلق — لا عدادات خالدة
+        return v
     }
 
     fun getUnreadNotificationCount(userId: String): Long {
@@ -227,13 +144,15 @@ class RedisManager(private val redis: StringRedisTemplate) {
     }
 
     fun resetUnreadNotifications(userId: String) {
-        redis.opsForValue().set("red:notify:unread:$userId", "0")
+        redis.opsForValue().set("red:notify:unread:$userId", "0", 30, TimeUnit.DAYS) // P9: TTL
     }
 
     fun pushNotification(userId: String, notificationJson: String) {
-        redis.opsForList().leftPush("red:notify:queue:$userId", notificationJson)
+        val key = "red:notify:queue:$userId"
+        redis.opsForList().leftPush(key, notificationJson)
         // Trim to last 100
-        redis.opsForList().trim("red:notify:queue:$userId", 0, 99)
+        redis.opsForList().trim(key, 0, 99)
+        redis.expire(key, 30, TimeUnit.DAYS) // P9: TTL
     }
 
     fun getRecentNotifications(userId: String, count: Long = 20): List<String> {
@@ -277,8 +196,10 @@ class RedisManager(private val redis: StringRedisTemplate) {
     // ══════════════════════════════════════════
 
     fun addRecentSearch(userId: String, query: String) {
-        redis.opsForList().leftPush("red:search:recent:$userId", query)
-        redis.opsForList().trim("red:search:recent:$userId", 0, 19) // آخر 20
+        val key = "red:search:recent:$userId"
+        redis.opsForList().leftPush(key, query)
+        redis.opsForList().trim(key, 0, 19) // آخر 20
+        redis.expire(key, 30, TimeUnit.DAYS) // P9: TTL
     }
 
     fun getRecentSearches(userId: String): List<String> {
@@ -294,7 +215,9 @@ class RedisManager(private val redis: StringRedisTemplate) {
     // ══════════════════════════════════════════
 
     fun incrementMetric(metric: String, delta: Long = 1): Long {
-        return redis.opsForHash<String, String>().increment("red:metrics:realtime", metric, delta) ?: delta
+        val v = redis.opsForHash<String, String>().increment("red:metrics:realtime", metric, delta) ?: delta
+        redis.expire("red:metrics:realtime", 48, TimeUnit.HOURS) // P9: TTL منزلق
+        return v
     }
 
     fun getMetrics(): Map<String, String> {
@@ -303,22 +226,27 @@ class RedisManager(private val redis: StringRedisTemplate) {
 
     fun setMetric(metric: String, value: String) {
         redis.opsForHash<String, String>().put("red:metrics:realtime", metric, value)
+        redis.expire("red:metrics:realtime", 48, TimeUnit.HOURS) // P9: TTL منزلق
     }
 
     // ══════════════════════════════════════════
     // 🧹 تنظيف
     // ══════════════════════════════════════════
 
+    fun deleteKey(key: String) {
+        redis.delete(key)
+    }
+
     fun cleanUserData(userId: String) {
-        val patterns = listOf(
-            "red:presence:$userId",
-            "red:status:$userId",
-            "red:notify:unread:$userId",
-            "red:notify:queue:$userId",
-            "red:search:recent:$userId",
-            "red:otp:$userId"
+        // P9: مفاتيح حية فقط — الحضور ZSET يُزال بـ ZREM لا DEL
+        redis.delete(
+            listOf(
+                "red:notify:unread:$userId",
+                "red:notify:queue:$userId",
+                "red:search:recent:$userId"
+            )
         )
-        redis.delete(patterns)
         redis.opsForSet().remove("red:online", userId)
+        redis.opsForZSet().remove("red:presence:index", userId)
     }
 }

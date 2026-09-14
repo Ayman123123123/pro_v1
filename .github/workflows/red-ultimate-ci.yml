@@ -1,0 +1,259 @@
+name: RED Ultimate CI
+
+# Phase 10 (2026-09-15): the single CI workflow. Supersedes blank.yml,
+# build-red.yml (dead project/** paths), extract-project.yml (one-shot,
+# already served), and quality-gate.yml (merged here + env matrix).
+# Originals preserved in الأرشيف/ci-2026-09-15/.
+
+on:
+  push:
+    paths:
+      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
+      - '.github/workflows/red-ultimate-ci.yml'
+      - 'scripts/check-sovereign-dod.sh'
+  pull_request:
+    paths:
+      - 'RED_Ultimate_V1-main/RED_Ultimate/**'
+      - '.github/workflows/red-ultimate-ci.yml'
+      - 'scripts/check-sovereign-dod.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: red-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PROJECT: RED_Ultimate_V1-main/RED_Ultimate
+
+jobs:
+  infrastructure:
+    name: Infrastructure and Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static infrastructure regressions
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          python3 scripts/check-infrastructure.py
+          find scripts -maxdepth 1 -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+
+      - name: Render base Compose configuration
+        working-directory: ${{ env.PROJECT }}
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: Render every environment override
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          for env in dev staging prod; do
+            echo "--- base + $env ---"
+            docker compose -f docker-compose.yml -f docker-compose.$env.yml \
+              --env-file .env.example config --quiet
+          done
+
+      - name: Validate TLS tooling and Nginx syntax
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          set -euo pipefail
+          tls="$(mktemp -d)"
+          trap 'rm -rf "$tls"' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -sha256 \
+            -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            -keyout "$tls/privkey.pem" -out "$tls/fullchain.pem" >/dev/null 2>&1
+          chmod 600 "$tls/privkey.pem"
+          chmod 644 "$tls/fullchain.pem"
+          scripts/verify-ssl-certs.sh "$tls/fullchain.pem" "$tls/privkey.pem"
+          docker run --rm \
+            --add-host backend:127.0.0.1 \
+            --add-host media-sfu:127.0.0.1 \
+            --add-host admin-panel:127.0.0.1 \
+            -v "$PWD/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$tls:/etc/ssl/red:ro" \
+            nginx:1.27-alpine nginx -t
+
+      - name: Build backend production image with BuildKit cache mount
+        working-directory: ${{ env.PROJECT }}
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          set -o pipefail
+          docker build --progress=plain --file backend-server/Dockerfile --tag younes-backend:ci . 2>&1 | tee /tmp/docker-build.log
+      - name: Upload docker build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-log
+          path: /tmp/docker-build.log
+          if-no-files-found: warn
+      - name: Publish failure excerpt to check output
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name=="Infrastructure and Docker") | .check_run_url | split("/") | last')
+          EXCERPT=$(grep -iE "error|failed" /tmp/docker-build.log | grep -v "show-error" | head -n 25 || true)
+          [ -z "$EXCERPT" ] && EXCERPT=$(tail -n 30 /tmp/docker-build.log)
+          jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
+            '{output:{title:"Docker failure excerpt",summary:$s}}' > /tmp/out.json
+          gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
+
+  backend:
+    name: Backend tests (JDK 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Test Spring backend and shared protocol
+        working-directory: ${{ env.PROJECT }}/backend-server
+        run: |
+          set -o pipefail
+          ./gradlew test --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-test.log
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: ${{ env.PROJECT }}/backend-server/build/test-results/test/*.xml
+          if-no-files-found: warn
+      - name: Publish failure excerpt to check output
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name=="Backend tests (JDK 21)") | .check_run_url | split("/") | last')
+          EXCERPT=$(grep -E "^e: |FAILED|What went wrong|error:" /tmp/gradle-test.log | head -n 25 || true)
+          [ -z "$EXCERPT" ] && EXCERPT=$(tail -n 30 /tmp/gradle-test.log)
+          jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
+            '{output:{title:"Backend failure excerpt",summary:$s}}' > /tmp/out.json
+          gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
+
+  admin-integration:
+    name: Admin and app contract integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT }}/admin_dashboard/package-lock.json
+      - name: Install and run static checks
+        working-directory: ${{ env.PROJECT }}/admin_dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+          npm run build
+
+  android:
+    name: Android 17 build and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      # No third-party setup-android action: android-actions/setup-android@v3
+      # crashes on the forced Node.js 24 runtime (deterministic CI failure).
+      # Pinned manual cmdline-tools install instead (15859902 = current Sep 2026).
+      - name: Install Android cmdline-tools (pinned, no third-party action)
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$HOME/android-sdk"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          curl -sSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+          unzip -q /tmp/cmdtools.zip -d "$ANDROID_HOME/cmdline-tools"
+          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_HOME"
+          } >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+      - name: Install API 37 and supported build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          # Since API 37 Google publishes minor-suffixed platform packages
+          # (platforms;android-37.0) — the bare android-37 id fails with
+          # "Failed to find package" (deterministic CI failure since Sep 2026).
+          sdkmanager "platforms;android-37.0" "build-tools;36.0.0" \
+            || sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      # :app is mapped to red-app/ via projectDir in settings.gradle.kts —
+      # the single canonical Android product since Phase 11 triage.
+      - name: Unit test and assemble canonical app
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          set -o pipefail
+          ./gradlew :app:testDebugUnitTest :app:assembleDebug \
+            -PRED_SKIP_BUILD_LOGIC=true \
+            --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-android.log
+      - name: Publish failure excerpt to check output
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CR_ID=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+            --jq '.jobs[] | select(.name=="Android 17 build and unit tests") | .check_run_url | split("/") | last')
+          EXCERPT=$(grep -A2 -E "^e: |FAILED|What went wrong|error:|Duplicate class" /tmp/gradle-android.log | head -n 80 || true)
+          [ -z "$EXCERPT" ] && EXCERPT=$(tail -n 30 /tmp/gradle-android.log)
+          jq -n --arg s "$(printf '%s' "$EXCERPT" | head -c 20000)" \
+            '{output:{title:"Android failure excerpt",summary:$s}}' > /tmp/out.json
+          gh api "repos/${{ github.repository }}/check-runs/$CR_ID" -X PATCH --input /tmp/out.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: younes-android-debug
+          path: ${{ env.PROJECT }}/red-app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  media-sfu:
+    name: Media SFU install and syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT }}/media-sfu/package-lock.json
+      - name: Install production dependency and validate server
+        working-directory: ${{ env.PROJECT }}/media-sfu
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          npm run check
+
+  sovereign-dod:
+    name: Sovereign DoD guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sovereign DoD guard (no Firebase / no telephony scope)
+        run: bash scripts/check-sovereign-dod.sh

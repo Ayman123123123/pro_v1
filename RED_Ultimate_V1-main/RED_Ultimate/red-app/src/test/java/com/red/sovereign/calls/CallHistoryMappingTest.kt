@@ -29,7 +29,7 @@ class CallHistoryMappingTest {
             peerLabel = "علي",
             type = "VIDEO",
             direction = "INCOMING",
-            route = "DINSTAR",
+            route = "RED",
             status = "COMPLETED",
             timestamp = 1_700_000_000_000L,
             durationMs = 45_000L,
@@ -41,7 +41,7 @@ class CallHistoryMappingTest {
         assertEquals("علي", item.peerLabel)
         assertEquals("VIDEO", item.type)
         assertEquals("INCOMING", item.direction)
-        assertEquals("DINSTAR", item.route)
+        assertEquals("RED", item.route)
         assertEquals("COMPLETED", item.status)
         assertEquals("1700000000000", item.startedAt)
         assertEquals("1700000005000", item.answeredAt)

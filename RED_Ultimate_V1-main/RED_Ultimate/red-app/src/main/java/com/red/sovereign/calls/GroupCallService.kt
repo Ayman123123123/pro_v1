@@ -484,6 +484,35 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     )
                 }
             }
+            ACTION_KICK_MEMBER -> {
+                val memberId = intent.getStringExtra(EXTRA_MEMBER_ID).orEmpty()
+                if (isHost && memberId.isNotBlank() && memberId != myUserId && groupCallId.isNotBlank()) {
+                    signaling.send(
+                        CallSignal(
+                            callId = groupCallId,
+                            type = CallSignal.GROUP_CALL_KICK,
+                            groupCallId = groupCallId,
+                            mode = if (isVideo) "VIDEO" else "VOICE",
+                            payload = mapOf("memberId" to memberId)
+                        )
+                    )
+                    markMemberLeft(memberId)
+                }
+            }
+            ACTION_MUTE_MEMBER -> {
+                val memberId = intent.getStringExtra(EXTRA_MEMBER_ID).orEmpty()
+                if (isHost && memberId.isNotBlank() && memberId != myUserId && groupCallId.isNotBlank()) {
+                    signaling.send(
+                        CallSignal(
+                            callId = groupCallId,
+                            type = CallSignal.GROUP_CALL_MUTE_MEMBER,
+                            groupCallId = groupCallId,
+                            mode = if (isVideo) "VIDEO" else "VOICE",
+                            payload = mapOf("memberId" to memberId)
+                        )
+                    )
+                }
+            }
             ACTION_TOGGLE_SPEAKER -> {
                 val nowSpeaker = !audio.isSpeakerphoneOn
                 audio.isSpeakerphoneOn = nowSpeaker
@@ -779,6 +808,25 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
                     sfu?.setMicrophoneEnabled(false)
                 }
             }
+            CallSignal.GROUP_CALL_KICK -> {
+                val kickedId = signal.payload["memberId"].orEmpty()
+                if (kickedId.isBlank()) return
+                if (kickedId == myUserId) {
+                    android.widget.Toast.makeText(this, "طردك المضيف من المكالمة", android.widget.Toast.LENGTH_LONG).show()
+                    stopGroupCall()
+                } else {
+                    markMemberLeft(kickedId)
+                }
+            }
+            CallSignal.GROUP_CALL_MUTE_MEMBER -> {
+                if (signal.payload["memberId"].orEmpty() == myUserId && myUserId.isNotBlank()) {
+                    GroupCallRuntime.isMuted = true
+                    engine?.setMicrophoneEnabled(false)
+                    mesh?.setMicrophoneEnabled(false)
+                    sfu?.setMicrophoneEnabled(false)
+                    android.widget.Toast.makeText(this, "كتمك المضيف — يمكنك فتح الكتم بنفسك", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
 
             CallSignal.USE_MESH -> {
                 // المضيف أعلن فشل SFU — اسقط للميش فوراً بدل انتظار مهلة التذكرة.
@@ -1061,6 +1109,15 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         networkWatcher?.stop(); networkWatcher = null
     }
 
+    /** Marks a kicked/left member LEFT in the visible roster (host + peers). */
+    private fun markMemberLeft(memberId: String) {
+        val cur = GroupCallRuntime.state as? GroupCallUiState.Active ?: return
+        if (cur.members.none { it.userId == memberId }) return
+        GroupCallRuntime.state = cur.copy(members = cur.members.map {
+            if (it.userId == memberId) it.copy(status = GroupCallMemberStatus.LEFT) else it
+        })
+    }
+
     private fun stopGroupCall() {
         if (stopping) return
         stopping = true
@@ -1235,6 +1292,8 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         const val ACTION_RAISE_HAND        = "com.red.sovereign.groupcall.RAISE_HAND"
         const val ACTION_TOGGLE_SPEAKER    = "com.red.sovereign.groupcall.TOGGLE_SPEAKER"
         const val ACTION_ADD_PARTICIPANT   = "com.red.sovereign.groupcall.ADD_PARTICIPANT"
+        const val ACTION_KICK_MEMBER     = "com.red.sovereign.groupcall.KICK_MEMBER"
+        const val ACTION_MUTE_MEMBER     = "com.red.sovereign.groupcall.MUTE_MEMBER"
 
         const val EXTRA_GROUP_CALL_ID = "group_call_id"
         const val EXTRA_GROUP_ID      = "group_id"
@@ -1245,6 +1304,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         const val EXTRA_INVITEE_IDS   = "invitee_ids"
         const val EXTRA_INVITEE_NAMES = "invitee_names"
         const val EXTRA_IS_VIDEO      = "is_video"
+        const val EXTRA_MEMBER_ID     = "member_id"
 
         private const val NOTIF_ID_ACTIVE   = 8100
         private const val NOTIF_ID_INCOMING = 8101
@@ -1318,6 +1378,20 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         fun muteAll(context: Context) {
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).setAction(ACTION_MUTE_ALL))
+        }
+
+        /** Host-only: forcibly remove [memberId] (server prunes + bans rejoin). */
+        fun kickMember(context: Context, memberId: String) {
+            ContextCompat.startForegroundService(context,
+                Intent(context, GroupCallService::class.java).setAction(ACTION_KICK_MEMBER)
+                    .putExtra(EXTRA_MEMBER_ID, memberId))
+        }
+
+        /** Host-only: mute one member (they can unmute themselves, WhatsApp-style). */
+        fun muteMember(context: Context, memberId: String) {
+            ContextCompat.startForegroundService(context,
+                Intent(context, GroupCallService::class.java).setAction(ACTION_MUTE_MEMBER)
+                    .putExtra(EXTRA_MEMBER_ID, memberId))
         }
 
         fun raiseHand(context: Context) {

@@ -19,7 +19,6 @@ import com.red.sovereign.settings.SettingsRuntime
  * يدعم:
  * - قناة إشعارات مخصصة للمكالمات
  * - أزرار تحكم (قبول/رفض/كتم)
- * - إشعارات مكالمات PSTN
  * - إشعارات المكالمات الجماعية
  * - إشعارات المؤتمر
  * - إشعارات البث المباشر
@@ -56,8 +55,7 @@ object CallNotificationManager {
     /**
      * ضمان وجود قناتَي المكالمات.
      *
-     * لا نعيد إنشاء قناة موجودة (نفس نمط [PstnCallForegroundService] و
-     * [PhoneStateReceiver]) حتى لا نغيّر الاسم/الوصف الذي أنشأه التطبيق ويراه
+     * لا نعيد إنشاء قناة موجودة حتى لا نغيّر الاسم/الوصف الذي أنشأه التطبيق ويراه
      * المستخدم؛ الإنشاء هنا شبكة أمان فقط إن استُدعيت الدالة قبل تهيئة التطبيق.
      */
     fun createNotificationChannel(context: Context) {
@@ -305,7 +303,7 @@ object CallRingRegistry {
     fun showIncoming(context: Context, callId: String, peer: String, isVideo: Boolean, callType: String, myUserId: String): Int {
         // إلغاء السابق قبل عرض الجديد — دقة بلا تداخل
         activeCallId?.takeIf { it != callId }?.let { cancel(context, it) }
-        // إزالة تكرار نفس المكالمة (FCM + WS يرنان معاً)
+        // إزالة تكرار نفس المكالمة (الدفع + WS يرنان معاً)
         if (activeCallId == callId) return activeNotifyId
         CallNotificationManager.createNotificationChannel(context)
         // كتم الوسائط المتداخلة: تركيز رنين حصري

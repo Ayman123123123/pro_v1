@@ -1,8 +1,7 @@
 param(
     [ValidateRange(1024, 65535)][int]$HttpPort = 8088,
     [switch]$TrustCurrentNetwork,
-    [switch]$EnableMediaPorts,
-    [switch]$EnableDinstarPorts
+    [switch]$EnableMediaPorts
 )
 $ErrorActionPreference = 'Stop'
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -10,7 +9,6 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-HttpPort', $HttpPort)
     if ($TrustCurrentNetwork) { $arguments += '-TrustCurrentNetwork' }
     if ($EnableMediaPorts) { $arguments += '-EnableMediaPorts' }
-    if ($EnableDinstarPorts) { $arguments += '-EnableDinstarPorts' }
     Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
     Write-Host 'Requested administrator permission in a new PowerShell window.'
     exit 0
@@ -38,9 +36,5 @@ if ($EnableMediaPorts) {
     Ensure-Rule 'YOUNES TURN' 'UDP' '3478'
     Ensure-Rule 'YOUNES SFU RTP' 'UDP' '40000-40100'
     Ensure-Rule 'YOUNES TURN Relay' 'UDP' '45000-45050'
-}
-if ($EnableDinstarPorts) {
-    Ensure-Rule 'YOUNES DINSTAR SIP' 'UDP' '5060' '192.168.11.1'
-    Ensure-Rule 'YOUNES DINSTAR RTP' 'UDP' '10000-10100' '192.168.11.1'
 }
 Write-Host 'YOUNES_WINDOWS_LAN_READY'

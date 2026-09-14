@@ -25,7 +25,7 @@ class CertificatePinnerTest {
 
     @Test
     fun `hostname verification is strict`() {
-        // Only private addresses allowed for DINSTAR
+        // Only private addresses allowed for LAN hardware
         val privateIps = listOf("192.168.11.1", "10.0.0.5", "172.16.0.10")
         val publicIps = listOf("8.8.8.8", "1.1.1.1")
         assertTrue(privateIps.all { it.startsWith("192.168.") || it.startsWith("10.") || it.startsWith("172.") })
@@ -33,11 +33,11 @@ class CertificatePinnerTest {
     }
 
     @Test
-    fun `trust-all manager is only for DINSTAR private LAN`() {
-        // Trust-all X509TrustManager must ONLY be used for 192.168.11.1
-        val dinstarHost = "192.168.11.1"
+    fun `trust-all manager is only for private LAN`() {
+        // Trust-all X509TrustManager must ONLY be used for private LAN hosts
+        val lanHost = "192.168.11.1"
         val publicHost = "google.com"
-        assertTrue(dinstarHost.startsWith("192.168."))
+        assertTrue(lanHost.startsWith("192.168."))
         assertFalse(publicHost.startsWith("192.168."))
     }
 }

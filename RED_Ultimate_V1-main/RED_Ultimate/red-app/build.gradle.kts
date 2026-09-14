@@ -19,6 +19,12 @@ android {
     namespace = "com.red.sovereign"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
+    testOptions {
+        // JVM unit tests call android.util.Log (CallTelemetry) — return defaults
+        // instead of throwing "not mocked". Pure JVM/Compose logic unaffected.
+        unitTests.isReturnDefaultValues = true
+    }
+
     defaultConfig {
         applicationId = "com.red.sovereign"
         minSdk = libs.versions.minSdk.get().toInt()
@@ -126,14 +132,18 @@ java {
     }
 }
 
+configurations.all {
+    // Drop the standalone core jar — its classes live inside tink-android (see above).
+    exclude(group = "com.google.crypto.tink", module = "tink")
+}
+
 dependencies {
     coreLibraryDesugaring(libs.android.tools.desugar)
 
     // Keep the Kotlin runtime and Compose artifacts on one coherent line.
     implementation(platform(libs.kotlin.bom))
-    // FCM works without google-services.json; the token is read at runtime.
-    // Version from catalog (libs.firebase.messaging = 25.0.1), no hardcoded pin.
-    implementation(libs.firebase.messaging)
+    // Sovereign push: UnifiedPush connector (self-hosted ntfy distributor, zero Google services).
+    implementation(libs.unifiedpush.connector)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -155,8 +165,6 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.kotlinx.coroutines.core)
-    // await() لمهام Play-services (توكن FCM دون حجب في VoipPushRegistrar) — من الكتالوج (1.10.2).
-    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.square.okhttp3)
     implementation(libs.libsignal.android)
@@ -179,9 +187,7 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // ───── خطوط Google (Cairo + Tajawal) ─────
-    // النسخة من سطر BOM في الكتالوج (1.7.8) — لا تثبيت يدوي.
-    implementation(libs.androidx.compose.ui.text.google.fonts)
+    // الخطوط مضمّنة محلياً (res/font/plex_arabic — SIL OFL) — لا خطوط Google الشبكية.
 
     // ───── Coil 3.x — تحميل وعرض الصور والفيديو (3.6.0، يخلف 2.7.0 المجمّد) ─────
     implementation(libs.coil3.compose)
@@ -220,7 +226,11 @@ dependencies {
 
     // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.security.crypto)
+    implementation(libs.androidx.security.crypto)
+    // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
+    // version (1.8.0 AND 1.23.0 both duplicate tink-core), so the graph must carry exactly
+    // one of them. The android AAR is the superset (core + AndroidKeystore), pinned modern.
+    implementation("com.google.crypto.tink:tink-android:1.23.0")
 
     testImplementation("junit:junit:4.13.2")
 }

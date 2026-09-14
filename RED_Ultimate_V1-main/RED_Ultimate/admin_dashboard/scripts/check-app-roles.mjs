@@ -56,6 +56,10 @@ const ADMIN_BY_DESIGN = new Map([
   ['/api/admin/content/polls/:p/close', 'media/PollsApi'],
   ['/api/master/admin/system/stats', 'features/admin'],
   ['/api/master/admin/users/pending', 'features/admin'],
+  // لوحة الإدارة داخل التطبيق — AdminViewModel عبر AdminDashboardScreen،
+  // ومدخلها محمي بـ isAdmin في RedDashboard (يُعاد التوجيه لغير الإداري).
+  ['/api/admin/presence/online', 'features/admin'],
+  ['/api/admin/users/:p', 'features/admin'],
 ]);
 
 // Events/Polls intentionally share an `/api/admin/content` namespace, but

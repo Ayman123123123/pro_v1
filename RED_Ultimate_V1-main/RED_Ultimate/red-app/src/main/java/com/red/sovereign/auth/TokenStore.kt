@@ -8,24 +8,19 @@ class TokenStore(val context: Context) {
     val accessToken get() = store.get("access")
     val refreshToken get() = store.get("refresh")
     val deviceId get() = store.get("device_id")
-    val fcmToken get() = store.get("fcm_token")
+    /** UnifiedPush endpoint URL issued by the self-hosted distributor. */
+    val pushEndpoint get() = store.get("push_endpoint")
     val redId get() = store.get("red_id")
     val username get() = store.get("username")
-    val pstnEnabled get() = store.get("pstn_enabled") == "true"
-    /** رقم الشريحة المربوطة 1:1 — كامل غير مقنع، يراه صاحبه فقط في جهازه. */
-    val pstnNumber get() = store.get("pstn_number")
-    val pstnPortIndex get() = store.get("pstn_port_index")?.toIntOrNull()
-    val pstnGatewayId get() = store.get("pstn_gateway_id")
     /** دور الحساب — "ADMIN" أو "USER". يُستخدم لإظهار/إخفاء أدوات الإدارة في التطبيق. */
     val role get() = store.get("role") ?: "USER"
     val isAdmin get() = role == "ADMIN"
 
     fun rememberDevice(value: String) = store.put("device_id", value)
-    fun saveFcmToken(value: String) = store.put("fcm_token", value)
+    fun savePushEndpoint(value: String) = store.put("push_endpoint", value)
+    fun clearPushEndpoint() = store.remove("push_endpoint")
     fun saveUsername(value: String) = store.put("username", value)
 
-    /** حفظ صلاحية PSTN بعد /api/auth/me — كان AuthViewModel يلمس store الخاص مباشرة. */
-    fun savePstnEnabled(value: Boolean) = store.put("pstn_enabled", value.toString())
     /**
      * كلمة مرور الدخول المؤقتة تُحفظ في الذاكرة فقط — لا تُكتب على القرص أبداً
      * (EncryptedSharedPrefs/Keystore لا يعنيان أن الاحتفاظ بكلمة مرور مقبول).
@@ -48,10 +43,6 @@ class TokenStore(val context: Context) {
         store.put("access", response.accessToken); store.put("refresh", response.refreshToken)
         response.deviceId?.let(::rememberDevice)
         store.put("red_id", response.user.redId); store.put("username", response.user.username)
-        store.put("pstn_enabled", response.user.pstnEnabled.toString())
-        store.put("pstn_number", response.user.pstnNumber ?: "")
-        store.put("pstn_port_index", response.user.pstnPortIndex?.toString() ?: "")
-        store.put("pstn_gateway_id", response.user.pstnGatewayId?.toString() ?: "")
         store.put("role", response.user.role.toString())
         clearPendingLogin()
     }
@@ -59,7 +50,7 @@ class TokenStore(val context: Context) {
     fun clearSession() {
         pendingPasswordMemory = null
         store.remove("access", "refresh", "red_id", "username", "role",
-            "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id",
-            "pending_username", "pending_password")
+            "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id", // Phase 8: purge stale PSTN keys from older installs
+            "pending_username", "pending_password", "push_endpoint")
     }
 }

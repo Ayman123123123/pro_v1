@@ -296,6 +296,15 @@ class ConferenceSignalingClient(
         )
     )
 
+    /** مشاركة الشاشة: بدء/إيقاف — تُبث للغرفة لتمييز بلاطة العارض. */
+    fun sendScreenShare(roomId: String, userId: String, sharing: Boolean) = send(
+        ConferenceSignal(
+            type = if (sharing) "SCREEN_SHARE_START" else "SCREEN_SHARE_STOP",
+            roomId = roomId,
+            userId = userId
+        )
+    )
+
     /** خفض اليد صراحة */
     fun lowerHand(roomId: String, userId: String) = raiseHand(roomId, userId, lowered = true)
 
@@ -359,6 +368,16 @@ class ConferenceSignalingClient(
             roomId = roomId,
             userId = userId,
             payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    /** LEGENDARY Phase 7: host mutes every participant except self (server persists + relays). */
+    fun muteAll(roomId: String, userId: String) = send(
+        ConferenceSignal(
+            type = "MUTE_ALL",
+            roomId = roomId,
+            userId = userId,
+            payload = emptyMap()
         )
     )
 

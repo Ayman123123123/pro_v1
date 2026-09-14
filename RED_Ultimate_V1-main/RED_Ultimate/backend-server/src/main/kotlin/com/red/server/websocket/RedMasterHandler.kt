@@ -76,7 +76,7 @@ class RedMasterHandler(
         val now = System.currentTimeMillis().toDouble()
         runCatching { redis.opsForZSet().add("red:presence:index", redId, now) }
         // أيضاً تحديث حالة ONLINE في UserStatusService للوحة والخصوصية
-        runCatching { redis.opsForSet().add("users:online", redId) }
+        runCatching { redis.opsForSet().add("red:online", redId) }
     }
 
     /** معالجة مغلف واحد بعزل الأخطاء — مرونة بمستوى واتساب: رسالة مرفوضة
@@ -138,7 +138,7 @@ class RedMasterHandler(
         val stored = messages.processIncoming(incoming)
         send(session, ack(stored, "SENT"))
         sendToDevice(stored.receiverId, stored.receiverDeviceId, messageEnvelope(stored))
-        // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول FCM اختياري
+        // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول الدفع السيادي
         // كي لا تُفوَّت الرسالة حتى لو لم يفتح التطبيق (البريد المعلق يغطي إعادة الاتصال فقط).
         val receiverHasLiveSession = sessions[stored.receiverId]?.values?.any { it.isOpen } == true
         if (!receiverHasLiveSession) {
@@ -239,7 +239,7 @@ class RedMasterHandler(
         }
         val now = System.currentTimeMillis().toDouble()
         redis.opsForZSet().add("red:presence:index", redId, now)
-        redis.opsForSet().add("users:online", redId)
+        redis.opsForSet().add("red:online", redId)
         // تحديث last_seen فوري في قاعدة البيانات (مرة واحدة — كانت مكررة بسطر ثانٍ زائد)
         runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
         messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
@@ -259,7 +259,7 @@ class RedMasterHandler(
         // إن لم يعد له أي جلسة حية — اعتبره offline فعلياً وحذّث last_seen
         if (removed || sessions[redId].isNullOrEmpty()) {
             runCatching { redis.opsForZSet().remove("red:presence:index", redId) }
-            runCatching { redis.opsForSet().remove("users:online", redId) }
+            runCatching { redis.opsForSet().remove("red:online", redId) }
             runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
             log.debug("Presence OFFLINE for {}", redId)
         }
@@ -270,11 +270,11 @@ class RedMasterHandler(
     fun cleanupStalePresence() {
         val cutoff = (System.currentTimeMillis() - 5 * 60_000L).toDouble()
         runCatching { redis.opsForZSet().removeRangeByScore("red:presence:index", 0.0, cutoff) }
-        // مزامنة users:online مع ZSet الحية
+        // مزامنة red:online مع ZSet الحية
         runCatching {
             val live = redis.opsForZSet().range("red:presence:index", 0, -1) ?: emptySet()
-            val online = redis.opsForSet().members("users:online") ?: emptySet()
-            (online - live).forEach { redis.opsForSet().remove("users:online", it) }
+            val online = redis.opsForSet().members("red:online") ?: emptySet()
+            (online - live).forEach { redis.opsForSet().remove("red:online", it) }
         }
     }
 

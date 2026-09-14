@@ -27,21 +27,16 @@ import com.red.sovereign.ui.screens.ActiveCallScreen
  *   `ZoomRuntime.isMinimized` للتصغير.
  * - `YounesCallService.action(…ACTION_END)` و`GroupCallService.end` و
  *   `ZoomGroupCallService.end` لإنهاء المكالمة (فتصبح الحالة `Idle`/`Ended`).
- * - [CallRuntime.clearPstn] لمكالمة البوابة — يستدعيها
- *   [YounesPstnCallOverlay] نفسه بعد `hangup` وبعد مهلة الحالة النهائية.
  *
  * تمرير `onDismiss` كان يعِد بشيء لا تنفّذه أي شاشة، ولهذا حُذف من كل الدوال
  * أدناه؛ الباقي `modifier` وحده لأن [ActiveCallScreen] هو الوحيد الذي يقبله.
  *
- * ## المكالمة الفردية والبوابة
+ * ## المكالمة الفردية
  *
  * [CallScreens] يعرض المكالمة الفردية عبر [ActiveCallScreen] — نفس ما يستدعيه
  * `YounesCallOverlay(onDismiss)` في `CallRuntime.kt`، بينما [UnifiedCallOverlays]
  * يستدعي `YounesCallOverlay()` الأغنى (`CallOverlay.kt`). هذا الفرق مقصود:
  * [CallScreens] يعرض الشاشة وحدها لمن يضعها داخل تخطيط خاص به.
- *
- * ومكالمة البوابة (PSTN) لا تظهر في [UnifiedCallOverlays] إطلاقاً، فهذا الملف
- * هو الموضع الوحيد الذي يعرض [YounesPstnCallOverlay] عند وصله.
  */
 
 /**
@@ -92,25 +87,10 @@ fun LiveStreamScreens() {
 }
 
 /**
- * موجّه مكالمة البوابة (PSTN/DINSTAR).
- *
- * [PstnCallStatus] تعداد لا تسلسل مغلق، فالمقارنة بـ`!=` لا بـ`is`.
- * الحرس هنا ضروري: [YounesPstnCallOverlay] لا يفحص [PstnCallStatus.IDLE]
- * بنفسه، فاستدعاؤه بلا شرط يرسم شاشة مكالمة وهمية بلا مكالمة.
- */
-@Composable
-fun PstnCallScreens() {
-    if (CallRuntime.pstnStatus == PstnCallStatus.IDLE) return
-    YounesPstnCallOverlay()
-}
-
-/**
  * موجّه موحّد — واجهة واحدة في كل لحظة.
  *
  * لا يعيد كتابة ترتيب الأولوية: يفوّضه إلى [UnifiedCallOverlays] نفسه فلا توجد
- * نسختان من الترتيب تتباعدان. المضاف هنا شيء واحد: مكالمة البوابة، وهي غير
- * مشمولة هناك إطلاقاً، وتُعرض فقط عندما تكون أنواع المكالمات الخمسة الأخرى
- * خاملة — فلا تتراكم واجهتان معاً.
+ * نسختان من الترتيب تتباعدان.
  */
 @Composable
 fun UnifiedCallScreens(modifier: Modifier = Modifier) {
@@ -122,8 +102,5 @@ fun UnifiedCallScreens(modifier: Modifier = Modifier) {
 
     Box(modifier = modifier.fillMaxSize()) {
         UnifiedCallOverlays()
-        if (!inAppCallActive && CallRuntime.pstnStatus != PstnCallStatus.IDLE) {
-            YounesPstnCallOverlay()
-        }
     }
 }

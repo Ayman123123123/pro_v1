@@ -4,6 +4,7 @@ import com.red.server.auth.repository.UserAccountRepository
 import com.red.server.auth.security.JwtService
 import com.red.server.groups.GroupRole
 import com.red.server.groups.GroupService
+import com.red.server.websocket.ConferenceWebSocketHandler
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
@@ -22,7 +23,8 @@ class SfuTicketController(
     private val jwt: JwtService,
     private val activeCalls: ActiveCallRegistry,
     private val conferenceRooms: ConferenceRoomService,
-    private val liveStreams: LiveStreamService
+    private val liveStreams: LiveStreamService,
+    private val conferenceSignaling: ConferenceWebSocketHandler
 ) {
     @GetMapping("/{groupId}/ticket")
     fun issue(@PathVariable groupId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
@@ -56,15 +58,24 @@ class SfuTicketController(
         }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
-        val ticket = jwt.issueSfuTicket(user, deviceId, roomId, "MEMBER", canProduce = true)
+        // LEGENDARY Phase 7: مساحات الصوت — المستمع تذكرة استهلاك فقط (يمنع نشر عميل معَدَّل
+        // متجاوزاً بوابة PRODUCE الخاصة بالـ mesh)؛ مؤتمرات الفيديو والمكالمات الجماعية للجميع.
+        val roomRole = if (conferenceRoom != null && conferenceRoom.isSpace) {
+            when {
+                conferenceRoom.hostId == authentication.name -> "HOST"
+                else -> conferenceSignaling.getRole(roomId, user.redId, authentication.name)
+            }
+        } else "MEMBER"
+        val canProduce = conferenceRoom == null || !conferenceRoom.isSpace || roomRole in setOf("HOST", "CO_HOST", "SPEAKER")
+        val ticket = jwt.issueSfuTicket(user, deviceId, roomId, roomRole, canProduce = canProduce)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
-            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, roomId, "MEMBER", true))
+            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, roomId, roomRole, canProduce))
     }
 
     /**
      * LIVE requires an explicit REST join before a viewer can obtain a media
-     * capability. The broadcaster alone receives producer permission.
+     * capability. The broadcaster and approved co-hosts (max 4) receive producer permission.
      */
     @GetMapping("/live/{streamId}/ticket")
     fun issueLive(@PathVariable streamId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
@@ -78,18 +89,21 @@ class SfuTicketController(
         require(isBroadcaster || liveStreams.isViewerAny(streamId, user.redId, accountIdText)) {
             "Join the live stream before requesting media access"
         }
+        // LEGENDARY Phase 6: approved co-hosts (max 4) publish to the SFU room too —
+        // match either id form since approval targets arrive as redId.
+        val isCoHost = !isBroadcaster && liveStreams.getCoHosts(streamId).any { it == accountIdText || it == user.redId }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
         val ticket = jwt.issueSfuTicket(
             user = user,
             deviceId = deviceId,
             groupId = streamId,
-            groupRole = if (isBroadcaster) "BROADCASTER" else "VIEWER",
-            canProduce = isBroadcaster
+            groupRole = if (isBroadcaster) "BROADCASTER" else if (isCoHost) "COHOST" else "VIEWER",
+            canProduce = isBroadcaster || isCoHost
         )
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
-            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, streamId, if (isBroadcaster) "BROADCASTER" else "VIEWER", isBroadcaster))
+            .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, streamId, if (isBroadcaster) "BROADCASTER" else if (isCoHost) "COHOST" else "VIEWER", isBroadcaster || isCoHost))
     }
 
     companion object {

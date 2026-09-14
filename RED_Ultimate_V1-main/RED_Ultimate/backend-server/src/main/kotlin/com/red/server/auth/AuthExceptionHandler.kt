@@ -22,7 +22,7 @@ import tools.jackson.databind.exc.MismatchedInputException
  * 1. الفرع `main` كان يمرّر `error.message` للعميل لأن إرجاع «INVALID_REQUEST»
  *    بلا سبب جعل فشل التسجيل لغزًا لا يمكن تشخيصه. المكسب: رموز النطاق
  *    (POLL_NOT_ACTIVE / ALREADY_VOTED / CSRF_VALIDATION_FAILED) تصل للواجهة.
- *    الخطر: أي رسالة استثناء داخلية تُسرَّب كما هي (مسار SQL، IP بوابة، سر SIP).
+ *    الخطر: أي رسالة استثناء داخلية تُسرَّب كما هي (مسار SQL، عنوان داخلي، سر توقيع).
  *
  * 2. الفرع `chore/platform-rebuild-baseline` كان يُرجع رمزًا ثابتًا فقط مع
  *    `diagnosticId`. المكسب: صفر تسريب + إمكانية ربط شكوى المستخدم بسجل الخادم.

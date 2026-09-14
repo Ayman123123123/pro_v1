@@ -18,10 +18,10 @@ import kotlinx.coroutines.launch
 /**
  * مدير تكامل نظام المكالمات — Call System Integration Manager
  *
- * يوحّد جميع مكونات نظام المكالمات (WebRTC, PSTN, Push Notifications, Telecom)
+ * يوحّد جميع مكونات نظام المكالمات (WebRTC, Push Notifications, Telecom)
  * في واجهة واحدة مركزية. يتعامل مع:
  * - تهيئة محرك WebRTC
- * - تسجيل إشعارات FCM للمكالمات
+ * - تسجيل إشعارات الدفع السيادي (UnifiedPush) للمكالمات
  * - ربط خدماتTelecom (Android ConnectionService)
  * - مزامنة سجل المكالمات مع الخادم
  * - إدارة حالة التطبيق أثناء المكالمات (foreground service)
@@ -58,18 +58,7 @@ object CallSystemIntegration {
             }
         )
 
-        // 4. بدء خدمةForeground للمكالمات PSTN
-        // تصحيح: PstnCallService غير موجود؛ الخدمة الحقيقية هي
-        // PstnCallForegroundService، ومصدر "هل PSTN متاح" هو صلاحية الحساب
-        // المحفوظة في TokenStore.pstnEnabled (تُحدّث من /api/auth/me).
-        // الخدمة تُشغَّل عبر مصنعها الحقيقي start(context, number) لأن
-        // ACTION_START يتوقع extra باسم "number" لبناء الإشعار.
-        val tokens = TokenStore(context)
-        if (tokens.pstnEnabled) {
-            PstnCallForegroundService.start(context, tokens.pstnNumber.orEmpty())
-        }
-
-        // 5. تهيئة مدير الإشعارات
+        // 4. تهيئة مدير الإشعارات
         // تصحيح: لا يوجد NotificationHelper في المشروع — إنشاء القناة (الخطوة 2)
         // هو كل ما يحتاجه نظام المكالمات فعلياً، وقنوات باقي التطبيق تُنشأ في
         // YounesApplication.createNotificationChannels.
@@ -91,17 +80,6 @@ object CallSystemIntegration {
         scope.launch {
             CallLogSyncScheduler.schedulePeriodicSync(context)
         }
-    }
-
-    /**
-     * إنهاء نظام المكالمات (عند الخروج)
-     */
-    fun shutdown(context: Context) {
-        // إيقاف خدماتForeground
-        val intent = Intent(context, PstnCallForegroundService::class.java).apply {
-            action = PstnCallForegroundService.ACTION_STOP
-        }
-        context.startService(intent)
     }
 
     /**
