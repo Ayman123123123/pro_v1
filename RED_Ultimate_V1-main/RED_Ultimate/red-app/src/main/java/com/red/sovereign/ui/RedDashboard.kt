@@ -1215,6 +1215,19 @@ private fun ChatHubScreen(
             }
         }
     }
+    // Phase-1 (2026-09-14): استبدال عنصر نائب بالمحتوى الحقيقي بعد نجاح الفك المتأخر.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.red.sovereign.crypto.DecryptedMessageUpdateBus.updates.collect { item ->
+            val index = decrypted.indexOfFirst { it.id == item.id }
+            if (index != -1) decrypted[index] = item else decrypted.add(item)
+        }
+    }
+    // Phase-1 (2026-09-14): تنبيه فوري عند فشل الإرسال (كان يضيع بصمت).
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.red.sovereign.crypto.MessageSendErrorBus.errors.collect { error ->
+            android.widget.Toast.makeText(context, error.arabicMessage, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         ReactionEventBus.events.collect { event ->
@@ -1528,7 +1541,7 @@ private fun ChatHubScreen(
                                     }
                                 }
                             }
-                            if (!item.outgoing && localMessages.effectiveReadReceipts(item.conversationId, SettingsRuntime.current.readReceipts)) RedConnectionService.markRead(context, item.id, item.sequence)
+                            if (!item.outgoing && !com.red.sovereign.core.isPendingDecryptPlaceholder(item.plaintext) && localMessages.effectiveReadReceipts(item.conversationId, SettingsRuntime.current.readReceipts)) RedConnectionService.markRead(context, item.id, item.sequence)
                         } catch (e: Exception) {
                             android.util.Log.e("RedDashboard", "Skipping bad message id=${item.id}", e)
                         }
