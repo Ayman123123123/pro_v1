@@ -260,4 +260,72 @@ class ConferenceWebSocketHandlerTest {
         assertTrue(aliceAfter.any { it["type"].asText() == "PARTICIPANT_JOINED" }) { "same canonical room: $aliceAfter" }
         assertEquals("HOST", aliased.getRole("legacyConfAlias02", "73066"))
     }
+
+    // ─────────────────────── غرفة الانتظار (Lobby) ───────────────────────
+
+    /** تهيئة غرفة بمضيف فعّال اللوبي، ثم انضمام ضيف فيُحتجَز. */
+    private fun lobbySetup(): Pair<Probe, Probe> {
+        val host = Probe("s1", "73066")
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"true"}}"""))
+        val guest = Probe("s2", "28261")
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        return Pair(host, guest)
+    }
+
+    @Test fun `اللوبي يحتجز الداخل الجديد ويبلغ المضيف ثم القبول يدخله`() {
+        val (host, guest) = lobbySetup()
+        // المنتظر: LOBBY_WAITING بلا ROOM_STATE (لا وسائط قبل الموافقة)
+        val guestTypes = guest.sent.map { objectMapper.readTree(it)["type"].asText() }
+        assertTrue(guestTypes.contains("LOBBY_WAITING")) { "الضيف لم يُحتجَز: $guestTypes" }
+        assertTrue(guestTypes.none { it == "ROOM_STATE" }) { "وصلت حالة غرفة كاملة لمنتظر: $guestTypes" }
+        // المضيف: LOBBY_REQUEST باسم المنتظر
+        val request = host.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "LOBBY_REQUEST" }
+        assertEquals("28261", request["payload"]["userId"].asText())
+        // القبول: المقبول يأخذ LOBBY_APPROVED ثم ROOM_STATE، والغرفة PARTICIPANT_JOINED
+        guest.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_APPROVE","roomId":"red-room-12345","payload":{"targetUserId":"28261"}}"""))
+        val after = guest.sent.map { objectMapper.readTree(it) }
+        assertTrue(after.any { it["type"].asText() == "LOBBY_APPROVED" }) { "لم يصل تأكيد القبول: $after" }
+        assertTrue(after.any { it["type"].asText() == "ROOM_STATE" }) { "لم تصل حالة الغرفة للمقبول: $after" }
+        assertTrue(host.sent.map { objectMapper.readTree(it)["type"].asText() }.contains("PARTICIPANT_JOINED")) {
+            "الغرفة لم تُبلَّغ بدخول المقبول: ${host.sent}"
+        }
+    }
+
+    @Test fun `رفض اللوبي من مضيف حقيقي يصل للمنتظر`() {
+        val (host, guest) = lobbySetup()
+        guest.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_DENY","roomId":"red-room-12345","payload":{"targetUserId":"28261"}}"""))
+        assertTrue(guest.sent.map { objectMapper.readTree(it)["type"].asText() }.contains("LOBBY_DENIED")) {
+            "لم يصل LOBBY_DENIED للمنتظر: ${guest.sent}"
+        }
+    }
+
+    @Test fun `غير المضيف لا يدير اللوبي والغرفة تبقى مفتوحة`() {
+        val host = Probe("s1", "73066")
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        val guest = Probe("s2", "28261")
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        guest.sent.clear()
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"true"}}"""))
+        val types = guest.sent.map { objectMapper.readTree(it) }
+        assertTrue(types.any { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "FORBIDDEN" }) { "لم يُرفض أمر اللوبي من مستمع: $types" }
+        // اللوبي لم يتفعّل فعلاً: منضمّ جديد يدخل مباشرة بROOM_STATE
+        val third = Probe("s3", "11111")
+        handler.handleTextMessage(third.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        assertTrue(third.sent.map { objectMapper.readTree(it)["type"].asText() }.contains("ROOM_STATE")) { "اللوبي تفعّل بأمر غير مصرّح!" }
+    }
+
+    @Test fun `إيقاف اللوبي يقبل كل المنتظرين`() {
+        val (host, guest) = lobbySetup()
+        val guest2 = Probe("s3", "11111")
+        handler.handleTextMessage(guest2.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        guest.sent.clear(); guest2.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"false"}}"""))
+        val guestTypes = guest.sent.map { objectMapper.readTree(it)["type"].asText() }
+        val guest2Types = guest2.sent.map { objectMapper.readTree(it)["type"].asText() }
+        assertTrue(guestTypes.contains("LOBBY_APPROVED") && guestTypes.contains("ROOM_STATE")) { "الأول لم يُقبَل: $guestTypes" }
+        assertTrue(guest2Types.contains("LOBBY_APPROVED") && guest2Types.contains("ROOM_STATE")) { "الثاني لم يُقبَل: $guest2Types" }
+    }
 }

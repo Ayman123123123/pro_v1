@@ -73,6 +73,13 @@ class ConferenceSignalingClient(
         }
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
+        /**
+         * غرفة الانتظار: حالة اللوبي + قائمة المنتظرين — من ROOM_STATE
+         * (كما يصل للمضيف الجديد أو العائد بعد الانقطاع فلا تفقد القائمة).
+         */
+        fun onLobbyState(enabled: Boolean, waiting: List<String>) {
+            Log.d(TAG, "onLobbyState default enabled=$enabled waiting=${waiting.size} — override should update ConferenceRuntime")
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -170,6 +177,10 @@ class ConferenceSignalingClient(
                                 val selfRole = signal.payload["self_role"] ?: "LISTENER"
                                 listener.onRoomState(participants, selfRole)
                                 listener.onSelfRole(selfRole)
+                                // غرفة الانتظار: الحالة + قائمة المنتظرين (مرتبة كإرسال الخادم)
+                                val waitingCount = signal.payload["waiting_count"]?.toIntOrNull() ?: 0
+                                val waiting = (0 until waitingCount).mapNotNull { signal.payload["waiting_user_$it"] }.sorted()
+                                listener.onLobbyState(signal.payload["lobby"] == "true", waiting)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
