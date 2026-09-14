@@ -10,10 +10,12 @@ on:
     paths:
       - 'RED_Ultimate_V1-main/RED_Ultimate/**'
       - '.github/workflows/red-ultimate-ci.yml'
+      - 'scripts/check-sovereign-dod.sh'
   pull_request:
     paths:
       - 'RED_Ultimate_V1-main/RED_Ultimate/**'
       - '.github/workflows/red-ultimate-ci.yml'
+      - 'scripts/check-sovereign-dod.sh'
   workflow_dispatch:
 
 permissions:
@@ -162,3 +164,12 @@ jobs:
         run: |
           npm ci --omit=dev --no-audit --no-fund
           npm run check
+
+  sovereign-dod:
+    name: Sovereign DoD guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run sovereign DoD guard (no Firebase / no telephony scope)
+        run: bash scripts/check-sovereign-dod.sh

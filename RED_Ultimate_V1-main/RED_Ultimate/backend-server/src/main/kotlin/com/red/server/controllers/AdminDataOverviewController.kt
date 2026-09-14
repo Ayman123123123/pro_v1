@@ -14,7 +14,7 @@ import java.time.Instant
  *
  * This deliberately reports aggregate counts and health metadata only. It never
  * returns E2EE envelopes, message text, recovery codes, passwords, identity
- * private keys, raw phone/SIM identifiers, or unmasked media references.
+ * private keys, raw phone/device identifiers, or unmasked media references.
  *
  * ## لماذا `null` وليس `0` عند التعذّر
  *
