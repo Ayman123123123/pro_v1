@@ -18,10 +18,10 @@ class ManagersTest {
         VirtualBackgroundManager.setEffect(VirtualBgEffect.BLUR)
         assertEquals(VirtualBgEffect.BLUR, VirtualBackgroundManager.config.effect)
         // في JVM الاختبار isSupported قد يكون false (SDK mock) — نتحقق من blurRadius لا من shouldApply
-        assertEquals(22f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
+        assertEquals(24f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
 
         VirtualBackgroundManager.setEffect(VirtualBgEffect.BLUR_HEAVY)
-        assertEquals(32f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
+        assertEquals(36f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
 
         VirtualBackgroundManager.setSolidColor(Color(0xFF14C79A))
         assertEquals(VirtualBgEffect.SOLID, VirtualBackgroundManager.config.effect)

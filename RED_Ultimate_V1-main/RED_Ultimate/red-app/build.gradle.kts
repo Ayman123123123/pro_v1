@@ -19,6 +19,12 @@ android {
     namespace = "com.red.sovereign"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
+    testOptions {
+        // JVM unit tests call android.util.Log (CallTelemetry) — return defaults
+        // instead of throwing "not mocked". Pure JVM/Compose logic unaffected.
+        unitTests.isReturnDefaultValues = true
+    }
+
     defaultConfig {
         applicationId = "com.red.sovereign"
         minSdk = libs.versions.minSdk.get().toInt()
