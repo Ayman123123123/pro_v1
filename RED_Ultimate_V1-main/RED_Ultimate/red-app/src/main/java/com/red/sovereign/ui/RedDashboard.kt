@@ -1512,7 +1512,7 @@ private fun ChatHubScreen(
                             }
                             // تتبع غير المقروء للرسائل الواردة (ما لم تكن المحادثة/المجموعة مفتوحة حالياً)
                             if (!item.outgoing) {
-                                if (item.conversationId.length > 32) {
+                                if (com.red.sovereign.core.RedConnectionService.isGroupConversation(item.conversationId)) {
                                     if (item.conversationId != groupConversationId) {
                                         groupUnread[item.conversationId] = (groupUnread[item.conversationId] ?: 0) + 1
                                     } else {
@@ -2522,7 +2522,7 @@ private fun ChatHubScreen(
     }
     selectedChatMessage?.let { message ->
         val payload = if (message.type == "RICH_TEXT") RichMessage.decode(message.plaintext) else null
-        val isGroupMsg = message.conversationId.length > 32
+        val isGroupMsg = com.red.sovereign.core.RedConnectionService.isGroupConversation(message.conversationId)
         ModalBottomSheet(
             onDismissRequest = { selectedChatMessage = null },
             containerColor = MaterialTheme.colorScheme.surface,
@@ -3606,7 +3606,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
                     "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-                    else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                    else -> if (call.peerId.matches(RED_ID_PATTERN) ) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }
@@ -3696,7 +3696,7 @@ private fun CallHistoryRow(call: CallHistoryItem) {
                     "LIVE" -> LiveStreamService.start(context, call.id, call.peerId, false)
                     "SPACE" -> ConferenceService.join(context, call.id, call.peerId, false, asHost = false)
                     "GROUP" -> ConferenceService.join(context, call.id, call.peerId, true, asHost = false)
-                    else -> if (call.peerId.matches(RED_ID_PATTERN) && call.route != "DINSTAR") {
+                    else -> if (call.peerId.matches(RED_ID_PATTERN) ) {
                         YounesCallService.start(context, call.peerId, call.type == "VIDEO")
                     }
                 }

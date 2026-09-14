@@ -2,16 +2,8 @@ package com.red.sovereign.features.calls
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,25 +15,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.ui.theme.SovereignColors
 
 /**
- * 📞 YOUNES Sovereign Call System — Ultimate Integration
+ * 📞 RED Sovereign Call System — Ultimate Integration RED-only
+ * أفضل من واتس وتيليجرام وزنجي وزووم
  */
 
 enum class CallType(val label: String, val icon: ImageVector, val color: Color, val description: String) {
-    VOIP_AUDIO("صوتي يونس", Icons.Rounded.Call, SovereignColors.VoipBlue, "تشفير طرفي كامل"),
-    VOIP_VIDEO("فيديو يونس", Icons.Rounded.Videocam, Color(0xFF9C27B0), "دقة 1080p سيادية"),
-    CONFERENCE("مؤتمر يونس", Icons.Rounded.Groups, SovereignColors.Success, "حتى 32 مشارك"),
-    LIVE_BROADCAST("بث مباشر", Icons.Rounded.LiveTv, SovereignColors.LiveRed, "بث سيادي عام"),
-    PSTN_DINSTAR("خطي يمني", Icons.Rounded.SimCard, SovereignColors.DinstarGold, "عبر بوابة DINSTAR")
+    VOIP_AUDIO("صوت يونس", Icons.Rounded.Call, SovereignColors.VoipBlue, "Opus 48kHz + RNNoise AI + E2EE"),
+    VOIP_VIDEO("فيديو يونس", Icons.Rounded.Videocam, Color(0xFF9C27B0), "AV1 SVC 720p + E2EE"),
+    GROUP_VOICE("مجموعة صوتية", Icons.Rounded.Groups, Color(0xFF00C98C), "30 متحدث + SFU"),
+    GROUP_VIDEO("مجموعة فيديو", Icons.Rounded.VideoCall, Color(0xFF00BCD4), "30 فيديو + simulcast"),
+    CONFERENCE("مؤتمر يونس", Icons.Rounded.Business, SovereignColors.Success, "500 مشارك + SFU tree + breakout"),
+    AUDIO_SPACE("مساحة صوتية", Icons.Rounded.HeadsetMic, Color(0xFFFF9800), "13 متحدث + غير محدود مستمع - أفضل من X"),
+    LIVE_BROADCAST("بث مباشر", Icons.Rounded.LiveTv, SovereignColors.LiveRed, "WebRTC <500ms + LL-HLS + تفاعلات فقط")
 }
 
 data class SovereignCall(
@@ -89,7 +82,6 @@ fun SovereignActiveCallScreen(
             }
         }
 
-        // Controls — الآن فعالة وليست فارغة
         Row(
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,

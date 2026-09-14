@@ -776,6 +776,44 @@ class RedConnectionService : Service() {
                 android.util.Log.w("RedConnectionService", "start failed: not allowed in background", e)
             }
         }
+        /**
+         * إصلاح جذري: حفظ متفائل فوري في UI قبل محاولة الخدمة
+         * يضمن ظهور الرسالة حتى لو فشل startForegroundService (Android 12+)
+         */
+        private fun saveOptimisticDirect(
+            context: Context,
+            id: String,
+            conversationId: String,
+            senderId: String,
+            payload: ByteArray,
+            type: String,
+            peerId: String?
+        ) {
+            try {
+                val repo = LocalRepository(context.applicationContext)
+                val tokenStore = TokenStore(context.applicationContext)
+                val myId = senderId.ifBlank { tokenStore.redId.orEmpty() }
+                // حفظ في Room + بث + تحديث المحادثة - كلها في IO
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        repo.saveLocalHistory(LocalHistoryEntity(id, conversationId, myId, payload, type, System.currentTimeMillis(), true))
+                        DecryptedMessageBus.publish(DecryptedMessage(id, conversationId, myId, payload, System.currentTimeMillis(), 0, type = type, outgoing = true))
+                        if (peerId != null) {
+                            val preview = try {
+                                val rich = RichMessage.decode(payload)
+                                rich?.text?.take(120) ?: String(payload, Charsets.UTF_8).take(120)
+                            } catch (_: Exception) { String(payload, Charsets.UTF_8).take(120) }
+                            repo.onMessageStored(conversationId, peerId, preview, System.currentTimeMillis(), isIncoming = false)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("RedConnectionService", "direct optimistic save failed for $id", e)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RedConnectionService", "saveOptimisticDirect failed", e)
+            }
+        }
+
         fun sendText(context: Context, targetRedId: String, conversationId: String, text: String, clientId: String? = null) =
             sendPayload(context, targetRedId, conversationId, "TEXT", text.toByteArray(Charsets.UTF_8), clientId ?: UuidV7.next())
 
@@ -784,6 +822,10 @@ class RedConnectionService : Service() {
 
         fun sendPayload(context: Context, targetRedId: String, conversationId: String, type: String, payload: ByteArray, clientId: String? = null) {
             val cid = clientId ?: UuidV7.next()
+            // حفظ متفائل فوري قبل الخدمة - يضمن الظهور حتى لو فشل FGS
+            if (type !in setOf("REACTION", "REACTION_REMOVE") && !payload.toString(Charsets.UTF_8).contains("\"action\":\"REACTION\"")) {
+                saveOptimisticDirect(context, cid, conversationId, "", payload, type, targetRedId)
+            }
             try {
                 context.startForegroundService(
                     Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_PAYLOAD)
@@ -792,11 +834,23 @@ class RedConnectionService : Service() {
                         .putExtra(EXTRA_CLIENT_ID, cid)
                 )
             } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
-                android.util.Log.w("RedConnectionService", "sendPayload failed: not allowed in background", e)
+                android.util.Log.w("RedConnectionService", "sendPayload FGS failed, but optimistic saved: $cid", e)
+                // محاولة ثانية عبر startService عادي كـ fallback
+                try {
+                    context.startService(
+                        Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_PAYLOAD)
+                            .putExtra(EXTRA_TARGET, targetRedId).putExtra(EXTRA_CONVERSATION, conversationId)
+                            .putExtra(EXTRA_TYPE, type).putExtra(EXTRA_PAYLOAD, payload)
+                            .putExtra(EXTRA_CLIENT_ID, cid)
+                    )
+                } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("RedConnectionService", "sendPayload failed", e)
             }
         }
         fun sendGroupText(context: Context, group: Group, text: String, clientId: String? = null) {
             val cid = clientId ?: UuidV7.next()
+            saveOptimisticDirect(context, cid, group.id, "", text.toByteArray(Charsets.UTF_8), "GROUP_MESSAGE", group.id)
             try {
                 context.startForegroundService(
                     Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
@@ -804,12 +858,20 @@ class RedConnectionService : Service() {
                         .putExtra(EXTRA_CLIENT_ID, cid)
                 )
             } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
-                android.util.Log.w("RedConnectionService", "sendGroupText failed: not allowed in background", e)
+                android.util.Log.w("RedConnectionService", "sendGroupText FGS failed, optimistic saved", e)
+                try {
+                    context.startService(
+                        Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
+                            .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, text)
+                            .putExtra(EXTRA_CLIENT_ID, cid)
+                    )
+                } catch (_: Exception) {}
             }
         }
 
         fun sendGroupPayload(context: Context, group: Group, type: String, payload: ByteArray, clientId: String? = null) {
             val cid = clientId ?: UuidV7.next()
+            saveOptimisticDirect(context, cid, group.id, "", payload, type, group.id)
             try {
                 context.startForegroundService(
                     Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_PAYLOAD)
@@ -819,13 +881,26 @@ class RedConnectionService : Service() {
                         .putExtra(EXTRA_CLIENT_ID, cid)
                 )
             } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
-                android.util.Log.w("RedConnectionService", "sendGroupPayload failed: not allowed in background", e)
+                android.util.Log.w("RedConnectionService", "sendGroupPayload FGS failed", e)
+                try {
+                    context.startService(
+                        Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_PAYLOAD)
+                            .putExtra(EXTRA_GROUP, Json.encodeToString(group))
+                            .putExtra(EXTRA_TYPE, type)
+                            .putExtra(EXTRA_PAYLOAD, payload)
+                            .putExtra(EXTRA_CLIENT_ID, cid)
+                    )
+                } catch (_: Exception) {}
             }
         }
 
         /** يرسل رسالة جماعية غنية (RICH_TEXT) — تدعم الرد/الاقتباس والرسائل المؤقتة. */
         fun sendGroupRichText(context: Context, group: Group, message: RichMessage, clientId: String? = null) {
             val cid = clientId ?: UuidV7.next()
+            // لا تحفظ تفاعلات كرسائل
+            if (message.action !in setOf("REACTION", "REACTION_REMOVE", "POLL_VOTE")) {
+                saveOptimisticDirect(context, cid, group.id, "", RichMessage.encode(message), "RICH_TEXT", group.id)
+            }
             try {
                 context.startForegroundService(
                     Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
@@ -833,7 +908,14 @@ class RedConnectionService : Service() {
                         .putExtra(EXTRA_CLIENT_ID, cid)
                 )
             } catch (e: android.app.ForegroundServiceStartNotAllowedException) {
-                android.util.Log.w("RedConnectionService", "sendGroupRichText failed: not allowed in background", e)
+                android.util.Log.w("RedConnectionService", "sendGroupRichText FGS failed", e)
+                try {
+                    context.startService(
+                        Intent(context, RedConnectionService::class.java).setAction(ACTION_SEND_GROUP_TEXT)
+                            .putExtra(EXTRA_GROUP, Json.encodeToString(group)).putExtra(EXTRA_TEXT, RichMessage.encode(message).toString(Charsets.UTF_8)).putExtra(EXTRA_GROUP_RICH, true)
+                            .putExtra(EXTRA_CLIENT_ID, cid)
+                    )
+                } catch (_: Exception) {}
             }
         }
 

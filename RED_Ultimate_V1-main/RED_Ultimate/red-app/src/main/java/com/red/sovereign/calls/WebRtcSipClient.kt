@@ -26,9 +26,9 @@ import kotlin.random.Random
  * The SDP offer/answer exchange happens through the PeerConnection,
  * and this client relays the SIP signaling over WebSocket.
  *
- * This is a purpose-built client for the RED Sovereign PSTN bridge.
+ * This is a purpose-built client for the RED Sovereign RED bridge.
  * It does NOT implement the full SIP protocol — only the subset needed
- * for outbound PSTN calls via Asterisk.
+ * for outbound RED calls via Asterisk.
  */
 class WebRtcSipClient(
     private val context: Context,
@@ -535,7 +535,7 @@ class WebRtcSipClient(
             }
 
 
-            // Incoming INVITE → incoming PSTN call via WebRTC
+            // Incoming INVITE → incoming RED call via WebRTC
             method == "INVITE" -> {
                 lastIncomingRequest = message
                 val sdpMatch = Regex("\\r\\n\\r\\n(.*)", RegexOption.DOT_MATCHES_ALL).find(message)

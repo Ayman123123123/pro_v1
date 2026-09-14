@@ -46,14 +46,7 @@ class MainActivity : FragmentActivity() {
     /** منسق البداية — يدير تشغيل وإيقاف الخدمات بعيداً عن Activity. */
     private lateinit var startupCoordinator: AppStartupCoordinator
 
-    /** مراقب دورة الحياة لاستئناف صلاحيات PSTN. */
-    private val pstnLifecycleObserver = object : DefaultLifecycleObserver {
-        override fun onResume(owner: LifecycleOwner) {
-            if (authViewModel.state is AuthState.Authenticated) {
-                authViewModel.refreshPstnEntitlement()
-            }
-        }
-    }
+    // تم إلغاء مراقب PSTN - لا يوجد هاتف يمني
     private var pstnObserverRegistered = false
 
     private val appPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
@@ -121,10 +114,6 @@ class MainActivity : FragmentActivity() {
                             if (state is AuthState.Authenticated) {
                                 requestNecessaryPermissions()
                                 startupCoordinator.onAuthenticated(this@MainActivity, authViewModel)
-                                if (!pstnObserverRegistered) {
-                                    ProcessLifecycleOwner.get().lifecycle.addObserver(pstnLifecycleObserver)
-                                    pstnObserverRegistered = true
-                                }
                             } else if (state !is AuthState.Loading) {
                                 startupCoordinator.onLoggedOut(this@MainActivity)
                             }

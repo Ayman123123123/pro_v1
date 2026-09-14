@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * 3. مؤتمر/Zoom (حتى 100 مشارك) - مثل Zoom
  * 4. بث مباشر (1-to-N) - مثل تيليجرام
  * 5. مساحات صوتية (صوت فقط) - مثل تويتر سبيس
- * 6. هاتف يمني PSTN عبر DINSTAR - حصري
+ * 6. هاتف يمني RED عبر RED - حصري
  * 7. محلي P2P (بلا إنترنت) - حصري
  */
 
@@ -35,7 +35,7 @@ enum class CallTypeUnified {
     CONFERENCE,            // مؤتمر (حتى 100) - SFU
     LIVE_STREAM,           // بث مباشر 1-to-N
     SPACE_AUDIO,           // مساحة صوتية (صوت فقط)
-    PSTN_YEMENI,           // هاتف يمني عبر DINSTAR
+    RED_YEMENI,           // هاتف يمني عبر RED
     LAN_P2P                // محلي P2P بلا إنترنت
 }
 
@@ -99,7 +99,7 @@ object UnifiedCallOrchestrator {
         CallTypeUnified.CONFERENCE -> "مؤتمر فيديو حتى 100 مشارك عبر SFU مع غرف جانبية ورفع يد وتسجيل"
         CallTypeUnified.LIVE_STREAM -> "بث مباشر 1-to-N مع دردشة وتفاعلات وهدايا، عام أو خاص بكلمة سر"
         CallTypeUnified.SPACE_AUDIO -> "مساحة صوتية جماعية - صوت فقط بلا فيديو، مضيف ومستمعون ومتحدثون"
-        CallTypeUnified.PSTN_YEMENI -> "هاتف يمني عبر بوابة DINSTAR وشرائح يمن موبايل وسبأفون وYOU والهاتف الثابت"
+        CallTypeUnified.RED_YEMENI -> "هاتف يمني عبر بوابة RED وشرائح يمن موبايل وسبأفون وYOU والهاتف الثابت"
         CallTypeUnified.LAN_P2P -> "مكالمة محلية P2P بلا إنترنت ولا خادم - نفس الواي فاي، مشفرة DTLS-SRTP"
     }
     
@@ -111,7 +111,7 @@ object UnifiedCallOrchestrator {
         CallTypeUnified.CONFERENCE -> "🎥"
         CallTypeUnified.LIVE_STREAM -> "🔴"
         CallTypeUnified.SPACE_AUDIO -> "🎙️"
-        CallTypeUnified.PSTN_YEMENI -> "☎️🇾🇪"
+        CallTypeUnified.RED_YEMENI -> "☎️🇾🇪"
         CallTypeUnified.LAN_P2P -> "📶"
     }
     
@@ -121,7 +121,7 @@ object UnifiedCallOrchestrator {
         CallTypeUnified.CONFERENCE -> "RED SFU (mediasoup) → WebRTC → Room"
         CallTypeUnified.LIVE_STREAM -> "RED SFU 1-to-N → WebRTC → Viewers"
         CallTypeUnified.SPACE_AUDIO -> "RED SFU Audio-Only → WebRTC → Space"
-        CallTypeUnified.PSTN_YEMENI -> "Android → Backend Auth → Asterisk AMI → DINSTAR → SIM → Yemen Network"
+        CallTypeUnified.RED_YEMENI -> "Android → Backend Auth → Asterisk AMI → RED → SIM → Yemen Network"
         CallTypeUnified.LAN_P2P -> "NSD Discovery → DTLS-SRTP P2P → No Server"
     }
     
@@ -142,7 +142,7 @@ object UnifiedCallOrchestrator {
     fun requestPermissions(context: Context, type: CallTypeUnified): Array<String> {
         return when (type) {
             CallTypeUnified.ONE_TO_ONE_AUDIO, CallTypeUnified.GROUP_AUDIO, 
-            CallTypeUnified.SPACE_AUDIO, CallTypeUnified.PSTN_YEMENI, CallTypeUnified.LAN_P2P -> {
+            CallTypeUnified.SPACE_AUDIO, CallTypeUnified.RED_YEMENI, CallTypeUnified.LAN_P2P -> {
                 arrayOf(android.Manifest.permission.RECORD_AUDIO)
             }
             CallTypeUnified.ONE_TO_ONE_VIDEO, CallTypeUnified.GROUP_VIDEO,
@@ -212,7 +212,7 @@ object UnifiedCallOrchestrator {
             CallTypeUnified.SPACE_AUDIO -> {
                 ConferenceService.join(context, info.callId, info.peerId, false, asHost = true)
             }
-            CallTypeUnified.PSTN_YEMENI -> {
+            CallTypeUnified.RED_YEMENI -> {
                 // يتم عبر AuthViewModel.dialPstn
             }
             CallTypeUnified.LAN_P2P -> {

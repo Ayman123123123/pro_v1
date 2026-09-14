@@ -121,7 +121,7 @@ object CallServiceIntegration {
     }
 
     /**
-     * بدء مكالمة PSTN
+     * بدء مكالمة RED
      *
      * تصحيح: PstnCallForegroundService لا يملك ACTION_DIAL — هو خدمة إبقاء
      * العملية حيّة فقط (ACTION_START + extra باسم "number") عبر
@@ -133,7 +133,7 @@ object CallServiceIntegration {
     }
 
     /**
-     * إنهاء مكالمة PSTN
+     * إنهاء مكالمة RED
      *
      * تصحيح: لا يوجد ACTION_HANGUP ولا action(...) في هذه الخدمة —
      * الإيقاف الحقيقي هو [PstnCallForegroundService.stop] (يحرّر الـ WakeLock).

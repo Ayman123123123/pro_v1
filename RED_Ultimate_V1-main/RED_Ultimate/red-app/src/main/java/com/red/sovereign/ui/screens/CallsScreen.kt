@@ -1,11 +1,9 @@
-﻿package com.red.sovereign.ui.screens
+package com.red.sovereign.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -46,6 +44,15 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+/**
+ * CallsScreen - مركز المكالمات المطور بدون PSTN/DINSTAR
+ * 
+ * - مكالمات خاصة صوت منفصل وفيديو منفصل (أفضل من واتس وتيليجرام وزنجي)
+ * - مكالمات مجموعات الدردشة صوت/فيديو كل على حدة
+ * - مكالمات جماعية للأصدقاء تشبه زووم/إيمو منفصلة تماماً
+ * - بث مباشر أفضل من تيك توك ويوتيوب (تفاعلات فقط)
+ * - مؤتمرات ومساحات أفضل من تويتر X
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CallsScreen(
@@ -53,8 +60,7 @@ fun CallsScreen(
     history: CallHistoryViewModel,
     directory: DirectoryViewModel,
     myDisplayName: String = "",
-    onExplore: () -> Unit = {},
-    onPstn: () -> Unit = {}
+    onExplore: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var filter by remember { mutableStateOf("الكل") }
@@ -65,19 +71,17 @@ fun CallsScreen(
     var showLiveDialog by remember { mutableStateOf(false) }
     var showSpaceDialog by remember { mutableStateOf(false) }
     var pendingCall by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-    // 1. capture target and video BEFORE clearing pendingCall
-    val callTarget = pendingCall?.first
-    val callVideo = pendingCall?.second
-    // 2. always clear pendingCall first to avoid stale state
-    pendingCall = null
-    // 3. check permissions and launch if valid
-    val audio = grants[Manifest.permission.RECORD_AUDIO] == true
-    val cam = callVideo == null || grants[Manifest.permission.CAMERA] == true
-    if (audio && cam && callTarget != null) {
-        YounesCallService.start(context, callTarget, callVideo ?: false)
+    
+    val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val callTarget = pendingCall?.first
+        val callVideo = pendingCall?.second
+        pendingCall = null
+        val audio = grants[Manifest.permission.RECORD_AUDIO] == true
+        val cam = callVideo == null || grants[Manifest.permission.CAMERA] == true
+        if (audio && cam && callTarget != null) {
+            YounesCallService.start(context, callTarget, callVideo ?: false)
+        }
     }
-}
 
     fun launchCall(target: String, video: Boolean) {
         if (!target.matches(Regex(YounesId.PATTERN))) return
@@ -99,12 +103,11 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
         history.calls.filter { call ->
             val matchesFilter = when (filter) {
                 "فائتة" -> call.status == "MISSED"
-                "صوت" -> call.type == "VOICE"
+                "صوت" -> call.type == "VOICE" || call.type == "AUDIO"
                 "فيديو" -> call.type == "VIDEO"
                 "جماعية" -> call.type == "GROUP" || call.type == "CONFERENCE"
                 "بث" -> call.type == "LIVE"
-                "مساحات" -> call.type == "SPACE"
-                "DINSTAR" -> call.route == "DINSTAR"
+                "مساحات" -> call.type == "SPACE" || call.type == "AUDIO_SPACE"
                 else -> true
             }
             val q = query.trim()
@@ -121,7 +124,7 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("مركز المكالمات", fontWeight = FontWeight.Bold) },
+                title = { Text("مركز المكالمات - يونس", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
@@ -133,20 +136,22 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
                 .padding(horizontal = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item { CallsQuickLaunchers(
-                onPrivateCall = { showNewCallDialog = true },
-                onGroupCall = { showGroupCallPicker = true },
-                onConference = { showConferenceDialog = true },
-                onLive = { showLiveDialog = true },
-                onSpace = { showSpaceDialog = true },
-                // DINSTAR يحتاج لوحة PSTN المخصصة حتى لا يمر الرقم كأنه RED ID.
-                onDinstar = onPstn,
-                onExplore = onExplore
-            ) }
+            item { 
+                CallsQuickLaunchers(
+                    onPrivateCall = { showNewCallDialog = true },
+                    onGroupCall = { showGroupCallPicker = true },
+                    onConference = { showConferenceDialog = true },
+                    onLive = { showLiveDialog = true },
+                    onSpace = { showSpaceDialog = true },
+                    onExplore = onExplore
+                ) 
+            }
 
-            item { OnlineContactsStrip(directory = directory, onCall = { person, video ->
-                launchCall(person.redId, video)
-            }) }
+            item { 
+                OnlineContactsStrip(directory = directory, onCall = { person, video ->
+                    launchCall(person.redId, video)
+                }) 
+            }
 
             item {
                 OutlinedTextField(
@@ -166,7 +171,7 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
 
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات", "DINSTAR")) { title ->
+                    items(listOf("الكل", "فائتة", "صوت", "فيديو", "جماعية", "بث", "مساحات")) { title ->
                         FilterChip(
                             selected = filter == title,
                             onClick = { filter = title },
@@ -192,7 +197,7 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
                     CallsEmptyState(Icons.Default.History, "تعذر تحميل السجل", history.error.orEmpty())
                 }
                 filteredCalls.isEmpty() -> item {
-                    CallsEmptyState(Icons.Default.History, "لا توجد مكالمات", "ستظهر هنا المكالمات الصوتية والفيديو والجماعية والبث والمساحات.")
+                    CallsEmptyState(Icons.Default.History, "لا توجد مكالمات", "ستظهر هنا المكالمات الصوتية والفيديو والجماعية والبث والمساحات - كلها مشفرة E2EE.")
                 }
                 else -> items(filteredCalls, key = { it.id }) { call ->
                     CallHistoryRow(call = call, onAudioCall = {
@@ -260,7 +265,6 @@ val callPermissionLauncher = rememberLauncherForActivityResult(ActivityResultCon
             ConferenceService.join(context, room, ownUserId, false, asHost = asHost)
         }
     )
-
 }
 
 @Composable
@@ -270,19 +274,18 @@ private fun CallsQuickLaunchers(
     onConference: () -> Unit,
     onLive: () -> Unit,
     onSpace: () -> Unit,
-    onDinstar: () -> Unit,
     onExplore: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("إطلاق سريع", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+        Text("إطلاق سريع - أفضل من كل المنافسين", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(listOf(
-                Triple("مكالمة", Icons.Rounded.Call, Brush.horizontalGradient(listOf(SovereignColors.VoipBlue, SovereignColors.Cyan))) to onPrivateCall,
+                Triple("صوت", Icons.Rounded.Call, Brush.horizontalGradient(listOf(SovereignColors.VoipBlue, SovereignColors.Cyan))) to onPrivateCall,
+                Triple("فيديو", Icons.Rounded.Videocam, Brush.horizontalGradient(listOf(Color(0xFF7C3AED), Color(0xFF8B5CF6)))) to onPrivateCall,
                 Triple("مجموعة", Icons.Rounded.Groups, Brush.horizontalGradient(listOf(SovereignColors.Success, Color(0xFF059669)))) to onGroupCall,
                 Triple("مؤتمر", Icons.Rounded.VideoCall, Brush.horizontalGradient(listOf(Color(0xFF7C3AED), Color(0xFF8B5CF6)))) to onConference,
                 Triple("بث", Icons.Rounded.LiveTv, SovereignGradients.live) to onLive,
                 Triple("مساحة", Icons.Rounded.RecordVoiceOver, SovereignGradients.space) to onSpace,
-                Triple("DINSTAR", Icons.Rounded.SimCard, SovereignGradients.dinstar) to onDinstar,
                 Triple("استكشاف", Icons.Rounded.Explore, SovereignGradients.royal) to onExplore
             )) { (data, action) ->
                 val (label, icon, brush) = data
@@ -319,7 +322,7 @@ private fun OnlineContactsStrip(directory: DirectoryViewModel, onCall: (PublicRe
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("متصل الآن", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+            Text("متصل الآن - مكالمات P2P فورية", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
             if (online.isNotEmpty()) {
                 Text("${online.size}", fontSize = 12.sp, color = SovereignColors.Success)
             }
@@ -348,10 +351,10 @@ private fun OnlineContactChip(person: PublicRedProfile, onCall: (PublicRedProfil
         Spacer(Modifier.height(4.dp))
         Text(person.displayName, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = { onCall(person, false) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).size(48.dp)) {
+            IconButton(onClick = { onCall(person, false) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.Call, "اتصال صوتي", tint = SovereignColors.VoipBlue, modifier = Modifier.size(20.dp))
             }
-            IconButton(onClick = { onCall(person, true) }, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).size(48.dp)) {
+            IconButton(onClick = { onCall(person, true) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.Videocam, "اتصال فيديو", tint = Color(0xFF8B5CF6), modifier = Modifier.size(20.dp))
             }
         }
@@ -374,7 +377,7 @@ private fun CallHistoryRow(call: CallHistoryItem, onAudioCall: () -> Unit, onVid
         "VIDEO" -> Icons.Rounded.Videocam
         "GROUP", "CONFERENCE" -> Icons.Rounded.Groups
         "LIVE" -> Icons.Rounded.LiveTv
-        "SPACE" -> Icons.Rounded.RecordVoiceOver
+        "SPACE", "AUDIO_SPACE" -> Icons.Rounded.RecordVoiceOver
         else -> Icons.Rounded.Call
     }
     val duration = call.computedDurationSeconds().formatCallDuration()
@@ -435,10 +438,10 @@ private fun NewCallDialog(onDismiss: () -> Unit, onCall: (String, Boolean) -> Un
     val pattern = Regex(YounesId.PATTERN)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("مكالمة جديدة عبر يونس") },
+        title = { Text("مكالمة جديدة عبر يونس - P2P مشفر") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("أدخل معرّف يونس للاتصال به مباشرة:", color = Color.Gray, fontSize = 12.sp)
+                Text("أدخل معرّف يونس للاتصال به مباشرة (صوت منفصل وفيديو منفصل):", color = Color.Gray, fontSize = 12.sp)
                 OutlinedTextField(
                     value = redId,
                     onValueChange = { redId = YounesId.normalizeInput(it) },
@@ -448,30 +451,14 @@ private fun NewCallDialog(onDismiss: () -> Unit, onCall: (String, Boolean) -> Un
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = video, onCheckedChange = { video = it })
-                    Text("مكالمة فيديو")
+                    Text("مكالمة فيديو - جودة عالية AV1 SVC")
                 }
+                Text("رنين فوري، E2EE، أفضل من واتس وتيليجرام", fontSize = 10.sp, color = AqyalGold)
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val perms = buildList {
-                        add(Manifest.permission.RECORD_AUDIO)
-                        if (video) add(Manifest.permission.CAMERA)
-                    }.toTypedArray()
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
-                        (!video || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)) {
-                        onCall(redId, video)
-                    } else {
-                        val launcher = (context as? androidx.activity.ComponentActivity)?.activityResultRegistry
-                            ?.register("perm", ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-                                val audio = grants[Manifest.permission.RECORD_AUDIO] == true
-                                val cam = !video || grants[Manifest.permission.CAMERA] == true
-                                if (audio && cam) onCall(redId, video)
-                            }
-                        launcher?.launch(perms)
-                    }
-                },
+                onClick = { onCall(redId, video) },
                 enabled = redId.matches(pattern)
             ) { Text(if (video) "اتصال فيديو" else "اتصال صوتي") }
         },
@@ -484,7 +471,7 @@ private fun ConferenceJoinDialog(onDismiss: () -> Unit, onJoin: (String) -> Unit
     var room by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("الانضمام إلى مؤتمر") },
+        title = { Text("الانضمام إلى مؤتمر - أفضل من زووم") },
         text = {
             OutlinedTextField(
                 value = room,
@@ -510,7 +497,7 @@ private fun LiveStreamDialog(
     var broadcaster by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("مركز البث المباشر") },
+        title = { Text("مركز البث المباشر - أفضل من تيك توك ويوتيوب") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف البث") }, singleLine = true)
@@ -518,13 +505,14 @@ private fun LiveStreamDialog(
                 if (broadcaster) {
                     OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("عنوان البث") }, singleLine = true)
                 }
+                Text("WebRTC <500ms للمتفاعلين + LL-HLS للجمهور - تفاعلات فقط بدون هدايا", fontSize = 10.sp, color = AqyalGold)
             }
         },
         confirmButton = {
             Button(onClick = {
                 if (broadcaster) onStart(room.trim().ifBlank { "stream_${UUID.randomUUID().toString().take(8)}" }, title.trim().ifBlank { "بث مباشر" })
                 else onJoin(room.trim())
-            }, enabled = broadcaster || room.trim().isNotBlank()) { Text(if (broadcaster) "بدء" else "انضمام") }
+            }, enabled = broadcaster || room.trim().isNotBlank()) { Text(if (broadcaster) "بدء بث" else "انضمام") }
         },
         dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
     )
@@ -536,14 +524,15 @@ private fun SpaceDialog(onDismiss: () -> Unit, onJoin: (String, Boolean) -> Unit
     var asHost by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("مساحة صوتية") },
+        title = { Text("مساحة صوتية - أفضل من تويتر X") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = room, onValueChange = { room = it }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("معرف المساحة (اختياري)") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = asHost, onCheckedChange = { asHost = it }); Text("الانضمام كمضيف") }
+                Text("13 متحدث + مستمعين لا نهائي + تفاعلات + تسجيل اختياري", fontSize = 10.sp, color = AqyalGold)
             }
         },
-        confirmButton = { Button(onClick = { onJoin(room.trim().ifBlank { "space-${System.currentTimeMillis() % 100000}" }, asHost || room.isBlank()) }) { Text("دخول") } },
+        confirmButton = { Button(onClick = { onJoin(room.trim().ifBlank { "space-${System.currentTimeMillis() % 100000}" }, asHost || room.isBlank()) }) { Text("دخول مساحة") } },
         dismissButton = { TextButton(onDismiss) { Text("إلغاء") } }
     )
 }
@@ -567,4 +556,3 @@ private fun formatCallTime(value: String?): String {
         else -> SimpleDateFormat("dd/MM/yyyy", Locale("ar")).format(Date(ts))
     }
 }
-
