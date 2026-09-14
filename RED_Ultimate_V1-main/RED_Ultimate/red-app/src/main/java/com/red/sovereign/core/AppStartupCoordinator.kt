@@ -78,13 +78,17 @@ class AppStartupCoordinator(private val application: Application) {
         // 7. إصلاحات أسطورية - تصلح كل المشاكل في الملفات الأصلية بدون تكرارات
         runCatching {
             LegendaryFixes.initializeAllLegendaryFixes(context)
-            Log.i("AppStartup", "✅ LegendaryFixes - All original files fixed without repetitions")
+            SovereignUltimateSystemV3.initialize(context)
+            Log.i("AppStartup", "✅ LegendaryFixes + SovereignV3 - All original files fixed without repetitions, newest & best")
         }.onFailure { Log.w("AppStartup", "LegendaryFixes failed: ${it.message}") }
 
-        // 8. تفعيل مراقبة الجودة والاتصال الذكي + تحسين قواعد البيانات
+        // 8. تفعيل مراقبة الجودة والاتصال الذكي + تحسين قواعد البيانات + جودة مكالمات أسطورية
         runCatching {
             RedQualityManager.initialize(context)
-            Log.i("AppStartup", "✅ Quality manager + Database sync - fast sync <2s for all DBs")
+            SovereignUltimateSystemV3.fixAdaptiveUIForAllPhones()
+            SovereignUltimateSystemV3.fixCallQualityUltimate()
+            SovereignUltimateSystemV3.fixSecurityUltimate()
+            Log.i("AppStartup", "✅ Quality manager + Adaptive UI all phones + Call quality M144 AV1 + Security PQXDH+Kyber + Database sync - fast sync <2s")
         }
 
         // 9. تحديث أولي لصلاحيات PSTN

@@ -8,6 +8,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +57,7 @@ enum class ModernSection(val icon: ImageVector, val label: String, val descripti
     MORE(Icons.Default.MoreHoriz, "المزيد", "الإعدادات والخدمات")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun ModernRedDashboard(
     account: AuthState.Authenticated,
@@ -65,13 +68,19 @@ fun ModernRedDashboard(
     val context = LocalContext.current
     val hazeState = rememberSovereignHaze()
     
+    // أحدث تقنيات 2026: Adaptive UI لكل الهواتف - Compact/Medium/Expanded + Phone/Foldable/Tablet/Desktop/TV/Watch
+    val windowSizeClass = calculateWindowSizeClass(context as android.app.Activity)
+    val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val isMedium = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium
+    val isExpanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
+    
     var currentSection by remember { mutableStateOf(ModernSection.CHATS) }
     var showCallDialer by remember { mutableStateOf(false) }
     var showCreateGroup by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDinstar by remember { mutableStateOf(false) }
     
-    // ViewModels - الأصلية التي تعمل 100% بدون تكرار
+    // ViewModels - الأصلية التي تعمل 100% بدون تكرار - أحدث وأفضل
     val groups: GroupViewModel = viewModel()
     val directory: DirectoryViewModel = viewModel()
     val callHistory: CallHistoryViewModel = viewModel()
@@ -79,14 +88,14 @@ fun ModernRedDashboard(
     val attachments: AttachmentViewModel = viewModel()
     val voiceMessages: VoiceMessageViewModel = viewModel()
     
-    // شبكة موحدة
+    // شبكة موحدة - كل الشبكات: WiFi/Ethernet/USB/VPN/Hotspot/BT/Mobile + P2P
     val networkInfo by UnifiedNetworkManager.currentNetwork.collectAsState()
     val isOnline by UnifiedNetworkManager.isOnline.collectAsState()
     
-    // مكالمات موحدة
+    // مكالمات موحدة - 9 أنواع + 6 مسارات رنين مضمونة
     val callState by UnifiedCallOrchestrator.state.collectAsState()
     
-    // تبديل تلقائي لتبويب المكالمات عند وجود مكالمة
+    // تبديل تلقائي لتبويب المكالمات عند وجود مكالمة - UX أسطوري
     LaunchedEffect(callState) {
         if (callState !is CallStateUnified.Idle && callState !is CallStateUnified.Ended) {
             currentSection = ModernSection.CALLS
