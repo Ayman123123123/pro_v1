@@ -152,7 +152,8 @@ class LocalServerDiscovery(private val context: Context) {
             add(ServerEndpoint.url())
             add("http://127.0.0.1:8088")
             add("http://[::1]:8088")
-            add("http://192.168.1.112:8088")
+            // NOTE: no site-specific LAN seed here (any-LAN rule) — the /24 sweep
+            // below plus RED_SERVER_CANDIDATES cover every LAN without hardcoding.
             addAll(candidates)
             // 10.0.2.2 هو alias لمضيف المحاكي (Android Emulator) — عنوان تطوير قياسي وليس IP LAN حقيقي.
             add("http://10.0.2.2:8088")

@@ -34,7 +34,8 @@ object ServerEndpoint {
         .getOrElse { normalize(FALLBACK_URL) } // ALLOW-IP: last-resort default when BuildConfig is unusable
 
     // Last-resort default used when BuildConfig.RED_SERVER_URL cannot be parsed.
-    private const val FALLBACK_URL = "http://192.168.1.112:8088"
+    // Generic loopback only — never a site-specific LAN IP (any-LAN rule).
+    private const val FALLBACK_URL = "http://127.0.0.1:8088"
 
     @Volatile private var current = buildDefaultUrl()
     private var onEndpointChangedListener: ((String) -> Unit)? = null

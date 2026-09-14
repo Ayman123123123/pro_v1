@@ -602,9 +602,9 @@ class RedConnectionService : Service() {
         repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
         DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))
         val preview = decodeMessagePreview(plaintext)
+        // Single source of truth for group detection (covers grp_/group-/group_/:group:).
         val isGroup = message.type == "GROUP_MESSAGE" ||
-                message.conversationId.startsWith("group-", ignoreCase = true) ||
-                message.conversationId.startsWith("group_", ignoreCase = true)
+                isGroupConversation(message.conversationId)
         if (!isGroup) {
             // المحادثة الفردية تُدار في جدول conversations مع تتبع غير المقروء والمستلم الحقيقي
             val peerId = if (message.senderId == tokenStore.redId) message.conversationId else message.senderId
