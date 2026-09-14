@@ -20,13 +20,20 @@
 
 لا تُعلن ميزة هذا المجلد مكتملة إلا إذا دخلت بوابة البناء المناسبة واختبار runtime/جهازها. أسرار `.env` و`secrets/` ومفاتيح Android الخاصة لا تُحفظ في Git.
 
-## FCM (مكالمات PSTN الواردة)
+## الدفع السيادي (إيقاظ المكالمات — UnifiedPush + ntfy)
 
-- الحالة الحالية: لا يوجد `google-services.json` حقيقي في `red-app/` — وهذا مقصود (ملف أسرار لكل بيئة، في `.gitignore`).
+- لا دفع Google ولا خدماتها في أي مسار: الإيقاظ عبر موزّع UnifiedPush مستضاف ذاتياً (خدمة `ntfy` في `docker-compose.yml`).
 - للتشغيل المحلي/الإنتاج:
-  1. انسخ `google-services.json.example` إلى `google-services.json` (بجانب `build.gradle.kts`) واملأ القيم من Firebase Console لنفس `applicationId` (`com.red.sovereign`).
-  2. على الخادم: عبّئ `FCM_V1_SERVICE_ACCOUNT` (JSON حساب الخدمة) — بدونه لا تُرسل رسائل DATA من `NotificationService`.
-  3. أعد البناء ونفّذ مكالمة PSTN واردة أثناء قفل التطبيق.
-- التشخيص: `PstnFcmListenerService` لا يخرج بصمت — كل رسالة مُتجاهَلة تُسجَّل في logcat تحت وسم `PstnFcmListener` مع السبب (`empty data` / `missing type` / `non-VOIP` / `missing callId` / `no active coordinator`). راقب بـ:
-  `adb logcat -s PstnFcmListener:* VoipPushRegistrar:*`
-- بدون الملف: البناء سليم والتطبيق يعمل، لكن الإيقاظ عبر FCM معطّل (يبقى مسار WebSocket `/ws/pstn` أثناء فتح التطبيق).
+  1. شغّل الحزمة (`docker compose up -d ntfy`) — يستمع على `NTFY_PORT` (افتراضي 2586).
+  2. على الجهاز: ثبّت تطبيق ntfy ووجّهه إلى `NTFY_BASE_URL`، ثم افتح RED مرة واحدة — `VoipPushRegistrar` يسجّل الموزّع ويرفع نقطة النهاية إلى `POST /api/devices/push-token`.
+  3. نفّذ مكالمة أثناء قتل التطبيق — `RedPushService.onMessage` يرن فوراً عبر `CallNotificationManager`.
+- التشخيص: راقب بـ `adb logcat -s RedPushService:* VoipPushRegistrar:*`، وخادمياً وسوم `notification.push_sent/push_failed` (نقاط 404/410 تُقلَّم ذاتياً من `device_push_tokens`).
+- بدون موزّع: البناء سليم والتطبيق يعمل، لكن الإيقاظ معطّل (تبقى مسارات WebSocket أثناء فتح التطبيق وصندوق العروض المعلقة `/api/calls/pending`).
+
+## إسناد الأصوات (res/raw)
+
+ملفات `redphone_busy.opus` و`redphone_outring.opus` و`webrtc_completed.mp3`
+و`webrtc_disconnected.mp3` و`notification_simple_01.ogg` مقتبسة من Signal-Android
+(© Open Whisper Systems ‏/ Signal Foundation، GPL-3.0) — دُمجت هنا بتوافق GPLv3§13
+ضمن العمل الجامع AGPL-3.0. التوصيل المقترح (المرحلة 3): outring أثناء الاتصال،
+busy عند BUSY، completed/disconnected عند انتهاء المكالمة.

@@ -331,6 +331,16 @@ class LiveStreamSignalingClient(
         )
     )
 
+    /** LEGENDARY Phase 6: مشاهد بلا SFU يطلب خدمة mesh احتياطية من المذيع. */
+    fun sendViewerNeedsMesh(streamId: String, userId: String) = send(
+        LiveStreamSignal(
+            type = "VIEWER_NEEDS_MESH",
+            roomId = streamId,
+            userId = userId,
+            payload = emptyMap()
+        )
+    )
+
     fun setQuality(streamId: String, userId: String, quality: String) = send(
         LiveStreamSignal(
             type = "SET_QUALITY",

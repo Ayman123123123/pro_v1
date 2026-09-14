@@ -383,7 +383,7 @@ override fun onConnected() {
                 mode = newIncoming.mode
                 CallRuntime.state = newIncoming
                 // P0: تأكيد الرنين للمتصل فوراً — بدونه يظن DeliveryEngine أن العرض ضاع
-                // فينتظر FCM+webhook ~20s رغم أن الجهاز يرن فعلاً.
+                // فينتظر الدفع+webhook ~20s رغم أن الجهاز يرن فعلاً.
                 runCatching {
                     signaling.send(CallSignal.createRinging(
                         callId = signal.callId.orEmpty(),
@@ -671,6 +671,10 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
                     ?: false
                 val fresh = CallUiState.Active(callId.orEmpty(), target, mode, keepStarted, keepHeld)
                 CallRuntime.state = if (keepWaiting != null) CallUiState.ActiveWithIncoming(fresh, keepWaiting) else fresh
+                // Connected earcon on fresh connects only — ICE-restart reconnects stay silent.
+                if (prev !is CallUiState.Active && prev !is CallUiState.ActiveWithIncoming && prev !is CallUiState.Reconnecting) {
+                    runCatching { RedBundledTones.playOneShot(this, RedBundledTones.RAW_CONNECTED) }
+                }
                 updateNotification("مكالمة يونس نشطة")
                 startStatsPolling()
             }
@@ -809,7 +813,7 @@ override fun onConnectionState(state: PeerConnection.PeerConnectionState) {
     override fun onDeliveryProgress(callId: String, path: CallDeliveryEngine.DeliveryPath, attempt: Int) {
         val label = when (path) {
             CallDeliveryEngine.DeliveryPath.WEBSOCKET -> "جارٍ الاتصال عبر القناة المباشرة…"
-            CallDeliveryEngine.DeliveryPath.FCM_PUSH -> "جارٍ إيقاظ جهاز المستلم…"
+            CallDeliveryEngine.DeliveryPath.SOVEREIGN_PUSH -> "جارٍ إيقاظ جهاز المستلم…"
             CallDeliveryEngine.DeliveryPath.HTTP_WEBHOOK -> "جارٍ محاولة الوصول عبر قناة احتياطية ($attempt)…"
             CallDeliveryEngine.DeliveryPath.UNKNOWN -> "جارٍ الاتصال…"
         }
@@ -1239,6 +1243,7 @@ private fun prepareAudio() {
             return
         }
         CallRuntime.state = CallUiState.CallEnded(endedPeer, endedMode, durationMs, endedCallId)
+        runCatching { RedBundledTones.playOneShot(this, RedBundledTones.RAW_ENDED) }
         updateNotification("انتهت المكالمة")
         scheduleCleanupAndReset(4000) // Keep the CallEnded screen for 4 seconds
     }

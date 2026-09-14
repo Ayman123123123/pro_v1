@@ -175,11 +175,12 @@
         <receiver android:name=".calls.PstnRingActionReceiver" android:exported="false" />
         <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
         <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
+        <!-- Sovereign push: UnifiedPush receiver (self-hosted distributor, no Google push). -->
         <service
-            android:name=".calls.PstnFcmListenerService"
+            android:name=".push.RedPushService"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
             </intent-filter>
         </service>
 </application>

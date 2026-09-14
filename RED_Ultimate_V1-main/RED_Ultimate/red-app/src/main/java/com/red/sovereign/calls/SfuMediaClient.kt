@@ -104,8 +104,8 @@ class SfuMediaClient(
     var localVideo: VideoTrack? = null
         private set
 
-    suspend fun attach(roomId: String): Boolean = withContext(Dispatchers.IO) {
-        val ticket = loadTicket(roomId) ?: return@withContext false
+    suspend fun attach(roomId: String, ticketPath: String? = null): Boolean = withContext(Dispatchers.IO) {
+        val ticket = loadTicket(roomId, ticketPath) ?: return@withContext false
         canProduce = ticket.canProduce
         if (!openSocket(ticket.token)) return@withContext false
         val joined = request(JSONObject().put("type", "join").put("roomId", roomId)) ?: return@withContext false
@@ -154,6 +154,39 @@ class SfuMediaClient(
         if (kind.wantsVideo) {
             SfuSdpFactory.rtpParametersFromLocal(answerSdp, "video")?.let { produce("video", transport.id, it) }
         }
+        true
+    }
+
+    private var cameraTrackBeforeShare: VideoTrack? = null
+    var isScreenSharing: Boolean = false
+        private set
+
+    /**
+     * SFU screen share: capture + swap the live video sender to screen content.
+     * Produces nothing new — the existing "video" producer carries the screen
+     * (same SSRC/codecs); peers are told via SCREEN_SHARE_START for labeling.
+     */
+    suspend fun startScreenShare(intentData: android.content.Intent): Boolean = withContext(Dispatchers.IO) {
+        if (isScreenSharing) return@withContext true
+        val eng = engine ?: return@withContext false
+        val screen = eng.startScreenShare(intentData) ?: return@withContext false
+        cameraTrackBeforeShare = eng.localMedia?.videoTrack
+        if (!eng.replaceVideoTrack(screen)) {
+            runCatching { eng.stopScreenShare() }
+            cameraTrackBeforeShare = null
+            return@withContext false
+        }
+        isScreenSharing = true
+        true
+    }
+
+    suspend fun stopScreenShare(): Boolean = withContext(Dispatchers.IO) {
+        if (!isScreenSharing) return@withContext true
+        val eng = engine ?: return@withContext false
+        eng.replaceVideoTrack(cameraTrackBeforeShare)
+        runCatching { eng.stopScreenShare() }
+        cameraTrackBeforeShare = null
+        isScreenSharing = false
         true
     }
 
@@ -221,6 +254,15 @@ class SfuMediaClient(
         }
     }
 
+    /**
+     * Viewer quality ladder (live SET_QUALITY): applies spatial/temporal layers
+     * to every video consumer (broadcaster simulcast required, else no-op).
+     */
+    fun setAllVideoLayers(spatialLayer: Int, temporalLayer: Int) {
+        val ids = consumers.filter { it.value.kind == "video" }.keys.toList()
+        ids.forEach { setConsumerPreferredLayers(it, spatialLayer, temporalLayer) }
+    }
+
     fun requestKeyFrame(consumerId: String) {
         if (consumerId.isBlank()) return
         scope.launch {
@@ -255,9 +297,10 @@ class SfuMediaClient(
         scope.cancel()
     }
 
-    private suspend fun loadTicket(roomId: String): SfuTicketDto? {
+    private suspend fun loadTicket(roomId: String, ticketPath: String? = null): SfuTicketDto? {
         val api = AuthorizedApiClient(tokens)
-        return when (val response = api.request("GET", "/api/sfu/groups/rooms/$roomId/ticket")) {
+        val path = ticketPath ?: "/api/sfu/groups/rooms/$roomId/ticket"
+        return when (val response = api.request("GET", path)) {
             is ApiResult.Success -> runCatching { json.decodeFromString<SfuTicketDto>(response.value) }.getOrNull()
             is ApiResult.Error -> null
         }
@@ -577,6 +620,9 @@ class SfuMediaClient(
             override fun onNetworkStats(stats: NetworkStats) = events.onNetworkStats(stats)
             override fun onError(message: String) = events.onError(message)
         })
+        // LEGENDARY Phase 6: pure consumers (live viewers) never run createEngine —
+        // expose the recv context or remote rendering has no EGL (black screen).
+        if (eglContext == null) eglContext = recvEngine?.eglContext
         val recv = recvEngine ?: return ApiResult.Error(500, "RECV_ENGINE_NOT_CREATED")
         return recv.createReceiverOnly(kind)
     }

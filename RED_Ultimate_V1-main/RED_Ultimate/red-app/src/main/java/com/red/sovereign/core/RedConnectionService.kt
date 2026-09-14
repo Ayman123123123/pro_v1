@@ -259,7 +259,10 @@ class RedConnectionService : Service() {
             val group = runCatching { json.decodeFromString<Group>(pending.groupJson) }.getOrNull() ?: continue
             scope.launch {
                 when (val prepared = groupCrypto.prepare(group, pending.text.toByteArray(Charsets.UTF_8))) {
-                    is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
+                    is ApiResult.Error -> {
+                        notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
+                        reportSendFailure(pending.clientId, group.id, null, prepared.message)
+                    }
                     is ApiResult.Success -> {
                         prepared.value.distributions.forEach { distribution ->
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
@@ -302,7 +305,10 @@ class RedConnectionService : Service() {
             val group = runCatching { json.decodeFromString<Group>(pending.groupJson) }.getOrNull() ?: continue
             scope.launch {
                 when (val prepared = groupCrypto.prepare(group, pending.payload)) {
-                    is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
+                    is ApiResult.Error -> {
+                        notifyConnection(getString(com.red.sovereign.R.string.status_group_encryption_failed, prepared.message))
+                        reportSendFailure(pending.clientId, group.id, null, prepared.message)
+                    }
                     is ApiResult.Success -> {
                         prepared.value.distributions.forEach { distribution ->
                             socket.sendEncrypted(distribution.receiverRedId, group.id, "GROUP_KEY_DISTRIBUTION", keyManager.protocolDeviceId(), distribution.encrypted)
@@ -335,7 +341,10 @@ class RedConnectionService : Service() {
     private fun sendEncryptedPayload(pending: PendingSend) {
         scope.launch {
             when (val encrypted = signal.encrypt(pending.target, pending.payload)) {
-                is ApiResult.Error -> notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
+                is ApiResult.Error -> {
+                    notifyConnection(getString(com.red.sovereign.R.string.status_encryption_failed, encrypted.message))
+                    reportSendFailure(pending.clientId, pending.conversation, pending.target, encrypted.message)
+                }
                 is ApiResult.Success -> {
                     // AUTO-FIX (message reliability): one message UUID must NOT be reused for every
                     // fan-out target. The server keys messages by uuid (unique index) and rejects a
@@ -535,6 +544,16 @@ class RedConnectionService : Service() {
                         android.util.Log.w("RedConnectionService", "decrypt failed for ${message.id}: ${t.message}")
                         null
                     }
+                    if (plaintext == null) {
+                        // Phase-1 (2026-09-14): عنصر نائب بدل الإسقاط الصامت — بلا ACK
+                        // فيعيد السيرفر التسليم تلقائياً وتُحاوَل إعادة الفك.
+                        saveDecryptPlaceholder(message)
+                        return
+                    }
+                    // هل كان لهذه الرسالة عنصر نائب؟ (نجاح متأخر بعد فشل سابق)
+                    val wasPlaceholder = runCatching {
+                        repository.getLocalHistoryEntry(message.id)?.let { isPendingDecryptPlaceholder(it.encryptedPlaintext) } == true
+                    }.getOrDefault(false)
                     if (plaintext != null) {
                         if (message.type == "GROUP_KEY_DISTRIBUTION") {
                             groupCrypto.processDistribution(message.senderId, message.senderDeviceId, plaintext)
@@ -597,6 +616,10 @@ class RedConnectionService : Service() {
                             socket.acknowledge(message.id, message.sequenceNumber, "DELIVERED")
                         }
                     }
+                    // Phase-1 (2026-09-14): نجح الفك بعد عنصر نائب → ادفع المحتوى الحقيقي للواجهة.
+                    if (wasPlaceholder) {
+                        publishPlaceholderResolution(message)
+                    }
                 } else if (message.senderId == tokenStore.redId) {
                     repository.saveIncomingMessage(message, outgoing = true)
                 }
@@ -626,6 +649,76 @@ class RedConnectionService : Service() {
     /**
      * فك تشفير preview للـ notification (نص عادي فقط، آمن)
      */
+    /**
+     * Phase-1 (2026-09-14): يحفظ عنصراً نائباً لرسالة تعذّر فكها — مرة واحدة لكل معرف.
+     * يحدّث صف المحادثة (لتظهر في القائمة) وينشر للواجهة، دون إشعار فوري (يأتي مع الفك
+     * الحقيقي) ودون ACK إطلاقاً (شرط إعادة التسليم التلقائي من السيرفر).
+     */
+    private suspend fun saveDecryptPlaceholder(message: RedProtos.ChatMessage) {
+        // توزيع المفاتيح ليس رسالة مرئية — لا عنصر نائب له (يُعاد تسليمه ويُعالج بصمت).
+        if (message.type == "GROUP_KEY_DISTRIBUTION") return
+        if (runCatching { repository.getLocalHistoryEntry(message.id) }.getOrNull() != null) return
+        val payload = pendingDecryptPayload()
+        repository.saveLocalHistory(
+            LocalHistoryEntity(message.id, message.conversationId, message.senderId, payload, message.type, message.timestamp, false)
+        )
+        DecryptedMessageBus.publish(
+            DecryptedMessage(message.id, message.conversationId, message.senderId, payload, message.timestamp, message.sequenceNumber, type = message.type)
+        )
+        val peerId = if (isGroupConversation(message.conversationId)) message.conversationId else message.senderId
+        runCatching {
+            repository.onMessageStored(message.conversationId, peerId, pendingDecryptDisplayText(), message.timestamp, isIncoming = true)
+        }
+    }
+
+    /**
+     * Phase-1: بعد نجاح فك رسالة كان لها عنصر نائب — اقرأ السجل النهائي
+     * (بعد كل فروع المعالجة) وانشره كتحديث استبدالي للواجهة.
+     * إن بقي السجل نائباً (مغلف إجراء بلا محتوى مرئي كـ REACTION) يُحذف بصمت.
+     */
+    private suspend fun publishPlaceholderResolution(message: RedProtos.ChatMessage) {
+        val finalEntry = runCatching { repository.getLocalHistoryEntry(message.id) }.getOrNull() ?: return
+        if (isPendingDecryptPlaceholder(finalEntry.encryptedPlaintext)) {
+            // مغلف إجراء (تفاعل/تعديل/حذف) لا محتوى مرئي له — أزل النائب.
+            runCatching { repository.deleteLocalMessage(finalEntry.id) }
+            return
+        }
+        com.red.sovereign.crypto.DecryptedMessageUpdateBus.publish(
+            DecryptedMessage(
+                finalEntry.id, finalEntry.conversationId, finalEntry.senderId,
+                finalEntry.encryptedPlaintext, finalEntry.createdAt,
+                message.sequenceNumber, type = finalEntry.messageType
+            )
+        )
+    }
+
+    /**
+     * Phase-1 (2026-09-14): فشل إرسال صادر — يُعلَّم الصف المتفائل FAILED (يظهر ⚠ في الفقاعة)
+     * ويُبث للواجهة لتنبيه المستخدم، بدل الضياع في سجل الحالة.
+     */
+    private fun reportSendFailure(clientId: String?, conversationId: String, targetId: String?, errorMessage: String) {
+        if (clientId != null) {
+            scope.launch {
+                runCatching { repository.updateMessageStatus(clientId, "FAILED") }
+                com.red.sovereign.crypto.MessageAckBus.publish(com.red.sovereign.crypto.MessageAck(clientId, "FAILED"))
+            }
+        }
+        com.red.sovereign.crypto.MessageSendErrorBus.publish(
+            com.red.sovereign.crypto.SendError(conversationId, targetId, errorMessage, sendFailureArabic(errorMessage))
+        )
+    }
+
+    /** ترجمة رموز فشل التشفير/الدليل إلى عربية مفهومة. */
+    private fun sendFailureArabic(code: String): String = when {
+        code.contains("NO_APPROVED_REMOTE_DEVICE") -> "تعذّر الإرسال: الطرف الآخر لم يُكمل إعداد جهازه بعد"
+        code.contains("DIRECTORY_FETCH_FAILED") -> "تعذّر الوصول لدليل الهوية — تحقق من الاتصال بالسيرفر"
+        code.contains("PREKEY_CONSUME_FAILED") -> "تعذّر بدء جلسة التشفير — أعد المحاولة بعد لحظات"
+        code.contains("GROUP") && code.contains("KEY") -> "تعذّر تجهيز مفاتيح المجموعة — أعد المحاولة"
+        code.startsWith("HTTP_") -> "تعذّر الإرسال: خطأ شبكة ($code)"
+        code.contains("NETWORK") -> "تعذّر الإرسال: انقطع الاتصال — ستُرسل تلقائياً عند عودته"
+        else -> "فشل الإرسال ($code)"
+    }
+
     private suspend fun storeRichOrPlainMessage(message: RedProtos.ChatMessage, plaintext: ByteArray) {
         repository.saveLocalHistory(LocalHistoryEntity(message.id, message.conversationId, message.senderId, plaintext, message.type, message.timestamp, false))
         DecryptedMessageBus.publish(DecryptedMessage(message.id, message.conversationId, message.senderId, plaintext, message.timestamp, message.sequenceNumber, type = message.type))

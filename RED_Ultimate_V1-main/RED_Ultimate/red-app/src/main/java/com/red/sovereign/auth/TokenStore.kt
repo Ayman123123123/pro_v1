@@ -8,7 +8,8 @@ class TokenStore(val context: Context) {
     val accessToken get() = store.get("access")
     val refreshToken get() = store.get("refresh")
     val deviceId get() = store.get("device_id")
-    val fcmToken get() = store.get("fcm_token")
+    /** UnifiedPush endpoint URL issued by the self-hosted distributor. */
+    val pushEndpoint get() = store.get("push_endpoint")
     val redId get() = store.get("red_id")
     val username get() = store.get("username")
     val pstnEnabled get() = store.get("pstn_enabled") == "true"
@@ -21,7 +22,8 @@ class TokenStore(val context: Context) {
     val isAdmin get() = role == "ADMIN"
 
     fun rememberDevice(value: String) = store.put("device_id", value)
-    fun saveFcmToken(value: String) = store.put("fcm_token", value)
+    fun savePushEndpoint(value: String) = store.put("push_endpoint", value)
+    fun clearPushEndpoint() = store.remove("push_endpoint")
     fun saveUsername(value: String) = store.put("username", value)
 
     /** حفظ صلاحية PSTN بعد /api/auth/me — كان AuthViewModel يلمس store الخاص مباشرة. */
@@ -60,6 +62,6 @@ class TokenStore(val context: Context) {
         pendingPasswordMemory = null
         store.remove("access", "refresh", "red_id", "username", "role",
             "pstn_enabled", "pstn_number", "pstn_port_index", "pstn_gateway_id",
-            "pending_username", "pending_password")
+            "pending_username", "pending_password", "push_endpoint")
     }
 }

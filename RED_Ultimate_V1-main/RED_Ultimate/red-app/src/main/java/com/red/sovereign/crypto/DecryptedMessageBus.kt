@@ -20,3 +20,13 @@ object DecryptedMessageBus {
     val messages = mutable.asSharedFlow()
     fun publish(message: DecryptedMessage) { mutable.tryEmit(message) }
 }
+
+/**
+ * Phase-1 (2026-09-14): تحديث رسالة معروضة مسبقاً (استبدال لا إضافة) —
+ * يُستخدم عند نجاح فك تشفير عنصر نائب: الواجهة تستبدل العنصر بنفس المعرف.
+ */
+object DecryptedMessageUpdateBus {
+    private val mutable = MutableSharedFlow<DecryptedMessage>(extraBufferCapacity = 64)
+    val updates = mutable.asSharedFlow()
+    fun publish(message: DecryptedMessage) { mutable.tryEmit(message) }
+}

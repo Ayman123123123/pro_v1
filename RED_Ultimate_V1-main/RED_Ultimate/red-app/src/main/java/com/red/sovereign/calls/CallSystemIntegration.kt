@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * يوحّد جميع مكونات نظام المكالمات (WebRTC, PSTN, Push Notifications, Telecom)
  * في واجهة واحدة مركزية. يتعامل مع:
  * - تهيئة محرك WebRTC
- * - تسجيل إشعارات FCM للمكالمات
+ * - تسجيل إشعارات الدفع السيادي (UnifiedPush) للمكالمات
  * - ربط خدماتTelecom (Android ConnectionService)
  * - مزامنة سجل المكالمات مع الخادم
  * - إدارة حالة التطبيق أثناء المكالمات (foreground service)

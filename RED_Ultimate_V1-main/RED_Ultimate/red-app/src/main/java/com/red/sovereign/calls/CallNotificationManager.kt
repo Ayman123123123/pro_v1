@@ -305,7 +305,7 @@ object CallRingRegistry {
     fun showIncoming(context: Context, callId: String, peer: String, isVideo: Boolean, callType: String, myUserId: String): Int {
         // إلغاء السابق قبل عرض الجديد — دقة بلا تداخل
         activeCallId?.takeIf { it != callId }?.let { cancel(context, it) }
-        // إزالة تكرار نفس المكالمة (FCM + WS يرنان معاً)
+        // إزالة تكرار نفس المكالمة (الدفع + WS يرنان معاً)
         if (activeCallId == callId) return activeNotifyId
         CallNotificationManager.createNotificationChannel(context)
         // كتم الوسائط المتداخلة: تركيز رنين حصري

@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 
  * المسارات:
  * 1. WebSocket مباشر (الأسرع) — انتظار RINGING ACK
- * 2. FCM Silent Push (إيقاظ الجهاز) — POST /api/calls/push-notify
+ * 2. Sovereign Wake Push (إيقاظ الجهاز عبر UnifiedPush) — POST /api/calls/push-notify
  * 3. HTTP Webhook Fallback (ضمان التسليم) — POST /api/calls/pending
  * 
  * مع Trickle ICE retry و adaptive bitrate
@@ -56,7 +56,7 @@ class CallDeliveryEngine(
         fun onDeliveryProgress(callId: String, path: DeliveryPath, attempt: Int)
     }
 
-    enum class DeliveryPath { WEBSOCKET, FCM_PUSH, HTTP_WEBHOOK, UNKNOWN }
+    enum class DeliveryPath { WEBSOCKET, SOVEREIGN_PUSH, HTTP_WEBHOOK, UNKNOWN }
 
     // ── الدالة الرئيسية: إرسال المكالمة بضمان وصول متعدد المسارات ──
     fun deliverCallOffer(
@@ -84,13 +84,13 @@ class CallDeliveryEngine(
                 return@launch
             }
 
-            // === المسار 2: FCM Silent Push (Wake-up) ===
-            listener.onDeliveryProgress(callId, DeliveryPath.FCM_PUSH, 2)
-            val pushSent = sendFcmPush(callId, targetRedId, callSignal.mode, callSignal.payload["sdp"].orEmpty())
+            // === المسار 2: Sovereign Wake Push (UnifiedPush wake-up) ===
+            listener.onDeliveryProgress(callId, DeliveryPath.SOVEREIGN_PUSH, 2)
+            val pushSent = sendWakePush(callId, targetRedId, callSignal.mode, callSignal.payload["sdp"].orEmpty())
             if (pushSent) {
-                Log.d("CallDeliveryEngine", "[$callId] FCM push dispatched")
+                Log.d("CallDeliveryEngine", "[$callId] wake push dispatched")
                 if (awaitDeliveryAck(RING_ACK_TIMEOUT_MS, deliveryConfirmed)) {
-                    listener.onDeliveryConfirmed(callId, DeliveryPath.FCM_PUSH)
+                    listener.onDeliveryConfirmed(callId, DeliveryPath.SOVEREIGN_PUSH)
                     return@launch
                 }
             }
@@ -132,8 +132,8 @@ class CallDeliveryEngine(
         return deliveryConfirmed.get()
     }
 
-    // ── FCM Silent Push ──
-    private suspend fun sendFcmPush(callId: String, targetRedId: String, mode: String, offerSdp: String): Boolean {
+    // ── Sovereign Wake Push (UnifiedPush) ──
+    private suspend fun sendWakePush(callId: String, targetRedId: String, mode: String, offerSdp: String): Boolean {
         return withContext(Dispatchers.IO) {
             runCatching {
                 val callerId = tokens.redId ?: return@runCatching false
@@ -156,7 +156,7 @@ class CallDeliveryEngine(
                 response.close()
                 success
             }.getOrElse { e ->
-                Log.w("CallDeliveryEngine", "FCM push request failed: ${e.message}")
+                Log.w("CallDeliveryEngine", "wake push request failed: ${e.message}")
                 false
             }
         }

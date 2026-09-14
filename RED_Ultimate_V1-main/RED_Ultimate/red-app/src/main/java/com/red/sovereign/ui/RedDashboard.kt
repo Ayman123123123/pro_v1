@@ -146,6 +146,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -1214,6 +1215,19 @@ private fun ChatHubScreen(
             }
         }
     }
+    // Phase-1 (2026-09-14): استبدال عنصر نائب بالمحتوى الحقيقي بعد نجاح الفك المتأخر.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.red.sovereign.crypto.DecryptedMessageUpdateBus.updates.collect { item ->
+            val index = decrypted.indexOfFirst { it.id == item.id }
+            if (index != -1) decrypted[index] = item else decrypted.add(item)
+        }
+    }
+    // Phase-1 (2026-09-14): تنبيه فوري عند فشل الإرسال (كان يضيع بصمت).
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.red.sovereign.crypto.MessageSendErrorBus.errors.collect { error ->
+            android.widget.Toast.makeText(context, error.arabicMessage, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         ReactionEventBus.events.collect { event ->
@@ -1467,6 +1481,8 @@ private fun ChatHubScreen(
                 android.widget.Toast.makeText(context, "لم يُمنح إذن الكاميرا — ستبدأ المكالمة صوتية. يمكنك تفعيل الكاميرا لاحقاً.", android.widget.Toast.LENGTH_LONG).show()
             }
             // واتساب: كل مكالمة مجموعة ترن جميع الأعضاء مباشرة عبر GroupCallService (Mesh/SFU)
+            // المعرف يُولَّد هنا (لا داخل الخدمة) ليُضمَّن في رسالة النظام — به يعمل الانضمام المتأخر.
+            val groupCallId = UUID.randomUUID().toString()
             com.red.sovereign.calls.GroupCallService.startGroupCall(
                 context = context,
                 myUserId = account.redId,
@@ -1474,14 +1490,17 @@ private fun ChatHubScreen(
                 inviteeNames = inviteNames,
                 isVideo = effectiveVideo,
                 hostName = account.username,
-                groupId = group.id
+                groupId = group.id,
+                groupCallId = groupCallId
             )
 
             // رسالة نظام في دردشة المجموعة — مثل واتساب: "بدأت مكالمة صوتية جماعية — انقر للانضمام"
             val title = if (effectiveVideo) "مكالمة فيديو جماعية 📹" else "مكالمة صوتية جماعية 📞"
             val rich = com.red.sovereign.core.RichMessage(
                 action = "CALL_STARTED",
-                text = "بدأ $title. ترن جميع الأعضاء — يمكن الانضمام حتى بعد بدء المكالمة."
+                text = "بدأ $title. ترن جميع الأعضاء — يمكن الانضمام حتى بعد بدء المكالمة.",
+                callId = groupCallId,
+                callIsVideo = effectiveVideo
             )
             com.red.sovereign.core.RedConnectionService.sendGroupRichText(context, group, rich)
         }
@@ -1527,7 +1546,7 @@ private fun ChatHubScreen(
                                     }
                                 }
                             }
-                            if (!item.outgoing && localMessages.effectiveReadReceipts(item.conversationId, SettingsRuntime.current.readReceipts)) RedConnectionService.markRead(context, item.id, item.sequence)
+                            if (!item.outgoing && !com.red.sovereign.core.isPendingDecryptPlaceholder(item.plaintext) && localMessages.effectiveReadReceipts(item.conversationId, SettingsRuntime.current.readReceipts)) RedConnectionService.markRead(context, item.id, item.sequence)
                         } catch (e: Exception) {
                             android.util.Log.e("RedDashboard", "Skipping bad message id=${item.id}", e)
                         }
@@ -1669,9 +1688,11 @@ private fun ChatHubScreen(
             }
             com.red.sovereign.calls.InlineChatCallBar(peerId = target)
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
-            // المفتاح (decrypted, conversation): إعادة الحساب عند تغيّر الرسائل فقط لا كل تركيب.
-            val conversationMessages = remember(decrypted, conversation) {
-                resolveRichMessages(decrypted.filter { it.conversationId == conversation })
+            // P0 (2026-09-14): derivedStateOf بدل remember(decrypted,..) — remember لا يعيد الحساب
+            // عند تغيّر محتوى SnapshotStateList (نفس المثيل) فكانت القائمة تتجمد فارغة ولا تظهر
+            // الرسائل لا للمرسل ولا للمستقبل. derivedStateOf يتتبع القراءات ويعيد الحساب تلقائياً.
+            val conversationMessages by remember(conversation) {
+                derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == conversation }) }
             }
             androidx.compose.runtime.LaunchedEffect(conversationMessages.lastOrNull()?.id, target) {
                 // G3: تمرير آمن موحد — scrollOnce بلا انهيار عند تقلص القائمة أثناء الحذف.
@@ -2231,9 +2252,10 @@ private fun ChatHubScreen(
                 }
                 // كل الأنواع (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) —
                 // وسائط المجموعة تُشفَّر بـ Sender Keys وتصل بنوعها الأصلي ولا يجوز استبعادها.
-                // المفتاح (decrypted, openGroup.id): إعادة الحساب عند تغيّر الرسائل فقط لا كل تركيب.
-                val groupMessages = remember(decrypted, openGroup.id) {
-                    resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id })
+                // P0 (2026-09-14): نفس علة remember(decrypted,..) في الخاص — تجمّد قائمة المجموعة.
+                // derivedStateOf يعيد الحساب عند كل إضافة/تعديل في decrypted.
+                val groupMessages by remember(openGroup.id) {
+                    derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id }) }
                 }
                 androidx.compose.runtime.LaunchedEffect(groupMessages.lastOrNull()?.id, openGroup.id) {
                     // G3: تمرير آمن موحد بلا انهيار عند تقلص القائمة.

@@ -62,7 +62,10 @@ data class RichMessage(
     // ignoreUnknownKeys=true فيسمح للعملاء القدامى بتجاهله، وexplicitNulls=false
     // فيمنع إرسال null على السلك. البديل المدعوم دائمًا هو hashtag #topic
     // داخل النص (يُستخرج محليًا عبر TOPIC_HASHTAG_REGEX).
-    val topicId: String? = null
+    val topicId: String? = null,
+    // مكالمة جماعية (CALL_STARTED): الانضمام المتأخر من رسالة النظام — null = لا مكالمة.
+    val callId: String? = null,
+    val callIsVideo: Boolean = false
 ) {
     /** الموضوع الفعّال: topicId أولًا، ثم أول hashtag كبديل (بدون #). */
     fun effectiveTopic(): String? {
