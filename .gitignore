@@ -109,6 +109,8 @@ secrets.properties
 
 # ضجيج تصحيح الأخطاء المحلي
 build_errors*.txt
+build_verify*.txt
+**/build_verify*.txt
 logcat.txt
 recovered.txt
 test_results.txt
