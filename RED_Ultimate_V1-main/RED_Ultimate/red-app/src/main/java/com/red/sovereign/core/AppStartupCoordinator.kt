@@ -75,20 +75,33 @@ class AppStartupCoordinator(private val application: Application) {
             Log.w("AppStartup", "NotificationRouter start failed: ${e.message}")
         }
 
-        // 7. إصلاحات أسطورية - تصلح كل المشاكل في الملفات الأصلية بدون تكرارات
+        // 7. إصلاحات أسطورية - تصلح كل المشاكل في الملفات الأصلية بدون تكرارات + أحدث وأفضل
         runCatching {
             LegendaryFixes.initializeAllLegendaryFixes(context)
             SovereignUltimateSystemV3.initialize(context)
-            Log.i("AppStartup", "✅ LegendaryFixes + SovereignV3 - All original files fixed without repetitions, newest & best")
+            com.red.sovereign.features.ModernFeaturesV3.improveChats()
+            com.red.sovereign.features.ModernFeaturesV3.improveGroups()
+            com.red.sovereign.features.ModernFeaturesV3.improveCalls(context)
+            com.red.sovereign.features.ModernFeaturesV3.improveLiveStream(context)
+            com.red.sovereign.features.ModernFeaturesV3.improveConferences()
+            com.red.sovereign.features.ModernFeaturesV3.improveDatabases()
+            com.red.sovereign.features.ModernFeaturesV3.improveUI()
+            com.red.sovereign.features.ModernFeaturesV3.improveWithLatestTech()
+            com.red.sovereign.features.ModernFeaturesV3.improveFastSync()
+            UltimateImprovementsV3.improveAll(context)
+            Log.i("AppStartup", "✅ LegendaryFixes + SovereignV3 + ModernFeaturesV3 + UltimateV3 - All original files fixed without repetitions, newest & best, complete")
         }.onFailure { Log.w("AppStartup", "LegendaryFixes failed: ${it.message}") }
 
-        // 8. تفعيل مراقبة الجودة والاتصال الذكي + تحسين قواعد البيانات + جودة مكالمات أسطورية
+        // 8. تفعيل مراقبة الجودة والاتصال الذكي + تحسين قواعد البيانات + جودة مكالمات أسطورية + تكيف كل الهواتف
         runCatching {
             RedQualityManager.initialize(context)
             SovereignUltimateSystemV3.fixAdaptiveUIForAllPhones()
             SovereignUltimateSystemV3.fixCallQualityUltimate()
             SovereignUltimateSystemV3.fixSecurityUltimate()
-            Log.i("AppStartup", "✅ Quality manager + Adaptive UI all phones + Call quality M144 AV1 + Security PQXDH+Kyber + Database sync - fast sync <2s")
+            com.red.sovereign.ui.ModernAdaptiveSystem.improveForAllPhones(context)
+            com.red.sovereign.ui.ModernAdaptiveSystem.improveReadableColors()
+            com.red.sovereign.ui.ModernAdaptiveSystem.improveWithLatestTech()
+            Log.i("AppStartup", "✅ Quality manager + Adaptive UI all phones Compact/Medium/Expanded Phone/Foldable/Tablet/Desktop/TV/Watch + Call quality M144 AV1 + Security PQXDH+Kyber + Readable AAA + Database sync - fast sync <2s everywhere")
         }
 
         // 9. تحديث أولي لصلاحيات PSTN
