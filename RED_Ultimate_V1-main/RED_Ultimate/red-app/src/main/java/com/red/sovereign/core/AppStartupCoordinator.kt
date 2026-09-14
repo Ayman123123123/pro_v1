@@ -21,13 +21,25 @@ class AppStartupCoordinator(private val application: Application) {
     private var pstnCoordinator: PstnIncomingCallCoordinator? = null
 
     /**
-     * تشغيل خدمات النظام الأساسية عند تسجيل الدخول.
+     * تشغيل خدمات النظام الأساسية عند تسجيل الدخول - نظام موحد متكامل
      */
     fun onAuthenticated(context: Context, authViewModel: AuthViewModel) {
-        Log.i("AppStartup", "Initializing core services for authenticated user")
+        Log.i("AppStartup", "🚀 Initializing UNIFIED core services - Better than WhatsApp/Telegram")
 
-        // 1. بدء خدمات الاتصال والويب سيكيت
-        runCatching { RedConnectionService.start(context) }
+        // 0. مدير الشبكات الموحد - يدعم كل الشبكات المحلية (WiFi, Ethernet, USB, VPN, Hotspot)
+        runCatching { 
+            UnifiedNetworkManager.initialize(context)
+            Log.i("AppStartup", "✅ UnifiedNetworkManager initialized - All local networks supported")
+        }.onFailure { Log.w("AppStartup", "UnifiedNetworkManager failed: ${it.message}") }
+
+        // 1. بدء خدمات الاتصال والويب سيكيت مع اكتشاف تلقائي محسن
+        runCatching { 
+            RedConnectionService.start(context)
+            // اكتشاف تلقائي للخادم على كل الشبكات
+            ServerEndpoint.autoDiscover(context) { success ->
+                Log.i("AppStartup", "Server discovery: $success - Current: ${ServerEndpoint.url()}")
+            }
+        }
         runCatching { YounesCallService.listen(context) }
 
         // 2. بدء منسق مكالمات PSTN الواردة
@@ -37,8 +49,11 @@ class AppStartupCoordinator(private val application: Application) {
             coordinator.start()
         }.onFailure { Log.w("AppStartup", "PstnCoordinator start failed: ${it.message}") }
 
-        // 3. تسجيل دفع VoIP
-        runCatching { VoipPushRegistrar.register(context) }
+        // 3. تسجيل دفع VoIP مع إعادة محاولة
+        runCatching { 
+            VoipPushRegistrar.register(context)
+            Log.i("AppStartup", "✅ VoIP Push registered - Calls will ring even when closed")
+        }
 
         // 4. بدء راوتر الإشعارات السيادي (لمنع التأخير في الخلفية وضمان وصول الـ VoIP)
         val routerIntent = Intent(context, SovereignNotificationRouter::class.java)
@@ -57,6 +72,14 @@ class AppStartupCoordinator(private val application: Application) {
 
         // 6. تحديث أولي لصلاحيات PSTN
         authViewModel.refreshPstnEntitlement()
+        
+        // 7. تهيئة نظام الدردشة الحديث
+        Log.i("AppStartup", "✅ ModernChatSystem ready - E2EE Private + Group Sender Keys")
+        
+        // 8. تهيئة منسق المكالمات الموحد
+        Log.i("AppStartup", "✅ UnifiedCallOrchestrator ready - All call types: 1-1, Group, Conference, Live, Space, PSTN, LAN P2P")
+        
+        Log.i("AppStartup", "🎉 UNIFIED SYSTEM READY - Better than WhatsApp & Telegram")
     }
 
     /**

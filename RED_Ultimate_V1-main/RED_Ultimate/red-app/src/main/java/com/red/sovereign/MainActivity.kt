@@ -133,7 +133,14 @@ class MainActivity : FragmentActivity() {
                             if (appLocked && SettingsRuntime.current.appLockEnabled) {
                                 AppLockScreen(onUnlocked = { appLocked = false })
                             } else {
-                                RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
+                                // نظام موحد حديث - أفضل من واتساب وتيليجرام
+                                // يمكن التبديل بين القديم والحديث عبر الإعدادات
+                                val useModern = SettingsRuntime.current.liquidGlassEnabled // استخدام Liquid Glass كمؤشر للحديث
+                                if (useModern) {
+                                    com.red.sovereign.ui.ModernRedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
+                                } else {
+                                    RedDashboard(state, authViewModel, deepLinkSender, deepLinkConversation)
+                                }
                             }
                         } else AuthFlow(authViewModel)
                     }
