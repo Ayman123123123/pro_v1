@@ -146,6 +146,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -1669,9 +1670,11 @@ private fun ChatHubScreen(
             }
             com.red.sovereign.calls.InlineChatCallBar(peerId = target)
             val conversation = remember(account.redId, target) { conversationId(account.redId, target) }
-            // المفتاح (decrypted, conversation): إعادة الحساب عند تغيّر الرسائل فقط لا كل تركيب.
-            val conversationMessages = remember(decrypted, conversation) {
-                resolveRichMessages(decrypted.filter { it.conversationId == conversation })
+            // P0 (2026-09-14): derivedStateOf بدل remember(decrypted,..) — remember لا يعيد الحساب
+            // عند تغيّر محتوى SnapshotStateList (نفس المثيل) فكانت القائمة تتجمد فارغة ولا تظهر
+            // الرسائل لا للمرسل ولا للمستقبل. derivedStateOf يتتبع القراءات ويعيد الحساب تلقائياً.
+            val conversationMessages by remember(conversation) {
+                derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == conversation }) }
             }
             androidx.compose.runtime.LaunchedEffect(conversationMessages.lastOrNull()?.id, target) {
                 // G3: تمرير آمن موحد — scrollOnce بلا انهيار عند تقلص القائمة أثناء الحذف.
@@ -2231,9 +2234,10 @@ private fun ChatHubScreen(
                 }
                 // كل الأنواع (GROUP_MESSAGE/RICH_TEXT/IMAGE/VIDEO/AUDIO/VOICE/FILE/STICKER) —
                 // وسائط المجموعة تُشفَّر بـ Sender Keys وتصل بنوعها الأصلي ولا يجوز استبعادها.
-                // المفتاح (decrypted, openGroup.id): إعادة الحساب عند تغيّر الرسائل فقط لا كل تركيب.
-                val groupMessages = remember(decrypted, openGroup.id) {
-                    resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id })
+                // P0 (2026-09-14): نفس علة remember(decrypted,..) في الخاص — تجمّد قائمة المجموعة.
+                // derivedStateOf يعيد الحساب عند كل إضافة/تعديل في decrypted.
+                val groupMessages by remember(openGroup.id) {
+                    derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id }) }
                 }
                 androidx.compose.runtime.LaunchedEffect(groupMessages.lastOrNull()?.id, openGroup.id) {
                     // G3: تمرير آمن موحد بلا انهيار عند تقلص القائمة.
