@@ -32,6 +32,21 @@ import kotlin.math.roundToInt
 object VoskTranscriber {
     private const val MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-ar-0.22.zip"
     private const val MODEL_DIR_NAME = "vosk-model-ar"
+    private const val MIRROR_OVERRIDE_FILE = "vosk_mirror_url.txt"
+
+    /**
+     * DoD §0.2: المرآة الذاتية أولًا — ملف `vosk_mirror_url.txt` في filesDir (سطر واحد
+     * برابط http(s) يُدار ذاتيًا) يتجاوز عنوان المنبع. الاستدلال نفسه يعمل دون شبكة دائمًا.
+     */
+    private fun modelUrl(context: Context): String {
+        val override = runCatching {
+            File(context.filesDir, MIRROR_OVERRIDE_FILE)
+                .takeIf { it.isFile }
+                ?.readText()?.trim()
+                ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+        }.getOrNull()
+        return override ?: MODEL_URL
+    }
     private const val SAMPLE_RATE = 16000
 
     sealed interface TranscribeState {
@@ -97,7 +112,7 @@ object VoskTranscriber {
         if (!isWifi(context)) return@withContext null
         try {
             val tmp = File(context.cacheDir, "vosk-ar.zip")
-            downloadWithProgress(MODEL_URL, tmp) { onState(TranscribeState.Downloading(it)) }
+            downloadWithProgress(modelUrl(context), tmp) { onState(TranscribeState.Downloading(it)) }
             dir.deleteRecursively()
             dir.mkdirs()
             unzip(tmp, dir)

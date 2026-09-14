@@ -53,6 +53,8 @@ data class SpaceReaction(
 )
 
 object ConferenceRuntime {
+    /** DoD (المرحلة 7): سقف بلاطات الفيديو — 12 بدل 25 (تبذير نطاق/ذاكرة على الجوال). */
+    const val MAX_VIDEO_TILES = 12
     var state: ConferenceUiState by mutableStateOf(ConferenceUiState.Idle)
     var participants by mutableStateOf(emptyList<ConferenceParticipant>())
     var localVideo: VideoTrack? by mutableStateOf(null)

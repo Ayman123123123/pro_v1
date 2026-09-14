@@ -482,7 +482,11 @@ fun YounesConferenceOverlay() {
                                     }
                                 }
 
-                                items(participants.filter { it.userId.isNotBlank() }, key = { it.userId }) { participant ->
+                                // DoD: سقف البلاطات 12 — الفائض عدّاد (+N) بدل renderers بلا حد.
+                                val allTiles = participants.filter { it.userId.isNotBlank() }
+                                val visibleTiles = allTiles.take(ConferenceRuntime.MAX_VIDEO_TILES)
+                                val overflowTiles = allTiles.size - visibleTiles.size
+                                items(visibleTiles, key = { it.userId }) { participant ->
                                     val track = remoteVideos[participant.userId]
                                     val isPresenting = participant.userId == ConferenceRuntime.remoteScreenSharePeerId && ConferenceRuntime.remoteScreenSharePeerId.isNotBlank()
                                     Card(
@@ -507,6 +511,25 @@ fun YounesConferenceOverlay() {
                                                         .padding(6.dp)
                                                         .background(Color(0xFF00C98C).copy(alpha = 0.85f), RoundedCornerShape(8.dp))
                                                         .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                // DoD: عدّاد الفائض فوق سقف البلاطات.
+                                if (overflowTiles > 0) {
+                                    item {
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(1f)
+                                                .clip(RoundedCornerShape(12.dp)),
+                                            colors = CardDefaults.cardColors(containerColor = scheme.surfaceVariant)
+                                        ) {
+                                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    "+$overflowTiles",
+                                                    color = scheme.onSurface, fontSize = 22.sp, fontWeight = FontWeight.Bold
                                                 )
                                             }
                                         }
