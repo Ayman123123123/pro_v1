@@ -72,6 +72,16 @@ object ConferenceRuntime {
     var speakingPeers: Set<String> by mutableStateOf(emptySet())
     /** العضو/البث المثبت (Spotlight / Pinned Stream) */
     var pinnedParticipantId: String? by mutableStateOf(null)
+    /**
+     * حالة غرفة الانتظار عند المضيف: "" | "waiting" | "denied"، وعدد الواقفين في طابوره.
+     * الخادم هو صاحب القرار — هذه مجرد مرآة للواجهة حتى لا تُجمِع العميل على استطلاع REST.
+     */
+    var lobbyState by mutableStateOf("")
+    var lobbyWaiting by mutableStateOf(0)
+    /** سياسة الغرفة كما أعلنها الخادم عند القبول: مكتوم افتراضيًا / مشاركة الشاشة مسموحة. */
+    var mutedByDefault by mutableStateOf(false)
+    var screenShareAllowed by mutableStateOf(true)
+
     /** حالة مشاركة الشاشة */
     var isScreenSharing by mutableStateOf(false)
     var remoteScreenShareTrack: VideoTrack? by mutableStateOf(null)
@@ -469,6 +479,27 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 ConferenceRuntime.pinnedMessage = signal.payload["text"].orEmpty()
             }
             "ERROR", "ROOM_STATE" -> Unit
+        }
+    }
+
+    override fun onLobbyState(state: String, waiting: Int) {
+        ConferenceRuntime.lobbyWaiting = waiting
+        when (state) {
+            // القبول يعني أن المقعد صار متاحًا: نفس تتبّع إعادة الاتصال أدناه — تسجيل
+            // الغرفة عبر REST (هو مصدر الحقيقة للسعة ولمنع تذكرة SFU) ثم connect الذي يرسل
+            // JOIN. حذف إحدى الخطوتين يترك participant بلا مقعد مسجَّل أو بلا إشارة.
+            "admitted" -> {
+                ConferenceRuntime.lobbyState = ""
+                val asSpace = !ConferenceRuntime.isVideoEnabled
+                scope.launch {
+                    runCatching { registerRoom(asSpace, emptyList(), asHost = false) }
+                        .onFailure { android.util.Log.w("ConferenceService", "post-admit room registration failed: ${it.message}") }
+                    signaling.connect(roomId)
+                }
+            }
+            "denied" -> ConferenceRuntime.lobbyState = "denied"
+            "waiting" -> ConferenceRuntime.lobbyState = "waiting"
+            else -> Unit // queue/list: بيانات المضيف، لا حالة لهذا المتصل
         }
     }
 

@@ -18,7 +18,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
     private val objectMapper = ObjectMapper().registerKotlinModule()
-    private val handler = ConferenceWebSocketHandler(objectMapper)
+    // غرفة فارغة = لوبي معطّل لكل الغرف، فسلوك الاختبارات السابق لم يتغيّر؛
+    // تُمرَّر حقيقية بدل mock لأن البوابة تقرأ حالة الغرفة لا تستدعي خدمات بعيدة.
+    private val rooms = com.red.server.calls.ConferenceRoomService(com.red.server.calls.RoomPasswordHasher())
+    private val handler = ConferenceWebSocketHandler(objectMapper, rooms)
 
     private class Probe(sessionId: String, userId: String) {
         val sent = CopyOnWriteArrayList<String>()
