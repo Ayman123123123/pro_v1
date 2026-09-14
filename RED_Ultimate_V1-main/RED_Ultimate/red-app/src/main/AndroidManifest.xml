@@ -4,10 +4,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Android 17 (API 37): الوصول إلى الشبكة المحلية لم يعد ضمنيًا مع INTERNET.
+         بدون هذا التصريح وطلبه وقت التشغيل يُحجب اكتشاف الخادم المحلي (mDNS/NSD وraw TCP)
+         بصمت تام — SocketException بلا رسالة، وهو سبب شكاوى «لا يتصل بالخادم المحلي». -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- يُطلب وقت التشغيل في MainActivity.onStart (SDK 37+) عبر localNetworkPermission. -->
     <!-- P2-LAN: مكالمات نفس الواي فاي — NSD/mDNS يتطلب MulticastLock (تثبيت فقط، بلا runtime) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <!-- LAN discovery uses INTERNET only, no runtime permission needed -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

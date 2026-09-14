@@ -108,7 +108,11 @@ for f in TARGET_FILES:
 
     # ٣. rememberCoroutineScope بدون import — fully-qualified مقبول
     if "rememberCoroutineScope" in code:
-        has_rcs = any("rememberCoroutineScope" in i for i in imports) or "androidx.compose.runtime.rememberCoroutineScope" in text
+        # runtime.* يستورد rememberCoroutineScope فعليًا — نفس تسامح قاعدة by remember أعلاه،
+        # وإلا صار الفاحص نفسه يصرخ في وجه كود سليم (خطأ إيجابي كاذب).
+        has_rcs = (any("rememberCoroutineScope" in i for i in imports)
+                   or "androidx.compose.runtime.rememberCoroutineScope" in text
+                   or "androidx.compose.runtime.*" in imports)
         check(f"{fname}: rememberCoroutineScope → import", has_rcs, "rememberCoroutineScope يحتاج import أو fully-qualified")
     else:
         passes += 1

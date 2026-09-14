@@ -183,7 +183,14 @@ def check_duplicate_state(path: Path, text: str, problems: list[str]) -> None:
     seen: collections.Counter[str] = collections.Counter()
     for index, line in enumerate(lines, start=1):
         if depth == 0:
-            match = re.match(r"^(?:private |internal |public )?(?:suspend )?fun (\w+)", line)
+            # سطر قد يبدأ بـ @Composable أو @Preview: تجاهل الوسوم وإلا لم تُنسَّب
+            # الدالة أبدًا، فيُحمَل عدّاد الدالة السابقة ويُتَّهم اسمٌ سليم بالتكرار.
+            match = re.match(
+                r"^(?:@[\w.]+(?:\([^)]*\))?\s+)*"
+                r"(?:(?:private|internal|public|protected|override|open|final)\s+)*"
+                r"(?:suspend\s+)?fun\s+(\w+)",
+                line,
+            )
             if match:
                 current = match.group(1)
                 seen = collections.Counter()

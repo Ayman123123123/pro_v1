@@ -544,9 +544,17 @@ class AdminV2Controller(
         authentication: Authentication
     ): ResponseEntity<SystemAnnouncement> {
         val adminId = UUID.fromString(authentication.name)
+        // عنوان/متن الإعلان يأتيان من جسم JSON اختياري: التحويل القسري كان يرمي
+        // ClassCastException فيتحول خطأ مستخدم بسيط إلى 500 بلا رسالة. الفحص المسبق
+        // يعيد 400 بصفة تفهمها اللوحة وتُصلِحها من طرف العميل.
+        val title = (body["title"] as? String)?.trim().orEmpty()
+        val content = (body["body"] as? String)?.trim().orEmpty()
+        if (title.isEmpty() || content.isEmpty()) {
+            return ResponseEntity.badRequest().build()
+        }
         val ann = service.createAnnouncement(
-            title = body["title"] as String,
-            body = body["body"] as String,
+            title = title,
+            body = content,
             type = body["type"] as? String ?: "INFO",
             targetAudience = body["targetAudience"] as? String ?: "ALL",
             priority = (body["priority"] as? Number)?.toInt() ?: 0,

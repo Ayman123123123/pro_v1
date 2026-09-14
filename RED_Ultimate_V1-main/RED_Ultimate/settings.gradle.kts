@@ -1,8 +1,49 @@
-val androidPrefsDir = System.getenv("ANDROID_USER_HOME")
-    ?: System.getenv("ANDROID_PREFS_ROOT")
-    ?: (System.getProperty("user.home") + "/.android")
-System.clearProperty("android.prefs.root")
-System.setProperty("android.user.home", androidPrefsDir)
+// ── Fix: Android Home Trap — Gradle 9.7 + AGP 9.3 strict (Isolated Projects) ──
+// Gradle 9.4+ is strict: AndroidLocationsBuildService throws when
+// ANDROID_PREFS_ROOT / ANDROID_USER_HOME / deprecated ANDROID_SDK_HOME disagree.
+// Docker mounting .android_home while the host has .android fails deterministically.
+// The JVM cannot unset env vars, so we unify through the system properties the Android
+// SDK consults first. This runs at settings-evaluation time — before any Android plugin —
+// which is what configuration-cache and isolated-projects require.
+run {
+    val prefsRoot = System.getenv("ANDROID_PREFS_ROOT")
+    val userHome = System.getenv("ANDROID_USER_HOME")
+    val sdkHomeDeprecated = System.getenv("ANDROID_SDK_HOME") // deprecated: prefs parent, NOT the SDK root
+    val androidHome = System.getenv("ANDROID_HOME")
+    val sdkRoot = System.getenv("ANDROID_SDK_ROOT")
+
+    // 1) Reject the deprecated ANDROID_SDK_HOME = SDK root misuse.
+    if (sdkHomeDeprecated != null && (sdkHomeDeprecated == androidHome || sdkHomeDeprecated == sdkRoot)) {
+        println("⚠️ ANDROID_SDK_HOME points at the SDK root ($sdkHomeDeprecated) — deprecated. Falling back prefs to ANDROID_USER_HOME/USER_HOME.")
+        val fallback = userHome ?: (System.getProperty("user.home") + "/.android")
+        System.setProperty("android.prefs.root", fallback)
+        System.setProperty("android.user.home", fallback)
+    }
+
+    // 2) Primary conflict: ANDROID_PREFS_ROOT vs ANDROID_USER_HOME — unify to USER_HOME.
+    if (prefsRoot != null && userHome != null && prefsRoot != userHome) {
+        println("⚠️ ANDROID_PREFS_ROOT ($prefsRoot) conflicts with ANDROID_USER_HOME ($userHome) — unifying to USER_HOME")
+        System.setProperty("android.prefs.root", userHome)
+        System.setProperty("android.user.home", userHome)
+        if (sdkHomeDeprecated == prefsRoot) System.setProperty("android.sdk.home", userHome)
+    } else if (prefsRoot != null && userHome == null) {
+        println("ℹ️ ANDROID_PREFS_ROOT ($prefsRoot) set without ANDROID_USER_HOME — mirroring it for consistency")
+        System.setProperty("android.prefs.root", prefsRoot)
+        System.setProperty("android.user.home", prefsRoot)
+    } else if (prefsRoot == null && userHome != null) {
+        // Normal container case: only USER_HOME is set — prefs must mirror it.
+        System.setProperty("android.prefs.root", userHome)
+        System.setProperty("android.user.home", userHome)
+    } else {
+        val fallback = System.getProperty("user.home") + "/.android"
+        System.setProperty("android.prefs.root", fallback)
+        System.setProperty("android.user.home", fallback)
+    }
+
+    // 3) Resolved state for CI logs (the trap guard greps this line).
+    val resolvedPrefs = System.getProperty("android.prefs.root") ?: userHome ?: prefsRoot ?: "default (~/.android)"
+    println("✅ Android prefs resolved to: $resolvedPrefs (Gradle 9.7 strict mode satisfied)")
+}
 
 pluginManagement {
     repositories {

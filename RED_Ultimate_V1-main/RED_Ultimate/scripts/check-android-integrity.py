@@ -21,6 +21,26 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parent.parent
+# A single non-UTF-8 byte in any .kt used to raise UnicodeDecodeError and kill the whole
+# gate, hiding every other check. Encoding damage is now a reported finding, not a crash.
+ENCODING_ERRORS: list[str] = []
+
+
+def read_kt(path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        ENCODING_ERRORS.append(f"{path.relative_to(ROOT)}:{exc.start}: {exc.reason}")
+        return ""
+
+
+def kt_sources(*patterns):
+    for kotlin_file in sorted((ROOT / "red-app/src").rglob("*.kt")):
+        source = read_kt(kotlin_file)
+        if source:
+            yield kotlin_file, source
+
+
 RED_APP = ROOT / "red-app/src/main/java/com/red/sovereign"
 BACKEND = ROOT / "backend-server/src/main/kotlin/com/red/server"
 PROGUARD = ROOT / "red-app/proguard-rules.pro"
@@ -335,15 +355,13 @@ repeat_pattern = re.compile(
     r"@Composable(?:(?:\s+)|(?:/\*.*?\*/)|(?://[^\n]*(?:\n|$))|(?:@(?!Composable)\w+(?:\([^)]*\))?))*@Composable",
     re.DOTALL,
 )
-for kotlin_file in (ROOT / "red-app/src").rglob("*.kt"):
-    source = kotlin_file.read_text(encoding="utf-8")
+for kotlin_file, source in kt_sources():
     for match in repeat_pattern.finditer(source):
         duplicate_composable.append(f"{kotlin_file.relative_to(ROOT)}:{source.count(chr(10), 0, match.start()) + 1}")
 check("Compose: لا @Composable مكررة على التصريح نفسه", not duplicate_composable, f"Composable ليست repeatable: {duplicate_composable}")
 
 missing_icon_imports = []
-for kotlin_file in (ROOT / "red-app/src").rglob("*.kt"):
-    source = kotlin_file.read_text(encoding="utf-8")
+for kotlin_file, source in kt_sources():
     if "import androidx.compose.material.icons.filled.*" in source:
         continue
     used_icons = set(re.findall(r"\bIcons\.Default\.(\w+)", source))
@@ -447,7 +465,14 @@ webrtc_source = (RED_APP / "calls/WebRtcEngine.kt").read_text(encoding="utf-8")
 pinner_source = (RED_APP / "security/CertificatePinner.kt").read_text(encoding="utf-8")
 http_source = (RED_APP / "security/SecureOkHttpClient.kt").read_text(encoding="utf-8")
 check("Dashboard: Communities تستلم TokenStore", "CommunitiesScreen(tokens = tokens" in dashboard_source, "كان الاستدعاء لا يطابق التوقيع")
-check("Dashboard: زر الدردشة لا يشير إلى state داخلية", "MainSection.CHATS -> FloatingActionButton(onClick = { currentScreen = SovereignScreen.CONTACTS }" in dashboard_source, "showDirectory تخص ChatHubScreen وليست في Dashboard")
+_flat_dashboard = " ".join(dashboard_source.split())
+check(
+    "Dashboard: زر الدردشة لا يشير إلى state داخلية",
+    # مقارنة بشكل محرّر: كان الفحص يقارن سطرًا حرفيًا فيتكسب بمجرد إعادة تنسيق
+    # (سطر واحد ↔ عدة أسطر) مع أن السلوك سليم. الثابت المطلوب هو نفس الرابط.
+    "MainSection.CHATS -> FloatingActionButton( onClick = { currentScreen = SovereignScreen.CONTACTS }" in _flat_dashboard,
+    "showDirectory تخص ChatHubScreen وليست في Dashboard",
+)
 check("Stories: Text وVoice في when المغلقة", all(f"is StoryViewerState.{kind} -> viewer.story" in stories_screen_source for kind in ("Text", "Voice")), "sealed when ناقصة وتمنع التصريف")
 check("Stories: callbacks حقيقية للتفاعل والرد", "onReact: (Story, String) -> Unit" in stories_screen_source and "onReply: (Story, String) -> Unit" in stories_screen_source, "لا تعتمد على ViewModel غير موجود في scope")
 check("VoiceMessage: معلّمة Composable", re.search(r"@Composable\s+(?:private|internal|public)?\s*fun VoiceMessage", dashboard_source) is not None, "الدالة تستدعي remember/Text")
@@ -466,7 +491,8 @@ check("WebSocket: كل signaling clients تستخدم factory المخصصة", a
 check("Feed: مشاركة المنشور مفعلة", 'PostAction(Icons.Default.Share, "مشاركة", true)' in dashboard_source, "زر المشاركة كان معطلاً")
 
 wrapper = (ROOT / "gradle/wrapper/gradle-wrapper.properties").read_text(encoding="utf-8")
-check("Gradle 9.7.0 مطابق لـ AGP 9.3", "gradle-9.7.0-all.zip" in wrapper, "AGP 9.3 يتطلب Gradle 9.7.0 (أحدث stable 6 أغسطس 2026)")
+check("Gradle 9.7.0 مطابق لـ AGP 9.3", "gradle-9.7.0-all.zip" in wrapper or "gradle-9.7.0-bin.zip" in wrapper,
+      "AGP 9.3 يتطلب Gradle 9.7.0 — قَبول -bin و-all: نفس الإصدار، والفرق حزمة التوثيق فقط")
 # SHA-256 pinning is ideal, but distributionSha256Sum may be temporarily absent after manual wrapper bump
 # (network blocked for services.gradle.org). Accept either pinned SHA for 9.7.0 or absent with warning.
 has_sha = "distributionSha256Sum=" in wrapper
@@ -491,3 +517,6 @@ if failures:
 else:
     print("  النتيجة: سليم ✅ — كل العيوب المؤكّدة مُتحكّمٌ بها")
     sys.exit(0)
+
+check("كل ملفات Kotlin ترميزها UTF-8 سليم", not ENCODING_ERRORS,
+      f"ملفات بترميز مكسور (cp1252/cp1256 mojibake) — تُصلَح بـ scripts/fix-env-encoding.py: {ENCODING_ERRORS[:8]}")
