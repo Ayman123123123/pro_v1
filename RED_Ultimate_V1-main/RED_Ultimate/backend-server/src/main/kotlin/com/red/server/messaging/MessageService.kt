@@ -38,29 +38,55 @@ class MessageService(
 ) {
     @PostConstruct
     fun indexes() {
-        // P9: كل إنشاء فهرس محمي — تعارض خيارات فهرس قديم (unique/non-unique على نفس
-        // المفاتيح) أو بيانات قديمة مكررة يجب ألا يُسقط الإقلاع؛ المخصّص الذري يمنع التكرار أصلًا.
-        runCatching {
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("uuid", Sort.Direction.ASC).unique())
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC))
-            // P9: فرادة (المحادثة، التسلسل) — شبكة أمان تحت المخصّص الذري findAndModify
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
-            // V26: فهارس إضافية للميزات الجديدة
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC))
-            mongo.indexOps(MessageDocument::class.java).createIndex(Index().on("disappearAt", Sort.Direction.ASC))
-        }.onFailure { e -> log.warn("Failed to create message indexes: {}", e.message) }
-        // فهارس المجموعات والقنوات
-        try {
-            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC))
-            // P9: فرادة (المجموعة، التسلسل)
-            mongo.indexOps(com.red.server.database.GroupMessageDocument::class.java).createIndex(Index().on("groupId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
-            // P9: فرادة (القناة، التسلسل)
-            mongo.indexOps(com.red.server.database.ChannelMessageDocument::class.java).createIndex(Index().on("channelId", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).unique())
-            mongo.indexOps(com.red.server.database.PinnedMessageDocument::class.java).createIndex(Index().on("messageUuid", Sort.Direction.ASC).unique())
-        } catch (e: Exception) {
-            log.warn("Failed to create group/channel indexes: {}", e.message)
+        // LEGENDARY FIX 2026-09-15: حلّ جذري لتعارض الفهارس (IndexKeySpecsConflict)
+        // المشكلة: فهارس قديمة في Mongo بلا unique (auto-generated) تتعارض مع طلب unique
+        // الحل: فحص الفهرس الموجود، إسقاطه إن كان يختلف في unique/keys، ثم إعادة الإنشاء
+        fun <T : Any> ensureIndex(clazz: Class<T>, index: Index, name: String) {
+            val ops = mongo.indexOps(clazz)
+            // محاولة الإنشاء السريع أولاً
+            runCatching { ops.createIndex(index) }.onFailure { e ->
+                val msg = e.message ?: ""
+                if (msg.contains("IndexKeySpecsConflict") || msg.contains("already exists") || e is DuplicateKeyException) {
+                    runCatching {
+                        ops.dropIndex(name)
+                        log.info("Dropped conflicting Mongo index {} on {} and recreating", name, clazz.simpleName)
+                    }
+                    runCatching { ops.createIndex(index) }.onFailure { e2 ->
+                        log.warn("Failed to recreate Mongo index {} on {} after drop: {}", name, clazz.simpleName, e2.message)
+                    }
+                } else {
+                    log.warn("Failed to create Mongo index {} on {}: {}", name, clazz.simpleName, msg)
+                }
+            }
         }
+        fun <T : Any> ensureUnique(clazz: Class<T>, fields: List<Pair<String, Sort.Direction>>, uniqueName: String) {
+            val ops = mongo.indexOps(clazz)
+            val existing = runCatching { ops.indexInfo }.getOrNull() ?: emptyList()
+            val conflict = existing.firstOrNull { it.name == uniqueName && !it.isUnique }
+            if (conflict != null) {
+                runCatching { ops.dropIndex(uniqueName) }.onSuccess {
+                    log.info("Dropped legacy non-unique index {} on {} to upgrade to unique", uniqueName, clazz.simpleName)
+                }
+            }
+            val idx = Index().apply { fields.forEach { (f, d) -> on(f, d) }; unique(); named(uniqueName) }
+            ensureIndex(clazz, idx, uniqueName)
+        }
+
+        runCatching {
+            ensureIndex(MessageDocument::class.java, Index().on("uuid", Sort.Direction.ASC).unique().named("uuid_1"), "uuid_1")
+            ensureIndex(MessageDocument::class.java, Index().on("receiverId", Sort.Direction.ASC).on("status", Sort.Direction.ASC).on("sequenceNumber", Sort.Direction.ASC).named("receiverId_1_status_1_sequenceNumber_1"), "receiverId_1_status_1_sequenceNumber_1")
+            ensureUnique(MessageDocument::class.java, listOf("conversationId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "conversationId_1_sequenceNumber_1")
+            ensureIndex(MessageDocument::class.java, Index().on("conversationId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("conversationId_1_isPinned_1_pinnedAt_-1"), "conversationId_1_isPinned_1_pinnedAt_-1")
+            ensureIndex(MessageDocument::class.java, Index().on("senderId", Sort.Direction.ASC).on("createdAt", Sort.Direction.DESC).named("senderId_1_createdAt_-1"), "senderId_1_createdAt_-1")
+            ensureIndex(MessageDocument::class.java, Index().on("disappearAt", Sort.Direction.ASC).named("disappearAt_1"), "disappearAt_1")
+        }.onFailure { e -> log.warn("Failed to create message indexes: {}", e.message) }
+
+        runCatching {
+            ensureIndex(com.red.server.database.GroupMessageDocument::class.java, Index().on("groupId", Sort.Direction.ASC).on("isPinned", Sort.Direction.ASC).on("pinnedAt", Sort.Direction.DESC).named("groupId_1_isPinned_1_pinnedAt_-1"), "groupId_1_isPinned_1_pinnedAt_-1")
+            ensureUnique(com.red.server.database.GroupMessageDocument::class.java, listOf("groupId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "groupId_1_sequenceNumber_1")
+            ensureUnique(com.red.server.database.ChannelMessageDocument::class.java, listOf("channelId" to Sort.Direction.ASC, "sequenceNumber" to Sort.Direction.ASC), "channelId_1_sequenceNumber_1")
+            ensureIndex(com.red.server.database.PinnedMessageDocument::class.java, Index().on("messageUuid", Sort.Direction.ASC).unique().named("messageUuid_1"), "messageUuid_1")
+        }.onFailure { e -> log.warn("Failed to create group/channel indexes: {}", e.message) }
     }
 
     fun processIncoming(message: RedProtos.ChatMessage): MessageDocument =

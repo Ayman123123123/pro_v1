@@ -170,5 +170,41 @@ chat-*.txt
 **/apk-output/
 *.apk
 *.aab
-*.ap_RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.png
-RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.jpg
+
+# لقطات مرجعية لاختبارات الشاشة (Signal screenshotTest): آلاف ملفات PNG كبيرة،
+# وهي داخل `feature/` و`demo/` — أي خارج build graph تماماً (settings.gradle.kts
+# يضمّ `:app` و`:shared-proto` فقط). لا قيمة لها في المستودع.
+#
+# عطل مُصلَح: السطر السابق كان `*.ap_<مسار>` — دمج خاطئ بين `*.apk`/`*.aab`
+# والنمط الأصلي، فصار نمطاً لا يطابق شيئاً وبقيت الصور متتبَّعة.
+# القاعدة مقيّدة بمجلد `reference` وحده حتى لا تُستثنى مصادر الاختبار نفسها
+# (`src/screenshotTest*/kotlin`) ولا تُخفي عطلاً حقيقياً لاحقاً.
+**/src/screenshotTest*/reference/**
+
+# مساحات عمل محلية للأيقونات (مرشّحات + معالجة) — ليست منتَجاً ولا يدخلها البناء
+icon-gallery/
+icon-work/
+
+# تقارير التحليل المولَّدة (ليست كوداً): قوائم استيرادات ونسخ مكرَّرة
+used_imports.txt
+imports_list.txt
+declared_deps.txt
+scratch_duplicates.txt
+errs.txt
+recovered.txt
+test_results.txt
+build_log.txt
+build_out.txt
+build_output.txt
+backend_compile.txt
+backend_test.txt
+assemble_log.txt
+rebuild_log.txt
+
+# JVM crash dumps وملفات replay الخاصة بها (مئات الكيلوبايتات لكل ملف)
+hs_err_pid*.log
+replay_pid*.log
+
+# نسخ .env المحلية المؤرَّخة (تتضاعف بلا حد) — `**/.env.*` أعلاه يغطيها،
+# وهذا السطر يوثّقها صراحةً حتى لا يظن أحد أنها مقصودة
+**/.env.before-*

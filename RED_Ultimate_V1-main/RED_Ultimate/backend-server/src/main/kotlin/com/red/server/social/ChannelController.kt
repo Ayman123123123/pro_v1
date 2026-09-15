@@ -12,6 +12,7 @@ import java.util.UUID
  * 📢 تحكم القنوات — V26 مع Rate Limiting
  * POST /api/channels — إنشاء قناة (حد: 5/ساعة لكل مستخدم)
  * GET /api/channels — قائمة القنوات العامة
+ * GET /api/channels?search= — بحث سحابي مكمّل (P1-G)
  * GET /api/channels/{id} — تفاصيل
  * POST /api/channels/{id}/join — انضمام (حد: 20/دقيقة)
  * POST /api/channels/{id}/leave — مغادرة
@@ -40,9 +41,27 @@ class ChannelController(
         }
     }
 
+    /**
+     * GET /api/channels?limit=&search=
+     *
+     * - بلا `search`: القائمة العامة كما كانت (listPublic) — لا تغيير في السلوك.
+     * - مع `search`: بحث سحابي مكمّل (searchCloudComplement) للبحث المحلي offline.
+     *   الاستعلام الأقصر من حرفين يعيد قائمة فارغة (العميل يمنعه أصلًا عبر
+     *   MESSAGE_SEARCH_MIN_LENGTH)، والحد يُقيَّد 1..100 داخل طبقة الخدمة،
+     *   وفشل الاستعلام يُلتقط هناك فيعيد قائمة فارغة بدل 500.
+     */
     @GetMapping
-    fun list(@RequestParam(required = false) limit: Int = 20): ResponseEntity<Any> {
-        val list = channels.listPublic(limit)
+    fun list(
+        @RequestParam(required = false) limit: Int = 20,
+        @RequestParam(required = false) search: String? = null
+    ): ResponseEntity<Any> {
+        // استعلام فارغ/مسافات = قائمة عامة، فلا يُمرَّر إلى مسار البحث.
+        val query = search?.trim().orEmpty()
+        val list = if (query.isEmpty()) {
+            channels.listPublic(limit)
+        } else {
+            channels.searchCloudComplement(query, limit)
+        }
         return ResponseEntity.ok(mapOf("channels" to list, "count" to list.size))
     }
 

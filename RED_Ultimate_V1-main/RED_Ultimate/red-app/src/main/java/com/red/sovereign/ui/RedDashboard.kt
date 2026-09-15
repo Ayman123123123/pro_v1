@@ -269,6 +269,7 @@ import com.red.sovereign.features.chat.LuxuryChatBubble
 import androidx.compose.ui.draw.scale
 import com.red.sovereign.ui.theme.YounesEmerald
 import com.red.sovereign.features.communities.CommunitiesScreen
+import com.red.sovereign.features.channels.ChannelsScreen
 import com.red.sovereign.features.contacts.ContactsScreen
 import com.red.sovereign.features.chat.SovereignChatInputBar
 import com.red.sovereign.ui.components.SovereignEmptyConversationState
@@ -301,7 +302,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 
 
 
-private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CONTACTS, PROFILE, EVENTS, POLLS, ADMIN, DEVICE_SETTINGS, OFFLINE_QUEUE, RECOVERY_HUB, SMART_SERVER }
+private enum class SovereignScreen { DASHBOARD, DEVICES, PRIVACY, EXPLORE, CREATE_GROUP, BACKUP, GROUP_INFO, SEARCH, COMMUNITIES, CHANNELS, CONTACTS, PROFILE, EVENTS, POLLS, ADMIN, DEVICE_SETTINGS, OFFLINE_QUEUE, RECOVERY_HUB, SMART_SERVER }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -512,6 +513,10 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             SovereignScreen.COMMUNITIES -> {
                 val tokens = rememberDashboardTokenStore()
                 CommunitiesScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
+            }
+            SovereignScreen.CHANNELS -> {
+                val tokens = rememberDashboardTokenStore()
+                ChannelsScreen(tokens = tokens, onBack = { currentScreen = SovereignScreen.DASHBOARD })
             }
             SovereignScreen.CONTACTS -> ContactsScreen(directory = directory, onBack = { currentScreen = SovereignScreen.DASHBOARD }, onChat = { person -> currentScreen = SovereignScreen.DASHBOARD; section = MainSection.CHATS }, onCall = { person, video -> com.red.sovereign.calls.YounesCallService.start(context, person.redId, video) }, onCreateGroup = { currentScreen = SovereignScreen.CREATE_GROUP })
             else -> currentScreen = SovereignScreen.DASHBOARD

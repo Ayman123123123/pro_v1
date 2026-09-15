@@ -57,6 +57,20 @@ class HealthController(
     @GetMapping("/health")
     fun health(): ResponseEntity<Map<String, Any>> {
         val (label, totalMs, probes) = runProbes()
+        // LEGENDARY FIX 2026-09-15: كان /health بلا حقل flyway فـ Diagnostics.tsx:59
+        // يعيد دائمًا "لا توجد بيانات Flyway من الخادم" — بينما /health/detailed
+        // محمي ADMIN. نكشف نفس كتلة flyway هنا (public، لا تكشف أسرارًا).
+        val flywayResult = runCatching {
+            val latest = jdbcTemplate.queryForObject(
+                "SELECT version FROM flyway_schema_history WHERE success = TRUE ORDER BY installed_rank DESC LIMIT 1",
+                String::class.java
+            )
+            val applied = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = TRUE",
+                Int::class.java
+            ) ?: 0
+            latest to applied
+        }
         val payload: Map<String, Any> = mapOf(
             "brand" to "YOUNES",
             "displayName" to "يونس",
@@ -69,6 +83,11 @@ class HealthController(
                 "mongodb" to mapOf("status" to if (probes.mongoOk) "UP" else "DOWN", "error" to if (probes.mongoOk) null else "MONGODB_UNAVAILABLE"),
                 "redis" to mapOf("status" to if (probes.redisOk) "UP" else "DOWN", "error" to if (probes.redisOk) null else "REDIS_UNAVAILABLE"),
                 "minio" to mapOf("status" to if (probes.minioOk) "UP" else "DOWN", "error" to if (probes.minioOk) null else "MINIO_OR_BUCKET_UNAVAILABLE")
+            ),
+            "flyway" to mapOf(
+                "latestVersion" to flywayResult.getOrNull()?.first,
+                "appliedCount" to (flywayResult.getOrNull()?.second ?: 0),
+                "error" to if (flywayResult.isSuccess) null else "FLYWAY_HISTORY_UNAVAILABLE"
             )
         )
         val status = if (probes.postgresOk) HttpStatus.OK else HttpStatus.SERVICE_UNAVAILABLE

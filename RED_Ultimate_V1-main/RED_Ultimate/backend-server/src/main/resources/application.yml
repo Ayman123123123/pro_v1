@@ -50,20 +50,26 @@ spring:
     baseline-on-migrate: true
     baseline-version: "0"
     validate-on-migrate: false
+    out-of-order: false
     # Windows Docker often reports Postgres healthy before it accepts JDBC.
     connect-retries: 30
     connect-retries-interval: 5s
+    # NOTE: validate=false يظل مطلوباً — checksums لـ V1/V14/V15/V19/V26/V28.1/V30/V31.1/V32
+    # تغيرت بعد تطبيقها (تنسيق/تعليقات) ولو فُعِّل التحقق سيفشل الإقلاع. الإصلاح الصحيح
+    # هو flyway repair بعد تثبيت التغييرات في release — لا تغير هذا إلى true قبل repair.
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: none
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         jdbc:
           batch_size: 25
         order_inserts: true
         order_updates: true
+        order_by:
+          default_null_ordering: last
 
 # Spring Boot Actuator properties belong under `management`, not `spring`.
 # The previous nesting was silently ignored, so the intended exposure policy

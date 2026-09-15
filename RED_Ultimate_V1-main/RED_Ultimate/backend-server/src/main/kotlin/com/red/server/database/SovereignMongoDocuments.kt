@@ -25,7 +25,7 @@ import java.time.Instant
 // ════════════════════════════════════════════════════
 
 @Document("messages")
-@CompoundIndex(name = "conv_seq", def = "{'conversationId': 1, 'sequenceNumber': -1}")
+@CompoundIndex(name = "conv_seq", def = "{'conversationId': 1, 'sequenceNumber': 1}", unique = true)
 @CompoundIndex(name = "pinned_conv", def = "{'conversationId': 1, 'isPinned': 1, 'pinnedAt': -1}")
 @CompoundIndex(name = "sender_created", def = "{'senderId': 1, 'createdAt': -1}")
 data class MessageDocument(
@@ -282,7 +282,7 @@ data class SpaceSpeaker(
 // ════════════════════════════════════════════════════
 
 @Document("group_messages")
-@CompoundIndex(name = "group_seq", def = "{'groupId': 1, 'sequenceNumber': -1}")
+@CompoundIndex(name = "group_seq", def = "{'groupId': 1, 'sequenceNumber': 1}", unique = true)
 @CompoundIndex(name = "group_pinned", def = "{'groupId': 1, 'isPinned': 1, 'pinnedAt': -1}")
 @CompoundIndex(name = "group_sender_created", def = "{'groupId': 1, 'senderId': 1, 'createdAt': -1}")
 data class GroupMessageDocument(
@@ -404,7 +404,7 @@ data class ChannelDocument(
 // (channel_members)؛ المستند لم يملك أي كاتب وكان يُستخدم خطأً في فحص الصلاحيات.
 
 @Document("channel_messages")
-@CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': -1}")
+@CompoundIndex(name = "channel_seq", def = "{'channelId': 1, 'sequenceNumber': 1}", unique = true)
 data class ChannelMessageDocument(
     @Id val id: String? = null,
     @Indexed(unique = true) val uuid: String,

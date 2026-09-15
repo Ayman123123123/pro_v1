@@ -79,7 +79,7 @@ backend-test:
 # 4) Admin dashboard: type-check + build.
 admin-checks:
   stage: admin
-  image: node:22-bookworm
+  image: node:24-bookworm
   timeout: 20m
   script:
     - cd "$PROJECT_DIR/admin_dashboard"
@@ -95,7 +95,7 @@ admin-checks:
 # 5) Media SFU: install + syntax/protocol checks.
 media-sfu:
   stage: sfu
-  image: node:22-bookworm
+  image: node:24-bookworm
   timeout: 20m
   script:
     - cd "$PROJECT_DIR/media-sfu"

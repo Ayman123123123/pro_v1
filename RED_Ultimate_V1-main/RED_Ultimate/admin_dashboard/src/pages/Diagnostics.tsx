@@ -56,16 +56,30 @@ export default function Diagnostics() {
           }
           // قراءة حالة الخدمة الجزئية من خريطة services عند الطلب
           if (service === 'flyway') {
-            const fw = body?.flyway;
+            let fw = body?.flyway ?? body?.services?.flyway;
+            // LEGENDARY FIX: كان /health بلا flyway فيُظهر دائمًا تنبيه اتصال.
+            // الآن /health يحمل flyway، لكن لو وصلت نسخة قديمة نحاول /health/detailed كـ fallback (ADMIN).
+            if (!fw && response.ok) {
+              try {
+                const detRes = await apiFetch('/health/detailed', { method: 'GET' });
+                if (detRes.ok) {
+                  const detBody = await detRes.json().catch(() => ({} as any));
+                  fw = detBody?.flyway;
+                }
+              } catch { /* ignore fallback failure */ }
+            }
             if (!fw) {
-              return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات Flyway من الخادم' };
+              return { id, system: label, status: 'ERROR' as const, detail: 'لا توجد بيانات Flyway من الخادم — تأكد أن الخادم محدث (V56+)' };
             }
             if (fw.error) {
               return { id, system: label, status: 'ERROR' as const, detail: fw.error };
             }
+            // حتى لو أعيد بناء DB فارغ، appliedCount=0 ليس خطأً لكن نُظهره بوضوح
+            const ver = fw.latestVersion || fw.version || '—';
+            const cnt = fw.appliedCount ?? fw.count ?? 0;
             return {
               id, system: label, status: 'READY' as const,
-              detail: `V${fw.latestVersion || '—'} · ${fw.appliedCount ?? 0} ترحيل مطبّق`,
+              detail: `V${ver} · ${cnt} ترحيل مطبّق`,
             };
           }
           if (service) {

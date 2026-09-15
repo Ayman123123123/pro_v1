@@ -98,18 +98,22 @@ class ChannelService(
         val nowTs = java.sql.Timestamp.from(now)
         try {
             jdbc.update(
-                """INSERT INTO channels(id, name, username, description, owner_id, is_public, is_broadcast, boosts_count, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO channels(id, name, username, description, owner_id, is_public, is_broadcast, boosts_count, subscriber_count, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 UUID.fromString(id), req.name.trim(), req.username?.trim()?.lowercase(), req.description?.trim(),
-                actorId, req.isPublic, req.isBroadcast, 0, nowTs, nowTs
+                actorId, req.isPublic, req.isBroadcast, 0, 1, nowTs, nowTs
             )
-        } catch (_: Exception) {
-            // fallback للأعمدة القديمة (قبل ترحيل P1-G) — يعمل دون is_broadcast/boosts_count
+        } catch (e: java.sql.SQLException) {
+            // fallback للأعمدة القديمة (قبل ترحيل P1-G) — يعمل دون is_broadcast/boosts_count.
+            // مقيّد بـ 42703 (undefined_column) وحده: أي خطأ آخر (انتهاك UNIQUE على username
+            // من سباق مع channelUsernameExists، انقطاع اتصال) يجب أن ينتشر لا أن يُبتلع
+            // فيتحول إلى 500 غامض أو إلى صفٍّ ناقص.
+            if (e.sqlState != "42703") throw e
             jdbc.update(
-                """INSERT INTO channels(id, name, username, description, owner_id, is_public, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                """INSERT INTO channels(id, name, username, description, owner_id, is_public, subscriber_count, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                 UUID.fromString(id), req.name.trim(), req.username?.trim()?.lowercase(), req.description?.trim(),
-                actorId, req.isPublic, nowTs, nowTs
+                actorId, req.isPublic, 1, nowTs, nowTs
             )
         }
         jdbc.update(
@@ -321,8 +325,11 @@ class ChannelService(
                 "UPDATE channels SET boosts_count = boosts_count + ?, updated_at=NOW() WHERE id=?",
                 by, UUID.fromString(channelId)
             )
-        } catch (_: Exception) {
-            // عمود مفقود رغم ensure (سباق ترحيل) — أعد المحاولة مرة بعد ensure
+        } catch (e: java.sql.SQLException) {
+            // عمود مفقود رغم ensure (سباق ترحيل) — أعد المحاولة مرة بعد ensure.
+            // مقيّد بـ 42703 (undefined_column)؛ أي خطأ آخر ينتشر بدل أن يُبتلع
+            // فتظهر زيادة تعزيزات فاشلة كأنها نجحت.
+            if (e.sqlState != "42703") throw e
             ensureBroadcastBoostColumns()
             jdbc.update(
                 "UPDATE channels SET boosts_count = boosts_count + ?, updated_at=NOW() WHERE id=?",
@@ -344,7 +351,8 @@ class ChannelService(
     /**
      * P1-G: بحث سحابي مكمّل للبحث المحلي (FTS5/Room offline أولًا).
      * يكمل ولا يستبدل: يُستدعى عند توفر اتصال فقط، والعميل يدمج عبر mergeChannelSearch.
-     * TODO(P1-G): ربط red-app (ChannelsApi.list(search) بنمط CommunitiesApi) + debounce موحد.
+     * مربوط بـ `GET /api/channels?search=` في ChannelController.list، ويستهلكه
+     * العميل من Features/channels/ChannelsApi.searchMerged.
      */
     fun searchCloudComplement(query: String, limit: Int = 20): List<ChannelResponse> {
         val q = query.trim()

@@ -25,8 +25,12 @@ data class ChannelBoosts(
     val channelId: String,
     val boosts: Int = 0
 ) {
-    /** المستوى = boosts / 5 (أعداد سالبة تُعامل كصفر). */
-    fun level(): Int = boosts.coerceAtLeast(0) / 5
+    /**
+     * المستوى = boosts / 5 (أعداد سالبة تُعامل كصفر).
+     * يُفوَّض إلى [levelForBoosts] في ChannelMode.kt — مصدر واحد لقاعدة الاشتقاق،
+     * فلا ينحرف الرقمان لو تغيّر BOOSTS_PER_LEVEL لاحقًا.
+     */
+    fun level(): Int = levelForBoosts(boosts)
 
     /** مزايا المستوى الحالي كقائمة نصية. */
     fun perks(): List<String> = ChannelBoostsPolicy.perksForLevel(level())
