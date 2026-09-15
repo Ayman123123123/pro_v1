@@ -84,6 +84,17 @@ class DeviceKeyManager(context: Context) {
     }
 
     private fun encode(value: ByteArray) = encoder.encodeToString(value)
+    /** Adopt the server-authoritative protocol device id so E2EE addressing matches the
+     *  identity directory (prevents undecryptable inbound frames after re-enrol/restore). */
+    @Synchronized
+    fun adoptProtocolDeviceId(serverValue: Int?) {
+        if (serverValue != null && serverValue > 0) {
+            if (store.get(PROTOCOL_DEVICE_ID)?.toIntOrNull() != serverValue) {
+                store.put(PROTOCOL_DEVICE_ID, serverValue.toString())
+            }
+        }
+    }
+
     private fun requireValue(key: String) = requireNotNull(store.get(key)) { "Missing local device key: $key" }
 
     private companion object {

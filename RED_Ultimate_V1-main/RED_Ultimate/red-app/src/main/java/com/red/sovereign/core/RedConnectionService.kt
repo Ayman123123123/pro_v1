@@ -519,10 +519,20 @@ class RedConnectionService : Service() {
         when (envelope.signalCase) {
             RedProtos.RedRED.SignalCase.MESSAGE -> {
                 val message = envelope.message
-                if (message.receiverId == tokenStore.redId && message.receiverDeviceId == keyManager.protocolDeviceId()) {
+                val addressedToThisAccount = message.receiverId == tokenStore.redId
+                val addressedToThisDevice = message.receiverDeviceId == keyManager.protocolDeviceId()
+                // FIX (messages reach device): tolerate a drifted device tag (re-install / device
+                // re-enrol / restored backup) - the frame is still ours if it is addressed to this
+                // account. Only the session that owns the ciphertext can decrypt, so a wrong-device
+                // frame fails harmlessly below. Previously such a frame was dropped before decrypt
+                // and the server kept replaying it with the same stale tag => permanently invisible.
+                if (addressedToThisAccount) {
                     val isGroupConversation = isGroupConversation(message.conversationId)
+                    // S-6 fix: a storage failure must not be misreported as a decrypt failure
+                    // (which would leave a decrypt placeholder and defer the ACK).
+                    runCatching { repository.saveIncomingMessage(message) }
+                        .onFailure { android.util.Log.w("RedConnectionService", "store failed for ${message.id}: ${it.message}") }
                     val plaintext = try {
-                        repository.saveIncomingMessage(message)
                         when (message.type) {
                             // توزيع مفاتيح المجموعة يُشفَّر زوجياً لكل عضو (ليس SenderKey)
                             "GROUP_KEY_DISTRIBUTION" -> signal.decrypt(message.senderId, message.senderDeviceId, message.ciphertextType, message.payload.toByteArray())
@@ -548,6 +558,9 @@ class RedConnectionService : Service() {
                     if (plaintext == null) {
                         // Phase-1 (2026-09-14): عنصر نائب بدل الإسقاط الصامت — بلا ACK
                         // فيعيد السيرفر التسليم تلقائياً وتُحاوَل إعادة الفك.
+                        // FIX (messages reach device): a frame addressed to another approved device of
+                        // this account is not ours - return without leaving a decrypt placeholder.
+                        if (!addressedToThisDevice) return
                         saveDecryptPlaceholder(message)
                         return
                     }

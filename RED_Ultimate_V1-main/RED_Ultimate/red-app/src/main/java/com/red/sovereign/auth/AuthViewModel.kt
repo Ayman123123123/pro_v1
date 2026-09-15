@@ -192,6 +192,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         when (response.status) {
             "APPROVED" -> {
                 tokens.save(response)
+                // Align local protocol device id with the server (see DeviceKeyManager).
+                keys.adoptProtocolDeviceId(
+                    response.user.devices.firstOrNull { it.id == response.deviceId }?.protocolDeviceId
+                )
                 pendingCredentials = null
                 state = AuthState.Authenticated(response.user.redId, response.user.username, response.user.role == "ADMIN")
             }

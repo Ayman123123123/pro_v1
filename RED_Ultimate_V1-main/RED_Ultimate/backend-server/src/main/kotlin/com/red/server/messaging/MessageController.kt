@@ -38,7 +38,14 @@ class MessageController(
         auth: Authentication
     ): List<Map<String, String?>> {
         val sinceInstant = if (since > 0) java.time.Instant.ofEpochMilli(since) else java.time.Instant.now().minusSeconds(48 * 3600)
-        val docs = messages.pendingFor(auth.name, sinceInstant, limit)
+        // FIX (messages reach device): auth.name is the account UUID (JwtAuthenticationFilter sets the
+        // principal to user.id), while MessageDocument.receiverId holds the 5-digit YOUNES RED ID.
+        // Passing the UUID straight through matched nothing, so offline catch-up always returned an
+        // empty list and any message that missed the live socket never surfaced. Resolve the RED ID.
+        val accountRedId = users.findById(UUID.fromString(auth.name))
+            .orElseThrow { NoSuchElementException("USER_NOT_FOUND") }
+            .redId
+        val docs = messages.pendingFor(accountRedId, sinceInstant, limit)
         return docs.map { doc ->
             val envelope = RedProtos.RedRED.newBuilder().setMessage(
                 RedProtos.ChatMessage.newBuilder()

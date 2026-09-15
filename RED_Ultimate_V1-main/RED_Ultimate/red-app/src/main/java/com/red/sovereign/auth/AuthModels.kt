@@ -31,7 +31,8 @@ data class DeviceResponse(
     val identityFingerprint: String,
     val status: String,
     val authorizationCertificate: String? = null,
-    val certificateExpiresAt: String? = null
+    val certificateExpiresAt: String? = null,
+    val protocolDeviceId: Int? = null
 )
 
 @Serializable

@@ -93,7 +93,10 @@ data class DeviceResponse(
     val status: DeviceStatus,
     val authorizationCertificate: String?,
     val certificateExpiresAt: Instant?,
-    val createdAt: Instant
+    val createdAt: Instant,
+    // Server-authoritative protocol device id (SignalProtocolAddress device number).
+    // Exported so clients can align their local identity after re-enrolment / restore.
+    val protocolDeviceId: Int
 )
 
 data class AuthResponse(
@@ -136,5 +139,6 @@ fun UserDevice.toResponse() = DeviceResponse(
     status = status,
     authorizationCertificate = authorizationCertificate,
     certificateExpiresAt = certificateExpiresAt,
-    createdAt = createdAt
+    createdAt = createdAt,
+    protocolDeviceId = protocolDeviceId
 )
