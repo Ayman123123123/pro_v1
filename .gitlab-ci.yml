@@ -1,21 +1,34 @@
+# RED Sovereign / YOUNES — GitLab CI/CD pipeline.
+# Mirrors the canonical GitHub workflow (.github/workflows/red-ultimate-ci.yml),
+# adapted for GitLab CI. Six gates: sovereign DoD guard, infrastructure, backend,
+# admin dashboard, media SFU, and Android build + unit tests.
 workflow:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
 
 stages:
+  - guards
+  - infrastructure
   - backend
   - admin
+  - sfu
   - android
 
 variables:
   GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
   GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true"
+  PROJECT_DIR: "RED_Ultimate_V1-main/RED_Ultimate"
+
+default:
+  interruptible: true
 
 cache:
   key:
     files:
+      - RED_Ultimate_V1-main/RED_Ultimate/gradle/wrapper/gradle-wrapper.properties
       - RED_Ultimate_V1-main/RED_Ultimate/backend-server/gradle/wrapper/gradle-wrapper.properties
       - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/package-lock.json
   paths:
@@ -23,12 +36,34 @@ cache:
     - .gradle/wrapper/
     - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/node_modules/
 
+# 1) Sovereign DoD guard: no Firebase/FCM/PSTN/Dinstar in shipped code.
+sovereign-dod:
+  stage: guards
+  image: alpine:3.20
+  timeout: 10m
+  script:
+    - apk add --no-cache bash grep findutils >/dev/null
+    - chmod +x scripts/check-sovereign-dod.sh
+    - bash scripts/check-sovereign-dod.sh
+
+# 2) Infrastructure: compose YAML validity + shell syntax.
+infrastructure:
+  stage: infrastructure
+  image: python:3.12-slim
+  timeout: 20m
+  script:
+    - cd "$PROJECT_DIR"
+    - pip install --quiet pyyaml
+    - python -c "import os,sys,yaml; files=['docker-compose.yml','docker-compose.dev.yml','docker-compose.staging.yml','docker-compose.prod.yml']; [yaml.safe_load(open(f)) for f in files if os.path.exists(f)]; print('compose YAML OK')"
+    - find . -maxdepth 3 -name '*.sh' -not -path './node_modules/*' -print0 | xargs -0 -r -n1 bash -n
+
+# 3) Backend tests (independent Gradle build).
 backend-test:
   stage: backend
   image: gradle:8.14.3-jdk21
   timeout: 30m
   script:
-    - cd RED_Ultimate_V1-main/RED_Ultimate/backend-server
+    - cd "$PROJECT_DIR/backend-server"
     - chmod +x gradlew
     - ./gradlew test --no-daemon --stacktrace
   artifacts:
@@ -41,12 +76,13 @@ backend-test:
       - RED_Ultimate_V1-main/RED_Ultimate/backend-server/build/libs/*.jar
     expire_in: 14 days
 
+# 4) Admin dashboard: type-check + build.
 admin-checks:
   stage: admin
   image: node:22-bookworm
   timeout: 20m
   script:
-    - cd RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard
+    - cd "$PROJECT_DIR/admin_dashboard"
     - npm ci --no-audit --no-fund
     - npm run check
     - npm run build
@@ -56,14 +92,30 @@ admin-checks:
       - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/dist/
     expire_in: 14 days
 
+# 5) Media SFU: install + syntax/protocol checks.
+media-sfu:
+  stage: sfu
+  image: node:22-bookworm
+  timeout: 20m
+  script:
+    - cd "$PROJECT_DIR/media-sfu"
+    - npm ci --omit=dev --no-audit --no-fund
+    - npm run check
+
+# 6) Android: unit tests + debug APK. The Gradle module is :app (mapped to red-app/).
 android-test:
   stage: android
   image: ghcr.io/cirruslabs/android-sdk:36
   timeout: 60m
+  before_script:
+    - |
+      yes | sdkmanager --licenses >/dev/null 2>&1 || true
+      sdkmanager "platforms;android-37.0" "build-tools;36.0.0" >/dev/null 2>&1 \
+        || sdkmanager "platforms;android-37" "build-tools;36.0.0" >/dev/null 2>&1 || true
   script:
-    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - cd "$PROJECT_DIR"
     - chmod +x gradlew
-    - ./gradlew :red-app:testDebugUnitTest :red-app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --no-daemon --stacktrace
+    - ./gradlew :app:testDebugUnitTest :app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --no-daemon --stacktrace
   artifacts:
     when: always
     reports:

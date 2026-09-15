@@ -1,0 +1,103 @@
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  SERVER_URL: "http://192.168.1.50"
+
+.build-template: &build-definition
+  image: gradle:9.7.0-jdk21
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .gradle/caches/
+      - .gradle/wrapper/
+  before_script:
+    - chmod +x gradlew
+
+backend-build:
+  stage: build
+  <<: *build-definition
+  script:
+    - ./gradlew --no-daemon clean test bootJar
+  artifacts:
+    paths:
+      - backend-server/build/libs/*.jar
+    expire_in: 1 week
+
+android-build:
+  stage: build
+  image: cirrusci/flutter:latest
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - ./gradlew :app:assembleDebug
+      -PRED_SERVER_URL="$SERVER_URL"
+      -PRED_SKIP_BUILD_LOGIC=true
+      --no-configuration-cache --no-daemon
+  artifacts:
+    paths:
+      - RED_Ultimate_V1-main/RED_Ultimate/app/build/outputs/apk/debug/*.apk
+    expire_in: 1 week
+
+backend-test:
+  stage: test
+  <<: *build-definition
+  script:
+    - ./gradlew --no-daemon test
+
+android-lint:
+  stage: test
+  image: cirrusci/flutter:latest
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - ./gradlew :app:ktlintCheck --no-daemon
+
+compose-validate:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - docker compose --env-file .env.example config --quiet
+
+stopship-gate:
+  stage: test
+  image: python:3.12
+  script:
+    - cd RED_Ultimate_V1-main
+    - if grep -rn "STOPSHIP" --include="*.kt" --include="*.kts" --include="*.java" RED_Ultimate/ 2>/dev/null; then echo "STOPSHIP found!"; exit 1; fi
+    - echo "No STOPSHIP markers ✅"
+
+deploy-staging:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  only:
+    - main
+    - arena/**
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - docker compose build --parallel
+    - docker compose up -d
+  environment:
+    name: staging
+    url: http://$SERVER_URL:8088
+
+deploy-production:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  only:
+    - tags
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - docker compose build --parallel
+    - docker compose up -d
+  environment:
+    name: production
+    url: https://$SERVER_URL
