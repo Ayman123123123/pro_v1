@@ -579,6 +579,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             // FIX P0: المشاهد SFU كان عالقاً Connecting للأبد (SfuMediaClient يبتلع CONNECTED).
             // فعّل فور نجاح attach + ابدأ polling/watcher.
             LiveStreamRuntime.eglContext = client.eglContext
+            client.subscribeToVideo()
             markViewerSfuActive()
             return
         }

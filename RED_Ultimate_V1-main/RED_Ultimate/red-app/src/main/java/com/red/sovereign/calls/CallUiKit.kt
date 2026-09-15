@@ -163,14 +163,14 @@ fun EncryptedBadge(text: String = "مشفّرة طرفياً") {
 @Composable
 fun NetworkQualityBars(stats: NetworkStats) {
     val (bars, color, label) = when (stats.quality) {
-        NetworkStats.Quality.EXCELLENT -> Triple(4, Color(0xFF2DDBA4), "ممتازة")
-        NetworkStats.Quality.GOOD -> Triple(3, Color(0xFF8BC34A), "جيدة")
-        NetworkStats.Quality.FAIR -> Triple(2, Color(0xFFFFC107), "متوسطة")
-        NetworkStats.Quality.POOR -> Triple(1, YounesRose, "ضعيفة")
+        NetworkStats.Quality.EXCELLENT -> Triple(5, Color(0xFF2DDBA4), "ممتازة")
+        NetworkStats.Quality.GOOD -> Triple(4, Color(0xFF8BC34A), "جيدة")
+        NetworkStats.Quality.FAIR -> Triple(3, Color(0xFFFFC107), "متوسطة")
+        NetworkStats.Quality.POOR -> Triple(2, YounesRose, "ضعيفة") // 1 or 2 for poor
         NetworkStats.Quality.UNKNOWN -> Triple(0, Color.Gray, "—")
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(4) { i ->
+        repeat(5) { i ->
             val on = i < bars
             Box(
                 Modifier.size(width = 3.dp, height = (5 + i * 3).dp)
@@ -178,7 +178,12 @@ fun NetworkQualityBars(stats: NetworkStats) {
                     .background(if (on) color else Color.White.copy(alpha = 0.22f))
             )
         }
-        Text("$label ${if (stats.rttMs > 0) "· ${stats.rttMs}ms" else ""}".trim(), color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+        val details = buildString {
+            append(label)
+            if (stats.rttMs > 0) append(" · ${stats.rttMs}ms")
+            if (stats.bandwidthKbps > 0) append(" · ${stats.bandwidthKbps}kbps")
+        }
+        Text(details.trim(), color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
     }
 }
 

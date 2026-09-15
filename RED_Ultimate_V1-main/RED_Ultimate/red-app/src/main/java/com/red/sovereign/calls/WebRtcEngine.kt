@@ -82,8 +82,8 @@ data class NetworkStats(
          */
         fun recommendBitrate(quality: Quality): BitrateProfile = when (quality) {
             Quality.UNKNOWN -> BitrateProfile.STANDARD
-            Quality.POOR -> BitrateProfile.AUDIO_ONLY
-            Quality.FAIR -> BitrateProfile.LOW
+            Quality.POOR -> BitrateProfile.LOW
+            Quality.FAIR -> BitrateProfile.FAIR
             Quality.GOOD -> BitrateProfile.STANDARD
             Quality.EXCELLENT -> BitrateProfile.HD
         }
@@ -95,10 +95,11 @@ data class NetworkStats(
         val videoWidth: Int,
         val videoHeight: Int
     ) {
-        AUDIO_ONLY(0, 0, 0, 0),    // نوقف الفيديو
-        LOW(200, 15, 320, 240),     // 240p @ 15fps
-        STANDARD(800, 24, 640, 480), // 480p @ 24fps
-        HD(1800, 30, 1280, 720)    // 720p @ 30fps
+        AUDIO_ONLY(0, 0, 0, 0),
+        LOW(200, 15, 320, 240),      // 240p @ 15fps
+        FAIR(400, 20, 640, 360),     // 360p @ 20fps
+        STANDARD(800, 30, 640, 480), // 480p @ 30fps
+        HD(1800, 30, 1280, 720)      // 720p @ 30fps
     }
 }
 
@@ -211,7 +212,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDevice)
             .setVideoEncoderFactory(
-                DefaultVideoEncoderFactory(egl.eglBaseContext, true /* enableIntelVp8Encoder */, true /* enableH264HighProfile */)
+                DefaultVideoEncoderFactory(egl.eglBaseContext, true /* enableIntelVp8Encoder */, false /* enableH264HighProfile (Constrained Baseline) */)
             )
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
             .createPeerConnectionFactory()
@@ -598,6 +599,7 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
                     val ns = NetworkStats(rtt, lossPct, kbps, availableBitrate / 1000L, jitter, fps, quality, audioLevel)
                     events.onNetworkStats(ns)
                     applyAdaptiveBitrate(ns)
+                    adjustQuality(ns)
                 }
             }
         })
@@ -791,7 +793,10 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         override fun onRenegotiationNeeded() = Unit
         override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
             when (val track = receiver.track()) {
-                is VideoTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteVideo(track) }
+                is VideoTrack -> { 
+                    runCatching { track.setEnabled(true) }
+                    events.onRemoteVideo(track) 
+                }
                 is AudioTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteAudio(track) }
             }
         }

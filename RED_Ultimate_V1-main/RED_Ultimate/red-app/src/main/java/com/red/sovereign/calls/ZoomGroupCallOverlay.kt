@@ -232,7 +232,8 @@ private fun ZoomElapsedTimer(startedAt: Long){
 @Composable
 private fun ZoomVoiceGrid(state: ZoomUiState.Active){
     val joined=state.members.filter{it.status==ZoomMemberStatus.JOINED}
-    val speaker=joined.firstOrNull{!it.isMuted}?.userId
+    val speaking = ZoomRuntime.speakingPeers
+    val speaker=joined.firstOrNull{it.userId in speaking}?.userId ?: joined.firstOrNull{!it.isMuted}?.userId
     LazyVerticalGrid(columns=GridCells.Fixed(2), verticalArrangement=Arrangement.spacedBy(16.dp), horizontalArrangement=Arrangement.spacedBy(16.dp), contentPadding=PaddingValues(16.dp), modifier=Modifier.fillMaxSize()){
         item(key="self"){ ZoomAvatarTile("أنت", "أن", ZoomRuntime.isMuted, !ZoomRuntime.isMuted && speaker==null, true)}
         items(joined, key={it.userId}){ m-> ZoomAvatarTile(m.displayName, m.displayName.take(2).uppercase(), m.isMuted, m.userId==speaker, false)}
@@ -257,7 +258,8 @@ private fun ZoomVideoGrid(state: ZoomUiState.Active, isSpeakerView: Boolean, onT
     val remote=ZoomRuntime.remoteVideos
     val local=ZoomRuntime.localVideo
     val joined=state.members.filter{it.status==ZoomMemberStatus.JOINED}
-    val speaker=joined.firstOrNull()
+    val speaking = ZoomRuntime.speakingPeers
+    val speaker=joined.firstOrNull{it.userId in speaking} ?: joined.firstOrNull()
     Box(Modifier.fillMaxSize()){
         if(isSpeakerView && speaker!=null){
             Column(Modifier.fillMaxSize()){
@@ -305,6 +307,7 @@ private fun ZoomControlIsland(state: ZoomUiState.Active, isSpeakerView: Boolean,
                 if(state.isVideo){
                     ZoomIslandBtn(if(ZoomRuntime.isVideoEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff, if(!ZoomRuntime.isVideoEnabled) Color(0xFFE53935) else Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_TOGGLE_VIDEO)}
                     ZoomIslandBtn(Icons.Default.Cameraswitch, Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, ZoomGroupCallService.ACTION_SWITCH_CAMERA)}
+                    ZoomIslandBtn(if(ZoomRuntime.isBackgroundBlurred) Icons.Default.BlurOn else Icons.Default.BlurOff, if(ZoomRuntime.isBackgroundBlurred) ZoomBlue else Color.White.copy(0.14f)){ ZoomGroupCallService.action(context, "ACTION_TOGGLE_BLUR")}
                     ZoomIslandBtn(Icons.Default.ScreenShare, if(ZoomRuntime.isScreenSharing) ZoomBlue else Color.White.copy(0.14f), if(ZoomRuntime.isScreenSharing) Color(0xFF002118) else Color.White){
                         if(ZoomRuntime.isScreenSharing) ZoomGroupCallService.stopScreenShare(context)
                         else {
@@ -472,7 +475,7 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
                     Spacer(Modifier.height(10.dp))
                     androidx.compose.foundation.lazy.LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp), modifier=Modifier.weight(1f)){
                         item{ ZoomParticipantRow("أنت (المضيف)", "متصل", ZoomRuntime.isMuted, ZoomRuntime.isVideoEnabled, ZoomRuntime.isHost, ZoomRuntime.isHandRaised)}
-                        items(state.members.size){ idx-> val m=state.members[idx]; Column(verticalArrangement=Arrangement.spacedBy(4.dp)){ ZoomParticipantRow(m.displayName, when(m.status){ ZoomMemberStatus.RINGING->"يرن..."; ZoomMemberStatus.JOINED->if(m.isMuted) "متصل · مكتوم" else "متصل"; ZoomMemberStatus.WAITING->"في قاعة الانتظار"; else->m.status.name}, m.isMuted, m.hasVideo, false, m.isHandRaised); if(ZoomRuntime.isHost && m.status==ZoomMemberStatus.WAITING){ ZoomSheetBtn("قبول الإدخال", ZoomBlue, Modifier.fillMaxWidth()){ ZoomGroupCallService.admitParticipant(context, m.userId) } } } }
+                        items(state.members.size){ idx-> val m=state.members[idx]; Column(verticalArrangement=Arrangement.spacedBy(4.dp)){ ZoomParticipantRow(m.displayName, when(m.status){ ZoomMemberStatus.RINGING->"يرن..."; ZoomMemberStatus.JOINED->if(m.isMuted) "متصل · مكتوم" else "متصل"; ZoomMemberStatus.WAITING->"في قاعة الانتظار"; else->m.status.name}, m.isMuted, m.hasVideo, false, m.isHandRaised, onMute = { if(ZoomRuntime.isHost) context.startService(android.content.Intent(context, ZoomGroupCallService::class.java).setAction("ACTION_MUTE_MEMBER").putExtra("target_user_id", m.userId)) }, onStopVideo = { if(ZoomRuntime.isHost) context.startService(android.content.Intent(context, ZoomGroupCallService::class.java).setAction("ACTION_STOP_VIDEO_MEMBER").putExtra("target_user_id", m.userId)) }); if(ZoomRuntime.isHost && m.status==ZoomMemberStatus.WAITING){ ZoomSheetBtn("قبول الإدخال", ZoomBlue, Modifier.fillMaxWidth()){ ZoomGroupCallService.admitParticipant(context, m.userId) } } } }
                     }
                 }
             }
@@ -508,13 +511,16 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
     Box(modifier.clip(RoundedCornerShape(8.dp)).background(col.copy(0.15f)).border(1.dp, col.copy(0.4f), RoundedCornerShape(8.dp)).clickable(onClick=onClick).padding(horizontal=8.dp, vertical=6.dp), contentAlignment=Alignment.Center){ Text(label, color=col, fontSize=10.sp, fontWeight=FontWeight.Bold, maxLines=1)}
 }
 
-@Composable private fun ZoomParticipantRow(name:String, status:String, isMuted:Boolean, isVideo:Boolean, isHost:Boolean, isHand:Boolean){
+@Composable private fun ZoomParticipantRow(name:String, status:String, isMuted:Boolean, isVideo:Boolean, isHost:Boolean, isHand:Boolean, onMute: (()->Unit)? = null, onStopVideo: (()->Unit)? = null){
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(0.06f)).padding(12.dp), horizontalArrangement=Arrangement.SpaceBetween, verticalAlignment=Alignment.CenterVertically){
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp), verticalAlignment=Alignment.CenterVertically){
             Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A)))), contentAlignment=Alignment.Center){ Text(name.take(2).uppercase().ifBlank{"؟"}, color=Color.White, fontSize=14.sp, fontWeight=FontWeight.Bold)}
             Column{ Row(horizontalArrangement=Arrangement.spacedBy(4.dp), verticalAlignment=Alignment.CenterVertically){ Text(name.take(14), color=Color.White, fontSize=13.sp, fontWeight=FontWeight.SemiBold); if(isHost) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(ZoomBlue).padding(horizontal=4.dp, vertical=1.dp)){ Text("مضيف", color=Color(0xFF002118), fontSize=9.sp)}; if(isHand) Text("✋", fontSize=12.sp)}; Text(status, color=Color.White.copy(0.6f), fontSize=11.sp)}
         }
-        Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){ if(isVideo) Icon(Icons.Default.Videocam, null, tint=ZoomBlue, modifier=Modifier.size(16.dp)) else Icon(Icons.Default.VideocamOff, null, tint=Color.Gray, modifier=Modifier.size(16.dp)); Icon(if(isMuted) Icons.Default.MicOff else Icons.Default.Mic, null, tint=if(isMuted) Color(0xFFE53935) else ZoomBlue, modifier=Modifier.size(16.dp))}
+        Row(horizontalArrangement=Arrangement.spacedBy(6.dp), verticalAlignment=Alignment.CenterVertically){ 
+            Icon(if(isVideo) Icons.Default.Videocam else Icons.Default.VideocamOff, null, tint=if(isVideo) ZoomBlue else Color.Gray, modifier=Modifier.size(16.dp).clickable { onStopVideo?.invoke() })
+            Icon(if(isMuted) Icons.Default.MicOff else Icons.Default.Mic, null, tint=if(isMuted) Color(0xFFE53935) else ZoomBlue, modifier=Modifier.size(16.dp).clickable { onMute?.invoke() })
+        }
     }
 }
 

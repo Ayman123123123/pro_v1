@@ -138,7 +138,16 @@ class RedMasterHandler(
         require(incoming.senderId == sender) { "senderId does not match authenticated RED ID" }
         val stored = messages.processIncoming(incoming)
         send(session, ack(stored, "SENT"))
-        sendToDevice(stored.receiverId, stored.receiverDeviceId, messageEnvelope(stored))
+        val envelope = messageEnvelope(stored)
+        // FIX (messages reach device): وسم الجهاز مرآة لتخمين المرسل وقد ينحرف
+        // (إعادة تثبيت / إعادة تسجيل / استعادة نسخة احتياطية). كان الانحراف يعني:
+        // sendToDevice لا يطابق أي جلسة ⇒ لا تسليم حيّ، وreceiverHasLiveSession يبقى
+        // صحيحاً (جلسة حيّة على جهاز آخر) ⇒ لا دفع أيضاً ⇒ الرسالة مخزَّنة لكن غير
+        // مرئية أبداً. النسخة المكافئة أُصلحت في العميل
+        // (RedConnectionService.handleEnvelope: التسامح مع الوسم المنحرف لأن وسم
+        // التشفير وحده يحسم من يفكّ) — فنُسقط هنا إلى كل جلسات الحساب.
+        sendToDevice(stored.receiverId, stored.receiverDeviceId, envelope) ||
+            sendToUser(stored.receiverId, envelope)
         // المستلم غير متصل الآن إطلاقاً — نسجّل إشعاراً داخل التطبيق ونحاول الدفع السيادي
         // كي لا تُفوَّت الرسالة حتى لو لم يفتح التطبيق (البريد المعلق يغطي إعادة الاتصال فقط).
         val receiverHasLiveSession = sessions[stored.receiverId]?.values?.any { it.isOpen } == true
@@ -146,7 +155,7 @@ class RedMasterHandler(
             notifications.sendChatMessagePush(stored.receiverId, stored.senderId)
         }
         // Synchronize the sender's other approved devices without echoing to this socket.
-        sendToUser(sender, messageEnvelope(stored), exceptSessionId = session.id)
+        sendToUser(sender, envelope, exceptSessionId = session.id)
     }
 
     private fun receiveAck(session: WebSocketSession, incoming: RedProtos.MessageAck) {
@@ -302,12 +311,18 @@ class RedMasterHandler(
         }
     }
 
-    private fun sendToDevice(redId: String, protocolDeviceId: Int, envelope: RedProtos.RedRED) {
-        sessions[redId]?.values?.filter { it.isOpen && it.attributes["protocolDeviceId"] == protocolDeviceId }?.forEach { send(it, envelope) }
+    /** @return true إذا سُلِّم لجهاز مطابق واحد على الأقل. */
+    private fun sendToDevice(redId: String, protocolDeviceId: Int, envelope: RedProtos.RedRED): Boolean {
+        val matched = sessions[redId]?.values?.filter { it.isOpen && it.attributes["protocolDeviceId"] == protocolDeviceId }
+        matched?.forEach { send(it, envelope) }
+        return matched?.isNotEmpty() == true
     }
 
-    private fun sendToUser(redId: String, envelope: RedProtos.RedRED, exceptSessionId: String? = null) {
-        sessions[redId]?.values?.filter { it.isOpen && it.id != exceptSessionId }?.forEach { send(it, envelope) }
+    /** @return true إذا سُلِّم لجلسة واحدة على الأقل من جلسات الحساب. */
+    private fun sendToUser(redId: String, envelope: RedProtos.RedRED, exceptSessionId: String? = null): Boolean {
+        val targets = sessions[redId]?.values?.filter { it.isOpen && it.id != exceptSessionId }
+        targets?.forEach { send(it, envelope) }
+        return targets?.isNotEmpty() == true
     }
 
     private fun send(session: WebSocketSession, envelope: RedProtos.RedRED) {

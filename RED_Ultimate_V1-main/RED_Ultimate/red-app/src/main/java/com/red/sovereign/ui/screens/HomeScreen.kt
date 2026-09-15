@@ -110,7 +110,7 @@ fun FeedScreen(account: AuthState.Authenticated, feed: FeedViewModel, stories: S
         }
         item {
             Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("لك", "أتابعهم", "اليمن").forEachIndexed { i, title ->
+                listOf("لك", "أتابعهم", "محلي").forEachIndexed { i, title ->
                     FilterChip(filter == i, {
                         filter = i
                         feed.load(when (i) { 1 -> "FOLLOWING"; 2 -> "YEMEN"; else -> null })

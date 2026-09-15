@@ -100,6 +100,14 @@ class SfuMediaClient(
      */
     private val videoPeerByConsumer = linkedMapOf<String, String>()
 
+    /**
+     * مستهلكو الفيديو الذين استُلم لهم مسار في **جيل محرك الاستقبال الحالي**.
+     * تُصفَّر عند إعادة إنشاء recvEngine، لأن كل PeerConnection جديد يعيد إطلاق
+     * onTrack لكل m-lines من جديد. بدونها كان الربط يُستهلك مرة واحدة فقط
+     * (remove) فتُسقط كل إعادة تسليم لاحقة صامتًا ⇒ شاشة سوداء للمشاهد.
+     */
+    private val deliveredVideoConsumers = linkedSetOf<String>()
+
     var eglContext: org.webrtc.EglBase.Context? = null
         private set
     var localVideo: VideoTrack? = null
@@ -297,6 +305,7 @@ class SfuMediaClient(
         producers.clear()
         consumers.clear()
         videoPeerByConsumer.clear()
+        deliveredVideoConsumers.clear()
         recvConnected = false
         attached = false
         scope.cancel()
@@ -358,6 +367,7 @@ class SfuMediaClient(
                                     }
                                     // كناسة دفاعية: أي مفتاح فيديو بلا مستهلك = مسار ميّت
                                     videoPeerByConsumer.keys.removeAll { it !in consumers.keys }
+                                    deliveredVideoConsumers.removeAll { it !in consumers.keys }
                                     any
                                 }
                                 if (removed) negotiateRecv()
@@ -377,7 +387,7 @@ class SfuMediaClient(
                 }
             }
         )
-        // Yemen-hardened: مهلة 8s بدل 4s — مصافحة WS على 4G عالي RTT كانت تفشل كذباً.
+        // Hardened: مهلة 8s بدل 4s — مصافحة WS على 4G عالي RTT كانت تفشل كذباً.
         return withTimeoutOrNull(8_000) { opened.await() } == true
     }
 
@@ -469,6 +479,17 @@ class SfuMediaClient(
         }
     }
 
+    fun subscribeToVideo(producerId: String? = null) {
+        scope.launch {
+            if (producerId != null) {
+                // If a specific producerId is given, just consume it (if not already consumed)
+                consumeOne("", producerId, "video")
+            } else {
+                negotiateRecv()
+            }
+        }
+    }
+
     /**
      * تفاوض/إعادة تفاوض على الـ recv engine بجميع المستهلكين المتراكمين.
      * يجب استدعاؤها داخل [mutex] — الـ wrapper الخارجي يقفل قبله.
@@ -538,15 +559,25 @@ class SfuMediaClient(
      */
     private fun claimVideoPeerLocked(trackId: String): String? {
         if (videoPeerByConsumer.isEmpty()) return null
+        // الملاءمة تُفضّل مستهلكاً لم يُسلَّم له مسار في هذا الجيل، لكنها **لا تحذف**
+        // الربط. الحذف كان يجعل أول تسليم هو الأخير: أي إعادة تفاوض أو إعادة إنشاء
+        // recvEngine (SPACE→CONFERENCE) تُعيد onTrack لكل m-lines فتُسقط المسارات
+        // اللاحقة صامتاً ⇒ شاشة سوداء للمشاهد. التنظيف الحقيقي يتم عند
+        // producerClosed/peerLeft + الكناسة الدفاعية أعلاه.
         if (trackId.isNotBlank()) {
             val hit = videoPeerByConsumer.keys.firstOrNull { consumerId ->
-                trackId.contains(consumerId) ||
-                    consumers[consumerId]?.producerId?.takeIf { it.isNotBlank() }?.let { trackId.contains(it) } == true
+                consumerId !in deliveredVideoConsumers &&
+                    (trackId.contains(consumerId) ||
+                        consumers[consumerId]?.producerId?.takeIf { it.isNotBlank() }?.let { trackId.contains(it) } == true)
             }
-            if (hit != null) return videoPeerByConsumer.remove(hit)
+            if (hit != null) {
+                deliveredVideoConsumers.add(hit)
+                return videoPeerByConsumer[hit]
+            }
         }
-        val first = videoPeerByConsumer.entries.firstOrNull() ?: return null
-        return videoPeerByConsumer.remove(first.key)
+        val fresh = videoPeerByConsumer.keys.firstOrNull { it !in deliveredVideoConsumers } ?: return null
+        deliveredVideoConsumers.add(fresh)
+        return videoPeerByConsumer[fresh]
     }
 
     /**
@@ -621,6 +652,9 @@ class SfuMediaClient(
 
     private suspend fun createRecvEngine(kind: CallMediaKind): ApiResult<Unit> {
         recvEngine?.release()
+        // جيل محرك جديد: كل m-lines ستُسلَّم من جديد ⇒ اسمح بإعادة التسليم، وإلا
+        // بقي المشاهد على مسار ميت (شاشة سوداء) بعد ترقية SPACE→CONFERENCE.
+        deliveredVideoConsumers.clear()
         recvEngineKind = kind
         recvEngine = WebRtcEngine(context, object : WebRtcEngine.Events {
             override fun onLocalDescription(description: SessionDescription) = Unit

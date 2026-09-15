@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -361,6 +362,7 @@ fun YounesCallOverlay() {
                 }
             },
                                 onFlip = { YounesCallService.action(context, YounesCallService.ACTION_SWITCH_CAMERA) },
+                                onAddParticipant = { Toast.makeText(context, "إضافة مشارك", Toast.LENGTH_SHORT).show() },
                                 onEnd = { YounesCallService.action(context, YounesCallService.ACTION_END) }
                             )
                         }
@@ -539,6 +541,7 @@ private fun ActiveControls(
     onBluetooth: () -> Unit,
     onCamera: () -> Unit,
     onFlip: () -> Unit,
+    onAddParticipant: () -> Unit,
     onEnd: () -> Unit
 ) {
     // واتساب: صف الأزرار ثم زر الإنهاء معزولاً بفجوة سفلية (منع اللمس العرضي).
@@ -552,15 +555,19 @@ private fun ActiveControls(
                 onRecord,
                 if (isRecording) Color(0xFFB71C1C) else Color(0x33E53935)
             )
-            CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
+            CallRoundButton(androidx.compose.material.icons.Icons.Default.PersonAdd, "إضافة", onAddParticipant)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
             if (video) {
                 CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "كاميرا", onCamera)
                 CallRoundButton(Icons.Default.Cameraswitch, "تدوير", onFlip)
-                // AUTO-FIX (call UI): hold must be available in video mode too (was audio-only).
                 CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, "تعليق", onHold)
+                CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
             } else {
                 CallRoundButton(if (held) Icons.Default.PlayArrow else Icons.Default.Pause, if (held) "استئناف" else "تعليق", onHold)
                 CallRoundButton(Icons.Default.Bluetooth, "بلوتوث", onBluetooth)
+                CallRoundButton(Icons.Default.Dialpad, "أرقام", onKeypad)
+                CallRoundButton(if (camera) Icons.Default.Videocam else Icons.Default.VideocamOff, "فيديو", onCamera) // Audio/Video toggle
             }
         }
         EndCallButton(onClick = onEnd)

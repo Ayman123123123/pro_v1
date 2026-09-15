@@ -203,6 +203,9 @@ fun YounesLiveStreamOverlay() {
             } else if (isBroadcaster && localVideo != null) {
                 LiveStreamVideoRenderer(track = localVideo, mirror = true, modifier = Modifier.fillMaxSize())
             } else if (!isBroadcaster && remoteVideo != null) {
+                LaunchedEffect(remoteVideo) {
+                    // Re-init or just trigger recomposition
+                }
                 LiveStreamVideoRenderer(track = remoteVideo, mirror = false, modifier = Modifier.fillMaxSize())
             } else {
                 // بطاقة انتظار قابلة للفعل — لا spinner صامت ولا شاشة سوداء
@@ -374,7 +377,8 @@ fun YounesLiveStreamOverlay() {
                         LiveStreamVideoRenderer(
                             track = coHosts[0].second,
                             mirror = false,
-                            modifier = Modifier.size(110.dp, 150.dp).clip(RoundedCornerShape(10.dp))
+                            modifier = Modifier.size(110.dp, 150.dp).clip(RoundedCornerShape(10.dp)),
+                            overlay = true
                         )
                         if (isBroadcaster) {
                             Text(
@@ -405,7 +409,8 @@ fun YounesLiveStreamOverlay() {
                                         LiveStreamVideoRenderer(
                                             track = track,
                                             mirror = false,
-                                            modifier = Modifier.size(84.dp, 110.dp).clip(RoundedCornerShape(10.dp))
+                                            modifier = Modifier.size(84.dp, 110.dp).clip(RoundedCornerShape(10.dp)),
+                                            overlay = true
                                         )
                                         if (isBroadcaster) {
                                             Text(
@@ -1378,7 +1383,7 @@ private fun FloatingHeart(emoji: String) {
 }
 
 @Composable
-private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
+private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier, overlay: Boolean = false) {
     // FIX: إصلاح الشاشة السوداء عند egl null + fallback + حماية init(null)
     val eglLive = LiveStreamRuntime.eglContext
     val egl = eglLive
@@ -1404,7 +1409,10 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
                 setMirror(mirror)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                 setEnableHardwareScaler(true)
-                setZOrderMediaOverlay(true)
+                // اصطلاح المشروع (CallUiKit): العلم مخصّص للطبقات الصغيرة فوق عارض آخر.
+                // كان true دائماً — فيضع عارض ملء الشاشة في طبقة overlay ويقلب الترتيب
+                // المقصود (قد يحجب واجهة الشات/الأزرار أو يُخفي بلاطات المضيفين).
+                setZOrderMediaOverlay(overlay)
                 viewRef = this
             }
         },

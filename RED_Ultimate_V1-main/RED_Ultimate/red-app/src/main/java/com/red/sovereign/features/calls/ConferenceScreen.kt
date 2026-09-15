@@ -2,6 +2,7 @@ package com.red.sovereign.features.calls
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +12,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -60,12 +70,17 @@ fun ConferenceScreen() {
             .fillMaxSize()
             .background(Color(0xFF060D1A))
     ) {
-        // MediaSFU Advanced Grid
-        MediaSfuGrid(
-            localVideo = localVideo,
-            remoteVideos = remoteVideos,
-            participants = participants
-        )
+        if (ConferenceRuntime.isVideoEnabled) {
+            // MediaSFU Advanced Grid
+            MediaSfuGrid(
+                localVideo = localVideo,
+                remoteVideos = remoteVideos,
+                participants = participants
+            )
+        } else {
+            // Twitter Spaces / Audio Conference Stage
+            TwitterSpacesStage(participants)
+        }
 
         // Top Header
         AnimatedVisibility(
@@ -243,6 +258,94 @@ private fun ConferenceVideoRenderer(track: VideoTrack, mirror: Boolean, modifier
             renderer?.let {
                 track.removeSink(it)
                 it.release()
+            }
+        }
+    }
+}
+
+@Composable
+fun TwitterSpacesStage(participants: List<com.red.sovereign.calls.ConferenceParticipant>) {
+    val speakers = participants.filter { it.role in setOf("HOST", "CO_HOST", "SPEAKER") || it.isHost }
+    val listeners = participants.filter { !speakers.contains(it) }
+    val speakingPeers = ConferenceRuntime.speakingPeers
+    val context = LocalContext.current
+
+    Column(modifier = Modifier.fillMaxSize().padding(top = 80.dp, start = 16.dp, end = 16.dp)) {
+        Text("المتحدثون", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            item {
+                SpaceAvatarTile(label = "أنت", isSpeaking = ConferenceRuntime.isSpeaker && !ConferenceRuntime.isMuted, isHost = ConferenceRuntime.selfRole == "HOST")
+            }
+            items(speakers, key = { it.userId }) { speaker ->
+                val isSpeaking = speaker.userId in speakingPeers || (speakingPeers.isEmpty() && speaker.isSpeaking)
+                SpaceAvatarTile(label = speaker.userId.take(8), isSpeaking = isSpeaking, isHost = speaker.isHost || speaker.role == "HOST", onClick = { ConferenceService.pinParticipant(context, speaker.userId) })
+            }
+        }
+        
+        if (listeners.isNotEmpty()) {
+            Text("المستمعون", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 16.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.height(200.dp)
+            ) {
+                items(listeners, key = { it.userId }) { listener ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(modifier = Modifier.size(54.dp).clip(CircleShape).background(Color(0xFF1E293B)), contentAlignment = Alignment.Center) {
+                            Text(listener.userId.take(2).uppercase(), color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(listener.userId.take(8), color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SpaceAvatarTile(label: String, isSpeaking: Boolean, isHost: Boolean, onClick: (() -> Unit)? = null) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick?.invoke() }) {
+        Box(modifier = Modifier.size(80.dp), contentAlignment = Alignment.Center) {
+            if (isSpeaking) {
+                val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "pulse")
+                val scale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.15f,
+                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                        animation = androidx.compose.animation.core.tween(600),
+                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+                    ),
+                    label = "pulseScale"
+                )
+                Box(modifier = Modifier.size(80.dp * scale).clip(CircleShape).background(Color(0xFF7C5CFF).copy(alpha = 0.3f)))
+            }
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF1E293B))
+                    .border(
+                        if (isHost) 2.dp else if (isSpeaking) 2.dp else 0.dp,
+                        if (isHost) Color(0xFFB8860B) else if (isSpeaking) Color(0xFF7C5CFF) else Color.Transparent,
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(label.take(2).uppercase(), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, color = Color.White, fontSize = 13.sp, fontWeight = if (isHost) FontWeight.Bold else FontWeight.Normal)
+            if (isHost) {
+                Icon(Icons.Default.Star, contentDescription = "Host", tint = Color(0xFFB8860B), modifier = Modifier.size(12.dp))
             }
         }
     }

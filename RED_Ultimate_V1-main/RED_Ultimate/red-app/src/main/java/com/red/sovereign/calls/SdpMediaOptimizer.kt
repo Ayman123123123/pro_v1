@@ -24,8 +24,8 @@ enum class CallMediaKind {
     }
     val opusBitrateBps: Int get() = when (this) {
         VOICE, SPACE -> 32_000
-        VIDEO -> 40_000
-        CONFERENCE -> 48_000
+        VIDEO -> 64_000
+        CONFERENCE -> 64_000
         LIVE -> 64_000
     }
 }

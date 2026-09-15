@@ -148,6 +148,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -464,7 +465,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                 )
             }
             SovereignScreen.SEARCH -> RedGlobalSearch(onBack = { currentScreen = SovereignScreen.DASHBOARD })
-            // Phase 8: مدخل الإدارة السيادية — كان DINSTAR (محذوف)؛ الآن لوحة الإدارة الحقيقية.
+            // مدخل الإدارة السيادية — لوحة الإدارة الحقيقية.
             SovereignScreen.ADMIN -> {
                 if (!account.isAdmin) { currentScreen = SovereignScreen.DASHBOARD; return }
                 val adminVm: com.red.sovereign.features.admin.AdminViewModel =
@@ -1136,7 +1137,7 @@ private fun ChatHubScreen(
             }
         }
     }
-    val conversations by repository.getActiveConversations().collectAsState(initial = emptyList())
+    val conversations by repository.getActiveConversations().collectAsStateWithLifecycle(initialValue = emptyList())
     // 📥 استعادة عدادات غير المقروء المحفوظة (تنجو من إعادة التشغيل) — ما لم تكن المحادثة مفتوحة حالياً
     // المفتاح معرف آخر محادثة لا الحجم — يمنع إعادة المسح مع كل رسالة.
     androidx.compose.runtime.LaunchedEffect(conversations.lastOrNull()?.id, target, groupConversationId) {
@@ -1491,8 +1492,8 @@ private fun ChatHubScreen(
                     android.util.Log.e("RedDashboard", "DecryptedMessageBus flow error", e)
                 }.collect { item ->
                         try {
-                            // العرض المتفائل قد يكون أضافها مسبقاً بنفس المعرف — لا تكرار.
-                            if (decrypted.none { it.id == item.id }) decrypted.add(item)
+                            val index = decrypted.indexOfFirst { it.id == item.id }
+                            if (index == -1) decrypted.add(item) else decrypted[index] = item
                             if (item.type == "RICH_TEXT") {
                                 RichMessage.decode(item.plaintext)?.let { rich ->
                                     // 🔐 علامة ✏️ للمعدَّل: فقط إن كان مُرسل التعديل هو مالك الرسالة
@@ -1546,7 +1547,9 @@ private fun ChatHubScreen(
             }
             repository.getLocalHistory(conversationToRestore).collect { entities ->
                 entities.forEach { stored ->
-                    if (decrypted.none { it.id == stored.id }) decrypted.add(DecryptedMessage(stored.id, stored.conversationId, stored.senderId, stored.encryptedPlaintext, stored.createdAt, 0, stored.messageType, stored.outgoing))
+                    val msg = DecryptedMessage(stored.id, stored.conversationId, stored.senderId, stored.encryptedPlaintext, stored.createdAt, 0, stored.messageType, stored.outgoing, stored.status)
+                    val index = decrypted.indexOfFirst { it.id == stored.id }
+                    if (index == -1) decrypted.add(msg) else decrypted[index] = msg
                 }
             }
         }
@@ -1665,7 +1668,7 @@ private fun ChatHubScreen(
             // عند تغيّر محتوى SnapshotStateList (نفس المثيل) فكانت القائمة تتجمد فارغة ولا تظهر
             // الرسائل لا للمرسل ولا للمستقبل. derivedStateOf يتتبع القراءات ويعيد الحساب تلقائياً.
             val conversationMessages by remember(conversation) {
-                derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == conversation }) }
+                derivedStateOf { resolveRichMessages(decrypted.toList().filter { it.conversationId == conversation }) }
             }
             androidx.compose.runtime.LaunchedEffect(conversationMessages.lastOrNull()?.id, target) {
                 // G3: تمرير آمن موحد — scrollOnce بلا انهيار عند تقلص القائمة أثناء الحذف.
@@ -2228,7 +2231,7 @@ private fun ChatHubScreen(
                 // P0 (2026-09-14): نفس علة remember(decrypted,..) في الخاص — تجمّد قائمة المجموعة.
                 // derivedStateOf يعيد الحساب عند كل إضافة/تعديل في decrypted.
                 val groupMessages by remember(openGroup.id) {
-                    derivedStateOf { resolveRichMessages(decrypted.filter { it.conversationId == openGroup.id }) }
+                    derivedStateOf { resolveRichMessages(decrypted.toList().filter { it.conversationId == openGroup.id }) }
                 }
                 androidx.compose.runtime.LaunchedEffect(groupMessages.lastOrNull()?.id, openGroup.id) {
                     // G3: تمرير آمن موحد بلا انهيار عند تقلص القائمة.

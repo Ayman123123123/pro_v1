@@ -61,11 +61,6 @@
     <string name="call_limits_sub">حدود يومية/بالدقيقة وقيود لكل رقم</string>
     <string name="call_recording">تسجيل المكالمات</string>
     <string name="call_recording_sub">تسجيل تلقائي والتخزين وسياسة الاحتفاظ</string>
-    <string name="call_forwarding">تحويل المكالمات والبريد الصوتي</string>
-    <string name="call_forwarding_sub">تحويل مشروط وإعدادات البريد الصوتي</string>
-    <!-- Phase 8 (2026-09-15): كتلة مُسحة DINSTAR/PSTN الميتة (بلا مستدعين) حُذفت هنا:
-         sip_bridge_test + label_number/port + action_test_bridge + dialer_title +
-         dial_enter_number + dial_yemeni_phone. الاتصال السيادي عبر RED/WebRTC فقط. -->
     <string name="dial_red_call">مكالمة RED</string>
     <string name="dial_clear">مسح</string>
     <string name="dial_back">رجوع</string>

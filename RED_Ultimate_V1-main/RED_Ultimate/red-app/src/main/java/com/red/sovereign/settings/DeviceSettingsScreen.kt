@@ -156,7 +156,7 @@ private object DeviceSettingsFlags {
 /** الحوارات العاملة — واحد لكل بند مفعّل (الثمانية الأصلية + الأربعة الجديدة للمكالمات). */
 private enum class DeviceDialog {
     THEME, APP_LOCK, NOTIFICATIONS, AUTO_DOWNLOAD, STORAGE, MEDIA_QUALITY, CONNECTION, OFFLINE_QUEUE,
-    CALL_HISTORY, CALL_LIMITS, CALL_RECORDING, CALL_FORWARDING
+    CALL_HISTORY, CALL_LIMITS, CALL_RECORDING
 }
 
 /**
@@ -285,13 +285,6 @@ fun DeviceSettingsScreen(
                 icon = Icons.Filled.Mic,
                 isComingSoon = false,
                 onClick = { activeDialog = DeviceDialog.CALL_RECORDING }
-            )
-            SettingsItem(
-                title = stringResource(R.string.call_forwarding),
-                subtitle = stringResource(R.string.call_forwarding_sub),
-                icon = Icons.Filled.CallReceived,
-                isComingSoon = false,
-                onClick = { activeDialog = DeviceDialog.CALL_FORWARDING }
             )
 
             // تعريب عام: كتلة الشبكة بالعربية عبر strings.xml (كانت إنجليزية خام).
@@ -790,7 +783,6 @@ private fun DeviceSettingsDialogs(
         DeviceDialog.CALL_HISTORY -> com.red.sovereign.calls.CallHistorySettingsDialog(onDismiss, settingsVm)
         DeviceDialog.CALL_LIMITS -> CallLimitsDialog(onDismiss, settingsVm)
         DeviceDialog.CALL_RECORDING -> CallRecordingEntryDialog(settingsVm, onDismiss)
-        DeviceDialog.CALL_FORWARDING -> com.red.sovereign.calls.CallForwardingDialog(onDismiss)
         null -> Unit
     }
 }
