@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -345,7 +346,7 @@ fun ChannelsScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                Icons.Default.Campaign,
+                                Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = null,
                                 tint = MutedText.copy(alpha = 0.5f),
                                 modifier = Modifier.size(64.dp)
@@ -440,7 +441,7 @@ private fun ChannelCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        if (channel.isBroadcast) Icons.Default.Campaign else Icons.Default.ChatBubbleOutline,
+                        if (channel.isBroadcast) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.ChatBubbleOutline,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
@@ -560,9 +561,9 @@ private fun ChannelCard(
                     }
                 }
 
-                if (levelPerks.customLinks) {
+                if (levelPerks.hasCollectiveEmoji) {
                     Text(
-                        "⚡ مفعّل: روابط مخصصة وHD",
+                        "⚡ مفعّل: إيموجي جماعي وحدود ${levelPerks.maxFileMb}MB",
                         fontSize = 10.sp,
                         color = AqyalGold
                     )

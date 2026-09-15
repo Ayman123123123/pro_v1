@@ -32,6 +32,11 @@ import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.OpenInNew
+import com.red.sovereign.util.BatteryOptimizationHelper
+import com.red.sovereign.ui.theme.YounesEmerald
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -277,6 +282,72 @@ fun CallSettingsScreen(
                 checked = settings.state.callNotifications,
                 onCheckedChange = settings::setCallNotifications
             )
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── قسم موثوقية الرنين والبطارية السيادية ──────────────────────
+            SettingsSectionTitle("موثوقية الرنين في الخلفية (UnifiedPush)")
+            Spacer(Modifier.height(8.dp))
+
+            val isBatteryIgnored = remember { BatteryOptimizationHelper.isBatteryOptimizationIgnored(context) }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF131B26)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (isBatteryIgnored) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
+                            null,
+                            tint = if (isBatteryIgnored) YounesEmerald else Color(0xFFFFA000),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (isBatteryIgnored) "تحسين البطارية مستثنى (مثالي)" else "تحسين البطارية قد يؤخر الرنين",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                "بدون خوادم Google، يحتاج التطبيق إذن العمل في الخلفية لضمان رنين المكالمات فورياً والتطبيق مقتول.",
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!isBatteryIgnored) {
+                            TextButton(
+                                onClick = { BatteryOptimizationHelper.requestIgnoreBatteryOptimization(context) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.OpenInNew, null, tint = YounesEmerald, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("استثناء البطارية", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        TextButton(
+                            onClick = { BatteryOptimizationHelper.openAutostartSettings(context) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.OpenInNew, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("إعدادات التشغيل التلقائي", color = AqyalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.height(16.dp))
 
