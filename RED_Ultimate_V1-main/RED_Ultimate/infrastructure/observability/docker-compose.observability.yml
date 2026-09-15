@@ -39,7 +39,7 @@ services:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
     profiles: [observability]
     environment:
-      DATA_SOURCE_NAME: postgresql://admin:${DB_PASSWORD:?DB_PASSWORD is required}@db-postgres:5432/red_sovereign?sslmode=disable
+      DATA_SOURCE_NAME: "postgresql://admin:${DB_PASSWORD:?DB_PASSWORD is required}@db-postgres:5432/red_sovereign?sslmode=disable"
     networks: [red-net]
   redis-exporter:
     image: oliver006/redis_exporter:v1.66.0
@@ -51,7 +51,7 @@ services:
   mongodb-exporter:
     image: percona/mongodb_exporter:0.43.1
     profiles: [observability]
-    command: [--mongodb.uri=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/admin?authSource=admin]
+    command: ['--mongodb.uri=mongodb://red_user:${MONGO_PASSWORD:?MONGO_PASSWORD is required}@db-mongo:27017/admin?authSource=admin']
     networks: [red-net]
 volumes:
   prometheus-data:
