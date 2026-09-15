@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * حدّ العقد بين الـ SFU والعميل.
@@ -17,7 +17,8 @@
 const UNAUTHORIZED_MESSAGES = new Set([
   'Unauthorized',
   'Expired or invalid token',
-  'Ticket not bound to this room'
+  'Ticket not bound to this room',
+  'Produce not permitted by ticket'
 ]);
 
 /** أخطاء طلب غير صالح — العميل أخطأ في الترتيب أو المعرّف أو تجاوز حدًّا. */

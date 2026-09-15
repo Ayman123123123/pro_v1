@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -44,7 +44,8 @@ test('every literal server-side failure is classified, not silently generic', ()
 
   const unclassified = literals.filter((message) => {
     // JWT_SECRET يُرمى عند الإقلاع قبل وجود أي عميل، فلا يعبر العقد أبداً.
-    if (message.startsWith('JWT_SECRET')) return false;
+    // Startup/config secret errors are fatal at boot and never reach a client.
+    if (/^[A-Z0-9_]+ must contain at least 32 characters$/.test(message)) return false;
     return clientErrorCode(new Error(message)) === 'REQUEST_FAILED';
   });
 
