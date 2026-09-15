@@ -51,7 +51,7 @@ class LanRtcSession(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val egl = EglBase.create()
+    private val egl = WebRtcBootstrap.sharedEgl
     val eglContext: EglBase.Context get() = egl.eglBaseContext
 
     private val hwAec = WebRtcEngine.hasVendorAudioEffect(
@@ -184,7 +184,8 @@ class LanRtcSession(
         peer = null
         runCatching { factory.dispose() }
         runCatching { audioDevice.release() }
-        runCatching { egl.release() }
+        // FIX: sharedEgl لا يُحرر — كان يسبب EGL_BAD_CONTEXT للعرض الحي
+        // runCatching { egl.release() }
         pendingIce.clear()
         haveLocalOffer = false
         remoteReady = false

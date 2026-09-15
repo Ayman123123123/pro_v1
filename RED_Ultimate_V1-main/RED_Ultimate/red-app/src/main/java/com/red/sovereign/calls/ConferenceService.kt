@@ -58,7 +58,7 @@ object ConferenceRuntime {
     var state: ConferenceUiState by mutableStateOf(ConferenceUiState.Idle)
     var participants by mutableStateOf(emptyList<ConferenceParticipant>())
     var localVideo: VideoTrack? by mutableStateOf(null)
-    var eglContext: org.webrtc.EglBase.Context? = null
+    var eglContext: org.webrtc.EglBase.Context? by mutableStateOf(null)
     val remoteVideos = androidx.compose.runtime.mutableStateMapOf<String, VideoTrack>()
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)

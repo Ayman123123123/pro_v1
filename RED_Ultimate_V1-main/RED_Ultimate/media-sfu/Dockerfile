@@ -34,6 +34,7 @@ RUN chown -R node:node /app
 USER node
 EXPOSE 4000
 EXPOSE 40000-40100/udp
+EXPOSE 40000-40100/tcp
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=20s \
   CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

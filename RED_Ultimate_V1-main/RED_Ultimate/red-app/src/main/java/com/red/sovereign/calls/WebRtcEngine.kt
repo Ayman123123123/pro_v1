@@ -613,6 +613,8 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         // AUTO-FIX (call audio): the ADM owns AudioRecord/AudioTrack threads - release it with
         // the engine, otherwise it leaks across calls and can starve the next call's mic.
         runCatching { audioDevice.release() }
+        // FIX: factory leak — كل مكالمة تنشئ factory جديد دون dispose → استنزاف native
+        runCatching { factory.dispose() }
         isRemoteDescriptionSet = false
         synchronized(pendingIceCandidates) {
             pendingIceCandidates.clear()
@@ -651,25 +653,75 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
             events.onCameraUnavailable()
             return null
         }
+        // FIX: حلقة fallback للدقة — HD قد تفشل على أجهزة ضعيفة، جرّب تنازلياً
+        val profiles = listOf(
+            NetworkStats.BitrateProfile.HD,
+            NetworkStats.BitrateProfile.STANDARD,
+            NetworkStats.BitrateProfile.LOW
+        )
+        val startIdx = when (currentBitrateProfile) {
+            NetworkStats.BitrateProfile.HD -> 0
+            NetworkStats.BitrateProfile.STANDARD -> 1
+            else -> 2
+        }
+        val tryList = profiles.subList(startIdx, profiles.size)
+        // إضافة 640x480/640x360 كfallback الأصلي لـ Mesh
+        val extraFallbacks = listOf(
+            NetworkStats.BitrateProfile.STANDARD,
+            NetworkStats.BitrateProfile.LOW
+        )
+
+        var lastError: Throwable? = null
+        // جرّب أولاً profile الحالي مع fallback
+        for (profile in tryList) {
+            val result = tryCreateVideoTrackWithProfile(profile)
+            if (result != null) return result
+        }
+        for (profile in extraFallbacks) {
+            // تجنب تكرار نفس profile
+            if (profile in tryList) continue
+            val result = tryCreateVideoTrackWithProfile(profile)
+            if (result != null) return result
+        }
+        android.util.Log.e("WebRtcEngine", "All video capture fallbacks failed", lastError)
+        events.onCameraUnavailable()
+        return null
+    }
+
+    private fun tryCreateVideoTrackWithProfile(profile: NetworkStats.BitrateProfile): VideoTrack? {
         return runCatching {
             val selected = camera(context) ?: return null
             capturer = selected
             videoSource = factory.createVideoSource(false)
+            if (videoSource == null) {
+                android.util.Log.e("WebRtcEngine", "createVideoSource returned null")
+                capturer?.dispose(); capturer = null
+                return null
+            }
             textureHelper = SurfaceTextureHelper.create("YounesCamera", egl.eglBaseContext)
-            selected.initialize(textureHelper, context, videoSource?.capturerObserver)
-            val profile = currentBitrateProfile.takeUnless { it == NetworkStats.BitrateProfile.AUDIO_ONLY }
-                ?: NetworkStats.BitrateProfile.LOW
-            selected.startCapture(
-                profile.videoWidth.coerceAtLeast(640),
-                profile.videoHeight.coerceAtLeast(480),
-                profile.videoFramerate.coerceAtLeast(24)
-            )
+            if (textureHelper == null) {
+                android.util.Log.e("WebRtcEngine", "SurfaceTextureHelper.create returned null — EGL exhausted")
+                videoSource?.dispose(); videoSource = null
+                capturer?.dispose(); capturer = null
+                return null
+            }
+            // capturerObserver قد يكون null إن فشل videoSource — لا تمرر null للـ native
+            val observer = videoSource?.capturerObserver
+            if (observer == null) {
+                android.util.Log.e("WebRtcEngine", "capturerObserver null")
+                textureHelper?.dispose(); textureHelper = null
+                videoSource?.dispose(); videoSource = null
+                capturer?.dispose(); capturer = null
+                return null
+            }
+            selected.initialize(textureHelper, context, observer)
+            // FIX: أزل coerceAtLeast — كان يحول LOW 320x240 إلى 640x480 قسراً ويهدر fallback
+            selected.startCapture(profile.videoWidth, profile.videoHeight, profile.videoFramerate)
             factory.createVideoTrack("younes-video", videoSource).apply {
                 setEnabled(cameraRequestedByUser && currentBitrateProfile != NetworkStats.BitrateProfile.AUDIO_ONLY)
             }
         }.onFailure { e ->
-            android.util.Log.e("WebRtcEngine", "Failed to create video track", e)
-            events.onCameraUnavailable()
+            android.util.Log.e("WebRtcEngine", "Failed to create video track ${profile.videoWidth}x${profile.videoHeight}@${profile.videoFramerate}", e)
             runCatching { capturer?.stopCapture() }
             capturer?.dispose()
             textureHelper?.dispose()
@@ -732,21 +784,21 @@ class WebRtcEngine(private val context: Context, private val events: Events) {
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) = Unit
         override fun onAddStream(stream: MediaStream) {
             stream.audioTracks.forEach { it.setEnabled(true) }
-            stream.videoTracks.forEach(events::onRemoteVideo)
+            stream.videoTracks.forEach { runCatching { it.setEnabled(true) }; events.onRemoteVideo(it) }
         }
         override fun onRemoveStream(stream: MediaStream) = Unit
         override fun onDataChannel(channel: DataChannel) = Unit
         override fun onRenegotiationNeeded() = Unit
         override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {
             when (val track = receiver.track()) {
-                is VideoTrack -> events.onRemoteVideo(track)
+                is VideoTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteVideo(track) }
                 is AudioTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteAudio(track) }
             }
         }
         override fun onTrack(transceiver: RtpTransceiver) {
             val receiver = transceiver.receiver ?: return
             when (val track = receiver.track()) {
-                is VideoTrack -> events.onRemoteVideo(track)
+                is VideoTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteVideo(track) }
                 is AudioTrack -> { runCatching { track.setEnabled(true) }; events.onRemoteAudio(track) }
             }
         }

@@ -919,31 +919,27 @@ private fun ConferencePulseScale(): Float {
 
 @Composable
 private fun ConferenceVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
-    val egl = ConferenceRuntime.eglContext ?: return
+    val egl = ConferenceRuntime.eglContext ?: WebRtcBootstrap.eglContext ?: return
     if (track == null) return
     var renderer: SurfaceViewRenderer? by remember { mutableStateOf(null) }
-    androidx.compose.runtime.key(track) {
-        AndroidView(
-            factory = { context ->
-                SurfaceViewRenderer(context).apply {
-                    init(egl, null)
-                    setMirror(mirror)
-                    setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                    setEnableHardwareScaler(true)
-                    renderer = this
-                    track.addSink(this)
-                }
-            },
-            update = { view -> if (renderer == view) track.addSink(view) },
-            modifier = modifier
-        )
-        DisposableEffect(track, renderer) {
-            onDispose {
-                renderer?.let {
-                    track.removeSink(it)
-                    it.release()
-                }
+    AndroidView(
+        factory = { context ->
+            SurfaceViewRenderer(context).apply {
+                init(egl, null)
+                setMirror(mirror)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                setEnableHardwareScaler(true)
+                renderer = this
             }
+        },
+        update = { view -> view.setMirror(mirror) },
+        onRelease = { it.release() },
+        modifier = modifier
+    )
+    DisposableEffect(track, renderer) {
+        if (track != null && renderer != null) track.addSink(renderer!!)
+        onDispose {
+            if (track != null && renderer != null) track.removeSink(renderer!!)
         }
     }
 }

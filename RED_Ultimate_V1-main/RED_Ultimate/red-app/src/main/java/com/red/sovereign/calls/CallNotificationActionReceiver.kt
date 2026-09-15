@@ -86,6 +86,9 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
                 ZoomGroupCallService.accept(context, callId, myUserId, isVideo, hostId)
             }
             CALL_TYPE_CONFERENCE -> ConferenceService.accept(context, callId, myUserId, isVideo)
+            CALL_TYPE_LIVESTREAM -> if (callId.isNotEmpty() && myUserId.isNotEmpty()) {
+                LiveStreamService.watch(context, callId, myUserId, null)
+            }
             // P0: تمرير المعرف للتحقق (كان يقبل أقدم عرض)
             else -> YounesCallService.accept(context, cameraOn = isVideo, micOn = true, isVideo = isVideo, callId = callId)
         }
@@ -95,6 +98,8 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
         when (callType) {
             CALL_TYPE_GROUP -> if (callId.isNotEmpty()) GroupCallService.decline(context, callId)
             CALL_TYPE_ZOOM -> if (callId.isNotEmpty()) ZoomGroupCallService.decline(context, callId)
+            CALL_TYPE_LIVESTREAM -> if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
+            CALL_TYPE_CONFERENCE -> if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
             else -> {
                 YounesCallService.action(context, YounesCallService.ACTION_REJECT)
                 // P0: إلغاء الرنين الموحد عند الرفض من الإشعار
@@ -113,6 +118,7 @@ class CallNotificationActionReceiver : BroadcastReceiver() {
             CALL_TYPE_GROUP -> GroupCallService.end(context)
             CALL_TYPE_CONFERENCE -> ConferenceService.leave(context)
             CALL_TYPE_ZOOM -> ZoomGroupCallService.end(context)
+            CALL_TYPE_LIVESTREAM -> if (callId.isNotBlank()) { LiveStreamService.stop(context); runCatching { CallRingRegistry.cancel(context, callId) } } else LiveStreamService.stop(context)
             else -> {
                 YounesCallService.action(context, YounesCallService.ACTION_END)
                 if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }

@@ -1379,9 +1379,21 @@ private fun FloatingHeart(emoji: String) {
 
 @Composable
 private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifier: Modifier) {
-    val egl = LiveStreamRuntime.eglContext
+    // FIX: إصلاح الشاشة السوداء عند egl null + fallback + حماية init(null)
+    val eglLive = LiveStreamRuntime.eglContext
+    val egl = eglLive
         ?: com.red.sovereign.calls.GroupCallRuntime.eglContext
         ?: WebRtcBootstrap.eglContext
+    if (egl == null) {
+        Box(modifier.background(Color(0xFF02080C)), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            androidx.compose.material3.CircularProgressIndicator(color = Color.White, modifier = androidx.compose.ui.Modifier.size(32.dp))
+        }
+        return
+    }
+    if (track == null) {
+        Box(modifier.background(Color(0xFF0F172A)))
+        return
+    }
 
     var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
 
@@ -1391,7 +1403,7 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
                 init(egl, null)
                 setMirror(mirror)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                setEnableHardwareScaler(false)
+                setEnableHardwareScaler(true)
                 setZOrderMediaOverlay(true)
                 viewRef = this
             }

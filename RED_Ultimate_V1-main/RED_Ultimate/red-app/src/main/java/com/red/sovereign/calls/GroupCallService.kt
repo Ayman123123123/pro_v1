@@ -99,7 +99,7 @@ object GroupCallRuntime {
     var speakingPeers: Set<String> by mutableStateOf(emptySet())
     /** الأيادي المرفوعة (RED IDs) — من CALL_RAISE_HAND الجماعية. */
     var raisedHands: Set<String> by mutableStateOf(emptySet())
-    var eglContext: org.webrtc.EglBase.Context? = null
+    var eglContext: org.webrtc.EglBase.Context? by mutableStateOf(null)
     var isMuted by mutableStateOf(false)
     var isVideoEnabled by mutableStateOf(false)
     var isHost by mutableStateOf(false)

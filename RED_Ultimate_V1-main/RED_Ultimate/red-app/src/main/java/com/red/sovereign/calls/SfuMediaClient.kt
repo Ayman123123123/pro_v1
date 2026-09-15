@@ -75,6 +75,7 @@ class SfuMediaClient(
     private var socket: WebSocket? = null
     private var engine: WebRtcEngine? = null
     private var recvEngine: WebRtcEngine? = null
+    private var recvEngineKind: CallMediaKind? = null
     private var sendTransport: SfuTransportOptions? = null
     private var recvTransport: SfuTransportOptions? = null
     private var routerCaps: JSONObject? = null
@@ -479,13 +480,25 @@ class SfuMediaClient(
     private suspend fun negotiateRecvLocked() {
         val transport = recvTransport ?: return
         if (consumers.isEmpty()) return
+        val needsVideo = consumers.values.any { it.kind == "video" }
+        val desiredKind = if (needsVideo) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
         if (recvEngine == null) {
-            val kind = if (consumers.values.any { it.kind == "video" }) CallMediaKind.CONFERENCE else CallMediaKind.SPACE
-            val created = createRecvEngine(kind)
+            val created = createRecvEngine(desiredKind)
             if (created !is ApiResult.Success) {
                 events.onError("SFU_RECV_ENGINE_FAILED")
                 return
             }
+            recvEngineKind = desiredKind
+        } else if (needsVideo && recvEngineKind == CallMediaKind.SPACE) {
+            android.util.Log.w("SfuMediaClient", "recvEngine SPACE->CONFERENCE upgrade (first video arrived)")
+            runCatching { recvEngine?.release() }
+            recvEngine = null
+            val created2 = createRecvEngine(CallMediaKind.CONFERENCE)
+            if (created2 !is ApiResult.Success) {
+                events.onError("SFU_RECV_ENGINE_RECREATE_FAILED")
+                return
+            }
+            recvEngineKind = CallMediaKind.CONFERENCE
         }
         // أقسام sendonly من منظور الخادم: الخادم يرسل إلينا
         val sections = consumers.values.map { c ->
@@ -608,6 +621,7 @@ class SfuMediaClient(
 
     private suspend fun createRecvEngine(kind: CallMediaKind): ApiResult<Unit> {
         recvEngine?.release()
+        recvEngineKind = kind
         recvEngine = WebRtcEngine(context, object : WebRtcEngine.Events {
             override fun onLocalDescription(description: SessionDescription) = Unit
             override fun onIceCandidate(candidate: org.webrtc.IceCandidate) = Unit

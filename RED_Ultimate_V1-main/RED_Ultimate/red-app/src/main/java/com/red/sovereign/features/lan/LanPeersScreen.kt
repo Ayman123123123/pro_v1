@@ -302,8 +302,10 @@ private fun InCallPanel(
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("مكالمة LAN نشطة — P2P مشفرة", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             if (video) {
-                val egl = remember { eglProvider() }
+                val egl = eglProvider()
                 if (egl != null) {
+                    var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+                    val track = remoteVideo ?: localTrackProvider()
                     Surface(
                         Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)),
                         color = Color.Black
@@ -314,13 +316,17 @@ private fun InCallPanel(
                                     init(egl, null)
                                     setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                                     setMirror(false)
+                                    viewRef = this
                                 }
                             },
-                            update = { view ->
-                                val t = remoteVideo ?: localTrackProvider()
-                                if (t != null) runCatching { t.addSink(view) }
-                            }
+                            update = { view -> view.setMirror(false) },
+                            onRelease = { it.release() },
+                            modifier = Modifier.fillMaxSize()
                         )
+                    }
+                    DisposableEffect(track, viewRef) {
+                        if (track != null && viewRef != null) track.addSink(viewRef)
+                        onDispose { if (track != null && viewRef != null) track.removeSink(viewRef) }
                     }
                 } else {
                     Text("يُجهز الفيديو…", color = Color.Gray, fontSize = 12.sp)

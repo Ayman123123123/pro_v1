@@ -49,6 +49,15 @@ github-git-partial-clone/
 historical_recovery_audit_*/
 audit_preservation_*/
 
+# حزم نسخ احتياطي محلية لشجرة git (47MB+ لكل ملف) + مستنسخات plumbing محلية —
+# محفوظة على القرص، لا تُرفع (تُضخم المستودع بلا فائدة بعد المزامنة)
+*.bundle
+patches.patch
+patches/
+.git-sha1/
+.git-temp/
+red-sha1/
+
 # سجلات تشخيص محلية مؤرّخة (مخرجات فحص، ليست كوداً)
 AUTH_*.txt
 **/AUTH_*.txt

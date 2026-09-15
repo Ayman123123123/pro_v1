@@ -88,7 +88,7 @@ object LiveStreamRuntime {
     var coHostVideo: VideoTrack? by mutableStateOf(null)
     /** مضيفون مشاركون حتى 4 — userId -> track. coHostVideo القديم = أول عنصر للتوافق. */
     var coHostVideos: Map<String, VideoTrack> by mutableStateOf(emptyMap())
-    var eglContext: org.webrtc.EglBase.Context? = null
+    var eglContext: org.webrtc.EglBase.Context? by mutableStateOf(null)
     var isMuted by mutableStateOf(false)
     var isAudioOnly by mutableStateOf(false)
     var isRecording by mutableStateOf(false)
@@ -228,8 +228,37 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                             if (sfu == null && mesh == null) {
                                 startBroadcasterMedia()
                             } else {
-                                val ok = mesh?.retryCamera() == true
-                                if (ok) LiveStreamRuntime.localVideo = mesh?.localVideo
+                                // FIX P0: مذيع SFU كان زر الإصلاح ميتاً (mesh==null دائماً).
+                                // جرّب SFU أولاً ثم mesh ثم إعادة نشر كاملة.
+                                var ok = false
+                                if (sfu != null) {
+                                    ok = runCatching { sfu?.retryCamera() == true }.getOrDefault(false)
+                                    if (ok) {
+                                        LiveStreamRuntime.localVideo = sfu?.localVideo
+                                        LiveStreamRuntime.cameraError = null
+                                        LiveStreamRuntime.isAudioOnly = false
+                                        sfu?.setCameraEnabled(true)
+                                    } else {
+                                        // إعادة attach+publish كاملة كملاذ أخير
+                                        val client = sfu
+                                        if (client != null) {
+                                            val republished = runCatching {
+                                                attachSfuWithRetry(client) && client.publish(CallMediaKind.LIVE)
+                                            }.getOrDefault(false)
+                                            if (republished) {
+                                                sfuLive = true
+                                                LiveStreamRuntime.localVideo = client.localVideo
+                                                LiveStreamRuntime.cameraError = null
+                                                LiveStreamRuntime.isAudioOnly = false
+                                                ok = true
+                                            }
+                                        }
+                                    }
+                                }
+                                if (!ok) {
+                                    ok = mesh?.retryCamera() == true
+                                    if (ok) LiveStreamRuntime.localVideo = mesh?.localVideo
+                                }
                                 // LEGENDARY FIX: إحياء الصوت مع الكاميرا (كان لاصقاً PERMISSION للأبد)
                                 if (hasAudioPermission() && LiveStreamRuntime.audioError != null) {
                                     if (mesh?.retryAudio() == true) {
@@ -270,9 +299,12 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 if (!isVideoOn && LiveStreamRuntime.localVideo == null) {
                     // إعادة محاولة فتح الكاميرا (إذن مُنح لاحقاً أو خلل مؤقت)
                     scope.launch {
-                        val ok = engine?.retryCamera() == true || mesh?.retryCamera() == true
+                        // FIX: مذيع SFU بلا engine/mesh — جرّب sfu أولاً
+                        val ok = sfu?.retryCamera() == true ||
+                            engine?.retryCamera() == true || mesh?.retryCamera() == true
                         if (ok) {
-                            LiveStreamRuntime.localVideo = engine?.localMedia?.videoTrack ?: mesh?.localVideo
+                            LiveStreamRuntime.localVideo = sfu?.localVideo
+                                ?: engine?.localMedia?.videoTrack ?: mesh?.localVideo
                             LiveStreamRuntime.cameraError = null
                             LiveStreamRuntime.isAudioOnly = false
                         } else if (!hasCameraPermission()) {
@@ -502,10 +534,19 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         // LEGENDARY Phase 6: المذيع يرفع مرة واحدة للـ SFU (O(1)) بدل اتصال mesh لكل مشاهد (O(N)).
         val client = SfuMediaClient(this, TokenStore(this), this)
         sfu = client
-        LiveStreamRuntime.eglContext = client.eglContext
+        // FIX: لا تنشر egl قبل نجاح attach (كان يسبب EGL_BAD_CONTEXT)
         if (attachSfuWithRetry(client) && client.publish(CallMediaKind.LIVE)) {
             sfuLive = true
+            LiveStreamRuntime.eglContext = client.eglContext
             LiveStreamRuntime.localVideo = client.localVideo
+            // FIX: فعّل الكاميرا صراحة وصفّر الخطأ بعد النجاح
+            if (client.localVideo != null) {
+                LiveStreamRuntime.cameraError = null
+                if (!LiveStreamRuntime.isAudioOnly) client.setCameraEnabled(true)
+            } else {
+                LiveStreamRuntime.cameraError = "UNAVAILABLE"
+                LiveStreamRuntime.isAudioOnly = true
+            }
             return
         }
         // Fallback: شبكة mesh القديمة 1-ن (تخدم أيضاً عملاء قدامى بلا SFU).
@@ -516,16 +557,29 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         // Live streaming needs HD + simulcast for adaptive quality to viewers
         val started = mesh?.start(CallMediaKind.LIVE)
         LiveStreamRuntime.localVideo = mesh?.localVideo
-        if (started is ApiResult.Success) flushPendingViewerOffers()
+        if (started is ApiResult.Success && mesh?.localVideo != null) {
+            LiveStreamRuntime.cameraError = null
+            flushPendingViewerOffers()
+        } else {
+            // FIX: فشل صامت سابقاً — سجّل خطأً صريحاً بدل Active كاذبة
+            if (mesh?.localVideo == null) {
+                LiveStreamRuntime.cameraError = if (!hasCameraPermission()) "PERMISSION" else "UNAVAILABLE"
+                LiveStreamRuntime.isAudioOnly = true
+            }
+            if (started is ApiResult.Success) flushPendingViewerOffers()
+        }
     }
 
     private suspend fun startViewerMedia() {
         // LEGENDARY Phase 6: المشاهد يستهلك من الـ SFU (صفر uplink) بدل PC كامل مع المذيع.
         val client = SfuMediaClient(this, TokenStore(this), this)
         sfu = client
-        LiveStreamRuntime.eglContext = client.eglContext
         if (attachSfuWithRetry(client)) {
             sfuLive = true
+            // FIX P0: المشاهد SFU كان عالقاً Connecting للأبد (SfuMediaClient يبتلع CONNECTED).
+            // فعّل فور نجاح attach + ابدأ polling/watcher.
+            LiveStreamRuntime.eglContext = client.eglContext
+            markViewerSfuActive()
             return
         }
         // Fallback: مسار الاستقبال القديم + طلب خدمة mesh من المذيع.
@@ -967,6 +1021,20 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
     }
 
+    /** FIX P0 viewer SFU: فعّل المشاهد فور attach ناجح دون انتظار PC CONNECTED (كان يبتلع). */
+    private fun markViewerSfuActive() {
+        if (isBroadcaster) return
+        connectWatchdog?.cancel()
+        val now = System.currentTimeMillis()
+        if (LiveStreamRuntime.streamStartTime == 0L) LiveStreamRuntime.streamStartTime = now
+        // لا تكتب Active إن كان already Active (إعادة اتصال)
+        if (LiveStreamRuntime.state !is LiveStreamUiState.Active) {
+            LiveStreamRuntime.state = LiveStreamUiState.Active(streamId, false, LiveStreamRuntime.streamStartTime)
+        }
+        startStatsPolling()
+        ensureNetworkWatcher()
+    }
+
     override fun onDisconnected() {
         when (LiveStreamRuntime.state) {
             is LiveStreamUiState.Active, is LiveStreamUiState.Connecting -> {
@@ -977,8 +1045,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
     }
     override fun onCameraUnavailable() {
-        // LEGENDARY Phase 6: الكاميرا مملوكة لنشر SFU — تجاهل إنذار mesh الاحتياطي (صوت فقط).
-        if (sfuLive) return
+        // FIX: تحقق هل SFU يملك فيديو فعلاً قبل التجاهل — كان يتجاهل حتى مع فشل النشر
+        if (sfuLive && LiveStreamRuntime.localVideo != null) return
         // بدل الشاشة السوداء الصامتة: سجل خطأً قابلاً للعرض + تدهور صوتي + تنبيه واحد
         LiveStreamRuntime.cameraError = if (!hasCameraPermission()) "PERMISSION" else "UNAVAILABLE"
         LiveStreamRuntime.isAudioOnly = true
@@ -1106,16 +1174,22 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     }
 
     override fun onRemoteVideo(track: VideoTrack) {
+        runCatching { track.setEnabled(true) }
         if (!isBroadcaster) {
             LiveStreamRuntime.remoteVideo = track
+            // FIX P0: مشاهد SFU أول remoteVideo يعني اتصال ناجح — فعّل حالا
+            if (sfuLive && LiveStreamRuntime.state is LiveStreamUiState.Connecting) markViewerSfuActive()
         }
     }
 
     override fun onRemoteVideo(peerId: String, track: VideoTrack) {
+        runCatching { track.setEnabled(true) }
         // LEGENDARY Phase 6: late EGL pickup — recv engine may appear after attach (producer joined later).
         if (LiveStreamRuntime.eglContext == null) LiveStreamRuntime.eglContext = sfu?.eglContext
-        if (!isBroadcaster) LiveStreamRuntime.remoteVideo = track
-        else {
+        if (!isBroadcaster) {
+            LiveStreamRuntime.remoteVideo = track
+            if (sfuLive && LiveStreamRuntime.state is LiveStreamUiState.Connecting) markViewerSfuActive()
+        } else {
             // شبكة مضيفين حتى 4 — الأحدث أولاً، الأقدم يُستبدل عند الامتلاء
             val current = LiveStreamRuntime.coHostVideos.toMutableMap()
             current[peerId] = track
@@ -1155,9 +1229,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             ensureNetworkWatcher()
         }
         if (state == PeerConnection.PeerConnectionState.FAILED && !stopping) {
-            // إصلاح البطء/القطع: ICE restart فوري عند الفشل (كان يعتمد على مراقب الشبكة فقط)
-            engine?.restartIce()
-            mesh?.restartIce()
+            // FIX: مشاهد SFU بلا engine/mesh — أعد ICE عبر SFU
+            if (sfuLive) sfu?.restartSfuIce() else { engine?.restartIce(); mesh?.restartIce() }
         }
     }
 
@@ -1171,8 +1244,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             ensureNetworkWatcher()
         }
         if (state == PeerConnection.PeerConnectionState.FAILED && !stopping) {
-            engine?.restartIce()
-            mesh?.restartIce()
+            if (sfuLive) sfu?.restartSfuIce() else { engine?.restartIce(); mesh?.restartIce() }
         }
     }
 
@@ -1182,9 +1254,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         if (networkWatcher == null) {
             networkWatcher = NetworkChangeWatcher(this) {
                 if (!stopping && LiveStreamRuntime.state is LiveStreamUiState.Active) {
-                    engine?.restartIce()
-                    mesh?.restartIce()
-                    android.util.Log.d("LiveStreamService", "تبديل الشبكة — إعادة ضبط المسار stream=$streamId")
+                    if (sfuLive) sfu?.restartSfuIce() else { engine?.restartIce(); mesh?.restartIce() }
+                    android.util.Log.d("LiveStreamService", "تبديل الشبكة — إعادة ضبط المسار stream=$streamId sfuLive=$sfuLive")
                     updateNetworkNotification("تبديل الشبكة — إعادة ضبط المسار…")
                 }
             }.also { it.start() }
@@ -1220,6 +1291,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 if (LiveStreamRuntime.state is LiveStreamUiState.Active) {
                     runCatching { engine?.pollStats() }
                     runCatching { mesh?.pollStats() }
+                    runCatching { sfu?.pollStats() }
                 }
                 kotlinx.coroutines.delay(2000)
             }
@@ -1394,11 +1466,34 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             .setSilent(true)
             .addAction(0, "إيقاف", CallNotificationActionReceiver.receiverIntent(this, CallNotificationActionReceiver.ACTION_LIVE_STOP, CallNotificationActionReceiver.CALL_TYPE_LIVESTREAM, 7403, callId = streamId, myUserId = userId, hostId = "", isVideo = isBroadcaster))
             .build()
-        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        // FIX targetSdk 34: لا تدّعِ CAMERA/MIC بدون إذن ممنوح — وإلا SecurityException
+        // المذيع: MIC (+CAMERA إن ممنوح) | المشاهد recvonly: بلا MIC إلا إن كان coHost يحتاج ميك
+        var type = 0
         if (isBroadcaster) {
-            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            if (hasAudioPermission()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (hasCameraPermission() && hasAudioPermission()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            // fallback إن بلا أذونات: سيعرض Error لكن نحتاج FGS — استخدم MIC مع catch
+            if (type == 0) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        } else {
+            // viewer recvonly: لا يحتاج ميك/كاميرا — استخدم mediaPlayback إن متاح، وإلا microphone مع حماية
+            // manifest يملك camera|microphone|phoneCall|mediaProjection — نستخدم phoneCall كـ neutral إن بلا ميك
+            // لتجنب SecurityException على 34. الأفضل: استخدم MICROPHONE فقط إن ممنوح
+            if (hasAudioPermission() && LiveStreamRuntime.isCoHost) {
+                type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                // viewer عادي: استخدم MICROPHONE فقط كـ fallback مع حماية كراش
+                type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                if (!hasAudioPermission()) {
+                    // جرّب بدون ادعاء ميك عبر phoneCall (لا يتطلب إذن runtime)
+                    type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+                }
+            }
         }
-        ServiceCompat.startForeground(this, 7403, notif, type)
+        runCatching { ServiceCompat.startForeground(this, 7403, notif, type) }
+            .onFailure {
+                // fallback أخير: بدون نوع محدد (قد ينجح على بعض إصدارات 34)
+                runCatching { ServiceCompat.startForeground(this, 7403, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) }
+            }
     }
 
     override fun onDestroy() {

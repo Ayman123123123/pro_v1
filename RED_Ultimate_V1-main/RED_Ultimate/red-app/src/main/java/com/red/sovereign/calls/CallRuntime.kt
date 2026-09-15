@@ -104,7 +104,7 @@ object CallRuntime {
      */
     const val TERMINAL_DISPLAY_MS: Long = CallUiState.TERMINAL_DISPLAY_MS
 
-    var eglContext: org.webrtc.EglBase.Context? = null
+    var eglContext: org.webrtc.EglBase.Context? by mutableStateOf(null)
     var localVideo: VideoTrack? by mutableStateOf(null)
     var localVideoTrack: VideoTrack? by mutableStateOf(null)
     var localAudioTrack: AudioTrack? by mutableStateOf(null)

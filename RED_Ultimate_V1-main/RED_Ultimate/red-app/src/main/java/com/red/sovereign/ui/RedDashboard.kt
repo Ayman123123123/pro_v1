@@ -3312,11 +3312,19 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         LiveStreamHubDialog(
             onDismiss = { showLiveDialog = false },
             onStartBroadcasting = { title, audience, pass, friendIds, category ->
+                // FIX gate: تحقق ثانٍ قبل البث (الحوار مفتوح ببوابة لكن قد يُسحب الإذن أثناء فتحه)
+                val hasCam = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                val hasMic = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!hasCam || !hasMic) {
+                    android.widget.Toast.makeText(context, "امنح الكاميرا والميكروفون أولاً — افتح البث من زر البث (سيطلب الإذن)", android.widget.Toast.LENGTH_LONG).show()
+                    return@LiveStreamHubDialog
+                }
                 // الجمهور: PUBLIC عام / FRIENDS أصدقاء بدعوات + سر / PRIVATE خاص بسر.
                 val isPriv = audience != "PUBLIC"
                 val password = if (isPriv) pass.trim().takeIf { it.isNotBlank() } else null
                 showLiveDialog = false
-                val streamId = "stream_${java.util.UUID.randomUUID().toString().take(8)}"
+                val rawId = "stream_${java.util.UUID.randomUUID().toString().take(8)}"
+                val streamId = com.red.sovereign.calls.RoomSeparationPolicy.normalizeStreamId(rawId)
                 LiveStreamService.start(
                     context = context,
                     streamId = streamId,
@@ -3328,6 +3336,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                     category = category
                 )
                 // بث الأصدقاء: دعوة المختارين فور الإطلاق عبر الخادم.
+                // FIX: استخدم streamId المطبّع (كان raw يسبب 404)
                 // إصلاح السباق Legendary V2: إعادة محاولة حتى 5 مرات (1s) بدل تأخير ثابت 2.5s
                 // قد يسبق registerBroadcaster أو يتأخر عنه.
                 if (audience == "FRIENDS" && friendIds.isNotEmpty()) {

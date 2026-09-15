@@ -161,7 +161,7 @@ services:
       # also extend the ports mapping + Dockerfile EXPOSE in lockstep.
       - RTC_MIN_PORT=${RTC_MIN_PORT:-40000}
       - RTC_MAX_PORT=${RTC_MAX_PORT:-40100}
-    ports: ["4000:4000", "40000-40100:40000-40100/udp"]
+    ports: ["4000:4000", "40000-40100:40000-40100/udp", "40000-40100:40000-40100/tcp"]
     init: true
     security_opt:
       - no-new-privileges:true
