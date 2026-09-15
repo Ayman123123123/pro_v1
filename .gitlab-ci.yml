@@ -63,7 +63,7 @@ android-test:
   script:
     - cd RED_Ultimate_V1-main/RED_Ultimate
     - chmod +x gradlew
-    - ./gradlew :red-app:testDebugUnitTest :red-app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --no-daemon --stacktrace
+    - ./gradlew :app:testDebugUnitTest :app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --no-daemon --stacktrace
   artifacts:
     when: always
     reports:
