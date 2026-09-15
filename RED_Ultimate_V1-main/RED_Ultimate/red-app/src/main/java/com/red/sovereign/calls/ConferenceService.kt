@@ -43,6 +43,8 @@ sealed interface ConferenceUiState {
     data class Connecting(val roomId: String) : ConferenceUiState
     data class Active(val roomId: String, val startedAt: Long) : ConferenceUiState
     data class Error(val message: String) : ConferenceUiState
+    /** غرفة الانتظار: المضيف فعّل اللوبي وننتظر موافقته على الدخول (Zoom-style). */
+    data class WaitingApproval(val roomId: String) : ConferenceUiState
 }
 
 data class SpaceReaction(
@@ -80,6 +82,10 @@ object ConferenceRuntime {
     var isScreenSharing by mutableStateOf(false)
     var remoteScreenShareTrack: VideoTrack? by mutableStateOf(null)
     var remoteScreenSharePeerId by mutableStateOf("")
+    /** غرفة الانتظار (Lobby): مفعّلة في هذه الغرفة؟ — مزامَنة من الخادم. */
+    var lobbyEnabled by mutableStateOf(false)
+    /** المنتظرون في اللوبي (للمضيف/المضيف المشارك) — من LOBBY_REQUEST/ROOM_STATE. */
+    var waitingUsers by mutableStateOf(emptyList<String>())
 }
 
 class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {
@@ -305,6 +311,17 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 if (target.isNotBlank()) signaling.muteUser(roomId, userId, target)
             }
             ACTION_MUTE_ALL -> signaling.muteAll(roomId, userId)
+            // ─────────── غرفة الانتظار (Lobby) ───────────
+            ACTION_LOBBY_SET -> signaling.setLobby(roomId, userId, intent?.getBooleanExtra(EXTRA_LOBBY_ENABLED, false) == true)
+            ACTION_LOBBY_APPROVE -> {
+                val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
+                if (target.isNotBlank()) signaling.approveLobby(roomId, userId, target)
+            }
+            ACTION_LOBBY_DENY -> {
+                val target = intent?.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
+                if (target.isNotBlank()) signaling.denyLobby(roomId, userId, target)
+            }
+            ACTION_LOBBY_APPROVE_ALL -> signaling.approveAllLobby(roomId, userId)
             ACTION_SET_QUALITY -> {
                 val quality = intent.getStringExtra(EXTRA_QUALITY) ?: "AUTO"
                 if (quality == "AUDIO") {
@@ -578,6 +595,47 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                     ConferenceRuntime.remoteScreenSharePeerId = ""
                 }
             }
+            // ─────────── غرفة الانتظار (Lobby) ───────────
+            "LOBBY_WAITING" -> {
+                // الخادم احتجزنا في اللوبي — لا ROOM_STATE قبل الموافقة فلا وسائط تبدأ.
+                ConferenceRuntime.state = ConferenceUiState.WaitingApproval(roomId)
+            }
+            "LOBBY_APPROVED" -> {
+                val target = signal.payload["targetUserId"].orEmpty()
+                if (target == userId && ConferenceRuntime.state is ConferenceUiState.WaitingApproval) {
+                    // ROOM_STATE الكامل يصل بعدها مباشرة فيكمل مسار الدخول القياسي.
+                    ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
+                }
+                ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - target
+            }
+            "LOBBY_DENIED" -> {
+                val target = signal.payload["targetUserId"].orEmpty()
+                if (target == userId) {
+                    ConferenceRuntime.state = ConferenceUiState.Error("رفض المضيف طلب الدخول")
+                    scope.launch {
+                        kotlinx.coroutines.delay(2500)
+                        if (ConferenceRuntime.state is ConferenceUiState.Error) leave()
+                    }
+                }
+                ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - target
+            }
+            "LOBBY_LEFT" -> {
+                // منتظر قطع اتصاله بنفسه — أسقط سطره من قائمة المضيف.
+                val gone = signal.payload["targetUserId"].orEmpty().ifBlank { signal.userId }
+                ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers - gone
+            }
+            "LOBBY_REQUEST" -> {
+                val waitingId = signal.payload["userId"].orEmpty().ifBlank { signal.userId }
+                if (waitingId.isNotBlank() &&
+                    ConferenceRuntime.selfRole in setOf("HOST", "CO_HOST") &&
+                    waitingId !in ConferenceRuntime.waitingUsers
+                ) {
+                    ConferenceRuntime.waitingUsers = ConferenceRuntime.waitingUsers + waitingId
+                }
+            }
+            "LOBBY_STATE" -> {
+                ConferenceRuntime.lobbyEnabled = signal.payload["enabled"] == "true"
+            }
             "ERROR", "ROOM_STATE" -> Unit
         }
     }
@@ -603,6 +661,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         val speaker = role in setOf("HOST", "CO_HOST", "SPEAKER")
         ConferenceRuntime.isSpeaker = speaker
         if (!speaker) applyListenerMute()
+    }
+
+    override fun onLobbyState(enabled: Boolean, waiting: List<String>) {
+        ConferenceRuntime.lobbyEnabled = enabled
+        ConferenceRuntime.waitingUsers = waiting
     }
 
     override fun onParticipantJoined(participant: ConferenceParticipant) {
@@ -653,6 +716,9 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 ConferenceRuntime.state = ConferenceUiState.Connecting(roomId)
                 scheduleSignalingReconnect()
             }
+            // منتظر في اللوبي وانقطع الاتصال؟ أعد المحاولة — سيعود لقائمة الانتظار
+            // ويصل المضيف طلب جديد (الخادم أسقط جلسته القديمة بـLOBBY_LEFT).
+            is ConferenceUiState.WaitingApproval -> scheduleSignalingReconnect()
             else -> leave()
         }
     }
@@ -987,6 +1053,12 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         const val ACTION_START_RECORDING = "com.red.sovereign.conference.START_RECORDING"
         const val ACTION_STOP_RECORDING = "com.red.sovereign.conference.STOP_RECORDING"
         const val ACTION_TOGGLE_LOCK = "com.red.sovereign.conference.TOGGLE_LOCK"
+        // غرفة الانتظار (Lobby) — تفعيل/قبول/رفض/قبول الكل
+        const val ACTION_LOBBY_SET = "com.red.sovereign.conference.LOBBY_SET"
+        const val ACTION_LOBBY_APPROVE = "com.red.sovereign.conference.LOBBY_APPROVE"
+        const val ACTION_LOBBY_DENY = "com.red.sovereign.conference.LOBBY_DENY"
+        const val ACTION_LOBBY_APPROVE_ALL = "com.red.sovereign.conference.LOBBY_APPROVE_ALL"
+        const val EXTRA_LOBBY_ENABLED = "lobby_enabled"
 
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"
@@ -1032,6 +1104,36 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
 
         fun muteAll(context: Context) {
             val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_MUTE_ALL)
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        /** غرفة الانتظار: تفعيل/إيقاف (مضيف) — الإيقاف يقبل كل المنتظرين تلقائياً. */
+        fun setLobby(context: Context, enabled: Boolean) {
+            val intent = Intent(context, ConferenceService::class.java).apply {
+                action = ACTION_LOBBY_SET
+                putExtra(EXTRA_LOBBY_ENABLED, enabled)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun approveWaiting(context: Context, targetUserId: String) {
+            val intent = Intent(context, ConferenceService::class.java).apply {
+                action = ACTION_LOBBY_APPROVE
+                putExtra(EXTRA_TARGET_USER_ID, targetUserId)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun denyWaiting(context: Context, targetUserId: String) {
+            val intent = Intent(context, ConferenceService::class.java).apply {
+                action = ACTION_LOBBY_DENY
+                putExtra(EXTRA_TARGET_USER_ID, targetUserId)
+            }
+            ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun approveAllWaiting(context: Context) {
+            val intent = Intent(context, ConferenceService::class.java).setAction(ACTION_LOBBY_APPROVE_ALL)
             ContextCompat.startForegroundService(context, intent)
         }
 

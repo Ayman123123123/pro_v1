@@ -34,6 +34,10 @@ class CallBootReceiver : BroadcastReceiver() {
         // دون ذلك يتجمد التسجيل حتى يفتح المستخدم التطبيق يدوياً.
         // آمن بلا موزّع: لا يُرسَل شيء إن لم يوجد موزّع أو نقطة نهاية مخزّنة.
         runCatching { VoipPushRegistrar.register(context) }
+        // (2026-09-15) أعد جدولة مزامنة سجل المكالمات المشفر — كانت تُجدول فقط من
+        // CallSystemIntegration.completeInitialization (غير المستدعاة، أُرشفت). بعد
+        // reboot لا تنجو أي WorkManager دورية سابقة، فبدون هذا تتعطل المزامنة.
+        runCatching { com.red.sovereign.core.sync.CallLogSyncScheduler.schedulePeriodicSync(context) }
         // أعد جدولة منبهات المكالمات المجدولة — AlarmManager لا ينجو من reboot
         // (المخزن ينجو، المنبهات لا) فتضيع المواعيد بصمت دونه.
         runCatching { ScheduledCallScheduler.rescheduleAll(context) }

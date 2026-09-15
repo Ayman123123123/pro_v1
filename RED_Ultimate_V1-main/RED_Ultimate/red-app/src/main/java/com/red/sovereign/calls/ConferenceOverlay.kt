@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Handshake
@@ -69,6 +70,29 @@ fun YounesConferenceOverlay() {
         ConferenceInviteSheet(state)
         return
     }
+    // غرفة الانتظار: ننتظر موافقة المضيف — لا وسائط ولا قائمة مشاركين بعد.
+    if (state is ConferenceUiState.WaitingApproval) {
+        val waitingContext = LocalContext.current
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(32.dp)) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Text("بانتظار موافقة المضيف…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                    Text("فعّلت المضيف غرفة انتظار لهذه المساحة — سيصلك إشعار فور قبولك.",
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp))
+                    androidx.compose.material3.TextButton(onClick = { ConferenceService.leave(waitingContext) }) {
+                        Text("إلغاء", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+        return
+    }
 
     val context = LocalContext.current
     val participants = ConferenceRuntime.participants
@@ -90,6 +114,8 @@ fun YounesConferenceOverlay() {
         is ConferenceUiState.Active -> state.roomId
         else -> ""
     }
+    // غرفة الانتظار: لوحة إدارة المنتظرين (مضيف/مضيف مشارك)
+    var showLobbySheet by remember { mutableStateOf(false) }
 
     val scheme = MaterialTheme.colorScheme
 
@@ -174,6 +200,22 @@ fun YounesConferenceOverlay() {
                                         contentDescription = "كتم الجميع",
                                         tint = scheme.onBackground
                                     )
+                                }
+                            }
+                            // غرفة الانتظار: مضيف ومضيف مشارك — زر يفتح لوحة المنتظرين
+                            if (ConferenceRuntime.selfRole == "HOST" || ConferenceRuntime.selfRole == "CO_HOST") {
+                                IconButton(onClick = { showLobbySheet = true }) {
+                                    BadgedBox(badge = {
+                                        if (ConferenceRuntime.waitingUsers.isNotEmpty()) {
+                                            Badge { Text(ConferenceRuntime.waitingUsers.size.toString()) }
+                                        }
+                                    }) {
+                                        Icon(
+                                            Icons.Default.HourglassTop,
+                                            contentDescription = "غرفة الانتظار",
+                                            tint = if (ConferenceRuntime.lobbyEnabled) Color(0xFF14C79A) else scheme.onBackground
+                                        )
+                                    }
                                 }
                             }
                             IconButton(
@@ -757,6 +799,61 @@ fun YounesConferenceOverlay() {
                 )
             }
         }
+    }
+
+    // غرفة الانتظار: لوحة المضيف — تفعيل اللوبي + قائمة المنتظرين (قبول/رفض/قبول الكل)
+    if (showLobbySheet) {
+        AlertDialog(
+            onDismissRequest = { showLobbySheet = false },
+            title = { Text("غرفة الانتظار ⏳", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("طلب موافقتك قبل دخول أي مشارك", fontSize = 13.sp)
+                        androidx.compose.material3.Switch(
+                            checked = ConferenceRuntime.lobbyEnabled,
+                            onCheckedChange = { enabled -> ConferenceService.setLobby(context, enabled) }
+                        )
+                    }
+                    if (ConferenceRuntime.waitingUsers.isEmpty()) {
+                        Text("لا يوجد منتظرون حالياً.", color = scheme.onSurfaceVariant, fontSize = 13.sp)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ConferenceRuntime.waitingUsers.forEach { waitingId ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(waitingId, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        TextButton(onClick = { ConferenceService.approveWaiting(context, waitingId) }) {
+                                            Text("قبول ✓", color = Color(0xFF14C79A))
+                                        }
+                                        TextButton(onClick = { ConferenceService.denyWaiting(context, waitingId) }) {
+                                            Text("رفض ✕", color = Color(0xFFE54343))
+                                        }
+                                    }
+                                }
+                            }
+                            androidx.compose.material3.TextButton(
+                                onClick = { ConferenceService.approveAllWaiting(context) },
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            ) {
+                                Text("قبول الكل (${ConferenceRuntime.waitingUsers.size})", color = scheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton({ showLobbySheet = false }) { Text("إغلاق") }
+            }
+        )
     }
 
     // Raised Hands Sheet / Dialog

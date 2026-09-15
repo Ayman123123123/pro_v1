@@ -91,7 +91,10 @@ class RedMasterHandler(
                 RedProtos.RedRED.SignalCase.DELETE -> delete(session, envelope.delete)
                 RedProtos.RedRED.SignalCase.REMOTE_WIPE_ACK -> receiveRemoteWipeAck(session, envelope.remoteWipeAck)
                 RedProtos.RedRED.SignalCase.REACTION -> receiveReaction(session, envelope.reaction)
-                RedProtos.RedRED.SignalCase.CALL_SIGNAL -> receiveCallSignal(session, envelope.callSignal)
+                // (2026-09-15) حُذف CALL_SIGNAL — كان مساراً ميتاً (Log فقط، بلا عميل
+                // يرسله). المسار الحي لإشارات المكالمات هو /ws/calls (JSON) في
+                // CallWebSocketHandler — انظر الخطة الأسطورية §1. Proto: حُذف حقل
+                // call_signal=9 من red_protocol.proto، وعملاء قدامى يُتجاهَلون بأمان.
                 else -> Unit
             }
         } catch (e: Exception) {
@@ -127,10 +130,8 @@ class RedMasterHandler(
         }
     }
 
-    private fun receiveCallSignal(session: WebSocketSession, callSignal: RedProtos.CallSignalRED) {
-        val sender = userId(session)
-        log.info("CallSignal {} ({}) received from {}", callSignal.callId, callSignal.type, sender)
-    }
+    // (2026-09-15) حُذف receiveCallSignal — كان Log فقط (مسار CALL_SIGNAL الميت).
+    // أي CALL_SIGNAL من عميل قديم يصلك الآن كحقل proto مجهول ويُتجاهل بأمان (else).
 
     private fun receiveMessage(session: WebSocketSession, incoming: RedProtos.ChatMessage) {
         val sender = userId(session)

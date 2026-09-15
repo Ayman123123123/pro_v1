@@ -1,9 +1,10 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
+
+import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
@@ -31,6 +32,17 @@ class ConferenceWebSocketHandler(
     private val sessionToRoom = ConcurrentHashMap<String, String>()
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
     private val roomHosts = ConcurrentHashMap<String, String>() // roomId -> host userId
+
+    /**
+     * غرفة الانتظار (Lobby — على غرار Zoom):
+     * - [roomLobby]: roomId ← مفعّلة؟
+     * - [roomWaiting]: roomId ← جلسات المحتجزين بانتظار موافقة المضيف.
+     * المحتجز ليس داخل [rooms] فلا يصله أي بثّ وسائط/حالات، ولا يستقبل إلا
+     * LOBBY_* وإلا لبقي صندوقاً أسود. أول منضّم (المضيف) والعودة بعد انقطاع
+     * (لها دور معروف) تتجاوزان الانتظار.
+     */
+    private val roomLobby = ConcurrentHashMap<String, Boolean>()
+    private val roomWaiting = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
 
     /**
      * الأيدي المرفوعة: roomId ← مجموعة من رفعوا أيديهم.
@@ -121,6 +133,8 @@ class ConferenceWebSocketHandler(
             }
             "APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST",
             "KICK_USER", "MUTE_USER", "MUTE_ALL", "PIN_MESSAGE" -> handleStageManagement(session, userId, signal)
+            // غرفة الانتظار: تفعيل/إيقاف وقبول/رفض — للمضيف والمضيف المشارك فقط (فحص الدور داخل handleLobby).
+            "LOBBY_SET", "LOBBY_APPROVE", "LOBBY_DENY", "LOBBY_APPROVE_ALL" -> handleLobby(session, userId, signal)
             // مشاركة الشاشة إعلان عابر (تسمية البلاطة) — يقتصر على أصحاب المنصة كالنشر.
             "SCREEN_SHARE_START", "SCREEN_SHARE_STOP" -> {
                 val role = roomRoles[signal.roomId]?.get(userId) ?: "LISTENER"
@@ -143,6 +157,30 @@ class ConferenceWebSocketHandler(
         // حدّ السعة مُنفذ (كان يقبل عدداً غير محدود فيخنق الـ mesh): 100 مشارك كحد X العملي.
         if (room.size >= MAX_PARTICIPANTS && room.none { (it.attributes["userId"] as? String) == userId }) {
             sendError(session, signal.roomId, "ROOM_FULL", "Room is full (max $MAX_PARTICIPANTS)")
+            return
+        }
+        // غرفة الانتظار (Lobby): مفعّلة + الغرفة قائمة (لها مضيف) + المنضمّ ليس مشاركاً
+        // معروفاً → يُحتجَز بانتظار موافقة المضيف بدل الدخول. أول منضّم (يصبح المضيف)
+        // والعودة بعد انقطاع (لها دور محفوظ) تتجاوزان الانتظار دائماً.
+        val existingRoles = roomRoles[signal.roomId]
+        if (roomLobby[signal.roomId] == true && roomHosts[signal.roomId] != null &&
+            existingRoles?.containsKey(userId) != true
+        ) {
+            val waiting = roomWaiting.computeIfAbsent(signal.roomId) { ConcurrentHashMap.newKeySet() }
+            if (waiting.size >= MAX_PARTICIPANTS) {
+                sendError(session, signal.roomId, "ROOM_FULL", "Waiting room is full (max $MAX_PARTICIPANTS)")
+                return
+            }
+            synchronized(waiting) { waiting.add(session) }
+            sessionToRoom[session.id] = signal.roomId
+            runCatching {
+                session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                    "type" to "LOBBY_WAITING",
+                    "roomId" to signal.roomId,
+                    "payload" to mapOf("userId" to userId)
+                ))))
+            }
+            notifyHostsOfWaiting(signal.roomId, userId)
             return
         }
         val roles = roomRoles.computeIfAbsent(signal.roomId) { ConcurrentHashMap() }
@@ -173,12 +211,29 @@ class ConferenceWebSocketHandler(
         ))
         room.filter { it.id != session.id }.forEach { runCatching { it.sendMessage(TextMessage(joinMsg)) } }
 
-        // Send room state to newcomer — includes roles
+        // Send room state to newcomer — includes roles (+ lobby state/waiting list)
+        // buildRoomState تُعيد TextMessage جاهزة — لا غلاف إضافي (لا يوجد
+        // مُنشئ TextMessage(TextMessage) في Spring).
+        session.sendMessage(buildRoomState(signal.roomId, room, session, userId))
+    }
+
+    /**
+     * بناء إطار ROOM_STATE الكامل لجلسة منضمّة — مستخرج ليستخدمه الانضمام
+     * القياسي وقبول غرفة الانتظار معاً (مسار واحد = لا تباين حالات).
+     * يتضمن: الأدوار/الصوت/الصورة/الأيدي/الكتم + حالة اللوبي وقائمة المنتظرين.
+     */
+    private fun buildRoomState(
+        roomId: String,
+        room: MutableSet<WebSocketSession>,
+        session: WebSocketSession,
+        userId: String
+    ): TextMessage {
+        val roles = roomRoles[roomId] ?: ConcurrentHashMap<String, String>()
         val peers = room.filter { it.id != session.id }.mapNotNull { it.attributes["userId"] as? String }
         val statePayload = mutableMapOf<String, String>()
         peers.forEachIndexed { i, p -> statePayload["user_$i"] = p }
-        val hands = roomHands[signal.roomId] ?: emptySet<String>()
-        val muted = roomMuted[signal.roomId] ?: emptySet<String>()
+        val hands = roomHands[roomId] ?: emptySet<String>()
+        val muted = roomMuted[roomId] ?: emptySet<String>()
         peers.forEach { p ->
             val role = roles[p] ?: "LISTENER"
             // الحالة الحقيقية لا قيمة ثابتة: كان الصوت والصورة يُعلَنان
@@ -190,14 +245,138 @@ class ConferenceWebSocketHandler(
             statePayload["${p}_muted"] = (p in muted).toString()
             statePayload["${p}_hand"] = (p in hands).toString()
         }
-        statePayload["host"] = roomHosts[signal.roomId] ?: userId
-        statePayload["self_role"] = myRole
-        val stateMsg = objectMapper.writeValueAsString(mapOf(
+        statePayload["host"] = roomHosts[roomId] ?: userId
+        statePayload["self_role"] = roles[userId] ?: "LISTENER"
+        statePayload["lobby"] = (roomLobby[roomId] == true).toString()
+        val waiting = waitingIds(roomId)
+        statePayload["waiting_count"] = waiting.size.toString()
+        waiting.forEachIndexed { i, w -> statePayload["waiting_user_$i"] = w }
+        return TextMessage(objectMapper.writeValueAsString(mapOf(
             "type" to "ROOM_STATE",
-            "roomId" to signal.roomId,
+            "roomId" to roomId,
             "payload" to statePayload
+        )))
+    }
+
+    /** هويات المنتظرين في لوبي غرفة — مرتبة لثبات القائمة بين الواجهات. */
+    private fun waitingIds(roomId: String): List<String> =
+        roomWaiting[roomId]?.mapNotNull { it.attributes["userId"] as? String }?.sorted().orEmpty()
+
+    // ─────────────────────── غرفة الانتظار (Lobby) ───────────────────────
+
+    private fun handleLobby(session: WebSocketSession, userId: String, signal: IncomingConferenceSignal) {
+        val roomId = signal.roomId
+        val role = roomRoles[roomId]?.get(userId) ?: "LISTENER"
+        if (role != "HOST" && role != "CO_HOST") {
+            sendError(session, roomId, "FORBIDDEN", "Only host/co-host can manage the lobby")
+            return
+        }
+        when (signal.type.uppercase()) {
+            "LOBBY_SET" -> {
+                val enabled = signal.payload["enabled"] == "true"
+                roomLobby[roomId] = enabled
+                rooms[roomId]?.filter { it.isOpen }?.forEach {
+                    runCatching {
+                        it.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                            "type" to "LOBBY_STATE",
+                            "roomId" to roomId,
+                            "payload" to mapOf("enabled" to enabled.toString())
+                        ))))
+                    }
+                }
+                // إيقاف اللوبي يقبل كل المنتظرين — لا يُتركون بلا إجابة إلى الأبد.
+                if (!enabled) admitAll(roomId)
+            }
+            "LOBBY_APPROVE" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { admit(roomId, it) }
+            "LOBBY_APPROVE_ALL" -> admitAll(roomId)
+            "LOBBY_DENY" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { deny(roomId, it) }
+        }
+    }
+
+    /** إدخال منتظر واحد إلى الغرفة — نفس مسار JOIN القياسي بعد البوابة. */
+    private fun admit(roomId: String, targetUserId: String) {
+        val waiting = roomWaiting[roomId] ?: return
+        val target = waiting.firstOrNull { (it.attributes["userId"] as? String) == targetUserId }
+        synchronized(waiting) { if (target != null) waiting.remove(target) }
+        // إشعار مباشر للمقبول (هو خارج الغرفة فلا يصل بثّها) + إعلان للغرفة لتنظيف قائمة الواجهة.
+        if (target != null && target.isOpen) {
+            runCatching {
+                target.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                    "type" to "LOBBY_APPROVED",
+                    "roomId" to roomId,
+                    "payload" to mapOf("targetUserId" to targetUserId)
+                ))))
+            }
+        }
+        announceLobbyDecision(roomId, "LOBBY_APPROVED", targetUserId)
+        if (target == null || !target.isOpen) return
+        val room = rooms.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+        val roles = roomRoles.computeIfAbsent(roomId) { ConcurrentHashMap() }
+        synchronized(room) { room.add(target) }
+        roles.putIfAbsent(targetUserId, "LISTENER")
+        // حالة الغرفة كاملة للمقبول (يعرف الأدوار والأيدي والمكتومين من الآن)
+        runCatching { target.sendMessage(buildRoomState(roomId, room, target, targetUserId)) }
+        // PARTICIPANT_JOINED للبقية — نفس شكل handleJoin حرفياً
+        val joinMsg = objectMapper.writeValueAsString(mapOf(
+            "type" to "PARTICIPANT_JOINED",
+            "roomId" to roomId,
+            "payload" to mapOf(
+                "userId" to targetUserId,
+                "role" to (roles[targetUserId] ?: "LISTENER"),
+                "isHost" to "false",
+                "hasVideo" to "false",
+                "hasAudio" to "true"
+            )
         ))
-        session.sendMessage(TextMessage(stateMsg))
+        room.filter { it.id != target.id }.forEach { runCatching { it.sendMessage(TextMessage(joinMsg)) } }
+    }
+
+    private fun admitAll(roomId: String) {
+        waitingIds(roomId).forEach { admit(roomId, it) }
+    }
+
+    /** رفض منتظر: إشعار مباشر ثم إغلاق جلسته (ليس في الغرفة فلا PARTICIPANT_LEFT). */
+    private fun deny(roomId: String, targetUserId: String) {
+        val waiting = roomWaiting[roomId] ?: return
+        val target = waiting.firstOrNull { (it.attributes["userId"] as? String) == targetUserId }
+        synchronized(waiting) { if (target != null) waiting.remove(target) }
+        announceLobbyDecision(roomId, "LOBBY_DENIED", targetUserId)
+        if (target != null) {
+            runCatching {
+                target.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf(
+                    "type" to "LOBBY_DENIED",
+                    "roomId" to roomId,
+                    "payload" to mapOf("targetUserId" to targetUserId)
+                ))))
+            }
+            runCatching { target.close(org.springframework.web.socket.CloseStatus.NORMAL) }
+        }
+    }
+
+    /** بثّ قرار لوبي إلى الغرفة — تنظّف به واجهات المضيفين قائمة المنتظرين. */
+    private fun announceLobbyDecision(roomId: String, type: String, targetUserId: String) {
+        val room = rooms[roomId] ?: return
+        val msg = objectMapper.writeValueAsString(mapOf(
+            "type" to type,
+            "roomId" to roomId,
+            "payload" to mapOf("targetUserId" to targetUserId)
+        ))
+        room.filter { it.isOpen }.forEach { runCatching { it.sendMessage(TextMessage(msg)) } }
+    }
+
+    /** بلّغ مضيفي الغرفة (وألاحق المضيف لاحقاً عبر ROOM_STATE) بمنتظر جديد. */
+    private fun notifyHostsOfWaiting(roomId: String, waitingUserId: String) {
+        val room = rooms[roomId] ?: return
+        val roles = roomRoles[roomId] ?: return
+        val msg = objectMapper.writeValueAsString(mapOf(
+            "type" to "LOBBY_REQUEST",
+            "roomId" to roomId,
+            "payload" to mapOf("userId" to waitingUserId)
+        ))
+        room.filter { s ->
+            val role = (s.attributes["userId"] as? String)?.let { roles[it] }
+            s.isOpen && (role == "HOST" || role == "CO_HOST")
+        }.forEach { runCatching { it.sendMessage(TextMessage(msg)) } }
     }
 
     private fun relay(session: WebSocketSession, signal: IncomingConferenceSignal) {
@@ -344,6 +523,17 @@ class ConferenceWebSocketHandler(
     }
 
     private fun handleLeave(session: WebSocketSession, signal: IncomingConferenceSignal) {
+        // مغادرٌ من لوبي الانتظار؟ نظّف قائمته دون بثّ PARTICIPANT_LEFT
+        // (لم يكن داخل الغرفة أصلاً) وأبلغ المضيفين لإسقاط سطره من الواجهة.
+        roomWaiting[signal.roomId]?.let { waiting ->
+            val wasWaiting = synchronized(waiting) { waiting.remove(session) }
+            if (wasWaiting) {
+                val uid = session.attributes["userId"] as? String
+                if (uid != null) announceLobbyDecision(signal.roomId, "LOBBY_LEFT", uid)
+                sessionToRoom.remove(session.id)
+                return
+            }
+        }
         val room = rooms[signal.roomId] ?: return
         synchronized(room) { room.remove(session) }
         sessionToRoom.remove(session.id)
@@ -384,6 +574,8 @@ class ConferenceWebSocketHandler(
             roomHosts.remove(signal.roomId)
             roomHands.remove(signal.roomId)
             roomMuted.remove(signal.roomId)
+            roomLobby.remove(signal.roomId)
+            roomWaiting.remove(signal.roomId)
             evictReactionKeys(signal.roomId)
         }
     }
@@ -428,6 +620,8 @@ class ConferenceWebSocketHandler(
             roomHosts.remove(roomId)
             roomHands.remove(roomId)
             roomMuted.remove(roomId)
+            roomLobby.remove(roomId)
+            roomWaiting.remove(roomId)
             evictReactionKeys(roomId)
         }
     }

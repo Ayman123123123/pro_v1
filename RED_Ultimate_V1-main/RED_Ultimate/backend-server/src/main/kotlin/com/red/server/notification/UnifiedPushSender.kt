@@ -1,6 +1,7 @@
 package com.red.server.notification
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.net.HttpURLConnection
@@ -31,7 +32,7 @@ import java.net.URL
 @Service
 class UnifiedPushSender {
     private val logger = LoggerFactory.getLogger(UnifiedPushSender::class.java)
-    private val json = ObjectMapper()
+    private val json = jacksonObjectMapper()
 
     private val connectTimeoutMs = envInt("PUSH_CONNECT_TIMEOUT_MS", 5000, 1000, 15000)
     private val readTimeoutMs = envInt("PUSH_READ_TIMEOUT_MS", 5000, 1000, 15000)

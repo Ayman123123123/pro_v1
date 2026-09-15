@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import com.red.server.calls.CallHistoryDocument
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
@@ -26,7 +27,7 @@ import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
 class CallWebSocketHandlerTest {
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = jacksonObjectMapper()
     private val history: CallHistoryService = mock()
     private val notifications: NotificationService = mock()
     private val handler = CallWebSocketHandler(objectMapper, history, notifications)

@@ -1,6 +1,5 @@
 package com.red.sovereign.calls
 
-import androidx.compose.ui.graphics.Color
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -10,26 +9,8 @@ import org.junit.Test
  */
 class ManagersTest {
 
-    @Test
-    fun `VirtualBackgroundManager يبدل التأثير ويحسب blur`() {
-        VirtualBackgroundManager.clear()
-        assertEquals(VirtualBgEffect.NONE, VirtualBackgroundManager.config.effect)
-
-        VirtualBackgroundManager.setEffect(VirtualBgEffect.BLUR)
-        assertEquals(VirtualBgEffect.BLUR, VirtualBackgroundManager.config.effect)
-        // في JVM الاختبار isSupported قد يكون false (SDK mock) — نتحقق من blurRadius لا من shouldApply
-        assertEquals(24f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
-
-        VirtualBackgroundManager.setEffect(VirtualBgEffect.BLUR_HEAVY)
-        assertEquals(36f, VirtualBackgroundManager.blurRadiusForCompose(), 0.1f)
-
-        VirtualBackgroundManager.setSolidColor(Color(0xFF14C79A))
-        assertEquals(VirtualBgEffect.SOLID, VirtualBackgroundManager.config.effect)
-        assertEquals(Color(0xFF14C79A), VirtualBackgroundManager.config.solidColor)
-
-        VirtualBackgroundManager.clear()
-        assertEquals(VirtualBgEffect.NONE, VirtualBackgroundManager.config.effect)
-    }
+    // (2026-09-15) حُذف اختبار VirtualBackgroundManager مع أرشفة المدير نفسه —
+    // كان ميزة نصية بلا أثر على إطارات WebRTC المرسلة (انظر الأرشيف/dead-code-2026-09-15/).
 
     @Test
     fun `CallQualityManager يصنف الشبكة صحيحاً`() {

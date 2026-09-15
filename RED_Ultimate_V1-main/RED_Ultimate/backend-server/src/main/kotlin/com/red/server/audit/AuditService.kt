@@ -1,6 +1,6 @@
 package com.red.server.audit
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Service
 import java.util.UUID
 
@@ -21,6 +21,6 @@ data class AuditEventResponse(
     val actorId: UUID?,
     val action: String,
     val targetId: String?,
-    val details: com.fasterxml.jackson.databind.JsonNode,
+    val details: tools.jackson.databind.JsonNode,
     val createdAt: java.time.Instant
 )

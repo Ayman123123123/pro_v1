@@ -73,6 +73,13 @@ class ConferenceSignalingClient(
         }
         fun onParticipantLeft(userId: String)
         fun onParticipantJoined(participant: ConferenceParticipant)
+        /**
+         * غرفة الانتظار: حالة اللوبي + قائمة المنتظرين — من ROOM_STATE
+         * (كما يصل للمضيف الجديد أو العائد بعد الانقطاع فلا تفقد القائمة).
+         */
+        fun onLobbyState(enabled: Boolean, waiting: List<String>) {
+            Log.d(TAG, "onLobbyState default enabled=$enabled waiting=${waiting.size} — override should update ConferenceRuntime")
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
@@ -170,6 +177,10 @@ class ConferenceSignalingClient(
                                 val selfRole = signal.payload["self_role"] ?: "LISTENER"
                                 listener.onRoomState(participants, selfRole)
                                 listener.onSelfRole(selfRole)
+                                // غرفة الانتظار: الحالة + قائمة المنتظرين (مرتبة كإرسال الخادم)
+                                val waitingCount = signal.payload["waiting_count"]?.toIntOrNull() ?: 0
+                                val waiting = (0 until waitingCount).mapNotNull { signal.payload["waiting_user_$it"] }.sorted()
+                                listener.onLobbyState(signal.payload["lobby"] == "true", waiting)
                             }
                             "PARTICIPANT_LEFT" -> {
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
@@ -384,6 +395,40 @@ class ConferenceSignalingClient(
             userId = userId,
             payload = emptyMap()
         )
+    )
+
+    // ───────────── غرفة الانتظار (Lobby) — للمضيف/المضيف المشارك ─────────────
+
+    /** تفعيل/إيقاف غرفة الانتظار — الخادم يبثّ LOBBY_STATE ويُدخل المنتظرين عند الإيقاف. */
+    fun setLobby(roomId: String, userId: String, enabled: Boolean) = send(
+        ConferenceSignal(
+            type = "LOBBY_SET",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("enabled" to enabled.toString())
+        )
+    )
+
+    fun approveLobby(roomId: String, userId: String, targetUserId: String) = send(
+        ConferenceSignal(
+            type = "LOBBY_APPROVE",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun denyLobby(roomId: String, userId: String, targetUserId: String) = send(
+        ConferenceSignal(
+            type = "LOBBY_DENY",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun approveAllLobby(roomId: String, userId: String) = send(
+        ConferenceSignal(type = "LOBBY_APPROVE_ALL", roomId = roomId, userId = userId, payload = emptyMap())
     )
 
     fun sendReaction(roomId: String, userId: String, emoji: String = "👏") = send(

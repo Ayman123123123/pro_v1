@@ -1,6 +1,6 @@
 package com.red.server.websocket
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
 import jakarta.annotation.PostConstruct

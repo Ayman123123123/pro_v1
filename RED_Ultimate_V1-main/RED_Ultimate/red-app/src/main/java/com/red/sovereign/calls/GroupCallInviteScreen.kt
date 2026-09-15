@@ -422,6 +422,19 @@ fun GroupCallInviteScreen(
     }
 }
 
+/** جهة اتصال للاختيار في شاشة دعوة المكالمة الجماعية.
+ *
+ * (2026-09-15) كان تعريفها في `CallTransferScreen.kt` المؤرشف
+ * (الأرشيف/dead-code-2026-09-15/) — نُقل هنا لأن هذه الشاشة هي المستهلك
+ * الحي الوحيد، وكان حذف المؤرشف سيكسر البناء بلاها.
+ */
+data class ContactInfo(
+    val id: String,
+    val name: String,
+    val phone: String,
+    val isActive: Boolean
+)
+
 @Composable
 fun ContactSelectItem(contact: ContactInfo, isSelected: Boolean, onClick: () -> Unit) {
     Card(

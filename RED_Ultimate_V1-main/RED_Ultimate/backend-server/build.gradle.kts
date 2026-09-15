@@ -46,29 +46,26 @@ dependencies {
     // Kotlin
     // fasterxml Jackson 2.x pinned explicitly (2.19.2 = catalog choice): Boot 4 BOM
     // manages Jackson 3 only, so unversioned fasterxml never resolves.
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.2")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.19.2")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.19.2")
-    // Jackson 3 (tools.jackson) for Boot 4 MVC — version from Boot 4 BOM.
+    // Jackson 3 (tools.jackson) — الوحيد منذ 2026-09-15 (هاجر الكود كله من fasterxml 2).
     // The module brings databind transitively; both are needed by JacksonConfig.
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // One authoritative RED protocol shared by Android and the backend
     implementation(project(":shared-proto"))
 
     // Argon2id password hashing
-    implementation("org.bouncycastle:bcprov-jdk18on:1.79")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
 
     // Local S3-compatible object storage
     implementation("io.minio:minio:8.6.0")
-    implementation("org.jsoup:jsoup:1.18.3") // LinkCard Open Graph
+    implementation("org.jsoup:jsoup:1.22.2") // LinkCard Open Graph
 
     // JWT
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

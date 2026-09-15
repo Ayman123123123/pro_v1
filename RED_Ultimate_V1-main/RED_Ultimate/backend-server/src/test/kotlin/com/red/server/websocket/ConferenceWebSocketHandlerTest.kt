@@ -1,8 +1,9 @@
 package com.red.server.websocket
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.red.server.calls.RoomAliasService
+
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -20,7 +21,7 @@ import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
-    private val objectMapper = ObjectMapper().registerKotlinModule()
+    private val objectMapper = jacksonObjectMapper()
     private val handler = ConferenceWebSocketHandler(objectMapper)
 
     private class Probe(sessionId: String, userId: String) {
@@ -44,7 +45,7 @@ class ConferenceWebSocketHandlerTest {
         val session = Probe("s1", "73066")
         handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         val messages = session.sent.map { objectMapper.readTree(it) }
-        assertTrue(messages.any { it["type"].asText() == "ROOM_STATE" }) { "Expected ROOM_STATE in: $messages" }
+        assertTrue(messages.any { it["type"].asString() == "ROOM_STATE" }) { "Expected ROOM_STATE in: $messages" }
     }
 
     @Test fun `JOIN broadcasts PARTICIPANT_JOINED to existing peers`() {
@@ -54,7 +55,7 @@ class ConferenceWebSocketHandlerTest {
         alice.sent.clear()
         handler.handleTextMessage(bob.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
         val aliceMessages = alice.sent.map { objectMapper.readTree(it) }
-        assertTrue(aliceMessages.any { it["type"].asText() == "PARTICIPANT_JOINED" }) { "Expected PARTICIPANT_JOINED in: $aliceMessages" }
+        assertTrue(aliceMessages.any { it["type"].asString() == "PARTICIPANT_JOINED" }) { "Expected PARTICIPANT_JOINED in: $aliceMessages" }
     }
 
     @Test fun `OFFER relayed to other peers but not back to sender`() {
@@ -67,17 +68,18 @@ class ConferenceWebSocketHandlerTest {
         handler.handleTextMessage(alice.session, TextMessage("""{"type":"OFFER","roomId":"red-room-12345","payload":{"sdp":"v=0..."}}"""))
         val aliceMessages = alice.sent.map { objectMapper.readTree(it) }
         val bobMessages = bob.sent.map { objectMapper.readTree(it) }
-        assertTrue(bobMessages.any { it["type"].asText() == "OFFER" }) { "Bob should receive OFFER" }
-        assertTrue(aliceMessages.none { it["type"].asText() == "OFFER" }) { "Alice should NOT receive her own OFFER" }
+        assertTrue(bobMessages.any { it["type"].asString() == "OFFER" }) { "Bob should receive OFFER" }
+        assertTrue(aliceMessages.none { it["type"].asString() == "OFFER" }) { "Alice should NOT receive her own OFFER" }
     }
 
-    @Test fun `invalid roomId rejected`() {
+    // (2026-09-15) العقد الجديد من main: رفض لطيل بإطار ERROR بلا إغلاق الجلسة —
+    // كان require يرمي فيُغلق سوكت المؤتمر بالكامل عند أول إطار شاذ.
+    @Test fun `invalid roomId rejected gracefully without killing the session`() {
         val session = Probe("s1", "73066")
-        try {
-            handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
-            assertTrue(false) { "should have thrown" }
-        } catch (e: IllegalArgumentException) {
-            assertNotNull(e.message)
+        handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
+        val messages = session.sent.map { objectMapper.readTree(it) }
+        assertTrue(messages.any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "INVALID_ROOM_ID" }) {
+            "Expected graceful INVALID_ROOM_ID error frame: $messages"
         }
     }
 
@@ -103,7 +105,7 @@ class ConferenceWebSocketHandlerTest {
         alice.sent.clear()
         handler.handleTextMessage(bob.session, TextMessage("""{"type":"LEAVE","roomId":"red-room-12345"}"""))
         val aliceMessages = alice.sent.map { objectMapper.readTree(it) }
-        assertTrue(aliceMessages.any { it["type"].asText() == "PARTICIPANT_LEFT" }) { "Alice should see Bob leave" }
+        assertTrue(aliceMessages.any { it["type"].asString() == "PARTICIPANT_LEFT" }) { "Alice should see Bob leave" }
     }
 
     // ─── حراسة المنصة والحالات المحفوظة (البند الثامن) ───
@@ -122,11 +124,11 @@ class ConferenceWebSocketHandlerTest {
         val (host, listener) = hostAndListener()
         handler.handleTextMessage(listener.session, TextMessage("""{"type":"PRODUCE","roomId":"red-room-12345"}"""))
         val err = listener.sent.map { objectMapper.readTree(it) }
-        assertTrue(err.any { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "NOT_ON_STAGE" }) {
+        assertTrue(err.any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "NOT_ON_STAGE" }) {
             "توقعنا رفض النشر للمستمع، فوصل: $err"
         }
         // والأهم: لم تتسرّب الحزمة إلى بقية الغرفة.
-        assertTrue(host.sent.none { objectMapper.readTree(it)["type"].asText() == "PRODUCE" }) {
+        assertTrue(host.sent.none { objectMapper.readTree(it)["type"].asString() == "PRODUCE" }) {
             "تسرّب PRODUCE من مستمع إلى الغرفة: ${host.sent}"
         }
     }
@@ -134,7 +136,7 @@ class ConferenceWebSocketHandlerTest {
     @Test fun `المضيف ينشر وسائط بلا منع`() {
         val (host, listener) = hostAndListener()
         handler.handleTextMessage(host.session, TextMessage("""{"type":"PRODUCE","roomId":"red-room-12345"}"""))
-        assertTrue(listener.sent.any { objectMapper.readTree(it)["type"].asText() == "PRODUCE" }) {
+        assertTrue(listener.sent.any { objectMapper.readTree(it)["type"].asString() == "PRODUCE" }) {
             "لم يصل نشر المضيف: ${listener.sent}"
         }
     }
@@ -147,7 +149,7 @@ class ConferenceWebSocketHandlerTest {
         )
         host.sent.clear()
         handler.handleTextMessage(listener.session, TextMessage("""{"type":"PRODUCE","roomId":"red-room-12345"}"""))
-        assertTrue(host.sent.any { objectMapper.readTree(it)["type"].asText() == "PRODUCE" }) {
+        assertTrue(host.sent.any { objectMapper.readTree(it)["type"].asString() == "PRODUCE" }) {
             "المتحدّث المعتمَد مُنع من النشر: ${host.sent}"
         }
     }
@@ -157,8 +159,8 @@ class ConferenceWebSocketHandlerTest {
         handler.handleTextMessage(listener.session, TextMessage("""{"type":"RAISE_HAND","roomId":"red-room-12345"}"""))
         val late = Probe("s3", "55555")
         handler.handleTextMessage(late.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("true", state["payload"]["28261_hand"].asText())
+        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("true", state["payload"]["28261_hand"].asString())
     }
 
     @Test fun `الموافقة على التحدّث تُنزل اليد`() {
@@ -170,9 +172,9 @@ class ConferenceWebSocketHandlerTest {
         )
         val late = Probe("s3", "55555")
         handler.handleTextMessage(late.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("false", state["payload"]["28261_hand"].asText())
-        assertEquals("SPEAKER", state["payload"]["28261_role"].asText())
+        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("false", state["payload"]["28261_hand"].asString())
+        assertEquals("SPEAKER", state["payload"]["28261_role"].asString())
     }
 
     @Test fun `الكتم الإداري يبقى ساريًا لمن ينضم لاحقًا`() {
@@ -187,21 +189,21 @@ class ConferenceWebSocketHandlerTest {
         )
         val late = Probe("s3", "55555")
         handler.handleTextMessage(late.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("true", state["payload"]["28261_muted"].asText())
+        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("true", state["payload"]["28261_muted"].asString())
         // والصوت يُعلَن مكتومًا لا "true" ثابتة كما كان.
-        assertEquals("false", state["payload"]["28261_audio"].asText())
+        assertEquals("false", state["payload"]["28261_audio"].asString())
     }
 
     @Test fun `المستمع يظهر بلا صوت ولا صورة في ROOM_STATE`() {
         hostAndListener()
         val late = Probe("s3", "55555")
         handler.handleTextMessage(late.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("false", state["payload"]["28261_audio"].asText())
-        assertEquals("false", state["payload"]["28261_video"].asText())
+        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("false", state["payload"]["28261_audio"].asString())
+        assertEquals("false", state["payload"]["28261_video"].asString())
         // والمضيف بالمقابل ناشر.
-        assertEquals("true", state["payload"]["73066_audio"].asText())
+        assertEquals("true", state["payload"]["73066_audio"].asString())
     }
 
     @Test fun `المستمع لا يرقّي نفسه`() {
@@ -211,14 +213,14 @@ class ConferenceWebSocketHandlerTest {
             TextMessage("""{"type":"APPROVE_SPEAKER","roomId":"red-room-12345","payload":{"targetUserId":"28261"}}""")
         )
         val messages = listener.sent.map { objectMapper.readTree(it) }
-        assertTrue(messages.any { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "FORBIDDEN" }) {
+        assertTrue(messages.any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "FORBIDDEN" }) {
             "توقعنا رفض الترقية الذاتية: $messages"
         }
         // ويظل ممنوعًا من النشر فعليًّا.
         listener.sent.clear()
         handler.handleTextMessage(listener.session, TextMessage("""{"type":"PRODUCE","roomId":"red-room-12345"}"""))
         assertTrue(listener.sent.map { objectMapper.readTree(it) }
-            .any { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "NOT_ON_STAGE" })
+            .any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "NOT_ON_STAGE" })
     }
 
     @Test fun `خفض اليد يمسح الطلب`() {
@@ -230,14 +232,14 @@ class ConferenceWebSocketHandlerTest {
         )
         val late = Probe("s3", "55555")
         handler.handleTextMessage(late.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
-        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("false", state["payload"]["28261_hand"].asText())
+        val state = late.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("false", state["payload"]["28261_hand"].asString())
     }
 
     @Test fun `رفع اليد يصل صاحبه أيضًا`() {
         val (_, listener) = hostAndListener()
         handler.handleTextMessage(listener.session, TextMessage("""{"type":"RAISE_HAND","roomId":"red-room-12345"}"""))
-        assertTrue(listener.sent.map { objectMapper.readTree(it) }.any { it["type"].asText() == "RAISE_HAND" }) {
+        assertTrue(listener.sent.map { objectMapper.readTree(it) }.any { it["type"].asString() == "RAISE_HAND" }) {
             "لم يصل تأكيد رفع اليد لصاحبها: ${listener.sent}"
         }
     }
@@ -252,12 +254,80 @@ class ConferenceWebSocketHandlerTest {
         val aliased = ConferenceWebSocketHandler(objectMapper, aliases)
         val alice = Probe("s-alias-1", "73066")
         aliased.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"legacyConfAlias02"}"""))
-        val state = alice.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
-        assertEquals("CONF_legacyConfAlias02", state["roomId"].asText())
+        val state = alice.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "ROOM_STATE" }
+        assertEquals("CONF_legacyConfAlias02", state["roomId"].asString())
         val bob = Probe("s-alias-2", "28261")
         aliased.handleTextMessage(bob.session, TextMessage("""{"type":"JOIN","roomId":"CONF_legacyConfAlias02"}"""))
         val aliceAfter = alice.sent.map { objectMapper.readTree(it) }
-        assertTrue(aliceAfter.any { it["type"].asText() == "PARTICIPANT_JOINED" }) { "same canonical room: $aliceAfter" }
+        assertTrue(aliceAfter.any { it["type"].asString() == "PARTICIPANT_JOINED" }) { "same canonical room: $aliceAfter" }
         assertEquals("HOST", aliased.getRole("legacyConfAlias02", "73066"))
+    }
+
+    // ─────────────────────── غرفة الانتظار (Lobby) ───────────────────────
+
+    /** تهيئة غرفة بمضيف فعّال اللوبي، ثم انضمام ضيف فيُحتجَز. */
+    private fun lobbySetup(): Pair<Probe, Probe> {
+        val host = Probe("s1", "73066")
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"true"}}"""))
+        val guest = Probe("s2", "28261")
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        return Pair(host, guest)
+    }
+
+    @Test fun `اللوبي يحتجز الداخل الجديد ويبلغ المضيف ثم القبول يدخله`() {
+        val (host, guest) = lobbySetup()
+        // المنتظر: LOBBY_WAITING بلا ROOM_STATE (لا وسائط قبل الموافقة)
+        val guestTypes = guest.sent.map { objectMapper.readTree(it)["type"].asString() }
+        assertTrue(guestTypes.contains("LOBBY_WAITING")) { "الضيف لم يُحتجَز: $guestTypes" }
+        assertTrue(guestTypes.none { it == "ROOM_STATE" }) { "وصلت حالة غرفة كاملة لمنتظر: $guestTypes" }
+        // المضيف: LOBBY_REQUEST باسم المنتظر
+        val request = host.sent.map { objectMapper.readTree(it) }.first { it["type"].asString() == "LOBBY_REQUEST" }
+        assertEquals("28261", request["payload"]["userId"].asString())
+        // القبول: المقبول يأخذ LOBBY_APPROVED ثم ROOM_STATE، والغرفة PARTICIPANT_JOINED
+        guest.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_APPROVE","roomId":"red-room-12345","payload":{"targetUserId":"28261"}}"""))
+        val after = guest.sent.map { objectMapper.readTree(it) }
+        assertTrue(after.any { it["type"].asString() == "LOBBY_APPROVED" }) { "لم يصل تأكيد القبول: $after" }
+        assertTrue(after.any { it["type"].asString() == "ROOM_STATE" }) { "لم تصل حالة الغرفة للمقبول: $after" }
+        assertTrue(host.sent.map { objectMapper.readTree(it)["type"].asString() }.contains("PARTICIPANT_JOINED")) {
+            "الغرفة لم تُبلَّغ بدخول المقبول: ${host.sent}"
+        }
+    }
+
+    @Test fun `رفض اللوبي من مضيف حقيقي يصل للمنتظر`() {
+        val (host, guest) = lobbySetup()
+        guest.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_DENY","roomId":"red-room-12345","payload":{"targetUserId":"28261"}}"""))
+        assertTrue(guest.sent.map { objectMapper.readTree(it)["type"].asString() }.contains("LOBBY_DENIED")) {
+            "لم يصل LOBBY_DENIED للمنتظر: ${guest.sent}"
+        }
+    }
+
+    @Test fun `غير المضيف لا يدير اللوبي والغرفة تبقى مفتوحة`() {
+        val host = Probe("s1", "73066")
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        val guest = Probe("s2", "28261")
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        guest.sent.clear()
+        handler.handleTextMessage(guest.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"true"}}"""))
+        val types = guest.sent.map { objectMapper.readTree(it) }
+        assertTrue(types.any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "FORBIDDEN" }) { "لم يُرفض أمر اللوبي من مستمع: $types" }
+        // اللوبي لم يتفعّل فعلاً: منضمّ جديد يدخل مباشرة بROOM_STATE
+        val third = Probe("s3", "11111")
+        handler.handleTextMessage(third.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        assertTrue(third.sent.map { objectMapper.readTree(it)["type"].asString() }.contains("ROOM_STATE")) { "اللوبي تفعّل بأمر غير مصرّح!" }
+    }
+
+    @Test fun `إيقاف اللوبي يقبل كل المنتظرين`() {
+        val (host, guest) = lobbySetup()
+        val guest2 = Probe("s3", "11111")
+        handler.handleTextMessage(guest2.session, TextMessage("""{"type":"JOIN","roomId":"red-room-12345"}"""))
+        guest.sent.clear(); guest2.sent.clear()
+        handler.handleTextMessage(host.session, TextMessage("""{"type":"LOBBY_SET","roomId":"red-room-12345","payload":{"enabled":"false"}}"""))
+        val guestTypes = guest.sent.map { objectMapper.readTree(it)["type"].asString() }
+        val guest2Types = guest2.sent.map { objectMapper.readTree(it)["type"].asString() }
+        assertTrue(guestTypes.contains("LOBBY_APPROVED") && guestTypes.contains("ROOM_STATE")) { "الأول لم يُقبَل: $guestTypes" }
+        assertTrue(guest2Types.contains("LOBBY_APPROVED") && guest2Types.contains("ROOM_STATE")) { "الثاني لم يُقبَل: $guest2Types" }
     }
 }

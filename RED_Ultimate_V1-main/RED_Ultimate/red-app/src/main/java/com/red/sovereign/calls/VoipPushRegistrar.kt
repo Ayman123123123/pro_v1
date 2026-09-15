@@ -31,8 +31,8 @@ import org.unifiedpush.android.connector.UnifiedPush
  * so a flapping network does not spam the backend or drain the battery.
  *
  * Callers ([com.red.sovereign.calls.CallBootReceiver],
- * [com.red.sovereign.calls.CallSystemIntegration],
- * [com.red.sovereign.core.AppStartupCoordinator]) just invoke [register].
+ * [com.red.sovereign.core.AppStartupCoordinator]) just invoke [register]; distributor
+ * choice persists via [UnifiedPush.saveDistributor] and re-registration is idempotent.
  */
 object VoipPushRegistrar {
     private const val TAG = "VoipPushRegistrar"
