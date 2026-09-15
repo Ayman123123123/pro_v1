@@ -154,3 +154,11 @@ chat-*.txt
 # Local secrets (never commit)
 **/keystore.properties
 **/application-override.properties
+# Build outputs & large artifacts (keep repository lean)
+**/build/
+**/node_modules/
+**/.gradle/
+**/apk-output/
+*.apk
+*.aab
+*.ap_
