@@ -150,3 +150,7 @@ chat-*.txt
 **/.idea/
 *.log
 !backend-server/src/main/resources/db/migration/*.sql
+
+# Local secrets (never commit)
+**/keystore.properties
+**/application-override.properties

@@ -13,7 +13,7 @@
 | Shared Protocol | `RED_Ultimate_V1-main/RED_Ultimate/shared-proto/` | Protobuf schemas |
 | Media SFU | `RED_Ultimate_V1-main/RED_Ultimate/media-sfu/` | Node.js WebRTC SFU |
 | Runtime | `RED_Ultimate_V1-main/RED_Ultimate/docker-compose.yml` | Full stack containers |
-| CI | `.github/workflows/` | `quality-gate.yml` is the canonical workflow |
+| CI | `.github/workflows/` | `red-ultimate-ci.yml` is the canonical workflow |
 
 ## Building
 

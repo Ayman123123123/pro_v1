@@ -1,0 +1,8 @@
+# Copy to application-override.properties for local/dev only. NEVER commit real values.
+spring.datasource.url=jdbc:postgresql://localhost:5432/red_sovereign
+spring.datasource.username=CHANGE_ME
+spring.datasource.password=CHANGE_ME
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+spring.data.redis.password=
+spring.flyway.enabled=false
