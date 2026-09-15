@@ -1,6 +1,4 @@
 ﻿package com.red.server.websocket
-
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.LiveStreamService
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomPasswordHasher
@@ -18,9 +16,48 @@ import org.springframework.web.socket.WebSocketSession
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.CopyOnWriteArrayList
+class LiveStreamWebSocketHandlerTest {
+    private val objectMapper = jacksonObjectMapper()
+    private val streams = LiveStreamService(
+        mock<RoomPasswordHasher>(),
+        mock(),
+        mock()
+    )
+    private val accessGuard: com.red.server.websocket.ApprovedDeviceSessionGuard = mock<com.red.server.websocket.ApprovedDeviceSessionGuard>().also {
+        whenever(it.isStillAuthorized(any(), any())).thenReturn(true)
+    }
+    private val handler = LiveStreamWebSocketHandler(objectMapper, streams, accessGuard)
+    @BeforeEach
+    fun startOwnedStream() {
+        streams.startStream("stream-12345678", "91179")
+    }
+    private class Probe(sessionId: String, userId: String) {
+        val sent = CopyOnWriteArrayList<String>()
+        private val attrs: MutableMap<String, Any> = mutableMapOf(
+            "userId" to userId,
+            "redId" to userId,
+
+﻿package com.red.server.websocket
+
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
+import com.red.server.calls.LiveStreamService
+import com.red.server.calls.RoomPasswordHasher
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
+import org.springframework.web.socket.CloseStatus
+import org.springframework.web.socket.TextMessage
+import org.springframework.web.socket.WebSocketMessage
+import org.springframework.web.socket.WebSocketSession
+import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
-    private val objectMapper = ObjectMapper().findAndRegisterModules()
+    private val objectMapper = jacksonObjectMapper()
     private val streams = LiveStreamService(
         mock<RoomPasswordHasher>(),
         mock(),
@@ -66,7 +103,7 @@ class LiveStreamWebSocketHandlerTest {
         broadcaster.sent.clear()
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"stream-12345678","payload":{"role":"viewer"}}"""))
         val bMessages = broadcaster.sent.map { objectMapper.readTree(it) }
-        assertTrue(bMessages.any { it["type"].asText() == "VIEWER_JOINED" }) { "Broadcaster should be notified of new viewer" }
+        assertTrue(bMessages.any { it["type"].asString() == "VIEWER_JOINED" }) { "Broadcaster should be notified of new viewer" }
     }
 
     @Test fun `OFFER from broadcaster reaches viewer`() {
@@ -78,7 +115,7 @@ class LiveStreamWebSocketHandlerTest {
         viewer.sent.clear()
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"OFFER","roomId":"stream-12345678","payload":{"sdp":"v=0..."}}"""))
         val vMessages = viewer.sent.map { objectMapper.readTree(it) }
-        assertTrue(vMessages.any { it["type"].asText() == "OFFER" }) { "Viewer should receive OFFER" }
+        assertTrue(vMessages.any { it["type"].asString() == "OFFER" }) { "Viewer should receive OFFER" }
     }
 
     @Test fun `targeted OFFER from broadcaster reaches only that viewer`() {
@@ -103,7 +140,7 @@ class LiveStreamWebSocketHandlerTest {
         viewer.sent.clear()
         handler.handleTextMessage(viewer.session, TextMessage("""{"type":"ANSWER","roomId":"stream-12345678","payload":{"sdp":"v=0..."}}"""))
         val bMessages = broadcaster.sent.map { objectMapper.readTree(it) }
-        assertTrue(bMessages.any { it["type"].asText() == "ANSWER" }) { "Broadcaster should receive ANSWER" }
+        assertTrue(bMessages.any { it["type"].asString() == "ANSWER" }) { "Broadcaster should receive ANSWER" }
     }
 
     @Test fun `broadcaster LEAVE notifies viewer`() {
@@ -114,9 +151,7 @@ class LiveStreamWebSocketHandlerTest {
         viewer.sent.clear()
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"LEAVE","roomId":"stream-12345678"}"""))
         val vMessages = viewer.sent.map { objectMapper.readTree(it) }
-        assertTrue(vMessages.any { it["type"].asText() == "PARTICIPANT_LEFT" }) { "Viewer should see broadcaster leave" }
-    }
-
+        assertTrue(vMessages.any { it["type"].asString() == "PARTICIPANT_LEFT" }) { "Viewer should see broadcaster leave" }
     @Test fun `alias bound via REST resolves via WS`() {
         val redis: StringRedisTemplate = mock()
         val ops: ValueOperations<String, String> = mock()
@@ -129,8 +164,9 @@ class LiveStreamWebSocketHandlerTest {
         val viewer = Probe("v-alias", "11154")
         aliased.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"legacyLiveAlias03","payload":{"role":"viewer"}}"""))
         val joined = viewer.sent.map { objectMapper.readTree(it) }
-        assertTrue(joined.none { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "STREAM_NOT_FOUND" }) {
+        assertTrue(joined.none { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "STREAM_NOT_FOUND" }) {
             "WS must resolve REST alias, got: ${viewer.sent}"
         }
-    }
 }
+        assertTrue(bMessages.any { it["type"].asString() == "ANSWER" }) { "Broadcaster should receive ANSWER" }
+        assertTrue(vMessages.any { it["type"].asString() == "PARTICIPANT_LEFT" }) { "Viewer should see broadcaster leave" }

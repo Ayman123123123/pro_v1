@@ -1,6 +1,7 @@
 package com.red.server.admin
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
 import com.red.server.admin.service.AdminService
@@ -44,7 +45,7 @@ class AdminServiceTest {
         announcements = mock()
         backups = mock()
         users = mock()
-        json = ObjectMapper()
+        json = jacksonObjectMapper()
         service = AdminService(
             auditLog, analytics, health, adminSessions, featureFlags,
             userReports, announcements, backups, users, json

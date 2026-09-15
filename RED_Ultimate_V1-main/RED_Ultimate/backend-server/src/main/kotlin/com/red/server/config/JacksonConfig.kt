@@ -1,38 +1,24 @@
 package com.red.server.config
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature as Jackson2SerializationFeature
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule as Jackson2JavaTimeModule
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.context.annotation.Primary
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.module.kotlin.KotlinFeature
 import tools.jackson.module.kotlin.KotlinModule
 
 /**
- * Jackson Configuration - إعدادات ObjectMapper
- * 
- * يدعم Jackson 3 (Boot 4 MVC) + Jackson 2 (manual usages) + Kotlin defaults.
- * KotlinModule يُسجل صراحةً لضمان تفعيل Kotlin default parameters.
+ * Jackson Configuration — Jackson 3 (tools.jackson) موحّد بالكامل.
+ *
+ * (2026-09-15) كان الملف يصون حزمة مزدوجة: فاصلك Jackson 2 (com.fasterxml)
+ * للاستخدام اليدوي + Jackson 3 لـ MVC — أُزيلت Jackson 2 نهائياً وهاجر كل
+ * الكود إلى tools.jackson (Boot 4 يدير الإصدار عبر BOM). KotlinModule يُسجَّل
+ * كـ Bean ليتعرف عليه الـ auto-configuration ويُطبَّق على الـ JsonMapper الرسمي.
  */
 @Configuration
 class JacksonConfig {
 
-    // Jackson 2 — للخدمات التي تستخدم ObjectMapper يدوياً (20+ service)
-    @Bean
-    @Primary
-    fun objectMapper(): ObjectMapper {
-        return jacksonObjectMapper().apply {
-            registerModule(Jackson2JavaTimeModule())
-            disable(Jackson2SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-            disable(Jackson2SerializationFeature.FAIL_ON_EMPTY_BEANS)
-        }
-    }
-
-    // Jackson 3 — لـ Spring MVC (@RequestBody) في Boot 4
+    // Jackson 3 — Kotlin defaults (default parameters، null-safety) لكل الـ MVC والاستخدام اليدوي.
     @Bean
     fun kotlinJacksonModule(): KotlinModule =
         KotlinModule.Builder()

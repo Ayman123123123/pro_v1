@@ -1,9 +1,10 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
+
+import tools.jackson.databind.ObjectMapper
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession

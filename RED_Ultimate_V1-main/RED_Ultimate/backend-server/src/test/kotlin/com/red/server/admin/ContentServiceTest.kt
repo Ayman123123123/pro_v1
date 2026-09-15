@@ -1,6 +1,6 @@
 package com.red.server.admin
 
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.databind.ObjectMapper
 import com.red.server.admin.model.*
 import com.red.server.admin.repository.*
 import com.red.server.admin.service.ContentService
