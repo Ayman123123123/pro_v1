@@ -198,7 +198,14 @@ class CallHistoryController(
     )
 
     companion object {
-        private const val DEFAULT_PENDING_OFFER_TTL_SECONDS = 45
+        /**
+         * يجب أن يطابق `CallRingPolicy.MAILBOX_TTL_SECONDS` في التطبيق (120s).
+         * كان 45s = مهلة عدم الرد فقط، وهي **أقصر** من نافذة صندوق بريد العميل:
+         * العميل يرن حتى 45s ثم يسجّل «مكالمة فائتة» حتى 120s. فانتهاء العرض عند 45s
+         * على الخادم كان يُلغي ذلك النطاق كاملاً (والسحب بعدها يعيد 410/204) ⇒ مكالمات
+         * فائتة من تطبيق مقتول تُفقد بصمت ولا يعلم بها المستلم.
+         */
+        private const val DEFAULT_PENDING_OFFER_TTL_SECONDS = 120
         private const val MIN_PENDING_OFFER_TTL_SECONDS = 5
         private const val MAX_PENDING_OFFER_TTL_SECONDS = 120
         private const val MAX_PENDING_OFFERS = 10_000
