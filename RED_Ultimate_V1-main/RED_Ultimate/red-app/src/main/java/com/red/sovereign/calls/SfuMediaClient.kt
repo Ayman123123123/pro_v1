@@ -108,7 +108,11 @@ class SfuMediaClient(
         val ticket = loadTicket(roomId, ticketPath) ?: return@withContext false
         canProduce = ticket.canProduce
         if (!openSocket(ticket.token)) return@withContext false
-        val joined = request(JSONObject().put("type", "join").put("roomId", roomId)) ?: return@withContext false
+        // التذكرة مربوطة بالمعرف القانوني (canonical) الذي يعيده الخادم في حقل roomId —
+        // الانضمام يجب أن يستخدمه حرفياً وإلا رفض SFU بـ "Ticket not bound to this room".
+        // مثال حقيقي: بث stream_X بينما القانوني LIVE_stream_X.
+        val joinRoomId = ticket.roomId.takeIf { it.isNotBlank() } ?: roomId
+        val joined = request(JSONObject().put("type", "join").put("roomId", joinRoomId)) ?: return@withContext false
         if (joined.optString("status") != "joined") return@withContext false
         routerCaps = joined.optJSONObject("rtpCapabilities")
         sendTransport = createTransport("send") ?: return@withContext false
