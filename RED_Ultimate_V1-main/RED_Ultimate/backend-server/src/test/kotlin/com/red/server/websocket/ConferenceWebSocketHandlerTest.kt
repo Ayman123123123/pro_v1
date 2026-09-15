@@ -72,13 +72,14 @@ class ConferenceWebSocketHandlerTest {
         assertTrue(aliceMessages.none { it["type"].asString() == "OFFER" }) { "Alice should NOT receive her own OFFER" }
     }
 
-    @Test fun `invalid roomId rejected`() {
+    // (2026-09-15) العقد الجديد من main: رفض لطيل بإطار ERROR بلا إغلاق الجلسة —
+    // كان require يرمي فيُغلق سوكت المؤتمر بالكامل عند أول إطار شاذ.
+    @Test fun `invalid roomId rejected gracefully without killing the session`() {
         val session = Probe("s1", "73066")
-        try {
-            handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
-            assertTrue(false) { "should have thrown" }
-        } catch (e: IllegalArgumentException) {
-            assertNotNull(e.message)
+        handler.handleTextMessage(session.session, TextMessage("""{"type":"JOIN","roomId":"x"}"""))
+        val messages = session.sent.map { objectMapper.readTree(it) }
+        assertTrue(messages.any { it["type"].asString() == "ERROR" && it["payload"]["code"].asString() == "INVALID_ROOM_ID" }) {
+            "Expected graceful INVALID_ROOM_ID error frame: $messages"
         }
     }
 
