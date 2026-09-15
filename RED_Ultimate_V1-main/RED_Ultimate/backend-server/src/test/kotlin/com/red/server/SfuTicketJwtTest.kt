@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 class SfuTicketJwtTest {
-    private val jwt = JwtService("this-is-a-test-only-secret-that-is-longer-than-thirty-two-characters", 3_600_000, "red-sovereign", "red-app")
+    // (2026-09-15) الوسيط الخامس configuredSfuSecret أُضيف في main (مفتاح SFU مخصص) —
+    // تمرير "" هنا يختبر مسار السقوط المتعمد إلى المفتاح الرئيسي (sfuKey fallback).
+    private val jwt = JwtService("this-is-a-test-only-secret-that-is-longer-than-thirty-two-characters", 3_600_000, "red-sovereign", "red-app", "")
 
     @Test
     fun `SFU ticket is device and room scoped rather than an interchangeable API token`() {
