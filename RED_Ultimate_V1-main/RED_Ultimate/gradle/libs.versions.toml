@@ -191,8 +191,6 @@ unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.
 # 1st Party
 libsignal-client = { module = "org.signal:libsignal-client", version.ref = "libsignal-client" }
 libsignal-android = { module = "org.signal:libsignal-android", version.ref = "libsignal-client" }
-protobuf-gradle-plugin = { module = "com.google.protobuf:protobuf-gradle-plugin", version.ref = "protobuf-gradle-plugin" }
-
 # Third Party - Jackson 2.x pinned for legacy fasterxml usages (Boot 4 manages Jackson 3 separately).
 # 2.12.0 (2021) has known CVEs - 2.19.2 (same com.fasterxml APIs, CVE-fixed).
 signal-android-database-sqlcipher = "net.zetetic:sqlcipher-android:4.17.0"
