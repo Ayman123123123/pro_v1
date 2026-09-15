@@ -146,8 +146,12 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
             override fun contentType() = mime.toMediaType()
             override fun contentLength() = size
             override fun writeTo(sink: BufferedSink) {
-                resolver.openInputStream(uri)?.use { input -> input.source().use { sink.writeAll(it) } }
-                    ?: error("Unable to open selected media")
+                val input = resolver.openInputStream(uri)
+                if (input == null) {
+                    android.util.Log.e("MediaApi", "upload openInputStream null")
+                    throw java.io.IOException("Unable to open selected media")
+                }
+                input.use { ins -> ins.source().use { sink.writeAll(it) } }
             }
         }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)

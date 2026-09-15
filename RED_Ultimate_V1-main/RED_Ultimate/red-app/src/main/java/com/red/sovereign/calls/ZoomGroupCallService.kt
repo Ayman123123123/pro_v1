@@ -112,6 +112,34 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
     private var ringTimeout: Job? = null
     private var incomingTimeout: Job? = null
 
+    /** G13 فصل الغرف: إنشاء الزوم — فارغ يولّد FRND_، legacy يُطبَّع FRND_، بادئة مخالفة تُطبَّع بلا كسر. */
+    private fun resolveMeetingIdForCreate(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return RoomSeparationPolicy.normalizeMeetingId(null)
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.FRIENDS || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeMeetingId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeMeetingId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_FRIENDS + core
+        return RoomSeparationPolicy.normalizeMeetingId(core)
+    }
+
+    /** G13 فصل الغرف: انضمام الزوم — فارغ يبقى فارغاً، legacy يُطبَّع، بادئة مخالفة تُطبَّع بلا كسر. */
+    private fun resolveMeetingIdForJoin(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return ""
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.FRIENDS || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeMeetingId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeMeetingId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_FRIENDS + core
+        return RoomSeparationPolicy.normalizeMeetingId(core)
+    }
+
     override fun onCreate() {
         super.onCreate()
         audio = getSystemService(AudioManager::class.java)
@@ -145,7 +173,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         when (intent?.action) {
             ACTION_START_ZOOM -> {
                 stopping = false; cleanedUp = false
-                meetingId = intent.getStringExtra(EXTRA_MEETING_ID) ?: generateMeetingId()
+                meetingId = resolveMeetingIdForCreate(intent.getStringExtra(EXTRA_MEETING_ID))
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID).orEmpty()
                 hostDisplayName = intent.getStringExtra(EXTRA_HOST_NAME).orEmpty()
                 isHost = true
@@ -179,7 +207,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             }
             ACTION_INCOMING_ZOOM -> {
                 stopping = false; cleanedUp = false
-                meetingId = intent.getStringExtra(EXTRA_MEETING_ID).orEmpty()
+                meetingId = resolveMeetingIdForJoin(intent.getStringExtra(EXTRA_MEETING_ID))
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID).orEmpty()
                 isHost = false
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, false)
@@ -206,7 +234,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             }
             ACTION_ACCEPT_ZOOM -> {
                 ringTimeout?.cancel(); incomingTimeout?.cancel()
-                val mId = intent.getStringExtra(EXTRA_MEETING_ID) ?: meetingId
+                val mId = resolveMeetingIdForJoin(intent.getStringExtra(EXTRA_MEETING_ID) ?: meetingId.ifBlank { null })
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID) ?: myUserId
                 intent.getStringExtra(EXTRA_HOST_ID)?.takeIf{it.isNotBlank()}?.let{ hostId = it }
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, isVideo)
@@ -222,7 +250,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             }
             ACTION_DECLINE_ZOOM -> {
                 ringTimeout?.cancel(); incomingTimeout?.cancel(); stopRingtone()
-                val mId = intent.getStringExtra(EXTRA_MEETING_ID) ?: meetingId
+                val mId = resolveMeetingIdForJoin(intent.getStringExtra(EXTRA_MEETING_ID) ?: meetingId.ifBlank { null })
                 scope.launch { runCatching{ signaling.connect() }; signaling.send(CallSignal(callId=mId, type="ZOOM_DECLINE", groupCallId=mId)) }
                 stopZoom()
             }
@@ -721,24 +749,28 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         private const val TAG = "ZoomService"
 
         fun generateMeetingId(): String {
-            val chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-            return (1..8).map{ chars.random() }.joinToString("").chunked(4).joinToString("-")
+            return RoomSeparationPolicy.normalizeMeetingId(null)
         }
 
-        fun startZoom(context: Context, myUserId: String, inviteeIds: List<String>, inviteeNames: List<String>, isVideo: Boolean, title: String="اجتماع Zoom", meetingId: String=generateMeetingId(), hostName: String=""){
+        fun startZoom(context: Context, myUserId: String, inviteeIds: List<String>, inviteeNames: List<String>, isVideo: Boolean, title: String="اجتماع Zoom", meetingId: String="", hostName: String=""){
+            val safeId = if (meetingId.isBlank()) RoomSeparationPolicy.normalizeMeetingId(null) else RoomSeparationPolicy.normalizeMeetingId(meetingId)
             ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).apply{
-                action=ACTION_START_ZOOM; putExtra(EXTRA_MEETING_ID,meetingId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_HOST_NAME,hostName); putExtra(EXTRA_IS_VIDEO,isVideo); putExtra(EXTRA_TITLE,title); putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(inviteeIds)); putStringArrayListExtra(EXTRA_INVITEE_NAMES, ArrayList(inviteeNames))
+                action=ACTION_START_ZOOM; putExtra(EXTRA_MEETING_ID,safeId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_HOST_NAME,hostName); putExtra(EXTRA_IS_VIDEO,isVideo); putExtra(EXTRA_TITLE,title); putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(inviteeIds)); putStringArrayListExtra(EXTRA_INVITEE_NAMES, ArrayList(inviteeNames))
             })
         }
         fun notifyIncoming(context: Context, meetingId: String, myUserId: String, hostId: String, hostName: String, isVideo: Boolean, title: String="", otherIds: List<String> = emptyList()){
+            val safeId = if (meetingId.isBlank()) "" else RoomSeparationPolicy.normalizeMeetingId(meetingId)
             ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).apply{
-                action=ACTION_INCOMING_ZOOM; putExtra(EXTRA_MEETING_ID,meetingId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_HOST_ID,hostId); putExtra(EXTRA_HOST_NAME,hostName); putExtra(EXTRA_IS_VIDEO,isVideo); putExtra(EXTRA_TITLE,title); putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(otherIds))
+                action=ACTION_INCOMING_ZOOM; putExtra(EXTRA_MEETING_ID,safeId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_HOST_ID,hostId); putExtra(EXTRA_HOST_NAME,hostName); putExtra(EXTRA_IS_VIDEO,isVideo); putExtra(EXTRA_TITLE,title); putStringArrayListExtra(EXTRA_INVITEE_IDS, ArrayList(otherIds))
             })
         }
         fun accept(context: Context, meetingId: String, myUserId: String, isVideo: Boolean, hostId: String=""){
-            ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).apply{ action=ACTION_ACCEPT_ZOOM; putExtra(EXTRA_MEETING_ID,meetingId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_IS_VIDEO,isVideo); if(hostId.isNotBlank()) putExtra(EXTRA_HOST_ID,hostId)})
+            val safeId = if (meetingId.isBlank()) "" else RoomSeparationPolicy.normalizeMeetingId(meetingId)
+            ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).apply{ action=ACTION_ACCEPT_ZOOM; putExtra(EXTRA_MEETING_ID,safeId); putExtra(EXTRA_MY_USER_ID,myUserId); putExtra(EXTRA_IS_VIDEO,isVideo); if(hostId.isNotBlank()) putExtra(EXTRA_HOST_ID,hostId)})
         }
-        fun decline(context: Context, meetingId: String){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_DECLINE_ZOOM).putExtra(EXTRA_MEETING_ID,meetingId)) }
+        fun decline(context: Context, meetingId: String){
+            val safeId = if (meetingId.isBlank()) "" else RoomSeparationPolicy.normalizeMeetingId(meetingId)
+            ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_DECLINE_ZOOM).putExtra(EXTRA_MEETING_ID,safeId)) }
         fun end(context: Context){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_END_ZOOM)) }
         fun action(context: Context, act: String){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(act)) }
         fun startScreenShare(context: Context, data: Intent){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_START_SCREEN_SHARE).putExtra("screen_data",data)) }

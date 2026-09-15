@@ -45,7 +45,11 @@ class ScheduledPostWorker(
             notifyFailure(applicationContext, "؟", "بيانات الجدولة ناقصة — أعد إنشاء المنشور")
             return@withContext Result.failure()
         }
-        val text = inputData.getString("text")?.trim().orEmpty()
+        val rawText = inputData.getString("text")?.trim().orEmpty()
+        val hasMedia = (inputData.getStringArray("media_uris")?.isNotEmpty() == true)
+        // المخزن يسمح بنص فارغ مع وسائط — لا تسقطه بصمت، بل انشر بعنصر نائب
+        // (نفس سلوك createWithMedia). فارغ بلا وسائط = لا شيء للنشر.
+        val text = rawText.ifBlank { if (hasMedia) "📷" else "" }
         if (text.isBlank()) {
             if (!ScheduledPostsStore.markDelivered(applicationContext, id)) {
                 Log.w(TAG, "markDelivered failed for blank $id — retrying")

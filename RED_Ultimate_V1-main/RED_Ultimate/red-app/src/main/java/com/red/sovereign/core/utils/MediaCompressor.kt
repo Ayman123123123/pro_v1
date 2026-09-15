@@ -60,12 +60,18 @@ object MediaCompressor {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(inputPath, bounds)
         val width = bounds.outWidth; val height = bounds.outHeight
-        if (width <= 0 || height <= 0) error("IMAGE_DECODE_FAILED")
+        if (width <= 0 || height <= 0) {
+            android.util.Log.e("MediaCompressor", "decode bounds invalid w=$width h=$height path=$inputPath")
+            throw java.io.IOException("IMAGE_DECODE_FAILED")
+        }
         var sample = 1
         while (maxOf(width, height) / (sample * 2) >= maxDimension) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val decodeFile = BitmapFactory.decodeFile(inputPath, options)
-        val bmp = decodeFile ?: error("IMAGE_DECODE_FAILED")
+        val bmp = decodeFile ?: run {
+            android.util.Log.e("MediaCompressor", "decode failed path=$inputPath")
+            throw java.io.IOException("IMAGE_DECODE_FAILED")
+        }
         var bitmap = bmp
         // EXIF orientation — without it camera photos appear flipped/rotated after compression
         bitmap = runCatching {

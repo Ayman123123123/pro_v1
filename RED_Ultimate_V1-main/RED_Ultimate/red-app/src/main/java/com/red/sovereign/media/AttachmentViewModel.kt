@@ -40,9 +40,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 val messageId = UuidV7.next()
                 val dir = File(app.cacheDir, "media-outbox").apply { mkdirs() }
                 val out = File(dir, "$messageId.$ext")
-                app.contentResolver.openInputStream(uri)?.use { ins ->
-                    out.outputStream().use { outs -> ins.copyTo(outs, 64 * 1024) }
-                } ?: error("UNABLE_TO_READ_SOURCE")
+                val ins = app.contentResolver.openInputStream(uri)
+                if (ins == null) {
+                    android.util.Log.e("AttachmentVM", "stage openInputStream null")
+                    throw java.io.IOException("UNABLE_TO_READ_SOURCE")
+                }
+                ins.use { input ->
+                    out.outputStream().use { outs -> input.copyTo(outs, 64 * 1024) }
+                }
                 require(out.isFile && out.length() in 1..100L * 1024 * 1024) { "FILE_TOO_LARGE" }
                 Triple(messageId, out.absolutePath, mime)
             }
@@ -146,8 +151,12 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 val source = File(downloaded.path)
                 require(source.isFile) { "Decrypted file is unavailable" }
                 val resolver = getApplication<Application>().contentResolver
-                resolver.openOutputStream(destination, "w")?.use { output -> source.inputStream().use { it.copyTo(output, 64 * 1024) } }
-                    ?: error("Unable to open export destination")
+                val exportOut = resolver.openOutputStream(destination, "w")
+                if (exportOut == null) {
+                    android.util.Log.e("AttachmentVM", "export openOutputStream null dst=$destination")
+                    throw java.io.IOException("Unable to open export destination")
+                }
+                exportOut.use { output -> source.inputStream().use { it.copyTo(output, 64 * 1024) } }
                 AttachmentState.Exported(downloaded.path, downloaded.name)
             }.getOrElse { AttachmentState.Error(it.message ?: "ATTACHMENT_EXPORT_FAILED") }
         }

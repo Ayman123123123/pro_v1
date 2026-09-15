@@ -417,6 +417,7 @@ class RedConnectionService : Service() {
                 drainGroupSends()
                 drainGroupPayloadSends()
                 scope.launch { catchUpMissedMessages() }
+                runCatching { com.red.sovereign.calls.PendingOfferPoller.pollNow(applicationContext) }; runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(applicationContext) }
             }
             ConnectionState.CONNECTING -> notifyConnection(getString(com.red.sovereign.R.string.status_connecting_local))
             ConnectionState.DISCONNECTED -> { connected = false; scheduleReconnect() }

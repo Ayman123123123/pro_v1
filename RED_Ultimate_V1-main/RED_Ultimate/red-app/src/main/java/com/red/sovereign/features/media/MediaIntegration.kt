@@ -27,10 +27,12 @@ private fun saveToDownloads(context: android.content.Context, source: File, hint
             return@launch
         }
         val ok = runCatching {
-            context.contentResolver.openOutputStream(uri)?.use { out ->
-                source.inputStream().use { it.copyTo(out, 64 * 1024) }
-            } ?: error("OPEN_FAILED")
-        }.isSuccess
+            val out = context.contentResolver.openOutputStream(uri)
+                ?: throw java.io.IOException("OPEN_FAILED")
+            out.use { output ->
+                source.inputStream().use { it.copyTo(output, 64 * 1024) }
+            }
+        }.onFailure { android.util.Log.e("MediaIntegration", "save failed uri=$uri src=${source.name}", it) }.isSuccess
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(context, if (ok) "تم الحفظ في التنزيلات" else "فشل الحفظ", Toast.LENGTH_SHORT).show()
         }

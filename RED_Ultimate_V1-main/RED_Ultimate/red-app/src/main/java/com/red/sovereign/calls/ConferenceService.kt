@@ -97,6 +97,20 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     private var ringtone: Ringtone? = null
     private var vibrator: Vibrator? = null
 
+    /** G13 فصل الغرف: المؤتمر — فارغ يبقى فارغاً، legacy يُقبل، بادئة مخالفة تُطبَّع CONF_ بلا كسر. */
+    private fun resolveRoomIdForJoin(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return ""
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.CONF || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeRoomId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeRoomId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_CONF + core
+        return RoomSeparationPolicy.normalizeRoomId(core)
+    }
+
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
@@ -142,7 +156,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_INVITE -> {
-                roomId = intent.getStringExtra(EXTRA_ROOM_ID).orEmpty()
+                roomId = resolveRoomIdForJoin(intent.getStringExtra(EXTRA_ROOM_ID))
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 val inviter = intent.getStringExtra(EXTRA_INVITER).orEmpty()
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
@@ -154,7 +168,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 showIncomingInvitationNotification(roomId, userId, inviter, hasVideo)
             }
             ACTION_JOIN -> {
-                roomId = intent.getStringExtra(EXTRA_ROOM_ID).orEmpty()
+                roomId = resolveRoomIdForJoin(intent.getStringExtra(EXTRA_ROOM_ID))
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 ConferenceRuntime.myUserId = userId
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, false)
@@ -179,7 +193,7 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
             }
             ACTION_LEAVE -> leave()
             ACTION_ACCEPT_INVITE -> {
-                roomId = intent.getStringExtra(EXTRA_ROOM_ID).orEmpty()
+                roomId = resolveRoomIdForJoin(intent.getStringExtra(EXTRA_ROOM_ID))
                 val hasVideo = intent.getBooleanExtra(EXTRA_VIDEO, true)
                 if (intent.hasExtra(EXTRA_USER_ID)) {
                     userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
@@ -1087,9 +1101,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
 
         fun invite(context: Context, roomId: String, userId: String, inviterName: String, video: Boolean) {
+            val safeId = if (roomId.isBlank()) "" else RoomSeparationPolicy.normalizeRoomId(roomId)
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_INVITE
-                putExtra(EXTRA_ROOM_ID, roomId)
+                putExtra(EXTRA_ROOM_ID, safeId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_INVITER, inviterName)
                 putExtra(EXTRA_VIDEO, video)
@@ -1098,9 +1113,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
 
         fun join(context: Context, roomId: String, userId: String, video: Boolean, inviteRedIds: List<String> = emptyList(), asHost: Boolean = inviteRedIds.isNotEmpty(), title: String = "", isPrivate: Boolean = true, description: String = "", password: String? = null, joinPassword: String? = null) {
+            val safeId = if (roomId.isBlank()) "" else RoomSeparationPolicy.normalizeRoomId(roomId)
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_JOIN
-                putExtra(EXTRA_ROOM_ID, roomId)
+                putExtra(EXTRA_ROOM_ID, safeId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_VIDEO, video)
                 putExtra(EXTRA_HOST, asHost)
@@ -1119,9 +1135,10 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         }
 
         fun accept(context: Context, roomId: String, myUserId: String = "", video: Boolean = true) {
+            val safeId = if (roomId.isBlank()) "" else RoomSeparationPolicy.normalizeRoomId(roomId)
             val intent = Intent(context, ConferenceService::class.java).apply {
                 action = ACTION_ACCEPT_INVITE
-                putExtra(EXTRA_ROOM_ID, roomId)
+                putExtra(EXTRA_ROOM_ID, safeId)
                 putExtra(EXTRA_VIDEO, video)
                 if (myUserId.isNotEmpty()) putExtra(EXTRA_USER_ID, myUserId)
             }

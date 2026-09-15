@@ -26,7 +26,9 @@ class CallHistoryController(
     private val users: UserAccountRepository,
     private val notificationService: NotificationService,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val callWebSocketHandler: com.red.server.websocket.CallWebSocketHandler? = null
+    private val callWebSocketHandler: com.red.server.websocket.CallWebSocketHandler? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val aliases: RoomAliasService? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @GetMapping("/history")
@@ -117,7 +119,8 @@ class CallHistoryController(
             "callerId" to offer.callerId,
             "mode" to offer.mode,
             "offerSdp" to offer.offerSdp,
-            "ttlSeconds" to offer.ttlSeconds
+            "ttlSeconds" to offer.ttlSeconds,
+            "createdAtMs" to offer.createdAt.toEpochMilli()
         ))
     }
 
@@ -155,22 +158,24 @@ class CallHistoryController(
         val callSignalingHandler = callWebSocketHandler
             ?: throw IllegalStateException("signaling unavailable")
         require(request.groupCallId.isNotBlank()) { "groupCallId is required" }
+        // مسار مجموعة: حل الاسم المستعار إلى القانوني، والخام القديم يبقى مقبولاً.
+        val effectiveGroupId = aliases?.resolve(request.groupCallId) ?: request.groupCallId.trim()
         // فقط مضيف الغرفة يدعو إضافيين — كان أي مصادق يستطيع الحقن في أي مكالمة.
         // (غرفة مجهولة بعد إعادة التشغيل تُقبل من المدعي مضيفاً — تُعاد إنشاؤها عبر الدمج).
-        val knownHost = callSignalingHandler.groupCallHost(request.groupCallId)
+        val knownHost = callSignalingHandler.groupCallHost(effectiveGroupId)
         if (knownHost != null) {
             require(knownHost.equals(user.redId, ignoreCase = true)) { "ONLY_HOST_CAN_INVITE" }
         }
         // وضع المكالمة الحقيقي (كان VOICE ثابتاً فيُدعى أعضاء الفيديو بدعوة صوتية).
         val mode = request.mode.takeIf { it.isNotBlank() }?.uppercase() ?: "VOICE"
         val added = callSignalingHandler.addGroupCallMembers(
-            request.groupCallId, user.redId, request.inviteeIds, mode, mapOf("hostName" to request.hostName)
+            effectiveGroupId, user.redId, request.inviteeIds, mode, mapOf("hostName" to request.hostName)
         )
         return ResponseEntity.ok(mapOf(
             "status" to "invited",
             "invitedCount" to added.size,
             "skippedCount" to (request.inviteeIds.size - added.size),
-            "roomSize" to callSignalingHandler.groupCallSize(request.groupCallId),
+            "roomSize" to callSignalingHandler.groupCallSize(effectiveGroupId),
             "maxMembers" to com.red.server.websocket.CallWebSocketHandler.MAX_GROUP_CALL_MEMBERS
         ))
     }

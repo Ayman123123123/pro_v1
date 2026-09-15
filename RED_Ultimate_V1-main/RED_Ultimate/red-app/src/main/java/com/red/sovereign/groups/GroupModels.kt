@@ -48,6 +48,7 @@ fun inviteQrPayload(token: String): String = "RED-GROUP:${inviteShareLink(token.
 /** LEGENDARY: قبول QR أو رابط أو رمز خام في مدخل واحد */
 fun parseInviteTokenQrAware(raw: String): String {
     val t = raw.trim()
-    if (t.startsWith("RED-GROUP:", ignoreCase = true)) return parseInviteToken(t.removePrefix("RED-GROUP:").removePrefix("red-group:"))
+    // تجريد البادئة بلا حساسية لحالة الأحرف (Red-Group:/RED-GROUP:/red-group: كلها مقبولة).
+    if (t.startsWith("RED-GROUP:", ignoreCase = true)) return parseInviteToken(t.substring("RED-GROUP:".length))
     return parseInviteToken(t)
 }

@@ -219,7 +219,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         // تحقق مبكر يميّز الموعد الخاطئ عن فشل الكتابة على القرص (كلاهما null من المخزن).
         if (scheduledAtMs <= System.currentTimeMillis() + 60_000L) {
-            state = FeedState.Error("اختر موعدًا بعد ساعة من الآن على الأقل")
+            state = FeedState.Error("اختر موعدًا بعد دقيقة من الآن على الأقل")
             return
         }
         val post = scheduled.schedule(text, visibility, pollOptions, pollDurationHours, scheduledAtMs)

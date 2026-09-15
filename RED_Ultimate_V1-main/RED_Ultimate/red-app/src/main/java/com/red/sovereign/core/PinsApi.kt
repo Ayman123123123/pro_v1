@@ -14,18 +14,61 @@ import kotlinx.serialization.json.Json
  * P0-D:
  * - مدة التثبيت الافتراضية 7 أيام ([DEFAULT_PIN_EXPIRES_SECONDS]) — تُمرر دائماً
  *   للخادم حتى لو نسي المتصل تمرير expiresInSeconds (قيمة null تعني 7 أيام).
- * - TODO(push): علّق polling كل 30s في ChatsScreen/RedDashboard
- *   (LaunchedEffect(groupConversationId) { while(...) { listForGroup(); delay(30_000) } })
- *   واستبدله بـ push عبر GROUP_SYNC (GroupSyncBus.events):
- *     • الخادم يبث GROUP_SYNC عند pin/unpin في مجموعة → needRefresh(groupId)
- *     • الواجهة تجمع lifecycle-aware فقط أثناء العرض:
- *       repeatOnLifecycle(RESUMED) { GroupSyncBus.events.collect { if (it == groupId) refresh() } }
- *       + جلبة أولية واحدة عند الفتح، بلا حلقة while/delay.
- *   إن بقي polling مؤقتاً: قلّل المدة فقط أثناء فتح شاشة المجموعة وأوقفه في onDispose
- *   (lifecycle-aware) — لا polling في الخلفية.
+ * - التحديث الدوري مشروط عبر [PinsPollPolicy] + [shouldFetch]/[recordResult]:
+ *   تخطَّ الجلبة عندما تكون الواجهة غير معروضة (isForeground=false) أو عندما
+ *   يكون النقل الحي يبث GROUP_SYNC (transportAlive=true — الـ push يكفي)،
+ *   واعتمد [GroupSyncBus.events] + جلبة أولية واحدة عند الفتح بلا حلقة خلفية.
+ *   عند الفشل المتكرر يُطبق باك-أوف أُسّي عبر [PinsPollPolicy.nextDelay].
  */
+object PinsPollPolicy {
+    /** الفاصل الأساسي بين الجلبات الدورية (30s). */
+    const val BASE_INTERVAL_MS: Long = 30_000L
+    /** سقف الباك-أوف عند الأخطاء المتكررة. */
+    const val MAX_INTERVAL_MS: Long = 300_000L
+
+    /** هل يُسمح بجلبة دورية الآن؟ خلفية أو نقل حي نشط = تخطَّ. */
+    fun shouldPoll(isForeground: Boolean, transportAlive: Boolean): Boolean {
+        if (!isForeground) return false
+        if (transportAlive) return false
+        return true
+    }
+
+    /** باك-أوف أُسّي: 30s, 60s, 120s ... حتى السقف. */
+    fun nextDelay(consecutiveErrors: Int): Long {
+        if (consecutiveErrors <= 0) return BASE_INTERVAL_MS
+        val shift = consecutiveErrors.coerceAtMost(4)
+        return (BASE_INTERVAL_MS shl shift).coerceAtMost(MAX_INTERVAL_MS)
+    }
+}
+
 class PinsApi(private val client: AuthorizedApiClient) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    private val lastFetchAt = mutableMapOf<String, Long>()
+    private var consecutiveErrors: Int = 0
+
+    /** فحص مشروط قبل listForGroup: يحترم الواجهة/النقل + throttle لكل مجموعة. */
+    fun shouldFetch(
+        groupId: String,
+        nowMs: Long = System.currentTimeMillis(),
+        minIntervalMs: Long = PinsPollPolicy.BASE_INTERVAL_MS,
+        isForeground: Boolean = true,
+        transportAlive: Boolean = false
+    ): Boolean {
+        if (!PinsPollPolicy.shouldPoll(isForeground, transportAlive)) return false
+        val last = lastFetchAt[groupId] ?: return true
+        return (nowMs - last) >= minIntervalMs
+    }
+
+    /** يُستدعى بعد كل جلبة لتحديث throttle وحساب التأخير التالي (باك-أوف عند الفشل). */
+    fun recordResult(groupId: String, success: Boolean, nowMs: Long = System.currentTimeMillis()): Long {
+        if (success) {
+            consecutiveErrors = 0
+            lastFetchAt[groupId] = nowMs
+            return PinsPollPolicy.BASE_INTERVAL_MS
+        }
+        consecutiveErrors++
+        return PinsPollPolicy.nextDelay(consecutiveErrors)
+    }
 
     companion object {
         /** مدة التثبيت الافتراضية المُرسلة للخادم عند التثبيت (7 أيام بالثواني). */

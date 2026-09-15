@@ -96,6 +96,9 @@ class CallSignalingClient(
                     }
                     Log.d(TAG, "onOpen: signaling connected")
                     listener.onConnected()
+                    // سحب صندوق البريد فور الاتصال + جدولة احتياطية (KEEP يمنع التكرار).
+                    PendingOfferPoller.pollNow(context)
+                    PendingOfferPoller.schedule(context)
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {

@@ -1,6 +1,8 @@
 package com.red.server.zoom
 
 import com.red.server.auth.repository.UserAccountRepository
+import com.red.server.calls.RoomAliasService
+import com.red.server.calls.RoomSeparationPolicy
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
@@ -10,39 +12,54 @@ import java.util.UUID
 @RequestMapping("/api/zoom")
 class ZoomController(
     private val zoomRooms: ZoomRoomService,
-    private val users: UserAccountRepository
+    private val users: UserAccountRepository,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val aliases: RoomAliasService? = null
 ) {
     @PostMapping("/create")
     fun create(@RequestBody req: CreateZoomRequest, authentication: Authentication): ResponseEntity<Map<String, Any>> {
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
-        val meetingId = req.meetingId.trim().ifBlank { ZoomGroupCallServiceHelper.generateId() }
+        // مسار إنشاء: تقنين إلى البادئة القانونية، والقديم بلا بادئة يُربط ولا يُكسر.
+        val meetingId = if (aliases != null) {
+            aliases.canonicalize(RoomSeparationPolicy.PREFIX_FRIENDS, req.meetingId) {
+                ZoomGroupCallServiceHelper.generateId()
+            }
+        } else {
+            req.meetingId.trim().ifBlank { ZoomGroupCallServiceHelper.generateId() }
+        }
         val room = zoomRooms.createRoom(meetingId, user.id.toString(), user.redId, req.title, req.isVideo)
         return ResponseEntity.ok(mapOf("meetingId" to room.meetingId, "title" to room.title, "isVideo" to room.isVideo))
     }
 
     @GetMapping("/{meetingId}")
     fun getRoom(@PathVariable meetingId: String): ResponseEntity<ZoomRoomRecord> {
-        val room = zoomRooms.getRoom(meetingId) ?: return ResponseEntity.notFound().build()
+        val effective = aliases?.resolve(meetingId) ?: meetingId.trim()
+        val room = zoomRooms.getRoom(effective) ?: zoomRooms.getRoom(meetingId.trim()) ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(room)
     }
 
     @PostMapping("/{meetingId}/join")
     fun join(@PathVariable meetingId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        val room = zoomRooms.getRoom(meetingId) ?: return ResponseEntity.notFound().build()
-        zoomRooms.addParticipant(meetingId, authentication.name)
-        return ResponseEntity.ok(mapOf("meetingId" to meetingId, "title" to room.title))
+        val effective = aliases?.resolve(meetingId) ?: meetingId.trim()
+        val room = zoomRooms.getRoom(effective) ?: zoomRooms.getRoom(meetingId.trim()) ?: return ResponseEntity.notFound().build()
+        zoomRooms.addParticipant(room.meetingId, authentication.name)
+        return ResponseEntity.ok(mapOf("meetingId" to room.meetingId, "title" to room.title))
     }
 
     @PostMapping("/{meetingId}/leave")
     fun leave(@PathVariable meetingId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        zoomRooms.removeParticipant(meetingId, authentication.name)
-        return ResponseEntity.ok(mapOf("meetingId" to meetingId))
+        val effective = aliases?.resolve(meetingId) ?: meetingId.trim()
+        val stored = zoomRooms.getRoom(effective)?.meetingId ?: zoomRooms.getRoom(meetingId.trim())?.meetingId ?: effective
+        zoomRooms.removeParticipant(stored, authentication.name)
+        return ResponseEntity.ok(mapOf("meetingId" to stored))
     }
 
     @PostMapping("/{meetingId}/close")
     fun close(@PathVariable meetingId: String, authentication: Authentication): ResponseEntity<Map<String, Any>> {
-        val closed = zoomRooms.closeRoom(meetingId, authentication.name)
+        val effective = aliases?.resolve(meetingId) ?: meetingId.trim()
+        val stored = zoomRooms.getRoom(effective)?.meetingId ?: zoomRooms.getRoom(meetingId.trim())?.meetingId ?: effective
+        val closed = zoomRooms.closeRoom(stored, authentication.name)
         return ResponseEntity.ok(mapOf("closed" to closed))
     }
 }

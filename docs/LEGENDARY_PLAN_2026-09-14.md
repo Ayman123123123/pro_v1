@@ -1,0 +1,2 @@
+القاعدة: محلي فقط — الجديد يستبدل القديم (نقل إلى docs/archive/ci-legacy-2026-09-14/ لا حذف نهائي)، وممنوع لمس هجرات V1..V51 وجداول PSTN وAndroidManifest وdocker وcommit/push.
+معايير القبول: flyway (validate-on-migrate:true + outOfOrder:true + baseline-on-migrate:false) + mailbox TTL 120s بمرجع واحد CallRingPolicy + CI موحد (setup-android/API 37 وartifact واحد red-app-debug بلا gh release upload) + compose config --quiet أخضر.

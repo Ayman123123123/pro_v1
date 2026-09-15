@@ -87,6 +87,7 @@ class YounesApplication : Application() {
         // حتى لو لم يُستدعَ schedule() يدويًا (مثلاً بعد reboot)، فالمجدولة الدورية كل 15 دقيقة
         // تضمن عدم بقاء أي رسالة PENDING إلى الأبد
         try { com.red.sovereign.core.outbox.OutboxRetryWorker.schedulePeriodic(this) } catch (_: Exception) {}
+        runCatching { com.red.sovereign.calls.PendingOfferPoller.schedule(this) }
         // LEGENDARY: مسح الملفات الحديثة المعلقة (media_uploads PENDING) عند كل إقلاع
         runCatching { com.red.sovereign.core.workers.MediaUploadWorker.enqueue(this) }
 

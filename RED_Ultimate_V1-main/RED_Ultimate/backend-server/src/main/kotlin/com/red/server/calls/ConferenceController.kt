@@ -200,7 +200,9 @@ class ConferenceController(
     private val users: UserAccountRepository,
     private val notifications: NotificationService,
     private val history: CallHistoryService,
-    private val callSignaling: com.red.server.websocket.CallWebSocketHandler
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val aliases: RoomAliasService? = null
 ) {
 
     @PostMapping("/create")
@@ -211,8 +213,15 @@ class ConferenceController(
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         // roomId اختياري: إن كان فارغاً يولّد الخادم معرفاً (إصلاح فشل Explore الذي كان يرسل "")
-        val roomId = request.roomId.trim().ifBlank { "room_${UUID.randomUUID().toString().replace("-", "").take(12)}" }
-        require(roomId.matches(Regex("^[A-Za-z0-9_-]{4,128}$"))) { "Invalid roomId" }
+        // مسار إنشاء: تقنين إلى البادئة القانونية، والقديم بلا بادئة يُربط ولا يُكسر.
+        val roomId = if (aliases != null) {
+            aliases.canonicalize(RoomSeparationPolicy.PREFIX_CONF, request.roomId) {
+                UUID.randomUUID().toString().replace("-", "").take(12)
+            }
+        } else {
+            request.roomId.trim().ifBlank { "room_${UUID.randomUUID().toString().replace("-", "").take(12)}" }
+                .also { require(it.matches(Regex("^[A-Za-z0-9_-]{4,128}$"))) { "Invalid roomId" } }
+        }
         val record = roomService.createRoom(
             roomId = roomId,
             hostId = user.id.toString(),
@@ -281,41 +290,47 @@ class ConferenceController(
         @RequestBody request: JoinRoomRequest,
         authentication: Authentication
     ): ResponseEntity<JoinRoomResponse> {
-        val record = roomService.getRoom(roomId)
+        // مسار انضمام: حل المستعار إلى القانوني، مع سقوط للخام القديم.
+        val rawTrimmed = roomId.trim()
+        val effectiveRoomId = aliases?.resolve(roomId) ?: rawTrimmed
+        val record = roomService.getRoom(effectiveRoomId)
+            ?: roomService.getRoom(rawTrimmed)
+            ?: if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) roomService.getRoom(RoomSeparationPolicy.PREFIX_CONF + rawTrimmed) else null
             ?: throw NoSuchElementException("Conference room not found")
+        val storedId = record.roomId
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         // المدعو/المضيف يتجاوز كلمة السر (الدعوة اعتماد) — كلمة السر للعامة المحمية فقط.
         // (كان المدعو لغرفة خاصة بكلمة سر يُرفض 403 بلا طريق دخول).
-        val member = roomService.isInvited(roomId, authentication.name, user.redId)
-        val authorized = roomService.canJoin(roomId, authentication.name, user.redId) &&
-            (member || roomService.verifyPassword(roomId, request.password))
+        val member = roomService.isInvited(storedId, authentication.name, user.redId)
+        val authorized = roomService.canJoin(storedId, authentication.name, user.redId) &&
+            (member || roomService.verifyPassword(storedId, request.password))
         if (!authorized) {
             return ResponseEntity.status(403).body(JoinRoomResponse(
                 authorized = false,
-                roomId = roomId,
+                roomId = storedId,
                 errorMessage = "لا تملك صلاحية الانضمام إلى هذه المكالمة"
             ))
         }
         // الغرفة المقفلة: المضيف والمدعوون والحاضرون فقط — الغرباء يُرفضون برسالة واضحة.
         val hostBypass = record.hostId == authentication.name
-        val alreadyIn = roomService.getParticipantCount(roomId) > 0 &&
-            roomService.isParticipant(roomId, authentication.name)
-        if (roomService.isLocked(roomId) && !hostBypass && !member && !alreadyIn) {
+        val alreadyIn = roomService.getParticipantCount(storedId) > 0 &&
+            roomService.isParticipant(storedId, authentication.name)
+        if (roomService.isLocked(storedId) && !hostBypass && !member && !alreadyIn) {
             return ResponseEntity.status(423).body(JoinRoomResponse(
                 authorized = false,
-                roomId = roomId,
+                roomId = storedId,
                 errorMessage = "الغرفة مقفلة من المضيف — اطلب منه فتحها أو دعوتك"
             ))
         }
-        if (roomService.isRoomFull(roomId)) {
+        if (roomService.isRoomFull(storedId)) {
             return ResponseEntity.status(429).body(JoinRoomResponse(
                 authorized = false,
-                roomId = roomId,
+                roomId = storedId,
                 errorMessage = "الغرفة ممتلئة (حتى ${ConferenceRoomService.MAX_PARTICIPANTS} مشارك)"
             ))
         }
-        roomService.addParticipant(roomId, authentication.name)
+        roomService.addParticipant(storedId, authentication.name)
         return ResponseEntity.ok(JoinRoomResponse(
             authorized = true,
             roomId = record.roomId,
@@ -331,8 +346,12 @@ class ConferenceController(
         @PathVariable roomId: String,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        roomService.removeParticipant(roomId, authentication.name)
-        return ResponseEntity.ok(mapOf("roomId" to roomId, "participantCount" to roomService.getParticipantCount(roomId)))
+        val effective = aliases?.resolve(roomId) ?: roomId.trim()
+        val stored = roomService.getRoom(effective)?.roomId ?: roomService.getRoom(roomId.trim())?.roomId ?: effective
+        roomService.removeParticipant(stored, authentication.name)
+        // توافق: إزالة من المفتاح الآخر أيضاً عند اختلاف المستعار عن المخزن.
+        if (stored != roomId.trim()) roomService.removeParticipant(roomId.trim(), authentication.name)
+        return ResponseEntity.ok(mapOf("roomId" to stored, "participantCount" to roomService.getParticipantCount(stored)))
     }
 
     @PostMapping("/{roomId}/lock")
@@ -341,10 +360,11 @@ class ConferenceController(
         @RequestBody request: LockRoomRequest,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val record = roomService.getRoom(roomId) ?: throw NoSuchElementException("Room not found")
+        val effective = aliases?.resolve(roomId) ?: roomId.trim()
+        val record = roomService.getRoom(effective) ?: roomService.getRoom(roomId.trim()) ?: throw NoSuchElementException("Room not found")
         require(record.hostId == authentication.name) { "ONLY_HOST_CAN_LOCK" }
-        roomService.setLocked(roomId, request.locked)
-        return ResponseEntity.ok(mapOf("roomId" to roomId, "locked" to request.locked))
+        roomService.setLocked(record.roomId, request.locked)
+        return ResponseEntity.ok(mapOf("roomId" to record.roomId, "locked" to request.locked))
     }
 
     @PostMapping("/{roomId}/close")
@@ -352,9 +372,10 @@ class ConferenceController(
         @PathVariable roomId: String,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val record = roomService.getRoom(roomId) ?: throw NoSuchElementException("Room not found")
+        val effective = aliases?.resolve(roomId) ?: roomId.trim()
+        val record = roomService.getRoom(effective) ?: roomService.getRoom(roomId.trim()) ?: throw NoSuchElementException("Room not found")
         require(record.hostId == authentication.name) { "ONLY_HOST_CAN_CLOSE" }
-        return ResponseEntity.ok(mapOf("roomId" to roomId, "closed" to roomService.closeRoom(roomId)))
+        return ResponseEntity.ok(mapOf("roomId" to record.roomId, "closed" to roomService.closeRoom(record.roomId)))
     }
 
     @PostMapping("/{roomId}/invite")
@@ -363,19 +384,21 @@ class ConferenceController(
         @RequestBody request: InviteMembersRequest,
         authentication: Authentication
     ): ResponseEntity<Map<String, Any>> {
-        val record = roomService.getRoom(roomId)
+        val effective = aliases?.resolve(roomId) ?: roomId.trim()
+        val record = roomService.getRoom(effective) ?: roomService.getRoom(roomId.trim())
             ?: throw NoSuchElementException("Room not found")
+        val storedId = record.roomId
         val accountId = UUID.fromString(authentication.name)
         val inviter = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }
         require(record.hostId == authentication.name) { "ONLY_HOST_CAN_INVITE" }
-        roomService.addInvitees(roomId, request.memberIds)
+        roomService.addInvitees(storedId, request.memberIds)
         val mode = if (record.isSpace) "SPACE" else "CONFERENCE"
         request.memberIds.filter { it.isNotBlank() && it != inviter.redId }.forEach { memberId ->
-            notifications.sendVoipPushNotification(memberId, inviter.redId, roomId, mode)
+            notifications.sendVoipPushNotification(memberId, inviter.redId, storedId, mode)
             callSignaling.deliverInvite(
                 targetRedId = memberId,
                 type = "CONFERENCE_INVITE",
-                roomId = roomId,
+                roomId = storedId,
                 sourceRedId = inviter.redId,
                 mode = mode,
                 payload = mapOf(
@@ -385,7 +408,7 @@ class ConferenceController(
                 )
             )
         }
-        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.memberIds.size, "roomId" to roomId))
+        return ResponseEntity.ok(mapOf("status" to "invited", "invitedCount" to request.memberIds.size, "roomId" to storedId))
     }
 }
 

@@ -116,10 +116,12 @@ suspend fun finishSaveUri(context: Context, uri: Uri) = withContext(Dispatchers.
 fun saveFileToDestination(source: File, destination: Uri, context: Context, callback: (Boolean, String) -> Unit) {
     CoroutineScope(Dispatchers.IO).launch {
         val result = runCatching {
-            context.contentResolver.openOutputStream(destination)?.use { output ->
+            val stream = context.contentResolver.openOutputStream(destination)
+                ?: throw java.io.IOException("UNABLE_TO_OPEN_DESTINATION")
+            stream.use { output ->
                 source.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
-            } ?: error("UNABLE_TO_OPEN_DESTINATION")
-        }
+            }
+        }.onFailure { android.util.Log.e("SharedMedia", "save failed dst=$destination src=${source.name}", it) }
         withContext(Dispatchers.Main) {
             result.fold(
                 onSuccess = { callback(true, "تم الحفظ بنجاح") },

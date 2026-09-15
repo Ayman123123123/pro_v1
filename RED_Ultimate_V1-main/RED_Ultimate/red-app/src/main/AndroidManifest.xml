@@ -24,7 +24,6 @@
     <!-- Android 14/15 FGS للرفع والتشغيل في الخلفية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -40,6 +39,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- الرسائل المجدولة: منبه دقيق عبر AlarmManager (يُستخدم مع fallback إلى WorkManager) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".YounesApplication"
@@ -152,6 +153,11 @@
             android:exported="false" />
         <!-- P0: مستقبل أزرار إشعارات المكالمات (كان غير معلن — الأزرار ميتة والتطبيق مقتول) -->
         <receiver android:name=".calls.CallNotificationActionReceiver" android:exported="false" />
+        <!-- الرسائل المجدولة: مستقبل المنبه الدقيق (معرف في features.chat.ScheduledMessagesScreen.kt:129) -->
+        <receiver
+            android:name=".features.chat.ScheduledMessageAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
         <!-- Sovereign push: UnifiedPush receiver (self-hosted distributor, no Google push). -->
         <service
             android:name=".push.RedPushService"

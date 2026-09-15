@@ -28,11 +28,29 @@ data class ZoomRoomRecord(
 @Service
 class ZoomRoomService(
     private val redis: StringRedisTemplate,
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val aliases: com.red.server.calls.RoomAliasService? = null
 ) {
     private val log = LoggerFactory.getLogger(ZoomRoomService::class.java)
     private val rooms = ConcurrentHashMap<String, ZoomRoomRecord>()
     private val participants = ConcurrentHashMap<String, MutableSet<String>>()
+
+    private fun effectiveId(raw: String): String =
+        aliases?.resolve(raw) ?: com.red.server.calls.RoomSeparationPolicy.resolve(raw)
+
+    private fun storedKey(rawId: String): String? {
+        val effective = effectiveId(rawId)
+        if (rooms.containsKey(effective)) return effective
+        val raw = rawId.trim()
+        if (rooms.containsKey(raw)) return raw
+        if (com.red.server.calls.RoomSeparationPolicy.kindOf(raw) == com.red.server.calls.RoomSeparationPolicy.RoomKind.LEGACY &&
+            com.red.server.calls.RoomSeparationPolicy.isValidRoomId(raw)) {
+            val prefixed = com.red.server.calls.RoomSeparationPolicy.PREFIX_FRIENDS + raw
+            if (rooms.containsKey(prefixed)) return prefixed
+        }
+        return null
+    }
 
     @PostConstruct
     fun restoreFromRedis() {
@@ -66,34 +84,40 @@ class ZoomRoomService(
         }
     }
 
-    fun getRoom(meetingId: String): ZoomRoomRecord? = rooms[meetingId]
+    fun getRoom(meetingId: String): ZoomRoomRecord? {
+        val key = storedKey(meetingId) ?: return null
+        return rooms[key]
+    }
 
-    fun isActive(meetingId: String): Boolean = rooms.containsKey(meetingId)
+    fun isActive(meetingId: String): Boolean = storedKey(meetingId) != null
 
     fun addParticipant(meetingId: String, userId: String) {
-        if (participants[meetingId]?.add(userId) == true) {
+        val key = storedKey(meetingId) ?: return
+        if (participants[key]?.add(userId) == true) {
             runCatching {
-                redis.opsForSet().add(membersKey(meetingId), userId)
-                touch(meetingId)
+                redis.opsForSet().add(membersKey(key), userId)
+                touch(key)
             }
         }
     }
 
     fun removeParticipant(meetingId: String, userId: String) {
-        if (participants[meetingId]?.remove(userId) == true) {
+        val key = storedKey(meetingId) ?: return
+        if (participants[key]?.remove(userId) == true) {
             runCatching {
-                redis.opsForSet().remove(membersKey(meetingId), userId)
-                touch(meetingId)
+                redis.opsForSet().remove(membersKey(key), userId)
+                touch(key)
             }
         }
     }
 
     fun closeRoom(meetingId: String, requesterId: String): Boolean {
-        val room = rooms[meetingId] ?: return false
+        val key = storedKey(meetingId) ?: return false
+        val room = rooms[key] ?: return false
         if (room.hostId != requesterId) return false
-        rooms.remove(meetingId)
-        participants.remove(meetingId)
-        dropFromRedis(meetingId)
+        rooms.remove(key)
+        participants.remove(key)
+        dropFromRedis(key)
         return true
     }
 

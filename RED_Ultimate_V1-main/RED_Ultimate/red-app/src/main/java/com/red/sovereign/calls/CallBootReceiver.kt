@@ -27,6 +27,9 @@ class CallBootReceiver : BroadcastReceiver() {
             return
         }
         YounesCallService.listen(context)
+        // سحب صندوق البريد بعد الإقلاع/التحديث: فوري + مجدول (KEEP يمنع التكرار).
+        runCatching { PendingOfferPoller.pollNow(context) }
+        runCatching { PendingOfferPoller.schedule(context) }
         // أعد تسجيل الدفع السيادي (UnifiedPush) بعد إعادة التشغيل أو تحديث التطبيق —
         // دون ذلك يتجمد التسجيل حتى يفتح المستخدم التطبيق يدوياً.
         // آمن بلا موزّع: لا يُرسَل شيء إن لم يوجد موزّع أو نقطة نهاية مخزّنة.

@@ -153,6 +153,34 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
     /** ACK تسجيل الغرفة الجماعية (رد الخادم على GROUP_CALL_INVITE) — تذكرة SFU تُطلب بعده فقط. */
     @Volatile private var groupRegisterAckedId: String? = null
 
+    /** G13 فصل الغرف: إنشاء المجموعة — فارغ يولّد GRP_، legacy يُقبل، بادئة مخالفة تُطبَّع GRP_ بلا كسر. */
+    private fun resolveGroupCallIdForCreate(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return RoomSeparationPolicy.normalizeGroupCallId(null)
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.GROUP_CHAT || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeGroupCallId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeGroupCallId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_GROUP + core
+        return RoomSeparationPolicy.normalizeGroupCallId(core)
+    }
+
+    /** G13 فصل الغرف: انضمام المجموعة — فارغ يبقى فارغاً، legacy يُقبل، بادئة مخالفة تُطبَّع بلا كسر. */
+    private fun resolveGroupCallIdForJoin(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return ""
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.GROUP_CHAT || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeGroupCallId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeGroupCallId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_GROUP + core
+        return RoomSeparationPolicy.normalizeGroupCallId(core)
+    }
+
     // مهلة الرنين — 45 ثانية قبل اعتبار الأعضاء "لم يردوا"
     private var ringTimeout: kotlinx.coroutines.Job? = null
     // مهلة الرنين الواردة — 30 ثانية دون رد → رفض تلقائي (تظهر للمضيف "لم يرد")
@@ -266,7 +294,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             ACTION_START_GROUP_CALL -> {
                 stopping = false; cleanedUp = false
                 groupRegisterAckedId = null
-                groupCallId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: UUID.randomUUID().toString()
+                groupCallId = resolveGroupCallIdForCreate(intent.getStringExtra(EXTRA_GROUP_CALL_ID))
                 sourceGroupId = intent.getStringExtra(EXTRA_GROUP_ID).orEmpty()
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID).orEmpty()
                 hostDisplayName = intent.getStringExtra(EXTRA_HOST_NAME).orEmpty()
@@ -319,7 +347,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
 
             ACTION_INCOMING_GROUP_CALL -> {
                 stopping = false; cleanedUp = false
-                groupCallId = intent.getStringExtra(EXTRA_GROUP_CALL_ID).orEmpty()
+                groupCallId = resolveGroupCallIdForJoin(intent.getStringExtra(EXTRA_GROUP_CALL_ID))
                 sourceGroupId = intent.getStringExtra(EXTRA_GROUP_ID).orEmpty()
                 GroupCallRuntime.activeGroupId = sourceGroupId
                 GroupCallRuntime.activeGroupName = intent.getStringExtra(EXTRA_GROUP_NAME).orEmpty()
@@ -351,7 +379,7 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             ACTION_ACCEPT_GROUP_CALL -> {
                 ringTimeout?.cancel()
                 incomingRingTimeout?.cancel()
-                val gId = intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId
+                val gId = resolveGroupCallIdForJoin(intent.getStringExtra(EXTRA_GROUP_CALL_ID) ?: groupCallId.ifBlank { null })
                 myUserId = intent.getStringExtra(EXTRA_MY_USER_ID) ?: myUserId
                 isVideo = intent.getBooleanExtra(EXTRA_IS_VIDEO, isVideo)
                 groupCallId = gId
@@ -1312,13 +1340,14 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         fun startGroupCall(
             context: Context, myUserId: String,
             inviteeIds: List<String>, inviteeNames: List<String>,
-            isVideo: Boolean, groupCallId: String = UUID.randomUUID().toString(),
+            isVideo: Boolean, groupCallId: String = "",
             hostName: String = "", groupId: String = "", groupName: String = ""
         ) {
+            val safeId = if (groupCallId.isBlank()) RoomSeparationPolicy.normalizeGroupCallId(null) else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).apply {
                     action = ACTION_START_GROUP_CALL
-                    putExtra(EXTRA_GROUP_CALL_ID, groupCallId)
+                    putExtra(EXTRA_GROUP_CALL_ID, safeId)
                     putExtra(EXTRA_GROUP_ID, groupId)
                     putExtra(EXTRA_GROUP_NAME, groupName)
                     putExtra(EXTRA_MY_USER_ID, myUserId)
@@ -1335,10 +1364,11 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
             otherMemberIds: List<String> = emptyList(),
             groupId: String = "", groupName: String = ""
         ) {
+            val safeId = if (groupCallId.isBlank()) "" else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).apply {
                     action = ACTION_INCOMING_GROUP_CALL
-                    putExtra(EXTRA_GROUP_CALL_ID, groupCallId)
+                    putExtra(EXTRA_GROUP_CALL_ID, safeId)
                     putExtra(EXTRA_GROUP_ID, groupId)
                     putExtra(EXTRA_GROUP_NAME, groupName)
                     putExtra(EXTRA_MY_USER_ID, myUserId)
@@ -1350,19 +1380,21 @@ class GroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Events, 
         }
 
         fun accept(context: Context, groupCallId: String, myUserId: String, isVideo: Boolean) {
+            val safeId = if (groupCallId.isBlank()) "" else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).apply {
                     action = ACTION_ACCEPT_GROUP_CALL
-                    putExtra(EXTRA_GROUP_CALL_ID, groupCallId)
+                    putExtra(EXTRA_GROUP_CALL_ID, safeId)
                     putExtra(EXTRA_MY_USER_ID, myUserId)
                     putExtra(EXTRA_IS_VIDEO, isVideo)
                 })
         }
 
         fun decline(context: Context, groupCallId: String) {
+            val safeId = if (groupCallId.isBlank()) "" else RoomSeparationPolicy.normalizeGroupCallId(groupCallId)
             ContextCompat.startForegroundService(context,
                 Intent(context, GroupCallService::class.java).setAction(ACTION_DECLINE_GROUP_CALL)
-                    .putExtra(EXTRA_GROUP_CALL_ID, groupCallId))
+                    .putExtra(EXTRA_GROUP_CALL_ID, safeId))
         }
 
         fun end(context: Context) {

@@ -148,6 +148,20 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     private val approvedCohostIds = mutableSetOf<String>()
     private val pendingViewerOffers = java.util.concurrent.ConcurrentLinkedQueue<String>()
 
+    /** G13 فصل الغرف: انضمام/إنشاء البث — فارغ يبقى فارغاً (لا توليد في مسار الانضمام)، legacy يُقبل، بادئة مخالفة تُطبَّع LIVE_ بلا كسر. */
+    private fun resolveStreamIdForJoin(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return ""
+        val k = RoomSeparationPolicy.kindOf(v)
+        if (k == RoomSeparationPolicy.RoomKind.LIVE || k == RoomSeparationPolicy.RoomKind.LEGACY) {
+            return RoomSeparationPolicy.normalizeStreamId(v)
+        }
+        val core = v.substringAfter("_").ifBlank { v }.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(64)
+        if (core.length < 4) return RoomSeparationPolicy.normalizeStreamId(null)
+        if (RoomSeparationPolicy.isValidRoomId(core)) return RoomSeparationPolicy.PREFIX_LIVE + core
+        return RoomSeparationPolicy.normalizeStreamId(core)
+    }
+
     override fun onCreate() {
         super.onCreate()
         val manager = getSystemService(NotificationManager::class.java)
@@ -158,7 +172,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_INVITE -> {
-                streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
+                streamId = resolveStreamIdForJoin(intent.getStringExtra(EXTRA_STREAM_ID))
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 val broadcasterName = intent.getStringExtra(EXTRA_BROADCASTER_NAME).orEmpty()
                 LiveStreamRuntime.state = LiveStreamUiState.Incoming(streamId, broadcasterName, userId)
@@ -167,7 +181,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             ACTION_START -> {
                 stopping = false
                 cleanedUp = false
-                streamId = intent.getStringExtra(EXTRA_STREAM_ID).orEmpty()
+                streamId = resolveStreamIdForJoin(intent.getStringExtra(EXTRA_STREAM_ID))
                 userId = intent.getStringExtra(EXTRA_USER_ID).orEmpty()
                 streamTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "بث مباشر يونس" }
                 streamCategory = intent.getStringExtra(EXTRA_CATEGORY)?.trim()?.take(30)?.takeIf { it.isNotBlank() } ?: "عام"
@@ -1562,9 +1576,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
 
         fun invite(context: Context, streamId: String, userId: String, broadcasterName: String) {
+            val safeId = if (streamId.isBlank()) "" else RoomSeparationPolicy.normalizeStreamId(streamId)
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_INVITE
-                putExtra(EXTRA_STREAM_ID, streamId)
+                putExtra(EXTRA_STREAM_ID, safeId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_BROADCASTER_NAME, broadcasterName)
             }
@@ -1581,9 +1596,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             password: String? = null,
             category: String = "عام"
         ) {
+            val safeId = if (streamId.isBlank()) "" else RoomSeparationPolicy.normalizeStreamId(streamId)
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_START
-                putExtra(EXTRA_STREAM_ID, streamId)
+                putExtra(EXTRA_STREAM_ID, safeId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_BROADCASTER, isBroadcaster)
                 putExtra(EXTRA_TITLE, title)
@@ -1608,9 +1624,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             ContextCompat.startForegroundService(context, Intent(context, LiveStreamService::class.java).setAction(act))
         }
         fun watch(context: Context, streamId: String, userId: String, password: String? = null) {
+            val safeId = if (streamId.isBlank()) "" else RoomSeparationPolicy.normalizeStreamId(streamId)
             val intent = Intent(context, LiveStreamService::class.java).apply {
                 action = ACTION_START
-                putExtra(EXTRA_STREAM_ID, streamId)
+                putExtra(EXTRA_STREAM_ID, safeId)
                 putExtra(EXTRA_USER_ID, userId)
                 putExtra(EXTRA_BROADCASTER, false)
                 if (!password.isNullOrBlank()) putExtra(EXTRA_PASSWORD, password)

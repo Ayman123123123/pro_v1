@@ -144,7 +144,10 @@ class EncryptedAttachmentRepository(
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
-                        if (total > MAX_BYTES) error("Decrypted attachment exceeds limit")
+                        if (total > MAX_BYTES) {
+                            android.util.Log.e("RED_ATTACHMENT", "decrypted size exceeds limit total=$total")
+                            throw java.io.IOException("Decrypted attachment exceeds limit")
+                        }
                         digest.update(buffer, 0, count)
                         destination.write(buffer, 0, count)
                     }

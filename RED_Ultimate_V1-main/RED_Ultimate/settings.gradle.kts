@@ -55,9 +55,10 @@ if (buildLogicRequested) include(":fast-lint")
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        // Google Maven mirror FIRST (fast + reliable DNS) — for all androidx/google deps
+     repositories {
+         mavenCentral()
+         google()
+         // Google Maven mirror FIRST (fast + reliable DNS) — for all androidx/google deps
         maven {
             url = uri("https://maven-central.storage-download.googleapis.com/maven2")
         }

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
  * سيادية: تُحفظ في SharedPreferences + WorkManager OneTime بقيود CONNECTED.
  *
  * النطاق V2: نص + استطلاع + وسائط (صور/فيديو/ملفات/صوت).
- * Uri تُحفظ ب鲱 navigatePermitted + نسخ للملف mallocّح.
+ * Uri تُحفظ بإذن دائم + نسخة مرحلية في التخزين الخاص.
  */
 @Serializable
 data class ScheduledMedia(

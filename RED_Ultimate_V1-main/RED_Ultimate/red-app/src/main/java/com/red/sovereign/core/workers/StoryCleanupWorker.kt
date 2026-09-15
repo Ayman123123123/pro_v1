@@ -49,17 +49,19 @@ class StoryCleanupWorker(
         private const val UNIQUE_NAME = "story-cleanup"
         private const val INTERVAL_HOURS = 6L
 
-        /** يُستدعى مرة واحدة عند إقلاع التطبيق. */
+        /** يُستدعى مرة واحدة عند إقلاع التطبيق — آمن للفشل (لا يعطل الإقلاع). */
         fun enqueue(context: Context) {
-            val request = PeriodicWorkRequestBuilder<StoryCleanupWorker>(
-                INTERVAL_HOURS, TimeUnit.HOURS
-            ).build()
+            runCatching {
+                val request = PeriodicWorkRequestBuilder<StoryCleanupWorker>(
+                    INTERVAL_HOURS, TimeUnit.HOURS
+                ).build()
 
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                UNIQUE_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
-                request
-            )
+                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    UNIQUE_NAME,
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    request
+                )
+            }.onFailure { Log.w(TAG, "تعذر جدولة تنظيف القصص", it) }
         }
     }
 }

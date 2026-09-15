@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.red.sovereign.core.RichMessage
 import com.red.sovereign.ui.theme.PlexArabicFamily
 
 /**
@@ -52,13 +53,16 @@ fun LuxuryChatBubble(
     fontFamily: FontFamily? = null,
     bubbleStyle: String = "LUXURY",
     isSelected: Boolean = false,
-    // P0-B: شارة التحويل — forwardOf != null تعني رسالة محوّلة.
-    // TODO: مرر forwardCount عبر RichMessage.forwardCount عند توفره
-    // (غير موجود حالياً — RichMessage يحمل forwardOf فقط)، لعرض
-    // "كثيرة التحويل" عندما forwardCount > 5.
+    // P0-B: شارة التحويل — RichMessage.forwardOf/forwardCount موجودان في الموديل.
+    // مرّر richMessage عند توفر الحمولة المفكوكة، وإلا تُستخدم forwardOf/forwardCount
+    // اليدوية شرطيًا (لا شارة عند غياب المعلومة). "كثيرة التحويل" عندما العدد > 5.
     forwardOf: String? = null,
-    forwardCount: Int = 0
+    forwardCount: Int = 0,
+    richMessage: RichMessage? = null
 ) {
+    val resolvedForwardOf: String? = richMessage?.forwardOf ?: forwardOf
+    val resolvedForwardCount: Int = (richMessage?.forwardCount ?: forwardCount).coerceAtLeast(0)
+    val isForwarded: Boolean = resolvedForwardOf != null || resolvedForwardCount > 0
     val resolvedFont = fontFamily ?: PlexArabicFamily
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
@@ -167,11 +171,11 @@ fun LuxuryChatBubble(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
             }
-            // P0-B: شارة التحويل — "محوّلة" عند forwardOf != null،
-            // و"كثيرة التحويل" عندما forwardCount > 5.
-            if (forwardOf != null) {
+            // P0-B: شارة التحويل — "محوّلة" عند التوفر،
+            // و"كثيرة التحويل" عندما العدد > 5.
+            if (isForwarded) {
                 Text(
-                    text = if (forwardCount > 5) "كثيرة التحويل" else "محوّلة",
+                    text = if (resolvedForwardCount > 5) "كثيرة التحويل" else "محوّلة",
                     color = timeColor,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
