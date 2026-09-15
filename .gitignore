@@ -161,4 +161,5 @@ chat-*.txt
 **/apk-output/
 *.apk
 *.aab
-*.ap_
+*.ap_RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.png
+RED_Ultimate_V1-main/RED_Ultimate/**/screenshotTest*/**/*.jpg
