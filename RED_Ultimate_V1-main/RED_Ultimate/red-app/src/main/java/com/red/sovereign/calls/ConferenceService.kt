@@ -82,6 +82,10 @@ object ConferenceRuntime {
     var isScreenSharing by mutableStateOf(false)
     var remoteScreenShareTrack: VideoTrack? by mutableStateOf(null)
     var remoteScreenSharePeerId by mutableStateOf("")
+    /** غرفة الانتظار (Lobby): مفعّلة في هذه الغرفة؟ — مزامَنة من الخادم. */
+    var lobbyEnabled by mutableStateOf(false)
+    /** المنتظرون في اللوبي (للمضيف/المضيف المشارك) — من LOBBY_REQUEST/ROOM_STATE. */
+    var waitingUsers by mutableStateOf(emptyList<String>())
 }
 
 class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingClient.Listener, SfuMediaClient.Events {
@@ -659,6 +663,11 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         if (!speaker) applyListenerMute()
     }
 
+    override fun onLobbyState(enabled: Boolean, waiting: List<String>) {
+        ConferenceRuntime.lobbyEnabled = enabled
+        ConferenceRuntime.waitingUsers = waiting
+    }
+
     override fun onParticipantJoined(participant: ConferenceParticipant) {
         val list = ConferenceRuntime.participants.toMutableList()
         list.removeAll { it.userId == participant.userId }
@@ -1044,6 +1053,12 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
         const val ACTION_START_RECORDING = "com.red.sovereign.conference.START_RECORDING"
         const val ACTION_STOP_RECORDING = "com.red.sovereign.conference.STOP_RECORDING"
         const val ACTION_TOGGLE_LOCK = "com.red.sovereign.conference.TOGGLE_LOCK"
+        // غرفة الانتظار (Lobby) — تفعيل/قبول/رفض/قبول الكل
+        const val ACTION_LOBBY_SET = "com.red.sovereign.conference.LOBBY_SET"
+        const val ACTION_LOBBY_APPROVE = "com.red.sovereign.conference.LOBBY_APPROVE"
+        const val ACTION_LOBBY_DENY = "com.red.sovereign.conference.LOBBY_DENY"
+        const val ACTION_LOBBY_APPROVE_ALL = "com.red.sovereign.conference.LOBBY_APPROVE_ALL"
+        const val EXTRA_LOBBY_ENABLED = "lobby_enabled"
 
         const val EXTRA_ROOM_ID = "room_id"
         const val EXTRA_USER_ID = "user_id"

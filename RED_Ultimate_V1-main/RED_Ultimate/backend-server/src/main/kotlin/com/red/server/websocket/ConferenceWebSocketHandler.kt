@@ -225,7 +225,7 @@ class ConferenceWebSocketHandler(
         session: WebSocketSession,
         userId: String
     ): TextMessage {
-        val roles = roomRoles[roomId] ?: ConcurrentHashMap()
+        val roles = roomRoles[roomId] ?: ConcurrentHashMap<String, String>()
         val peers = room.filter { it.id != session.id }.mapNotNull { it.attributes["userId"] as? String }
         val statePayload = mutableMapOf<String, String>()
         peers.forEachIndexed { i, p -> statePayload["user_$i"] = p }
@@ -284,9 +284,9 @@ class ConferenceWebSocketHandler(
                 // إيقاف اللوبي يقبل كل المنتظرين — لا يُتركون بلا إجابة إلى الأبد.
                 if (!enabled) admitAll(roomId)
             }
-            "LOBBY_APPROVE" -> signal.payload["targetUserId"]?.takeIf { it.isNotBlank() }?.let { admit(roomId, it) }
+            "LOBBY_APPROVE" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { admit(roomId, it) }
             "LOBBY_APPROVE_ALL" -> admitAll(roomId)
-            "LOBBY_DENY" -> signal.payload["targetUserId"]?.takeIf { it.isNotBlank() }?.let { deny(roomId, it) }
+            "LOBBY_DENY" -> (signal.payload["targetUserId"] as? String)?.takeIf { it.isNotBlank() }?.let { deny(roomId, it) }
         }
     }
 

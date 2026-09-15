@@ -114,6 +114,8 @@ fun YounesConferenceOverlay() {
         is ConferenceUiState.Active -> state.roomId
         else -> ""
     }
+    // غرفة الانتظار: لوحة إدارة المنتظرين (مضيف/مضيف مشارك)
+    var showLobbySheet by remember { mutableStateOf(false) }
 
     val scheme = MaterialTheme.colorScheme
 

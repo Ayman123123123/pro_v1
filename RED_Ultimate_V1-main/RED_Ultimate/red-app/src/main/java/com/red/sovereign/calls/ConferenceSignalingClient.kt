@@ -397,6 +397,40 @@ class ConferenceSignalingClient(
         )
     )
 
+    // ───────────── غرفة الانتظار (Lobby) — للمضيف/المضيف المشارك ─────────────
+
+    /** تفعيل/إيقاف غرفة الانتظار — الخادم يبثّ LOBBY_STATE ويُدخل المنتظرين عند الإيقاف. */
+    fun setLobby(roomId: String, userId: String, enabled: Boolean) = send(
+        ConferenceSignal(
+            type = "LOBBY_SET",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("enabled" to enabled.toString())
+        )
+    )
+
+    fun approveLobby(roomId: String, userId: String, targetUserId: String) = send(
+        ConferenceSignal(
+            type = "LOBBY_APPROVE",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun denyLobby(roomId: String, userId: String, targetUserId: String) = send(
+        ConferenceSignal(
+            type = "LOBBY_DENY",
+            roomId = roomId,
+            userId = userId,
+            payload = mapOf("targetUserId" to targetUserId)
+        )
+    )
+
+    fun approveAllLobby(roomId: String, userId: String) = send(
+        ConferenceSignal(type = "LOBBY_APPROVE_ALL", roomId = roomId, userId = userId, payload = emptyMap())
+    )
+
     fun sendReaction(roomId: String, userId: String, emoji: String = "👏") = send(
         ConferenceSignal(
             type = "REACTION",
