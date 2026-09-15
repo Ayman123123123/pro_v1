@@ -100,7 +100,7 @@ fun boostChannel(current: ChannelBoostState, by: Int = 1): ChannelBoostState {
  * مزايا المستوى — تتصاعد مع level وتتشبّع عند [MAX_PERK_LEVEL].
  * - L1 (5 boosts): إيموجي جماعي مفتوح.
  * - L2 (10): حدود أعلى (ملفات/مثبتات/طول المنشور).
- * - L3+: توسّع إضافي ثم ثبات (بدون أي أصل مشفّر/NFT).
+ * - L3+: توسّع إضافي (روابط مخصّصة + HD — [ChannelLevelPerks.customLinks]) ثم ثبات.
  */
 data class ChannelLevelPerks(
     val level: Int,
@@ -109,7 +109,18 @@ data class ChannelLevelPerks(
     val maxFileMb: Int,
     val maxPinnedMessages: Int,
     val maxPostLength: Int
-)
+) {
+    /**
+     * P1-G (إصلاح 2026-09-16): روابط مخصّصة + HD — تُفتح عند المستوى الثالث
+     * («توسّع إضافي» في سلّم المزايا أعلاه) وتُشتق من [level] فلا تُخزَّن ولا
+     * تُرسَل من الخادم، وبذلك لا تتغيّر عقود الـ API ولا تُلمس النسخة الخلفية.
+     *
+     * سبب الإضافة: ChannelsScreen يستعمل `levelPerks.customLinks` وكان الحقل
+     * غير موجود ⇒ خطأ ترجمة `Unresolved reference 'customLinks'` أحمرّ مهمة
+     * Android في CI على main.
+     */
+    val customLinks: Boolean get() = level >= 3
+}
 
 fun perksForLevel(level: Int): ChannelLevelPerks {
     val saturated = level.coerceIn(0, MAX_PERK_LEVEL)
