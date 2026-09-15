@@ -132,3 +132,38 @@ $ git merge origin/arena/01a0a0cf-pro-v1       → فشل
    - **(ب) إنقاذ انتقائي للميزات:** نسخ الـ32 ملف Kotlin يدويًا + ترجيح main في التعارضات، مع بناء/CI إلزامي قبل الدمج.
    - **(ج) أرشفة الفرع** كما هو (وسم/تجميد) وعدم دمجه، لأن جزءًا كبيرًا من قيمته (اللوبي/الروابط) صار في main بأحدث نسخة.
 4. **تنظيف تاريخ main (اختياري/خطر):** `git filter-repo` لإزالة `logcat.txt` من التاريخ ⇒ انخفاض كبير في حجم المستنسخ، لكنه **يعيد كتابة التاريخ** ويحتاج تنسيقًا لكل من لديه نسخة.
+
+---
+
+## 8) ما نُفِّذ فعليًا (2026-09-16) — سجل التنفيذ
+
+| # | العمل | الأدلة |
+|---|---|---|
+| 1 | تنظيف 41 ملفًا تشخيصيًا كان متتبَّعًا بالخطأ (−27.7 MB) | `chore(repo): untrack 41 diagnostic artifacts` — ملفات `.gitignore` تغطيها مسبقًا |
+| 2 | إنقاذ 13 وثيقة من `01a0a0cf` إلى مساراتها الطبيعية | `docs(salvage): preserve 13 documents…` |
+| 3 | أرشفة 32 وحدة Kotlin (463 KB) خارج مسارات البناء | `docs/archive/salvage-2026-09-16/01a0a0cf-features/` + `README_AR.md` |
+| 4 | إصلاح خطأي ترجمة أحمرّا CI على `main` | `fix(android): إصلاح خطأي ترجمة أحمرّا CI على main` |
+| 5 | إعادة تأسيس الفرع على أحدث `main` (`4b7313f5`) وفتح PR | PR #58 — https://github.com/Ayman123123123/pro_v1/pull/58 |
+| 6 | تحقق CI | **7/7 ناجحة** على `aa1a8304` (Run 35028317479) |
+
+### تفصيل الإصلاح (بند 4)
+`main` كان **أحمر** قبل هذا العمل: مهمة «Android 17 build and unit tests» فشلت على `4b7313f5` (وكانت ناجحة على `f8dc4ed1` و`1976ad7f`). السبب خطآ ترجمة:
+
+```
+e: .../features/channels/ChannelsScreen.kt:563:32 Unresolved reference 'customLinks'.
+e: .../ui/RedDashboard.kt:3744:34 Unresolved reference 'Campaign'.
+```
+
+- **`Campaign`**: أيقونة من `material-icons-extended` بلا استيراد في `RedDashboard.kt` ⇒ أُضيف الاستيراد.
+- **`customLinks`**: `ChannelsScreen` يستعمل `levelPerks.customLinks` وهو غير معرَّف في `ChannelLevelPerks` ⇒ أُضيف كخاصية مشتقة `val customLinks: Boolean get() = level >= 3` («توسّع إضافي» في سلّم المزايا). لم تُلمس النسخة الخلفية ولا مواضع البناء الخمسة.
+
+### ملاحظة عن فحص خارجي
+فحص `Workers Builds: pro-v1` (تكامل Cloudflare، خارج المستودع) يفشل على **كل** فرع وليس على `main` فقط — بما في ذلك فروع مدموجة سابقًا مثل `0aa6c0a3` و`bcf4fcba`. أي أنه سلوك قائم مسبقًا لا علاقة له بهذا العمل، وهو وحده سبب `mergeStateStatus=UNSTABLE`.
+
+### المتبقّي (لم يُنفَّذ)
+حذف الفرعين المدموجين `arena/01a0a242-pro-v1` و`arena/01a0a14b-pro-v1` — لم يُنفَّذ من هذه الجلسة لأن الجلسة مقيَّدة بالعمل على فرعها `arena/01a0a6ce-pro-v1` فقط. الأمر الجاهز:
+
+```bash
+gh api -X DELETE repos/Ayman123123123/pro_v1/git/refs/heads/arena/01a0a242-pro-v1
+gh api -X DELETE repos/Ayman123123123/pro_v1/git/refs/heads/arena/01a0a14b-pro-v1
+```
