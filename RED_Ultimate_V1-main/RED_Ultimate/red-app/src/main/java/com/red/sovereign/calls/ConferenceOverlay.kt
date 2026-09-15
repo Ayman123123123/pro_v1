@@ -628,7 +628,7 @@ fun YounesConferenceOverlay() {
                             ActivityResultContracts.StartActivityForResult()
                         ) { result ->
                             if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                                ConferenceService.startScreenShare(context, result.data!!)
+                                result.data?.let { ConferenceService.startScreenShare(context, it) } ?: android.util.Log.w("ConferenceOverlay", "screen share grant null; skip")
                             }
                         }
                         IconButton(

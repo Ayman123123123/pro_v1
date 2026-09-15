@@ -2,6 +2,7 @@ package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
@@ -21,7 +22,11 @@ import java.util.concurrent.ConcurrentHashMap
  * For larger conferences (>4) the protocol proxies to media-sfu; Android speaks same shape.
  */
 @Component
-class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextWebSocketHandler() {
+class ConferenceWebSocketHandler(
+    private val objectMapper: ObjectMapper,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val roomAliases: RoomAliasService? = null
+) : TextWebSocketHandler() {
     private val rooms = ConcurrentHashMap<String, MutableSet<WebSocketSession>>()
     private val sessionToRoom = ConcurrentHashMap<String, String>()
     private val roomRoles = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>() // roomId -> userId -> role
@@ -49,7 +54,7 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
 
     /** LEGENDARY Phase 7: دور مشارك (للتذاكر الواعية بالدور) — الأدوار مفتاحها redId. */
     fun getRole(roomId: String, vararg ids: String): String {
-        val effective = runCatching { RoomSeparationPolicy.resolve(roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: roomId
+        val effective = resolveRoom(roomId)
         val roles = roomRoles[effective] ?: roomRoles[roomId.trim()] ?: return "LISTENER"
         for (id in ids) { val r = roles[id]; if (r != null) return r }
         return "LISTENER"
@@ -58,8 +63,8 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
-        // G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام.
-        val resolvedRoomId = runCatching { RoomSeparationPolicy.resolve(incoming.roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: incoming.roomId
+        // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
+        val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
         require(signal.roomId.isNotBlank()) { "roomId is required" }
         require(signal.roomId.matches(ROOM_ID)) { "Invalid roomId" }
@@ -397,6 +402,13 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
     private fun evictReactionKeys(roomId: String) {
         val prefix = "$roomId:"
         lastReactionAt.keys.removeIf { it.startsWith(prefix) }
+    }
+
+    /** G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
+    private fun resolveRoom(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return v
+        return runCatching { roomAliases?.resolve(v) ?: RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
     }
 
     companion object {

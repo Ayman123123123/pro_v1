@@ -2,6 +2,7 @@ package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import com.red.server.calls.RoomAliasService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -14,6 +15,8 @@ import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketMessage
 import org.springframework.web.socket.WebSocketSession
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.CopyOnWriteArrayList
 
 class ConferenceWebSocketHandlerTest {
@@ -237,5 +240,24 @@ class ConferenceWebSocketHandlerTest {
         assertTrue(listener.sent.map { objectMapper.readTree(it) }.any { it["type"].asText() == "RAISE_HAND" }) {
             "لم يصل تأكيد رفع اليد لصاحبها: ${listener.sent}"
         }
+    }
+
+    @Test fun `alias bound via REST resolves via WS`() {
+        val redis: StringRedisTemplate = mock()
+        val ops: ValueOperations<String, String> = mock()
+        whenever(redis.opsForValue()).thenReturn(ops)
+        whenever(ops.get(any())).thenReturn(null)
+        val aliases = RoomAliasService(redis)
+        aliases.link("legacyConfAlias02", "CONF_legacyConfAlias02")
+        val aliased = ConferenceWebSocketHandler(objectMapper, aliases)
+        val alice = Probe("s-alias-1", "73066")
+        aliased.handleTextMessage(alice.session, TextMessage("""{"type":"JOIN","roomId":"legacyConfAlias02"}"""))
+        val state = alice.sent.map { objectMapper.readTree(it) }.first { it["type"].asText() == "ROOM_STATE" }
+        assertEquals("CONF_legacyConfAlias02", state["roomId"].asText())
+        val bob = Probe("s-alias-2", "28261")
+        aliased.handleTextMessage(bob.session, TextMessage("""{"type":"JOIN","roomId":"CONF_legacyConfAlias02"}"""))
+        val aliceAfter = alice.sent.map { objectMapper.readTree(it) }
+        assertTrue(aliceAfter.any { it["type"].asText() == "PARTICIPANT_JOINED" }) { "same canonical room: $aliceAfter" }
+        assertEquals("HOST", aliased.getRole("legacyConfAlias02", "73066"))
     }
 }

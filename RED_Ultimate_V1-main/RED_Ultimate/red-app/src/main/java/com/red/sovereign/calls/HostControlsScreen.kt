@@ -278,8 +278,9 @@ fun HostControlsScreen(
     }
 
     // Kick / Manage participant dialog
-    if (showKickDialog && selectedParticipant != null) {
-        val target = selectedParticipant!!
+    if (showKickDialog) {
+        val target = selectedParticipant ?: return
+        if (target.id.isBlank()) { android.util.Log.w("HostControls", "kick skipped: blank id"); return }
         AlertDialog(
             onDismissRequest = {
                 showKickDialog = false

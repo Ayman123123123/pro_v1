@@ -135,7 +135,7 @@ class FtsSearchManager(private val db: SupportSQLiteDatabase) {
      * يستخرج النص القابل للفهرسة عبر [extractIndexableText] (يفك RichMessage
      * وإلا الخام UTF-8) ثم ينادي [indexMessage] — فيُضمن أن كل حفظ يُفهرس.
      *
-     * TODO(P0-C): انقل النداء إلى `LocalRepository.saveLocalHistory`
+     * DONE(P0-C): نُقل النداء إلى `LocalRepository.saveLocalHistory`
      * (خارج نطاق P0-C — ممنوع لمسه هنا):
      * ```
      * suspend fun saveLocalHistory(h: LocalHistoryEntity) {

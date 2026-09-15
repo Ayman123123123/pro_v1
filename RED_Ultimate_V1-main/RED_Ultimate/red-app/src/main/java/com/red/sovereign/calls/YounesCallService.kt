@@ -126,6 +126,22 @@ override fun onCreate() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_RELAY_OFFER -> {
+                val relayId = intent.getStringExtra(EXTRA_CALL_ID).orEmpty()
+                val relaySource = intent.getStringExtra(EXTRA_RELAY_SOURCE).orEmpty()
+                val relayMode = intent.getStringExtra(EXTRA_MODE) ?: "VOICE"
+                val relaySdp = intent.getStringExtra(EXTRA_RELAY_SDP).orEmpty()
+                if (relayId.isBlank() || relaySource.isBlank() || relaySdp.isBlank()) return START_STICKY
+                onSignal(
+                    CallSignal(
+                        callId = relayId,
+                        sourceUserId = relaySource,
+                        type = "OFFER",
+                        mode = relayMode,
+                        payload = mapOf("sdp" to relaySdp)
+                    )
+                )
+            }
             ACTION_LISTEN -> { promote(notification("جاهز لاستقبال مكالمات يونس", ongoing = true), media = false); signaling.connect() }
 ACTION_START -> {
                 sessionGuard.beginNewSession()
@@ -1607,6 +1623,9 @@ private fun prepareAudio() {
         const val EXTRA_IS_VIDEO = "extra_is_video"
         // P0: مطابقة القبول مع العرض الوارد (كان زر قبول قديم يقبل مكالمة جديدة)
         const val EXTRA_CALL_ID = "extra_call_id"
+        const val ACTION_RELAY_OFFER = "com.red.sovereign.call.RELAY_OFFER"
+        const val EXTRA_RELAY_SOURCE = "extra_relay_source"
+        const val EXTRA_RELAY_SDP = "extra_relay_sdp"
 
         private fun safeStartService(context: Context, intent: Intent) {
             try {
@@ -1646,6 +1665,21 @@ private fun prepareAudio() {
 
         fun listen(context: Context) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_LISTEN))
         fun stop(context: Context) = context.startService(Intent(context, YounesCallService::class.java).setAction(ACTION_STOP))
+        fun relayOffer(app: Context, signal: CallSignal) {
+            val id = signal.callId.orEmpty()
+            val src = signal.sourceUserId.orEmpty()
+            val sdp = signal.payload["sdp"].orEmpty()
+            if (id.isBlank() || src.isBlank() || sdp.isBlank()) return
+            if (signal.type != "OFFER") return
+            safeStartService(
+                app,
+                Intent(app, YounesCallService::class.java).setAction(ACTION_RELAY_OFFER)
+                    .putExtra(EXTRA_CALL_ID, id)
+                    .putExtra(EXTRA_RELAY_SOURCE, src)
+                    .putExtra(EXTRA_MODE, signal.mode)
+                    .putExtra(EXTRA_RELAY_SDP, sdp)
+            )
+        }
         fun start(context: Context, target: String, video: Boolean) = safeStartService(context, Intent(context, YounesCallService::class.java).setAction(ACTION_START).putExtra(EXTRA_TARGET, target).putExtra(EXTRA_MODE, if (video) "VIDEO" else "VOICE"))
         fun accept(context: Context, cameraOn: Boolean = true, micOn: Boolean = true, isVideo: Boolean = false, callId: String = "") = safeStartService(
             context,

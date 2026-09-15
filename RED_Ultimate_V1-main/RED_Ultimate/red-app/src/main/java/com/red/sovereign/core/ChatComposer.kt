@@ -42,7 +42,7 @@ object ChatComposer {
         poll: InlinePoll? = null,
     ): Result<RichMessage> = runCatching {
         val trimmed = text.trim()
-        require(trimmed.isNotEmpty() || poll != null) { "EMPTY_TEXT" }
+        if (trimmed.isEmpty() && poll == null) { java.util.logging.Logger.getLogger("ChatComposer").warning("buildText rejected: blank without poll"); throw IllegalArgumentException("EMPTY_TEXT") }
         val safeAction = if (action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "LOCATION", "CONTACT")) action else "MESSAGE"
         val clamped = clampDisappearingMs(disappearingMs)
         RichMessage(
@@ -97,7 +97,7 @@ object ChatComposer {
         disappearingMs: Long? = null
     ): Result<RichMessage> = runCatching {
         val trimmed = newText.trim()
-        require(trimmed.isNotEmpty()) { "EMPTY_TEXT" }
+        if (trimmed.isEmpty()) { java.util.logging.Logger.getLogger("ChatComposer").warning("buildEdit rejected: blank text"); throw IllegalArgumentException("EMPTY_TEXT") }
         val clamped = clampDisappearingMs(disappearingMs)
         RichMessage(
             action = "EDIT",

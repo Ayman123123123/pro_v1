@@ -270,7 +270,7 @@ class PendingOfferPoller(
             }
         }
 
-        /** رنين 1:1 (VOICE/VIDEO) — المسار الموحد: إشعار + إحماء الخدمة للمسار الحي. */
+        /** رنين 1:1 (VOICE/VIDEO) — المسار الموحد: إشعار + حقن العرض في خط الخدمة الحي. */
         private fun ringOneToOne(app: Context, offer: PendingOfferResponse, myId: String): Boolean {
             val mode = if (offer.mode.equals("VIDEO", ignoreCase = true)) "VIDEO" else "VOICE"
             val isVideo = mode == "VIDEO"
@@ -285,10 +285,21 @@ class PendingOfferPoller(
                     myId
                 )
             }.onFailure { Log.w(TAG, "showIncoming failed: ${it.message}"); return false }
-            // 2) إحماء الخدمة ليستقبل العرض الحي عبر المقبس (لا مدخل عرض مباشر
-            // في HEAD — onSignal داخل الخدمة هو المدخل الوحيد ولا يُستدعى خارجها).
+            // 2) إحماء الخدمة ثم حقن العرض في نفس خط المعالجة الحي عبر relayOffer.
             runCatching { YounesCallService.listen(app) }
                 .onFailure { Log.w(TAG, "listen warm-up failed: ${it.message}") }
+            runCatching {
+                YounesCallService.relayOffer(
+                    app,
+                    CallSignal(
+                        callId = offer.callId,
+                        sourceUserId = offer.callerId,
+                        type = "OFFER",
+                        mode = mode,
+                        payload = mapOf("sdp" to offer.offerSdp)
+                    )
+                )
+            }.onFailure { Log.w(TAG, "relayOffer failed: ${it.message}") }
             Log.i(TAG, "pending offer ringing callId=${offer.callId} from=${offer.callerId} mode=$mode")
             return true
         }

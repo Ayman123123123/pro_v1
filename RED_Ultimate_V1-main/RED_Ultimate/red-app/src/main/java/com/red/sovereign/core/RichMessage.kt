@@ -75,23 +75,22 @@ data class RichMessage(
         return TOPIC_HASHTAG_REGEX.find(text)?.value?.removePrefix("#")
     }
     init {
-        require(action in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "REACTION", "REACTION_REMOVE", "POLL_VOTE", "CALL_STARTED", "LOCATION", "CONTACT", "PIN")) { "Unknown action: $action" }
-        require(text.length <= 65_536)
-        require(mentions.size <= 20) { "Too many mentions" }
-        require(hashtags.size <= 10) { "Too many hashtags" }
-        require(topicId == null || topicId.length in 1..64) { "Invalid topicId length" }
-        require(disappearingMs == null || disappearingMs in setOf(0L, 3600000L, 86400000L, 604800000L, 7776000000L))
+        // عقد تحقق fail-fast (مغطى باختبارات وحدة): أي حمولة مخالفة تُسجَّل ثم تُرفض
+        // باستثناء — ومسار المستخدم آمن لأن البناء يمر عبر ChatComposer (Result) والفك عبر decode (null).
+        val richLog = java.util.logging.Logger.getLogger("RichMessage")
+        if (action !in setOf("MESSAGE", "EDIT", "DELETE", "STORY_REPLY", "REACTION", "REACTION_REMOVE", "POLL_VOTE", "CALL_STARTED", "LOCATION", "CONTACT", "PIN")) { richLog.warning("reject action=$action"); throw IllegalArgumentException("Unknown action: $action") }
+        if (text.length > 65_536) { richLog.warning("reject text too long=${text.length}"); throw IllegalArgumentException("text too long") }
+        if (mentions.size > 20) { richLog.warning("reject mentions=${mentions.size}"); throw IllegalArgumentException("Too many mentions") }
+        if (hashtags.size > 10) { richLog.warning("reject hashtags=${hashtags.size}"); throw IllegalArgumentException("Too many hashtags") }
+        if (!(topicId == null || topicId.length in 1..64)) { richLog.warning("reject topicId length"); throw IllegalArgumentException("Invalid topicId length") }
+        if (!(disappearingMs == null || disappearingMs in setOf(0L, 3600000L, 86400000L, 604800000L, 7776000000L))) { richLog.warning("reject disappearingMs=$disappearingMs"); throw IllegalArgumentException("Invalid disappearingMs") }
         // التحقق من صحة حمولة تفاعل الإيموجي
-        require(emoji == null || emoji.length in 1..16) { "Invalid emoji length" }
-        require(
-            (action == "REACTION" && reactionOf != null && emoji != null) ||
+        if (!(emoji == null || emoji.length in 1..16)) { richLog.warning("reject emoji length"); throw IllegalArgumentException("Invalid emoji length") }
+        if (!((action == "REACTION" && reactionOf != null && emoji != null) ||
             (action == "REACTION_REMOVE" && reactionOf != null) ||
-            action !in setOf("REACTION", "REACTION_REMOVE")
-        ) { "Invalid reaction payload" }
-        require(
-            (action == "POLL_VOTE" && pollVoteOf != null && (pollVoteOption == null || pollVoteOption in 0..50)) ||
-            action != "POLL_VOTE"
-        ) { "Invalid poll vote payload" }
+            action !in setOf("REACTION", "REACTION_REMOVE"))) { richLog.warning("reject reaction payload action=$action"); throw IllegalArgumentException("Invalid reaction payload") }
+        if (!((action == "POLL_VOTE" && pollVoteOf != null && (pollVoteOption == null || pollVoteOption in 0..50)) ||
+            action != "POLL_VOTE")) { richLog.warning("reject poll vote payload action=$action"); throw IllegalArgumentException("Invalid poll vote payload") }
     }
 
     companion object {

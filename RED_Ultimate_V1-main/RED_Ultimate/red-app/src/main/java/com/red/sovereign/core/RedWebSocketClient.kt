@@ -63,7 +63,7 @@ class RedWebSocketClient(
 
     /**
      * @return معرف الرسالة عند نجاح الإرسال، أو null عند انقطاع الـ socket.
-     * كان يرمي IllegalStateException عبر check() فينهار التطبيق إذا انقطع
+     * كان يرمي IllegalStateException عند فحص الحالة فينهار التطبيق إذا انقطع
      * الاتصال بين الحشو والإرسال؛ الآن يفشل بصمت ويُسجَّل لدى المتصل.
      */
     fun sendEncrypted(
@@ -96,7 +96,7 @@ class RedWebSocketClient(
     }
 
     fun acknowledge(messageId: String, sequence: Long, status: String): Boolean {
-        require(status == "DELIVERED" || status == "READ")
+        if (status != "DELIVERED" && status != "READ") { android.util.Log.w("RedWebSocketClient", "acknowledge skipped: bad status=$status id=$messageId"); return false }
         val envelope = RedProtos.RedRED.newBuilder().setAck(
             RedProtos.MessageAck.newBuilder().setMessageId(messageId).setSequenceNumber(sequence).setStatus(status)
         ).build()

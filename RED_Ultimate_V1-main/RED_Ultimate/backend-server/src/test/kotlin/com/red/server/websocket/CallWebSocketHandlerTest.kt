@@ -6,6 +6,7 @@ import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallStatus
 import com.red.server.calls.CallType
+import com.red.server.calls.RoomAliasService
 import com.red.server.services.NotificationService
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -19,6 +20,8 @@ import org.mockito.kotlin.whenever
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketMessage
 import org.springframework.web.socket.WebSocketSession
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -137,5 +140,25 @@ class CallWebSocketHandlerTest {
             TextMessage("""{"callId":"g-3","targetUserId":"22222","type":"GROUP_CALL_STATUS","mode":"VOICE","payload":{"status":"joined"}}""")
         )
         assertTrue(bob.sent.any { it.contains("GROUP_CALL_STATUS") })
+    }
+
+    @Test
+    fun `alias bound via REST resolves via WS`() {
+        val redis: StringRedisTemplate = mock()
+        val ops: ValueOperations<String, String> = mock()
+        whenever(redis.opsForValue()).thenReturn(ops)
+        whenever(ops.get(any())).thenReturn(null)
+        val aliases = RoomAliasService(redis)
+        aliases.link("legacyCallAlias01", "GRP_legacyCallAlias01")
+        val aliased = CallWebSocketHandler(objectMapper, history, notifications, aliases)
+        val bob = Probe("b-alias", "22222")
+        aliased.afterConnectionEstablished(bob.session)
+        aliased.handleTextMessage(
+            Probe("host-alias", "11111").session,
+            TextMessage("""{"callId":"legacyCallAlias01","type":"GROUP_CALL_INVITE","mode":"VOICE","inviteeIds":["22222"]}""")
+        )
+        assertTrue(bob.sent.any { it.contains("GRP_legacyCallAlias01") }) { "WS must resolve REST alias: ${bob.sent}" }
+        assertEquals("11111", aliased.groupCallHost("legacyCallAlias01"))
+        assertEquals("11111", aliased.groupCallHost("GRP_legacyCallAlias01"))
     }
 }

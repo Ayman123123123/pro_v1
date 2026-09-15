@@ -252,7 +252,7 @@ class OutboxRetryWorker(
         "IMAGE", "MEDIA_IMAGE" -> "IMAGE"
         "VIDEO", "MEDIA_VIDEO" -> "VIDEO"
         "AUDIO", "MEDIA_AUDIO" -> "AUDIO"
-        "FILE", "MEDIA_FILE", "MEDIA" -> if (msg.mediaType?.uppercase() in setOf("IMAGE", "VIDEO", "AUDIO", "FILE", "VOICE")) msg.mediaType!!.uppercase() else "FILE"
+        "FILE", "MEDIA_FILE", "MEDIA" -> msg.mediaType?.uppercase()?.takeIf { it in setOf("IMAGE", "VIDEO", "AUDIO", "FILE", "VOICE") } ?: "FILE"
         else -> null
     }
 

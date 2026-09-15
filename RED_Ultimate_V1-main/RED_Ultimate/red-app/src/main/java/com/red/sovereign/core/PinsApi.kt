@@ -97,7 +97,7 @@ class PinsApi(private val client: AuthorizedApiClient) {
     suspend fun listForGroup(groupId: String): ApiResult<List<PinDto>> = withContext(Dispatchers.IO) {
         when (val r = client.request("GET", "/api/messages/pins?groupId=$groupId")) {
             is ApiResult.Success -> runCatching { json.decodeFromString<PinListResponse>(r.value).pins }
-                .let { if (it.isSuccess) ApiResult.Success(r.code, it.getOrNull()!!) else ApiResult.Error(r.code, "PARSE_ERROR") }
+                .let { parsed -> val v = parsed.getOrNull(); if (parsed.isSuccess && v != null) ApiResult.Success(r.code, v) else { java.util.logging.Logger.getLogger("PinsApi").warning("pins parse failed code=${r.code}"); ApiResult.Error(r.code, "PARSE_ERROR") } }
             is ApiResult.Error -> r
         }
     }

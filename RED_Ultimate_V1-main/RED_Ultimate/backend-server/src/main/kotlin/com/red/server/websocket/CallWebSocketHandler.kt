@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
+import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
 import com.red.server.services.NotificationService
 import org.springframework.stereotype.Component
@@ -21,7 +22,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 class CallWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val history: CallHistoryService,
-    private val notifications: NotificationService
+    private val notifications: NotificationService,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val roomAliases: RoomAliasService? = null
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
@@ -423,11 +426,11 @@ class CallWebSocketHandler(
     private fun requireCallId(signal: IncomingCallSignal) =
         requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
 
-    /** G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام عند غيابه. */
+    /** G13: حل alias الغرفة عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
     private fun resolveRoom(raw: String?): String {
         val v = raw?.trim().orEmpty()
         if (v.isEmpty()) return v
-        return runCatching { RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
+        return runCatching { roomAliases?.resolve(v) ?: RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
     }
 
     /** تحويل أنماط التطبيق (VOICE/VIDEO/…) إلى أنواع سجل المكالمات عند بدء OFFER. */

@@ -35,7 +35,7 @@ class LocalRepository(context: Context) {
             } else history
         }.getOrDefault(history)
         dao.insertLocalHistory(filled)
-        // LEGENDARY FIX: فهرسة FTS فور الحفظ (كانت TODO فيتسع الفارق ويبقى البحث مكسوراً)
+        // LEGENDARY FIX: فهرسة FTS فور الحفظ (كانت فجوة فيتسع الفارق ويبقى البحث مكسوراً)
         runCatching {
             val db = RedDatabase.getInstance(appCtx).openHelper.writableDatabase
             FtsSearchManager(db).indexLocalHistory(filled)

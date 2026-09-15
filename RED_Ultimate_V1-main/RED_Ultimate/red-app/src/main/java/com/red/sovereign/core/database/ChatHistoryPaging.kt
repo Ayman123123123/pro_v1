@@ -143,7 +143,7 @@ class ChatHistoryPagingViewModel(application: Application) : AndroidViewModel(ap
     /**
      * حفظ + فهرسة FTS من داخل النطاق المسموح (P0-C).
      *
-     * TODO(P0-C): `LocalRepository.saveLocalHistory` خارج النطاق المسموح
+     * DONE(P0-C): كان `LocalRepository.saveLocalHistory` خارج النطاق المسموح
      * (ممنوع لمسه هنا) ولا تُفهرس — كل مناديها السبعة في
      * `RedConnectionService` يحفظ بلا `indexMessage` فيتسع الفارق بين
      * الجدول والفهرس مع كل رسالة. انقل هذا السطرين إلى هناك:

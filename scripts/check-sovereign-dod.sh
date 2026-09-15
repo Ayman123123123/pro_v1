@@ -23,10 +23,14 @@ say()  { printf '%s\n' "$*"; }
 fail() { say "❌ DoD: $*"; FAIL=1; }
 
 # ── 1) Firebase/FCM: صفر مطلق في الكود المشحون ──────────────────────────
+# استثناء موثق 2026-09-15: younes_icon_master.png أيقونة مستخدمة (TopBar) — تطابق fcm
+# هو بايتات IDAT مضغوطة عرضية + مقطعا tEXt:date فقط، لا FCM حقيقي (فُحصت البنية بايتًا ببايت).
 FIREBASE_HITS=$(grep -rni -E "firebase|fcm[^a-z]|googleapis\.com.*fcm|google-services" \
   "$P/backend-server/src" "$P/red-app/src" "$P/admin_dashboard/src" \
   "$P/media-sfu" "$P/shared-proto" 2>/dev/null \
-  | grep -v "/_archive/" | grep -v "db/migration" || true)
+  | grep -v "/_archive/" | grep -v "db/migration" \
+  | grep -v "res/drawable/younes_icon_master.png" \
+  || true)
 if [ -n "$FIREBASE_HITS" ]; then
   fail "Firebase/FCM tokens in shipped code:"; say "$FIREBASE_HITS"
 fi

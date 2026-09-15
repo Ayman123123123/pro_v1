@@ -59,7 +59,7 @@ object ServerEndpoint {
     fun host(): String = runCatching { URI(url()).host }.getOrNull() ?: ""
 
     fun update(context: Context, value: String) {
-        val normalized = normalize(value)
+        val normalized = runCatching { normalize(value) }.getOrNull() ?: run { android.util.Log.w("ServerEndpoint", "update skipped: invalid url"); return }
         if (current != normalized) {
             SecureStore(context.applicationContext, "red_server_endpoint").put(KEY, normalized)
             current = normalized
@@ -85,15 +85,15 @@ object ServerEndpoint {
     }
 
     private fun normalize(value: String): String {
-        val uri = URI(value.trim())
-        require(uri.scheme == "http" || uri.scheme == "https") { "Server URL must use HTTP(S)" }
-        require(!uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) { "Invalid server URL" }
-        require(uri.path.isNullOrBlank() || uri.path == "/") { "Server URL must not contain a path" }
+        val uri = runCatching { URI(value.trim()) }.getOrNull() ?: run { android.util.Log.w("ServerEndpoint", "normalize failed: bad uri"); throw IllegalArgumentException("Invalid server URL") }
+        if (!(uri.scheme == "http" || uri.scheme == "https")) { android.util.Log.w("ServerEndpoint", "normalize failed: scheme"); throw IllegalArgumentException("Server URL must use HTTP(S)") }
+        if (!(!uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null)) { android.util.Log.w("ServerEndpoint", "normalize failed: host parts"); throw IllegalArgumentException("Invalid server URL") }
+        if (!(uri.path.isNullOrBlank() || uri.path == "/")) { android.util.Log.w("ServerEndpoint", "normalize failed: path"); throw IllegalArgumentException("Server URL must not contain a path") }
         if (uri.scheme == "http") {
             // cleartext HTTP مسموح فقط لعناوين الشبكة المحلية (LAN/محاكي) —
             // لا لأي خادم عام على الإنترنت. هذا الحارس يكمّل قاعدة
             // network_security_config التي لا يمكنها مطابقة عناوين IP الحرفية.
-            require(isLocalCleartextHost(uri.host)) { "Cleartext HTTP allowed only for local (LAN) servers" }
+            if (!isLocalCleartextHost(uri.host)) { android.util.Log.w("ServerEndpoint", "normalize failed: non-local cleartext"); throw IllegalArgumentException("Cleartext HTTP allowed only for local (LAN) servers") }
         }
         return URI(uri.scheme, null, uri.host, uri.port, null, null, null).toString().trimEnd('/')
     }

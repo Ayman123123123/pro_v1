@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
@@ -30,7 +31,9 @@ import java.util.concurrent.TimeUnit
 class LiveStreamWebSocketHandler(
     private val objectMapper: ObjectMapper,
     private val liveStreamService: com.red.server.calls.LiveStreamService,
-    private val accessGuard: ApprovedDeviceSessionGuard
+    private val accessGuard: ApprovedDeviceSessionGuard,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val roomAliases: RoomAliasService? = null
 ) : TextWebSocketHandler() {
     private val log = org.slf4j.LoggerFactory.getLogger(javaClass)
     private val broadcasters = ConcurrentHashMap<String, WebSocketSession>()
@@ -102,8 +105,8 @@ class LiveStreamWebSocketHandler(
         val accountId = session.attributes["accountId"] as? String
         val redId = session.attributes["redId"] as? String ?: userId
         val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
-        // G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام.
-        val resolvedRoomId = runCatching { RoomSeparationPolicy.resolve(incoming.roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: incoming.roomId
+        // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
+        val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
         require(signal.roomId.isNotBlank()) { "streamId is required" }
         require(signal.roomId.matches(STREAM_ID)) { "Invalid streamId" }
@@ -577,6 +580,13 @@ class LiveStreamWebSocketHandler(
 
     private fun resolveBroadcasterId(streamId: String, fallbackUserId: String): String {
         return liveStreamService.getStreamRecord(streamId)?.broadcasterId ?: fallbackUserId
+    }
+
+    /** G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام. */
+    private fun resolveRoom(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return v
+        return runCatching { roomAliases?.resolve(v) ?: RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
     }
 
     /** بث حدث غرفة لكل المتصلين (مذيع + مشاهدون) — للاستدعاء من REST (حذف شات/تثبيت...). */

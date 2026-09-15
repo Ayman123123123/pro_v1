@@ -32,7 +32,7 @@ class SecureStore(context: Context, name: String) {
         val encoded = prefs.getString(name, null) ?: return null
         try {
             val data = Base64.decode(encoded, Base64.NO_WRAP)
-            require(data.size > IV_SIZE)
+            if (data.size <= IV_SIZE) { Log.w(TAG, "SecureStore SHORT_DATA key=$name size=${data.size}"); return null }
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, data.copyOfRange(0, IV_SIZE)))
             return cipher.doFinal(data.copyOfRange(IV_SIZE, data.size)).toString(Charsets.UTF_8)

@@ -2,6 +2,7 @@
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.LiveStreamService
+import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomPasswordHasher
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -14,6 +15,8 @@ import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketMessage
 import org.springframework.web.socket.WebSocketSession
+import org.springframework.data.redis.core.StringRedisTemplate
+import org.springframework.data.redis.core.ValueOperations
 import java.util.concurrent.CopyOnWriteArrayList
 
 class LiveStreamWebSocketHandlerTest {
@@ -112,5 +115,22 @@ class LiveStreamWebSocketHandlerTest {
         handler.handleTextMessage(broadcaster.session, TextMessage("""{"type":"LEAVE","roomId":"stream-12345678"}"""))
         val vMessages = viewer.sent.map { objectMapper.readTree(it) }
         assertTrue(vMessages.any { it["type"].asText() == "PARTICIPANT_LEFT" }) { "Viewer should see broadcaster leave" }
+    }
+
+    @Test fun `alias bound via REST resolves via WS`() {
+        val redis: StringRedisTemplate = mock()
+        val ops: ValueOperations<String, String> = mock()
+        whenever(redis.opsForValue()).thenReturn(ops)
+        whenever(ops.get(any())).thenReturn(null)
+        val aliases = RoomAliasService(redis)
+        aliases.link("legacyLiveAlias03", "LIVE_legacyLiveAlias03")
+        streams.startStream("LIVE_legacyLiveAlias03", "91179")
+        val aliased = LiveStreamWebSocketHandler(objectMapper, streams, accessGuard, aliases)
+        val viewer = Probe("v-alias", "11154")
+        aliased.handleTextMessage(viewer.session, TextMessage("""{"type":"JOIN","roomId":"legacyLiveAlias03","payload":{"role":"viewer"}}"""))
+        val joined = viewer.sent.map { objectMapper.readTree(it) }
+        assertTrue(joined.none { it["type"].asText() == "ERROR" && it["payload"]["code"].asText() == "STREAM_NOT_FOUND" }) {
+            "WS must resolve REST alias, got: ${viewer.sent}"
+        }
     }
 }

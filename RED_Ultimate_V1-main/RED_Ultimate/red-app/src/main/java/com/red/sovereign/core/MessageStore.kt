@@ -211,7 +211,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun save(message: RedProtos.ChatMessage, status: String = "DELIVERED") {
-        require(message.payload.size() > 0) { "Ciphertext is empty" }
+        if (message.payload.size() == 0) { Log.w(TAG, "save skipped: empty ciphertext id=${message.id}"); return }
         writableDatabase.insertWithOnConflict("messages", null, ContentValues().apply {
             put("id", message.id); put("conversation_id", message.conversationId); put("sender_id", message.senderId)
             put("receiver_id", message.receiverId); put("encrypted_payload", message.payload.toByteArray())
@@ -222,7 +222,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun updateStatus(messageId: String, status: String) {
-        require(status in setOf("PENDING", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "DEAD_LETTER", "DELETED_FOR_ALL"))
+        if (status !in setOf("PENDING", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "DEAD_LETTER", "DELETED_FOR_ALL")) { Log.w(TAG, "updateStatus skipped: bad status=$status id=$messageId"); return }
         writableDatabase.update("messages", ContentValues().apply { put("status", status) }, "id = ?", arrayOf(messageId))
         writableDatabase.update("local_history", ContentValues().apply { put("status", status) }, "id = ?", arrayOf(messageId))
     }
@@ -354,7 +354,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun saveDecrypted(message: LocalMessage) {
-        require(message.plaintext.isNotEmpty() && message.plaintext.size <= 256 * 1024)
+        if (message.plaintext.isEmpty() || message.plaintext.size > 256 * 1024) { Log.w(TAG, "saveDecrypted skipped: bad size=${message.plaintext.size} id=${message.id}"); return }
         writableDatabase.insertWithOnConflict("local_history", null, ContentValues().apply {
             put("id", message.id); put("conversation_id", message.conversationId); put("sender_id", message.senderId)
             put("encrypted_plaintext", recordCipher.encrypt(message.plaintext)); put("message_type", message.type)
@@ -469,7 +469,7 @@ class MessageStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun setConversationPreference(conversationId: String, field: String, value: Long) {
-        require(field in setOf("pinned", "archived", "muted_until"))
+        if (field !in setOf("pinned", "archived", "muted_until")) { Log.w(TAG, "pref skipped: bad field=$field conv=$conversationId"); return }
         writableDatabase.execSQL("INSERT OR IGNORE INTO conversation_preferences(conversation_id) VALUES (?)", arrayOf(conversationId))
         writableDatabase.update("conversation_preferences", ContentValues().apply { put(field, value) }, "conversation_id=?", arrayOf(conversationId))
     }
