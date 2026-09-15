@@ -1,0 +1,75 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+stages:
+  - backend
+  - admin
+  - android
+
+variables:
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true"
+
+cache:
+  key:
+    files:
+      - RED_Ultimate_V1-main/RED_Ultimate/backend-server/gradle/wrapper/gradle-wrapper.properties
+      - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/package-lock.json
+  paths:
+    - .gradle/caches/
+    - .gradle/wrapper/
+    - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/node_modules/
+
+backend-test:
+  stage: backend
+  image: gradle:8.14.3-jdk21
+  timeout: 30m
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate/backend-server
+    - chmod +x gradlew
+    - ./gradlew test --no-daemon --stacktrace
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - RED_Ultimate_V1-main/RED_Ultimate/backend-server/build/test-results/test/*.xml
+    paths:
+      - RED_Ultimate_V1-main/RED_Ultimate/backend-server/build/reports/tests/
+      - RED_Ultimate_V1-main/RED_Ultimate/backend-server/build/libs/*.jar
+    expire_in: 14 days
+
+admin-checks:
+  stage: admin
+  image: node:22-bookworm
+  timeout: 20m
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard
+    - npm ci --no-audit --no-fund
+    - npm run check
+    - npm run build
+  artifacts:
+    when: always
+    paths:
+      - RED_Ultimate_V1-main/RED_Ultimate/admin_dashboard/dist/
+    expire_in: 14 days
+
+android-test:
+  stage: android
+  image: ghcr.io/cirruslabs/android-sdk:36
+  timeout: 60m
+  script:
+    - cd RED_Ultimate_V1-main/RED_Ultimate
+    - chmod +x gradlew
+    - ./gradlew :red-app:testDebugUnitTest :red-app:assembleDebug -PRED_SKIP_BUILD_LOGIC=true --no-daemon --stacktrace
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - RED_Ultimate_V1-main/RED_Ultimate/**/build/test-results/**/*.xml
+    paths:
+      - RED_Ultimate_V1-main/RED_Ultimate/red-app/build/outputs/apk/debug/*.apk
+      - RED_Ultimate_V1-main/RED_Ultimate/**/build/reports/tests/
+    expire_in: 14 days
