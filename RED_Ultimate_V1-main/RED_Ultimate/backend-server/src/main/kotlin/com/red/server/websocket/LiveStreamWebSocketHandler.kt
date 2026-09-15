@@ -108,8 +108,16 @@ class LiveStreamWebSocketHandler(
         // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
         val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
-        require(signal.roomId.isNotBlank()) { "streamId is required" }
-        require(signal.roomId.matches(STREAM_ID)) { "Invalid streamId" }
+        // تحقّق غير قاتل: كان require يرمي فيُغلق السوكت قبل أي ردّ واضح للعميل.
+        if (signal.roomId.isBlank() || !signal.roomId.matches(STREAM_ID)) {
+            val err = objectMapper.writeValueAsString(mapOf(
+                "type" to "ERROR",
+                "roomId" to signal.roomId,
+                "payload" to mapOf("code" to "INVALID_STREAM_ID", "message" to "streamId is required and must match ${STREAM_ID.pattern}")
+            ))
+            runCatching { session.sendMessage(TextMessage(err)) }
+            return
+        }
 
         when (signal.type.uppercase()) {
             "JOIN" -> {
@@ -339,6 +347,17 @@ class LiveStreamWebSocketHandler(
                 }
             }
             "CHAT", "REACTION", "RAISE_HAND", "LOWER_HAND" -> {
+                // بوابة العضوية: من لم يُكمل JOIN لا يبثّ شيئاً في غرفة حية
+                // (كان بإمكان أي سوكت متصل دون JOIN أن يغرِق الشات).
+                if (sessionRole[session.id] == null) {
+                    val err = objectMapper.writeValueAsString(mapOf(
+                        "type" to "ERROR",
+                        "roomId" to signal.roomId,
+                        "payload" to mapOf("code" to "JOIN_REQUIRED", "message" to "Send JOIN before interactive actions")
+                    ))
+                    runCatching { session.sendMessage(TextMessage(err)) }
+                    return
+                }
                 if (signal.type.equals("RAISE_HAND", ignoreCase = true)) {
                     val uname = signal.payload["userName"]?.toString().orEmpty().take(64).ifBlank { userId }
                     runCatching { liveStreamService.addRaisedHand(signal.roomId, userId, uname) }
@@ -541,6 +560,8 @@ class LiveStreamWebSocketHandler(
                 ))
                 runCatching { target.sendMessage(TextMessage(kickedMsg)) }
                 runCatching { target.close(CloseStatus.POLICY_VIOLATION) }
+                // removeSession ينظّف الحالة كاملة (مشاهدون/عدّاد/جداول الجلسة)
+                // ويبثّ PARTICIPANT_LEFT، فلا تبقى جلسة "شبح".
                 removeSession(target, signal.roomId, targetUserId)
                 liveStreamService.removeViewer(signal.roomId, targetUserId)
             }
@@ -640,6 +661,8 @@ class LiveStreamWebSocketHandler(
     private fun removeSession(session: WebSocketSession, streamId: String, userId: String) {
         val role = sessionRole.remove(session.id) ?: return
         sendLocks.remove(session.id)
+        sessionUser.remove(session.id)
+        sessionToStream.remove(session.id)
         when (role) {
             Role.BROADCASTER -> {
                 broadcasters.remove(streamId, session)

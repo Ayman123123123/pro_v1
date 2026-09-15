@@ -66,8 +66,12 @@ class ConferenceWebSocketHandler(
         // G13: حل alias عبر RoomAliasService (Redis+ذاكرة) مع سقوط للخام.
         val resolvedRoomId = resolveRoom(incoming.roomId)
         val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
-        require(signal.roomId.isNotBlank()) { "roomId is required" }
-        require(signal.roomId.matches(ROOM_ID)) { "Invalid roomId" }
+        // تحقّق غير قاتل: كان require يرمي فيُغلق سوكت المؤتمر بالكامل عند أول
+        // إطار شاذ؛ نُبلّغ المرسِل ونُبقي الجلسة (بقية الغرفة لا تتضرر).
+        if (signal.roomId.isBlank() || !signal.roomId.matches(ROOM_ID)) {
+            sendError(session, signal.roomId, "INVALID_ROOM_ID", "roomId is required and must match ${ROOM_ID.pattern}")
+            return
+        }
 
         when (signal.type.uppercase()) {
             "JOIN" -> handleJoin(session, userId, signal)
@@ -104,6 +108,17 @@ class ConferenceWebSocketHandler(
                 if (lowered) hands.remove(userId) else hands.add(userId)
                 relayIncludingSender(signal, userId)
             }
+            // مسح كل الأيدي (المضيف/المضيف المشارك) — كان عميل الأندرويد يرسل هذا
+            // النوع بينما الخادم لا يعرفه فيرمي ويُسقط الجلسة. يُحفَظ كحالة ويُبَثّ.
+            "CLEAR_ALL_HANDS" -> {
+                val role = roomRoles[signal.roomId]?.get(userId) ?: "LISTENER"
+                if (role != "HOST" && role != "CO_HOST") {
+                    sendError(session, signal.roomId, "FORBIDDEN", "Only host/co-host can clear raised hands")
+                } else {
+                    roomHands[signal.roomId]?.clear()
+                    relayIncludingSender(signal, userId)
+                }
+            }
             "APPROVE_SPEAKER", "DEMOTE_LISTENER", "GRANT_COHOST", "REVOKE_COHOST",
             "KICK_USER", "MUTE_USER", "MUTE_ALL", "PIN_MESSAGE" -> handleStageManagement(session, userId, signal)
             // مشاركة الشاشة إعلان عابر (تسمية البلاطة) — يقتصر على أصحاب المنصة كالنشر.
@@ -115,7 +130,11 @@ class ConferenceWebSocketHandler(
                 )
             }
             "LEAVE" -> handleLeave(session, signal)
-            else -> throw IllegalArgumentException("Unsupported conference signal type: ${signal.type}")
+            else -> {
+                // صلابتها: نوع غير مدعوم يُسجَّل ويُبلَّغ المرسِل فقط — لا رمي يُغلق
+                // الجلسة (كان أي إشارة أحدث من الخادم تُسقط سوكت المؤتمر كاملاً).
+                sendError(session, signal.roomId, "UNSUPPORTED_TYPE", "Unsupported conference signal type: ${signal.type}")
+            }
         }
     }
 
@@ -239,7 +258,13 @@ class ConferenceWebSocketHandler(
                     roles[targetId] = "LISTENER"
                     roomHands[roomId]?.remove(targetId)
                 }
-                "MUTE_USER" -> roomMuted.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }.add(targetId)
+                // دعم الفكّ أيضاً: payload[\"muted\"] == false يفكّ الكتم (كان الكتم
+                // أحادياً فيبقى المستخدم مكتوماً في حالة الغرفة بلا طريق للعودة).
+                "MUTE_USER" -> {
+                    val muted = signal.payload["muted"]?.toString()?.equals("false", ignoreCase = true) != true
+                    val set = roomMuted.computeIfAbsent(roomId) { ConcurrentHashMap.newKeySet() }
+                    if (muted) set.add(targetId) else set.remove(targetId)
+                }
                 // MUTE_ALL بلا target — تُطبَّق بعد كتلة targetId (انظر أدناه).
                 "GRANT_COHOST" -> {
                     // حدّ X: مضيفان مشاركان فقط (كان بلا حد فيصعّد الامتياز بلا نهاية).
@@ -381,6 +406,15 @@ class ConferenceWebSocketHandler(
             if (remaining != null) {
                 roomHosts[roomId] = remaining
                 roomRoles[roomId]?.set(remaining, "HOST")
+                // تعميم انتخاب المضيف الجديد (كان في مسار LEAVE وحده) — وإلا فانقطاع
+                // سوكت المضيف يترك غرفةً بلا مضيف معروف لدى بقية العملاء أبدياً.
+                val remainingSessions = room.toList()
+                val hostMsg = objectMapper.writeValueAsString(mapOf(
+                    "type" to "HOST_CHANGED",
+                    "roomId" to roomId,
+                    "payload" to mapOf("userId" to remaining)
+                ))
+                remainingSessions.forEach { runCatching { it.sendMessage(TextMessage(hostMsg)) } }
             } else {
                 roomRoles.remove(roomId)
                 roomHosts.remove(roomId)

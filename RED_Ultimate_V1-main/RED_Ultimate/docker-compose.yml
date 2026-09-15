@@ -72,6 +72,7 @@ services:
       - SPRING_DATA_REDIS_HOST=cache-redis
       - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:-}
       - RED_ADMIN_USERNAME=${RED_ADMIN_USERNAME:?RED_ADMIN_USERNAME is required}
       - RED_ADMIN_PASSWORD=${RED_ADMIN_PASSWORD:?RED_ADMIN_PASSWORD is required}
       - OPENRELAY_ENABLED=${OPENRELAY_ENABLED:-false}
@@ -150,6 +151,7 @@ services:
           cpus: '1.0'
     environment:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - SFU_TICKET_SECRET=${SFU_TICKET_SECRET:-}
       - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:?MEDIASOUP_ANNOUNCED_IP is required}
       - MEDIASOUP_EXTERNAL_IP=${MEDIASOUP_EXTERNAL_IP:-}
       - MEDIASOUP_WORKERS=${MEDIASOUP_WORKERS:-2}
@@ -469,8 +471,13 @@ services:
           memory: 256M
           cpus: '0.5'
     environment:
+      # NTFY_BASE_URL must be a URL a PHONE on the LAN can reach ntfy at
+      # (e.g. http://192.168.0.244:2586). The 127.0.0.1 fallback only suits a
+      # single-host dev box - set NTFY_BASE_URL in .env for real devices.
       - NTFY_BASE_URL=${NTFY_BASE_URL:-http://127.0.0.1:2586}
+      - NTFY_LISTEN_HTTP=:80
       - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_CACHE_DURATION=${NTFY_CACHE_DURATION:-12h}
       - NTFY_ATTACHMENT_CACHE_DIR=/var/cache/ntfy/attachments
       - NTFY_LOG_LEVEL=${NTFY_LOG_LEVEL:-info}
     ports:

@@ -175,13 +175,18 @@ class ConferenceSignalingClient(
                                 signal.payload["userId"]?.let { listener.onParticipantLeft(it) }
                             }
                             "PARTICIPANT_JOINED" -> {
+                                // الخادم يُرسل الدور في الحمولة — كان العميل يُسقطه فيظهر
+                                // المنضم جديداً بلقب LISTENER حتى لو كان مضيفاً مشاركاً.
+                                val joinedRole = signal.payload["role"]
+                                    ?: if (signal.payload["isHost"] == "true") "HOST" else "LISTENER"
                                 listener.onParticipantJoined(
                                     ConferenceParticipant(
                                         userId = signal.payload["userId"] ?: "",
                                         displayName = signal.payload["displayName"] ?: "",
+                                        role = joinedRole,
                                         hasAudio = signal.payload["hasAudio"] == "true",
                                         hasVideo = signal.payload["hasVideo"] == "true",
-                                        isHost = signal.payload["isHost"] == "true"
+                                        isHost = signal.payload["isHost"] == "true" || joinedRole == "HOST"
                                     )
                                 )
                             }

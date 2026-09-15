@@ -432,18 +432,22 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                     mesh?.setCameraEnabled(false)
                 }
                 // LEGENDARY Phase 6: اختيار طبقة simulcast حقيقي على SFU (لا-أثر بلا simulcast).
-                sfu?.setAllVideoLayers(
-                    when (parsed) {
-                        LiveQuality.AUDIO_ONLY, LiveQuality.Q360 -> 0
-                        LiveQuality.Q480 -> 1
-                        else -> 2
-                    },
-                    when (parsed) {
-                        LiveQuality.AUDIO_ONLY -> 0
-                        LiveQuality.Q360, LiveQuality.Q480 -> 1
-                        else -> 2
-                    }
-                )
+                // AUTO = ترك القرار للـ SFU (تكيّف مع عرض النطاق): كان يثبّت أعلى طبقة
+                // (else -> 2) فيُبطل التكيّف تماماً. الآن لا نُقيّد الطبقات في AUTO.
+                if (parsed != LiveQuality.AUTO) {
+                    sfu?.setAllVideoLayers(
+                        when (parsed) {
+                            LiveQuality.AUDIO_ONLY, LiveQuality.Q360 -> 0
+                            LiveQuality.Q480 -> 1
+                            else -> 2
+                        },
+                        when (parsed) {
+                            LiveQuality.AUDIO_ONLY -> 0
+                            LiveQuality.Q360, LiveQuality.Q480 -> 1
+                            else -> 2
+                        }
+                    )
+                }
                 signaling.setQuality(streamId, userId, parsed.name)
             }
             ACTION_TOGGLE_STATS -> {

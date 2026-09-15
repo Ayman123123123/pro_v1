@@ -274,9 +274,21 @@ class LiveStreamController(
     ): ResponseEntity<Map<String, Any>> {
         val stored = findStream(streamId)?.streamId ?: effectiveStreamId(streamId)
         when (req.action.uppercase()) {
-            "MUTE" -> liveStreamService.muteUser(stored, authentication.name, req.targetId, true)
-            "UNMUTE" -> liveStreamService.muteUser(stored, authentication.name, req.targetId, false)
-            "BAN" -> liveStreamService.banUser(stored, authentication.name, req.targetId, true)
+            "MUTE" -> {
+                liveStreamService.muteUser(stored, authentication.name, req.targetId, true)
+                // إشعار فوري للمكتوم عبر قناة الإشارة: كان REST يغيّر الحالة صامتاً
+                // فيبقى المشاهد يرسل تعليقات فتُرفض بلا سبب مرئي له.
+                liveSignaling.broadcastToRoom(stored, "MUTED", mapOf("targetUserId" to req.targetId), authentication.name)
+            }
+            "UNMUTE" -> {
+                liveStreamService.muteUser(stored, authentication.name, req.targetId, false)
+                liveSignaling.broadcastToRoom(stored, "UNMUTED", mapOf("targetUserId" to req.targetId), authentication.name)
+            }
+            "BAN" -> {
+                liveStreamService.banUser(stored, authentication.name, req.targetId, true)
+                // الحظر يقطع الجلسة فوراً — كان الحساب يبقى متصلاً حتى يغادر بنفسه.
+                liveSignaling.disconnectUser(stored, req.targetId, "Banned by broadcaster")
+            }
             "UNBAN" -> liveStreamService.banUser(stored, authentication.name, req.targetId, false)
             "PIN" -> liveStreamService.setPinned(stored, authentication.name, req.targetId.ifBlank { null }, req.value)
             "UNPIN" -> liveStreamService.setPinned(stored, authentication.name, null, null)

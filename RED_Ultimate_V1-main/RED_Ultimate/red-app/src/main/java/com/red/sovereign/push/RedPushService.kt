@@ -5,6 +5,7 @@ import android.util.Log
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.calls.CallRingRegistry
 import com.red.sovereign.calls.IncomingCallActivity
+import com.red.sovereign.calls.PendingOfferPoller
 import com.red.sovereign.calls.VoipPushRegistrar
 import com.red.sovereign.calls.YounesCallService
 import com.red.sovereign.core.RedConnectionService
@@ -15,19 +16,23 @@ import org.unifiedpush.android.connector.data.PushEndpoint
 import org.unifiedpush.android.connector.data.PushMessage
 
 /**
- * Sovereign push receiver — UnifiedPush connector (self-hosted distributor, no Google push).
+ * Sovereign push receiver - UnifiedPush connector (self-hosted distributor, no Google push).
  *
  * Declared in the manifest with action `org.unifiedpush.android.connector.PUSH_EVENT`.
  * The distributor wakes this service even when the app process is dead:
  * - [onNewEndpoint]: persist the URL + POST it to /api/devices/push-token.
- * - [onMessage]: wake payload from our own server (JSON, see [handlePush]).
+ * - [onMessage]: wake payload from our own server (sealed envelope, see [handlePush]).
  *
- * Wake payload contract (server: UnifiedPushSender):
- * - `{"type":"CALL","callId","mode":"VOICE|VIDEO","callerId","callerName","callType","ts"}`
- * - `{"type":"MESSAGE","conversationId","senderId","ts"}` (no preview — E2EE stays sealed)
- * - `{"type":"CANCEL","callId","ts"}` (caller hung up before accept)
+ * Wake payload contract (server: com.red.server.notification.UnifiedPushSender):
+ * - sealed v2 envelope (preferred):
+ *     {"v":2,"e":"<base64url(nonce||AES-GCM(plaintext))>"}
+ *   whose plaintext carries identifiers only - no names, no previews:
+ *     {"t":"CALL","i":"<callId>","c":"<callType>","f":"<callerId>","m":"VOICE|VIDEO"}
+ *     {"t":"CANCEL","i":"<callId>"}
+ *     {"t":"MESSAGE","i":"<senderId>"}
+ * - v1 plaintext wake (legacy tolerance): {"type":..,"callId":..,...} - still accepted.
  *
- * Every callback is total — it must never throw: a crash here would drop the wake.
+ * Every callback is total - it must never throw: a crash here would drop the wake.
  */
 class RedPushService : PushService() {
 
@@ -48,50 +53,89 @@ class RedPushService : PushService() {
     }
 
     override fun onRegistrationFailed(reason: FailedReason, instance: String) {
-        // Transient (no network / distributor down): register() re-runs on every app
-        // start and BOOT_COMPLETED, so no retry loop here — it would drain battery.
+        // Transient (no network / distributor down): VoipPushRegistrar owns the single
+        // exponential-backoff reconnect loop - no tight retry loop here (battery).
         Log.w(TAG, "UnifiedPush registration failed: $reason")
+        VoipPushRegistrar.onRegistrationFailed(applicationContext)
     }
 
     override fun onUnregistered(instance: String) {
         TokenStore(applicationContext).clearPushEndpoint()
-        Log.i(TAG, "unregistered by distributor — endpoint cleared")
+        PushWakePresenter.clearDedup()
+        Log.i(TAG, "unregistered by distributor - endpoint cleared")
     }
 
     companion object {
         private const val TAG = "RedPushService"
 
         fun handlePush(context: Context, text: String) {
-            val json = runCatching { JSONObject(text) }.getOrNull() ?: return
-            when (json.optString("type")) {
+            val json = decodeWake(context, text) ?: return
+            val type = json.optString("t").ifBlank { json.optString("type") }
+            when (type) {
                 "CALL" -> handleCallPush(context, json)
-                "MESSAGE" -> runCatching { RedConnectionService.start(context) }
-                "CANCEL" -> {
-                    val callId = json.optString("callId")
-                    if (callId.isNotBlank()) runCatching { CallRingRegistry.cancel(context, callId) }
-                }
-                else -> Log.i(TAG, "unknown push type ignored")
+                "MESSAGE" -> handleMessagePush(context)
+                "CANCEL" -> handleCancelPush(context, json)
+                else -> Log.i(TAG, "unknown push type '$type' ignored")
             }
         }
 
+        /**
+         * Opens a v2 sealed envelope with the stored endpoint, falling back to the
+         * legacy plaintext JSON. Returns null when nothing usable could be decoded;
+         * in that case we still nudge a sync so the socket/mailbox can recover.
+         */
+        private fun decodeWake(context: Context, text: String): JSONObject? {
+            val body = SovereignPushCipher.envelopeBody(text)
+            if (body != null) {
+                val endpoint = VoipPushRegistrar.currentEndpoint(context)
+                val plain = endpoint?.let { SovereignPushCipher.open(it, body) }
+                if (plain != null) return runCatching { JSONObject(plain) }.getOrNull()
+                Log.w(TAG, "sealed wake could not be opened (endpoint rotated?) - blind sync")
+                nudgeSync(context)
+                return null
+            }
+            return runCatching { JSONObject(text) }.getOrNull()
+        }
+
         private fun handleCallPush(context: Context, json: JSONObject) {
-            val callId = json.optString("callId").takeIf { it.isNotBlank() } ?: return
-            val mode = json.optString("mode", "VOICE")
-            val callType = json.optString("callType", IncomingCallActivity.CALL_TYPE_1TO1)
-            val peer = json.optString("callerName").takeIf { it.isNotBlank() }
-                ?: json.optString("callerId").takeIf { it.isNotBlank() }
-                ?: "RED"
+            val callId = json.optString("i").ifBlank { json.optString("callId") }
+                .takeIf { it.isNotBlank() } ?: return
+            val callType = json.optString("c").ifBlank { json.optString("callType") }
+                .takeIf { it.isNotBlank() } ?: IncomingCallActivity.CALL_TYPE_1TO1
+            val mode = json.optString("m").ifBlank { json.optString("mode", "VOICE") }
+            val from = json.optString("f").ifBlank { json.optString("callerId") }
             val myId = TokenStore(context).redId.orEmpty()
-            // Ring instantly from the push (works from a dead process); showIncoming
-            // dedups against the socket OFFER arriving a moment later — no double ring.
+
+            // 1) Ring + open the full-screen incoming activity (works from a dead process).
             runCatching {
-                CallRingRegistry.showIncoming(context, callId, peer, mode == "VIDEO", callType, myId)
-            }.onFailure { Log.w(TAG, "showIncoming failed for $callId", it) }
-            // Connect signaling so the full OFFER/session arrives over our socket.
+                PushWakePresenter.present(context, callType, callId, from, mode, myId)
+            }.onFailure { Log.w(TAG, "present incoming failed for $callId", it) }
+
+            // 2) Bring signaling up so the full OFFER/session arrives over our socket.
             runCatching {
                 if (callType == IncomingCallActivity.CALL_TYPE_1TO1) YounesCallService.listen(context)
                 else RedConnectionService.start(context)
-            }
+            }.onFailure { Log.w(TAG, "signaling start failed for $callId", it) }
+
+            // 3) Sync on open: pull any pending offer if the socket is slow to connect.
+            runCatching { PendingOfferPoller.pollNow(context) }
+        }
+
+        private fun handleMessagePush(context: Context) {
+            runCatching { RedConnectionService.start(context) }
+            runCatching { PendingOfferPoller.pollNow(context) }
+        }
+
+        private fun handleCancelPush(context: Context, json: JSONObject) {
+            val callId = json.optString("i").ifBlank { json.optString("callId") }
+            if (callId.isBlank()) return
+            runCatching { PushWakePresenter.cancel(context, callId) }
+            runCatching { CallRingRegistry.cancel(context, callId) }
+        }
+
+        private fun nudgeSync(context: Context) {
+            runCatching { RedConnectionService.start(context) }
+            runCatching { PendingOfferPoller.pollNow(context) }
         }
     }
 }

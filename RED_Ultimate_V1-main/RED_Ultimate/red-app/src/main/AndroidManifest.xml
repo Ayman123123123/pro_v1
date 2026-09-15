@@ -51,7 +51,7 @@
         android:theme="@style/Theme.Younes"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round">
+        android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="true">
         <service
             android:name=".calls.YounesCallService"
             android:exported="false"

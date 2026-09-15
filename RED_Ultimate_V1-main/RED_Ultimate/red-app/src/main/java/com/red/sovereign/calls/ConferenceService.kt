@@ -431,10 +431,16 @@ class ConferenceService : Service(), MeshRtcSession.Events, ConferenceSignalingC
                 )
             }
             "RAISE_HAND" -> {
-                val participantList = ConferenceRuntime.participants.map { p ->
-                    if (p.userId == signal.userId) p.copy(raisedHand = true) else p
+                // الخادم يُبثّ الرفع والخفض على النوع نفسه (payload lowered) —
+                // كان الخفض يُعامَل كورفع فيبقى اليد مرفوعة في واجهة الجميع.
+                val raised = signal.payload["lowered"] != "true"
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { p ->
+                    if (p.userId == signal.userId) p.copy(raisedHand = raised) else p
                 }
-                ConferenceRuntime.participants = participantList
+            }
+            "CLEAR_ALL_HANDS" -> {
+                // المضيف يمسح كل الأيدي المرفوعة — النوع أصبح مدعوماً خادمياً.
+                ConferenceRuntime.participants = ConferenceRuntime.participants.map { it.copy(raisedHand = false) }
             }
             "HOST_CHANGED" -> {
                 val next = signal.payload["userId"].orEmpty()

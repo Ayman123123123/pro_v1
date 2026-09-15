@@ -13,6 +13,17 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
+import com.red.server.auth.model.UserAccount
+import io.jsonwebtoken.Jwts
+import io.jsonwebtoken.security.Keys
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.util.Date
+import javax.crypto.SecretKey
 
 /** Issues a short-lived, group-membership-bound capability for one mediasoup room. */
 @RestController
@@ -21,12 +32,15 @@ class SfuTicketController(
     private val users: UserAccountRepository,
     private val groups: GroupService,
     private val jwt: JwtService,
+    private val sfuTickets: SfuTicketSigner,
     private val activeCalls: ActiveCallRegistry,
     private val conferenceRooms: ConferenceRoomService,
     private val liveStreams: LiveStreamService,
     private val conferenceSignaling: ConferenceWebSocketHandler,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val aliases: RoomAliasService? = null
+    private val aliases: RoomAliasService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val callSignaling: com.red.server.websocket.CallWebSocketHandler? = null
 ) {
     @GetMapping("/{groupId}/ticket")
     fun issue(@PathVariable groupId: String, authentication: Authentication): ResponseEntity<SfuTicketResponse> {
@@ -40,7 +54,7 @@ class SfuTicketController(
         val groupRole = groups.roleFor(accountId, effectiveGroupId)
             ?: throw NoSuchElementException("Group membership not found")
         val canProduce = groupRole in setOf(GroupRole.OWNER, GroupRole.ADMIN, GroupRole.MEMBER)
-        val ticket = jwt.issueSfuTicket(user, deviceId, effectiveGroupId, groupRole.name, canProduce)
+        val ticket = sfuTickets.issue(user, deviceId, effectiveGroupId, groupRole.name, canProduce)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
             .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, effectiveGroupId, groupRole.name, canProduce))
@@ -58,7 +72,15 @@ class SfuTicketController(
         val conferenceRoom = conferenceRooms.getRoom(effectiveRoomId)
             ?: conferenceRooms.getRoom(rawTrimmed)
             ?: if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) conferenceRooms.getRoom(RoomSeparationPolicy.PREFIX_CONF + rawTrimmed) else null
-        val legitimateRoom = conferenceRoom != null || activeCalls.isActiveCall(effectiveRoomId) || activeCalls.isActiveCall(rawTrimmed)
+        // An active friends/group call (registered in the call signaling handler) also opens its
+        // mediasoup room. Without this, friends/group calls could never obtain an SFU ticket and
+        // were silently forced to mesh-only.
+        val groupRoomOpen = callSignaling?.groupCallHost(effectiveRoomId) != null ||
+            callSignaling?.groupCallHost(rawTrimmed) != null
+        val legitimateRoom = conferenceRoom != null ||
+            activeCalls.isActiveCall(effectiveRoomId) ||
+            activeCalls.isActiveCall(rawTrimmed) ||
+            groupRoomOpen
         require(legitimateRoom) { "Room not open for SFU" }
         val canonicalRoomId = conferenceRoom?.roomId ?: effectiveRoomId
         val accountId = UUID.fromString(authentication.name)
@@ -77,7 +99,7 @@ class SfuTicketController(
             }
         } else "MEMBER"
         val canProduce = conferenceRoom == null || !conferenceRoom.isSpace || roomRole in setOf("HOST", "CO_HOST", "SPEAKER")
-        val ticket = jwt.issueSfuTicket(user, deviceId, canonicalRoomId, roomRole, canProduce = canProduce)
+        val ticket = sfuTickets.issue(user, deviceId, canonicalRoomId, roomRole, canProduce = canProduce)
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
             .body(SfuTicketResponse(ticket, SFU_TICKET_EXPIRES_SECONDS, canonicalRoomId, roomRole, canProduce))
@@ -111,7 +133,7 @@ class SfuTicketController(
         val isCoHost = !isBroadcaster && (liveStreams.getCoHosts(canonicalStreamId) + liveStreams.getCoHosts(rawTrimmed)).any { it == accountIdText || it == user.redId }
         val accessToken = authentication.credentials as? String ?: throw IllegalArgumentException("Device token required")
         val deviceId = requireNotNull(jwt.deviceId(accessToken)) { "An approved device token is required" }
-        val ticket = jwt.issueSfuTicket(
+        val ticket = sfuTickets.issue(
             user = user,
             deviceId = deviceId,
             groupId = canonicalStreamId,
@@ -138,3 +160,54 @@ data class SfuTicketResponse(
     val role: String,
     val canProduce: Boolean
 )
+
+/**
+ * Issues the short-lived SFU media capability ticket.
+ *
+ * The signing key is derived from SFU_TICKET_SECRET when that variable is set and non-blank,
+ * and otherwise from the primary JWT secret (red.jwt.secret / JWT_SECRET). This lets operators
+ * separate or rotate the media-ticket secret without touching login/refresh tokens, while keeping
+ * a zero-config safe fallback that is byte-identical to the previous behaviour.
+ *
+ * The derivation (SHA-256(secret) -> HS256 key) intentionally matches media-sfu/server.js
+ * authenticate() and JwtService so the SFU verifies the ticket with the same environment variable.
+ */
+@Service
+class SfuTicketSigner(
+    @Value("\${SFU_TICKET_SECRET:}") private val configuredSfuSecret: String,
+    @Value("\${red.jwt.secret}") private val configuredJwtSecret: String,
+    @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
+    @Value("\${red.jwt.audience:red-app}") private val audience: String
+) {
+    /** True when a dedicated SFU secret is configured (no secret shared with the JWT signer). */
+    val dedicatedSecretInUse: Boolean
+        get() = configuredSfuSecret.isNotBlank() && configuredSfuSecret != configuredJwtSecret
+
+    private val signingKey: SecretKey by lazy {
+        val secret = configuredSfuSecret.ifBlank { configuredJwtSecret }
+        require(secret.length >= 32 && secret != "change-me-in-production-please") {
+            "SFU_TICKET_SECRET (or JWT_SECRET) must contain at least 32 random characters"
+        }
+        val digest = MessageDigest.getInstance("SHA-256").digest(secret.toByteArray(StandardCharsets.UTF_8))
+        Keys.hmacShaKeyFor(digest)
+    }
+
+    fun issue(user: UserAccount, deviceId: UUID, groupId: String, groupRole: String, canProduce: Boolean): String {
+        val now = Instant.now()
+        return Jwts.builder()
+            .subject(user.id.toString())
+            .claim("redId", user.redId)
+            .claim("username", user.username)
+            .claim("role", user.role.name)
+            .claim("deviceId", deviceId.toString())
+            .claim("sfuGroupId", groupId)
+            .claim("sfuGroupRole", groupRole)
+            .claim("sfuCanProduce", canProduce)
+            .issuer(issuer)
+            .audience().add(audience).and()
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES)))
+            .signWith(signingKey)
+            .compact()
+    }
+}

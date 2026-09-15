@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
+import com.red.server.calls.CallStatus
+import com.red.server.calls.ActiveCallRegistry
 import com.red.server.calls.CallType
 import com.red.server.calls.RoomAliasService
 import com.red.server.calls.RoomSeparationPolicy
@@ -24,7 +26,9 @@ class CallWebSocketHandler(
     private val history: CallHistoryService,
     private val notifications: NotificationService,
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    private val roomAliases: RoomAliasService? = null
+    private val roomAliases: RoomAliasService? = null,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val activeCalls: ActiveCallRegistry? = null
 ) : TextWebSocketHandler() {
     private val sessions = ConcurrentHashMap<String, CopyOnWriteArrayList<WebSocketSession>>()
     private val pending = ConcurrentHashMap<String, CopyOnWriteArrayList<PendingCallSignal>>()
@@ -202,15 +206,80 @@ class CallWebSocketHandler(
             }
         }
 
-        require(signal.targetUserId.isNotBlank()) { "targetUserId is required" }
-        require(signal.targetUserId != source) { "Cannot call the same RED ID" }
+        // Group-call media/signaling (mesh) reuses the 1:1 envelope but carries the group call id
+        // as `callId`. Relay those to the room members instead of creating a bogus 1:1 call record
+        // (a shared callId could otherwise collide and abort the frame).
+        val rawCallId = signal.callId?.trim().orEmpty()
+        val groupRoom = if (rawCallId.isNotBlank()) {
+            groupRooms[resolveRoom(rawCallId)] ?: groupRooms[rawCallId]
+        } else null
+        if (groupRoom != null) {
+            val recipients = signal.targetUserId.takeIf { it.isNotBlank() && it != source }
+                ?.let { listOf(it) }
+                ?: (groupRoom.members + groupRoom.host)
+                    .filter { it.isNotBlank() && !it.equals(source, ignoreCase = true) }
+                    .distinct()
+            recipients.forEach { recipient ->
+                val outbound = OutgoingCallSignal(rawCallId, source, recipient, type, signal.mode.uppercase(), signal.payload)
+                val targets = liveSessions(recipient)
+                if (targets.isNotEmpty()) {
+                    val json = objectMapper.writeValueAsString(outbound)
+                    targets.forEach { target -> runCatching { target.sendMessage(TextMessage(json)) } }
+                }
+            }
+            session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to rawCallId))))
+            return
+        }
+        if (signal.targetUserId.isBlank()) {
+            session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf(
+                "type" to "ERROR",
+                "callId" to rawCallId,
+                "payload" to mapOf("error" to "targetUserId is required")
+            ))))
+            return
+        }
+        if (signal.targetUserId.equals(source, ignoreCase = true)) {
+            session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf(
+                "type" to "ERROR",
+                "callId" to rawCallId,
+                "payload" to mapOf("error" to "Cannot call the same RED ID")
+            ))))
+            return
+        }
         val callId = when (type) {
-            "OFFER" -> history.start(source, signal.targetUserId, signal.targetUserId,
-                callTypeForMode(signal.mode), CallRoute.RED, signal.callId).id
-            "ANSWER" -> requireCallId(signal).also { history.answer(it, source) }
-            "END" -> requireCallId(signal).also { history.end(it, source) }
+            "OFFER" -> {
+                // BUSY: if the callee is already in an established call, answer BUSY instead of
+                // ringing. The registry is only populated once a call is answered.
+                val busy = activeCalls?.let {
+                    it.isInCall(signal.targetUserId) && !it.isActiveCall(rawCallId)
+                } == true
+                if (busy) {
+                    val busySignal = OutgoingCallSignal(rawCallId, signal.targetUserId, source, "BUSY", signal.mode.uppercase(), emptyMap())
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(busySignal)))
+                    session.sendSafe(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to rawCallId))))
+                    return
+                }
+                history.start(source, signal.targetUserId, signal.targetUserId,
+                    callTypeForMode(signal.mode), CallRoute.RED, signal.callId).id
+            }
+            "ANSWER" -> requireCallId(signal).also {
+                history.answer(it, source)
+                activeCalls?.register(it, listOf(source, signal.targetUserId))
+            }
+            "END" -> requireCallId(signal).also {
+                history.end(it, source)
+                activeCalls?.unregister(it)
+            }
             "ICE", "HOLD", "RESUME", "RENEGOTIATE", "CALL_REACTION", "CALL_RAISE_HAND" -> requireCallId(signal)
-            "REJECT" -> requireCallId(signal).also { history.end(it, source) }
+            "REJECT" -> requireCallId(signal).also { id ->
+                val doc = runCatching { history.findById(id) }.getOrNull()
+                if (doc != null && doc.status == CallStatus.RINGING && doc.targetId == source) {
+                    history.rejected(id, source)
+                } else {
+                    history.end(id, source)
+                }
+                activeCalls?.unregister(id)
+            }
             "CONFERENCE_INVITE", "LIVE_INVITE" -> requireCallId(signal)
             else -> throw IllegalArgumentException("Unsupported call signal type")
         }

@@ -23,6 +23,8 @@ class SovereignNotificationRouter : Service() {
         const val CHANNEL_CALLS = "red_calls"
         const val FOREGROUND_ID = 1001
         const val ACTION_CONNECT = "com.red.action.CONNECT"
+        const val ACTION_STOP = "com.red.action.STOP"
+        private const val TAG = "SovereignNotificationRouter"
     }
 
     override fun onCreate() {
@@ -37,7 +39,13 @@ class SovereignNotificationRouter : Service() {
             .setSmallIcon(R.drawable.younes_icon_master_vector)
             .setOngoing(true)
             .build()
-        startForeground(FOREGROUND_ID, notification)
+        runCatching { startForeground(FOREGROUND_ID, notification) }
+            .onFailure { Log.w(TAG, "startForeground failed: ${it.message}") }
+        if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 

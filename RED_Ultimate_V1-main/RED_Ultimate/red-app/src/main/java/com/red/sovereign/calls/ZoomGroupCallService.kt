@@ -282,7 +282,26 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
             ACTION_MUTE_ALL -> {
                 if (isHost) {
                     ZoomRuntime.isMuted = true; engine?.setMicrophoneEnabled(false); mesh?.setMicrophoneEnabled(false); sfu?.setMicrophoneEnabled(false)
+                    // مرآة الحالة في قائمة الأعضاء (كانت تبقى "غير مكتوم" في الواجهة).
+                    scope.launch(Dispatchers.Main.immediate) {
+                        ZoomRuntime.state = when (val cur = ZoomRuntime.state) {
+                            is ZoomUiState.Active -> cur.copy(members = cur.members.map { it.copy(isMuted = true) })
+                            is ZoomUiState.Ringing -> cur.copy(members = cur.members.map { it.copy(isMuted = true) })
+                            else -> cur
+                        }
+                    }
                     signaling.send(CallSignal(callId=meetingId, type="ZOOM_MUTE_ALL", groupCallId=meetingId, mode=if(isVideo)"VIDEO" else "VOICE"))
+                }
+            }
+            ACTION_ADMIT_ZOOM -> {
+                // قاعة الانتظار: المضيف يُدخل عضواً محجوزاً — يُبلَغ العضو ثم يُربَط المسار.
+                if (!isHost) return START_STICKY
+                val target = intent.getStringExtra(EXTRA_TARGET_USER_ID).orEmpty()
+                if (target.isBlank()) return START_STICKY
+                scope.launch {
+                    signaling.send(CallSignal(callId=meetingId, targetUserId=target, type="ZOOM_ADMIT", groupCallId=meetingId))
+                    updateMemberStatus(target, ZoomMemberStatus.JOINED)
+                    mesh?.attachPeer(target); mesh?.offerTo(target)
                 }
             }
             ACTION_START_SCREEN_SHARE -> {
@@ -454,18 +473,48 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         when(signal.type){
             "ZOOM_ACCEPT" -> {
                 val joinerId=signal.sourceUserId.orEmpty()
-                if(joinerId.isNotBlank()){ mesh?.attachPeer(joinerId); mesh?.offerTo(joinerId) }
-                val cur=ZoomRuntime.state
-                scope.launch(Dispatchers.Main.immediate){
-                    when(cur){
-                        is ZoomUiState.Ringing -> {
-                            val updated=cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.JOINED) else it }
-                            stopRingback(); ZoomRuntime.state=ZoomUiState.Active(cur.meetingId,cur.isVideo,updated,System.currentTimeMillis(), ZoomRuntime.meetingTitle)
+                // قاعة الانتظار: إن فعّلها المضيف فلا يُدخل المنضمّ فورًا؛ يُحجز WAITING
+                // ويُبلَّغ صراحةً (ZOOM_WAITING) ثم يُدخله المضيف يدويًّا (ZOOM_ADMIT).
+                if (isHost && ZoomRuntime.isWaitingRoomEnabled && joinerId.isNotBlank()) {
+                    stopRingback()
+                    scope.launch(Dispatchers.Main.immediate){
+                        ZoomRuntime.state = when(val cur = ZoomRuntime.state){
+                            is ZoomUiState.Ringing -> ZoomUiState.Active(cur.meetingId,cur.isVideo,cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.WAITING) else it},System.currentTimeMillis(), ZoomRuntime.meetingTitle)
+                            is ZoomUiState.Active -> cur.copy(members=cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.WAITING) else it})
+                            else -> cur
                         }
-                        is ZoomUiState.Active -> ZoomRuntime.state=cur.copy(members=cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.JOINED) else it})
-                        else->{}
+                    }
+                    signaling.send(CallSignal(callId=meetingId, targetUserId=joinerId, type="ZOOM_WAITING", groupCallId=meetingId))
+                } else {
+                    if(joinerId.isNotBlank()){ mesh?.attachPeer(joinerId); mesh?.offerTo(joinerId) }
+                    val cur=ZoomRuntime.state
+                    scope.launch(Dispatchers.Main.immediate){
+                        when(cur){
+                            is ZoomUiState.Ringing -> {
+                                val updated=cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.JOINED) else it }
+                                stopRingback(); ZoomRuntime.state=ZoomUiState.Active(cur.meetingId,cur.isVideo,updated,System.currentTimeMillis(), ZoomRuntime.meetingTitle)
+                            }
+                            is ZoomUiState.Active -> ZoomRuntime.state=cur.copy(members=cur.members.map{ if(it.userId==joinerId) it.copy(status=ZoomMemberStatus.JOINED) else it})
+                            else->{}
+                        }
                     }
                 }
+            }
+            "ZOOM_WAITING" -> {
+                // المنضمّ: حجزه المضيف في قاعة الانتظار — اعرض شاشة الانتظار بدل الاجتماع.
+                stopRingtone()
+                val mId = signal.callId ?: signal.groupCallId ?: meetingId
+                if (mId.isNotBlank()) ZoomRuntime.state = ZoomUiState.WaitingRoom(mId, hostDisplayName.ifBlank { signal.sourceUserId.orEmpty() })
+            }
+            "ZOOM_ADMIT" -> {
+                // المضيف قبِل الإدخال: عُد إلى الاجتماع النشط واربط المسار معه (يعرض هو).
+                val cur = ZoomRuntime.state
+                if (cur is ZoomUiState.WaitingRoom) {
+                    ZoomRuntime.state = ZoomUiState.Active(cur.meetingId, isVideo, listOf(ZoomMember(myUserId, myUserId, ZoomMemberStatus.JOINED, hasVideo=isVideo)), System.currentTimeMillis(), ZoomRuntime.meetingTitle)
+                    ensureNetworkWatcher(); promoteToForeground()
+                }
+                val host = signal.sourceUserId.orEmpty()
+                if (host.isNotBlank() && host != myUserId) mesh?.attachPeer(host)
             }
             "ZOOM_DECLINE" -> updateMemberStatus(signal.sourceUserId.orEmpty(), ZoomMemberStatus.DECLINED)
             "ZOOM_END" -> stopZoom()
@@ -738,7 +787,10 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         const val ACTION_CREATE_POLL = "com.red.sovereign.zoom.CREATE_POLL"
         const val ACTION_VOTE_POLL = "com.red.sovereign.zoom.VOTE_POLL"
         const val ACTION_CREATE_BREAKOUT = "com.red.sovereign.zoom.CREATE_BREAKOUT"
+        /** قاعة الانتظار: إدخال عضو محجوز يدويًّا من المضيف. */
+        const val ACTION_ADMIT_ZOOM = "com.red.sovereign.zoom.ADMIT"
         const val EXTRA_MEETING_ID = "zoom_meeting_id"
+        const val EXTRA_TARGET_USER_ID = "target_user_id"
         const val EXTRA_MY_USER_ID = "my_user_id"
         const val EXTRA_HOST_ID = "host_id"
         const val EXTRA_HOST_NAME = "host_name"
@@ -780,5 +832,7 @@ class ZoomGroupCallService : Service(), WebRtcEngine.Events, MeshRtcSession.Even
         fun createPoll(context: Context, question: String, options: List<String>){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_POLL).putExtra("poll_question", question).putStringArrayListExtra("poll_options", ArrayList(options))) }
         fun votePoll(context: Context, pollId: String, option: Int){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_VOTE_POLL).putExtra("poll_id", pollId).putExtra("poll_option", option)) }
         fun createBreakout(context: Context, count: Int){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_CREATE_BREAKOUT).putExtra("breakout_count", count)) }
+        /** إدخال مشارك محجوز في قاعة الانتظار (المضيف فقط). */
+        fun admitParticipant(context: Context, targetUserId: String){ ContextCompat.startForegroundService(context, Intent(context, ZoomGroupCallService::class.java).setAction(ACTION_ADMIT_ZOOM).putExtra(EXTRA_TARGET_USER_ID, targetUserId)) }
     }
 }

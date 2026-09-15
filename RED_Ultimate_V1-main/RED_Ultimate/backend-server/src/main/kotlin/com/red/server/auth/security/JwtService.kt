@@ -20,7 +20,8 @@ class JwtService(
     @Value("\${red.jwt.secret}") private val configuredSecret: String,
     @Value("\${red.jwt.access-expiration-minutes:15}") private val accessExpirationMinutes: Long,
     @Value("\${red.jwt.issuer:red-sovereign}") private val issuer: String,
-    @Value("\${red.jwt.audience:red-app}") private val audience: String
+    @Value("\${red.jwt.audience:red-app}") private val audience: String,
+    @Value("\${red.jwt.sfu-secret:}") private val configuredSfuSecret: String
 ) {
     @PostConstruct
     fun validateSecret() {
@@ -39,6 +40,18 @@ class JwtService(
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(configuredSecret.toByteArray(StandardCharsets.UTF_8))
         Keys.hmacShaKeyFor(digest)
+    }
+
+    /** Dedicated key for SFU media tickets; falls back to the main key when no separate secret is configured. */
+    private val sfuKey: SecretKey by lazy {
+        val s = configuredSfuSecret
+        if (s.isNotBlank() && s.length >= 32) {
+            Keys.hmacShaKeyFor(
+                MessageDigest.getInstance("SHA-256").digest(s.toByteArray(StandardCharsets.UTF_8))
+            )
+        } else {
+            key
+        }
     }
 
     fun issue(user: UserAccount, deviceId: UUID? = null): String {
@@ -81,7 +94,7 @@ class JwtService(
             .audience().add(audience).and()
             .issuedAt(Date.from(now))
             .expiration(Date.from(now.plus(10, ChronoUnit.MINUTES))) // Short-lived ticket: 10 minutes
-            .signWith(key)
+            .signWith(sfuKey)
             .compact()
     }
 

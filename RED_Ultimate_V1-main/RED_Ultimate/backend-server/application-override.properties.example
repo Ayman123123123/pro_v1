@@ -1,8 +1,12 @@
-# Copy to application-override.properties for local/dev only. NEVER commit real values.
-spring.datasource.url=jdbc:postgresql://localhost:5432/red_sovereign
-spring.datasource.username=CHANGE_ME
-spring.datasource.password=CHANGE_ME
-spring.data.redis.host=localhost
+# Template for local backend overrides.
+# Copy this file to application-override.properties (same folder) and fill in real values.
+# application-override.properties is git-ignored and must NEVER be committed.
+# It only exists to point a developer machine at local PostgreSQL/Redis.
+spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/red_sovereign
+spring.datasource.username=<db-user>
+spring.datasource.password=<db-password>
+spring.data.redis.host=127.0.0.1
 spring.data.redis.port=6379
 spring.data.redis.password=
-spring.flyway.enabled=false
+# Keep migrations enabled: disabling Flyway silently breaks schema expectations.
+spring.flyway.enabled=true

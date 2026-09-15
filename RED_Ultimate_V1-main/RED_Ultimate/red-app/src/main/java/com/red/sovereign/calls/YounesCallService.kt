@@ -384,6 +384,21 @@ override fun onConnected() {
                     mode = signal.mode ?: "VOICE"
                 )
                 // CALL WAITING: إذا في مكالمة نشطة، نضيف المكالمة الجديدة كـ waiting
+                // Glare: while our own outgoing call is still dialing, answer the new caller with BUSY
+                // instead of overwriting the outgoing call state (which used to silently clobber it).
+                if (outgoingPending && CallRuntime.state is CallUiState.Connecting) {
+                    runCatching {
+                        signaling.send(
+                            CallSignal(
+                                callId = signal.callId,
+                                targetUserId = signal.sourceUserId.orEmpty(),
+                                type = "BUSY",
+                                mode = signal.mode ?: "VOICE"
+                            )
+                        )
+                    }
+                    return
+                }
                 val currentActive = CallRuntime.state as? CallUiState.Active
                 if (currentActive != null && !currentActive.isHeld) {
                     CallRuntime.state = CallUiState.ActiveWithIncoming(currentActive, newIncoming)

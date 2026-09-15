@@ -23,6 +23,7 @@ data class CallTelemetryDocument(
     val durationMs: Long,
     val avgRttMs: Long,
     val maxPacketLoss: Double,
+    val avgMosScore: Double = 0.0,
     val qualityAtEnd: String,
     val wasRecorded: Boolean,
     val wasHeld: Int,
@@ -53,6 +54,7 @@ class CallTelemetryController(private val repository: CallTelemetryRepository) {
             durationMs = event.durationMs,
             avgRttMs = event.avgRttMs,
             maxPacketLoss = event.maxPacketLoss,
+            avgMosScore = event.avgMosScore,
             qualityAtEnd = event.qualityAtEnd,
             wasRecorded = event.wasRecorded,
             wasHeld = event.wasHeld,
@@ -93,5 +95,6 @@ data class CallTelemetryDto(
     val maxPacketLoss: Double,
     val qualityAtEnd: String,
     val wasRecorded: Boolean,
-    val wasHeld: Int
+    val wasHeld: Int,
+    val avgMosScore: Double = 0.0
 )

@@ -56,10 +56,14 @@ object CallQualityManager {
         lastStats = defaultStats
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun classify(rtt: Int, loss: Float, bitrate: Int, jitter: Int): NetworkQuality = when {
-        loss > 5.0f || rtt > 400 || bitrate < 150 || jitter > 50 -> NetworkQuality.POOR
-        loss > 2.0f || rtt > 200 || bitrate < 400 || jitter > 30 -> NetworkQuality.FAIR
-        loss > 0.5f || rtt > 100 || bitrate < 900 || jitter > 15 -> NetworkQuality.GOOD
+        // RTT/loss/jitter are transport-level and mode-agnostic. Bitrate is deliberately NOT part of
+        // the grade: an audio-only call legitimately runs at ~24-48 kbps and must still read EXCELLENT,
+        // while a collapsed video bitrate is handled by AdaptiveCallQuality / CallPerformanceManager.
+        loss > 5.0f || rtt > 400 || jitter > 50 -> NetworkQuality.POOR
+        loss > 2.0f || rtt > 200 || jitter > 30 -> NetworkQuality.FAIR
+        loss > 0.5f || rtt > 100 || jitter > 15 -> NetworkQuality.GOOD
         else -> NetworkQuality.EXCELLENT
     }
 

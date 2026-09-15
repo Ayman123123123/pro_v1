@@ -472,7 +472,7 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
                     Spacer(Modifier.height(10.dp))
                     androidx.compose.foundation.lazy.LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp), modifier=Modifier.weight(1f)){
                         item{ ZoomParticipantRow("أنت (المضيف)", "متصل", ZoomRuntime.isMuted, ZoomRuntime.isVideoEnabled, ZoomRuntime.isHost, ZoomRuntime.isHandRaised)}
-                        items(state.members.size){ idx-> val m=state.members[idx]; ZoomParticipantRow(m.displayName, when(m.status){ ZoomMemberStatus.RINGING->"يرن..."; ZoomMemberStatus.JOINED->if(m.isMuted) "متصل · مكتوم" else "متصل"; else->m.status.name}, m.isMuted, m.hasVideo, false, m.isHandRaised)}
+                        items(state.members.size){ idx-> val m=state.members[idx]; Column(verticalArrangement=Arrangement.spacedBy(4.dp)){ ZoomParticipantRow(m.displayName, when(m.status){ ZoomMemberStatus.RINGING->"يرن..."; ZoomMemberStatus.JOINED->if(m.isMuted) "متصل · مكتوم" else "متصل"; ZoomMemberStatus.WAITING->"في قاعة الانتظار"; else->m.status.name}, m.isMuted, m.hasVideo, false, m.isHandRaised); if(ZoomRuntime.isHost && m.status==ZoomMemberStatus.WAITING){ ZoomSheetBtn("قبول الإدخال", ZoomBlue, Modifier.fillMaxWidth()){ ZoomGroupCallService.admitParticipant(context, m.userId) } } } }
                     }
                 }
             }
