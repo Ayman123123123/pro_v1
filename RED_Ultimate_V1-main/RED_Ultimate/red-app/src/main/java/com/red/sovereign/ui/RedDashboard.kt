@@ -609,6 +609,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     onPrivacy = { currentScreen = SovereignScreen.PRIVACY },
                     onBackup = { currentScreen = SovereignScreen.BACKUP },
                     onCommunities = { currentScreen = SovereignScreen.COMMUNITIES },
+                    onChannels = { currentScreen = SovereignScreen.CHANNELS },
                     onProfile = { currentScreen = SovereignScreen.PROFILE },
                     onEvents = { currentScreen = SovereignScreen.EVENTS },
                     onPolls = { currentScreen = SovereignScreen.POLLS },
@@ -3709,6 +3710,7 @@ private fun MoreScreen(
     onPrivacy: () -> Unit,
     onBackup: () -> Unit,
     onCommunities: () -> Unit = {},
+    onChannels: () -> Unit = {},
     onProfile: () -> Unit = {},
     onEvents: () -> Unit = {},
     onPolls: () -> Unit = {},
@@ -3739,7 +3741,8 @@ private fun MoreScreen(
         // إشعارات/دردشات/بيانات/حساب/أجهزة/استعادة/خادم/طابور) بدل الشارات الميتة.
         MoreOption(Icons.Default.Tune, "إعدادات الجهاز", "السمة والقفل والإشعارات والتخزين والطابور دون اتصال", com.red.sovereign.ui.theme.YounesEmerald, click = onDeviceSettings)
         MoreOption(Icons.Default.Contacts, "جهات الاتصال", "الأصدقاء وطلبات التواصل والحظر", com.red.sovereign.ui.theme.AqyalCyanGlow, click = onContacts)
-        MoreOption(Icons.Default.Public, "المجتمعات والقنوات", "مجتمعات عامة وقنوات — انضم وتابع (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
+        MoreOption(Icons.Default.Campaign, "القنوات السيادية", "بث ومشاركات عامة مع نظام التعزيزات والمستويات", Color(0xFF2196F3), enabled = true, click = onChannels)
+        MoreOption(Icons.Default.Public, "المجتمعات", "مجتمعات عامة — انضم وشارك (عام، ليس مشفراً)", Color(0xFFA78BFA), enabled = true, click = onCommunities)
         MoreOption(Icons.Default.Event, "الفعاليات", "فعاليات مجتمعية مع RSVP وتسجيل حضور", Color(0xFFE8B84A), enabled = true, click = onEvents)
         MoreOption(Icons.Default.Poll, "الاستطلاعات", "تصويت مجتمعي مع نتائج فورية ونِسَم مئوية", Color(0xFF65D7E7), enabled = true, click = onPolls)
     }
