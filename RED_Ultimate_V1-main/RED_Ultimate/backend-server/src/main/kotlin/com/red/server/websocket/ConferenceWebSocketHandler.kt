@@ -211,7 +211,9 @@ class ConferenceWebSocketHandler(
         room.filter { it.id != session.id }.forEach { runCatching { it.sendMessage(TextMessage(joinMsg)) } }
 
         // Send room state to newcomer — includes roles (+ lobby state/waiting list)
-        session.sendMessage(TextMessage(buildRoomState(signal.roomId, room, session, userId)))
+        // buildRoomState تُعيد TextMessage جاهزة — لا غلاف إضافي (لا يوجد
+        // مُنشئ TextMessage(TextMessage) في Spring).
+        session.sendMessage(buildRoomState(signal.roomId, room, session, userId))
     }
 
     /**
