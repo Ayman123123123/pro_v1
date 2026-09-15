@@ -43,6 +43,9 @@ data class MessageDocument(
     val ciphertextType: Int,
     val sequenceNumber: Long = 0,
     @Indexed var status: String = "SENT", // SENT, DELIVERED, READ, FAILED
+    // عدّاد تسليمات المضخة غير المُقرّة — يحُدّ حلقة إعادة الإرسال (انظر MessageService.recordDeliveryAttempt).
+    // حقل جديد: المستندات القديمة بلا هذا الحقل تقرأ 0 عبر قيمة المُنشئ الافتراضية، فلا حاجة لترحيل.
+    var deliveryAttempts: Int = 0,
     // الوسائط المشفرة
     val attachments: List<MessageAttachment> = emptyList(),
     // 🎙️ البيانات الوصفية للرسائل الصوتية (اختيارية — تُملأ عند messageType=VOICE)

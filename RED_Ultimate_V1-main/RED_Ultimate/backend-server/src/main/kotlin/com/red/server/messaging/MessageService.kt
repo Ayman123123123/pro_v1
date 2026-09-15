@@ -225,7 +225,31 @@ class MessageService(
     }
 
     /**
-     * Only the intended receiver may advance SENT -> DELIVERED -> READ.
+     * FIX (حلقة إعادة إرسال لا نهائية): مضخة الإعادة تُرسل كل ما status=SENT كل 30 ثانية. ورسالة
+     * يستحيل فكّها على الجهاز الحالي — لأن مفاتيح E2E الخاصة بالجهاز القديم فُقدت بإعادة التثبيت —
+     * لا تُقرّ بـ ACK أبداً: العميل يعود بلا ACK **عمداً** (ليجرّبها الجهاز الصحيح، انظر
+     * RedConnectionService: `if (!addressedToThisDevice) return`). فكانت تُعاد إلى الأبد بلا أي
+     * تقدّم. هنا نحُدّ المحاولات: بعد [cap] تسليماً غير مُقرّ نُعلنها FAILED، فيتوقف الإرسال طبيعياً
+     * لأن كل الاستعلامات تشترط status=SENT، ويرى المرسل حالة صريحة بدل انتظار أبدي.
+     * @return true إن بقيت قابلة للإعادة، false إن استُنفدت المحاولات (أو لم تكن SENT).
+     */
+    fun recordDeliveryAttempt(messageId: String, cap: Int): Boolean {
+        val updated = mongo.findAndModify(
+            Query(Criteria.where("uuid").`is`(messageId).and("status").`is`("SENT")),
+            Update().inc("deliveryAttempts", 1),
+            FindAndModifyOptions.options().returnNew(true),
+            MessageDocument::class.java
+        ) ?: return false
+        if (updated.deliveryAttempts >= cap) {
+            updated.status = "FAILED"
+            mongo.save(updated)
+            log.warn("Message {} marked FAILED after {} undelivered redelivery attempts", messageId, updated.deliveryAttempts)
+            return false
+        }
+        return true
+    }
+
+    /** Only the intended receiver may advance SENT -> DELIVERED -> READ.
      * FIX (رسالة عالقة للأبد): كان الشرط يشترط **تطابق وسم الجهاز** أيضاً، فجهازٌ تغيّر معرّفه
      * (إعادة تثبيت/استعادة نسخة احتياطية) يرى ACKه مرفوضاً بخطأ ⇒ تبقى status=SENT للأبد فلا
      * يصل إشعار "تم التسليم" للمرسل. الملكية (receiverId) هي حدّ التخويل الحقيقي — فحص الجهاز

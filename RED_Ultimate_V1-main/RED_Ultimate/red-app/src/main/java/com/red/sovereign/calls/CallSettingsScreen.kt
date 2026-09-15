@@ -55,6 +55,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -349,6 +352,11 @@ fun CallSettingsScreen(
                 }
             }
 
+            Spacer(Modifier.height(12.dp))
+
+            // موزّع UnifiedPush — بدونه لا يرن التطبيق وهو مقتول (كان غير مكشوف إطلاقاً)
+            UnifiedPushDistributorCard()
+
             Spacer(Modifier.height(16.dp))
 
             // ── قسم التطوير ───────────────────────────────────────────────
@@ -437,6 +445,114 @@ fun SettingsSectionTitle(title: String) {
         fontSize = 12.sp,
         modifier = Modifier.padding(start = 4.dp)
     )
+}
+
+/**
+ * حالة موزّع UnifiedPush — «هل يرن التطبيق وهو مقتول؟»
+ *
+ * بطاقة البطارية أعلاه تقول إن «تحسين البطارية قد يؤخر الرنين»، لكن السبب الأشيع لعدم
+ * الرنين **إطلاقاً** شيء آخر تماماً: غياب موزّع UnifiedPush. حينها
+ * `VoipPushRegistrar.ensureDistributor` يسجّل سطراً ويمضي، فلا يُصدر الموزّع نقطة نهاية،
+ * فلا يُرفع push token للخادم، فلا يجد الخادم ما يوقظ به الجهاز ⇒ لا رنين أبداً ولا أي
+ * إشارة للمستخدم بأن السبب هو الموزّع لا الشبكة ولا البطارية. هذه البطاقة تكشف الحالة
+ * صراحةً وتسمح بالاختيار؛ ودوال [VoipPushRegistrar.availableDistributors]
+ * و[currentDistributor] و[useDistributor] و[currentEndpoint] كانت مكتوبة بالكامل
+ * وغير مستدعاة من أي شاشة (واجهة ميتة).
+ */
+private data class DistributorStatus(
+    val installed: List<String> = emptyList(),
+    val active: String? = null,
+    val endpoint: String? = null
+) {
+    /** موزّع مُسجَّل + نقطة نهاية معلنة = الخادم يملك ما يوقظ به هذا الجهاز فعلاً. */
+    val healthy: Boolean get() = active != null && !endpoint.isNullOrBlank()
+}
+
+@Composable
+private fun UnifiedPushDistributorCard() {
+    val context = LocalContext.current
+    var refreshTick by remember { mutableStateOf(0) }
+    // كل نداءات UnifiedPush تعبر حدود عملية (binder) — تُنفَّذ خارج الخيط الرئيسي
+    val status by produceState(DistributorStatus(), refreshTick) {
+        value = withContext(Dispatchers.IO) {
+            DistributorStatus(
+                installed = VoipPushRegistrar.availableDistributors(context),
+                active = VoipPushRegistrar.currentDistributor(context),
+                endpoint = VoipPushRegistrar.currentEndpoint(context)
+            )
+        }
+    }
+    val accent = when {
+        status.healthy -> YounesEmerald
+        status.installed.isEmpty() -> Color(0xFFFF5252)
+        else -> Color(0xFFFFA000)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF131B26)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (status.healthy) Icons.Default.CheckCircle else Icons.Default.Security,
+                    null,
+                    tint = accent,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        when {
+                            status.healthy -> "الرنين من تطبيق مقتول: جاهز"
+                            status.installed.isEmpty() -> "لا يوجد موزّع — لن يرن التطبيق وهو مقتول"
+                            else -> "الموزّع غير مُسجَّل بعد"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        when {
+                            status.healthy -> "الموزّع: ${status.active}"
+                            status.installed.isEmpty() ->
+                                "بلا موزّع UnifiedPush لا يستطيع الخادم إيقاظ هذا الجهاز، فلا يرن وهو مقتول. " +
+                                    "ثبّت موزّعاً (مثل ntfy) ثم اضغط إعادة الفحص."
+                            else -> "اختر موزّعاً لتفعيل الإيقاظ السيادي (بلا خوادم Google)."
+                        },
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            status.installed.forEach { pkg ->
+                TextButton(
+                    onClick = {
+                        VoipPushRegistrar.useDistributor(context, pkg)
+                        refreshTick++
+                    }
+                ) {
+                    Icon(
+                        if (pkg == status.active) Icons.Default.CheckCircle else Icons.Default.RadioButtonChecked,
+                        null,
+                        tint = if (pkg == status.active) YounesEmerald else Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        pkg,
+                        color = if (pkg == status.active) YounesEmerald else Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            TextButton(onClick = { refreshTick++ }) {
+                Icon(Icons.Default.OpenInNew, null, tint = AqyalGold, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("إعادة الفحص", color = AqyalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 /**

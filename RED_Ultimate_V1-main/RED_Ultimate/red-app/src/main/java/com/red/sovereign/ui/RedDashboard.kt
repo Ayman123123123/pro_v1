@@ -925,6 +925,33 @@ private fun PostCard(
     com.red.sovereign.ui.components.SovereignGroupAvatar(group, groups, themed = false)
 }
 
+@Composable
+private fun ChatHubEffects(
+    directory: DirectoryViewModel,
+    dashboardStores: DashboardStoresViewModel,
+    context: android.content.Context
+) {
+    // الحضور الجماعي بمانع عاصفة
+    LaunchedEffect(directory) {
+        snapshotFlow { directory.contacts.map { it.redId } }
+            .debounce(PRESENCE_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .collect { directory.refreshPresence() }
+    }
+    // نبضة الحضور الدورية
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            runCatching { directory.refreshPresence() }
+        }
+    }
+    LaunchedEffect(Unit) {
+        com.red.sovereign.crypto.MessageSendErrorBus.errors.collect { error ->
+            android.widget.Toast.makeText(context, error.arabicMessage, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatHubScreen(
@@ -941,23 +968,10 @@ private fun ChatHubScreen(
     onCreateGroup: () -> Unit = {},
     onConversationOpen: (Boolean) -> Unit = {}
 ) {
-    // الحضور الجماعي بمانع عاصفة: كان المفتاح contacts.size فيطلق
-    // refreshPresence مع كل إضافة أثناء المزامنة الأولى؛ الآن snapshotFlow
-    // بهوية جهات الاتصال + debounce 2000ms — لا منطق محذوف، فقط المفتاح.
-    LaunchedEffect(directory) {
-        snapshotFlow { directory.contacts.map { it.redId } }
-            .debounce(PRESENCE_DEBOUNCE_MS)
-            .distinctUntilChanged()
-            .collect { directory.refreshPresence() }
-    }
-    // نبضة الحضور الدورية: تحديث online/lastSeen كل 60 ثانية أثناء بقاء
-    // الشاشة مفتوحة، حتى لو لم تتغير قائمة جهات الاتصال.
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(60_000)
-            runCatching { directory.refreshPresence() }
-        }
-    }
+    val context = LocalContext.current
+    val dashboardStores = rememberDashboardStores()
+    ChatHubEffects(directory, dashboardStores, context)
+
     val tab = if (showGroups) 1 else 0
     var target by remember { mutableStateOf("") }
     // فتح محادثة من إشعار رسالة
@@ -1077,9 +1091,7 @@ private fun ChatHubScreen(
     BackHandler(enabled = dashboardBackState.isBackEnabled()) {
         dispatchDashboardBack()
     }
-    val context = LocalContext.current
-    // توحيد 2026-09-10: مخازن واحدة عبر DashboardStoresViewModel (لا نسخ remember متفرقة).
-    val dashboardStores = rememberDashboardStores()
+
     val pinApi = remember(dashboardStores) { PinsApi(dashboardStores.apiClient) }
     var messageInfo by remember { mutableStateOf<DecryptedMessage?>(null) }
     val editedMessageIds = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
@@ -1197,11 +1209,7 @@ private fun ChatHubScreen(
         }
     }
     // Phase-1 (2026-09-14): تنبيه فوري عند فشل الإرسال (كان يضيع بصمت).
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        com.red.sovereign.crypto.MessageSendErrorBus.errors.collect { error ->
-            android.widget.Toast.makeText(context, error.arabicMessage, android.widget.Toast.LENGTH_LONG).show()
-        }
-    }
+
     // تحديث فوري لعرض التفاعلات عند ورود حدث E2EE (إضافة/إزالة)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         ReactionEventBus.events.collect { event ->

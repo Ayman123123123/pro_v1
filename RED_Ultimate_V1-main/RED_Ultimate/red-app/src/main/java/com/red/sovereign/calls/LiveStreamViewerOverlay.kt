@@ -1402,22 +1402,19 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
         return
     }
 
-    var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
+    val context = LocalContext.current
+    val viewRef = remember(egl) {
+        SurfaceViewRenderer(context).apply {
+            init(egl, null)
+            setMirror(mirror)
+            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+            setEnableHardwareScaler(true)
+            setZOrderMediaOverlay(overlay)
+        }
+    }
 
     AndroidView(
-        factory = { context ->
-            SurfaceViewRenderer(context).apply {
-                init(egl, null)
-                setMirror(mirror)
-                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
-                setEnableHardwareScaler(true)
-                // اصطلاح المشروع (CallUiKit): العلم مخصّص للطبقات الصغيرة فوق عارض آخر.
-                // كان true دائماً — فيضع عارض ملء الشاشة في طبقة overlay ويقلب الترتيب
-                // المقصود (قد يحجب واجهة الشات/الأزرار أو يُخفي بلاطات المضيفين).
-                setZOrderMediaOverlay(overlay)
-                viewRef = this
-            }
-        },
+        factory = { viewRef },
         update = { view ->
             view.setMirror(mirror)
         },
@@ -1425,11 +1422,11 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
     )
 
     DisposableEffect(track, viewRef) {
-        if (track != null && viewRef != null) {
+        if (track != null) {
             track.addSink(viewRef)
         }
         onDispose {
-            if (track != null && viewRef != null) {
+            if (track != null) {
                 track.removeSink(viewRef)
             }
         }
@@ -1437,7 +1434,7 @@ private fun LiveStreamVideoRenderer(track: VideoTrack?, mirror: Boolean, modifie
 
     DisposableEffect(viewRef) {
         onDispose {
-            viewRef?.release()
+            viewRef.release()
         }
     }
 }

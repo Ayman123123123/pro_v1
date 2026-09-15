@@ -307,7 +307,14 @@ class RedMasterHandler(
                     val cutoff = Instant.now().minusSeconds(PENDING_REDELIVER_MIN_AGE_SECONDS)
                     messages.pendingForDeviceOrAccount(redId, deviceId, liveDeviceIds(redId), PENDING_REDELIVER_LIMIT)
                         .filter { it.createdAt.isBefore(cutoff) }
-                        .forEach { send(session, messageEnvelope(it)) }
+                        .forEach { pending ->
+                            // حُدّ المحاولات: رسالة لا تُقرّ أبداً (مفاتيح E2E مفقودة بإعادة تثبيت)
+                            // كانت تُعاد كل 30s إلى الأبد. عند استنفاد المحاولات تُوسم FAILED فلا
+                            // تعودها الاستعلامات (كلها تشترط status=SENT).
+                            if (messages.recordDeliveryAttempt(pending.uuid, PENDING_REDELIVER_MAX_ATTEMPTS)) {
+                                send(session, messageEnvelope(pending))
+                            }
+                        }
                 }.onFailure { log.debug("redeliverPendingMessages failed for {}: {}", redId, it.message) }
             }
         }
@@ -414,5 +421,7 @@ class RedMasterHandler(
         private const val PENDING_REDELIVER_LIMIT = 50
         /** AUTO-FIX: never race the live push - only re-send messages older than this. */
         private const val PENDING_REDELIVER_MIN_AGE_SECONDS = 10L
+        /** ~10 دقائق عند دورة 30s — بعدها تُوسم الرسالة FAILED بدل إعادة لا نهائية. */
+        private const val PENDING_REDELIVER_MAX_ATTEMPTS = 20
     }
 }
