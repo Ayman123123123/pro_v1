@@ -295,8 +295,9 @@ class ConferenceController(
         val effectiveRoomId = aliases?.resolve(roomId) ?: rawTrimmed
         val record = roomService.getRoom(effectiveRoomId)
             ?: roomService.getRoom(rawTrimmed)
-            ?: if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) roomService.getRoom(RoomSeparationPolicy.PREFIX_CONF + rawTrimmed) else null
-            ?: throw NoSuchElementException("Conference room not found")
+            ?: run {
+                if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) roomService.getRoom(RoomSeparationPolicy.PREFIX_CONF + rawTrimmed) else null
+            } ?: throw NoSuchElementException("Conference room not found")
         val storedId = record.roomId
         val accountId = UUID.fromString(authentication.name)
         val user = users.findById(accountId).orElseThrow { NoSuchElementException("User not found") }

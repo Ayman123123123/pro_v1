@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.red.server.calls.CallHistoryService
 import com.red.server.calls.CallRoute
 import com.red.server.calls.CallType
+import com.red.server.calls.RoomSeparationPolicy
 import com.red.server.services.NotificationService
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.CloseStatus
@@ -33,7 +34,8 @@ class CallWebSocketHandler(
         when (type) {
             // دعوة مكالمة جماعية: targetUserId فارغ والقائمة في inviteeIds — يُرن لكل مدعو
             "GROUP_CALL_INVITE" -> {
-                val groupCallId = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+                val rawGroupCallId = requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+                val groupCallId = resolveRoom(rawGroupCallId)
                 // حد واتساب: 32 مشاركاً كحد أقصى — كان الخادم يقبل عدداً غير محدود.
                 val invitees = signal.inviteeIds.filter { it.isNotBlank() && it != source }.take(MAX_GROUP_CALL_MEMBERS)
                 require(invitees.isNotEmpty()) { "inviteeIds is required" }
@@ -57,8 +59,8 @@ class CallWebSocketHandler(
             // ردود الأعضاء إلى المضيف: ACCEPT/DECLINE جوابٌ على الدعوة
             // فوجهته المضيف طبعًا.
             "GROUP_CALL_ACCEPT", "GROUP_CALL_DECLINE" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms[groupCallId]
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 // Kicked members rejoining (stale invite / message tap): bounce them out cleanly.
                 if (type == "GROUP_CALL_ACCEPT" && room != null && room.kicked.any { it.equals(source, ignoreCase = true) }) {
                     val bounce = OutgoingCallSignal(groupCallId, room.host, source, "GROUP_CALL_END", signal.mode.uppercase(), mapOf("reason" to "kicked"))
@@ -97,8 +99,8 @@ class CallWebSocketHandler(
             // ثم المضيف كسقوط أخير حين لا تكون الغرفة معروفة للخادم (مثل
             // إعادة تشغيله وسط مكالمة).
             "GROUP_CALL_STATUS" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms[groupCallId]
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 val recipients: List<String> = when {
                     signal.targetUserId.isNotBlank() -> listOf(signal.targetUserId)
                     room != null -> (room.members + room.host)
@@ -122,8 +124,8 @@ class CallWebSocketHandler(
                 return
             }
             "GROUP_CALL_END" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms.remove(groupCallId)
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms.remove(groupCallId) ?: groupRooms.remove(signal.callId?.trim().orEmpty())
                 val targets = (room?.members ?: emptyList()) + room?.host
                 dropPending(groupCallId)
                 targets.filterNotNull().filter { it.isNotBlank() && it != source }.forEach { memberId ->
@@ -137,8 +139,8 @@ class CallWebSocketHandler(
             }
             // كتم الكل — المضيف فقط، يُبث لكل الأعضاء (كان يُسقط: لا targetUserId فيُرفض).
             "GROUP_CALL_MUTE_ALL" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms[groupCallId]
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 if (room == null || !room.host.equals(source, ignoreCase = true)) {
                     session.sendMessage(TextMessage(objectMapper.writeValueAsString(mapOf("type" to "ACK", "callId" to groupCallId))))
                     return
@@ -157,8 +159,8 @@ class CallWebSocketHandler(
             }
             // طرد عضو — المضيف فقط: يُحذف من الغرفة + يُمنع من العودة + يُبث للجميع.
             "GROUP_CALL_KICK" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms[groupCallId]
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 val victim = (signal.payload["memberId"] as? String).orEmpty()
                 if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
                     || victim.equals(source, ignoreCase = true)
@@ -179,8 +181,8 @@ class CallWebSocketHandler(
             }
             // كتم عضو واحد — المضيف فقط: يُوجَّه للعضو نفسه (+ المضيف يعرف ضمنياً).
             "GROUP_CALL_MUTE_MEMBER" -> {
-                val groupCallId = requireCallId(signal)
-                val room = groupRooms[groupCallId]
+                val groupCallId = resolveRoom(requireCallId(signal))
+                val room = groupRooms[groupCallId] ?: groupRooms[signal.callId?.trim().orEmpty()]
                 val victim = (signal.payload["memberId"] as? String).orEmpty()
                 if (room == null || !room.host.equals(source, ignoreCase = true) || victim.isBlank()
                     || victim.equals(source, ignoreCase = true)
@@ -363,30 +365,35 @@ class CallWebSocketHandler(
         mode: String,
         payload: Map<String, Any?> = emptyMap()
     ): List<String> {
-        val existing = groupRooms[groupCallId]
+        val effectiveId = resolveRoom(groupCallId)
+        val existing = groupRooms[effectiveId] ?: groupRooms[groupCallId.trim()]
         val current = (existing?.members.orEmpty() + (existing?.host?.let { listOf(it) } ?: emptyList()))
             .filter { it.isNotBlank() }.distinct()
         val fresh = extraIds.filter { it.isNotBlank() && it != hostRedId && it !in current }
             .take((MAX_GROUP_CALL_MEMBERS - current.size).coerceAtLeast(0))
         if (existing == null) {
             require(fresh.isNotEmpty()) { "inviteeIds is required" }
-            groupRooms[groupCallId] = GroupCallRoom(host = hostRedId, members = fresh.toMutableList())
+            groupRooms[effectiveId] = GroupCallRoom(host = hostRedId, members = fresh.toMutableList())
         } else if (fresh.isNotEmpty()) {
-            groupRooms[groupCallId] = existing.copy(members = (existing.members + fresh).distinct().toMutableList())
+            groupRooms[effectiveId] = existing.copy(members = (existing.members + fresh).distinct().toMutableList())
         }
         val enriched = payload + ("hostName" to (payload["hostName"] ?: ""))
         fresh.forEach { invitee ->
-            deliverInvite(invitee, "GROUP_CALL_INVITE", groupCallId, hostRedId, mode, enriched)
+            deliverInvite(invitee, "GROUP_CALL_INVITE", effectiveId, hostRedId, mode, enriched)
         }
         return fresh
     }
 
     /** مضيف الغرفة الجماعية — للتحقق من صلاحية الدعوات الإضافية عبر REST. */
-    fun groupCallHost(groupCallId: String): String? = groupRooms[groupCallId]?.host
+    fun groupCallHost(groupCallId: String): String? {
+        val effective = resolveRoom(groupCallId)
+        return groupRooms[effective]?.host ?: groupRooms[groupCallId.trim()]?.host
+    }
 
     /** عدد مشاركي الغرفة الجماعية (مضيف + أعضاء) — لفرض الحد. */
     fun groupCallSize(groupCallId: String): Int {
-        val room = groupRooms[groupCallId] ?: return 0
+        val effective = resolveRoom(groupCallId)
+        val room = groupRooms[effective] ?: groupRooms[groupCallId.trim()] ?: return 0
         return ((room.members + room.host).filter { it.isNotBlank() }.distinct()).size
     }
 
@@ -415,6 +422,13 @@ class CallWebSocketHandler(
 
     private fun requireCallId(signal: IncomingCallSignal) =
         requireNotNull(signal.callId?.takeIf(String::isNotBlank)) { "callId is required" }
+
+    /** G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام عند غيابه. */
+    private fun resolveRoom(raw: String?): String {
+        val v = raw?.trim().orEmpty()
+        if (v.isEmpty()) return v
+        return runCatching { RoomSeparationPolicy.resolve(v) }.getOrNull()?.takeIf { it.isNotBlank() } ?: v
+    }
 
     /** تحويل أنماط التطبيق (VOICE/VIDEO/…) إلى أنواع سجل المكالمات عند بدء OFFER. */
     private fun callTypeForMode(mode: String): CallType = when (mode.uppercase()) {

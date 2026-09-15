@@ -24,7 +24,10 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun download(path: String, maximumBytes: Int = 25 * 1024 * 1024): ApiResult<ByteArray> {
-        require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
+        if (!(path.startsWith("/api/media/") && !path.contains(".."))) {
+            android.util.Log.e("MediaApi", "download invalid path")
+            return ApiResult.Error(400, "INVALID_MEDIA_PATH")
+        }
         val temporary = File.createTempFile("media-download-", ".bin", context.cacheDir)
         return try {
             when (val result = client.download(path, temporary)) {
@@ -71,8 +74,14 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
     }
 
     suspend fun downloadToPrivateCache(path: String, extension: String): ApiResult<File> {
-        require(path.startsWith("/api/media/") && !path.contains("..")) { "Invalid authenticated media path" }
-        require(extension.matches(Regex("^[a-z0-9]{2,5}$")))
+        if (!(path.startsWith("/api/media/") && !path.contains(".."))) {
+            android.util.Log.e("MediaApi", "downloadToPrivateCache invalid path")
+            return ApiResult.Error(400, "INVALID_MEDIA_PATH")
+        }
+        if (!extension.matches(Regex("^[a-z0-9]{2,5}$"))) {
+            android.util.Log.e("MediaApi", "downloadToPrivateCache invalid extension")
+            return ApiResult.Error(400, "INVALID_MEDIA_EXTENSION")
+        }
         // Try encrypted cache first
         val cacheKey = "story:$path"
         encryptedCache.get(cacheKey)?.let { bytes ->
@@ -118,7 +127,10 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
     }
 
     suspend fun uploadEncrypted(file: File, displayName: String): ApiResult<MediaObject> {
-        require(file.isFile && file.length() in 1..100L * 1024 * 1024)
+        if (!(file.isFile && file.length() in 1..100L * 1024 * 1024)) {
+            android.util.Log.e("MediaApi", "uploadEncrypted invalid file size=" + file.length())
+            return ApiResult.Error(400, "FILE_TOO_LARGE")
+        }
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", "$displayName.bin", file.asRequestBody("application/octet-stream".toMediaType()))
             .build()
@@ -129,7 +141,10 @@ class MediaApi(private val context: Context, private val client: AuthorizedApiCl
         client.request("POST", "/api/media/grants", json.encodeToString(MediaGrantRequest(objectKey, targetRedId)))
 
     suspend fun delete(path: String): ApiResult<String> {
-        require(path.startsWith("/api/media/") && !path.contains(".."))
+        if (!(path.startsWith("/api/media/") && !path.contains(".."))) {
+            android.util.Log.e("MediaApi", "delete invalid path")
+            return ApiResult.Error(400, "INVALID_MEDIA_PATH")
+        }
         return client.request("DELETE", path)
     }
 

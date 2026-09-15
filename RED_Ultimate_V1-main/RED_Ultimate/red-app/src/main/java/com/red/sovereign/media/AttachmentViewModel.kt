@@ -48,7 +48,10 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 ins.use { input ->
                     out.outputStream().use { outs -> input.copyTo(outs, 64 * 1024) }
                 }
-                require(out.isFile && out.length() in 1..100L * 1024 * 1024) { "FILE_TOO_LARGE" }
+                if (!(out.isFile && out.length() in 1..100L * 1024 * 1024)) {
+                    android.util.Log.e("AttachmentVM", "stage file invalid size=" + out.length())
+                    throw java.io.IOException("FILE_TOO_LARGE")
+                }
                 Triple(messageId, out.absolutePath, mime)
             }
         }
@@ -149,7 +152,10 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         downloadStates[messageId] = withContext(Dispatchers.IO) {
             runCatching {
                 val source = File(downloaded.path)
-                require(source.isFile) { "Decrypted file is unavailable" }
+                if (!source.isFile) {
+                    android.util.Log.e("AttachmentVM", "export source unavailable")
+                    throw java.io.IOException("Decrypted file is unavailable")
+                }
                 val resolver = getApplication<Application>().contentResolver
                 val exportOut = resolver.openOutputStream(destination, "w")
                 if (exportOut == null) {

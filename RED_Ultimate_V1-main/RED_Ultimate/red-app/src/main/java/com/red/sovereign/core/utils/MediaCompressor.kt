@@ -95,8 +95,10 @@ object MediaCompressor {
         outputFile.parentFile?.mkdirs()
         try {
             FileOutputStream(outputFile).use { out ->
-                check(scaled.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(40, 100), out)) {
-                    "IMAGE_COMPRESSION_FAILED"
+                val ok = scaled.compress(Bitmap.CompressFormat.JPEG, jpegQuality.coerceIn(40, 100), out)
+                if (!ok) {
+                    android.util.Log.e("MediaCompressor", "compress failed path=$inputPath")
+                    throw java.io.IOException("IMAGE_COMPRESSION_FAILED")
                 }
             }
             return outputFile

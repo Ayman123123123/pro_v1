@@ -1,6 +1,7 @@
 package com.red.server.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.RoomSeparationPolicy
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import org.springframework.stereotype.Component
@@ -100,7 +101,10 @@ class LiveStreamWebSocketHandler(
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
         val accountId = session.attributes["accountId"] as? String
         val redId = session.attributes["redId"] as? String ?: userId
-        val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        // G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام.
+        val resolvedRoomId = runCatching { RoomSeparationPolicy.resolve(incoming.roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: incoming.roomId
+        val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
         require(signal.roomId.isNotBlank()) { "streamId is required" }
         require(signal.roomId.matches(STREAM_ID)) { "Invalid streamId" }
 

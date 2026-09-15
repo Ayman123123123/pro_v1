@@ -2,6 +2,7 @@ package com.red.server.websocket
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.red.server.calls.RoomSeparationPolicy
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.TextMessage
 import org.springframework.web.socket.WebSocketSession
@@ -48,14 +49,18 @@ class ConferenceWebSocketHandler(private val objectMapper: ObjectMapper) : TextW
 
     /** LEGENDARY Phase 7: دور مشارك (للتذاكر الواعية بالدور) — الأدوار مفتاحها redId. */
     fun getRole(roomId: String, vararg ids: String): String {
-        val roles = roomRoles[roomId] ?: return "LISTENER"
+        val effective = runCatching { RoomSeparationPolicy.resolve(roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: roomId
+        val roles = roomRoles[effective] ?: roomRoles[roomId.trim()] ?: return "LISTENER"
         for (id in ids) { val r = roles[id]; if (r != null) return r }
         return "LISTENER"
     }
 
     public override fun handleTextMessage(session: WebSocketSession, message: TextMessage) {
         val userId = session.attributes["userId"] as? String ?: error("Authenticated RED ID is missing")
-        val signal = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        val incoming = objectMapper.readValue(message.payload, IncomingConferenceSignal::class.java)
+        // G13: حل alias الغرفة القادمة عبر WS إلى القانوني، مع سقوط للخام.
+        val resolvedRoomId = runCatching { RoomSeparationPolicy.resolve(incoming.roomId) }.getOrNull()?.takeIf { it.isNotBlank() } ?: incoming.roomId
+        val signal = if (resolvedRoomId == incoming.roomId) incoming else incoming.copy(roomId = resolvedRoomId)
         require(signal.roomId.isNotBlank()) { "roomId is required" }
         require(signal.roomId.matches(ROOM_ID)) { "Invalid roomId" }
 

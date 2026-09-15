@@ -95,8 +95,9 @@ class SfuTicketController(
         val rawTrimmed = streamId.trim()
         val record = liveStreams.getStreamRecord(effectiveStreamId)
             ?: liveStreams.getStreamRecord(rawTrimmed)
-            ?: if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) liveStreams.getStreamRecord(RoomSeparationPolicy.PREFIX_LIVE + rawTrimmed) else null
-            ?: throw NoSuchElementException("Live stream not found or ended")
+            ?: run {
+                if (RoomSeparationPolicy.kindOf(rawTrimmed) == RoomSeparationPolicy.RoomKind.LEGACY && RoomSeparationPolicy.isValidRoomId(rawTrimmed)) liveStreams.getStreamRecord(RoomSeparationPolicy.PREFIX_LIVE + rawTrimmed) else null
+            } ?: throw NoSuchElementException("Live stream not found or ended")
         val canonicalStreamId = record.streamId
         val accountId = UUID.fromString(authentication.name)
         val accountIdText = accountId.toString()

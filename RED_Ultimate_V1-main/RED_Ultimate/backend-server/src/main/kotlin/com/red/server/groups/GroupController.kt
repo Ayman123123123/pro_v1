@@ -1,5 +1,7 @@
 package com.red.server.groups
 
+import com.red.server.calls.RoomAliasService
+import com.red.server.calls.RoomSeparationPolicy
 import jakarta.validation.Valid
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -15,7 +17,11 @@ import java.util.UUID
 
 @RestController
 @RequestMapping("/api/groups")
-class GroupController(private val groups: GroupService) {
+class GroupController(
+    private val groups: GroupService,
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private val aliases: RoomAliasService? = null
+) {
     /** P0-F: توافق + ترقيم — بدون cursor&limit يعيد السلوك القديم، ومعهما keyset. */
     @GetMapping fun list(
         auth: Authentication,
@@ -28,7 +34,12 @@ class GroupController(private val groups: GroupService) {
         @RequestParam(required = false, defaultValue = "") q: String,
         @RequestParam(required = false) limit: Int?
     ) = groups.discover(q, limit ?: 20)
-    @PostMapping fun create(@Valid @RequestBody request: CreateGroupRequest, auth: Authentication) = groups.create(UUID.fromString(auth.name), request)
+    @PostMapping fun create(@Valid @RequestBody request: CreateGroupRequest, auth: Authentication): GroupResponse {
+        val response = groups.create(UUID.fromString(auth.name), request)
+        // G13: warm GRP_ alias for the new group's call room; legacy group id stays as-is.
+        runCatching { aliases?.canonicalize(RoomSeparationPolicy.PREFIX_GROUP, response.id) { response.id } }
+        return response
+    }
     @GetMapping("/{id}") fun details(@PathVariable id: String, auth: Authentication) = groups.details(UUID.fromString(auth.name), id)
     @PostMapping("/{id}/members") fun add(@PathVariable id: String, @RequestBody request: AddGroupMemberRequest, auth: Authentication) = groups.add(UUID.fromString(auth.name), id, request)
     @PatchMapping("/{id}/members/{userId}") fun role(@PathVariable id: String, @PathVariable userId: UUID, @RequestBody request: UpdateGroupRoleRequest, auth: Authentication) = groups.role(UUID.fromString(auth.name), id, userId, request)
