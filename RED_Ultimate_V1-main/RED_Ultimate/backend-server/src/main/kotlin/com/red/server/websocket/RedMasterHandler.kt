@@ -252,7 +252,9 @@ class RedMasterHandler(
         redis.opsForSet().add("red:online", redId)
         // تحديث last_seen فوري في قاعدة البيانات (مرة واحدة — كانت مكررة بسطر ثانٍ زائد)
         runCatching { jdbc.update("UPDATE users SET last_seen = ?, updated_at = ? WHERE red_id = ?", Instant.now(), Instant.now(), redId) }
-        messages.pendingFor(redId, protocolDeviceId).forEach { send(session, messageEnvelope(it)) }
+        // FIX (رسالة مفقودة): المقيَّد بالجهاز وحده لا يسترجع شيئاً لجهاز انحرف معرّفه
+        messages.pendingForDeviceOrAccount(redId, protocolDeviceId, liveDeviceIds(redId))
+            .forEach { send(session, messageEnvelope(it)) }
         log.debug("Presence ONLINE for {} (sessions={})", redId, sessions[redId]?.size)
     }
 
@@ -303,7 +305,7 @@ class RedMasterHandler(
                 val deviceId = session.attributes["protocolDeviceId"] as? Int ?: return@deviceLoop
                 runCatching {
                     val cutoff = Instant.now().minusSeconds(PENDING_REDELIVER_MIN_AGE_SECONDS)
-                    messages.pendingFor(redId, deviceId, PENDING_REDELIVER_LIMIT)
+                    messages.pendingForDeviceOrAccount(redId, deviceId, liveDeviceIds(redId), PENDING_REDELIVER_LIMIT)
                         .filter { it.createdAt.isBefore(cutoff) }
                         .forEach { send(session, messageEnvelope(it)) }
                 }.onFailure { log.debug("redeliverPendingMessages failed for {}: {}", redId, it.message) }
@@ -324,6 +326,18 @@ class RedMasterHandler(
         targets?.forEach { send(it, envelope) }
         return targets?.isNotEmpty() == true
     }
+
+    /**
+     * معرّفات الأجهزة المتصلة الآن لهذا الحساب.
+     * تُستخدم لتفريق «وسم جهاز ميت/منحرف» (نسترجعه لأي جهاز حيّ) عن «جهاز حيّ آخر»
+     * (لا نُزاحمه برسائله) — انظر MessageService.pendingForDeviceOrAccount.
+     */
+    private fun liveDeviceIds(redId: String): Set<Int> =
+        sessions[redId]?.values
+            ?.filter { it.isOpen }
+            ?.mapNotNull { it.attributes["protocolDeviceId"] as? Int }
+            ?.toSet()
+            ?: emptySet()
 
     private fun send(session: WebSocketSession, envelope: RedProtos.RedRED) {
         synchronized(session) {

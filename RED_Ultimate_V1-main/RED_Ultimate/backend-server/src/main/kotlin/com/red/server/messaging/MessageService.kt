@@ -187,6 +187,31 @@ class MessageService(
         MessageDocument::class.java
     )
 
+    /**
+     * FIX (رسالة مفقودة بعد انحراف وسم الجهاز): كل مسارات التسليم في RedMasterHandler تستخدم
+     * pendingFor المقيَّدة بالجهاز. فجهازٌ أُعيد تثبيته أو استُعيدت نسخته الاحتياطية يحمل معرّفاً
+     * جديداً ⇒ كل ما أُرسل له قبل ذلك لا يُستَرجَع أبداً (لا عند الاتصال ولا في مضخة الإعادة).
+     * هنا نُكمل من مخزون الحساب كله، لكن **فقط** للرسائل التي وسمها جهاز غير متصل الآن:
+     * إن كان جهازها الحقيقي حيّاً فهو أولى بها ولا نُزاحمه (حساب بعدة أجهزة).
+     */
+    fun pendingForDeviceOrAccount(redId: String, receiverDeviceId: Int, liveDeviceIds: Set<Int>, limit: Int = 50): List<MessageDocument> {
+        val capped = limit.coerceIn(1, 50)
+        val byDevice = pendingFor(redId, receiverDeviceId, capped)
+        if (byDevice.size >= capped) return byDevice
+        val accountWide = mongo.find(
+            Query(Criteria.where("receiverId").`is`(redId).and("status").`is`("SENT").and("deletedForEveryoneAt").`is`(null))
+                .with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(capped),
+            MessageDocument::class.java
+        ).filter { it.receiverDeviceId !in liveDeviceIds }
+        if (accountWide.isEmpty()) return byDevice
+        val seen = byDevice.mapTo(HashSet()) { it.uuid }
+        val merged = (byDevice + accountWide.filter { it.uuid !in seen }).sortedBy { it.sequenceNumber }
+        if (merged.size > byDevice.size) {
+            log.info("Device-tag drift catch-up for {} device {}: {} extra message(s) recovered", redId, receiverDeviceId, merged.size - byDevice.size)
+        }
+        return merged.take(capped)
+    }
+
     fun getMissedMessages(userId: String, conversationId: String, fromSequence: Long, toSequence: Long, limit: Int = 50): List<MessageDocument> {
         val criteria = Criteria.where("conversationId").`is`(conversationId)
             .andOperator(Criteria().orOperator(Criteria.where("senderId").`is`(userId), Criteria.where("receiverId").`is`(userId)))
@@ -199,13 +224,24 @@ class MessageService(
         return mongo.find(Query(criteria).with(Sort.by(Sort.Direction.ASC, "sequenceNumber")).limit(limit.coerceIn(1, 50)), MessageDocument::class.java)
     }
 
-    /** Only the intended receiver may advance SENT -> DELIVERED -> READ. */
+    /**
+     * Only the intended receiver may advance SENT -> DELIVERED -> READ.
+     * FIX (رسالة عالقة للأبد): كان الشرط يشترط **تطابق وسم الجهاز** أيضاً، فجهازٌ تغيّر معرّفه
+     * (إعادة تثبيت/استعادة نسخة احتياطية) يرى ACKه مرفوضاً بخطأ ⇒ تبقى status=SENT للأبد فلا
+     * يصل إشعار "تم التسليم" للمرسل. الملكية (receiverId) هي حدّ التخويل الحقيقي — فحص الجهاز
+     * كان تطابقاً تشخيصياً لا أمنياً (الجهازان ملك الحساب نفسه)؛ لذلك نُبقيه لكن **يُشفي الوسم**
+     * على الجهاز الذي أثبت حيازته للرسالة فعلاً (فلا تتكرر المشكلة ولا تُعاد الرسالة بلا نهاية).
+     */
     fun acknowledge(receiverId: String, receiverDeviceId: Int, messageId: String, requestedStatus: String): MessageDocument {
         val status = requestedStatus.uppercase()
         require(status == "DELIVERED" || status == "READ") { "Unsupported ACK status" }
         val message = mongo.findOne(Query(Criteria.where("uuid").`is`(messageId)), MessageDocument::class.java)
             ?: throw NoSuchElementException("Message not found")
-        require(message.receiverId == receiverId && message.receiverDeviceId == receiverDeviceId) { "Only the target device can acknowledge this message" }
+        require(message.receiverId == receiverId) { "Only the target device can acknowledge this message" }
+        if (message.receiverDeviceId != receiverDeviceId) {
+            log.info("ACK healed device-tag drift: message={} was={} now={}", messageId, message.receiverDeviceId, receiverDeviceId)
+            message.receiverDeviceId = receiverDeviceId
+        }
         if (rank(status) > rank(message.status)) {
             message.status = status
             if (status == "DELIVERED" && message.deliveredAt == null) message.deliveredAt = Instant.now()

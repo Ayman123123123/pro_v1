@@ -580,7 +580,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
             // فعّل فور نجاح attach + ابدأ polling/watcher.
             LiveStreamRuntime.eglContext = client.eglContext
             client.subscribeToVideo()
-            markViewerSfuActive()
+            // attach ناجح ≠ وصول وسائط — لا تعلن Active هنا (انظر markViewerSfuAttached)
+            markViewerSfuAttached()
             return
         }
         // Fallback: مسار الاستقبال القديم + طلب خدمة mesh من المذيع.
@@ -1022,7 +1023,53 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         }
     }
 
-    /** FIX P0 viewer SFU: فعّل المشاهد فور attach ناجح دون انتظار PC CONNECTED (كان يبتلع). */
+    /**
+     * FIX (مشاهد في دوّامة صامتة): نجاح attach على الـ SFU لا يعني وصول أي وسائط.
+     * كان هذا الموضع يُلغي watchdog الاتصال ويعلن Active فور attach، فيبقى المشاهد على بطاقة
+     * "جارٍ معالجة البث الفائق..." إلى الأبد: لا خطأ (الـ watchdog مُلغى) ولا إصلاح — لأن فرع
+     * العرض في LiveStreamViewerOverlay يحتاج `remoteVideo != null` ليعرض الفيديو، وهو لا يصل.
+     * الآن نبقي Connecting (فالبطاقة تُخبر المشاهد بالانتظار) ونراقب وصول الوسائط فعلاً.
+     */
+    private fun markViewerSfuAttached() {
+        if (isBroadcaster) return
+        val now = System.currentTimeMillis()
+        if (LiveStreamRuntime.streamStartTime == 0L) LiveStreamRuntime.streamStartTime = now
+        startStatsPolling()
+        ensureNetworkWatcher()
+        armViewerMediaWatchdog(allowRecovery = true)
+    }
+
+    /** وصول صوت فعلاً — يفرّق البث الصوتي المشروع عن العطل الصامت. */
+    @Volatile private var viewerAudioReceived = false
+
+    /**
+     * FIX (مشاهد بلا وسائط): نافذة 12s لوصول أول فيديو. عند انقضائها بلا فيديو نحاول إصلاحاً
+     * واحداً (إعادة التفاوض على الاستقبال + إعادة ICE) ثم نعيد التسلح بنافذة أقصر. فإن وصل صوت
+     * فقط بعدها فهذا بث صوتي مشروع (المذيع صوت فقط أو كاميرته محجوزة) ⇒ Active بواجهة صوتية
+     * لا خطأ. وإلا فشل صريح ببطاقة قابلة للفعل بدل الانتظار الصامت الأبدي.
+     */
+    private fun armViewerMediaWatchdog(allowRecovery: Boolean) {
+        connectWatchdog?.cancel()
+        connectWatchdog = scope.launch {
+            kotlinx.coroutines.delay(if (allowRecovery) 12_000L else 8_000L)
+            if (stopping || isBroadcaster) return@launch
+            if (LiveStreamRuntime.state !is LiveStreamUiState.Connecting) return@launch
+            if (LiveStreamRuntime.remoteVideo != null) return@launch
+            if (allowRecovery) {
+                // إصلاح واحد: أعد التفاوض على الاستقبال وأعد ICE (المذيع قد يكون نشر بعد التحاقنا)
+                runCatching { sfu?.subscribeToVideo() }
+                runCatching { sfu?.restartSfuIce() }
+                armViewerMediaWatchdog(allowRecovery = false)
+            } else if (viewerAudioReceived) {
+                LiveStreamRuntime.isAudioOnly = true
+                markViewerSfuActive()
+            } else {
+                LiveStreamRuntime.state = LiveStreamUiState.Error("LIVE_NO_MEDIA_TIMEOUT")
+            }
+        }
+    }
+
+    /** الاتصال حيّ فعلاً ووصلت وسائط — يُستدعى من onRemoteVideo. */
     private fun markViewerSfuActive() {
         if (isBroadcaster) return
         connectWatchdog?.cancel()
@@ -1178,6 +1225,8 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         runCatching { track.setEnabled(true) }
         if (!isBroadcaster) {
             LiveStreamRuntime.remoteVideo = track
+            // وصل الفيديو فعلاً ⇒ ألغِ الواجهة الصوتية الاحتياطية التي قد يكون watchdog الوسائط كتبها
+            LiveStreamRuntime.isAudioOnly = false
             // FIX P0: مشاهد SFU أول remoteVideo يعني اتصال ناجح — فعّل حالا
             if (sfuLive && LiveStreamRuntime.state is LiveStreamUiState.Connecting) markViewerSfuActive()
         }
@@ -1189,6 +1238,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         if (LiveStreamRuntime.eglContext == null) LiveStreamRuntime.eglContext = sfu?.eglContext
         if (!isBroadcaster) {
             LiveStreamRuntime.remoteVideo = track
+            LiveStreamRuntime.isAudioOnly = false
             if (sfuLive && LiveStreamRuntime.state is LiveStreamUiState.Connecting) markViewerSfuActive()
         } else {
             // شبكة مضيفين حتى 4 — الأحدث أولاً، الأقدم يُستبدل عند الامتلاء
@@ -1216,6 +1266,9 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
     // موروث من WebRtcEngine.Events و MeshRtcSession.Events بنفس التوقيع — تجاوز صريح إلزامي
     override fun onRemoteAudio(track: org.webrtc.AudioTrack) {
         runCatching { track.setEnabled(true) }
+        // FIX (بث صوتي مشروع لا عطل): وصول صوت للمشاهد يمنع اعتبار غياب الفيديو فشلاً
+        // في watchdog الوسائط — المذيع قد يبث صوتاً فقط أو تكون كاميرته محجوزة.
+        if (!isBroadcaster) viewerAudioReceived = true
     }
 
     override fun onNetworkStats(stats: NetworkStats) { LiveStreamRuntime.networkStats = stats }
@@ -1403,6 +1456,7 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
         LiveStreamRuntime.isCoHost = false
         LiveStreamRuntime.isMuted = false
         LiveStreamRuntime.isAudioOnly = false
+        viewerAudioReceived = false
         LiveStreamRuntime.isRecording = false
         LiveStreamRuntime.quality = LiveQuality.AUTO
         LiveStreamRuntime.showStats = false

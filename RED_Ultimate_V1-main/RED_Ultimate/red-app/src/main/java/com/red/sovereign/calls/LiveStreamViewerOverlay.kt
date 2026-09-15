@@ -123,6 +123,8 @@ fun YounesLiveStreamOverlay() {
     // الآن بطاقة عربية صريحة بأزرار فعل (إعادة/صوت فقط/مغادرة/نسخ التفاصيل).
     if (state is LiveStreamUiState.Error) {
         val arabic = when {
+            // قبل فحص TIMEOUT العام: رسالة وسائط لا اتصال — النص العام يقول "خلال 15 ثانية" وهو غير دقيق هنا
+            state.message.contains("NO_MEDIA") -> "لم يصل أي فيديو أو صوت من المذيع — قد يكون البث صوتياً فقط أو الشبكة ضعيفة"
             state.message.contains("TIMEOUT") -> "تعذر الاتصال بالبث خلال 15 ثانية — تحقق من الشبكة"
             state.message.contains("PERMISSION") -> "إذن الكاميرا/الميكروفون مطلوب للبث"
             state.message.contains("REGISTRATION") -> "تعذر تسجيل البث في الخادم"

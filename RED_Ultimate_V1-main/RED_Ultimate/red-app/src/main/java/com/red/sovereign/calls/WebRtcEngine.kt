@@ -81,10 +81,10 @@ data class NetworkStats(
          * الـ "Profile" ثابت لكن نطبقه ديناميكياً بناءً على الإحصائيات.
          */
         fun recommendBitrate(quality: Quality): BitrateProfile = when (quality) {
-            Quality.UNKNOWN -> BitrateProfile.STANDARD
-            Quality.POOR -> BitrateProfile.LOW
-            Quality.FAIR -> BitrateProfile.FAIR
-            Quality.GOOD -> BitrateProfile.STANDARD
+            Quality.UNKNOWN   -> BitrateProfile.STANDARD
+            Quality.POOR      -> BitrateProfile.AUDIO_ONLY
+            Quality.FAIR      -> BitrateProfile.LOW
+            Quality.GOOD      -> BitrateProfile.STANDARD
             Quality.EXCELLENT -> BitrateProfile.HD
         }
     }

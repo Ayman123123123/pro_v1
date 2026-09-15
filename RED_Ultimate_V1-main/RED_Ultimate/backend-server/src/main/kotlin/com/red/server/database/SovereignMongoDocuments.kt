@@ -35,7 +35,9 @@ data class MessageDocument(
     @Indexed val senderId: String,
     val senderDeviceId: Int,
     @Indexed val receiverId: String,
-    val receiverDeviceId: Int,
+    // var لا val: وسم الجهاز يُشفى ذاتياً عند انحراف المعرّف (إعادة تثبيت/استعادة نسخة احتياطية)
+    // — انظر MessageService.acknowledge. الحقل والفهرس كما هما فلا حاجة لترحيل.
+    var receiverDeviceId: Int,
     var payload: ByteArray,
     val messageType: String = "TEXT", // TEXT, IMAGE, VIDEO, VOICE, FILE, LOCATION, CONTACT, POLL
     val ciphertextType: Int,

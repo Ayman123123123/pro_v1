@@ -26,10 +26,10 @@ class BitrateProfileTest {
         assertEquals(240, low.videoHeight)
     }
 
-    @Test fun `STANDARD is 480p @ 24fps`() {
+    @Test fun `STANDARD is 480p @ 30fps`() {
         val std = NetworkStats.BitrateProfile.STANDARD
         assertEquals(800, std.videoMaxBitrateKbps)
-        assertEquals(24, std.videoFramerate)
+        assertEquals(30, std.videoFramerate)
         assertEquals(640, std.videoWidth)
         assertEquals(480, std.videoHeight)
     }
@@ -63,6 +63,7 @@ class BitrateProfileTest {
             )
         }
     }
+
 
     @Test fun `MOS driven classify stays excellent on a clean path`() {
         assertEquals(NetworkStats.Quality.EXCELLENT, NetworkStats.classify(40, 0.2, 2_000))
