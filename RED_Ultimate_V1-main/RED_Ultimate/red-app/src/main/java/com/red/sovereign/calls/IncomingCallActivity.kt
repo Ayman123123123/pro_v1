@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -296,7 +297,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                         IncomingCallActivity.CALL_TYPE_LIVESTREAM -> "بث مباشر"
                         else -> "دعوة مؤتمر / مساحة"
                     },
-                    color = Color.White.copy(0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp
                 )
                 Spacer(Modifier.height(8.dp))
@@ -344,7 +345,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("فيديو", color = Color.White.copy(0.7f), fontSize = 14.sp)
+                        Text("فيديو", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         Switch(
                             checked = showVideoToggle,
                             onCheckedChange = { showVideoToggle = it },
@@ -372,7 +373,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             }
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("رفض", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                        Text("رفض", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
@@ -395,7 +396,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                             }
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text("قبول", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                        Text("قبول", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                 }
             }
