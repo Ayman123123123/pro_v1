@@ -517,7 +517,7 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
             Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1E3A5F), Color(0xFF0F172A)))), contentAlignment=Alignment.Center){ Text(name.take(2).uppercase().ifBlank{"؟"}, color=Color.White, fontSize=14.sp, fontWeight=FontWeight.Bold)}
             Column{ Row(horizontalArrangement=Arrangement.spacedBy(4.dp), verticalAlignment=Alignment.CenterVertically){ Text(name.take(14), color=Color.White, fontSize=13.sp, fontWeight=FontWeight.SemiBold); if(isHost) Box(Modifier.clip(RoundedCornerShape(4.dp)).background(ZoomBlue).padding(horizontal=4.dp, vertical=1.dp)){ Text("مضيف", color=Color(0xFF002118), fontSize=9.sp)}; if(isHand) Text("✋", fontSize=12.sp)}; Text(status, color=Color.White.copy(0.6f), fontSize=11.sp)}
         }
-        Row(horizontalArrangement=Arrangement.spacedBy(6.dp), verticalAlignment=Alignment.CenterVertically){ 
+        Row(horizontalArrangement=Arrangement.spacedBy(6.dp), verticalAlignment=Alignment.CenterVertically){
             Icon(if(isVideo) Icons.Default.Videocam else Icons.Default.VideocamOff, null, tint=if(isVideo) ZoomBlue else Color.Gray, modifier=Modifier.size(16.dp).clickable { onStopVideo?.invoke() })
             Icon(if(isMuted) Icons.Default.MicOff else Icons.Default.Mic, null, tint=if(isMuted) Color(0xFFE53935) else ZoomBlue, modifier=Modifier.size(16.dp).clickable { onMute?.invoke() })
         }
@@ -527,12 +527,13 @@ private fun ZoomParticipantsSheet(state: ZoomUiState.Active, onDismiss:()->Unit)
 @Composable
 private fun ZoomVideoTile(label:String, track: VideoTrack?, isMuted:Boolean, isMirror:Boolean, eglContext: org.webrtc.EglBase.Context?, fillBounds:Boolean){
     val modifier=if(fillBounds) Modifier.fillMaxSize() else Modifier.fillMaxWidth().aspectRatio(0.85f)
+    val egl = eglContext ?: WebRtcBootstrap.eglContext
     androidx.compose.material3.Card(modifier=modifier.border(width=if(isMuted)0.dp else 1.dp, color=if(isMuted) Color.Transparent else ZoomBlue.copy(0.45f), shape=RoundedCornerShape(14.dp)), shape=RoundedCornerShape(14.dp), colors=CardDefaults.cardColors(containerColor=Color(0xFF0F172A)), elevation=CardDefaults.cardElevation(2.dp)){
         Box(Modifier.fillMaxSize()){
-            if(track!=null && eglContext!=null){
+            if(track!=null && egl!=null){
                 WebrtcVideo(
                     track = track,
-                    egl = eglContext,
+                    egl = egl,
                     mirror = isMirror,
                     modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
                     isOverlay = true

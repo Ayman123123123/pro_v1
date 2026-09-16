@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -30,7 +31,7 @@ import com.red.sovereign.ui.theme.YounesRuby
 fun InlineChatCallBar(peerId: String, modifier: Modifier = Modifier) {
     val state = CallRuntime.state
     val context = LocalContext.current
-    
+
     // We only show the inline bar if the current call involves this peer
     val isRelevantCall = when (state) {
         is CallUiState.Active -> state.peer == peerId
@@ -59,7 +60,7 @@ fun InlineChatCallBar(peerId: String, modifier: Modifier = Modifier) {
                     // Actually, if we are in chat, the global overlay is likely hiding the chat?
                     // The instruction said: "عند النقر -> يفتح YounesCallOverlay كاملاً"
                     // We can emit an action or toggle a state. For now, the global overlay is controlled
-                    // by UnifiedCallOverlays showing if state !is Idle. If they minimized it, we would 
+                    // by UnifiedCallOverlays showing if state !is Idle. If they minimized it, we would
                     // need a CallRuntime.isMinimized state. Let's assume UnifiedCallOverlays handles minimizing.
                     CallRuntime.isMinimized = false
                 }
@@ -70,7 +71,7 @@ fun InlineChatCallBar(peerId: String, modifier: Modifier = Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 val icon = if ((state as? CallUiState.Active)?.mode == "VIDEO") Icons.Default.Videocam else Icons.Default.Call
                 Icon(icon, contentDescription = null, tint = YounesEmerald, modifier = Modifier.size(20.dp))
-                
+
                 Column {
                     Text(
                         text = "مكالمة جارية مع $peerId",
@@ -88,7 +89,7 @@ fun InlineChatCallBar(peerId: String, modifier: Modifier = Modifier) {
                         else -> ""
                     }
                     if (subtitle.isNotEmpty()) {
-                        Text(subtitle, color = Color.White.copy(0.7f), fontSize = 12.sp)
+                        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     }
                 }
             }
@@ -107,3 +108,68 @@ fun InlineChatCallBar(peerId: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * 📞 بانر المكالمة الجماعية العائم في ترويسة شات المجموعة (WhatsApp Group Call Banner)
+ * يظهر حصراً لأعضاء هذه المجموعة عند وجود مكالمة جماعية قائمة ليتيح لهم "انضمام (Join)".
+ */
+@Composable
+fun InlineGroupCallBar(groupId: String, onJoin: () -> Unit, modifier: Modifier = Modifier) {
+    val state = GroupCallRuntime.state
+    val isGroupActive = GroupCallRuntime.activeGroupId == groupId && state !is GroupCallUiState.Idle && state !is GroupCallUiState.Ended
+
+    AnimatedVisibility(
+        visible = isGroupActive,
+        enter = expandVertically(),
+        exit = shrinkVertically()
+    ) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(YounesEmerald.copy(alpha = 0.18f))
+                .clickable {
+                    GroupCallRuntime.isMinimized = false
+                    onJoin()
+                }
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val isVideo = (state as? GroupCallUiState.Active)?.isVideo == true
+                Icon(
+                    imageVector = if (isVideo) Icons.Default.Videocam else Icons.Default.Call,
+                    contentDescription = null,
+                    tint = YounesEmerald,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column {
+                    Text(
+                        text = if (isVideo) "مكالمة فيديو جماعية جارية 🎥" else "مكالمة صوتية جماعية جارية 📞",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "انقر للانضمام الفوري للأعضاء",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            androidx.compose.material3.Button(
+                onClick = {
+                    GroupCallRuntime.isMinimized = false
+                    onJoin()
+                },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = YounesEmerald),
+                shape = RoundedCornerShape(14.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+            ) {
+                Text("انضمام", color = Color(0xFF002117), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+    }
+}
+

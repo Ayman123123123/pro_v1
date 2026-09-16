@@ -200,6 +200,10 @@ class LiveStreamService : Service(), WebRtcEngine.Events, MeshRtcSession.Events,
                 if (isBroadcaster && !hasCameraPermission()) {
                     LiveStreamRuntime.cameraError = "PERMISSION"
                     LiveStreamRuntime.isAudioOnly = true
+                } else if (isBroadcaster) {
+                    LiveStreamRuntime.isAudioOnly = false
+                    // تفعيل معاينة كاميرا المذيع فوراً (0ms) دون انتظار اتصال الـ WebSocket
+                    scope.launch { startBroadcasterMedia() }
                 }
                 LiveStreamRuntime.state = LiveStreamUiState.Connecting(streamId, isBroadcaster)
                 promote()

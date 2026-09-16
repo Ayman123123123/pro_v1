@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -119,12 +120,12 @@ private fun MinimizedGroupCallBar(state: GroupCallUiState.Active) {
                     Text(if (state.isVideo) "فيديو جماعي" else "صوت جماعي", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("$joinedCount مشاركون", color = Color.White.copy(0.7f), fontSize = 10.sp)
+                    Text("$joinedCount مشاركون", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
                     WhatsAppElapsedTimer(state.startedAt)
                 }
-                if (state.isVideo && GroupCallRuntime.eglContext != null) {
+                if (state.isVideo) {
                     var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
-                    val egl = GroupCallRuntime.eglContext
+                    val egl = GroupCallRuntime.eglContext ?: WebRtcBootstrap.eglContext
                     GroupCallRuntime.localVideo?.let { track ->
                     AndroidView(
                         factory = { ctx ->
@@ -251,7 +252,7 @@ private fun WhatsAppActiveHeader(state: GroupCallUiState.Active) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (state.isVideo) "مكالمة فيديو جماعية" else "مكالمة صوتية جماعية",
-                        color = Color.White.copy(0.7f), fontSize = 12.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp
                     )
                     WhatsAppElapsedTimer(state.startedAt)
                     // جودة الشبكة Liquid Glass
@@ -597,7 +598,7 @@ private fun WhatsAppIncomingPanel(state: GroupCallUiState.IncomingGroup) {
             if (state.otherMembers.isNotEmpty()) {
                 Text("+ ${state.otherMembers.size} آخرون في المكالمة", color = Color.White.copy(0.55f), fontSize = 13.sp)
             }
-            Text("المكالمة مشفّرة E2EE", color = Color.White.copy(0.4f), fontSize = 11.sp)
+            Text("المكالمة مشفّرة E2EE", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
 
         // أفاتار نابض مع دوائر متحدة — InfiniteTransition يعيش فقط داخل
@@ -698,7 +699,7 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
                 Text(if (state.isVideo) "📹 مكالمة فيديو جماعية" else "📞 مكالمة صوتية جماعية", color = YounesEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Text("ترن $groupName", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("جاري الاتصال بـ ${state.members.size} أشخاص — أول من يقبل يبدأ المكالمة", color = Color.White.copy(0.6f), fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("جاري الاتصال بـ ${state.members.size} أشخاص — أول من يقبل يبدأ المكالمة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
 
         LazyVerticalGrid(
@@ -720,7 +721,7 @@ private fun WhatsAppRingingPanel(state: GroupCallUiState.Ringing) {
         ) {
             Icon(Icons.Default.CallEnd, null, tint = Color.White, modifier = Modifier.size(28.dp))
         }
-        Text("إلغاء", color = Color.White.copy(0.6f), fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+        Text("إلغاء", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -814,12 +815,13 @@ private fun GroupCallVideoTile(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (track != null && eglContext != null && track.enabled()) {
+            val egl = eglContext ?: WebRtcBootstrap.eglContext
+            if (track != null && egl != null && track.enabled()) {
                 var viewRef by remember { mutableStateOf<SurfaceViewRenderer?>(null) }
                 AndroidView(
                     factory = { ctx ->
                         SurfaceViewRenderer(ctx).apply {
-                            init(eglContext, null)
+                            init(egl, null)
                             setMirror(isMirror)
                             setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
                             setEnableHardwareScaler(true)
@@ -866,7 +868,7 @@ private fun GroupCallVideoTile(
                                 Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(0.12f))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text("الكاميرا متوقفة", color = Color.White.copy(0.7f), fontSize = 9.sp)
+                                Text("الكاميرا متوقفة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 9.sp)
                             }
                         }
                     }

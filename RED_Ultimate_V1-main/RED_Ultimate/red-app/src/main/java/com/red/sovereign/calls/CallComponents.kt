@@ -148,7 +148,7 @@ fun CallPeerAvatar(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "غير متصل",
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 9.sp
                 )
             }

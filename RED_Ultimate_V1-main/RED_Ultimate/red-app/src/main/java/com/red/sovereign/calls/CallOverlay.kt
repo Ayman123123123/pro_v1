@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.compose.material3.MaterialTheme
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -440,7 +441,7 @@ private fun CallHeader(peer: String, state: CallUiState, video: Boolean) {
 private fun IncomingBody(peer: String, video: Boolean, onAccept: () -> Unit, onAcceptPrivate: () -> Unit, onReject: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
         PulseAvatar(letter = peer, pulsing = true)
-        Text(if (video) "يرن فيديو يونس" else "يرن صوت يونس", color = Color.White.copy(0.6f), fontSize = 13.sp)
+        Text(if (video) "يرن فيديو يونس" else "يرن صوت يونس", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(36.dp), verticalAlignment = Alignment.Bottom) {
             EndCallButton("رفض", onReject)
             AcceptCallButton("قبول", onAccept)

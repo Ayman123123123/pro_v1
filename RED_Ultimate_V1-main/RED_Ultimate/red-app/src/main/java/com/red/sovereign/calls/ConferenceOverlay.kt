@@ -1,5 +1,6 @@
 package com.red.sovereign.calls
 
+import androidx.compose.material3.MaterialTheme
 import android.app.Activity
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -902,7 +903,7 @@ fun YounesConferenceOverlay() {
             title = { Text("دردشة الاجتماع 💬") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("دردشة مشفرة حية بداخل القاعة:", color = Color.Gray, fontSize = 12.sp)
+                    Text("دردشة مشفرة حية بداخل القاعة:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     OutlinedTextField(
                         value = inCallMessageInput,
                         onValueChange = { inCallMessageInput = it },
