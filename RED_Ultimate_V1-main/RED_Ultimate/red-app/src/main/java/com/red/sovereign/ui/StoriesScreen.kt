@@ -1,5 +1,6 @@
 package com.red.sovereign.ui
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -292,7 +293,7 @@ fun StoryFullscreen(
                                     Spacer(Modifier.width(10.dp))
                                     Column {
                                         Text(resolved, fontWeight = FontWeight.Medium)
-                                        Text(v.redId, fontSize = 11.sp, color = Color.Gray)
+                                        Text(v.redId, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }

@@ -1,5 +1,6 @@
 package com.red.sovereign.features.contacts
 
+import androidx.compose.material3.MaterialTheme
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -74,7 +75,7 @@ fun ShareRedIdSheet(
             )
             Text(
                 "اسمح للآخرين بإضافتك عبر RED ID الخاص بك",
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp
             )
             Spacer(Modifier.height(20.dp))
@@ -151,7 +152,7 @@ fun ShareRedIdSheet(
                         Text(displayName, fontWeight = FontWeight.SemiBold, color = Color.White)
                         Text(
                             redId,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp,
                             fontFamily = FontFamily.Monospace
                         )

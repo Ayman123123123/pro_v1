@@ -1,5 +1,6 @@
 package com.red.sovereign.features.chat
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -85,7 +86,7 @@ fun StarredMessagesScreen(
                     Spacer(Modifier.height(16.dp))
                     Text("لا توجد رسائل مُعلَّمة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text("علّم الرسائل بالضغط على النجمة في قائمة الإجراءات", color = Color.Gray, fontSize = 13.sp)
+                    Text("علّم الرسائل بالضغط على النجمة في قائمة الإجراءات", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 }
             }
         } else {

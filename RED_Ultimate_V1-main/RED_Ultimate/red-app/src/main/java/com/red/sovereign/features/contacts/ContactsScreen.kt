@@ -1,5 +1,6 @@
 package com.red.sovereign.features.contacts
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -83,7 +84,7 @@ fun ContactsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Column { Text("جهات الاتصال", fontWeight = FontWeight.Bold); Text("${directory.contacts.size} جهة • ${directory.onlineIds.size} متصل", color = Color.Gray, fontSize = 12.sp) } },
+                title = { Column { Text("جهات الاتصال", fontWeight = FontWeight.Bold); Text("${directory.contacts.size} جهة • ${directory.onlineIds.size} متصل", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) } },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
                 actions = {
                     IconButton(onClick = { showQrScanner = true }) { Icon(Icons.Rounded.QrCodeScanner, "مسح RED ID") }
@@ -106,7 +107,7 @@ fun ContactsScreen(
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
             }
             if (filtered.isEmpty() && query.isNotBlank()) {
-                item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("لا توجد نتائج لـ \"$query\"", color = Color.Gray) } }
+                item { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text("لا توجد نتائج لـ \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
             } else {
                 items(filtered, key = { it.redId }) { person ->
                     WhatsAppContactRow(person, isOnline = directory.isOnline(person.redId), lastSeen = directory.lastSeenLabel(person.redId), onChat = { onChat(person) }, onCall = { video -> onCall(person, video) })
@@ -120,7 +121,7 @@ fun ContactsScreen(
                         Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalGold), contentAlignment = Alignment.Center) { Text(req.requester.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
-                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(req.requester.displayName, color = Color.White, fontWeight = FontWeight.Bold); Text("@${req.requester.username}", color = Color.Gray, fontSize = 12.sp) }
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(req.requester.displayName, color = Color.White, fontWeight = FontWeight.Bold); Text("@${req.requester.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                                 TextButton({ directory.resolve(req, false) }) { Text("رفض") }
                                 Button({ directory.resolve(req, true) }) { Text("قبول") }
                             }
@@ -137,7 +138,7 @@ fun ContactsScreen(
                                 Box(Modifier.size(44.dp).clip(CircleShape).background(AqyalCyanGlow), contentAlignment = Alignment.Center) { Text(req.recipient.displayName.take(1), color = Color.Black, fontWeight = FontWeight.Bold) }
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                     Text(req.recipient.displayName, color = Color.White, fontWeight = FontWeight.Bold)
-                                    Text("بانتظار قبول @${req.recipient.username}", color = Color.Gray, fontSize = 12.sp)
+                                    Text("بانتظار قبول @${req.recipient.username}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                                 }
                                 TextButton({ directory.cancel(req) }) { Text("إلغاء") }
                             }
@@ -218,7 +219,7 @@ private fun ContactActionRow(icon: androidx.compose.ui.graphics.vector.ImageVect
         Box(Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = color, modifier = Modifier.size(22.dp)) }
         Column(Modifier.padding(start = 14.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            Text(subtitle, color = Color.Gray, fontSize = 12.sp)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.red.sovereign.features.devices
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -118,7 +119,7 @@ fun DevicesScreen(
                         devices.isEmpty() -> "لا توجد أجهزة"
                         else -> "${devices.size} جلسات نشطة"
                     },
-                    fontSize = 12.sp, color = Color.Gray
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             // 🔄 زر تحديث يدوي
@@ -138,7 +139,7 @@ fun DevicesScreen(
             }
         }
 
-        HorizontalDivider(color = Color.Gray.copy(alpha = 0.1f))
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
 
         // ⚠️ شريط خطأ الشبكة — مع إعادة المحاولة (للأخطاء الجزئية مع بقاء قائمة)
         loadError?.let { err ->
@@ -164,7 +165,7 @@ fun DevicesScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         CircularProgressIndicator(color = SovereignColors.Cyan, modifier = Modifier.size(36.dp))
-                        Text("جارٍ التحميل…", color = Color.Gray, fontSize = 13.sp)
+                        Text("جارٍ التحميل…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     }
                 }
             }
@@ -176,7 +177,7 @@ fun DevicesScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.ErrorOutline, "خطأ التحميل", tint = SovereignColors.Danger, modifier = Modifier.size(48.dp))
                         Text("تعذّر تحميل الأجهزة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                        Text(loadError ?: "", fontSize = 12.sp, color = Color.Gray)
+                        Text(loadError ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { reloadTrigger++ }) {
                             Icon(Icons.Rounded.Refresh, "إعادة المحاولة", Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -193,7 +194,7 @@ fun DevicesScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(Icons.Rounded.DevicesOther, "لا توجد أجهزة", tint = Color.Gray, modifier = Modifier.size(48.dp))
                         Text("لا توجد أجهزة متصلة", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                        Text("ستظهر هنا الجلسات النشطة لحسابك", fontSize = 12.sp, color = Color.Gray)
+                        Text("ستظهر هنا الجلسات النشطة لحسابك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedButton(onClick = { reloadTrigger++ }) {
                             Icon(Icons.Rounded.Refresh, "تحديث", Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -223,7 +224,7 @@ fun DevicesScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "يتم تشفير كافة الجلسات بمفاتيح فريدة. يمكنك فصل أي جهاز مشبوه فوراً.",
-                            fontSize = 11.sp, color = Color.Gray
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -287,8 +288,8 @@ private fun DeviceCard(device: DeviceSession, onLogout: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(device.deviceName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
-                Text(device.platform, fontSize = 11.sp, color = Color.Gray)
-                Text("${device.lastActiveAt} • IP: ${device.ipAddress}", fontSize = 10.sp, color = Color.Gray)
+                Text(device.platform, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${device.lastActiveAt} • IP: ${device.ipAddress}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (!device.isCurrentDevice) {
                 IconButton(onClick = onLogout) { Icon(Icons.Rounded.Logout, null, tint = SovereignColors.Danger) }
@@ -311,6 +312,6 @@ private fun SecurityTip(text: String) {
     Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Rounded.CheckCircle, null, tint = SovereignColors.Warning.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(8.dp))
-        Text(text, fontSize = 12.sp, color = Color.Gray)
+        Text(text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

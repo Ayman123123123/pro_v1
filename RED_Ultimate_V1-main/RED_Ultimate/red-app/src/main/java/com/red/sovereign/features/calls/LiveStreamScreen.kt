@@ -1,5 +1,6 @@
 package com.red.sovereign.features.calls
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -190,7 +191,7 @@ fun LiveStreamScreen() {
                 value = chatText,
                 onValueChange = { chatText = it },
                 modifier = Modifier.weight(1f).height(48.dp),
-                placeholder = { Text("أضف تعليقًا...", color = Color.Gray) },
+                placeholder = { Text("أضف تعليقًا...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 shape = RoundedCornerShape(24.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.Black.copy(0.5f),

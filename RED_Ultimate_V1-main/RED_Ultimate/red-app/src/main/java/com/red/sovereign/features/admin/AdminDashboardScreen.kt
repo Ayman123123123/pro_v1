@@ -1,5 +1,6 @@
 package com.red.sovereign.features.admin
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -82,7 +83,7 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 if (pendingUsers.isEmpty()) {
-                    Text("لا توجد حسابات معلقة.", color = Color.Gray)
+                    Text("لا توجد حسابات معلقة.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -102,7 +103,7 @@ fun AdminDashboardScreen(viewModel: AdminViewModel, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
                 if (users.isEmpty()) {
-                    Text("لا يوجد مستخدمون حالياً.", color = Color.Gray)
+                    Text("لا يوجد مستخدمون حالياً.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -154,8 +155,8 @@ private fun UserOverviewCard(user: UserOverview, onDelete: () -> Unit) {
                     Text(user.displayName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(user.phoneNumber, color = Color.Gray, fontSize = 12.sp)
-                Text("آخر ظهور: ${if (user.isOnline) "الآن" else formatDate(user.lastSeenAt)}", color = Color.Gray, fontSize = 10.sp)
+                Text(user.phoneNumber, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text("آخر ظهور: ${if (user.isOnline) "الآن" else formatDate(user.lastSeenAt)}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
             }
             IconButton(onClick = { showDeleteConfirm = true }) {
                 Icon(Icons.Default.Delete, contentDescription = "حذف المستخدم", tint = Color(0xFFE53935))
@@ -179,7 +180,7 @@ private fun StatCard(title: String, value: String, icon: androidx.compose.ui.gra
             Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(24.dp))
             Spacer(Modifier.height(4.dp))
             Text(value, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text(title, color = Color.Gray, fontSize = 12.sp)
+            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }
@@ -198,7 +199,7 @@ private fun PendingUserCard(user: PendingUser, onApprove: () -> Unit) {
         ) {
             Column {
                 Text(user.phoneNumber, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(formatDate(user.registeredAt), color = Color.Gray, fontSize = 12.sp)
+                Text(formatDate(user.registeredAt), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
             Button(
                 onClick = onApprove,

@@ -608,6 +608,24 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                         onProfileClick = { currentScreen = SovereignScreen.PROFILE },
                         hazeState = hazeState
                     )
+                    // 🏝️ الكبسولة الديناميكية: مؤشر عائم للمكالمة الجارية (1:1 أو مؤتمر)
+                    // يظهر تلقائياً أثناء المكالمة، والضغط عليه يعيد فتح تبويب المكالمات.
+                    val islandCall = com.red.sovereign.calls.CallRuntime.state
+                    val islandConference = com.red.sovereign.calls.ConferenceRuntime.state
+                    val activeCall = islandCall as? com.red.sovereign.calls.CallUiState.Active
+                    val activeConference = islandConference as? com.red.sovereign.calls.ConferenceUiState.Active
+                    if (activeCall != null || activeConference != null) {
+                        com.red.sovereign.ui.components.DynamicIslandHeader(
+                            isVisible = true,
+                            title = when {
+                                activeCall != null -> activeCall.peer.ifBlank { "مكالمة جارية" }
+                                else -> "مؤتمر نشط"
+                            },
+                            subtitle = "اضغط للعودة إلى المكالمة",
+                            icon = androidx.compose.material.icons.Icons.Rounded.Call,
+                            onClick = { section = MainSection.CALLS }
+                        )
+                    }
                 // 📴 بانر الطابور دون اتصال: يعرض عدد الرسائل المعلقة من Room
                 // ويعيد جدولة العامل الحقيقي OutboxRetryWorker بضغطة واحدة،
                 // وزر العرض يفتح OfflineQueueScreen (القائمة الكاملة retry/delete).
@@ -689,7 +707,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
             title = { Text("مكالمة جديدة عبر يونس") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: ${YounesId.PLACEHOLDER}", color = Color.Gray, fontSize = 12.sp)
+                    Text("أدخل معرّف يونس للاتصال به مباشرة:\nمثال: ${YounesId.PLACEHOLDER}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     OutlinedTextField(
                         value = dialerRedId,
                         onValueChange = { dialerRedId = YounesId.normalizeInput(it) },
@@ -763,7 +781,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                         Icon(if (liveIsPrivate) Icons.Filled.Lock else Icons.Filled.Public, null, tint = if (liveIsPrivate) Color(0xFFE53935) else YounesEmerald)
                         Column(Modifier.weight(1f)) {
                             Text(if (liveIsPrivate) "بث خاص بكلمة سر" else "بث عام (بدون كلمة سر)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            Text(if (liveIsPrivate) "المشاهدون يحتاجون كلمة السر" else "يمكن للجميع المشاهدة", fontSize = 11.sp, color = Color.Gray)
+                            Text(if (liveIsPrivate) "المشاهدون يحتاجون كلمة السر" else "يمكن للجميع المشاهدة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(checked = liveIsPrivate, onCheckedChange = { liveIsPrivate = it })
                     }
@@ -777,7 +795,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                         )
                     }
-                    Text("سيتمكن الأصدقاء من الانضمام عبر دعوة أو رابط younes://livestream/<id>", fontSize = 11.sp, color = Color.Gray)
+                    Text("سيتمكن الأصدقاء من الانضمام عبر دعوة أو رابط younes://livestream/<id>", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -863,11 +881,11 @@ private fun PostCard(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(10.dp)) {
                     Text(card.title ?: card.url, fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(card.description ?: "", color = Color.Gray, fontSize = 12.sp, maxLines = 2)
+                    Text(card.description ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, maxLines = 2)
                 }
             }
         }
-        if (post.editedAt != null) TextButton({ showEditHistory = true }) { Text("تم التعديل — عرض السجل", color = Color.Gray, fontSize = 11.sp) }
+        if (post.editedAt != null) TextButton({ showEditHistory = true }) { Text("تم التعديل — عرض السجل", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp) }
         if (showEditHistory) AlertDialog(
             onDismissRequest = { showEditHistory = false },
             title = { Text("سجل التعديلات") },
@@ -878,7 +896,7 @@ private fun PostCard(
                         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .6f))) {
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(entry.text, fontSize = 13.sp)
-                                Text(entry.editedAt, fontSize = 11.sp, color = Color.Gray)
+                                Text(entry.editedAt, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -920,7 +938,7 @@ private fun PostCard(
                         }
                     }
                 }
-                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text("إجمالي الأصوات: ${poll.options.sumOf { it.votes }}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
@@ -1620,7 +1638,7 @@ private fun ChatHubScreen(
                                         // G3: Red ID الكامل ظاهر (كان مقتطعاً take(12)).
                                         Text("@${request.requester.username} • ${request.requester.redId}", color = AqyalCyanGlow, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
-                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("رفض", color = Color.Gray) }
+                                    OutlinedButton({ directory.resolve(request, false) }, Modifier.height(38.dp)) { Text("رفض", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                     Button({ directory.resolve(request, true) }, Modifier.height(38.dp), colors = ButtonDefaults.buttonColors(containerColor = YounesEmerald)) { Text("قبول", color = Color(0xFF002118)) }
                                 }
                             }
@@ -2010,7 +2028,7 @@ private fun ChatHubScreen(
                                         messageText = messageText.replace(USERNAME_PARTIAL, "@${person.redId} ")
                                     }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Text("@${person.username}", color = YounesEmerald, fontWeight = FontWeight.Bold)
-                                        Text(" • ${person.displayName}", color = Color.Gray, fontSize = 12.sp)
+                                        Text(" • ${person.displayName}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -2541,7 +2559,7 @@ private fun ChatHubScreen(
             text = { Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Image(safetyState.qr, "QR لرمز الأمان", Modifier.size(240.dp).clip(RoundedCornerShape(12.dp)))
                 Text(safetyState.number, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, color = AqyalGold)
-                Text("الجهاز ${safetyState.deviceId} · ${safetyState.fingerprint.chunked(8).joinToString(" ")}", fontSize = 9.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                Text("الجهاز ${safetyState.deviceId} · ${safetyState.fingerprint.chunked(8).joinToString(" ")}", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                 safetyState.scanError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, textAlign = TextAlign.Center) }
                 Text("امسح رمز الطرف الآخر وجهًا لوجه، أو قارن الرقم عبر قناة موثوقة مستقلة.", fontSize = 11.sp, textAlign = TextAlign.Center)
                 if (!safetyState.verified) OutlinedButton({
@@ -2808,7 +2826,7 @@ private fun ChatHubScreen(
             title = { Text(selectedGroup.name) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(selectedGroup.description.orEmpty(), color = Color.Gray)
+                    Text(selectedGroup.description.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LazyColumn(Modifier.height(220.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(selectedGroup.members, key = { it.id }) { member ->
                             val manageable = canManage && member.role != "OWNER" && member.redId != account.redId && (myRole == "OWNER" || member.role == "MEMBER")
@@ -3037,7 +3055,7 @@ private fun ChatHubScreen(
                     DirectoryState.Loading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally), color = AqyalGold)
                     is DirectoryState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
                     is DirectoryState.Message -> Text(state.text, color = AqyalGold)
-                    DirectoryState.Ready -> if (directory.results.isEmpty()) Text("لا توجد نتائج مطابقة", color = Color.Gray) else LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    DirectoryState.Ready -> if (directory.results.isEmpty()) Text("لا توجد نتائج مطابقة", color = MaterialTheme.colorScheme.onSurfaceVariant) else LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         items(directory.results, key = { it.redId }) { person ->
                             Card(Modifier.fillMaxWidth()) {
                                 Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -3055,7 +3073,7 @@ private fun ChatHubScreen(
                             }
                         }
                     }
-                    DirectoryState.Idle -> Text("ابحث عن شخص دون مشاركة رقم هاتف أو جهات اتصال الجهاز.", color = Color.Gray, fontSize = 12.sp)
+                    DirectoryState.Idle -> Text("ابحث عن شخص دون مشاركة رقم هاتف أو جهات اتصال الجهاز.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
         },
@@ -3160,7 +3178,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         ) {
             Column {
                 Text("مركز المكالمات السيادي", fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = PlexArabicFamily)
-                Text("المكالمات الفردية، المؤتمرات، والبث المباشر", color = Color.LightGray, fontSize = 12.sp, fontFamily = PlexArabicFamily)
+                Text("المكالمات الفردية، المؤتمرات، والبث المباشر", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, fontFamily = PlexArabicFamily)
             }
             IconButton(
                 onClick = { showStatsScreen = true },
@@ -3241,7 +3259,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
         OutlinedTextField(
             value = history.searchQuery,
             onValueChange = { history.searchQuery = it },
-            placeholder = { Text("بحث في سجل المكالمات (اسم أو معرف أو رقم)...", fontSize = 12.sp, color = Color.Gray) },
+            placeholder = { Text("بحث في سجل المكالمات (اسم أو معرف أو رقم)...", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
             leadingIcon = { Icon(Icons.Filled.Search, null, tint = SovereignColors.EmeraldNeon, modifier = Modifier.size(18.dp)) },
             trailingIcon = {
                 if (history.searchQuery.isNotEmpty()) {
@@ -3429,7 +3447,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "مساحة صوتية مشفرة عبر خادم SFU — صوت فقط، بلا كاميرا.\nاترك الحقل فارغًا لإنشاء غرفة جديدة بمعرّف تلقائي.",
-                        color = Color.Gray, fontSize = 14.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp
                     )
                     OutlinedTextField(
                         value = roomInput,
@@ -3476,7 +3494,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             title = { Text("مكالمة جديدة مشفرة E2EE 📞") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("أدخل معرّف يونس أو اختر من جهات اتصالك للاتصال الفوري:", color = Color.Gray, fontSize = 13.sp)
+                    Text("أدخل معرّف يونس أو اختر من جهات اتصالك للاتصال الفوري:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     OutlinedTextField(
                         value = newCallTargetInput,
                         onValueChange = { newCallTargetInput = it },
@@ -3500,7 +3518,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
                                 ) {
                                     Column(Modifier.weight(1f)) {
                                         Text(contact.displayName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                                        Text("@${contact.username} · ${contact.redId}", color = Color.Gray, fontSize = 11.sp)
+                                        Text("@${contact.username} · ${contact.redId}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         IconButton(
@@ -3568,7 +3586,7 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             title = { Text("اكتشاف البثوث العامة والمساحات 🌐") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = Color.Gray, fontSize = 13.sp)
+                    Text("ابحث عن بث مباشر عام أو مساحة صوتية باسم البث أو المُبث:", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     OutlinedTextField(
                         value = publicStreamSearchQuery,
                         onValueChange = { publicStreamSearchQuery = it },
@@ -3937,9 +3955,9 @@ private fun CreateSheet(
     }
 }
 
-@Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = Color.Gray, fontSize = 12.sp) } } }
+@Composable private fun CreateOption(icon: ImageVector, title: String, detail: String, enabled: Boolean, click: () -> Unit) = Card(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = click)) { Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = if (enabled) AqyalGold else Color.Gray, modifier = Modifier.size(31.dp)); Column(Modifier.padding(horizontal = 14.dp)) { Text(title, fontWeight = FontWeight.Bold, color = if (enabled) Color.Unspecified else Color.Gray); Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) } } }
 
-@Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = Color.Gray, modifier = Modifier.padding(top = 8.dp)) }
+@Composable internal fun EmptyState(icon: ImageVector, title: String, detail: String) = Column(Modifier.fillMaxWidth().padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(icon, null, tint = AqyalGold, modifier = Modifier.size(62.dp)); Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold); Text(detail, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
 // (حُذف PollVoteStore الميت + InlinePollCard المكررة: البطاقة الحية في MessageContent.kt
 //  عبر RichTextMessage، والأصوات الحية في ChatPollVoteStore — كانت النسخة هنا بلا منادين
 //  وتحمل خطأ tautology في isSelected. 2026-09-10)

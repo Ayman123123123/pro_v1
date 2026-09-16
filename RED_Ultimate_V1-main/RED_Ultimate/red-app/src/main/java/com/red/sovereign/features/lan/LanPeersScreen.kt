@@ -186,7 +186,7 @@ fun LanPeersScreen(
         if (discovering && peers.isEmpty()) {
             Text(
                 "لا أجهزة بعد — تأكد أن الطرف الآخر فتح نفس الشاشة وبدأ الاكتشاف.",
-                color = Color.Gray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp
             )
         }
@@ -212,7 +212,7 @@ fun LanPeersScreen(
             text = {
                 Column {
                     Text("${inc.from.name} (${inc.from.redId.take(8)}…)")
-                    Text(if (inc.media == "video") "مكالمة فيديو" else "مكالمة صوتية", fontSize = 12.sp, color = Color.Gray)
+                    Text(if (inc.media == "video") "مكالمة فيديو" else "مكالمة صوتية", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!inc.from.verified) Text(
                         "غير موجود في جهات اتصالك — تحقق من هويته قبل القبول.",
                         fontSize = 12.sp,
@@ -276,7 +276,7 @@ private fun PeerRow(
                         Text("موثق", color = Color(0xFF00C98C), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-                Text("${peer.redId.take(12)}… • ${peer.host}", color = Color.Gray, fontSize = 11.sp)
+                Text("${peer.redId.take(12)}… • ${peer.host}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             }
             TextButton(onClick = onVoice, enabled = !busy) { Text("صوت") }
             TextButton(onClick = onVideo, enabled = !busy) { Text("فيديو") }
@@ -329,7 +329,7 @@ private fun InCallPanel(
                         onDispose { if (track != null && viewRef != null) track.removeSink(viewRef) }
                     }
                 } else {
-                    Text("يُجهز الفيديو…", color = Color.Gray, fontSize = 12.sp)
+                    Text("يُجهز الفيديو…", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

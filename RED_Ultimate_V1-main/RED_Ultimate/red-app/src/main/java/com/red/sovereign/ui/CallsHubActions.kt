@@ -1,5 +1,6 @@
 package com.red.sovereign.ui
 
+import androidx.compose.material3.MaterialTheme
 import com.red.sovereign.calls.GroupCallService
 import android.Manifest
 import android.content.pm.PackageManager
@@ -285,7 +286,7 @@ fun GroupCallPickerDialog(
                 // Header
                 Column {
                     Text("مكالمة جماعية", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Color.White)
-                    Text("${selected.size} مختار · ${contacts.size} صديق", color = Color.White.copy(0.6f), fontSize = 13.sp)
+                    Text("${selected.size} مختار · ${contacts.size} صديق", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 }
 
                 // Toggle صوت/فيديو
@@ -360,8 +361,8 @@ fun GroupCallPickerDialog(
                             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Icon(Icons.Rounded.PersonOff, null, tint = Color.White.copy(0.5f), modifier = Modifier.size(40.dp))
-                                    Text("لا توجد جهات اتصال بعد", color = Color.White.copy(0.5f))
-                                    Text("أضف أصدقاء من تبويب الدردشات", color = Color.White.copy(0.4f), fontSize = 12.sp)
+                                    Text("لا توجد جهات اتصال بعد", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("أضف أصدقاء من تبويب الدردشات", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                                 }
                             }
                         }
@@ -370,7 +371,7 @@ fun GroupCallPickerDialog(
 
                 // Actions
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onDismiss) { Text("إلغاء", color = Color.White.copy(0.6f)) }
+                    TextButton(onClick = onDismiss) { Text("إلغاء", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { if (selected.isNotEmpty()) onStartCall(selected.toList(), isVideo) },
@@ -440,7 +441,7 @@ fun ConferenceHubDialog(
                         }
                         Column {
                             Text("المؤتمرات والمساحات", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("نمط Twitter/X Spaces و Zoom", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                            Text("نمط Twitter/X Spaces و Zoom", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                     }
                     IconButton(onClick = onDismiss) {
@@ -509,7 +510,7 @@ fun ConferenceHubDialog(
                             value = roomIdInput,
                             onValueChange = { roomIdInput = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("مثال: room-123 أو majlis-01", color = Color.Gray) },
+                            placeholder = { Text("مثال: room-123 أو majlis-01", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -524,7 +525,7 @@ fun ConferenceHubDialog(
                             value = passwordInput,
                             onValueChange = { if (!it.contains(' ')) passwordInput = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("كلمة السر (إن طُلبت)", color = Color.Gray) },
+                            placeholder = { Text("كلمة السر (إن طُلبت)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -625,7 +626,7 @@ fun LiveStreamHubDialog(
                         }
                         Column {
                             Text("مركز البث المباشر 🔴", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("نمط TikTok — بث تفاعلي وإعجابات حية", color = Color.White.copy(0.6f), fontSize = 12.sp)
+                            Text("نمط TikTok — بث تفاعلي وإعجابات حية", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                         }
                     }
                     IconButton(onClick = onDismiss) {
@@ -693,7 +694,7 @@ fun LiveStreamHubDialog(
                                 value = streamTitle,
                                 onValueChange = { streamTitle = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("مثال: بث سيادي مباشر", color = Color.Gray) },
+                                placeholder = { Text("مثال: بث سيادي مباشر", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -784,7 +785,7 @@ fun LiveStreamHubDialog(
                                     value = streamPassword,
                                     onValueChange = { if (!it.contains(' ')) streamPassword = it },
                                     modifier = Modifier.fillMaxWidth(),
-                                    placeholder = { Text("كلمة سر البث (4 أحرف فأكثر)", color = Color.Gray) },
+                                    placeholder = { Text("كلمة سر البث (4 أحرف فأكثر)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
                                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -836,7 +837,7 @@ fun LiveStreamHubDialog(
                                 value = watchStreamId,
                                 onValueChange = { watchStreamId = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("مثال: stream-xyz أو رابط البث", color = Color.Gray) },
+                                placeholder = { Text("مثال: stream-xyz أو رابط البث", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -850,7 +851,7 @@ fun LiveStreamHubDialog(
                                 value = watchPassword,
                                 onValueChange = { if (!it.contains(' ')) watchPassword = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("كلمة السر (للبث الخاص فقط)", color = Color.Gray) },
+                                placeholder = { Text("كلمة السر (للبث الخاص فقط)", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
