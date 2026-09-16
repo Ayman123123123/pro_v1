@@ -1,8 +1,0 @@
-/*
- * Copyright 2026 RED Messenger, LLC
- * SPDX-License-Identifier: AGPL-3.0-only
- */
-
-package org.signal.registration.screens.devicetransfer.complete
-
-class DeviceTransferCompleteState

@@ -8,9 +8,9 @@ plugins {
 // The only safe generic default is the Android-emulator alias.  A private LAN
 // address from one developer's network makes every other installation fail
 // before discovery or the server settings screen can help.
-val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://10.0.2.2:8088")
+val redServerUrl = providers.gradleProperty("RED_SERVER_URL").orElse("http://192.168.1.192:8088")
 val redServerCandidates = providers.gradleProperty("RED_SERVER_CANDIDATES")
-    .orElse("http://10.0.2.2:8088,http://127.0.0.1:8088")
+    .orElse("http://192.168.1.192:8088,http://10.0.2.2:8088,http://127.0.0.1:8088")
 val redTlsPins = providers.gradleProperty("RED_TLS_PINS").orElse("")
 val redTargetAbi = providers.gradleProperty("RED_TARGET_ABI").orElse("arm64-v8a")
 require(redTargetAbi.get() in setOf("arm64-v8a", "armeabi-v7a", "x86_64")) { "Unsupported RED_TARGET_ABI" }

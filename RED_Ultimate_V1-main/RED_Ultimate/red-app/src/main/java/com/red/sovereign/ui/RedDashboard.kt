@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -622,7 +623,7 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                                 else -> "مؤتمر نشط"
                             },
                             subtitle = "اضغط للعودة إلى المكالمة",
-                            icon = androidx.compose.material.icons.Icons.Rounded.Call,
+                            icon = androidx.compose.material.icons.Icons.Default.Call,
                             onClick = { section = MainSection.CALLS }
                         )
                     }
