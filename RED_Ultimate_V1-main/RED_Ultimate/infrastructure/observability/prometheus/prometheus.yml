@@ -1,88 +1,27 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
-  external_labels:
-    cluster: 'red-sovereign'
-    environment: 'production'
-
 rule_files:
   - /etc/prometheus/alerts.yml
-
 alerting:
   alertmanagers:
     - static_configs: [{targets: ['alertmanager:9093']}]
-
 scrape_configs:
-  # RED Application Services
   - job_name: red-backend
     metrics_path: /actuator/prometheus
     static_configs: [{targets: ['backend:8080']}]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'red-backend'
-
-  - job_name: red-media-sfu
-    metrics_path: /metrics
-    static_configs: [{targets: ['media-sfu:4000']}]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'red-media-sfu'
-
-  - job_name: red-nginx
-    metrics_path: /metrics
-    static_configs: [{targets: ['nginx:80']}]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'red-nginx'
-
-  # Infrastructure Exporters
   - job_name: postgres
     static_configs: [{targets: ['postgres-exporter:9187']}]
-
   - job_name: redis
     static_configs: [{targets: ['redis-exporter:9121']}]
-
   - job_name: mongodb
     static_configs: [{targets: ['mongodb-exporter:9216']}]
-
   - job_name: minio
     metrics_path: /minio/v2/metrics/cluster
     static_configs: [{targets: ['minio:9000']}]
-
-  # Observability Stack
-  - job_name: prometheus
-    static_configs: [{targets: ['localhost:9090']}]
-
-  - job_name: alertmanager
-    static_configs: [{targets: ['alertmanager:9093']}]
-
-  - job_name: grafana
-    static_configs: [{targets: ['grafana:3000']}]
-
-  - job_name: tempo
-    static_configs: [{targets: ['tempo:3200']}]
-
-  - job_name: loki
-    static_configs: [{targets: ['loki:3100']}]
-
-  - job_name: pyroscope
-    static_configs: [{targets: ['pyroscope:4040']}]
-
-  - job_name: otel-collector
-    static_configs: [{targets: ['otel-collector:8888']}]
-
-  # Node Exporter (host metrics)
-  - job_name: node-exporter
-    static_configs: [{targets: ['host.docker.internal:9100']}]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'docker-host'
-
-  # Blackbox Exporter (TLS/HTTP probes)
+  - job_name: media-sfu
+    metrics_path: /health
+    static_configs: [{targets: ['media-sfu:4000']}]
   - job_name: tls-certificate
     metrics_path: /probe
     params: {module: [https_tls]}
@@ -94,24 +33,3 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
-
-  - job_name: blackbox-http
-    metrics_path: /probe
-    params: {module: [http_2xx]}
-    static_configs:
-      - targets:
-          - https://nginx:443/health
-          - http://backend:8080/health
-          - http://media-sfu:4000/health
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: blackbox-exporter:9115
-
-  # Pushgateway (for ephemeral jobs)
-  - job_name: pushgateway
-    static_configs: [{targets: ['pushgateway:9091']}]
-    honor_labels: true

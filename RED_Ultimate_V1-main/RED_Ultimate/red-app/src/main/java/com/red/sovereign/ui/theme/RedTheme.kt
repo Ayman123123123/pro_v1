@@ -255,7 +255,7 @@ private val redTypography = Typography(
         fontSize = 57.sp,
         lineHeight = 64.sp,
         fontWeight = FontWeight.Black,
-        letterSpacing = (-0.25).sp
+        letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
         fontFamily = AppFontFamily,
@@ -308,14 +308,14 @@ private val redTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 24.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.15.sp
+        letterSpacing = 0.sp
     ),
     titleSmall = TextStyle(
         fontFamily = AppFontFamily,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.1.sp
+        letterSpacing = 0.sp
     ),
 
     // Body - للنصوص الأساسية (min 14sp، lineHeight ≥ 1.5)
@@ -324,21 +324,21 @@ private val redTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 26.sp,
         fontWeight = FontWeight.Normal,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = AppFontFamily,
         fontSize = 14.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.Normal,
-        letterSpacing = 0.25.sp
+        letterSpacing = 0.sp
     ),
     bodySmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontSize = 12.sp,
-        lineHeight = 18.sp,
+        fontSize = 13.sp,
+        lineHeight = 22.sp,
         fontWeight = FontWeight.Normal,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.sp
     ),
 
     // Label - للتسميات والأزرار
@@ -347,21 +347,21 @@ private val redTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.1.sp
+        letterSpacing = 0.sp
     ),
     labelMedium = TextStyle(
         fontFamily = AppFontFamily,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         fontWeight = FontWeight.Medium,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.sp
     ),
     labelSmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
+        fontSize = 12.sp,
+        lineHeight = 18.sp,
         fontWeight = FontWeight.Medium,
-        letterSpacing = 0.5.sp
+        letterSpacing = 0.sp
     ),
 )
 
@@ -643,12 +643,12 @@ fun YounesTheme(
         )
     } else baseScheme
 
-    // ─── مقياس الخط الديناميكي ───────────────────────────────────────────
-    val scaledTypography = rememberScaledTypography(AppThemeState.fontScale)
-
+    // ─── مقياس الخط: Density في MainActivity يكبّر كل sp — لا تكبير ثانٍ هنا
+    // (التكبير المزدوج السابق 1.3x→1.69x كان يفجّر الفقاعات). نحترم fontScale
+    // عبر Density فقط ونمرر redTypography كما هي.
     MaterialTheme(
         colorScheme = finalScheme,
-        typography = scaledTypography,
+        typography = redTypography,
         shapes = redShapes,
         content = content
     )

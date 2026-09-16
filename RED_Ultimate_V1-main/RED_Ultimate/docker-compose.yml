@@ -59,7 +59,7 @@ x-resource-limits-xlarge: &resource-limits-xlarge
 services:
   # ━━━━━━━━━━━━ 1. Infrastructure ━━━━━━━━━━━━
   postgres:
-    image: postgres:16.9-bookworm
+    image: postgres:16.15-bookworm
     container_name: red-db-sql
     restart: unless-stopped
     <<: *resource-limits-xlarge
@@ -120,7 +120,7 @@ services:
       - mongo_password
 
   redis:
-    image: redis:7.4.5-bookworm
+    image: redis:7.4.11-bookworm
     container_name: red-cache
     restart: unless-stopped
     <<: *resource-limits-medium
@@ -133,7 +133,7 @@ services:
       - --maxmemory
       - "1gb"
       - --maxmemory-policy
-      - "allkeys-lru"
+      - "volatile-lru"
       - --save
       - "900 1"
       - --save
@@ -147,7 +147,7 @@ services:
     networks: ["red-net"]
 
   minio:
-    image: minio/minio:RELEASE.2024.12.19
+    image: minio/minio:RELEASE.2026-06-06T02-44-06Z
     container_name: red-storage
     restart: unless-stopped
     <<: *resource-limits-medium
@@ -169,7 +169,7 @@ services:
 
   # ━━━━━━━━━━━━ 2. Application Services ━━━━━━━━━━━━
   identity-init:
-    image: alpine:3.21
+    image: alpine:3.22
     container_name: red-identity-init
     restart: "no"
     network_mode: none
@@ -199,8 +199,8 @@ services:
 
   backend:
     build:
-      context: ./backend-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend-server/Dockerfile
     image: red-backend:prod
     container_name: red-backend
     restart: unless-stopped
@@ -369,14 +369,14 @@ services:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/panel-alive"]
       <<: *healthcheck-defaults
     logging: *default-logging
     networks: ["red-net"]
 
   # ━━━━━━━━━━━━ 3. Networking ━━━━━━━━━━━━
   nginx:
-    image: nginx:1.28.0-alpine
+    image: nginx:1.29.1-alpine
     container_name: red-proxy
     restart: unless-stopped
     <<: *resource-limits-small
@@ -438,7 +438,7 @@ services:
 
   # ━━━━━━━━━━━━ 4. Observability ━━━━━━━━━━━━
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.14.0
     container_name: red-prometheus
     restart: unless-stopped
     <<: *resource-limits-medium
@@ -479,14 +479,14 @@ services:
       - grafana_admin_password
 
   loki:
-    image: grafana/loki:3.1.0
+    image: grafana/loki:3.7.7
     container_name: red-loki
     restart: unless-stopped
     <<: *resource-limits-medium
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/loki.yml
     volumes:
       - loki-data:/loki
-      - ./infrastructure/observability/loki:/etc/loki
+      - ./infrastructure/observability/loki/loki.yml:/etc/loki/loki.yml:ro
     ports:
       - "3100:3100"
     healthcheck:
@@ -500,14 +500,14 @@ services:
     container_name: red-tempo
     restart: unless-stopped
     <<: *resource-limits-medium
-    command: -config.file=/etc/tempo.yaml
+    command: -config.file=/etc/tempo/tempo.yml
     volumes:
       - tempo-data:/var/tempo
-      - ./infrastructure/observability/tempo:/etc/tempo
+      - ./infrastructure/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
     ports:
       - "3200:3200"
-      - "4317:4317"
-      - "4318:4318"
+      - "4319:4317"
+      - "4320:4318"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
       <<: *healthcheck-defaults
@@ -534,9 +534,9 @@ services:
     container_name: red-otel-collector
     restart: unless-stopped
     <<: *resource-limits-small
-    command: --config=/etc/otelcol-contrib/config.yaml
+    command: --config=/etc/otelcol-contrib/config.yml
     volumes:
-      - ./infrastructure/observability/otel:/etc/otelcol-contrib
+      - ./infrastructure/observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
     ports:
       - "4317:4317"
       - "4318:4318"

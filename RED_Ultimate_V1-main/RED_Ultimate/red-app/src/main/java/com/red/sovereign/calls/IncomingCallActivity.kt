@@ -120,7 +120,12 @@ class IncomingCallActivity : ComponentActivity() {
     }
 
     private fun bindIntent(intent: Intent?) {
-        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: CALL_TYPE_CONFERENCE
+        // call_type إلزامي — Intent ناقص يُسقط بصمت بدل عرض مؤتمر وهمي لشخص 1:1.
+        val callType = intent?.getStringExtra(EXTRA_CALL_TYPE) ?: run {
+            android.util.Log.w("IncomingCallActivity", "missing call_type — dropping intent")
+            finish()
+            return
+        }
         viewModel.callType = callType
         when (callType) {
             CALL_TYPE_1TO1 -> {
@@ -305,7 +310,7 @@ fun IncomingCallScreen(viewModel: IncomingCallViewModel, onFinish: () -> Unit) {
                 // G3: Red ID الكامل تحت الاسم — معرف المتصل حيث كان ناقصاً.
                 if (inviterRedId.isNotBlank() && inviterRedId != inviterName) {
                     Spacer(Modifier.height(2.dp))
-                    Text(inviterRedId, color = Color.White.copy(0.55f), fontSize = 13.sp)
+                    Text(inviterRedId, color = Color.White.copy(0.85f), fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(

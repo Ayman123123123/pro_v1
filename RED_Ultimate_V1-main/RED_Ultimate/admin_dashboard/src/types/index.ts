@@ -263,3 +263,36 @@ export interface RealtimeMetrics {
   network: number;
   timestamp: string;
 }
+
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export interface Device {
+  id: string;
+  userId: string;
+  deviceId: string;
+  deviceName: string;
+  platform: string;
+  status: string;
+  lastSeen?: string;
+  createdAt: string;
+}
+
+export interface SecurityEvent {
+  id: string;
+  userId: string;
+  type: string;
+  severity: string;
+  message: string;
+  ipAddress?: string;
+  createdAt: string;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  userId: string;
+  action: string;
+  category: string;
+  message: string;
+  ipAddress?: string;
+  createdAt: string;
+}

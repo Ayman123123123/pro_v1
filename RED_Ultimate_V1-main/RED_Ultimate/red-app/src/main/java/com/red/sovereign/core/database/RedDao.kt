@@ -216,6 +216,10 @@ interface RedDao {
     @Query("DELETE FROM message_reactions WHERE messageId = :messageId")
     suspend fun deleteReactionsForMessage(messageId: String)
 
+    /** Phase 0 (2026-09-16): شريط الردود — ThreadRepliesScreen يقرأ به. */
+    @Query("SELECT * FROM local_history WHERE conversationId = :convId AND replyToMessageId = :rootId ORDER BY createdAt ASC LIMIT :limit OFFSET :offset")
+    suspend fun getThreadReplies(convId: String, rootId: String, offset: Int, limit: Int): List<LocalHistoryEntity>
+
     @Query("SELECT COUNT(*) FROM local_history WHERE conversationId = :convId AND outgoing = 0 AND createdAt > :since")
     suspend fun countIncomingSince(convId: String, since: Long): Int
 

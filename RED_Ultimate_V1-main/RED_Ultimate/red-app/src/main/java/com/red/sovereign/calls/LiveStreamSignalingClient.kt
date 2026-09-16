@@ -5,14 +5,40 @@ import android.util.Log
 import com.red.sovereign.auth.TokenStore
 import com.red.sovereign.core.ServerEndpoint
 import com.red.sovereign.security.SecureOkHttpClient
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+
+object FlexibleStringMapSerializer : KSerializer<Map<String, String>> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("FlexibleStringMap", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: Map<String, String>) {
+        encoder.encodeSerializableValue(kotlinx.serialization.serializer(), value)
+    }
+
+    override fun deserialize(decoder: Decoder): Map<String, String> {
+        if (decoder !is JsonDecoder) return emptyMap()
+        val jsonElement = decoder.decodeJsonElement()
+        if (jsonElement !is JsonObject) return emptyMap()
+        return jsonElement.mapValues { (_, element) ->
+            if (element is JsonPrimitive) element.content else element.toString()
+        }
+    }
+}
 
 /**
  * WebSocket client for live broadcast signaling.
@@ -23,6 +49,7 @@ data class LiveStreamSignal(
     val type: String,
     val roomId: String = "",
     val userId: String = "",
+    @Serializable(with = FlexibleStringMapSerializer::class)
     val payload: Map<String, String> = emptyMap()
 )
 

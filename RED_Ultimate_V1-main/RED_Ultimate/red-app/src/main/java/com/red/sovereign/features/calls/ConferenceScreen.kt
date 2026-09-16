@@ -103,7 +103,7 @@ fun ConferenceScreen() {
                         .background(Color(0xFF00C98C), RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text("مؤتمر آمن 🔒", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("مؤتمر آمن 🔒", color = Color(0xFF002118), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 
                 Text(

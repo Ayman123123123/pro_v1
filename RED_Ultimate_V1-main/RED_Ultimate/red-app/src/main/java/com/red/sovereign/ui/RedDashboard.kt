@@ -38,7 +38,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -601,12 +600,16 @@ fun RedDashboard(account: AuthState.Authenticated, viewModel: AuthViewModel, dee
                     )
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
+                    val serverStatus by com.red.sovereign.core.ConnectionStatusRepository.status.collectAsState()
                     SovereignTopBar(
                         redId = account.redId,
                         username = account.username,
                         onSettings = { showSettings = true },
                         onSearch = { currentScreen = SovereignScreen.SEARCH },
                         onProfileClick = { currentScreen = SovereignScreen.PROFILE },
+                        serverState = serverStatus.state,
+                        serverRetryInSec = serverStatus.retryInSec,
+                        onServerClick = { currentScreen = SovereignScreen.SMART_SERVER },
                         hazeState = hazeState
                     )
                     // 🏝️ الكبسولة الديناميكية: مؤشر عائم للمكالمة الجارية (1:1 أو مؤتمر)
@@ -2107,7 +2110,7 @@ private fun ChatHubScreen(
                 )
             }
         }
-        if (groupConversationId != null) Column(Modifier.fillMaxSize().padding(14.dp)) {
+        if (showGroups) Column(Modifier.fillMaxSize().padding(14.dp)) {
             val openGroup = groups.groups.firstOrNull { it.id == groupConversationId }
             if (openGroup == null) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3323,17 +3326,23 @@ private fun UnifiedCallsScreen(ownUserId: String, history: CallHistoryViewModel,
             onDismiss = { showGroupCallPicker = false },
             onStartCall = { selectedIds, isVideo ->
                 showGroupCallPicker = false
-                val selectedNames = selectedIds.map { id ->
-                    contacts.find { it.redId == id }?.displayName ?: id
+                // حارس العضو الواحد: اتصال بشخص واحد = مكالمة 1:1 — لا غرفة جماعية.
+                // يوقف عرض عدة وجهات لنفس الشخص.
+                if (selectedIds.size == 1) {
+                    com.red.sovereign.calls.YounesCallService.start(context, selectedIds.first(), isVideo)
+                } else {
+                    val selectedNames = selectedIds.map { id ->
+                        contacts.find { it.redId == id }?.displayName ?: id
+                    }
+                    GroupCallService.startGroupCall(
+                        context = context,
+                        myUserId = ownUserId,
+                        inviteeIds = selectedIds,
+                        inviteeNames = selectedNames,
+                        isVideo = isVideo,
+                        hostName = myDisplayName
+                    )
                 }
-                GroupCallService.startGroupCall(
-                    context = context,
-                    myUserId = ownUserId,
-                    inviteeIds = selectedIds,
-                    inviteeNames = selectedNames,
-                    isVideo = isVideo,
-                    hostName = myDisplayName
-                )
             }
         )
     }

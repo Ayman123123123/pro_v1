@@ -43,7 +43,7 @@ object RedTypography {
             fontSize = 57.sp,
             lineHeight = 64.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = (-0.25).sp
+            letterSpacing = 0.sp
         ),
         displayMedium = TextStyle(
             fontFamily = PlexArabicFamily,

@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.red.sovereign.core.RichMessage
-import com.red.sovereign.ui.theme.PlexArabicFamily
+import androidx.compose.material3.MaterialTheme
 
 /**
  * فقاعة دردشة "Luxury" — تصميم عصري وحصري للمنصة السيادية.
@@ -63,7 +63,7 @@ fun LuxuryChatBubble(
     val resolvedForwardOf: String? = richMessage?.forwardOf ?: forwardOf
     val resolvedForwardCount: Int = (richMessage?.forwardCount ?: forwardCount).coerceAtLeast(0)
     val isForwarded: Boolean = resolvedForwardOf != null || resolvedForwardCount > 0
-    val resolvedFont = fontFamily ?: PlexArabicFamily
+    val resolvedFont = fontFamily ?: FontFamily.Default
     val bubbleColor = if (isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val timeColor = textColor.copy(alpha = 0.7f)
@@ -222,8 +222,8 @@ fun LuxuryChatBubble(
                         else -> "✓"
                     }
                     val tickColor = when (status.uppercase()) {
-                        "READ" -> com.red.sovereign.ui.theme.YounesReadTick
-                        "FAILED", "ERROR", "DEAD_LETTER" -> Color(0xFFF25C5C)
+                        "READ" -> MaterialTheme.colorScheme.tertiary
+                        "FAILED", "ERROR", "DEAD_LETTER" -> MaterialTheme.colorScheme.error
                         "SENDING", "PENDING", "QUEUED" -> timeColor.copy(alpha = 0.7f)
                         else -> timeColor
                     }
@@ -242,7 +242,7 @@ fun LuxuryChatBubble(
 
 /** LEGENDARY: تمييز @all/@user بلون أساسي (واتساب يبرز المنشن — كان نصاً عادياً يضيع). دالة خالصة (تُستدعى داخل remember من الأعلى). */
 private fun annotatedWithMentions(message: String, base: Color): androidx.compose.ui.text.AnnotatedString {
-    val primary = Color(0xFF00C98C)
+    val primary = base
         val regex = Regex("@(all|الجميع|online|متصل|[A-Z0-9]{5,16})", RegexOption.IGNORE_CASE)
         val builder = androidx.compose.ui.text.AnnotatedString.Builder(message)
         regex.findAll(message).forEach { m ->

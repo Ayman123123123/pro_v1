@@ -313,8 +313,8 @@ message RTPCapabilities {
 message ProducerInfo {
   string producer_id = 1;
   string peer_id = 2;
-  string kind = 3.
-  string display_name = 4.
+  string kind = 3;
+  string display_name = 4;
 }
 
 message Encodings {

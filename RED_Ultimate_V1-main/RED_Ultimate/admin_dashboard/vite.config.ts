@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
-import tailwindcss from '@tailwindcss/vite';
 import checker from 'vite-plugin-checker';
 import path from 'path';
 
@@ -17,10 +16,9 @@ const proxy = {
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss(),
     checker({
       typescript: true,
-      eslint: { lintCommand: 'eslint src --ext ts,tsx' },
+      eslint: { lintCommand: 'eslint src' },
     }),
   ],
   resolve: {
@@ -31,7 +29,6 @@ export default defineConfig({
       '@/stores': path.resolve(__dirname, './src/stores'),
       '@/api': path.resolve(__dirname, './src/api'),
       '@/pages': path.resolve(__dirname, './src/pages'),
-      '@/routes': path.resolve(__dirname, './src/routes'),
       '@/utils': path.resolve(__dirname, './src/utils'),
       '@/types': path.resolve(__dirname, './src/types'),
       '@/styles': path.resolve(__dirname, './src/styles'),
@@ -47,17 +44,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-router': ['@tanstack/react-router'],
-          'vendor-query': ['@tanstack/react-query'],
-          'vendor-table': ['@tanstack/react-table'],
-          'vendor-state': ['zustand', 'jotai'],
-          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select', '@radix-ui/react-toast', '@radix-ui/react-tooltip', '@radix-ui/react-avatar', '@radix-ui/react-label', '@radix-ui/react-switch', '@radix-ui/react-tabs', '@radix-ui/react-popover', '@radix-ui/react-hover-card', '@radix-ui/react-context-menu', '@radix-ui/react-menubar', '@radix-ui/react-navigation-menu', '@radix-ui/react-accordion', '@radix-ui/react-alert-dialog', '@radix-ui/react-checkbox', '@radix-ui/react-collapsible', '@radix-ui/react-progress', '@radix-ui/react-radio-group', '@radix-ui/react-scroll-area', '@radix-ui/react-separator', '@radix-ui/react-slider', '@radix-ui/react-slot'],
-          'vendor-charts': ['recharts', '@visx/axis', '@visx/grid', '@visx/group', '@visx/hierarchy', '@visx/mock-data', '@visx/responsive', '@visx/scale', '@visx/shape', '@visx/tooltip'],
-          'vendor-forms': ['react-hook-form', 'zod', '@hookform/resolvers'],
-          'vendor-i18n': ['i18next', 'react-i18next'],
-          'vendor-utils': ['date-fns', 'date-fns-tz', 'clsx', 'tailwind-merge', 'class-variance-authority', 'lucide-react', 'sonner', 'vaul', 'cmdk'],
-          'vendor-realtime': ['socket.io-client'],
-          'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
+          'vendor-router': ['react-router-dom'],
+          'vendor-charts': ['echarts', 'echarts-for-react'],
+          'vendor-ui': ['antd', '@ant-design/icons'],
         },
         chunkFileNames: 'assets/js/[name]-[hash].js',
         entryFileNames: 'assets/js/[name]-[hash].js',

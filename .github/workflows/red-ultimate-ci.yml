@@ -165,8 +165,8 @@ jobs:
         working-directory: ${{ env.PROJECT }}/admin_dashboard
         run: |
           npm ci --no-audit --no-fund
-          npm run check
-          npm run build
+          npm run typecheck
+          npm run build:fast
 
   android:
     name: Android 17 build and unit tests

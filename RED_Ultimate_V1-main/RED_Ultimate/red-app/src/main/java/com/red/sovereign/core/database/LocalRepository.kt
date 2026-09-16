@@ -191,6 +191,15 @@ class LocalRepository(context: Context) {
     /** يحذف تفاعلات رسالة واحدة (يُستخدم مع الحذف لدى الجميع وحذف لديّ). */
     suspend fun deleteReactionsForMessage(messageId: String) = dao.deleteReactionsForMessage(messageId)
 
+    // ─── Phase 0 green-build shims (2026-09-16) ───
+    // ReactionsScreen.kt و ThreadRepliesScreen.kt يستخدمان أسماءً مختلفة عن
+    // الموجود في DAO؛ نسوّي الواجهة هنا دون لمس الشاشات لتفادي كسر أكبر.
+    suspend fun getReactionsForMessage(messageId: String): List<MessageReactionEntity> = dao.reactionsForMessage(messageId)
+    suspend fun deleteReaction(messageId: String, senderId: String) = dao.deleteReaction(messageId, senderId)
+    suspend fun upsertReaction(reaction: MessageReactionEntity) = dao.upsertReaction(reaction)
+    suspend fun getThreadReplies(conversationId: String, rootMessageId: String, offset: Int, limit: Int): List<LocalHistoryEntity> =
+        dao.getThreadReplies(conversationId, rootMessageId, offset, limit)
+
     /** عدد الرسائل الواردة بعد لحظة معينة — لاستعادة عدادات غير المقروء بعد إعادة التشغيل. */
     suspend fun countIncomingSince(convId: String, since: Long): Int = dao.countIncomingSince(convId, since)
 

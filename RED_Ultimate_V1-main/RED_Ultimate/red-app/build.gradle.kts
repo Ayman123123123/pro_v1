@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.hilt)
 }
 
 // The only safe generic default is the Android-emulator alias.  A private LAN
@@ -192,83 +191,12 @@ dependencies {
     implementation(libs.material.material)
     implementation(libs.androidx.core.splashscreen)
 
-    // ───── New Modern Libraries ─────
-    // Core Modern
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
+    // الخطوط مضمّنة محلياً (res/font/plex_arabic — SIL OFL) — لا خطوط Google الشبكية.
 
-    // Compose & UI
-    implementation(platform(libs.compose.bom))
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material3.windowsizeclass)
-    implementation(libs.androidx.compose.foundation)
-    implementation(libs.androidx.compose.animation)
-    implementation(libs.androidx.compose.animation.graphics)
-    implementation(libs.androidx.compose.runtime.livedata)
-    implementation(libs.androidx.compose.runtime.rxjava3)
-
-    // Navigation
-    implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.navigation.dynamic.features.fragment)
-
-    // Paging & Data
-    implementation(libs.androidx.paging.compose)
-    implementation(libs.androidx.paging.runtime.ktx)
-    implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.datastore.core)
-
-    // Database (Room)
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    implementation(libs.androidx.room.paging)
-    ksp(libs.androidx.room.compiler)
-
-    // Dependency Injection (Koin)
-    implementation(libs.koin.android)
-    implementation(libs.koin.androidx.compose)
-    implementation(libs.koin.androidx.viewmodel)
-
-    // Networking
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.moshi)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging.interceptor)
-
-    // Serialization
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
-    implementation(libs.kotlinx.serialization.json)
-    implementation(libs.kotlinx.serialization.protobuf)
-
-    // Media & Images
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network.okhttp)
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.ui)
-    implementation(libs.androidx.media3.session)
-
-    // Cryptography & Security
-    implementation(libs.tink.android)
-    implementation(libs.libsignal.android)
-    implementation(libs.androidx.security.crypto)
-    implementation(libs.androidx.biometric)
-
-    // ML & AI (On-device)
-    implementation(libs.mlkit.translate)
-    implementation(libs.mlkit.text.recognition)
-    implementation(libs.mlkit.face.detection)
-    implementation(libs.tensorflow.lite)
-    implementation(libs.tensorflow.lite.gpu)
-    implementation(libs.tensorflow.lite.support)
-
-    // Coroutines & Flow
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.kotlinx.coroutines.flow)
-
-    // Performance & Monitoring
-    implementation(libs.androidx.metrics.performance)
-    implementation(libs.primes)
+    // ───── Coil 3.x — تحميل وعرض الصور والفيديو (3.6.0، يخلف 2.7.0 المجمّد) ─────
+    implementation(libs.coil3.compose)
+    implementation(libs.coil3.video)
+    implementation(libs.coil3.network.okhttp)
 
     // ───── Haze — ضبابية خلفية حقيقية للأشرطة الزجاجية ─────
     implementation(libs.haze.compose)
@@ -282,17 +210,27 @@ dependencies {
     // ───── emoji2-emojipicker — محدد الإيموجي الرسمي من Google ─────
     implementation(libs.androidx.emoji2.emojipicker)
 
+    // ───── Paging 3 — تحميل المحادثات والمنشورات بتكاسل ─────
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
     // ───── WorkManager — مزامنة في الخلفية ─────
     implementation(libs.androidx.work.runtime.ktx)
 
     // ───── Room — قاعدة بيانات محلية سيادية ─────
     // Room 2.7+ merged all KTX APIs into room-runtime; room-ktx is an empty
     // compatibility artifact, so one runtime dependency preserves every API.
+    implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.sqlite)
+    ksp(libs.androidx.room.compiler)
     implementation(libs.signal.android.database.sqlcipher)
 
     // ───── Accompanist — أذونات وتسهيلات Compose ─────
     implementation(libs.accompanist.permissions)
+
+    // ───── Biometric — قفل التطبيق بالبصمة/الوجه ─────
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.security.crypto)
 
     // Tink single-source (CI-proven): tink-android AAR *bundles* core classes at every
 
@@ -303,13 +241,7 @@ dependencies {
     implementation("com.google.crypto.tink:tink-android:1.23.0")
 
 
-    // Testing
-    testImplementation(libs.junit)
-    testImplementation(libs.mockito.core)
-    testImplementation(libs.mockito.kotlin)
-    testImplementation(libs.robolectric)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(libs.androidx.test.rules)
+    testImplementation("junit:junit:4.13.2")
 }
 
 

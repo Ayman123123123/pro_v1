@@ -1,128 +1,44 @@
 # RED Sovereign — Docker Compose Staging Override
 # Usage: docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 #
-# Staging configuration with:
-# - Reduced replicas (1 each)
-# - Moderate resource limits
-# - 7d Prometheus retention
-# - No published ports (behind nginx like prod)
-# - TLS enabled with staging certificates
-
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
-
-x-healthcheck-defaults: &healthcheck-defaults
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 30s
-
-x-resource-limits-small: &resource-limits-small
-  deploy:
-    resources:
-      limits:
-        memory: 256M
-        cpus: '0.5'
-      reservations:
-        memory: 128M
-        cpus: '0.25'
-
-x-resource-limits-medium: &resource-limits-medium
-  deploy:
-    resources:
-      limits:
-        memory: 1G
-        cpus: '1.0'
-      reservations:
-        memory: 512M
-        cpus: '0.5'
-
-x-resource-limits-large: &resource-limits-large
-  deploy:
-    resources:
-      limits:
-        memory: 2G
-        cpus: '2.0'
-      reservations:
-        memory: 1G
-        cpus: '1.0'
+# Phase 10 (2026-09-15): the old prometheus/grafana stanzas were dangling
+# (command/env-only overrides of services that exist only in prod, so
+# base+staging failed to render) — staging now defines its own pair with
+# 7d retention. No published ports: staging sits behind nginx like prod.
 
 services:
-  backend:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    environment:
-      SPRING_PROFILES_ACTIVE: "staging"
-      RED_ADMIN_COOKIE_SECURE: "true"
-
-  media-sfu:
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
-    environment:
-      MEDIASOUP_WORKERS: "2"
-
-  admin-dashboard:
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  nginx:
-    environment:
-      - RED_ADMIN_COOKIE_SECURE=true
-
-  # Staging observability (7d retention, no public ports)
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v2.52.0
     container_name: red-prometheus-staging
     restart: unless-stopped
-    <<: *resource-limits-large
+    mem_limit: 1g
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=7d'
       - '--web.enable-lifecycle'
     volumes:
-      - ./infrastructure/observability/prometheus:/etc/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks:
       - red-net
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:10.4.0
     container_name: red-grafana-staging
     restart: unless-stopped
-    <<: *resource-limits-medium
+    mem_limit: 256m
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_admin_password
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     volumes:
-      - ./infrastructure/observability/grafana:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana-data:/var/lib/grafana
     networks:
       - red-net
@@ -130,84 +46,12 @@ services:
       - prometheus
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-    secrets:
-      - grafana_admin_password
-
-  loki:
-    image: grafana/loki:3.1.0
-    container_name: red-loki-staging
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - loki-data:/loki
-      - ./infrastructure/observability/loki:/etc/loki
-    networks:
-      - red-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-
-  tempo:
-    image: grafana/tempo:2.6.0
-    container_name: red-tempo-staging
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    command: -config.file=/etc/tempo.yaml
-    volumes:
-      - tempo-data:/var/tempo
-      - ./infrastructure/observability/tempo:/etc/tempo
-    networks:
-      - red-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3200/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-
-  pyroscope:
-    image: grafana/pyroscope:1.10.0
-    container_name: red-pyroscope-staging
-    restart: unless-stopped
-    <<: *resource-limits-medium
-    volumes:
-      - pyroscope-data:/var/lib/pyroscope
-    networks:
-      - red-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4040/ready"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.122.0
-    container_name: red-otel-collector-staging
-    restart: unless-stopped
-    <<: *resource-limits-small
-    command: --config=/etc/otelcol-contrib/config.yaml
-    volumes:
-      - ./infrastructure/observability/otel:/etc/otelcol-contrib
-    networks:
-      - red-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13133"]
-      <<: *healthcheck-defaults
-    logging: *default-logging
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   prometheus-data:
     driver: local
   grafana-data:
     driver: local
-  loki-data:
-    driver: local
-  tempo-data:
-    driver: local
-  pyroscope-data:
-    driver: local
-
-secrets:
-  grafana_admin_password:
-    file: ./secrets/grafana_admin_password.txt

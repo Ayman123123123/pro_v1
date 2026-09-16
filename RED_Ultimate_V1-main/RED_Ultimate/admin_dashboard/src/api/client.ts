@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { getAccessToken, clearAuth } from '@/stores/authStore';
+import { getAccessToken, clearAuth } from '@/stores';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -86,8 +86,8 @@ class ApiClient {
     return response.data;
   }
 
-  async post<T>(url: string, data?: unknown): Promise<T> {
-    const response = await this.client.post<T>(url, data);
+  async post<T>(url: string, data?: unknown, config?: Record<string, unknown>): Promise<T> {
+    const response = await this.client.post<T>(url, data, config);
     return response.data;
   }
 

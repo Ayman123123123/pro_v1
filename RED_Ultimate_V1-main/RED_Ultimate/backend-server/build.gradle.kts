@@ -1,9 +1,9 @@
-Ôªøplugins {
-    alias(libs.plugins.kotlin-jvm)
-    alias(libs.plugins.kotlin-spring)
-    alias(libs.plugins.kotlin-jpa)
-    alias(libs.plugins.spring-boot)
-    alias(libs.plugins.spring-dependency-management)
+plugins {
+    kotlin("jvm") version "2.3.21"
+    kotlin("plugin.spring") version "2.3.21"
+    kotlin("plugin.jpa") version "2.3.21"
+    id("org.springframework.boot") version "4.0.8"
+    id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "com.red"
@@ -23,73 +23,44 @@ repositories {
 
 dependencies {
     // Spring Boot Starters
-    implementation(libs.spring.boot.starter.web)
-    implementation(libs.spring.boot.starter.webflux)
-    implementation(libs.spring.boot.starter.websocket)
-    implementation(libs.spring.boot.starter.data.mongodb)
-    implementation(libs.spring.boot.starter.data.redis)
-    implementation(libs.spring.boot.starter.security)
-    implementation(libs.spring.boot.starter.actuator)
-    implementation(libs.spring.boot.starter.validation)
-    implementation(libs.spring.boot.starter.aop)
-    implementation(libs.spring.boot.starter.mail)
-    implementation(libs.spring.boot.starter.data.jpa)
-    implementation(libs.spring.boot.starter.flyway)
-    implementation(libs.spring.boot.starter.threads)
-
-    // OpenAPI 3.1 (springdoc-openapi)
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
-
-    // Rate limiting (Bucket4j)
-    implementation("com.bucket4j:bucket4j-spring-boot3-starter:8.12.0")
-    implementation("com.bucket4j:bucket4j-redis:8.12.0")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-websocket")
+    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
 
     // Database
-    implementation(libs.postgresql)
-    implementation(libs.flyway.core)
-    implementation(libs.flyway.postgresql)
-    implementation(libs.mongodb.driver.sync)
-    implementation(libs.mongodb.driver.reactivestreams)
-    implementation(libs.redis.client)
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // Boot 4 moved Flyway autoconfiguration out of spring-boot-autoconfigure into
+    // its own module. With flyway-core alone there is no FlywayAutoConfiguration on
+    // the classpath, so `spring.flyway.*` is read by nobody and NO migration ever
+    // runs ó the schema only ever changed when someone applied SQL by hand. This
+    // starter brings spring-boot-flyway (the autoconfiguration) plus flyway-core.
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.flywaydb:flyway-database-postgresql")
+    runtimeOnly("org.postgresql:postgresql")
 
     // Kotlin
-    implementation(libs.kotlin.reflect)
-    implementation(libs.kotlin.stdlib.jdk8)
-    implementation(libs.kotlinx.coroutines.core)
+    // fasterxml Jackson 2.x pinned explicitly (2.19.2 = catalog choice): Boot 4 BOM
+    // manages Jackson 3 only, so unversioned fasterxml never resolves.
+    // Jackson 3 (tools.jackson) ó «·ÊÕÌœ „‰– 2026-09-15 (Â«Ã— «·ﬂÊœ ﬂ·Â „‰ fasterxml 2).
+    // The module brings databind transitively; both are needed by JacksonConfig.
+    implementation("tools.jackson.module:jackson-module-kotlin")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // One authoritative RED protocol shared by Android and the backend
     implementation(project(":shared-proto"))
-
-    // Security
-    implementation(libs.spring.security.crypto)
-    implementation(libs.spring.security.oauth2.resource.server)
-    implementation(libs.spring.security.oauth2.jose)
-    implementation(libs.nimbus.jose.jwt)
-
-    // Protobuf & Serialization
-    implementation(libs.protobuf.java)
-    implementation(libs.protobuf.kotlin)
-    implementation(libs.grpc.kotlin.stub)
-    implementation(libs.grpc.protobuf)
-
-    // Observability
-    implementation(libs.micrometer.prometheus)
-    implementation(libs.micrometer.tracing.brave)
-    implementation(libs.opentelemetry.sdk)
-    implementation(libs.opentelemetry.exporter.otlp)
-    implementation("io.micrometer:micrometer-registry-otlp")
-    implementation("io.opentelemetry:opentelemetry-api:1.45.0")
-    implementation("io.opentelemetry:opentelemetry-semconv:1.26.0-alpha")
-
-    // Structured logging (Logstash Logback Encoder)
-    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
     // Argon2id password hashing
     implementation("org.bouncycastle:bcprov-jdk18on:1.86")
 
     // Local S3-compatible object storage
-    implementation(libs.minio)
-    implementation(libs.jsoup) // LinkCard Open Graph
+    implementation("io.minio:minio:8.6.0")
+    implementation("org.jsoup:jsoup:1.23.1") // LinkCard Open Graph
 
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.13.0")
@@ -97,18 +68,9 @@ dependencies {
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0")
 
     // Testing
-    testImplementation(libs.spring.boot.starter.test)
-    testImplementation(libs.spring.security.test)
-    testImplementation(libs.mockito.kotlin)
-    testImplementation(libs.mockito.core)
-    testImplementation(libs.mockito.inline)
-    testImplementation(libs.testcontainers)
-    testImplementation(libs.testcontainers.postgresql)
-    testImplementation(libs.testcontainers.mongodb)
-    testImplementation(libs.testcontainers.redis)
-    testImplementation(libs.testcontainers.minio)
-    testImplementation("au.com.dius.pact:consumer-junit5:4.6.13")
-    testImplementation("au.com.dius.pact:provider-junit5:4.6.13")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")
 }
 
 kotlin {

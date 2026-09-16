@@ -75,6 +75,13 @@ tensorflow-lite = "2.16.1"
 tensorflow-lite-gpu = "2.16.1"
 tensorflow-lite-support = "0.4.4"
 
+# New: Compression, Search, Sync, ML
+brotli = "1.10.2"
+zstd = "1.5.6-4"
+lucene = "9.11.0"
+automerge = "2.0.0"
+rnnoise = "0.1.0"
+
 # Coroutines & Flow
 kotlinx-coroutines-android = "1.9.0"
 kotlinx-coroutines-flow = "1.9.0"
@@ -177,6 +184,15 @@ mlkit-face-detection = { module = "com.google.mlkit:face-detection", version.ref
 tensorflow-lite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tensorflow-lite" }
 tensorflow-lite-gpu = { module = "org.tensorflow:tensorflow-lite-gpu", version.ref = "tensorflow-lite-gpu" }
 tensorflow-lite-support = { module = "org.tensorflow:tensorflow-lite-support", version.ref = "tensorflow-lite-support" }
+
+# New: Compression, Search, Sync, ML
+brotli = { module = "org.brotli:brotli", version.ref = "brotli" }
+zstd = { module = "com.github.luben:zstd-jni", version.ref = "zstd" }
+lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
+lucene-analyzers-common = { module = "org.apache.lucene:lucene-analyzers-common", version.ref = "lucene" }
+lucene-queryparser = { module = "org.apache.lucene:lucene-queryparser", version.ref = "lucene" }
+automerge = { module = "io.automerge:automerge", version.ref = "automerge" }
+rnnoise = { module = "com.github.rnnoise:rnnoise-android", version.ref = "rnnoise" }
 
 # Coroutines & Flow
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines-android" }

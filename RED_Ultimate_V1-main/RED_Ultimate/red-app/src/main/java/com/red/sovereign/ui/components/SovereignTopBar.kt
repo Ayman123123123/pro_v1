@@ -43,7 +43,7 @@ import com.red.sovereign.ui.theme.SovereignColors
 
 /**
  * الشريط العلوي السيادي — رأس زجاجي يعرض الهوية وحالة التشفير التام
- * والإجراءات السريعة (بحث، إعدادات).
+ * وحالة السيرفر (متصل/جارٍ الاتصال/غير متصل) والإجراءات السريعة.
  */
 @Composable
 fun SovereignTopBar(
@@ -53,6 +53,10 @@ fun SovereignTopBar(
     onSearch: () -> Unit,
     onProfileClick: () -> Unit = {},
     isEncrypted: Boolean = true,
+    serverState: com.red.sovereign.core.ConnectionStatusRepository.ServerUiState =
+        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.ONLINE,
+    serverRetryInSec: Long = 0,
+    onServerClick: () -> Unit = {},
     hazeState: dev.chrisbanes.haze.HazeState? = null
 ) {
     val dimens = rememberAdaptiveDimens()
@@ -140,6 +144,42 @@ fun SovereignTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 2.dp)
                 ) {
+                    // مؤشر حالة السيرفر — نقطة ملونة + نص (يوقف الالتباس مع شارة E2EE)
+                    val (dotColor, statusText) = when (serverState) {
+                        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.ONLINE ->
+                            SovereignColors.EmeraldNeon to "متصل"
+                        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.CONNECTING ->
+                            SovereignColors.GoldNeon to "جارٍ الاتصال…"
+                        com.red.sovereign.core.ConnectionStatusRepository.ServerUiState.OFFLINE ->
+                            Color(0xFFFF6B6B) to if (serverRetryInSec > 0) "غير متصل — إعادة خلال ${serverRetryInSec}ث" else "غير متصل — السيرفر طافي"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(dotColor.copy(alpha = 0.15f))
+                            .border(0.8.dp, dotColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .clickable(onClick = onServerClick)
+                            .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = statusText,
+                                color = Color.White.copy(alpha = 0.92f),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(7.dp))
                     // مؤشّر الأمان والتشفير التام بين الطرفين
                     if (isEncrypted) {
                         Box(

@@ -23,7 +23,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         StarredMessageEntity::class,
         MediaUploadEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class RedDatabase : RoomDatabase() {
@@ -62,7 +62,7 @@ abstract class RedDatabase : RoomDatabase() {
                 "red_sovereign.db"
             )
                 .openHelperFactory(factory)
-                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
+                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7, OUTBOX_REPAIR_MIGRATION_7_8)
                 .addCallback(FtsCallback())
                 .build()
 
@@ -137,7 +137,7 @@ abstract class RedDatabase : RoomDatabase() {
                         "red_sovereign.db"
                     )
                         .openHelperFactory(newFactory)
-                        .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7)
+                .addMigrations(REACTION_MIGRATION_1_2, INDEX_MIGRATION_2_3, MESSAGES_INDEX_MIGRATION_3_4, OUTBOX_MIGRATION_4_5, STARRED_MIGRATION_5_6, MEDIA_UPLOAD_MIGRATION_6_7, OUTBOX_REPAIR_MIGRATION_7_8)
                         .addCallback(FtsCallback())
                         .fallbackToDestructiveMigration()
                         .build()
@@ -269,5 +269,23 @@ private val MEDIA_UPLOAD_MIGRATION_6_7 = object : androidx.room.migration.Migrat
         // فهارس الأداء الحاسمة للدردشة
         runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_created_desc` ON `local_history` (`conversationId`, `createdAt` DESC, `id` DESC)") }
         runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_local_history_conv_status` ON `local_history` (`conversationId`, `status`)") }
+    }
+}
+
+/** إصلاح الترقية 7→8: إكمال أعمدة outbox الناقصة + فهارس جهات الاتصال/القصص/الردود.
+ * يمنع تعطل الترقية من v4/v5/v6 (no such column) — كلها IF NOT EXISTS آمنة. */
+private val OUTBOX_REPAIR_MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+    override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+        runCatching { database.execSQL("ALTER TABLE `outbox_messages` ADD COLUMN `targetRedId` TEXT") }
+        runCatching { database.execSQL("ALTER TABLE `outbox_messages` ADD COLUMN `priority` INTEGER NOT NULL DEFAULT 2") }
+        runCatching { database.execSQL("ALTER TABLE `outbox_messages` ADD COLUMN `mediaType` TEXT") }
+        runCatching { database.execSQL("ALTER TABLE `outbox_messages` ADD COLUMN `localMediaPath` TEXT") }
+        runCatching { database.execSQL("ALTER TABLE `outbox_messages` ADD COLUMN `mediaEncryptionKey` TEXT") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_priority_next` ON `outbox_messages` (`priority`, `nextAttemptAt`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_status_created` ON `outbox_messages` (`status`, `createdAt`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_contacts_friend` ON `contacts` (`isFriend`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_stories_expiry` ON `stories` (`expiresAt`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_stories_user` ON `stories` (`userId`)") }
+        runCatching { database.execSQL("CREATE INDEX IF NOT EXISTS `index_history_replyTo` ON `local_history` (`replyToMessageId`)") }
     }
 }
