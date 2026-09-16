@@ -1,0 +1,361 @@
+syntax = "proto3";
+
+package red.sfu.v1;
+
+option js_import_style = "commonjs";
+option go_package = "github.com/red/sfu/v1;sfu";
+
+service SFUService {
+  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+  rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc CreateProducer(CreateProducerRequest) returns (CreateProducerResponse);
+  rpc CreateConsumer(CreateConsumerRequest) returns (CreateConsumerResponse);
+  rpc GetRoomStats(GetRoomStatsRequest) returns (RoomStats);
+  rpc StartRecording(StartRecordingRequest) returns (StartRecordingResponse);
+  rpc StopRecording(StopRecordingRequest) returns (StopRecordingResponse);
+  rpc StartLiveStream(StartLiveStreamRequest) returns (StartLiveStreamResponse);
+  rpc StopLiveStream(StopLiveStreamRequest) returns (StopLiveStreamResponse);
+  rpc GetWorkerStats(GetWorkerStatsRequest) returns (WorkerStats);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message CreateRoomRequest {
+  string room_id = 1;
+  string created_by = 2;
+  RoomConfig config = 3;
+}
+
+message CreateRoomResponse {
+  string room_id = 1;
+  RouterRTPCapabilities rtp_capabilities = 2;
+  int64 created_at = 3;
+}
+
+message JoinRoomRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string display_name = 3;
+  bool can_produce = 4;
+  bool can_consume = 5;
+  map<string, string> metadata = 6;
+}
+
+message JoinRoomResponse {
+  string peer_id = 1;
+  RouterRTPCapabilities rtp_capabilities = 2;
+  repeated ProducerInfo existing_producers = 3;
+  RoomInfo room_info = 4;
+}
+
+message LeaveRoomRequest {
+  string room_id = 1;
+  string peer_id = 2;
+}
+
+message LeaveRoomResponse {
+  bool success = 1;
+}
+
+message CreateProducerRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string transport_id = 3;
+  ProducerOptions options = 4;
+}
+
+message CreateProducerResponse {
+  string producer_id = 1;
+  string transport_id = 2;
+}
+
+message CreateConsumerRequest {
+  string room_id = 1;
+  string peer_id = 2;
+  string producer_id = 3;
+  string transport_id = 4;
+  ConsumerOptions options = 5;
+}
+
+message CreateConsumerResponse {
+  string consumer_id = 1;
+  ProducerRTPParameters rtp_parameters = 2;
+  ProducerInfo producer_info = 3;
+}
+
+message GetRoomStatsRequest {
+  string room_id = 1;
+}
+
+message RoomStats {
+  string room_id = 1;
+  int32 peer_count = 2;
+  int32 producer_count = 3;
+  int32 consumer_count = 4;
+  int64 total_bytes_sent = 5;
+  int64 total_bytes_received = 6;
+  int64 total_packets_lost = 7;
+  double avg_rtt_ms = 8;
+  double avg_jitter_ms = 9;
+  repeated PeerStats peers = 10;
+}
+
+message PeerStats {
+  string peer_id = 1;
+  string display_name = 2;
+  int32 producer_count = 3;
+  int32 consumer_count = 4;
+  int64 bytes_sent = 5;
+  int64 bytes_received = 6;
+  int64 packets_lost = 7;
+  double rtt_ms = 8;
+  double jitter_ms = 9;
+  repeated ProducerStats producers = 10;
+  repeated ConsumerStats consumers = 11;
+}
+
+message ProducerStats {
+  string producer_id = 1;
+  string kind = 2;
+  int64 bytes_sent = 3;
+  int64 packets_sent = 4;
+  int64 packets_lost = 5;
+  double bitrate_kbps = 6;
+  repeated LayerStats layers = 7;
+}
+
+message ConsumerStats {
+  string consumer_id = 1;
+  string kind = 2;
+  int64 bytes_received = 3;
+  int64 packets_received = 4;
+  int64 packets_lost = 5;
+  double bitrate_kbps = 6;
+  int32 spatial_layer = 7;
+  int32 temporal_layer = 8;
+  double score = 9;
+}
+
+message LayerStats {
+  int32 spatial_layer = 1;
+  int32 temporal_layer = 2;
+  int64 bytes_sent = 3;
+  int64 packets_sent = 4;
+  double bitrate_kbps = 5;
+}
+
+message StartRecordingRequest {
+  string room_id = 1;
+  RecordingOptions options = 2;
+}
+
+message StartRecordingResponse {
+  string recording_id = 1;
+  string status = 2;
+}
+
+message StopRecordingRequest {
+  string recording_id = 1;
+}
+
+message StopRecordingResponse {
+  bool success = 1;
+}
+
+message StartLiveStreamRequest {
+  string room_id = 1;
+  LiveStreamOptions options = 2;
+}
+
+message StartLiveStreamResponse {
+  string stream_id = 1;
+  string status = 2;
+}
+
+message StopLiveStreamRequest {
+  string stream_id = 1;
+}
+
+message StopLiveStreamResponse {
+  bool success = 1;
+}
+
+message GetWorkerStatsRequest {}
+
+message WorkerStats {
+  int32 worker_count = 1;
+  repeated WorkerInfo workers = 2;
+  int32 total_rooms = 3;
+  int32 total_peers = 4;
+  int64 cpu_usage_percent = 5;
+  int64 memory_usage_bytes = 6;
+}
+
+message WorkerInfo {
+  int32 pid = 1;
+  int32 room_count = 2;
+  int32 peer_count = 3;
+  int64 cpu_usage_percent = 4;
+  int64 memory_usage_bytes = 5;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  int32 workers = 2;
+  int32 rooms = 3;
+  int32 peers = 4;
+  int64 uptime_seconds = 5;
+}
+
+message RoomConfig {
+  bool enable_recording = 1;
+  bool enable_live_stream = 2;
+  bool enable_e2ee = 3;
+  int32 max_peers = 4;
+  RecordingLayout recording_layout = 5;
+  int32 last_n = 6;
+}
+
+message RoomInfo {
+  string room_id = 1;
+  string created_by = 2;
+  int64 created_at = 3;
+  int32 peer_count = 4;
+  bool recording_active = 5;
+  bool live_stream_active = 6;
+}
+
+message RouterRTPCapabilities {
+  repeated CodecCapabilities codecs = 1;
+  repeated HeaderExtensionCapabilities header_extensions = 2;
+}
+
+message CodecCapabilities {
+  string mime_type = 1;
+  string kind = 2;
+  int32 clock_rate = 3;
+  int32 channels = 4;
+  map<string, string> parameters = 5;
+  repeated RTCPFeedback rtcp_feedback = 6;
+}
+
+message HeaderExtensionCapabilities {
+  string uri = 1;
+  int32 id = 2;
+}
+
+message RTCPFeedback {
+  string type = 1;
+  string parameter = 2;
+}
+
+message ProducerOptions {
+  string kind = 1;
+  RTPParameters rtp_parameters = 2;
+  bool simulcast = 3;
+  Encodings encodings = 4;
+  map<string, string> app_data = 5;
+}
+
+message ConsumerOptions {
+  RTPCapabilities rtp_capabilities = 1;
+  bool paused = 2;
+  PreferredLayers preferred_layers = 3;
+  bool enable_rtx = 4;
+  bool pipe = 5;
+}
+
+message ProducerRTPParameters {
+  string mux_id = 1;
+  repeated RTPEncodingParameters encodings = 2;
+  repeated HeaderExtensionParameters header_extensions = 3;
+  repeated RTCPParameters rtcp = 4;
+}
+
+message RTPParameters {
+  string mux_id = 1;
+  repeated RTPEncodingParameters encodings = 2;
+  repeated HeaderExtensionParameters header_extensions = 3;
+  repeated RTCPParameters rtcp = 4;
+}
+
+message RTPEncodingParameters {
+  string rid = 1;
+  int32 max_bitrate = 2;
+  int32 max_framerate = 3;
+  double scale_resolution_down_by = 4;
+  bool active = 5;
+  int32 priority = 6;
+  int32 network_priority = 7;
+  string codec_payload_type = 8;
+  string scalability_mode = 9;
+}
+
+message HeaderExtensionParameters {
+  string uri = 1;
+  int32 id = 2;
+  bool encrypt = 3;
+  map<string, string> parameters = 4;
+}
+
+message RTCPParameters {
+  string cname = 1;
+  bool reduced_size = 2;
+}
+
+message RTPCapabilities {
+  repeated CodecCapabilities codecs = 1;
+  repeated HeaderExtensionCapabilities header_extensions = 2;
+}
+
+message ProducerInfo {
+  string producer_id = 1;
+  string peer_id = 2;
+  string kind = 3.
+  string display_name = 4.
+}
+
+message Encodings {
+  repeated RTPEncodingParameters encodings = 1;
+}
+
+message PreferredLayers {
+  int32 spatial_layer = 1;
+  int32 temporal_layer = 2;
+}
+
+message RecordingOptions {
+  string output_path = 1;
+  string format = 2;
+  RecordingLayout layout = 3;
+  int32 width = 4;
+  int32 height = 5;
+  int32 framerate = 6;
+  int32 video_bitrate = 7;
+  int32 audio_bitrate = 8;
+  bool include_audio = 9;
+  map<string, string> metadata = 10;
+}
+
+message LiveStreamOptions {
+  string rtmp_url = 1;
+  string stream_key = 2;
+  string format = 3;
+  RecordingLayout layout = 4;
+  int32 width = 5;
+  int32 height = 6;
+  int32 framerate = 7;
+  int32 video_bitrate = 8;
+  int32 audio_bitrate = 9;
+  bool include_audio = 10;
+}
+
+enum RecordingLayout {
+  RECORDING_LAYOUT_UNSPECIFIED = 0;
+  RECORDING_LAYOUT_GRID = 1;
+  RECORDING_LAYOUT_SPEAKER = 2;
+  RECORDING_LAYOUT_PIP = 3;
+  RECORDING_LAYOUT_CUSTOM = 4;
+}
