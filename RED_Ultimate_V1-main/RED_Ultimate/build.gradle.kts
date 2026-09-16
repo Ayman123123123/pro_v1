@@ -137,6 +137,9 @@ gradle.projectsEvaluated {
 
   tasks.named("ci") {
     dependsOn("ktlintCheck")
+    dependsOn("detekt")
+    dependsOn("spotbugsMain")
+    dependsOn("dependencyCheckAnalyze")
     dependsOn("buildQa")
     dependsOn("checkStopship")
 
@@ -147,6 +150,9 @@ gradle.projectsEvaluated {
 
     subprojects.forEach { subproject ->
       subproject.tasks.findByName("ktlintCheck")?.let { dependsOn(it) }
+      subproject.tasks.findByName("detekt")?.let { dependsOn(it) }
+      subproject.tasks.findByName("spotbugsMain")?.let { dependsOn(it) }
+      subproject.tasks.findByName("dependencyCheckAnalyze")?.let { dependsOn(it) }
     }
 
     subprojects.filter { it.name != "app" }.forEach { subproject ->

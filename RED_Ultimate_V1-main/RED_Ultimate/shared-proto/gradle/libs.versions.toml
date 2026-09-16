@@ -1,0 +1,32 @@
+# Version Catalog for shared-proto (Protocol Buffers Shared Module)
+# Run ./gradlew --write-verification-metadata sha256 after changes
+
+[versions]
+# Protobuf
+protobuf = "3.25.5"
+protobuf-gradle = "0.10.0"
+
+# Java / Kotlin
+java = "21"
+kotlin = "2.3.21"
+kotlin-jvm-target = "21"
+
+# Build
+gradle = "8.11"
+
+[plugins]
+java-library = { id = "java-library" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle" }
+
+[libraries]
+# Protobuf
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-grpc = { module = "io.grpc:grpc-protobuf", version = "1.66.0" }
+protobuf-grpc-stub = { module = "io.grpc:grpc-stub", version = "1.66.0" }
+
+# Kotlin (for potential Kotlin-specific protobuf extensions)
+kotlin-stdlib-jdk8 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
+
+[bundles]
+protobuf-runtime = ["protobuf-java"]
+protobuf-grpc = ["protobuf-grpc", "protobuf-grpc-stub"]

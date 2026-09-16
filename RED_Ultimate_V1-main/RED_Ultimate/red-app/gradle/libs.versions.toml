@@ -1,0 +1,207 @@
+# Version Catalog for red-app (Android App)
+# This catalog extends the root catalog with app-specific dependencies
+# Run ./gradlew --write-verification-metadata sha256 after changes
+
+[versions]
+# App-specific versions (in addition to root catalog)
+# All base versions come from root gradle/libs.versions.toml
+# Override or add app-specific versions here
+
+# Core Modern
+androidx-core-ktx = "1.13.1"
+androidx-lifecycle-runtime-ktx = "2.8.4"
+androidx-activity-compose = "1.9.2"
+
+# Compose & UI
+compose-bom = "2024.10.00"
+androidx-compose-material3 = "1.3.1"
+androidx-compose-foundation = "1.7.0"
+androidx-compose-animation = "1.7.0"
+androidx-compose-animation-graphics = "1.7.0"
+androidx-compose-runtime-livedata = "1.7.0"
+androidx-compose-runtime-rxjava3 = "1.7.0"
+
+# Navigation
+androidx-navigation-compose = "2.8.4"
+androidx-navigation-dynamic-features-fragment = "2.8.4"
+
+# Paging & Data
+androidx-paging-compose = "3.3.2"
+androidx-paging-runtime-ktx = "3.3.2"
+androidx-datastore-preferences = "1.1.1"
+androidx-datastore-core = "1.1.1"
+
+# Database
+androidx-room-runtime = "2.6.1"
+androidx-room-ktx = "2.6.1"
+androidx-room-paging = "2.6.1"
+androidx-room-compiler = "2.6.1"
+
+# Dependency Injection
+koin-android = "4.0.0"
+koin-androidx-compose = "4.0.0"
+koin-androidx-viewmodel = "4.0.0"
+
+# Networking
+retrofit = "3.0.0"
+retrofit-converter-moshi = "3.0.0"
+okhttp = "5.0.0-alpha.11"
+okhttp-logging-interceptor = "5.0.0-alpha.11"
+
+# Serialization
+moshi = "1.15.1"
+moshi-kotlin = "1.15.1"
+kotlinx-serialization-json = "1.6.3"
+kotlinx-serialization-protobuf = "1.6.3"
+
+# Media & Images
+coil-compose = "3.2.0"
+coil-network-okhttp = "3.2.0"
+androidx-media3-exoplayer = "1.6.1"
+androidx-media3-ui = "1.6.1"
+androidx-media3-session = "1.6.1"
+
+# Cryptography & Security
+tink-android = "1.11.0"
+libsignal-android = "0.86.5"
+androidx-security-crypto = "1.1.0-alpha06"
+androidx-biometric = "1.2.0-alpha05"
+
+# ML & AI (On-device)
+mlkit-translate = "17.0.1"
+mlkit-text-recognition = "16.0.0"
+mlkit-face-detection = "16.1.6"
+tensorflow-lite = "2.16.1"
+tensorflow-lite-gpu = "2.16.1"
+tensorflow-lite-support = "0.4.4"
+
+# Coroutines & Flow
+kotlinx-coroutines-android = "1.9.0"
+kotlinx-coroutines-flow = "1.9.0"
+
+# Testing
+junit = "4.13.2"
+androidx-junit = "1.2.1"
+androidx-espresso-core = "3.6.1"
+androidx-test-runner = "1.6.1"
+androidx-test-rules = "1.6.1"
+androidx-test-ext-junit = "1.2.1"
+mockito-core = "5.12.0"
+mockito-kotlin = "5.1.0"
+robolectric = "4.11"
+
+# Performance & Monitoring
+androidx-metrics-performance = "1.0.0-beta01"
+primes = "1.0.0"
+
+# Performance/Profiling
+macrobenchmark = "1.2.6"
+baseline-profile = "1.2.6"
+
+# Build Logic
+agp-upgrade-assistant = "8.5.2"
+
+[plugins]
+# App-specific plugins
+benchmark = { id = "androidx.benchmark", version.ref = "macrobenchmark" }
+baseline-profile-plugin = { id = "com.android.baselineprofile", version.ref = "baseline-profile" }
+android-lint = { id = "com.android.lint", version.ref = "android-gradle-plugin" }
+
+[libraries]
+# App-specific libraries (referencing root catalog versions where possible)
+# Core Modern
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core-ktx" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidx-lifecycle-runtime-ktx" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
+
+# Compose & UI
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "androidx-compose-material3" }
+androidx-compose-material3-windowsizeclass = { module = "androidx.compose.material3:material3-window-size-class" }
+androidx-compose-foundation = { module = "androidx.compose.foundation:foundation", version.ref = "androidx-compose-foundation" }
+androidx-compose-animation = { module = "androidx.compose.animation:animation", version.ref = "androidx-compose-animation" }
+androidx-compose-animation-graphics = { module = "androidx.compose.animation:animation-graphics", version.ref = "androidx-compose-animation-graphics" }
+androidx-compose-runtime-livedata = { module = "androidx.compose.runtime:runtime-livedata", version.ref = "androidx-compose-runtime-livedata" }
+androidx-compose-runtime-rxjava3 = { module = "androidx.compose.runtime:runtime-rxjava3", version.ref = "androidx-compose-runtime-rxjava3" }
+
+# Navigation
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "androidx-navigation-compose" }
+androidx-navigation-dynamic-features-fragment = { module = "androidx.navigation:navigation-dynamic-features-fragment", version.ref = "androidx-navigation-dynamic-features-fragment" }
+
+# Paging & Data
+androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "androidx-paging-compose" }
+androidx-paging-runtime-ktx = { module = "androidx.paging:paging-runtime-ktx", version.ref = "androidx-paging-runtime-ktx" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore-preferences" }
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "androidx-datastore-core" }
+
+# Database
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "androidx-room-runtime" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "androidx-room-ktx" }
+androidx-room-paging = { module = "androidx.room:room-paging", version.ref = "androidx-room-paging" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "androidx-room-compiler" }
+
+# Dependency Injection
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin-android" }
+koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin-androidx-compose" }
+koin-androidx-viewmodel = { module = "io.insert-koin:koin-androidx-viewmodel", version.ref = "koin-androidx-viewmodel" }
+
+# Networking
+retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
+retrofit-converter-moshi = { module = "com.squareup.retrofit2:converter-moshi", version.ref = "retrofit-converter-moshi" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp-logging-interceptor" }
+
+# Serialization
+moshi = { module = "com.squareup.moshi:moshi", version.ref = "moshi" }
+moshi-kotlin = { module = "com.squareup.moshi:moshi-kotlin", version.ref = "moshi-kotlin" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
+kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinx-serialization-protobuf" }
+
+# Media & Images
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
+coil-network-okhttp = { module = "io.coil-kt:coil-network-okhttp", version.ref = "coil-network-okhttp" }
+androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "androidx-media3-exoplayer" }
+androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "androidx-media3-ui" }
+androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "androidx-media3-session" }
+
+# Cryptography & Security
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tink-android" }
+libsignal-android = { module = "org.signal:libsignal-android", version.ref = "libsignal-android" }
+androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "androidx-security-crypto" }
+androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
+
+# ML & AI (On-device)
+mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkit-translate" }
+mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
+mlkit-face-detection = { module = "com.google.mlkit:face-detection", version.ref = "mlkit-face-detection" }
+tensorflow-lite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tensorflow-lite" }
+tensorflow-lite-gpu = { module = "org.tensorflow:tensorflow-lite-gpu", version.ref = "tensorflow-lite-gpu" }
+tensorflow-lite-support = { module = "org.tensorflow:tensorflow-lite-support", version.ref = "tensorflow-lite-support" }
+
+# Coroutines & Flow
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines-android" }
+kotlinx-coroutines-flow = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-flow", version.ref = "kotlinx-coroutines-flow" }
+
+# Testing
+junit = { module = "junit:junit", version.ref = "junit" }
+androidx-junit = { module = "androidx.test:junit", version.ref = "androidx-junit" }
+androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso-core" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
+androidx-test-rules = { module = "androidx.test:rules", version.ref = "androidx-test-rules" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-ext-junit" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito-core" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockito-kotlin" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+
+# Performance & Monitoring
+androidx-metrics-performance = { module = "androidx.metrics:metrics-performance", version.ref = "androidx-metrics-performance" }
+primes = { module = "com.google.android.libraries.performance.primes:primes", version.ref = "primes" }
+
+# Benchmark
+macrobenchmark = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "macrobenchmark" }
+baseline-profile-gradle-plugin = { module = "com.android.baselineprofile:baseline-profile-gradle-plugin", version.ref = "baseline-profile" }
+benchmark-gradle-plugin = { module = "androidx.benchmark:benchmark-gradle-plugin", version.ref = "macrobenchmark" }
+
+[bundles]
+app-test = ["junit", "androidx-junit", "androidx-espresso-core", "androidx-test-runner", "androidx-test-rules", "androidx-test-ext-junit", "mockito-core", "mockito-kotlin", "robolectric"]
+benchmark-test = ["macrobenchmark", "baseline-profile-gradle-plugin"]

@@ -1,0 +1,136 @@
+# Version Catalog for backend-server (Spring Boot Backend)
+# Run ./gradlew --write-verification-metadata sha256 after changes
+
+[versions]
+# Spring Boot 3.3.x
+spring-boot = "3.3.5"
+spring-cloud = "2023.0.3"
+spring-dependency-management = "1.1.7"
+
+# Java / Kotlin
+java = "21"
+kotlin = "2.3.21"
+kotlin-jvm-target = "21"
+
+# Database
+postgresql = "42.7.3"
+flyway = "11.4.0"
+mongodb-driver = "5.1.0"
+redis-client = "6.3.8.RELEASE"
+
+# Security
+spring-security = "6.3.5"
+jjwt = "9.37.3"
+bouncycastle = "1.86"
+nimbus-jose-jwt = "9.37.3"
+
+# Observability
+micrometer-prometheus = "1.13.0"
+micrometer-tracing = "1.13.0"
+opentelemetry-sdk = "1.42.0"
+opentelemetry-exporter-otlp = "1.42.0"
+
+# Testing
+junit-jupiter = "5.11.4"
+mockito = "5.12.0"
+mockito-kotlin = "5.1.0"
+testcontainers = "1.20.1"
+spring-boot-test = "3.3.5"
+spring-security-test = "6.3.5"
+
+# Serialization
+jackson = "2.19.2"
+jackson-kotlin = "2.19.2"
+jackson-module-kotlin = "2.19.2"
+protobuf = "3.25.5"
+protobuf-gradle = "0.10.0"
+grpc = "1.62.1"
+grpc-kotlin-stub = "1.5.1"
+
+# Utilities
+minio = "8.6.0"
+jsoup = "1.22.2"
+coroutines = "1.9.0"
+
+# Build
+gradle = "8.11"
+spotbugs = "4.8.6"
+checkstyle = "10.18.0"
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+kotlin-jpa = { id = "org.jetbrains.kotlin.plugin.jpa", version.ref = "kotlin" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle" }
+spotbugs = { id = "com.github.spotbugs", version.ref = "spotbugs" }
+checkstyle = { id = "checkstyle", version.ref = "checkstyle" }
+
+[libraries]
+# Spring Boot Starters
+spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web", version.ref = "spring-boot" }
+spring-boot-starter-websocket = { module = "org.springframework.boot:spring-boot-starter-websocket", version.ref = "spring-boot" }
+spring-boot-starter-data-mongodb = { module = "org.springframework.boot:spring-boot-starter-data-mongodb", version.ref = "spring-boot" }
+spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis", version.ref = "spring-boot" }
+spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security", version.ref = "spring-boot" }
+spring-boot-starter-webflux = { module = "org.springframework.boot:spring-boot-starter-webflux", version.ref = "spring-boot" }
+spring-boot-starter-validation = { module = "org.springframework.boot:spring-boot-starter-validation", version.ref = "spring-boot" }
+spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator", version.ref = "spring-boot" }
+spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail", version.ref = "spring-boot" }
+spring-boot-starter-data-jpa = { module = "org.springframework.boot:spring-boot-starter-data-jpa", version.ref = "spring-boot" }
+spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway", version.ref = "spring-boot" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
+spring-boot-starter-threads = { module = "org.springframework.boot:spring-boot-starter-threads", version.ref = "spring-boot" }
+spring-boot-starter-aop = { module = "org.springframework.boot:spring-boot-starter-aop", version.ref = "spring-boot" }
+
+# Database
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
+flyway-postgresql = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
+mongodb-driver-sync = { module = "org.mongodb:mongodb-driver-sync", version.ref = "mongodb-driver" }
+mongodb-driver-reactivestreams = { module = "org.mongodb:mongodb-driver-reactivestreams", version.ref = "mongodb-driver" }
+redis-client = { module = "io.lettuce:lettuce-core", version.ref = "redis-client" }
+
+# Security
+spring-security-crypto = { module = "org.springframework.security:spring-security-crypto", version.ref = "spring-security" }
+spring-security-oauth2-resource-server = { module = "org.springframework.security:spring-security-oauth2-resource-server", version.ref = "spring-security" }
+spring-security-oauth2-jose = { module = "org.springframework.security:spring-security-oauth2-jose", version.ref = "spring-security" }
+nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
+
+# Protobuf & Serialization
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobuf" }
+grpc-kotlin-stub = { module = "io.grpc:grpc-kotlin-stub", version.ref = "grpc-kotlin-stub" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+
+# Observability
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer-prometheus" }
+micrometer-tracing-brave = { module = "io.micrometer:micrometer-tracing-bridge-brave", version.ref = "micrometer-tracing" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry-sdk" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry-exporter-otlp" }
+
+# Kotlin
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-stdlib-jdk8 = { module = "org.jetbrains.kotlin:kotlin-stdlib-jdk8", version.ref = "kotlin" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+
+# Utilities
+minio = { module = "io.minio:minio", version.ref = "minio" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+
+# Testing
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockito-inline = { module = "org.mockito:mockito-inline", version.ref = "mockito" }
+mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockito-kotlin" }
+testcontainers = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers" }
+testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
+testcontainers-mongodb = { module = "org.testcontainers:mongodb", version.ref = "testcontainers" }
+testcontainers-redis = { module = "org.testcontainers:redis", version.ref = "testcontainers" }
+testcontainers-minio = { module = "org.testcontainers:minio", version.ref = "testcontainers" }
+spring-security-test = { module = "org.springframework.security:spring-security-test", version.ref = "spring-security-test" }
+
+[bundles]
+backend-test = ["spring-boot-starter-test", "junit-jupiter", "mockito-core", "mockito-inline", "mockito-kotlin", "spring-security-test"]
+testcontainers-bom = ["testcontainers", "testcontainers-postgresql", "testcontainers-mongodb", "testcontainers-redis", "testcontainers-minio"]

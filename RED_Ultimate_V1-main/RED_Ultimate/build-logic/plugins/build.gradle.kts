@@ -1,6 +1,9 @@
 plugins {
   `kotlin-dsl`
   alias(libs.plugins.ktlint)
+  alias(libs.plugins.detekt)
+  alias(libs.plugins.spotbugs)
+  alias(libs.plugins.owasp-dependency-check)
   id("groovy-gradle-plugin")
 }
 
@@ -35,6 +38,38 @@ ktlint {
     exclude { element ->
       element.file.path.contains("/build/generated-sources")
     }
+  }
+}
+
+detekt {
+  toolVersion = libs.versions.detekt.get()
+  config = files("$rootDir/config/detekt/detekt.yml")
+  buildUponDefaultConfig = true
+  reports {
+    html.required.set(true)
+    xml.required.set(true)
+    txt.required.set(true)
+  }
+}
+
+spotbugs {
+  toolVersion = "4.8.6"
+  effort = "max"
+  reportLevel = "high"
+  excludeFilter = file("$rootDir/config/spotbugs/exclude.xml")
+  reports {
+    xml.required.set(true)
+    html.required.set(true)
+  }
+}
+
+dependencyCheck {
+  suppressionFile = file("$rootDir/config/dependency-check/suppression.xml")
+  failBuildOnCVSS = 7
+  dataDirectory = file("$buildDir/dependency-check-data")
+  reports {
+    html.required.set(true)
+    json.required.set(true)
   }
 }
 
